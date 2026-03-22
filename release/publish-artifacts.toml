@@ -1,0 +1,23 @@
+schema_version = 1
+
+[[crates]]
+artifact = "sc-observability-types"
+package = "sc-observability-types"
+cargo_toml = "crates/sc-observability-types/Cargo.toml"
+publish_order = 1
+wait_after_publish_seconds = 30
+
+[[crates]]
+artifact = "sc-observability"
+package = "sc-observability"
+cargo_toml = "crates/sc-observability/Cargo.toml"
+publish_order = 2
+wait_after_publish_seconds = 30
+
+[[crates]]
+artifact = "sc-observability-otlp"
+package = "sc-observability-otlp"
+cargo_toml = "crates/sc-observability-otlp/Cargo.toml"
+publish_order = 3
+wait_after_publish_seconds = 0
+
