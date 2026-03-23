@@ -7,6 +7,11 @@ This document is the source design baseline for the companion
 `requirements.md` and `architecture.md` documents, which now exist on their
 respective review branches.
 
+Important note: this document still contains some pre-rewrite layering
+assumptions. Where it conflicts with the corrected stack documented in
+`requirements.md` and `architecture.md`, those conflicts are called out
+explicitly below and must be corrected before implementation begins.
+
 ## 1. Purpose
 
 Define the standalone public API surface for a reusable observability workspace
@@ -80,8 +85,8 @@ This design targets a 4-crate workspace:
 
 - `sc-observability-types`
 - `sc-observability`
-- `sc-observability-otlp`
 - `sc-observe`
+- `sc-observability-otlp`
 
 Required baseline updates before implementation begins:
 
@@ -93,9 +98,33 @@ Required baseline updates before implementation begins:
   must both be written to reflect the 4-crate workspace rather than the older
   3-crate shape
 - workspace `Cargo.toml` must add `sc-observe` as a member
-- `sc-observe` depends on `sc-observability`, `sc-observability-otlp`, and
-  `sc-observability-types`
+- the corrected layering is
+  `sc-observability-types <- sc-observability <- sc-observe <- sc-observability-otlp`
 - `sc-observe` must not introduce any `agent-team-mail-*` dependencies
+
+## 3.2 Layering Review Notes
+
+The corrected architecture for docs-v2 is:
+
+```text
+sc-observability-types
+  <- sc-observability
+    <- sc-observe
+      <- sc-observability-otlp
+```
+
+This document still contains several pre-v2 assumptions that violate that
+ordering:
+
+- §6.3 describes `sc-observe` as routing typed observations into both logging
+  and telemetry outputs
+- §6.5 currently states `sc-observe -> sc-observability-otlp`
+- §7.2 places OTLP configuration under `ObservabilityConfig`
+- §12.1 describes `sc-observe` as deriving `TelemetryConfig` from
+  `ObservabilityConfig.otel`
+
+Those surfaces are flagged here intentionally. They should be corrected in the
+API surface before implementation, but are not silently rewritten in this pass.
 
 ## 4. Design Goals
 
