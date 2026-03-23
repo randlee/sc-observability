@@ -2,7 +2,7 @@
 
 **Status**: Draft for review
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
-**Source of truth**: [`api-design.md`](/Users/randlee/Documents/github/sc-observability-req/docs/api-design.md)
+**Source of truth**: [`api-design.md`](api-design.md)
 
 ## 1. Purpose And Scope
 
