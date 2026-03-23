@@ -104,6 +104,10 @@ Responsibilities:
 - isolate failures so one subscriber/projector failure does not block later matches
 - return `ObservationError::RoutingFailure` when no eligible path remains
 
+`SubscriberRegistration<T>` and `ProjectionRegistration<T>` are concurrent
+runtime inputs and therefore require `Send + Sync`, consistent with the
+requirements and API design.
+
 Routing model:
 
 ```text
@@ -138,6 +142,10 @@ Responsibilities:
 - fan out to multiple sinks
 - apply sink-local filtering
 - track sink health and dropped-event counts
+
+The built-in file sink default path layout is:
+
+`<log_root>/<service_name>/logs/<service_name>.log.jsonl`
 
 Logging flow:
 
@@ -190,6 +198,20 @@ LogEvent / SpanSignal / MetricRecord
 - OTLP trace export requires a completed span and its events
 - `CompleteSpan { record: SpanRecord<SpanEnded>, events: Vec<SpanEvent> }` is the export boundary
 
+`SpanAssembler` contract, as defined by `api-design.md` §12.4:
+
+1. `SpanSignal::Started` opens an in-flight span buffer keyed by `span_id`
+2. `SpanSignal::Event` is attached to the in-flight buffer by matching `span_id`
+3. `CompleteSpan` is emitted only on `SpanSignal::Ended`, never on `Started`
+4. in-flight spans without a matching `Ended` are dropped at flush/shutdown and counted as dropped exports
+
+Ownership and threading model:
+
+- `SpanAssembler` is owned and driven internally by `Telemetry`
+- concurrent emit paths, async tasks, and threads do not hold `SpanAssembler` directly
+- `Telemetry` is responsible for serializing `SpanSignal` delivery to
+  `SpanAssembler`; the exact mechanism is an implementation detail
+
 ### 2.5 Type System Layer
 
 The shared type layer lives in `sc-observability-types`.
@@ -219,7 +241,17 @@ Important invariants:
 - only `SpanRecord<SpanStarted>` has a public constructor
 - `SpanRecord<SpanEnded>` is only created via `.end(...)`
 - producer-facing `SpanRecord<S>` fields are private
+- final span duration is accessible only on `SpanRecord<SpanEnded>` via a
+  duration accessor such as `duration_ms()`
 - `TraceContext` contains only `trace_id`, `span_id`, and `parent_span_id`
+- `TraceContext` is W3C-style only; `TraceId` is 32-character lowercase hex and
+  `SpanId` is 16-character lowercase hex
+- request, session, runtime, and application metadata are excluded from
+  `TraceContext`
+- error codes are stable string-like values with namespace prefixes and
+  `SCREAMING_SNAKE_CASE` formatting
+- one `Diagnostic` is reusable across CLI rendering, JSON error rendering, log
+  attachment, span attachment, and health summaries
 - `ErrorContext` is not directly constructible without remediation
 
 ## 3. Trait Injection Strategy
@@ -250,6 +282,10 @@ The producer sees:
 
 - `ObservationEmitter<T>` for its typed observations
 - optionally `LogEmitter`, `SpanEmitter`, or `MetricEmitter` where lower-level code needs them directly
+
+All traits used behind `Arc<dyn ...>` in this injection model are required to be
+`Send + Sync`, consistent with `api-design.md` §7.4 and the non-functional
+requirements.
 
 ### 3.2 Explicit Injection vs Shared `Arc`
 
@@ -390,6 +426,13 @@ The sketch above is illustrative:
 | `LogExporter` | `sc-observability-otlp` | Open | OTLP logging exporters remain replaceable/testable |
 | `TraceExporter` | `sc-observability-otlp` | Open | Trace exporters remain replaceable/testable |
 | `MetricExporter` | `sc-observability-otlp` | Open | Metric exporters remain replaceable/testable |
+
+Table notes:
+
+- all open traits used behind `Arc<dyn ...>` are required to remain object-safe
+  for dynamic dispatch
+- all traits used in concurrent routing, injection, and export contexts are
+  required to be `Send + Sync`
 
 ## 5. ADRs
 
