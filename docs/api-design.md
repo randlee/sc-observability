@@ -528,8 +528,10 @@ Requirements:
 - serialization is stable
 - comparison semantics are stable
 - local time conversion is a rendering concern, not a wire/storage concern
+- human-readable console rendering may optionally format local time, but that
+  must not change the canonical stored or emitted UTC timestamp
 
-The exact implementation type remains open.
+The exact Rust implementation type remains open.
 
 ### 8.6 `ProcessIdentity`
 
@@ -1560,7 +1562,7 @@ The standalone API must not reintroduce:
 
 These questions remain open but do not block the main direction:
 
-- the exact timestamp implementation type
+- the exact Rust timestamp implementation type
 - whether redaction extensibility is callback-based, trait-based, or policy-only
 - whether `TraceContext` should remain as one nested struct exactly as drafted
 - the exact shared abstraction for span attributes, in-span events, and
