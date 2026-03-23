@@ -3,10 +3,9 @@
 **Status**: Draft for review
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 
-This is the only active design document in the worktree.
-
-`requirements.md` and `architecture.md` are intentionally absent. They will be
-written only after this API design is reviewed and accepted.
+This document is the source design baseline for the companion
+`requirements.md` and `architecture.md` documents, which now exist on their
+respective review branches.
 
 ## 1. Purpose
 
