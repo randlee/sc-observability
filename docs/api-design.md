@@ -234,7 +234,7 @@ pub struct Observability { /* opaque */ }
 
 impl Observability {
     pub fn new(config: ObservabilityConfig) -> Result<Self, InitError>;
-    pub fn emit<T>(&self, observation: T) -> Result<(), ObservationError>
+    pub fn emit<T>(&self, observation: Observation<T>) -> Result<(), ObservationError>
     where
         T: Observable;
     pub fn flush(&self) -> Result<(), FlushError>;
@@ -317,7 +317,7 @@ pub trait ObservationEmitter<T>: Send + Sync
 where
     T: Observable,
 {
-    fn emit(&self, observation: T) -> Result<(), ObservationError>;
+    fn emit(&self, observation: Observation<T>) -> Result<(), ObservationError>;
 }
 
 pub trait LogEmitter: Send + Sync {
@@ -325,7 +325,7 @@ pub trait LogEmitter: Send + Sync {
 }
 
 pub trait SpanEmitter: Send + Sync {
-    fn emit_span(&self, span: SpanRecord) -> Result<(), EventError>;
+    fn emit_span(&self, span: ProjectedSpan) -> Result<(), EventError>;
 }
 
 pub trait MetricEmitter: Send + Sync {
@@ -361,7 +361,35 @@ This is intentionally minimal. The core routing system should not require every
 application event type to embed observability details directly into the event
 definition.
 
-### 7.6 Observations vs Projections
+### 7.6 `Observation<T>`
+
+`Observation<T>` is the standard envelope emitted through the routing system.
+
+The shared repo owns the envelope. Consumer crates own the payload type `T`.
+
+Design direction:
+
+```rust
+pub struct Observation<T>
+where
+    T: Observable,
+{
+    pub timestamp: Timestamp,
+    pub service: String,
+    pub identity: ProcessIdentity,
+    pub trace: Option<TraceContext>,
+    pub payload: T,
+}
+```
+
+Rules:
+
+- all producer-facing observation emission uses `Observation<T>`, not raw `T`
+- shared process and trace metadata live on the envelope, not duplicated in each
+  consumer payload
+- consumer crates remain free to define payload fields specific to their domain
+
+### 7.7 Observations vs Projections
 
 An observation is the canonical producer-side signal.
 
@@ -766,12 +794,12 @@ pub trait ObservationSubscriber<T>: Send + Sync
 where
     T: Observable,
 {
-    fn handle(&self, observation: &T) -> Result<(), SubscriberError>;
+    fn handle(&self, observation: &Observation<T>) -> Result<(), SubscriberError>;
 }
 ```
 
-These subscribers receive the original typed observation, not a projected log or
-telemetry record.
+These subscribers receive the original typed observation envelope, not a
+projected log or telemetry record.
 
 ### 10.2 Log Projectors
 
@@ -782,7 +810,10 @@ pub trait LogProjector<T>: Send + Sync
 where
     T: Observable,
 {
-    fn project_logs(&self, observation: &T) -> Result<Vec<LogEvent>, ProjectionError>;
+    fn project_logs(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<LogEvent>, ProjectionError>;
 }
 ```
 
@@ -797,7 +828,7 @@ where
 {
     fn project_spans(
         &self,
-        observation: &T,
+        observation: &Observation<T>,
     ) -> Result<Vec<ProjectedSpan>, ProjectionError>;
 }
 ```
@@ -822,12 +853,54 @@ where
 {
     fn project_metrics(
         &self,
-        observation: &T,
+        observation: &Observation<T>,
     ) -> Result<Vec<MetricRecord>, ProjectionError>;
 }
 ```
 
-### 10.5 Why This Split Exists
+### 10.5 Registration and Filtering
+
+`sc-observe` owns per-type registration and filtering for subscribers and
+projectors.
+
+Design direction:
+
+```rust
+pub trait ObservationFilter<T>: Send + Sync
+where
+    T: Observable,
+{
+    fn accepts(&self, observation: &Observation<T>) -> bool;
+}
+
+pub struct SubscriberRegistration<T>
+where
+    T: Observable,
+{
+    pub subscriber: std::sync::Arc<dyn ObservationSubscriber<T>>,
+    pub filter: Option<std::sync::Arc<dyn ObservationFilter<T>>>,
+}
+
+pub struct ProjectionRegistration<T>
+where
+    T: Observable,
+{
+    pub log_projector: Option<std::sync::Arc<dyn LogProjector<T>>>,
+    pub span_projector: Option<std::sync::Arc<dyn SpanProjector<T>>>,
+    pub metric_projector: Option<std::sync::Arc<dyn MetricProjector<T>>>,
+    pub filter: Option<std::sync::Arc<dyn ObservationFilter<T>>>,
+}
+```
+
+Rules:
+
+- routing is per observation payload type
+- filtering is part of runtime registration, not producer burden
+- one observation may fan out to multiple subscribers and multiple projectors
+- v1 `sc-observe` scope stops at registration, filtering, projection, and
+  fan-out
+
+### 10.6 Why This Split Exists
 
 This split supports the complicated but common pattern where one typed producer
 event needs to:
@@ -1222,7 +1295,7 @@ Example conceptual pattern:
   - a log projector for `AgentInfoEvent`
   - a span projector for `AgentInfoEvent`
   - a metric projector for `AgentInfoEvent`
-- ATM emits one `AgentInfoEvent`
+- ATM emits one `Observation<AgentInfo>`
 - observability fans that out to all relevant outputs
 
 This is a canonical example for the design, not a side note.
@@ -1232,7 +1305,9 @@ architecture.
 
 Required example characteristics:
 
-- a consumer-owned typed observation such as `AgentInfoEvent`
+- a consumer-owned typed payload such as `AgentInfo`
+- a shared `Observation<T>` envelope carrying timestamp, service, process
+  identity, and optional trace context
 - variant-based event typing for hook-like lifecycle events
 - variant-specific metadata payloads
 - one emitted observation routed to:
@@ -1251,7 +1326,6 @@ Recommended conceptual shape in a consumer crate:
 ```rust
 pub struct AgentInfo {
     pub agent_id: String,
-    pub trace: Option<TraceContext>,
     pub event: AgentInfoEvent,
 }
 
@@ -1301,6 +1375,23 @@ The example must prove that one consumer-owned typed observation can fan out to:
 - one or more log sinks
 - OTEL spans when appropriate
 - OTEL metrics when appropriate
+
+Recommended emission shape in that example:
+
+```rust
+let observation = Observation {
+    timestamp: now_utc(),
+    service: "atm".to_string(),
+    identity: ProcessIdentity {
+        hostname: Some("host-a".to_string()),
+        pid: Some(4242),
+    },
+    trace: Some(trace_context),
+    payload: agent_info,
+};
+
+observability.emit(observation)?;
+```
 
 ## 15. Diagnostics and CLI Integration
 
@@ -1434,7 +1525,10 @@ This draft is ready for review against these questions:
 
 - Is the observation-first architecture correct?
 - Is `Observability` the right producer-facing service?
+- Is the shared `Observation<T>` envelope the right producer-facing contract?
 - Is the subscriber/projector split correct?
+- Is per-type registration and filtering in `sc-observe` the right routing
+  model?
 - Are logging and telemetry correctly modeled as downstream output surfaces?
 - Is the 4-crate split correct?
 - Is `sc-observability` lightweight enough for basic CLI logging?
