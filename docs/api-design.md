@@ -374,6 +374,7 @@ pub struct Observation<T>
 where
     T: Observable,
 {
+    pub version: String,
     pub timestamp: Timestamp,
     pub service: String,
     pub identity: ProcessIdentity,
@@ -385,6 +386,8 @@ where
 Rules:
 
 - all producer-facing observation emission uses `Observation<T>`, not raw `T`
+- `version` identifies the shared observation envelope schema version, not the
+  consumer payload schema version
 - shared process and trace metadata live on the envelope, not duplicated in each
   consumer payload
 - consumer crates remain free to define payload fields specific to their domain
@@ -778,6 +781,48 @@ pub struct DiagnosticSummary {
 }
 ```
 
+### 9.8 Public Error Type Pattern
+
+Public crate-surface errors should be structured around diagnostics.
+
+Design direction:
+
+```rust
+pub trait DiagnosticInfo {
+    fn diagnostic(&self) -> &Diagnostic;
+}
+
+pub struct ErrorContext {
+    pub diagnostic: Diagnostic,
+    pub source: Option<Box<dyn std::error::Error + Send + Sync>>,
+}
+```
+
+Recommended pattern:
+
+- each crate defines concrete public error enums for its own surface
+- each error variant carries or can derive a `Diagnostic`
+- public errors implement `DiagnosticInfo`
+- callers may render the diagnostic directly for CLI output and also attach it
+  to logs and spans
+
+Recommended surface-specific cut:
+
+- `InitError` for invalid config and initialization failures
+- `ObservationError` for invalid observation emission or routing-unavailable
+  failures
+- `EventError` for invalid projected log/span/metric records
+- `FlushError` and `ShutdownError` for lifecycle operations
+- `ProjectionError` and `SubscriberError` for typed observation routing
+- `LogSinkError`, `ExportError`, and `IdentityError` for implementation-layer
+  infrastructure failures
+
+Rule:
+
+- fail-fast caller/input errors should be returned directly
+- fail-open backend failures should still be recorded through diagnostics and
+  health reporting even when they do not fail the producer's core path
+
 ## 10. Observation Subscribers and Projectors
 
 The routing layer supports two concepts:
@@ -897,6 +942,10 @@ Rules:
 - routing is per observation payload type
 - filtering is part of runtime registration, not producer burden
 - one observation may fan out to multiple subscribers and multiple projectors
+- matching registrations are invoked in deterministic registration order
+- one subscriber or projector failure must not prevent later matching
+  registrations from running
+- no-match routing is a valid no-op, not an error
 - v1 `sc-observe` scope stops at registration, filtering, projection, and
   fan-out
 
@@ -1380,6 +1429,7 @@ Recommended emission shape in that example:
 
 ```rust
 let observation = Observation {
+    version: "v1".to_string(),
     timestamp: now_utc(),
     service: "atm".to_string(),
     identity: ProcessIdentity {
@@ -1515,9 +1565,8 @@ These questions remain open but do not block the main direction:
 - whether `TraceContext` should remain as one nested struct exactly as drafted
 - the exact shared abstraction for span attributes, in-span events, and
   child-span projection from one typed observation family
-- the exact public error types for `InitError`, `ObservationError`,
-  `EventError`, `FlushError`, `ShutdownError`, `LogSinkError`, `ExportError`,
-  `ProjectionError`, `SubscriberError`, and `IdentityError`
+- the exact enum/struct layout used by each crate to implement the shared
+  public error pattern
 
 ## 20. Review Checklist
 
@@ -1529,6 +1578,7 @@ This draft is ready for review against these questions:
 - Is the subscriber/projector split correct?
 - Is per-type registration and filtering in `sc-observe` the right routing
   model?
+- Is deterministic registration-order dispatch the right default?
 - Are logging and telemetry correctly modeled as downstream output surfaces?
 - Is the 4-crate split correct?
 - Is `sc-observability` lightweight enough for basic CLI logging?
