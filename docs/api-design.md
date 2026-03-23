@@ -168,6 +168,10 @@ Design intent:
 - applications use this when one emitted observation should fan out to logs,
   telemetry, and typed subscribers
 - this crate may depend on `sc-observability` and `sc-observability-otlp`
+- v1 scope is intentionally limited to registration, filtering, projection, and
+  fan-out
+- v1 does not need a large general-purpose workflow engine beyond those routing
+  responsibilities
 
 Must not own:
 
@@ -269,7 +273,39 @@ Field semantics:
 
 > **Note**: Field names may be refined at implementation time. The intent and semantics of each field are fixed by this design.
 
-### 7.3 Producer Injection Traits
+### 7.3 `ObservabilityHealthReport`
+
+The observation runtime should expose a thin aggregate health view rather than a
+separate complex subsystem.
+
+Design direction:
+
+```rust
+pub enum ObservationHealthState {
+    Healthy,
+    Degraded,
+    Unavailable,
+}
+
+pub struct ObservabilityHealthReport {
+    pub state: ObservationHealthState,
+    pub dropped_observations_total: u64,
+    pub subscriber_failures_total: u64,
+    pub projection_failures_total: u64,
+    pub logging: Option<LoggingHealthReport>,
+    pub telemetry: Option<TelemetryHealthReport>,
+    pub last_error: Option<DiagnosticSummary>,
+}
+```
+
+Rules:
+
+- this is an aggregate runtime view for `sc-observe`
+- it summarizes routing failures separately from downstream logging and telemetry
+  health
+- it does not replace `LoggingHealthReport` or `TelemetryHealthReport`
+
+### 7.4 Producer Injection Traits
 
 Producer crates should depend on narrow injected interfaces rather than always
 depending on the concrete service types directly.
@@ -311,7 +347,7 @@ Recommended usage:
 - lower-level or specialized code may inject `LogEmitter` or telemetry emitters
   directly when it is intentionally producing projected signals
 
-### 7.4 `Observable`
+### 7.5 `Observable`
 
 Typed producer observations implement or satisfy an `Observable` contract.
 
@@ -325,7 +361,7 @@ This is intentionally minimal. The core routing system should not require every
 application event type to embed observability details directly into the event
 definition.
 
-### 7.5 Observations vs Projections
+### 7.6 Observations vs Projections
 
 An observation is the canonical producer-side signal.
 
@@ -905,6 +941,15 @@ The sink model is intentionally open-ended. Consumers may compose:
 This surface is designed to remain lightweight enough for basic CLI use without
 pulling in observation routing or OTEL runtime machinery.
 
+V1 built-in sink scope:
+
+- JSONL file sink
+- human-readable console sink
+- fan-out across multiple sinks
+
+Anything more specialized should build on the sink interfaces rather than
+expanding the core lightweight crate aggressively.
+
 ### 11.8 Sink Registration and Filtering
 
 The logging service owns sink registration, fan-out, and optional filtering.
@@ -983,6 +1028,48 @@ pub struct TelemetryConfig {
     pub metrics: Option<MetricsConfig>,
 }
 ```
+
+### 12.1.1 `OtelConfig`
+
+The initial OTEL transport configuration should carry forward the proven core
+shape from the existing `agent-team-mail` implementation, but without any
+ATM-specific env naming baked into the shared API.
+
+Design direction:
+
+```rust
+pub struct OtelConfig {
+    pub enabled: bool,
+    pub endpoint: Option<String>,
+    pub protocol: String,
+    pub auth_header: Option<String>,
+    pub ca_file: Option<std::path::PathBuf>,
+    pub insecure_skip_verify: bool,
+    pub timeout_ms: u64,
+    pub debug_local_export: bool,
+    pub max_retries: u32,
+    pub initial_backoff_ms: u64,
+    pub max_backoff_ms: u64,
+}
+```
+
+Initial intent of each field:
+
+- `enabled`: master switch for OTEL export behavior
+- `endpoint`: collector endpoint base URL
+- `protocol`: initial transport selector; v1 remains OTLP HTTP
+- `auth_header`: optional prebuilt auth header
+- `ca_file`: optional custom CA bundle
+- `insecure_skip_verify`: debug/controlled-environment TLS override
+- `timeout_ms`: per-export timeout budget
+- `debug_local_export`: optional local debug export path
+- `max_retries`: bounded retry attempts
+- `initial_backoff_ms`: initial retry backoff
+- `max_backoff_ms`: maximum retry backoff
+
+This shape is a baseline, not a promise that every current field name is final.
+The design intent is to preserve the proven transport knobs while neutralizing
+the old ATM-specific surface.
 
 ### 12.2 `ResourceAttributes`
 
@@ -1284,6 +1371,18 @@ pub enum TelemetryEnvMode {
     CustomPrefix(String),
 }
 ```
+
+Recommended standard-name mapping for the OTEL transport config includes:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT`
+- `OTEL_EXPORTER_OTLP_PROTOCOL`
+- `OTEL_EXPORTER_OTLP_HEADERS`
+- `OTEL_EXPORTER_OTLP_CERTIFICATE`
+- `OTEL_EXPORTER_OTLP_INSECURE`
+- `OTEL_EXPORTER_OTLP_TIMEOUT`
+
+Custom-prefix loading may expose an equivalent neutral set for application-owned
+config surfaces.
 
 ## 17. Extension Strategy
 
