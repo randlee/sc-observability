@@ -88,9 +88,9 @@ Required baseline updates before implementation begins:
 
 - the main-repo `requirements.md` and `architecture.md` baseline currently
   describe a 3-crate shape and must be updated to the 4-crate workspace
-- [`docs/requirements.md`](/Users/randlee/Documents/github/sc-observability-cobs/docs/requirements.md)
+- [`requirements.md`](requirements.md)
   and
-  [`docs/architecture.md`](/Users/randlee/Documents/github/sc-observability-cobs/docs/architecture.md)
+  [`architecture.md`](architecture.md)
   must both be written to reflect the 4-crate workspace rather than the older
   3-crate shape
 - workspace `Cargo.toml` must add `sc-observe` as a member
@@ -293,15 +293,16 @@ Observation emission error inventory:
 
 - `ObservationError::Shutdown`
   recoverable: no
-  meaning: caller attempted to emit after shutdown
+  meaning: caller attempted to emit after shutdown; this variant carries no
+  `ErrorContext`
 - `ObservationError::QueueFull`
   recoverable: yes
   meaning: the observation runtime could not accept more work within configured
-  capacity
+  capacity; this variant carries `ErrorContext`
 - `ObservationError::RoutingFailure`
   recoverable: depends on caller policy
   meaning: the observation could not be routed to any active or eligible
-  subscriber/projector path
+  subscriber/projector path; this variant carries `ErrorContext`
 
 ### 7.2 `ObservabilityConfig`
 
@@ -1001,7 +1002,15 @@ impl ErrorContext {
 }
 
 pub struct InitError(pub ErrorContext);
-pub struct ObservationError(pub ErrorContext);
+pub enum ObservationError {
+    Shutdown,
+    QueueFull(ErrorContext),
+    RoutingFailure(ErrorContext),
+}
+pub enum TelemetryError {
+    Shutdown,
+    ExportFailure(ErrorContext),
+}
 pub struct EventError(pub ErrorContext);
 pub struct FlushError(pub ErrorContext);
 pub struct ShutdownError(pub ErrorContext);
@@ -1014,9 +1023,13 @@ pub struct IdentityError(pub ErrorContext);
 
 Required pattern:
 
-- public API errors are named newtypes around `ErrorContext`
-- public API errors implement `std::error::Error`, `Display`, and
-  `DiagnosticInfo`
+- most public API errors are named newtypes around `ErrorContext`
+- `ObservationError` and `TelemetryError` are enums because they need named
+  shutdown/runtime guard variants
+- all public API errors implement `std::error::Error` and `Display`
+- errors that always carry diagnostics implement `DiagnosticInfo`
+- `ObservationError` and `TelemetryError` expose optional diagnostic access only
+  on their contextual variants
 - `DiagnosticInfo` is sealed; only this crate's named error newtypes implement
   it
 - stable machine/actionable meaning is carried by `Diagnostic.code`, not by a
@@ -1056,6 +1069,10 @@ where
 These subscribers receive the original typed observation envelope, not a
 projected log or telemetry record.
 
+`T` is fixed at each `Arc<dyn ...<T>>` site. Object erasure is over the
+concrete subscriber/projector implementation, not over the observation type.
+There is no `Arc<dyn ObservationSubscriber>` erased over `T`.
+
 `ObservationSubscriber<T>` is intentionally open. External crates may implement
 it to add custom observation routing.
 This trait must remain object-safe for `Arc<dyn ObservationSubscriber<T>>`.
@@ -1077,6 +1094,7 @@ where
 ```
 
 `LogProjector<T>` is intentionally open.
+The `T` clarification from §10.1 applies here as well.
 This trait must remain object-safe for `Arc<dyn LogProjector<T>>`.
 
 ### 10.3 Span Projectors
@@ -1106,6 +1124,7 @@ pub enum SpanSignal {
 ```
 
 `SpanProjector<T>` is intentionally open.
+The `T` clarification from §10.1 applies here as well.
 This trait must remain object-safe for `Arc<dyn SpanProjector<T>>`.
 
 ### 10.4 Metric Projectors
@@ -1125,6 +1144,7 @@ where
 ```
 
 `MetricProjector<T>` is intentionally open.
+The `T` clarification from §10.1 applies here as well.
 This trait must remain object-safe for `Arc<dyn MetricProjector<T>>`.
 
 ### 10.5 Registration and Filtering
@@ -1488,9 +1508,9 @@ pub struct Telemetry { /* opaque */ }
 
 impl Telemetry {
     pub fn new(config: TelemetryConfig) -> Result<Self, InitError>;
-    pub fn emit_log(&self, event: &LogEvent) -> Result<(), EventError>;
-    pub fn emit_span(&self, span: &SpanSignal) -> Result<(), EventError>;
-    pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), EventError>;
+    pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError>;
+    pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError>;
+    pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError>;
     pub fn flush(&self) -> Result<(), FlushError>;
     pub fn shutdown(&self) -> Result<(), ShutdownError>;
     pub fn health(&self) -> TelemetryHealthReport;
@@ -1503,8 +1523,7 @@ assembly.
 Rule:
 
 - calling `emit_log()`, `emit_span()`, or `emit_metric()` after `shutdown()`
-  returns `Err(EventError)` with the named shutdown semantic case
-  `Telemetry::Shutdown` or an equivalent `Diagnostic.code`
+  returns `Err(TelemetryError::Shutdown)`
 - this lifecycle rule is semantic only in this design doc; no telemetry handle
   typestate is required here
 
@@ -1551,7 +1570,7 @@ Rules:
 
 Rules:
 
-- invalid projected records return `EventError`
+- invalid telemetry emission inputs return `TelemetryError::ExportFailure(...)`
 - exporter failures after validation are fail-open
 - exporter failures update health and dropped counters
 - exporter failures do not fail the caller's core command flow
