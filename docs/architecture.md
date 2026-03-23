@@ -37,16 +37,16 @@ isolation:
 
 ## 1.1 Approval Scope
 
-This document is intended to do two different jobs, and those jobs should not
-be conflated:
-
-- approved for shared-repo boundary direction and blocker closure
-- not yet, by itself, a complete ATM migration specification
+```text
+APPROVED for shared-repo boundary direction / blocker closure.
+NOT YET sufficient as the complete ATM migration specification.
+```
 
 The shared workspace architecture is approved when the crate boundaries,
-dependency layering, and generic extension points are correct. ATM migration
-confidence additionally requires ATM-owned adapter requirements and ATM-owned
-adapter architecture that define the compatibility behavior outside this repo.
+dependency layering, and generic extension points are correct. Complete ATM
+migration confidence additionally requires the ATM adapter requirements and ATM
+adapter architecture documents that define the compatibility behavior outside
+this repo.
 
 ## 2. Architectural Principles
 

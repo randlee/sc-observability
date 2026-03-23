@@ -66,10 +66,13 @@ for crate_root in shared_crate_roots:
 
 for path in source_files:
     text = path.read_text(encoding="utf-8")
+    # Enforce the shared-repo boundary: no source-code coupling to agent-team-mail crates.
     if "agent-team-mail-" in text or "agent_team_mail" in text:
         raise SystemExit(f"ATM coupling reference found in shared crate source: {path}")
+    # Enforce the shared-repo boundary: no ATM-prefixed env/config reads in shared crates.
     if re.search(r"\bATM_[A-Z0-9_]+\b", text):
         raise SystemExit(f"ATM-prefixed env/config reference found in shared crate source: {path}")
+    # Enforce the shared-repo boundary: no home/path discovery in shared crates.
     if any(
         token in text
         for token in [
@@ -90,6 +93,7 @@ for path in [
     root / "crates/sc-observe/Cargo.toml",
 ]:
     deps = package_deps(path)
+    # Enforce the layered stack: only sc-observability-otlp may own OTLP/OpenTelemetry deps.
     if any(name.startswith("opentelemetry") or "otlp" in name for name in deps):
         raise SystemExit(f"OTLP/OpenTelemetry dependency found outside sc-observability-otlp: {path}")
 
@@ -97,6 +101,16 @@ api = (root / "docs/api-design.md").read_text(encoding="utf-8")
 arch = (root / "docs/architecture.md").read_text(encoding="utf-8")
 req = (root / "docs/requirements.md").read_text(encoding="utf-8")
 atm_example = (root / "docs/atm-adapter-example.md").read_text(encoding="utf-8")
+
+# Enforce the adapter-spec boundary: ATM adapter requirements doc must remain present.
+if not (root / "docs/atm-adapter-requirements.md").exists():
+    raise SystemExit("docs/atm-adapter-requirements.md is missing")
+# Enforce the adapter-spec boundary: ATM adapter architecture doc must remain present.
+if not (root / "docs/atm-adapter-architecture.md").exists():
+    raise SystemExit("docs/atm-adapter-architecture.md is missing")
+# Enforce extraction planning continuity: extraction inventory must remain present.
+if not (root / "docs/extraction-inventory.md").exists():
+    raise SystemExit("docs/extraction-inventory.md is missing")
 
 if "sc-observe -> sc-observability-otlp" in api:
     raise SystemExit("api-design.md still contains forbidden sc-observe -> sc-observability-otlp dependency")
@@ -112,6 +126,10 @@ if "atm-observability-adapter" not in arch:
     raise SystemExit("architecture.md missing explicit ATM adapter boundary")
 if "OTLP-017" not in req or "OTLP-018" not in req:
     raise SystemExit("requirements.md missing OTLP attachment/TelemetryConfig requirements")
+
+# Enforce proving-artifact continuity: ATM boundary example must remain present before compilation.
+if not (root / "examples/atm-adapter-example/Cargo.toml").exists():
+    raise SystemExit("examples/atm-adapter-example/Cargo.toml is missing")
 
 subprocess.run(
     ["cargo", "check", "--manifest-path", "examples/atm-adapter-example/Cargo.toml"],

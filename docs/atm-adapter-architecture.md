@@ -17,6 +17,38 @@ Its purpose is to define the ATM-side integration that sits above the shared
 `sc-observability` workspace without pushing ATM semantics back into the shared
 crates.
 
+## 1.1 Layered Diagram
+
+```text
+ATM producers / daemon paths
+          |
+          v
+atm-observability-adapter
+  - ATM payload mapping
+  - ATM env/config translation
+  - ATM health projection
+  - ATM spool / fan-in ownership
+          |
+          v
+sc-observability-otlp
+  - OTLP attachment
+  - exporter runtime
+          |
+          v
+sc-observe
+  - observation routing
+  - subscriber / projector registration
+          |
+          v
+sc-observability
+  - logging
+  - sinks
+          |
+          v
+sc-observability-types
+  - shared contracts
+```
+
 ## 2. Ownership Split
 
 ### Shared Workspace Owns

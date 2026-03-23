@@ -18,6 +18,43 @@ behavior. This adapter layer owns the ATM-specific transforms, compatibility
 rules, and projected surfaces needed to preserve ATM observability behavior
 while using the standalone shared crates underneath.
 
+## 1.1 Scope
+
+This document covers:
+
+- ATM-owned compatibility and mapping behavior
+- ATM-owned env/config translation
+- ATM-owned durability and health projection behavior
+- ATM-owned schema and parity obligations
+
+This document does not cover:
+
+- generic shared-crate APIs already owned by the `sc-observability` workspace
+- daemon implementation details unrelated to observability
+- approval of breaking ATM schema changes without an explicit migration plan
+
+## 1.2 Dependency Diagram
+
+```text
+atm-observability-adapter
+  -> sc-observability-otlp
+    -> sc-observe
+      -> sc-observability
+        -> sc-observability-types
+```
+
+## 1.3 Requirements Summary
+
+| ID | Title | Section |
+| --- | --- | --- |
+| ADP-001 | ATM-owned payload and envelope ownership | 2 |
+| ADP-002 | ATM-owned EventFields to LogEventV1 mapping semantics | 3 |
+| ADP-003 | ATM-prefixed env and OTEL translation ownership | 6 |
+| ADP-004 | Fan-in, direct-spool, and shutdown-safe durability ownership | 4 |
+| ADP-005 | ATM health JSON projection ownership | 5 |
+| ADP-006 | ATM health surface parity obligations | 2 / 5 |
+| ADP-007 | Shipped schema compatibility obligations | 2 |
+
 ## 2. Ownership Boundary
 
 - ADP-001 The ATM adapter shall own `LogEventV1` and all ATM-specific payload,
@@ -26,7 +63,9 @@ while using the standalone shared crates underneath.
   into ATM-owned event/log envelopes, including promotion rules and passthrough
   rules for extra fields.
 - ADP-003 The ATM adapter shall own all ATM-prefixed env/config translation for
-  logging and OTEL setup.
+  logging and OTEL setup, including `ATM_OTEL_ENDPOINT`,
+  `ATM_OTEL_PROTOCOL`, `ATM_OTEL_AUTH_HEADER`, `ATM_OTEL_CA_FILE`,
+  `ATM_OTEL_INSECURE_SKIP_VERIFY`, and `ATM_OTEL_DEBUG_LOCAL_EXPORT`.
 - ADP-004 The ATM adapter shall own ATM-specific daemon fan-in, direct-spool
   fallback, and shutdown-safe durability behavior.
 - ADP-005 The ATM adapter shall own ATM health JSON projection from shared
