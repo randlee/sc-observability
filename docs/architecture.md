@@ -150,6 +150,12 @@ Runtime role:
 - assemble span lifecycle signals into completed exportable spans
 - invoke actual OpenTelemetry/OTLP services and transports
 
+Configuration model:
+
+- `TelemetryConfig` is constructed and owned by the application layer
+- `TelemetryConfig` is passed directly to `sc-observability-otlp`
+- `TelemetryConfig` is not embedded in or derived from `ObservabilityConfig`
+
 Must not push OTLP concerns into the lower crates.
 
 ## 4. Runtime Composition
@@ -200,6 +206,27 @@ The important ownership rule is:
 - producers emit one canonical observation
 - lower layers do not require knowledge of higher-layer transports
 
+### 5.1 Full-Stack Attachment Model
+
+Under the corrected layering, `sc-observability-otlp` attaches to
+`sc-observe` by using the existing open projector extension points.
+
+The attachment model is:
+
+1. the application constructs `ObservabilityBuilder` for `sc-observe`
+2. the application constructs `TelemetryConfig` independently for
+   `sc-observability-otlp`
+3. `sc-observability-otlp` registers its `LogProjector`, `SpanProjector`, and
+   `MetricProjector` implementations with `ObservabilityBuilder`
+4. `sc-observe` remains generic and routes observations through those
+   registrations like any other external projector
+
+Important boundary:
+
+- `sc-observe` does not provide a special internal OTLP handle
+- `sc-observability-otlp` plugs in through the same registration model exposed
+  to other downstream projector consumers
+
 ## 6. Crate Boundary Table
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
@@ -249,16 +276,17 @@ The important ownership rule is:
   - OTel integration is opt-in
   - transport concerns are isolated where they belong
 
-## 8. Known API-Design Follow-Ups
+## 8. API-Design Consistency
 
-The current `api-design.md` is the approved baseline, but it still carries some
-pre-rewrite layering assumptions that must be corrected before implementation:
+In this docs-v2 branch, `api-design.md` is updated to match the corrected
+layering:
 
-- it still states `sc-observe -> sc-observability-otlp` in the dependency section
-- it still places OTLP configuration under `ObservabilityConfig`
-- it still describes `sc-observe` as deriving `TelemetryConfig`
-
-Those are API-surface follow-ups, not reasons to keep the wrong architecture.
+- `sc-observe` depends on `sc-observability-types` and `sc-observability` only
+- `ObservabilityConfig` no longer owns OTLP configuration
+- `TelemetryConfig` is application-constructed and passed directly to
+  `sc-observability-otlp`
+- OTLP attachment is expressed through projector registration with
+  `ObservabilityBuilder`
 
 ## 9. Pre-Implementation Cleanup
 

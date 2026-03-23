@@ -144,6 +144,8 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
 - OTLP-014 `sc-observability-otlp` shall depend on `sc-observe` rather than the other way around.
 - OTLP-015 `sc-observability-otlp` shall attach OTel behavior using lower-level routing and logging infrastructure from the crates beneath it.
 - OTLP-016 `sc-observability-otlp` shall not push OTLP-specific requirements into `sc-observability`.
+- OTLP-017 `sc-observability-otlp` shall attach to the routing layer by registering `LogProjector`, `SpanProjector`, and `MetricProjector` implementations with `ObservabilityBuilder`, not through direct internal access to `sc-observe` internals.
+- OTLP-018 `TelemetryConfig` shall be constructed independently of `ObservabilityConfig` and passed directly to `sc-observability-otlp` at setup time.
 
 ## 7. Non-Functional Requirements
 

@@ -7,10 +7,8 @@ This document is the source design baseline for the companion
 `requirements.md` and `architecture.md` documents, which now exist on their
 respective review branches.
 
-Important note: this document still contains some pre-rewrite layering
-assumptions. Where it conflicts with the corrected stack documented in
-`requirements.md` and `architecture.md`, those conflicts are called out
-explicitly below and must be corrected before implementation begins.
+This document is aligned to the corrected layering documented in
+`requirements.md` and `architecture.md`.
 
 ## 1. Purpose
 
@@ -102,30 +100,6 @@ Required baseline updates before implementation begins:
   `sc-observability-types <- sc-observability <- sc-observe <- sc-observability-otlp`
 - `sc-observe` must not introduce any `agent-team-mail-*` dependencies
 
-## 3.2 Layering Review Notes
-
-The corrected architecture for docs-v2 is:
-
-```text
-sc-observability-types
-  <- sc-observability
-    <- sc-observe
-      <- sc-observability-otlp
-```
-
-This document still contains several pre-v2 assumptions that violate that
-ordering:
-
-- §6.3 describes `sc-observe` as routing typed observations into both logging
-  and telemetry outputs
-- §6.5 currently states `sc-observe -> sc-observability-otlp`
-- §7.2 places OTLP configuration under `ObservabilityConfig`
-- §12.1 describes `sc-observe` as deriving `TelemetryConfig` from
-  `ObservabilityConfig.otel`
-
-Those surfaces are flagged here intentionally. They should be corrected in the
-API surface before implementation, but are not silently rewritten in this pass.
-
 ## 4. Design Goals
 
 - Let a producer emit one canonical observation.
@@ -210,15 +184,16 @@ Owns:
 - observation emitter interfaces
 - subscriber registry
 - projector registry
-- routing from typed observations into logging and telemetry outputs
+- routing from typed observations into logging outputs and generic downstream
+  projector/subscriber extension points
 - top-level health aggregation across the observation runtime
 
 Design intent:
 
 - this is the heavier runtime crate
 - applications use this when one emitted observation should fan out to logs,
-  telemetry, and typed subscribers
-- this crate may depend on `sc-observability` and `sc-observability-otlp`
+  generic projectors, and typed subscribers
+- this crate depends on `sc-observability` and `sc-observability-types`
 - v1 scope is intentionally limited to registration, filtering, projection, and
   fan-out
 - v1 does not need a large general-purpose workflow engine beyond those routing
@@ -236,10 +211,20 @@ Owns remote telemetry infrastructure.
 Owns:
 
 - `Telemetry`
+- `TelemetryConfig`
 - OTLP exporters
 - OTLP transport concerns
 - batching, retry, timeout, flush, shutdown
 - exporter health and dropped-export accounting
+
+Design intent:
+
+- this crate sits at the top of the stack
+- the application constructs `TelemetryConfig` independently and passes it
+  directly to `sc-observability-otlp`
+- this crate attaches to `sc-observe` by registering `LogProjector`,
+  `SpanProjector`, and `MetricProjector` implementations with
+  `ObservabilityBuilder`
 
 Must not own:
 
@@ -254,12 +239,11 @@ Recommended dependency direction:
 ```text
 sc-observability-types
     ↑
-    ├── sc-observability
-    ├── sc-observability-otlp
-    └── sc-observe
-
-sc-observe -> sc-observability
-sc-observe -> sc-observability-otlp
+    └── sc-observability
+          ↑
+          └── sc-observe
+                ↑
+                └── sc-observability-otlp
 ```
 
 Implications:
@@ -267,6 +251,7 @@ Implications:
 - a basic CLI may depend only on `sc-observability`
 - applications that need observation routing depend on `sc-observe`
 - OTEL remains optional and isolated in `sc-observability-otlp`
+- `sc-observe` does not depend on `sc-observability-otlp`
 
 ## 7. Producer-Facing Model
 
@@ -345,7 +330,6 @@ pub struct ObservabilityConfig {
     pub env_prefix: String,
     pub queue_capacity: usize,
     pub rotation: RotationPolicy,
-    pub otel: Option<OtelConfig>,
 }
 ```
 
@@ -356,7 +340,6 @@ Field semantics:
 - `env_prefix` — prefix for environment variable overrides (e.g. `"OTEL"` for standard OTel names, or a tool-specific prefix); must not be ATM-specific in generic deployments
 - `queue_capacity` — capacity of the internal async event queue; controls backpressure before dropping
 - `rotation` — log rotation policy applied to the built-in file sink
-- `otel` — optional OTLP telemetry configuration; when `None`, telemetry is disabled and `TelemetryHealthState` is `Disabled`
 
 Composition rules inside `sc-observe`:
 
@@ -368,11 +351,9 @@ Composition rules inside `sc-observe`:
 - `LoggerConfig.level`, `retention`, `redaction`, and `process_identity` use
   documented `sc-observe` defaults unless those knobs are exposed separately in
   a future expansion of `ObservabilityConfig`
-- when `ObservabilityConfig.otel` is `Some(...)`, `sc-observe` derives an
-  internal `TelemetryConfig` using `tool_name` as `service_name`
-- this derivation rule exists for `sc-observe` composition only; it does not
-  remove the direct standalone construction path for `LoggerConfig` in
-  `sc-observability` or `TelemetryConfig` in `sc-observability-otlp`
+- `sc-observe` does not derive or own `TelemetryConfig`
+- `TelemetryConfig` is constructed independently by the application layer and
+  passed directly to `sc-observability-otlp`
 
 > **Note**: Field names may be refined at implementation time. The intent and semantics of each field are fixed by this design.
 
@@ -382,6 +363,14 @@ Registrations are config-time only:
   `ObservabilityBuilder` or equivalent construction-time configuration
 - registration closes at `Observability::new(...)`
 - no runtime registration after construction is part of v1
+
+Full-stack attachment model:
+
+- `sc-observability-otlp` attaches to the routing layer by registering its
+  `LogProjector`, `SpanProjector`, and `MetricProjector` implementations with
+  `ObservabilityBuilder`
+- `sc-observe` remains generic and does not expose OTLP-specific internal
+  attachment paths
 
 ### 7.3 `ObservabilityHealthReport`
 
@@ -1458,16 +1447,10 @@ pub struct TelemetryConfig {
 
 Composition rule:
 
-- when `sc-observe` enables telemetry, it derives `TelemetryConfig` from
-  `ObservabilityConfig.otel`
-- `TelemetryConfig.service_name = ObservabilityConfig.tool_name`
-- `TelemetryConfig.resource` is initialized from default resource attributes and
-  the service identity
-- `TelemetryConfig.transport = ObservabilityConfig.otel.unwrap()`
-- `TelemetryConfig.logs`, `traces`, and `metrics` are initialized from `sc-observe`
-  defaults unless the observation runtime later exposes those knobs explicitly
-- this derivation rule does not remove the direct standalone `TelemetryConfig`
-  construction path in `sc-observability-otlp`
+- `TelemetryConfig` is constructed independently by the application layer
+- `TelemetryConfig` is passed directly to `sc-observability-otlp`
+- `TelemetryConfig.service_name`, `resource`, `transport`, and signal-specific
+  settings are owned by the OTLP setup path, not by `ObservabilityConfig`
 
 ### 12.1.1 `OtelConfig`
 
