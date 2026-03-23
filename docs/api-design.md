@@ -325,7 +325,7 @@ pub trait LogEmitter: Send + Sync {
 }
 
 pub trait SpanEmitter: Send + Sync {
-    fn emit_span(&self, span: ProjectedSpan) -> Result<(), EventError>;
+    fn emit_span(&self, span: SpanSignal) -> Result<(), EventError>;
 }
 
 pub trait MetricEmitter: Send + Sync {
@@ -522,16 +522,24 @@ pub enum LevelFilter {
 
 The shared timestamp contract is UTC-only.
 
+Design direction:
+
+```rust
+pub type Timestamp = time::OffsetDateTime;
+```
+
 Requirements:
 
+- all timestamp values are normalized to `time::UtcOffset::UTC`
 - timestamps are stored and serialized in UTC
+- serialization uses RFC3339 UTC form
 - serialization is stable
 - comparison semantics are stable
 - local time conversion is a rendering concern, not a wire/storage concern
 - human-readable console rendering may optionally format local time, but that
   must not change the canonical stored or emitted UTC timestamp
 
-The exact Rust implementation type remains open.
+This closes the timestamp type choice for the shared crates.
 
 ### 8.6 `ProcessIdentity`
 
@@ -595,6 +603,11 @@ Meaning:
 - `parent_span_id`: the parent node when nested
 
 This is how logs, spans, and related facts are connected.
+
+Rule:
+
+- `TraceContext` is limited to generic W3C-style trace correlation only
+- request/session/runtime/application metadata must not be added here
 
 ### 8.9 `StateTransition`
 
@@ -743,7 +756,44 @@ Rules:
 This keeps span lifecycle correctness in the type system while still supporting
 generic serialization and export.
 
-### 9.5 `MetricKind`
+### 9.5 `SpanEvent`
+
+`SpanEvent` represents an in-span fact attached to an existing span context.
+
+Design direction:
+
+```rust
+pub struct SpanEvent {
+    pub timestamp: Timestamp,
+    pub trace: TraceContext,
+    pub name: String,
+    pub attributes: serde_json::Map<String, serde_json::Value>,
+    pub diagnostic: Option<Diagnostic>,
+}
+```
+
+### 9.6 `SpanSignal`
+
+`SpanSignal` is the projection-time abstraction for trace output.
+
+Design direction:
+
+```rust
+pub enum SpanSignal {
+    Started(SpanRecord<SpanStarted>),
+    Event(SpanEvent),
+    Ended(SpanRecord<SpanEnded>),
+}
+```
+
+Rules:
+
+- in-span events use `SpanSignal::Event`
+- child spans are represented by additional `Started`/`Ended` signals whose
+  `TraceContext.parent_span_id` points at the parent span
+- one observation family may legitimately project all three signal kinds
+
+### 9.7 `MetricKind`
 
 ```rust
 pub enum MetricKind {
@@ -753,7 +803,7 @@ pub enum MetricKind {
 }
 ```
 
-### 9.6 `MetricRecord`
+### 9.8 `MetricRecord`
 
 Design direction:
 
@@ -771,7 +821,7 @@ pub struct MetricRecord {
 
 `MetricRecord` does not carry a full `Diagnostic` in the initial design.
 
-### 9.7 `DiagnosticSummary`
+### 9.9 `DiagnosticSummary`
 
 Design direction:
 
@@ -783,7 +833,7 @@ pub struct DiagnosticSummary {
 }
 ```
 
-### 9.8 Public Error Type Pattern
+### 9.10 Public Error Type Pattern
 
 Public crate-surface errors should be structured around diagnostics.
 
@@ -798,26 +848,28 @@ pub struct ErrorContext {
     pub diagnostic: Diagnostic,
     pub source: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
+
+pub struct InitError(pub ErrorContext);
+pub struct ObservationError(pub ErrorContext);
+pub struct EventError(pub ErrorContext);
+pub struct FlushError(pub ErrorContext);
+pub struct ShutdownError(pub ErrorContext);
+pub struct ProjectionError(pub ErrorContext);
+pub struct SubscriberError(pub ErrorContext);
+pub struct LogSinkError(pub ErrorContext);
+pub struct ExportError(pub ErrorContext);
+pub struct IdentityError(pub ErrorContext);
 ```
 
-Recommended pattern:
+Required pattern:
 
-- each crate defines concrete public error enums for its own surface
-- each error variant carries or can derive a `Diagnostic`
-- public errors implement `DiagnosticInfo`
+- public API errors are named newtypes around `ErrorContext`
+- public API errors implement `std::error::Error`, `Display`, and
+  `DiagnosticInfo`
+- stable machine/actionable meaning is carried by `Diagnostic.code`, not by a
+  growing public enum surface
 - callers may render the diagnostic directly for CLI output and also attach it
   to logs and spans
-
-Recommended surface-specific cut:
-
-- `InitError` for invalid config and initialization failures
-- `ObservationError` for invalid observation emission or routing-unavailable
-  failures
-- `EventError` for invalid projected log/span/metric records
-- `FlushError` and `ShutdownError` for lifecycle operations
-- `ProjectionError` and `SubscriberError` for typed observation routing
-- `LogSinkError`, `ExportError`, and `IdentityError` for implementation-layer
-  infrastructure failures
 
 Rule:
 
@@ -876,15 +928,16 @@ where
     fn project_spans(
         &self,
         observation: &Observation<T>,
-    ) -> Result<Vec<ProjectedSpan>, ProjectionError>;
+    ) -> Result<Vec<SpanSignal>, ProjectionError>;
 }
 ```
 
 Where:
 
 ```rust
-pub enum ProjectedSpan {
+pub enum SpanSignal {
     Started(SpanRecord<SpanStarted>),
+    Event(SpanEvent),
     Ended(SpanRecord<SpanEnded>),
 }
 ```
@@ -1017,11 +1070,23 @@ pub struct RetentionPolicy {
 ### 11.5 `RedactionPolicy`
 
 ```rust
+pub trait Redactor: Send + Sync {
+    fn redact(&self, key: &str, value: &mut serde_json::Value);
+}
+
 pub struct RedactionPolicy {
     pub denylist_keys: Vec<String>,
     pub redact_bearer_tokens: bool,
+    pub custom_redactors: Vec<std::sync::Arc<dyn Redactor>>,
 }
 ```
+
+Rules:
+
+- built-in denylist and bearer-token redaction run first
+- custom redactors run after built-ins in registration order
+- redaction happens before sink fan-out
+- sink implementations must receive already-redacted events
 
 ### 11.6 `Logger`
 
@@ -1213,7 +1278,7 @@ pub struct Telemetry { /* opaque */ }
 impl Telemetry {
     pub fn new(config: TelemetryConfig) -> Result<Self, InitError>;
     pub fn emit_log(&self, event: &LogEvent) -> Result<(), EventError>;
-    pub fn emit_span(&self, span: &ProjectedSpan) -> Result<(), EventError>;
+    pub fn emit_span(&self, span: &SpanSignal) -> Result<(), EventError>;
     pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), EventError>;
     pub fn flush(&self) -> Result<(), FlushError>;
     pub fn shutdown(&self) -> Result<(), ShutdownError>;
@@ -1229,7 +1294,7 @@ pub trait LogExporter: Send + Sync {
 }
 
 pub trait TraceExporter: Send + Sync {
-    fn export_spans(&self, batch: &[ProjectedSpan]) -> Result<(), ExportError>;
+    fn export_spans(&self, batch: &[SpanSignal]) -> Result<(), ExportError>;
 }
 
 pub trait MetricExporter: Send + Sync {
@@ -1558,17 +1623,17 @@ The standalone API must not reintroduce:
 - health models coupled to one CLI command surface
 - transport logic embedded in the local logging crate
 
-## 19. Open Questions
+## 19. Remaining Work
 
-These questions remain open but do not block the main direction:
+The main architecture and public API shape are now settled.
 
-- the exact Rust timestamp implementation type
-- whether redaction extensibility is callback-based, trait-based, or policy-only
-- whether `TraceContext` should remain as one nested struct exactly as drafted
-- the exact shared abstraction for span attributes, in-span events, and
-  child-span projection from one typed observation family
-- the exact enum/struct layout used by each crate to implement the shared
-  public error pattern
+Remaining work after design review is implementation work, not unresolved
+direction:
+
+- translate this design into definitive `requirements.md`
+- translate this design into definitive `architecture.md`
+- add `sc-observe` to the workspace and implement the crate boundaries
+- build the required `AgentInfo`-style proving example and integration tests
 
 ## 20. Review Checklist
 
