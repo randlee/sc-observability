@@ -245,6 +245,12 @@ impl Observability {
 
 This is the only producer-facing observation emission path in the design.
 
+Rule:
+
+- calling `emit()` after `shutdown()` is invalid behavior
+- this lifecycle rule is semantic only in this design doc; `Observability` is
+  not parameterized by typestate here
+
 ### 7.2 `ObservabilityConfig`
 
 `ObservabilityConfig` is the top-level configuration passed to `Observability::new`.
@@ -270,6 +276,22 @@ Field semantics:
 - `queue_capacity` — capacity of the internal async event queue; controls backpressure before dropping
 - `rotation` — log rotation policy applied to the built-in file sink
 - `otel` — optional OTLP telemetry configuration; when `None`, telemetry is disabled and `TelemetryHealthState` is `Disabled`
+
+Composition rules inside `sc-observe`:
+
+- `sc-observe` derives an internal `LoggerConfig` from `ObservabilityConfig`
+- `LoggerConfig.service_name = ObservabilityConfig.tool_name`
+- `LoggerConfig.log_root = ObservabilityConfig.log_root`
+- `LoggerConfig.queue_capacity = ObservabilityConfig.queue_capacity`
+- `LoggerConfig.rotation = ObservabilityConfig.rotation`
+- `LoggerConfig.level`, `retention`, `redaction`, and `process_identity` use
+  documented `sc-observe` defaults unless those knobs are exposed separately in
+  a future expansion of `ObservabilityConfig`
+- when `ObservabilityConfig.otel` is `Some(...)`, `sc-observe` derives an
+  internal `TelemetryConfig` using `tool_name` as `service_name`
+- this derivation rule exists for `sc-observe` composition only; it does not
+  remove the direct standalone construction path for `LoggerConfig` in
+  `sc-observability` or `TelemetryConfig` in `sc-observability-otlp`
 
 > **Note**: Field names may be refined at implementation time. The intent and semantics of each field are fixed by this design.
 
@@ -360,6 +382,9 @@ pub trait Observable: Send + Sync + 'static {}
 This is intentionally minimal. The core routing system should not require every
 application event type to embed observability details directly into the event
 definition.
+
+`Observable` is intentionally open. Consumer crates implement it for their own
+payload types.
 
 ### 7.6 `Observation<T>`
 
@@ -574,6 +599,9 @@ pub trait ProcessIdentityResolver: Send + Sync {
 }
 ```
 
+`ProcessIdentityResolver` is intentionally open for consumer implementation.
+Changes to its signature are breaking.
+
 Rationale:
 
 - most consumers want automatic hostname/pid population
@@ -589,10 +617,25 @@ Rationale:
 Design direction:
 
 ```rust
+pub struct TraceId(String);
+pub struct SpanId(String);
+pub struct TraceIdError;
+pub struct SpanIdError;
+
+impl TraceId {
+    pub fn new(value: impl Into<String>) -> Result<Self, TraceIdError>;
+    pub fn as_str(&self) -> &str;
+}
+
+impl SpanId {
+    pub fn new(value: impl Into<String>) -> Result<Self, SpanIdError>;
+    pub fn as_str(&self) -> &str;
+}
+
 pub struct TraceContext {
-    pub trace_id: String,
-    pub span_id: String,
-    pub parent_span_id: Option<String>,
+    pub trace_id: TraceId,
+    pub span_id: SpanId,
+    pub parent_span_id: Option<SpanId>,
 }
 ```
 
@@ -608,6 +651,8 @@ Rule:
 
 - `TraceContext` is limited to generic W3C-style trace correlation only
 - request/session/runtime/application metadata must not be added here
+- `TraceId` validates 32-char lowercase hex W3C trace IDs at construction
+- `SpanId` validates 16-char lowercase hex W3C span IDs at construction
 
 ### 8.9 `StateTransition`
 
@@ -724,7 +769,6 @@ pub struct SpanRecord<S> {
     pub service: String,
     pub name: String,
     pub trace: TraceContext,
-    pub state: SpanState,
     pub status: SpanStatus,
     pub duration_ms: Option<u64>,
     pub diagnostic: Option<Diagnostic>,
@@ -737,6 +781,14 @@ Recommended lifecycle:
 
 ```rust
 impl SpanRecord<SpanStarted> {
+    pub fn new(
+        timestamp: Timestamp,
+        service: String,
+        name: String,
+        trace: TraceContext,
+        attributes: serde_json::Map<String, serde_json::Value>,
+    ) -> Self;
+
     pub fn end(
         self,
         status: SpanStatus,
@@ -747,11 +799,14 @@ impl SpanRecord<SpanStarted> {
 
 Rules:
 
+- `SpanRecord<SpanStarted>` has the only public constructor
+- `SpanRecord<SpanEnded>` has no public constructor and is only reachable via
+  `SpanRecord<SpanStarted>::end(...)`
 - `SpanRecord<SpanStarted>` may not carry a final duration
 - `SpanRecord<SpanEnded>` must carry a final duration
 - producer APIs should expose only valid transitions per state
-- downstream consumers may still use the runtime `SpanState` field when reading
-  serialized/projected data
+- runtime `SpanState` is derived from the typestate parameter `S` during
+  serialization and export rather than stored as a public producer-facing field
 
 This keeps span lifecycle correctness in the type system while still supporting
 generic serialization and export.
@@ -840,13 +895,26 @@ Public crate-surface errors should be structured around diagnostics.
 Design direction:
 
 ```rust
-pub trait DiagnosticInfo {
+mod sealed {
+    pub trait Sealed {}
+}
+
+pub trait DiagnosticInfo: sealed::Sealed {
     fn diagnostic(&self) -> &Diagnostic;
 }
 
-pub struct ErrorContext {
-    pub diagnostic: Diagnostic,
-    pub source: Option<Box<dyn std::error::Error + Send + Sync>>,
+pub struct ErrorContext { /* private fields */ }
+
+impl ErrorContext {
+    pub fn new(
+        code: ErrorCode,
+        message: impl Into<String>,
+        remediation: Remediation,
+    ) -> Self;
+    pub fn cause(self, cause: impl Into<String>) -> Self;
+    pub fn docs(self, docs: impl Into<String>) -> Self;
+    pub fn detail(self, key: impl Into<String>, value: serde_json::Value) -> Self;
+    pub fn source(self, source: impl std::error::Error + Send + Sync + 'static) -> Self;
 }
 
 pub struct InitError(pub ErrorContext);
@@ -866,10 +934,15 @@ Required pattern:
 - public API errors are named newtypes around `ErrorContext`
 - public API errors implement `std::error::Error`, `Display`, and
   `DiagnosticInfo`
+- `DiagnosticInfo` is sealed; only this crate's named error newtypes implement
+  it
 - stable machine/actionable meaning is carried by `Diagnostic.code`, not by a
   growing public enum surface
 - callers may render the diagnostic directly for CLI output and also attach it
   to logs and spans
+- `ErrorContext` is not directly constructible without `Remediation`
+- canonical `Display` delegates to `Diagnostic` and prints message, cause when
+  present, and remediation steps or non-recoverable justification
 
 Rule:
 
@@ -900,6 +973,9 @@ where
 These subscribers receive the original typed observation envelope, not a
 projected log or telemetry record.
 
+`ObservationSubscriber<T>` is intentionally open. External crates may implement
+it to add custom observation routing.
+
 ### 10.2 Log Projectors
 
 Design direction:
@@ -915,6 +991,8 @@ where
     ) -> Result<Vec<LogEvent>, ProjectionError>;
 }
 ```
+
+`LogProjector<T>` is intentionally open.
 
 ### 10.3 Span Projectors
 
@@ -942,6 +1020,8 @@ pub enum SpanSignal {
 }
 ```
 
+`SpanProjector<T>` is intentionally open.
+
 ### 10.4 Metric Projectors
 
 Design direction:
@@ -957,6 +1037,8 @@ where
     ) -> Result<Vec<MetricRecord>, ProjectionError>;
 }
 ```
+
+`MetricProjector<T>` is intentionally open.
 
 ### 10.5 Registration and Filtering
 
@@ -991,6 +1073,8 @@ where
     pub filter: Option<std::sync::Arc<dyn ObservationFilter<T>>>,
 }
 ```
+
+`ObservationFilter<T>` is intentionally open.
 
 Rules:
 
@@ -1116,6 +1200,8 @@ pub trait LogSink: Send + Sync {
 }
 ```
 
+`LogSink` is intentionally open.
+
 Built-in sink:
 
 - `JsonlFileSink`
@@ -1184,9 +1270,15 @@ pub enum LoggingHealthState {
     Unavailable,
 }
 
+pub enum SinkHealthState {
+    Healthy,
+    DegradedDropping,
+    Unavailable,
+}
+
 pub struct SinkHealth {
     pub name: String,
-    pub state: String,
+    pub state: SinkHealthState,
     pub last_error: Option<DiagnosticSummary>,
 }
 
@@ -1212,11 +1304,25 @@ Design direction:
 pub struct TelemetryConfig {
     pub service_name: String,
     pub resource: ResourceAttributes,
+    pub transport: OtelConfig,
     pub logs: Option<LogsConfig>,
     pub traces: Option<TracesConfig>,
     pub metrics: Option<MetricsConfig>,
 }
 ```
+
+Composition rule:
+
+- when `sc-observe` enables telemetry, it derives `TelemetryConfig` from
+  `ObservabilityConfig.otel`
+- `TelemetryConfig.service_name = ObservabilityConfig.tool_name`
+- `TelemetryConfig.resource` is initialized from default resource attributes and
+  the service identity
+- `TelemetryConfig.transport = ObservabilityConfig.otel.unwrap()`
+- `TelemetryConfig.logs`, `traces`, and `metrics` are initialized from `sc-observe`
+  defaults unless the observation runtime later exposes those knobs explicitly
+- this derivation rule does not remove the direct standalone `TelemetryConfig`
+  construction path in `sc-observability-otlp`
 
 ### 12.1.1 `OtelConfig`
 
@@ -1286,21 +1392,46 @@ impl Telemetry {
 }
 ```
 
+Telemetry receives `SpanSignal` values but exports completed spans only after
+assembly.
+
 ### 12.4 Exporter Traits
 
 ```rust
+pub struct CompleteSpan {
+    pub record: SpanRecord<SpanEnded>,
+    pub events: Vec<SpanEvent>,
+}
+
+pub struct SpanAssembler { /* opaque */ }
+
+impl SpanAssembler {
+    pub fn push(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventError>;
+    pub fn flush_incomplete(&mut self) -> usize;
+}
+
 pub trait LogExporter: Send + Sync {
     fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError>;
 }
 
 pub trait TraceExporter: Send + Sync {
-    fn export_spans(&self, batch: &[SpanSignal]) -> Result<(), ExportError>;
+    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError>;
 }
 
 pub trait MetricExporter: Send + Sync {
     fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError>;
 }
 ```
+
+Rules:
+
+- `SpanAssembler` buffers `SpanSignal::Started`
+- `SpanAssembler` attaches subsequent `SpanSignal::Event` items to the active
+  span by `span_id`
+- `SpanAssembler` emits `CompleteSpan` only on `SpanSignal::Ended`
+- in-flight started spans without a matching end are dropped at flush/shutdown
+  and counted in telemetry dropped-export accounting
+- `LogExporter`, `TraceExporter`, and `MetricExporter` are intentionally open
 
 ### 12.5 Telemetry Failure Model
 
@@ -1322,9 +1453,15 @@ pub enum TelemetryHealthState {
     Unavailable,
 }
 
+pub enum ExporterHealthState {
+    Healthy,
+    Degraded,
+    Unavailable,
+}
+
 pub struct ExporterHealth {
     pub name: String,
-    pub state: String,
+    pub state: ExporterHealthState,
     pub last_error: Option<DiagnosticSummary>,
 }
 
