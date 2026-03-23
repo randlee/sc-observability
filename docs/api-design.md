@@ -75,6 +75,29 @@ out.
 - Daemon fan-in, socket contracts, spool merge, and runtime-home discovery are
   explicitly out of scope.
 
+## 3.1 Required Baseline Updates
+
+This design targets a 4-crate workspace:
+
+- `sc-observability-types`
+- `sc-observability`
+- `sc-observability-otlp`
+- `sc-observe`
+
+Required baseline updates before implementation begins:
+
+- the main-repo `requirements.md` and `architecture.md` baseline currently
+  describe a 3-crate shape and must be updated to the 4-crate workspace
+- [`docs/requirements.md`](/Users/randlee/Documents/github/sc-observability-cobs/docs/requirements.md)
+  and
+  [`docs/architecture.md`](/Users/randlee/Documents/github/sc-observability-cobs/docs/architecture.md)
+  must both be written to reflect the 4-crate workspace rather than the older
+  3-crate shape
+- workspace `Cargo.toml` must add `sc-observe` as a member
+- `sc-observe` depends on `sc-observability`, `sc-observability-otlp`, and
+  `sc-observability-types`
+- `sc-observe` must not introduce any `agent-team-mail-*` dependencies
+
 ## 4. Design Goals
 
 - Let a producer emit one canonical observation.
@@ -231,15 +254,27 @@ Design direction:
 
 ```rust
 pub struct Observability { /* opaque */ }
+pub struct ObservabilityBuilder { /* opaque */ }
 
 impl Observability {
     pub fn new(config: ObservabilityConfig) -> Result<Self, InitError>;
+    pub fn builder(config: ObservabilityConfig) -> ObservabilityBuilder;
     pub fn emit<T>(&self, observation: Observation<T>) -> Result<(), ObservationError>
     where
         T: Observable;
     pub fn flush(&self) -> Result<(), FlushError>;
     pub fn shutdown(&self) -> Result<(), ShutdownError>;
     pub fn health(&self) -> ObservabilityHealthReport;
+}
+
+impl ObservabilityBuilder {
+    pub fn register_subscriber<T>(self, registration: SubscriberRegistration<T>) -> Self
+    where
+        T: Observable;
+    pub fn register_projection<T>(self, registration: ProjectionRegistration<T>) -> Self
+    where
+        T: Observable;
+    pub fn build(self) -> Result<Observability, InitError>;
 }
 ```
 
@@ -248,8 +283,25 @@ This is the only producer-facing observation emission path in the design.
 Rule:
 
 - calling `emit()` after `shutdown()` is invalid behavior
+- calling `emit()` after `shutdown()` returns `Err(ObservationError)` with the
+  named shutdown semantic case `ObservationError::Shutdown` or an equivalent
+  `Diagnostic.code`
 - this lifecycle rule is semantic only in this design doc; `Observability` is
   not parameterized by typestate here
+
+Observation emission error inventory:
+
+- `ObservationError::Shutdown`
+  recoverable: no
+  meaning: caller attempted to emit after shutdown
+- `ObservationError::QueueFull`
+  recoverable: yes
+  meaning: the observation runtime could not accept more work within configured
+  capacity
+- `ObservationError::RoutingFailure`
+  recoverable: depends on caller policy
+  meaning: the observation could not be routed to any active or eligible
+  subscriber/projector path
 
 ### 7.2 `ObservabilityConfig`
 
@@ -295,6 +347,13 @@ Composition rules inside `sc-observe`:
 
 > **Note**: Field names may be refined at implementation time. The intent and semantics of each field are fixed by this design.
 
+Registrations are config-time only:
+
+- subscriber and projector registrations are passed through
+  `ObservabilityBuilder` or equivalent construction-time configuration
+- registration closes at `Observability::new(...)`
+- no runtime registration after construction is part of v1
+
 ### 7.3 `ObservabilityHealthReport`
 
 The observation runtime should expose a thin aggregate health view rather than a
@@ -335,22 +394,26 @@ depending on the concrete service types directly.
 Recommended traits:
 
 ```rust
-pub trait ObservationEmitter<T>: Send + Sync
+mod sealed_emitters {
+    pub trait Sealed {}
+}
+
+pub trait ObservationEmitter<T>: sealed_emitters::Sealed + Send + Sync
 where
     T: Observable,
 {
     fn emit(&self, observation: Observation<T>) -> Result<(), ObservationError>;
 }
 
-pub trait LogEmitter: Send + Sync {
+pub trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
 }
 
-pub trait SpanEmitter: Send + Sync {
+pub trait SpanEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_span(&self, span: SpanSignal) -> Result<(), EventError>;
 }
 
-pub trait MetricEmitter: Send + Sync {
+pub trait MetricEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_metric(&self, metric: MetricRecord) -> Result<(), EventError>;
 }
 ```
@@ -368,6 +431,15 @@ Recommended usage:
   observations
 - lower-level or specialized code may inject `LogEmitter` or telemetry emitters
   directly when it is intentionally producing projected signals
+
+- `ObservationEmitter<T>` is sealed; it is not intended for external
+  implementation. Adding methods is non-breaking.
+- `LogEmitter` is sealed; it is not intended for external implementation.
+  Adding methods is non-breaking.
+- `SpanEmitter` is sealed; it is not intended for external implementation.
+  Adding methods is non-breaking.
+- `MetricEmitter` is sealed; it is not intended for external implementation.
+  Adding methods is non-breaking.
 
 ### 7.5 `Observable`
 
@@ -485,14 +557,24 @@ Remediation is mandatory in structured diagnostics.
 Design direction:
 
 ```rust
+pub struct RecoverableSteps { /* private fields */ }
+
 pub enum Remediation {
-    Recoverable { steps: Vec<String> },
+    Recoverable(RecoverableSteps),
     NotRecoverable { justification: String },
+}
+
+impl Remediation {
+    pub fn recoverable(
+        first: impl Into<String>,
+        rest: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self;
 }
 ```
 
 Rules:
 
+- `Recoverable` construction is only through `Remediation::recoverable(...)`
 - `Recoverable` must contain at least one concrete step
 - `NotRecoverable` must contain a justification
 - diagnostics without remediation metadata are invalid
@@ -764,22 +846,8 @@ pub struct SpanEnded;
 Design direction:
 
 ```rust
-pub struct SpanRecord<S> {
-    pub timestamp: Timestamp,
-    pub service: String,
-    pub name: String,
-    pub trace: TraceContext,
-    pub status: SpanStatus,
-    pub duration_ms: Option<u64>,
-    pub diagnostic: Option<Diagnostic>,
-    pub attributes: serde_json::Map<String, serde_json::Value>,
-    _state: std::marker::PhantomData<S>,
-}
-```
+pub struct SpanRecord<S> { /* private fields */ }
 
-Recommended lifecycle:
-
-```rust
 impl SpanRecord<SpanStarted> {
     pub fn new(
         timestamp: Timestamp,
@@ -795,6 +863,20 @@ impl SpanRecord<SpanStarted> {
         duration_ms: u64,
     ) -> SpanRecord<SpanEnded>;
 }
+
+impl<S> SpanRecord<S> {
+    pub fn timestamp(&self) -> Timestamp;
+    pub fn service(&self) -> &str;
+    pub fn name(&self) -> &str;
+    pub fn trace(&self) -> &TraceContext;
+    pub fn status(&self) -> SpanStatus;
+    pub fn diagnostic(&self) -> Option<&Diagnostic>;
+    pub fn attributes(&self) -> &serde_json::Map<String, serde_json::Value>;
+}
+
+impl SpanRecord<SpanEnded> {
+    pub fn duration_ms(&self) -> u64;
+}
 ```
 
 Rules:
@@ -802,8 +884,9 @@ Rules:
 - `SpanRecord<SpanStarted>` has the only public constructor
 - `SpanRecord<SpanEnded>` has no public constructor and is only reachable via
   `SpanRecord<SpanStarted>::end(...)`
-- `SpanRecord<SpanStarted>` may not carry a final duration
-- `SpanRecord<SpanEnded>` must carry a final duration
+- `SpanRecord<SpanStarted>` has no public duration accessor
+- `SpanRecord<SpanEnded>` must carry a final duration and exposes it only via
+  `duration_ms()`
 - producer APIs should expose only valid transitions per state
 - runtime `SpanState` is derived from the typestate parameter `S` during
   serialization and export rather than stored as a public producer-facing field
@@ -975,6 +1058,7 @@ projected log or telemetry record.
 
 `ObservationSubscriber<T>` is intentionally open. External crates may implement
 it to add custom observation routing.
+This trait must remain object-safe for `Arc<dyn ObservationSubscriber<T>>`.
 
 ### 10.2 Log Projectors
 
@@ -993,6 +1077,7 @@ where
 ```
 
 `LogProjector<T>` is intentionally open.
+This trait must remain object-safe for `Arc<dyn LogProjector<T>>`.
 
 ### 10.3 Span Projectors
 
@@ -1021,6 +1106,7 @@ pub enum SpanSignal {
 ```
 
 `SpanProjector<T>` is intentionally open.
+This trait must remain object-safe for `Arc<dyn SpanProjector<T>>`.
 
 ### 10.4 Metric Projectors
 
@@ -1039,6 +1125,7 @@ where
 ```
 
 `MetricProjector<T>` is intentionally open.
+This trait must remain object-safe for `Arc<dyn MetricProjector<T>>`.
 
 ### 10.5 Registration and Filtering
 
@@ -1075,16 +1162,22 @@ where
 ```
 
 `ObservationFilter<T>` is intentionally open.
+This trait must remain object-safe for `Arc<dyn ObservationFilter<T>>`.
 
 Rules:
 
+- registrations are supplied at construction time through
+  `ObservabilityBuilder` or equivalent config wiring
+- `SubscriberRegistration<T>` and `ProjectionRegistration<T>` are construction
+  inputs and are expected to be `Send + Sync`
 - routing is per observation payload type
 - filtering is part of runtime registration, not producer burden
 - one observation may fan out to multiple subscribers and multiple projectors
 - matching registrations are invoked in deterministic registration order
 - one subscriber or projector failure must not prevent later matching
   registrations from running
-- no-match routing is a valid no-op, not an error
+- if no active or eligible subscriber/projector path remains for an observation,
+  emission returns `ObservationError::RoutingFailure`
 - v1 `sc-observe` scope stops at registration, filtering, projection, and
   fan-out
 
@@ -1201,6 +1294,7 @@ pub trait LogSink: Send + Sync {
 ```
 
 `LogSink` is intentionally open.
+This trait must remain object-safe for `Arc<dyn LogSink>`.
 
 Built-in sink:
 
@@ -1333,10 +1427,16 @@ ATM-specific env naming baked into the shared API.
 Design direction:
 
 ```rust
+pub enum OtlpProtocol {
+    HttpBinary,
+    HttpJson,
+    Grpc,
+}
+
 pub struct OtelConfig {
     pub enabled: bool,
     pub endpoint: Option<String>,
-    pub protocol: String,
+    pub protocol: OtlpProtocol,
     pub auth_header: Option<String>,
     pub ca_file: Option<std::path::PathBuf>,
     pub insecure_skip_verify: bool,
@@ -1352,7 +1452,7 @@ Initial intent of each field:
 
 - `enabled`: master switch for OTEL export behavior
 - `endpoint`: collector endpoint base URL
-- `protocol`: initial transport selector; v1 remains OTLP HTTP
+- `protocol`: typed transport selector
 - `auth_header`: optional prebuilt auth header
 - `ca_file`: optional custom CA bundle
 - `insecure_skip_verify`: debug/controlled-environment TLS override
@@ -1365,6 +1465,11 @@ Initial intent of each field:
 This shape is a baseline, not a promise that every current field name is final.
 The design intent is to preserve the proven transport knobs while neutralizing
 the old ATM-specific surface.
+
+Rule:
+
+- invalid OTLP transport configuration, including unsupported protocol values,
+  is detected at `Telemetry::new(...)` and returns `InitError`
 
 ### 12.2 `ResourceAttributes`
 
@@ -1394,6 +1499,14 @@ impl Telemetry {
 
 Telemetry receives `SpanSignal` values but exports completed spans only after
 assembly.
+
+Rule:
+
+- calling `emit_log()`, `emit_span()`, or `emit_metric()` after `shutdown()`
+  returns `Err(EventError)` with the named shutdown semantic case
+  `Telemetry::Shutdown` or an equivalent `Diagnostic.code`
+- this lifecycle rule is semantic only in this design doc; no telemetry handle
+  typestate is required here
 
 ### 12.4 Exporter Traits
 
@@ -1432,6 +1545,7 @@ Rules:
 - in-flight started spans without a matching end are dropped at flush/shutdown
   and counted in telemetry dropped-export accounting
 - `LogExporter`, `TraceExporter`, and `MetricExporter` are intentionally open
+- exporter traits must remain object-safe for `Arc<dyn ...>` usage
 
 ### 12.5 Telemetry Failure Model
 
