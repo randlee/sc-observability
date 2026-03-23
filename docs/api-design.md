@@ -605,24 +605,76 @@ pub enum SpanStatus {
 }
 ```
 
-### 9.3 `SpanRecord`
+### 9.3 `SpanState`
+
+Span lifecycle should be encoded in the producer-facing type system.
+
+Runtime/serialized state:
+
+```rust
+pub enum SpanState {
+    Started,
+    Ended,
+}
+```
+
+Important rule:
+
+- a plain runtime enum is not enough to make illegal transitions a compilation
+  error
+- compile-time lifecycle guarantees require typestate or equivalent
+  state-specific types
+
+Recommended producer-facing markers:
+
+```rust
+pub struct SpanStarted;
+pub struct SpanEnded;
+```
+
+### 9.4 `SpanRecord`
 
 Design direction:
 
 ```rust
-pub struct SpanRecord {
+pub struct SpanRecord<S> {
     pub timestamp: Timestamp,
     pub service: String,
     pub name: String,
     pub trace: TraceContext,
+    pub state: SpanState,
     pub status: SpanStatus,
-    pub duration_ms: u64,
+    pub duration_ms: Option<u64>,
     pub diagnostic: Option<Diagnostic>,
     pub attributes: serde_json::Map<String, serde_json::Value>,
+    _state: std::marker::PhantomData<S>,
 }
 ```
 
-### 9.4 `MetricKind`
+Recommended lifecycle:
+
+```rust
+impl SpanRecord<SpanStarted> {
+    pub fn end(
+        self,
+        status: SpanStatus,
+        duration_ms: u64,
+    ) -> SpanRecord<SpanEnded>;
+}
+```
+
+Rules:
+
+- `SpanRecord<SpanStarted>` may not carry a final duration
+- `SpanRecord<SpanEnded>` must carry a final duration
+- producer APIs should expose only valid transitions per state
+- downstream consumers may still use the runtime `SpanState` field when reading
+  serialized/projected data
+
+This keeps span lifecycle correctness in the type system while still supporting
+generic serialization and export.
+
+### 9.5 `MetricKind`
 
 ```rust
 pub enum MetricKind {
@@ -632,7 +684,7 @@ pub enum MetricKind {
 }
 ```
 
-### 9.5 `MetricRecord`
+### 9.6 `MetricRecord`
 
 Design direction:
 
@@ -650,7 +702,7 @@ pub struct MetricRecord {
 
 `MetricRecord` does not carry a full `Diagnostic` in the initial design.
 
-### 9.6 `DiagnosticSummary`
+### 9.7 `DiagnosticSummary`
 
 Design direction:
 
@@ -707,7 +759,19 @@ pub trait SpanProjector<T>: Send + Sync
 where
     T: Observable,
 {
-    fn project_spans(&self, observation: &T) -> Result<Vec<SpanRecord>, ProjectionError>;
+    fn project_spans(
+        &self,
+        observation: &T,
+    ) -> Result<Vec<ProjectedSpan>, ProjectionError>;
+}
+```
+
+Where:
+
+```rust
+pub enum ProjectedSpan {
+    Started(SpanRecord<SpanStarted>),
+    Ended(SpanRecord<SpanEnded>),
 }
 ```
 
@@ -938,7 +1002,7 @@ pub struct Telemetry { /* opaque */ }
 impl Telemetry {
     pub fn new(config: TelemetryConfig) -> Result<Self, InitError>;
     pub fn emit_log(&self, event: &LogEvent) -> Result<(), EventError>;
-    pub fn emit_span(&self, span: &SpanRecord) -> Result<(), EventError>;
+    pub fn emit_span(&self, span: &ProjectedSpan) -> Result<(), EventError>;
     pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), EventError>;
     pub fn flush(&self) -> Result<(), FlushError>;
     pub fn shutdown(&self) -> Result<(), ShutdownError>;
@@ -954,7 +1018,7 @@ pub trait LogExporter: Send + Sync {
 }
 
 pub trait TraceExporter: Send + Sync {
-    fn export_spans(&self, batch: &[SpanRecord]) -> Result<(), ExportError>;
+    fn export_spans(&self, batch: &[ProjectedSpan]) -> Result<(), ExportError>;
 }
 
 pub trait MetricExporter: Send + Sync {
@@ -1030,9 +1094,9 @@ transition fact.
 
 Recommended pattern:
 
-- project one span per sub-agent run
-- start it on the relevant start observation
-- end it on the relevant end observation
+- project one span lifecycle per sub-agent run
+- project `SpanRecord<SpanStarted>` on the relevant start observation
+- project `SpanRecord<SpanEnded>` on the relevant end observation
 - project tool calls inside that run as child spans when meaningful
 - project important facts, retries, warnings, and transitions as events inside
   the same trace context
@@ -1041,7 +1105,8 @@ Recommended pattern:
 
 Recommended pattern:
 
-- project one span per task execution when the task has meaningful duration
+- project one span lifecycle per task execution when the task has meaningful
+  duration
 - project `state_transition` events for lifecycle changes
 - project child spans or child event sequences for nested work under the task
 - project metrics for counts, outcomes, and durations
@@ -1050,7 +1115,7 @@ Recommended pattern:
 
 Recommended pattern:
 
-- project one span per test run
+- project one span lifecycle per test run
 - optionally project child spans per suite, shard, or execution group
 - project transition/failure events during the run
 - project metrics for counts, failures, and duration distributions
@@ -1091,6 +1156,8 @@ Required example characteristics:
     activity
 - support for span attributes, in-span events, and child-span projection from
   the same observation family
+- support for typestate-safe span lifecycle projection where invalid transitions
+  are unrepresentable
 
 Recommended conceptual shape in a consumer crate:
 
@@ -1256,8 +1323,6 @@ These questions remain open but do not block the main direction:
 - the exact timestamp implementation type
 - whether redaction extensibility is callback-based, trait-based, or policy-only
 - whether `TraceContext` should remain as one nested struct exactly as drafted
-- whether span lifecycle needs explicit `SpanStart` / `SpanEnd` projection types
-  instead of only `SpanRecord`
 - the exact shared abstraction for span attributes, in-span events, and
   child-span projection from one typed observation family
 - the exact public error types for `InitError`, `ObservationError`,
