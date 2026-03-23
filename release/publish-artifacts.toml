@@ -15,9 +15,15 @@ publish_order = 2
 wait_after_publish_seconds = 30
 
 [[crates]]
+artifact = "sc-observe"
+package = "sc-observe"
+cargo_toml = "crates/sc-observe/Cargo.toml"
+publish_order = 3
+wait_after_publish_seconds = 30
+
+[[crates]]
 artifact = "sc-observability-otlp"
 package = "sc-observability-otlp"
 cargo_toml = "crates/sc-observability-otlp/Cargo.toml"
-publish_order = 3
+publish_order = 4
 wait_after_publish_seconds = 0
-

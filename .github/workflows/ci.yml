@@ -72,6 +72,9 @@ jobs:
       - name: Validate publish_order dependency graph
         run: bash scripts/ci/validate_publish_order.sh
 
+      - name: Validate repo boundaries
+        run: bash scripts/ci/validate_repo_boundaries.sh
+
   test:
     needs: [clippy, manifest-validation]
     strategy:

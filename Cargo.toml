@@ -2,8 +2,10 @@
 members = [
   "crates/sc-observability-types",
   "crates/sc-observability",
+  "crates/sc-observe",
   "crates/sc-observability-otlp",
 ]
+exclude = ["examples/atm-adapter-example"]
 resolver = "2"
 
 [workspace.package]

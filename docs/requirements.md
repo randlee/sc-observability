@@ -123,6 +123,7 @@ This crate is the observation routing layer built on top of logging.
 - OBS-019 `sc-observe` shall expose `ObservabilityHealthReport` as the top-level runtime health view.
 - OBS-020 `ObservabilityHealthReport` shall summarize dropped observations, subscriber failures, projection failures, and downstream attached service health where available.
 - OBS-021 `sc-observe` shall not own application-specific observation payloads or ATM compatibility behavior.
+- OBS-022 Boot-phase observability shall initialize before plugin or adapter registration so early lifecycle events can be recorded without ATM-specific context.
 
 ## 6. `sc-observability-otlp` Requirements
 
@@ -157,6 +158,8 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
 - NFR-006 The workspace shall not mandate global mutable state for basic operation.
 - NFR-007 Backend sink/export failures shall be fail-open.
 - NFR-008 Each crate section in this document shall remain readable in isolation without requiring upward-layer concepts to understand lower-layer behavior.
+- NFR-009 The workspace shall enforce layering and repo-boundary rules in CI, including dependency bans against `agent-team-mail-*` and banned crate edges that violate the approved stack.
+- NFR-010 The workspace shall enforce basic docs consistency checks in CI so the approved crate layering does not drift out of sync across requirements, architecture, and API design documents.
 
 ## 8. Source Organization Requirements
 

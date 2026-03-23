@@ -6,6 +6,7 @@ This repo is in initial extraction/setup.
 
 The immediate goal is to establish:
 - correct standalone ownership for observability types, facades, and OTLP export
+- a real `sc-observe` workspace crate between logging and OTLP layers
 - zero `agent-team-mail-*` dependencies
 - a clean publishable workspace structure
 
@@ -24,21 +25,24 @@ The immediate goal is to establish:
 3. Verify repository setup end to end:
    - release preflight validates publish order and version alignment
    - release workflow is ready to publish `sc-observability-types`,
-     `sc-observability`, then `sc-observability-otlp`
+     `sc-observability`, `sc-observe`, then `sc-observability-otlp`
    - workspace version stays above the source ATM workspace version that last
      published these crate names
 4. Complete crates.io ownership and release readiness:
    - verify crate ownership/maintainers for `sc-observability-types`,
-     `sc-observability`, and `sc-observability-otlp`
+     `sc-observability`, `sc-observe`, and `sc-observability-otlp`
    - verify publish tokens and first-release permissions
    - document the handoff from ATM-published crates to this repo
-5. Separate neutral observability code from ATM-specific adapters.
+5. Separate neutral observability code from ATM-specific adapters and prove the
+   external adapter pattern with non-production examples.
 6. Move only generic types/config/export logic into this repo.
 7. Verify ATM cutover readiness:
    - published crate names match the existing names used in ATM
    - replacement instructions are documented
    - no `agent-team-mail-*` dependencies remain
-8. Write the migration plan after the agents are live and operating on the new
+8. Maintain extraction inventory and boundary ADRs as modules move from ATM to
+   the standalone repo.
+9. Write the migration plan after the agents are live and operating on the new
    repos.
 
 ## Rule

@@ -287,6 +287,26 @@ Important boundary:
   - policy limits, thresholds, retry counts, and similar values are named rather than hidden in inline literals
   - error-code registries remain separate from general-purpose constants so semantic stability is easier to enforce
 
+### ADR-006: ATM Adapter Boundary
+
+- **Status**: Accepted
+- **Context**: ATM is the first and most sophisticated downstream adopter, but this repo must remain free of ATM production contracts and `agent-team-mail-*` dependencies.
+- **Decision**: ATM-specific observability behavior belongs in an ATM-owned adapter boundary named `atm-observability-adapter`. Shared crates in this repo own only generic logging, routing, and OTLP infrastructure. ATM-specific contracts such as `LogEventV1`, daemon fan-in/spool compatibility, ATM-named env parsing, ATM health snapshots, and ATM-specific projector behavior move to the adapter boundary outside this repo.
+- **Consequences**:
+  - the shared repo remains generic and publishable without ATM coupling
+  - ATM integration is still proven here through a separate example document and unpublished proving crate
+  - production ATM compatibility logic is implemented in ATM-owned code, not in the shared repo
+
+### ADR-007: Boot-Phase Observability Precedes Plugin Registration
+
+- **Status**: Accepted
+- **Context**: Early daemon and process lifecycle events occur before optional plugin or adapter context exists. Observability must be available during that boot phase.
+- **Decision**: Core observability initialization happens before plugin registration or adapter-specific augmentation. Early lifecycle events must be recordable through the base logging/routing stack without requiring ATM plugin context.
+- **Consequences**:
+  - early startup failures remain observable
+  - adapters enrich the runtime after core observability is already available
+  - boot sequencing is explicit rather than left to implementation drift
+
 ## 8. API-Design Consistency
 
 In this docs-v2 branch, `api-design.md` is updated to match the corrected
@@ -298,9 +318,21 @@ layering:
   `sc-observability-otlp`
 - OTLP attachment is expressed through projector registration with
   `ObservabilityBuilder`
+- the ATM production boundary is explicitly outside this repo in
+  `atm-observability-adapter`
 
 ## 9. Pre-Implementation Cleanup
 
 - remove any requirement or architecture text that places OTLP concerns in `sc-observability`
 - remove any requirement or architecture text that requires `sc-observe -> sc-observability-otlp`
 - make OTLP integration attach from the top of the stack rather than being constructed inside `sc-observe`
+
+## 10. ATM Proving Artifact
+
+The ATM integration proving artifacts owned by this repo are:
+
+- [`docs/atm-adapter-example.md`](./atm-adapter-example.md)
+- unpublished crate `examples/atm-adapter-example`
+
+These exist to prove interface sufficiency only. They do not replace the
+ATM-owned production adapter boundary.

@@ -5,6 +5,7 @@
 This repo becomes the publishing source of truth for:
 - `sc-observability-types`
 - `sc-observability`
+- `sc-observe`
 - `sc-observability-otlp`
 
 These crates currently exist inside the `agent-team-mail` workspace. After
@@ -25,8 +26,9 @@ cutover, new releases of these crate names must come from this repo instead.
 Before the ATM workspace switches to crates.io dependencies from this repo:
 1. This repo must publish the target version of `sc-observability-types`.
 2. This repo must publish the target version of `sc-observability`.
-3. This repo must publish the target version of `sc-observability-otlp`.
-4. ATM must then replace its in-workspace path dependencies with version pins.
+3. This repo must publish the target version of `sc-observe`.
+4. This repo must publish the target version of `sc-observability-otlp`.
+5. ATM must then replace its in-workspace path dependencies with version pins.
 
 ## Source of Truth
 
