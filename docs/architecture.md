@@ -276,6 +276,17 @@ Important boundary:
   - OTel integration is opt-in
   - transport concerns are isolated where they belong
 
+### ADR-005: Centralized Registries For Error Codes And Constants
+
+- **Status**: Accepted
+- **Context**: Scattered error-code definitions and inline policy numbers make review, documentation, and consistency checks harder across a multi-crate workspace.
+- **Decision**: Each crate owns one dedicated error-code registry module and one dedicated constants module. Stable error codes are defined in the registry module, shared non-trivial constants are defined in the constants module, and non-trivial magic numbers are prohibited outside those definitions.
+- **Consequences**:
+  - reviewers have one obvious place to audit error codes per crate
+  - documentation and reporting can enumerate public error codes consistently
+  - policy limits, thresholds, retry counts, and similar values are named rather than hidden in inline literals
+  - error-code registries remain separate from general-purpose constants so semantic stability is easier to enforce
+
 ## 8. API-Design Consistency
 
 In this docs-v2 branch, `api-design.md` is updated to match the corrected

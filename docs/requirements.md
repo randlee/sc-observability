@@ -158,7 +158,16 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
 - NFR-007 Backend sink/export failures shall be fail-open.
 - NFR-008 Each crate section in this document shall remain readable in isolation without requiring upward-layer concepts to understand lower-layer behavior.
 
-## 8. Out Of Scope
+## 8. Source Organization Requirements
+
+- SRC-001 Each crate shall define its stable error codes in one dedicated source file or module owned by that crate.
+- SRC-002 Each crate shall expose its public error codes from that single registry location so they can be reviewed, reported, and documented consistently.
+- SRC-003 Shared non-trivial constants for a crate shall be defined in one dedicated constants file or module owned by that crate.
+- SRC-004 Error-code registries and constants modules shall remain separate concerns; error-code definitions shall not be mixed into the general constants module.
+- SRC-005 Non-trivial magic numbers shall not appear outside dedicated constants definitions, except for trivial language literals such as `0` and `1` where their meaning is self-evident.
+- SRC-006 Policy values, limits, thresholds, retry counts, timeouts, and similar operational numbers shall be named constants rather than inline numeric literals.
+
+## 9. Out Of Scope
 
 - OOS-001 daemon-owned canonical file writing
 - OOS-002 producer-to-daemon socket contracts
