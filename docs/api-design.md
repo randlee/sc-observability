@@ -1298,6 +1298,8 @@ pub struct RedactionPolicy {
 }
 ```
 
+`Redactor` is intentionally open. External crates may implement it.
+
 Rules:
 
 - built-in denylist and bearer-token redaction run first
@@ -1375,6 +1377,8 @@ pub trait LogFilter: Send + Sync {
     fn accepts(&self, event: &LogEvent) -> bool;
 }
 ```
+
+`LogFilter` is intentionally open. External crates may implement it.
 
 Rules:
 
