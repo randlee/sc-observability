@@ -210,7 +210,10 @@ Ownership and threading model:
 - `SpanAssembler` is owned and driven internally by `Telemetry`
 - concurrent emit paths, async tasks, and threads do not hold `SpanAssembler` directly
 - `Telemetry` is responsible for serializing `SpanSignal` delivery to
-  `SpanAssembler`; the exact mechanism is an implementation detail
+  `SpanAssembler` using a `Mutex`, message channel, or equivalent `Send`-safe
+  mechanism
+- `RefCell` or other non-`Send` interior mutability is not acceptable in this
+  concurrency model
 
 ### 2.5 Type System Layer
 
@@ -241,6 +244,9 @@ Important invariants:
 - only `SpanRecord<SpanStarted>` has a public constructor
 - `SpanRecord<SpanEnded>` is only created via `.end(...)`
 - producer-facing `SpanRecord<S>` fields are private
+- the runtime `SpanState` serialization value is derived from the typestate
+  parameter `S` at export/serialization time; it is not a public producer-facing
+  field
 - final span duration is accessible only on `SpanRecord<SpanEnded>` via a
   duration accessor such as `duration_ms()`
 - `TraceContext` contains only `trace_id`, `span_id`, and `parent_span_id`
@@ -330,16 +336,14 @@ It avoids:
 ```rust
 use std::sync::Arc;
 
-use sc_observability::Logger;
-use sc_observability_otlp::Telemetry;
 use sc_observe::Observability;
 use sc_observability_types::{
+    InitError,
     Observation,
     ObservationEmitter,
     ObservationSubscriber,
-    LogProjector,
-    SpanProjector,
-    MetricProjector,
+    ProjectionRegistration,
+    SubscriberRegistration,
 };
 
 #[derive(Clone)]
@@ -358,16 +362,12 @@ impl AgentLoop {
     }
 }
 
-fn build_observability(config: ObservabilityConfig) -> anyhow::Result<Arc<Observability>> {
-    let logger = Logger::new(LoggerConfig::from_observability(&config)?)?;
-    let telemetry = config.otel.as_ref()
-        .map(|otel| Telemetry::new(TelemetryConfig::from_observability(&config, otel)))
-        .transpose()?;
-
+fn build_observability(config: ObservabilityConfig) -> Result<Arc<Observability>, InitError> {
     let observability = Observability::builder(config)
-        .with_logger(logger)
-        .with_telemetry(telemetry)
-        .register_subscriber::<AgentInfo>(Arc::new(AgentDashboardSubscriber::new()))
+        .register_subscriber::<AgentInfo>(SubscriberRegistration {
+            subscriber: Arc::new(AgentDashboardSubscriber::new()),
+            filter: None,
+        })
         .register_projection::<AgentInfo>(ProjectionRegistration {
             log_projector: Some(Arc::new(AgentInfoLogProjector::new())),
             span_projector: Some(Arc::new(AgentInfoSpanProjector::new())),
@@ -399,10 +399,11 @@ The sketch above is illustrative:
 - registration happens before `build()`
 - producer code emits one typed `Observation<AgentInfo>`
 - routing, projection, logging, and OTLP export happen inside the runtime
-- `.with_logger(...)` and `.with_telemetry(...)` are illustrative builder-time
-  composition hooks, not finalized method names; implementation must align the
-  concrete builder API with `api-design.md` rather than inventing incompatible
-  signatures
+- `sc-observe` derives its internal logger and telemetry configuration from
+  `ObservabilityConfig`; producers do not pre-construct or inject `Logger` or
+  `Telemetry`
+- `build()` returns `Result<Observability, InitError>`; wrapping that in
+  `anyhow::Result` is an application-layer convenience, not the core API
 
 ## 4. Sealed vs Open Trait Inventory
 
@@ -431,6 +432,8 @@ Table notes:
 
 - all open traits used behind `Arc<dyn ...>` are required to remain object-safe
   for dynamic dispatch
+- the sealed emitter traits are also object-safe when used behind `Arc<dyn ...>`;
+  `T` is fixed at each usage site rather than erased
 - all traits used in concurrent routing, injection, and export contexts are
   required to be `Send + Sync`
 
