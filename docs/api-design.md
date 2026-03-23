@@ -183,7 +183,35 @@ impl Observability {
 
 This is the only producer-facing emission path in the design.
 
-### 7.2 Producer Injection Traits
+### 7.2 `ObservabilityConfig`
+
+`ObservabilityConfig` is the top-level configuration passed to `Observability::new`.
+
+Design direction:
+
+```rust
+pub struct ObservabilityConfig {
+    pub tool_name: String,
+    pub log_root: std::path::PathBuf,
+    pub env_prefix: String,
+    pub queue_capacity: usize,
+    pub rotation: RotationPolicy,
+    pub otel: Option<OtelConfig>,
+}
+```
+
+Field semantics:
+
+- `tool_name` — identity of the calling tool or service; used as the log subdirectory name and as the default `service` field in log events and telemetry
+- `log_root` — absolute path to the root logging directory; the caller is responsible for providing this; no runtime-home discovery is performed
+- `env_prefix` — prefix for environment variable overrides (e.g. `"OTEL"` for standard OTel names, or a tool-specific prefix); must not be ATM-specific in generic deployments
+- `queue_capacity` — capacity of the internal async event queue; controls backpressure before dropping
+- `rotation` — log rotation policy applied to the built-in file sink
+- `otel` — optional OTLP telemetry configuration; when `None`, telemetry is disabled and `TelemetryHealthState` is `Disabled`
+
+> **Note**: Field names may be refined at implementation time. The intent and semantics of each field are fixed by this design.
+
+### 7.3 Producer Injection Traits
 
 Producer crates should depend on narrow injected interfaces rather than always
 depending on the concrete service types directly.
@@ -225,7 +253,7 @@ Recommended usage:
 - lower-level or specialized code may inject `LogEmitter` or telemetry emitters
   directly when it is intentionally producing projected signals
 
-### 7.3 `Observable`
+### 7.4 `Observable`
 
 Typed producer observations implement or satisfy an `Observable` contract.
 
@@ -239,7 +267,7 @@ This is intentionally minimal. The core routing system should not require every
 application event type to embed observability details directly into the event
 definition.
 
-### 7.4 Observations vs Projections
+### 7.5 Observations vs Projections
 
 An observation is the canonical producer-side signal.
 
