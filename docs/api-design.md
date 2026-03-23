@@ -1030,8 +1030,11 @@ Required pattern:
 - errors that always carry diagnostics implement `DiagnosticInfo`
 - `ObservationError` and `TelemetryError` expose optional diagnostic access only
   on their contextual variants
-- `DiagnosticInfo` is sealed; only this crate's named error newtypes implement
-  it
+- `DiagnosticInfo` is defined in `sc-observability-types` and sealed there
+- named error newtypes in each crate implement `DiagnosticInfo` by delegating to
+  their inner `ErrorContext`
+- `ObservationError::Shutdown` and `TelemetryError::Shutdown` do not carry
+  `ErrorContext` and therefore do not implement `DiagnosticInfo` directly
 - stable machine/actionable meaning is carried by `Diagnostic.code`, not by a
   growing public enum surface
 - callers may render the diagnostic directly for CLI output and also attach it
