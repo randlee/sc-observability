@@ -3,6 +3,9 @@
 **Status**: Draft for review
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Source of truth**: [`api-design.md`](./api-design.md)
+**Related ATM adapter docs**:
+- [`atm-adapter-requirements.md`](./atm-adapter-requirements.md)
+- [`atm-adapter-architecture.md`](./atm-adapter-architecture.md)
 
 ## 1. Purpose And Scope
 
@@ -23,6 +26,15 @@ This workspace is explicitly not:
 - an ATM-specific library
 - a socket/spool/merge transport
 - a runtime-home discovery mechanism
+
+## 1.1 Approval Scope
+
+This requirements document is sufficient to approve the shared workspace
+direction and enforce the standalone crate boundaries.
+
+It is not, by itself, the full ATM migration specification. ATM-specific
+compatibility, durability, health projection, and env/config translation
+requirements are defined separately in [`atm-adapter-requirements.md`](./atm-adapter-requirements.md).
 
 ## 2. Layered Dependency Order
 

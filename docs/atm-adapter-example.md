@@ -12,6 +12,8 @@ The goal is to verify that:
   points only
 - no `agent-team-mail-*` dependency is required in this repo to prove the
   integration path
+- the shared repo can provide boundary evidence without pretending to be the
+  full ATM migration specification
 
 ## Boundary
 
@@ -53,6 +55,19 @@ It demonstrates the intended integration pattern:
 - the shared repo boundaries are sufficient for ATM integration
 - OTLP attachment uses projector registration, not a special internal OTLP hook
 - the shared repo remains free of `agent-team-mail-*` dependencies
+
+## What The Example Does Not Prove
+
+This example is intentionally boundary-focused and is not sufficient evidence
+that ATM migration is fully specified.
+
+It does not prove:
+
+- complete `EventFields -> LogEventV1` compatibility semantics
+- ATM direct-spool or daemon fan-in durability behavior
+- ATM health JSON parity
+- ATM-prefixed env/config translation and launch inheritance behavior
+- full ATM migration readiness without the ATM-owned adapter docs and code
 
 ## Follow-On Ownership
 

@@ -5,6 +5,8 @@
 **Related documents**:
 - [`requirements.md`](./requirements.md)
 - [`api-design.md`](./api-design.md)
+- [`atm-adapter-requirements.md`](./atm-adapter-requirements.md)
+- [`atm-adapter-architecture.md`](./atm-adapter-architecture.md)
 
 ## 1. System Overview
 
@@ -32,6 +34,19 @@ isolation:
 - the routing layer depends on logging but not on OTLP
 - the OTLP layer builds on the lower-level infrastructure and owns all OTel
   transport concerns
+
+## 1.1 Approval Scope
+
+This document is intended to do two different jobs, and those jobs should not
+be conflated:
+
+- approved for shared-repo boundary direction and blocker closure
+- not yet, by itself, a complete ATM migration specification
+
+The shared workspace architecture is approved when the crate boundaries,
+dependency layering, and generic extension points are correct. ATM migration
+confidence additionally requires ATM-owned adapter requirements and ATM-owned
+adapter architecture that define the compatibility behavior outside this repo.
 
 ## 2. Architectural Principles
 
@@ -304,8 +319,36 @@ Important boundary:
 - **Decision**: Core observability initialization happens before plugin registration or adapter-specific augmentation. Early lifecycle events must be recordable through the base logging/routing stack without requiring ATM plugin context.
 - **Consequences**:
   - early startup failures remain observable
-  - adapters enrich the runtime after core observability is already available
-  - boot sequencing is explicit rather than left to implementation drift
+- adapters enrich the runtime after core observability is already available
+- boot sequencing is explicit rather than left to implementation drift
+
+### ADR-008: Shared Approval Is Not ATM Migration Approval
+
+- **Status**: Accepted
+- **Context**: The shared workspace can be architecturally sound while still
+  leaving ATM-specific migration behavior under-specified.
+- **Decision**: Treat the shared-repo document set as approval for generic crate
+  boundaries and extension points only. Treat ATM migration completeness as a
+  separate approval track owned by the ATM adapter documents.
+- **Consequences**:
+  - shared boundary cleanup can proceed without over-claiming ATM migration
+    readiness
+  - ATM-specific compatibility semantics remain owned by ATM adapter documents
+  - review language stays precise about what has and has not been approved
+
+### ADR-009: Boundary CI Must Enforce Shared-Repo Purity
+
+- **Status**: Accepted
+- **Context**: The shared-repo boundary can drift silently if CI only checks
+  crate names and a few high-level doc strings.
+- **Decision**: Boundary CI must enforce no ATM-specific imports or env reads in
+  shared crates, no home/path discovery in shared crates outside generic config
+  helpers, no OTLP/OpenTelemetry dependency outside `sc-observability-otlp`, and
+  successful compilation of the unpublished ATM proving artifact.
+- **Consequences**:
+  - layer violations are caught before merge
+  - ATM-specific behavior remains in the ATM-owned adapter boundary
+  - the proving artifact remains executable evidence, not dead documentation
 
 ## 8. API-Design Consistency
 
@@ -336,3 +379,10 @@ The ATM integration proving artifacts owned by this repo are:
 
 These exist to prove interface sufficiency only. They do not replace the
 ATM-owned production adapter boundary.
+
+They are intentionally narrower than a full ATM migration proof:
+
+- they prove that ATM-shaped payloads and adapter-owned mapping layers can be
+  wired through the shared crates without `agent-team-mail-*` dependencies
+- they do not prove spool semantics, daemon fan-in merge behavior, ATM health
+  JSON compatibility, or complete ATM env/config translation
