@@ -1,7 +1,7 @@
 # SC-Observability API Design
 
 **Status**: Draft for review
-**Applies to**: `sc-observability-types`, `sc-observability`, `sc-observability-otlp`
+**Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 
 This is the only active design document in the worktree.
 
@@ -51,11 +51,13 @@ out.
 
 ## 3. Decision Summary
 
-- The producer-facing API is one `Observability` service.
+- The producer-facing observation-routing API is one `Observability` service.
 - Producers emit typed observations through that service.
 - Logging and OTEL are downstream projections of observations.
 - Structured logging remains a primary output surface.
 - OTEL export remains a primary output surface.
+- The lightweight logging crate stays usable on its own without observation
+  routing or OTEL dependencies.
 - Logging and OTEL are separate infrastructure services behind the
   observation-routing layer.
 - Diagnostics are first-class structured data shared by logs, telemetry, and
@@ -122,7 +124,7 @@ Must not own:
 
 ### 6.2 `sc-observability`
 
-Owns local structured logging infrastructure.
+Owns lightweight local structured logging infrastructure.
 
 Owns:
 
@@ -133,13 +135,46 @@ Owns:
 - sink fan-out
 - sink health and dropped-event accounting
 
+Design intent:
+
+- this is the minimal logging crate for basic CLI applications
+- no OTEL dependency is required
+- no observation bus is required
+- no heavy runtime or large subscriber graph is required
+
 Must not own:
 
 - OTLP transport
+- typed observation routing
 - ATM-specific metadata rules
 - ATM path conventions
 
-### 6.3 `sc-observability-otlp`
+### 6.3 `sc-observe`
+
+Owns typed observation routing and projection.
+
+Owns:
+
+- `Observability`
+- observation emitter interfaces
+- subscriber registry
+- projector registry
+- routing from typed observations into logging and telemetry outputs
+- top-level health aggregation across the observation runtime
+
+Design intent:
+
+- this is the heavier runtime crate
+- applications use this when one emitted observation should fan out to logs,
+  telemetry, and typed subscribers
+- this crate may depend on `sc-observability` and `sc-observability-otlp`
+
+Must not own:
+
+- application-specific observation types
+- ATM-specific compatibility behavior
+
+### 6.4 `sc-observability-otlp`
 
 Owns remote telemetry infrastructure.
 
@@ -157,6 +192,27 @@ Must not own:
 - ATM-specific metadata rules
 - ATM compatibility behavior
 
+## 6.5 Dependency Direction
+
+Recommended dependency direction:
+
+```text
+sc-observability-types
+    ↑
+    ├── sc-observability
+    ├── sc-observability-otlp
+    └── sc-observe
+
+sc-observe -> sc-observability
+sc-observe -> sc-observability-otlp
+```
+
+Implications:
+
+- a basic CLI may depend only on `sc-observability`
+- applications that need observation routing depend on `sc-observe`
+- OTEL remains optional and isolated in `sc-observability-otlp`
+
 ## 7. Producer-Facing Model
 
 The producer-facing model is based on observations.
@@ -164,6 +220,8 @@ The producer-facing model is based on observations.
 ### 7.1 `Observability`
 
 `Observability` is the top-level service the producer interacts with.
+
+It belongs in `sc-observe`, not in the lightweight logging crate.
 
 Design direction:
 
@@ -181,7 +239,7 @@ impl Observability {
 }
 ```
 
-This is the only producer-facing emission path in the design.
+This is the only producer-facing observation emission path in the design.
 
 ### 7.2 `ObservabilityConfig`
 
@@ -681,7 +739,7 @@ event needs to:
 
 without requiring the producer to emit those outputs separately.
 
-## 11. Structured Logging Surface
+## 11. Structured Logging Surface (`sc-observability`)
 
 The logging surface is a service with pluggable sinks.
 
@@ -780,6 +838,9 @@ The sink model is intentionally open-ended. Consumers may compose:
 - file plus custom stream sink
 - filtered sink chains
 
+This surface is designed to remain lightweight enough for basic CLI use without
+pulling in observation routing or OTEL runtime machinery.
+
 ### 11.8 Sink Registration and Filtering
 
 The logging service owns sink registration, fan-out, and optional filtering.
@@ -840,7 +901,7 @@ pub struct LoggingHealthReport {
 }
 ```
 
-## 12. Telemetry Surface
+## 12. Telemetry Surface (`sc-observability-otlp`)
 
 In v1, the telemetry surface is OTLP-backed and lives in
 `sc-observability-otlp`.
@@ -1003,6 +1064,7 @@ That type belongs in a consumer-owned crate, such as ATM.
 Example conceptual pattern:
 
 - ATM defines `AgentInfoEvent`
+- ATM creates an `Observability` runtime from `sc-observe`
 - ATM registers:
   - one or more typed subscribers for `AgentInfoEvent`
   - a log projector for `AgentInfoEvent`
@@ -1068,6 +1130,23 @@ This exact consumer-owned pattern should be represented:
 
 The shared crates should prove this pattern works without taking ownership of
 the ATM event type itself.
+
+## 14.1 Required Working Example
+
+The repo should include a working example and corresponding integration test
+fixture that demonstrates all four layers:
+
+- `sc-observability-types` contracts
+- `sc-observability` lightweight logging
+- `sc-observe` observation routing
+- `sc-observability-otlp` telemetry projection/export
+
+The example must prove that one consumer-owned typed observation can fan out to:
+
+- one or more typed subscribers
+- one or more log sinks
+- OTEL spans when appropriate
+- OTEL metrics when appropriate
 
 ## 15. Diagnostics and CLI Integration
 
@@ -1193,6 +1272,9 @@ This draft is ready for review against these questions:
 - Is `Observability` the right producer-facing service?
 - Is the subscriber/projector split correct?
 - Are logging and telemetry correctly modeled as downstream output surfaces?
+- Is the 4-crate split correct?
+- Is `sc-observability` lightweight enough for basic CLI logging?
+- Is `sc-observe` the right place for observation routing and pub/sub?
 - Is the core type model minimal enough?
 - Is mandatory remediation the right shared diagnostic contract?
 - Is the span/event/metric pattern correct for sub-agents, tasks, and test runs?
