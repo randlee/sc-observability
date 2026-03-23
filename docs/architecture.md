@@ -363,6 +363,10 @@ The sketch above is illustrative:
 - registration happens before `build()`
 - producer code emits one typed `Observation<AgentInfo>`
 - routing, projection, logging, and OTLP export happen inside the runtime
+- `.with_logger(...)` and `.with_telemetry(...)` are illustrative builder-time
+  composition hooks, not finalized method names; implementation must align the
+  concrete builder API with `api-design.md` rather than inventing incompatible
+  signatures
 
 ## 4. Sealed vs Open Trait Inventory
 
@@ -465,7 +469,7 @@ The sketch above is illustrative:
 | --- | --- | --- | --- |
 | `sc-observability-types` | Rust standard ecosystem support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | Shared value types, diagnostics, identifiers, health contracts, emitter traits, routing traits |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | `Logger`, `LoggerConfig`, sinks, redaction, rotation, logging health |
-| `sc-observe` | `sc-observability-types`, `sc-observability`, optionally `sc-observability-otlp` | `agent-team-mail-*` | `Observability`, builder/config, routing, subscribers, projectors, top-level health |
+| `sc-observe` | `sc-observability-types`, `sc-observability`, `sc-observability-otlp` | `agent-team-mail-*` | `Observability`, builder/config, routing, subscribers, projectors, top-level health |
 | `sc-observability-otlp` | `sc-observability-types` | `sc-observability`, `sc-observe`, `agent-team-mail-*` | `Telemetry`, config, `SpanAssembler`, OTLP exporters, exporter health |
 
 Boundary summary:
