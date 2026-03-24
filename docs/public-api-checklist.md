@@ -6,81 +6,81 @@ change the public surface opportunistically.
 
 ## 1. Usage
 
-Each item should be marked during implementation as one of:
+Each item uses one of these markers:
 
-- `finalized`
-- `implemented`
-- `internal-only`
+- `[ ]` pending
+- `[~]` designed, not implemented
+- `[x]` finalized and implemented
 
-No item should move from `finalized` back to provisional without an explicit
-design change.
+Internal-only items should be called out explicitly rather than kept in the
+public list silently.
 
 ## 2. `sc-observability-types`
 
 ### Finalized Public Types
 
-- `ErrorCode`
-- `ValueValidationError`
-- `ToolName`
-- `EnvPrefix`
-- `ServiceName`
-- `TargetCategory`
-- `ActionName`
-- `MetricName`
-- `RecoverableSteps`
-- `Remediation`
-- `Diagnostic`
-- `DiagnosticInfo`
-- `DiagnosticSummary`
-- `ErrorContext`
-- `IdentityError`
-- `Level`
-- `LevelFilter`
-- `ProcessIdentity`
-- `ProcessIdentityPolicy`
-- `ProcessIdentityResolver`
-- `TraceId`
-- `SpanId`
-- `TraceContext`
-- `StateTransition`
-- `Observation<T>`
-- `LogEvent`
-- `SpanStatus`
-- `SpanStarted`
-- `SpanEnded`
-- `SpanRecord<S>`
-- `SpanEvent`
-- `SpanSignal`
-- `MetricKind`
-- `MetricRecord`
-- `LoggingHealthState`
-- `SinkHealthState`
-- `SinkHealth`
-- `LoggingHealthReport`
-- `ObservationHealthState`
-- `ObservabilityHealthReport`
-- `TelemetryHealthState`
-- `ExporterHealthState`
-- `ExporterHealth`
-- `TelemetryHealthReport`
-- `CompleteSpan`
-- `ObservationSubscriber<T>`
-- `ObservationFilter<T>`
-- `LogProjector<T>`
-- `SpanProjector<T>`
-- `MetricProjector<T>`
-- `SubscriberRegistration<T>`
-- `ProjectionRegistration<T>`
-- `InitError`
-- `EventError`
-- `FlushError`
-- `ShutdownError`
-- `ProjectionError`
-- `SubscriberError`
-- `LogSinkError`
-- `ExportError`
-- `ObservationError`
-- `TelemetryError`
+- [~] `ErrorCode`
+- [~] `ValueValidationError`
+- [~] `ToolName`
+- [~] `EnvPrefix`
+- [~] `ServiceName`
+- [~] `TargetCategory`
+- [~] `ActionName`
+- [~] `MetricName`
+- [~] `RecoverableSteps`
+- [~] `Remediation`
+- [~] `Diagnostic`
+- [~] `DiagnosticInfo`
+- [~] `DiagnosticSummary`
+- [~] `ErrorContext`
+- [~] `IdentityError`
+- [~] `Level`
+- [~] `LevelFilter`
+- [~] `ProcessIdentity`
+- [~] `ProcessIdentityPolicy`
+- [~] `ProcessIdentityResolver`
+- [~] `TraceId`
+- [~] `SpanId`
+- [~] `TraceContext`
+- [~] `StateTransition`
+- [~] `Observation<T>`
+- [~] `LogEvent`
+- [~] `SpanStatus`
+- [~] `SpanStarted`
+- [~] `SpanEnded`
+- [~] `SpanRecord<S>`
+- [~] `SpanEvent`
+- [~] `SpanSignal`
+- [~] `MetricKind`
+- [~] `MetricRecord`
+- [~] `LoggingHealthState`
+- [~] `SinkHealthState`
+- [~] `SinkHealth`
+- [~] `LoggingHealthReport`
+- [~] `ObservationHealthState`
+- [~] `ObservabilityHealthReport`
+- [~] `TelemetryHealthState`
+- [~] `ExporterHealthState`
+- [~] `ExporterHealth`
+- [~] `TelemetryHealthReport`
+- [~] `CompleteSpan`
+- [~] `ObservationSubscriber<T>`
+- [~] `ObservationFilter<T>`
+- [~] `LogProjector<T>`
+- [~] `SpanProjector<T>`
+- [~] `MetricProjector<T>`
+- [~] `SubscriberRegistration<T>`
+- [~] `ProjectionRegistration<T>`
+- [~] `InitError`
+- [~] `EventError`
+- [~] `FlushError`
+- [~] `ShutdownError`
+- [~] `ProjectionError`
+- [~] `SubscriberError`
+- [~] `LogSinkError`
+- [~] `ExportError`
+- [~] `ObservationError`
+- [~] `TelemetryError`
 
 ### Finalized Public Rules
 
@@ -94,16 +94,16 @@ design change.
 
 ### Finalized Public Types
 
-- `LoggerConfig`
-- `RotationPolicy`
-- `RetentionPolicy`
-- `RedactionPolicy`
-- `Redactor`
-- `Logger`
-- `LogEmitter`
-- `LogSink`
-- `LogFilter`
-- `SinkRegistration`
+- [~] `LoggerConfig`
+- [~] `RotationPolicy`
+- [~] `RetentionPolicy`
+- [~] `RedactionPolicy`
+- [~] `Redactor`
+- [~] `Logger`
+- [~] `LogEmitter`
+- [~] `LogSink`
+- [~] `LogFilter`
+- [~] `SinkRegistration`
 
 ### Finalized Public Rules
 
@@ -116,10 +116,10 @@ design change.
 
 ### Finalized Public Types
 
-- `ObservabilityConfig`
-- `ObservabilityBuilder`
-- `Observability`
-- `ObservationEmitter<T>`
+- [~] `ObservabilityConfig`
+- [~] `ObservabilityBuilder`
+- [~] `Observability`
+- [~] `ObservationEmitter<T>`
 
 ### Finalized Public Rules
 
@@ -132,21 +132,27 @@ design change.
 
 ### Finalized Public Types
 
-- `TelemetryConfig`
-- `TelemetryConfigBuilder`
-- `Telemetry`
-- `OtlpProtocol`
-- `OtelConfig`
-- `LogsConfig`
-- `TracesConfig`
-- `MetricsConfig`
-- `ResourceAttributes`
-- `SpanAssembler`
-- `LogExporter`
-- `TraceExporter`
-- `MetricExporter`
+- [~] `TelemetryConfig`
+- [~] `TelemetryConfigBuilder`
+- [~] `Telemetry`
+- [~] `OtlpProtocol`
+- [~] `OtelConfig`
+- [~] `LogsConfig`
+- [~] `TracesConfig`
+- [~] `MetricsConfig`
+- [~] `ResourceAttributes`
+- [~] `SpanAssembler`
+- [~] `LogExporter`
+- [~] `TraceExporter`
+- [~] `MetricExporter`
+
+Internal-only:
+
 - `SpanEmitter`
 - `MetricEmitter`
+
+Note:
+- sealed/crate-local per `architecture.md` §3.4 and OTLP-022
 
 ### Finalized Public Rules
 

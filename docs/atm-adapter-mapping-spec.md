@@ -15,6 +15,10 @@ ATM implementation starts. It is intentionally outside the shared workspace
 API docs because it governs ATM-owned semantics rather than generic shared
 behavior.
 
+The following referenced docs are present in the shared repo and pending ATM
+team review: `atm-adapter-requirements.md`, `atm-adapter-architecture.md`,
+`atm-adapter-example.md`, `atm-quickstart.md`.
+
 ## 2. Mapping Layers
 
 ATM integration has three mapping layers:

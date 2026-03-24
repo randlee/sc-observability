@@ -116,3 +116,6 @@ A sprint is only complete when:
 - the tests required by this document are present
 - CI gates are green
 - the API checklist is updated if any public surface changed
+
+See also: [`implementation-plan.md`](./implementation-plan.md) §5 Cross-Crate
+Acceptance Gates.

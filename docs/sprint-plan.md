@@ -77,7 +77,9 @@ Scope:
 - migration and release readiness
 
 Done means:
-- no major open design gaps
+- all public API checklist items marked finalized
+- no unresolved Important findings from QA-1 through QA-6
+- migration and release readiness checklist drafted
 - release and cutover tasks can start
 
 ## 3. Sprint Dependencies

@@ -6,6 +6,7 @@
 - [`requirements.md`](./requirements.md)
 - [`architecture.md`](./architecture.md)
 - [`api-design.md`](./api-design.md)
+- [`project-plan.md`](./project-plan.md)
 - [`atm-adapter-mapping-spec.md`](./atm-adapter-mapping-spec.md)
 - [`test-strategy.md`](./test-strategy.md)
 - [`sprint-plan.md`](./sprint-plan.md)
@@ -32,6 +33,9 @@ plan. It answers four questions:
 - Keep all non-trivial shared constants in one `constants.rs` per crate.
 - No magic-number policy/config literals outside constants modules.
 - Keep the API checklist current as implementation lands.
+- All sprint plans must preserve the standalone boundary defined by
+  `docs/requirements.md`, `docs/architecture.md`, `docs/git-workflows.md`, and
+  `docs/publishing.md` as required by `docs/project-plan.md`.
 
 ## 3. Milestone Order
 
@@ -148,7 +152,10 @@ Implementation notes:
 Exit criteria:
 - logs, spans, and metrics can be attached through builder registration
 - `Telemetry::new(...)` rejects invalid OTLP config eagerly
-- shutdown and flush behavior matches the documented lifecycle
+- emit methods return `TelemetryError::Shutdown` after `shutdown()` is called
+- all in-flight spans are flushed or explicitly dropped and counted before
+  shutdown completes
+- flush and shutdown behavior matches the documented telemetry lifecycle
 
 ### M5. ATM Adapter Integration
 
@@ -168,7 +175,7 @@ Shared-repo proving outputs:
 - shared docs stay aligned with ATM adapter docs
 
 Exit criteria:
-- ATM adapter mapping spec reviewed
+- ATM adapter mapping spec accepted by the ATM team with no open blocking items
 - ATM proving path exercises logging, routing, and OTLP attachment
 - no shared-repo boundary regressions
 
@@ -189,6 +196,8 @@ The next milestone cannot start until the previous one has:
 - tests at the level required by [`test-strategy.md`](./test-strategy.md)
 - no unresolved public API checklist items
 - docs aligned with implemented behavior
+
+See also: [`test-strategy.md`](./test-strategy.md) §6 Exit Criteria.
 
 ## 6. Out Of Scope For Shared Implementation
 
