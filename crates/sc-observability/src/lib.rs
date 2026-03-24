@@ -63,6 +63,16 @@ pub struct RedactionPolicy {
     pub custom_redactors: Vec<Arc<dyn Redactor>>,
 }
 
+impl std::fmt::Debug for RedactionPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RedactionPolicy")
+            .field("denylist_keys", &self.denylist_keys)
+            .field("redact_bearer_tokens", &self.redact_bearer_tokens)
+            .field("custom_redactors", &self.custom_redactors.len())
+            .finish()
+    }
+}
+
 pub trait LogFilter: Send + Sync {
     fn accepts(&self, event: &LogEvent) -> bool;
 }
@@ -94,6 +104,7 @@ impl SinkRegistration {
     }
 }
 
+#[derive(Debug)]
 pub struct LoggerConfig {
     pub service_name: ServiceName,
     pub log_root: PathBuf,
@@ -784,6 +795,18 @@ mod tests {
                 .join("logs")
                 .join("sc-observability.log.jsonl")
         );
+    }
+
+    #[test]
+    fn logger_config_debug_renders_redaction_summary() {
+        let root = temp_path("debug");
+        let config = LoggerConfig::default_for(service_name(), root);
+
+        let rendered = format!("{config:?}");
+
+        assert!(rendered.contains("LoggerConfig"));
+        assert!(rendered.contains("RedactionPolicy"));
+        assert!(rendered.contains("custom_redactors: 0"));
     }
 
     #[test]
