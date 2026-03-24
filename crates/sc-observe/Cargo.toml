@@ -11,6 +11,3 @@ description = "Observation routing runtime layered on sc-observability."
 [dependencies]
 sc-observability-types = { path = "../sc-observability-types", version = "0.46.2" }
 sc-observability = { path = "../sc-observability", version = "0.46.2" }
-
-[dev-dependencies]
-sc-observability-otlp = { path = "../sc-observability-otlp", version = "0.46.2" }

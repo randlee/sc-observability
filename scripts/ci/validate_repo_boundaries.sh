@@ -38,10 +38,8 @@ if missing:
     raise SystemExit(f"missing workspace members: {sorted(missing)}")
 
 obs_deps = package_deps(root / "crates/sc-observability/Cargo.toml")
-observe_deps = package_deps(root / "crates/sc-observe/Cargo.toml")
 observe_runtime_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dependencies")
 observe_test_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dev-dependencies")
-otlp_deps = package_deps(root / "crates/sc-observability-otlp/Cargo.toml")
 otlp_runtime_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dependencies")
 otlp_test_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dev-dependencies")
 
@@ -49,11 +47,13 @@ if "sc-observability-otlp" in obs_deps or "sc-observe" in obs_deps:
     raise SystemExit("sc-observability must not depend on sc-observe or sc-observability-otlp")
 if "sc-observability-otlp" in observe_runtime_deps:
     raise SystemExit("sc-observe must not depend on sc-observability-otlp")
-if otlp_runtime_deps != {"serde_json", "thiserror", "sc-observability-types"}:
+required_otlp = {"serde_json", "thiserror", "sc-observability-types", "sc-observe"}
+allowed_otlp = required_otlp | {"sc-observability"}
+if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
     raise SystemExit(
         "sc-observability-otlp runtime dependencies drifted from allowed baseline"
     )
-if observe_test_deps != {"sc-observability-otlp"}:
+if observe_test_deps:
     raise SystemExit("sc-observe dev-dependencies drifted from allowed baseline")
 if otlp_test_deps:
     raise SystemExit(

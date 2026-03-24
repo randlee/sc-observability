@@ -251,6 +251,8 @@ fn temp_root(name: &str) -> std::path::PathBuf {
 fn builder_registration_attaches_logs_spans_and_metrics() {
     let telemetry = Arc::new(Telemetry::new(telemetry_config()).expect("telemetry"));
     let root = temp_root("integration");
+    // Test-only scaffolding: sc-observe owns builder registration; OTLP plugs in
+    // by registering projectors through the same public routing surface callers use.
     let config = ObservabilityConfig::default_for(
         ToolName::new("test-service").expect("valid tool"),
         root.clone(),
