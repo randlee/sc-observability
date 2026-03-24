@@ -28,6 +28,9 @@ Fail-open shutdown path:
 cargo run --manifest-path examples/atm-adapter-example/Cargo.toml -- fail-open
 ```
 
+The `-- fail-open` mode intentionally leaves one span incomplete by design so
+shutdown drops it and records the loss per `OTLP-009`.
+
 ## ATM_OTEL_* Environment Variables
 
 - `ATM_OTEL_ENDPOINT`
@@ -42,3 +45,19 @@ cargo run --manifest-path examples/atm-adapter-example/Cargo.toml -- fail-open
 
 If `ATM_OTEL_ENDPOINT` is unset, telemetry stays disabled and the example still
 runs end to end.
+
+## ATM Team Adoption
+
+- Replace `AgentContext`, `HookEventKind`, and `AgentInfoEvent` with ATM-owned
+  payload types and keep them local to the ATM adapter crate.
+- Minimum Cargo.toml dependencies:
+  `sc-observability-types`, `sc-observability`, `sc-observe`,
+  `sc-observability-otlp`, plus `serde`/`serde_json` if ATM-owned payloads need
+  them.
+- Wire projectors through `ObservabilityBuilder` by registering ATM-owned
+  `LogProjector`, `SpanProjector`, and `MetricProjector` implementations, then
+  attach OTLP by wrapping those projectors with the local telemetry-aware
+  adapter pattern shown in `main.rs`.
+- Keep `ATM_OTEL_*` translation in the ATM adapter layer. This example’s
+  `telemetry_config_from_env()` function is the copyable pattern for mapping
+  environment input into `TelemetryConfig`.

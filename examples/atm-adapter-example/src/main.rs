@@ -1,4 +1,6 @@
-/// Runnable ATM adapter example built on the shared observability crates.
+//! Runnable ATM adapter example built on the shared observability crates.
+
+mod constants;
 
 use std::env;
 use std::path::PathBuf;
@@ -6,13 +8,15 @@ use std::sync::Arc;
 
 use sc_observability::RotationPolicy;
 use sc_observability_otlp::{
-    OtelConfig, OtlpProtocol, Telemetry, TelemetryConfig, TelemetryConfigBuilder,
+    LogsConfig, MetricsConfig, OtelConfig, OtlpProtocol, Telemetry, TelemetryConfig,
+    TelemetryConfigBuilder, TracesConfig,
 };
 use sc_observability_types::{
     ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
-    Observation, ProcessIdentity, ProjectionRegistration, Remediation, ServiceName, SpanEvent,
-    SpanId, SpanRecord, SpanSignal, SpanStarted, SpanStatus, StateTransition, TargetCategory,
-    TraceContext, TraceId,
+    LoggingHealthReport, Observation, ObservabilityHealthReport, ProcessIdentity,
+    ProjectionError, ProjectionRegistration, Remediation, ServiceName, SpanEvent, SpanId,
+    SpanRecord, SpanSignal, SpanStarted, SpanStatus, StateTransition, TargetCategory,
+    TelemetryHealthReport, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde::{Deserialize, Serialize};
@@ -70,8 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = ServiceName::new("atm").expect("valid service name");
     let log_root = temp_log_root();
 
-    let observability = build_observability(service.clone(), log_root.clone(), mode)?;
-    let health = project_health(&observability.0.health(), &observability.1.health());
+    let health = build_observability(service.clone(), log_root.clone(), mode)?;
 
     println!("ATM adapter example complete");
     println!("mode={mode:?}");
@@ -96,7 +99,7 @@ fn build_observability(
     service: ServiceName,
     log_root: PathBuf,
     mode: RunMode,
-) -> Result<(Observability, Arc<Telemetry>), Box<dyn std::error::Error>> {
+) -> Result<AtmHealthProjection, Box<dyn std::error::Error>> {
     let observability_config = ObservabilityConfig {
         tool_name: sc_observability_types::ToolName::new("atm").expect("valid tool name"),
         log_root,
@@ -108,22 +111,34 @@ fn build_observability(
     let telemetry_config = telemetry_config_from_env(service.clone())?;
     let telemetry = Arc::new(Telemetry::new(telemetry_config)?);
 
-    let builder = Observability::builder(observability_config);
-    let runtime = Telemetry::register_projection(
-        builder,
-        telemetry.clone(),
-        ProjectionRegistration {
-            log_projector: Some(Arc::new(AtmLogProjector)),
-            span_projector: Some(Arc::new(AtmSpanProjector)),
-            metric_projector: Some(Arc::new(AtmMetricProjector)),
+    let runtime = Observability::builder(observability_config)
+        .register_projection(ProjectionRegistration {
+            log_projector: Some(Arc::new(AttachedLogProjector {
+                telemetry: telemetry.clone(),
+                inner: Arc::new(AtmLogProjector),
+            })),
+            span_projector: Some(Arc::new(AttachedSpanProjector {
+                telemetry: telemetry.clone(),
+                inner: Arc::new(AtmSpanProjector),
+            })),
+            metric_projector: Some(Arc::new(AttachedMetricProjector {
+                telemetry: telemetry.clone(),
+                inner: Arc::new(AtmMetricProjector),
+            })),
             filter: None,
-        },
-    )
-    .build()?;
+        })
+        .build()?;
 
     emit_example_sequence(&runtime, service, mode)?;
     runtime.flush()?;
     telemetry.flush()?;
+    let observability_health = runtime.health();
+    let logging_health = observability_health
+        .logging
+        .clone()
+        .ok_or("observability health missing logging snapshot")?;
+    let telemetry_health = telemetry.health();
+    let health = project_health(&logging_health, &observability_health, &telemetry_health);
 
     match mode {
         RunMode::Normal => {
@@ -131,12 +146,14 @@ fn build_observability(
             runtime.shutdown()?;
         }
         RunMode::FailOpen => {
+            // OTLP-009: this path intentionally leaves one started span without a
+            // matching end so shutdown drops it and records fail-open export loss.
             let _ = telemetry.shutdown();
             runtime.shutdown()?;
         }
     }
 
-    Ok((runtime, telemetry))
+    Ok(health)
 }
 
 fn emit_example_sequence(
@@ -212,7 +229,9 @@ fn emit_example_sequence(
     Ok(())
 }
 
-fn telemetry_config_from_env(service: ServiceName) -> Result<TelemetryConfig, Box<dyn std::error::Error>> {
+fn telemetry_config_from_env(
+    service: ServiceName,
+) -> Result<TelemetryConfig, Box<dyn std::error::Error>> {
     let endpoint = env::var("ATM_OTEL_ENDPOINT").ok();
     let protocol = parse_protocol(env::var("ATM_OTEL_PROTOCOL").ok().as_deref())?;
     let auth_header = env::var("ATM_OTEL_AUTH_HEADER").ok();
@@ -221,6 +240,9 @@ fn telemetry_config_from_env(service: ServiceName) -> Result<TelemetryConfig, Bo
     let debug_local_export = parse_bool_env("ATM_OTEL_DEBUG_LOCAL_EXPORT")?.unwrap_or(false);
 
     Ok(TelemetryConfigBuilder::new(service)
+        .enable_logs(LogsConfig::default())
+        .enable_traces(TracesConfig::default())
+        .enable_metrics(MetricsConfig::default())
         .with_transport(OtelConfig {
             enabled: endpoint.is_some(),
             endpoint,
@@ -228,11 +250,11 @@ fn telemetry_config_from_env(service: ServiceName) -> Result<TelemetryConfig, Bo
             auth_header,
             ca_file,
             insecure_skip_verify,
-            timeout_ms: 3_000,
+            timeout_ms: constants::OTLP_TIMEOUT_MS,
             debug_local_export,
-            max_retries: 3,
-            initial_backoff_ms: 250,
-            max_backoff_ms: 5_000,
+            max_retries: constants::OTLP_MAX_RETRIES,
+            initial_backoff_ms: constants::OTLP_INITIAL_BACKOFF_MS,
+            max_backoff_ms: constants::OTLP_MAX_BACKOFF_MS,
         })
         .with_resource(sc_observability_otlp::ResourceAttributes {
             attributes: [
@@ -267,22 +289,15 @@ fn parse_bool_env(name: &str) -> Result<Option<bool>, Box<dyn std::error::Error>
 }
 
 fn project_health(
-    observability: &sc_observability_types::ObservabilityHealthReport,
-    telemetry: &sc_observability_types::TelemetryHealthReport,
+    logging: &LoggingHealthReport,
+    observability: &ObservabilityHealthReport,
+    telemetry: &TelemetryHealthReport,
 ) -> AtmHealthProjection {
     AtmHealthProjection {
-        logging_state: observability
-            .logging
-            .as_ref()
-            .map(|logging| format!("{:?}", logging.state))
-            .unwrap_or_else(|| "Unavailable".to_string()),
+        logging_state: format!("{:?}", logging.state),
         routing_state: format!("{:?}", observability.state),
         telemetry_state: format!("{:?}", telemetry.state),
-        dropped_logs_total: observability
-            .logging
-            .as_ref()
-            .map(|logging| logging.dropped_events_total)
-            .unwrap_or_default(),
+        dropped_logs_total: logging.dropped_events_total,
         dropped_observations_total: observability.dropped_observations_total,
         dropped_exports_total: telemetry.dropped_exports_total,
         last_error: observability
@@ -290,6 +305,90 @@ fn project_health(
             .as_ref()
             .map(|summary| summary.message.clone())
             .or_else(|| telemetry.last_error.as_ref().map(|summary| summary.message.clone())),
+    }
+}
+
+struct AttachedLogProjector<T> {
+    telemetry: Arc<Telemetry>,
+    inner: Arc<dyn sc_observability_types::LogProjector<T>>,
+}
+
+impl<T> sc_observability_types::LogProjector<T> for AttachedLogProjector<T>
+where
+    T: sc_observability_types::Observable,
+{
+    fn project_logs(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<LogEvent>, ProjectionError> {
+        let events = self.inner.project_logs(observation)?;
+        for event in &events {
+            self.telemetry
+                .emit_log(event)
+                .map_err(telemetry_to_projection_error)?;
+        }
+        Ok(events)
+    }
+}
+
+struct AttachedSpanProjector<T> {
+    telemetry: Arc<Telemetry>,
+    inner: Arc<dyn sc_observability_types::SpanProjector<T>>,
+}
+
+impl<T> sc_observability_types::SpanProjector<T> for AttachedSpanProjector<T>
+where
+    T: sc_observability_types::Observable,
+{
+    fn project_spans(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<SpanSignal>, ProjectionError> {
+        let spans = self.inner.project_spans(observation)?;
+        for span in &spans {
+            self.telemetry
+                .emit_span(span)
+                .map_err(telemetry_to_projection_error)?;
+        }
+        Ok(spans)
+    }
+}
+
+struct AttachedMetricProjector<T> {
+    telemetry: Arc<Telemetry>,
+    inner: Arc<dyn sc_observability_types::MetricProjector<T>>,
+}
+
+impl<T> sc_observability_types::MetricProjector<T> for AttachedMetricProjector<T>
+where
+    T: sc_observability_types::Observable,
+{
+    fn project_metrics(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<MetricRecord>, ProjectionError> {
+        let metrics = self.inner.project_metrics(observation)?;
+        for metric in &metrics {
+            self.telemetry
+                .emit_metric(metric)
+                .map_err(telemetry_to_projection_error)?;
+        }
+        Ok(metrics)
+    }
+}
+
+fn telemetry_to_projection_error(
+    error: sc_observability_types::TelemetryError,
+) -> ProjectionError {
+    match error {
+        sc_observability_types::TelemetryError::Shutdown => {
+            ProjectionError(Box::new(sc_observability_types::ErrorContext::new(
+                sc_observability_types::ErrorCode::new_static("SC_ATM_EXAMPLE_SHUTDOWN"),
+                "telemetry runtime is shut down",
+                Remediation::not_recoverable("do not project telemetry after shutdown"),
+            )))
+        }
+        sc_observability_types::TelemetryError::ExportFailure(context) => ProjectionError(context),
     }
 }
 
