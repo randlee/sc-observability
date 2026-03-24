@@ -1,3 +1,9 @@
+//! Lightweight structured logging for the `sc-observability` workspace.
+//!
+//! This crate owns logging-only concerns: logger configuration, built-in file
+//! and console sinks, sink fan-out, filtering, redaction, and logging health.
+//! It intentionally avoids typed observation routing and OTLP transport logic.
+
 pub mod constants;
 pub mod error_codes;
 
@@ -204,23 +210,7 @@ impl Logger {
 
         for registration in &self.sinks {
             if let Err(err) = registration.sink.flush() {
-                *self
-                    .runtime
-                    .last_error
-                    .lock()
-                    .expect("logger last_error poisoned") = Some(DiagnosticSummary::from(
-                    &diagnostic_for_sink_failure(err.to_string()),
-                ));
-                return Err(FlushError(Box::new(
-                    ErrorContext::new(
-                        error_codes::LOGGER_FLUSH_FAILED,
-                        "logger flush failed",
-                        Remediation::not_recoverable(
-                            "sink flush failure handling is owned by the logger runtime",
-                        ),
-                    )
-                    .cause(err.to_string()),
-                )));
+                self.record_sink_failure(err.to_string());
             }
         }
 
@@ -286,6 +276,20 @@ impl Logger {
         }
 
         event
+    }
+
+    fn record_sink_failure(&self, message: impl Into<String>) {
+        let message = message.into();
+        self.runtime
+            .dropped_events_total
+            .fetch_add(1, Ordering::SeqCst);
+        *self
+            .runtime
+            .last_error
+            .lock()
+            .expect("logger last_error poisoned") = Some(DiagnosticSummary::from(
+            &diagnostic_for_sink_failure(message),
+        ));
     }
 }
 
@@ -520,11 +524,13 @@ impl LogSink for ConsoleSink {
 }
 
 mod sealed_emitters {
-    #[allow(dead_code)]
     pub trait Sealed {}
 }
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "crate-local emitter trait is intentionally available for logging-only injection"
+)]
 pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
 }
@@ -537,7 +543,7 @@ impl LogEmitter for Logger {
     }
 }
 
-pub fn diagnostic_for_sink_failure(message: impl Into<String>) -> Diagnostic {
+pub(crate) fn diagnostic_for_sink_failure(message: impl Into<String>) -> Diagnostic {
     Diagnostic {
         code: error_codes::LOGGER_SINK_WRITE_FAILED,
         message: message.into(),
@@ -838,6 +844,86 @@ mod tests {
         assert_eq!(health.state, LoggingHealthState::DegradedDropping);
         assert_eq!(health.dropped_events_total, 1);
         assert!(health.last_error.is_some());
+    }
+
+    #[test]
+    fn flush_failures_are_fail_open_and_counted_in_health() {
+        struct FlushFailSink;
+
+        impl LogSink for FlushFailSink {
+            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+                Ok(())
+            }
+
+            fn flush(&self) -> Result<(), LogSinkError> {
+                Err(LogSinkError(Box::new(ErrorContext::new(
+                    error_codes::LOGGER_FLUSH_FAILED,
+                    "flush failed",
+                    Remediation::not_recoverable("test sink intentionally fails flush"),
+                ))))
+            }
+
+            fn health(&self) -> SinkHealth {
+                SinkHealth {
+                    name: "flush-fail".to_string(),
+                    state: SinkHealthState::DegradedDropping,
+                    last_error: None,
+                }
+            }
+        }
+
+        let root = temp_path("flush-fail");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.enable_file_sink = false;
+        let mut logger = Logger::new(config).expect("logger");
+        logger.register_sink(SinkRegistration::new(Arc::new(FlushFailSink)));
+
+        logger.flush().expect("flush remains fail-open");
+
+        let health = logger.health();
+        assert_eq!(health.dropped_events_total, 1);
+        assert!(health.last_error.is_some());
+    }
+
+    #[test]
+    fn default_log_path_uses_service_scoped_layout() {
+        let service = ServiceName::new("custom-service").expect("valid service");
+        let log_root = PathBuf::from("/tmp/observability-root");
+
+        let path = default_log_path(&log_root, &service);
+
+        assert_eq!(
+            path,
+            PathBuf::from("/tmp/observability-root/custom-service/logs/custom-service.log.jsonl")
+        );
+    }
+
+    #[test]
+    fn sink_filter_blocks_event_delivery() {
+        struct DenyAll;
+
+        impl LogFilter for DenyAll {
+            fn accepts(&self, _event: &LogEvent) -> bool {
+                false
+            }
+        }
+
+        let root = temp_path("filter");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.enable_file_sink = false;
+        let mut logger = Logger::new(config).expect("logger");
+
+        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        logger.register_sink(
+            SinkRegistration::new(Arc::new(ConsoleSink::from_writer(Box::new(SharedBuffer {
+                lines: lines.clone(),
+            }))))
+            .with_filter(Arc::new(DenyAll)),
+        );
+
+        logger.emit(log_event(service_name())).expect("emit");
+
+        assert!(lines.lock().expect("lines poisoned").is_empty());
     }
 
     #[test]

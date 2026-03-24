@@ -1,3 +1,10 @@
+//! Shared neutral contracts for the `sc-observability` workspace.
+//!
+//! This crate defines the reusable value types, diagnostics, typestate span
+//! contracts, health reports, and open extension traits consumed by the higher
+//! layers in the workspace. It intentionally avoids owning sinks, routing
+//! runtimes, exporter behavior, or ATM-specific payload types.
+
 pub mod constants;
 pub mod error_codes;
 
