@@ -513,6 +513,7 @@ impl sc_observability_types::SpanProjector<AgentInfoEvent> for AtmSpanProjector 
                         common_fields(&observation.payload),
                     )
                     .with_diagnostic(Diagnostic {
+                        timestamp: observation.timestamp,
                         code: ErrorCode::new_static("SC_ATM_ADAPTER_EXAMPLE_OUTCOME"),
                         message: format!("subagent completed with outcome={outcome}"),
                         cause: None,

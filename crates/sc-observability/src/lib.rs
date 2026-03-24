@@ -17,6 +17,7 @@ use std::time::{Duration, SystemTime};
 use sc_observability_types::{
     Diagnostic, DiagnosticSummary, ErrorContext, FlushError, InitError, Level, LevelFilter,
     LogEvent, LogSinkError, ProcessIdentityPolicy, Remediation, ServiceName, ShutdownError,
+    Timestamp,
 };
 pub use sc_observability_types::{
     EventError, LoggingHealthReport, LoggingHealthState, SinkHealth, SinkHealthState,
@@ -97,6 +98,7 @@ pub struct LoggerConfig {
     pub service_name: ServiceName,
     pub log_root: PathBuf,
     pub level: LevelFilter,
+    /// Reserved for future async/backpressure implementation. Phase 1 execution is synchronous; this value is stored but not yet applied.
     pub queue_capacity: usize,
     pub rotation: RotationPolicy,
     pub retention: RetentionPolicy,
@@ -559,6 +561,7 @@ impl LogEmitter for Logger {
 
 pub(crate) fn diagnostic_for_sink_failure(message: impl Into<String>) -> Diagnostic {
     Diagnostic {
+        timestamp: Timestamp::now_utc(),
         code: error_codes::LOGGER_SINK_WRITE_FAILED,
         message: message.into(),
         cause: None,
@@ -739,6 +742,7 @@ mod tests {
             correlation_id: None,
             outcome: Some("ok".to_string()),
             diagnostic: Some(Diagnostic {
+                timestamp: Timestamp::UNIX_EPOCH,
                 code: ErrorCode::new_static("SC_TEST"),
                 message: "diagnostic".to_string(),
                 cause: None,

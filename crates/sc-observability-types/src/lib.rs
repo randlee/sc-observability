@@ -25,10 +25,12 @@ pub type Timestamp = OffsetDateTime;
 pub struct ErrorCode(Cow<'static, str>);
 
 impl ErrorCode {
+    /// Creates an error code from a `'static` string without allocating.
     pub const fn new_static(code: &'static str) -> Self {
         Self(Cow::Borrowed(code))
     }
 
+    /// Creates an error code from owned or borrowed string data by taking ownership.
     pub fn new_owned(code: impl Into<String>) -> Self {
         Self(Cow::Owned(code.into()))
     }
@@ -214,6 +216,7 @@ pub enum Remediation {
 }
 
 impl Remediation {
+    /// Builds a recoverable remediation with one required first step and any remaining ordered steps.
     pub fn recoverable(
         first: impl Into<String>,
         rest: impl IntoIterator<Item = impl Into<String>>,
@@ -225,6 +228,7 @@ impl Remediation {
         }
     }
 
+    /// Builds a non-recoverable remediation with the required justification for why recovery is not possible.
     pub fn not_recoverable(justification: impl Into<String>) -> Self {
         Self::NotRecoverable {
             justification: justification.into(),
@@ -235,6 +239,7 @@ impl Remediation {
 /// Structured diagnostic payload reusable across CLI, logging, and telemetry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Diagnostic {
+    pub timestamp: Timestamp,
     pub code: ErrorCode,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -264,7 +269,7 @@ impl From<&Diagnostic> for DiagnosticSummary {
         Self {
             code: Some(value.code.clone()),
             message: value.message.clone(),
-            at: OffsetDateTime::now_utc(),
+            at: value.timestamp,
         }
     }
 }
@@ -281,6 +286,7 @@ impl ErrorContext {
     pub fn new(code: ErrorCode, message: impl Into<String>, remediation: Remediation) -> Self {
         Self {
             diagnostic: Diagnostic {
+                timestamp: OffsetDateTime::now_utc(),
                 code,
                 message: message.into(),
                 cause: None,
@@ -312,6 +318,7 @@ impl ErrorContext {
         self
     }
 
+    /// Returns the structured diagnostic carried by this error context.
     pub fn diagnostic(&self) -> &Diagnostic {
         &self.diagnostic
     }
@@ -374,6 +381,22 @@ pub enum ProcessIdentityPolicy {
         pid: Option<u32>,
     },
     Resolver(Arc<dyn ProcessIdentityResolver>),
+}
+
+impl std::fmt::Debug for ProcessIdentityPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Auto => f.write_str("ProcessIdentityPolicy::Auto"),
+            Self::Fixed { hostname, pid } => f
+                .debug_struct("ProcessIdentityPolicy::Fixed")
+                .field("hostname", hostname)
+                .field("pid", pid)
+                .finish(),
+            Self::Resolver(_) => {
+                f.write_str("ProcessIdentityPolicy::Resolver(<dyn ProcessIdentityResolver>)")
+            }
+        }
+    }
 }
 
 /// Open resolver contract for caller-defined process identity lookup.
@@ -945,6 +968,7 @@ mod tests {
 
     fn diagnostic() -> Diagnostic {
         Diagnostic {
+            timestamp: Timestamp::UNIX_EPOCH,
             code: error_codes::DIAGNOSTIC_INVALID,
             message: "diagnostic invalid".to_string(),
             cause: Some("invalid example".to_string()),

@@ -207,6 +207,7 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
         correlation_id: None,
         outcome: Some("ok".to_string()),
         diagnostic: Some(Diagnostic {
+            timestamp: Timestamp::UNIX_EPOCH,
             code: ErrorCode::new_static("SC_TEST"),
             message: "projected".to_string(),
             cause: None,

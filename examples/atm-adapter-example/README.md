@@ -6,6 +6,11 @@ This unpublished crate demonstrates the intended ATM adapter pattern on top of:
 - `sc-observe`
 - `sc-observability-otlp`
 
+This is a boundary-correct starter pattern, not a near-production ATM adapter.
+ATM still needs to supply the real production adapter layer for env/config
+translation, health projection, and durability/fan-in behavior described in
+`docs/atm-adapter-mapping-spec.md`.
+
 ## What It Shows
 
 - ATM-shaped payload types defined locally in the example

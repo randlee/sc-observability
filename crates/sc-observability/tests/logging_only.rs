@@ -41,6 +41,7 @@ fn event() -> LogEvent {
         correlation_id: None,
         outcome: Some("ok".to_string()),
         diagnostic: Some(Diagnostic {
+            timestamp: Timestamp::UNIX_EPOCH,
             code: ErrorCode::new_static("SC_TEST"),
             message: "integration".to_string(),
             cause: None,

@@ -33,6 +33,7 @@ pub struct ObservabilityConfig {
     pub tool_name: ToolName,
     pub log_root: PathBuf,
     pub env_prefix: EnvPrefix,
+    /// Reserved for future async/backpressure implementation. Phase 1 execution is synchronous; this value is stored but not yet applied.
     pub queue_capacity: usize,
     pub rotation: RotationPolicy,
 }
@@ -596,6 +597,7 @@ mod tests {
             correlation_id: None,
             outcome: Some("ok".to_string()),
             diagnostic: Some(Diagnostic {
+                timestamp: Timestamp::UNIX_EPOCH,
                 code: ErrorCode::new_static("SC_TEST"),
                 message: "projected".to_string(),
                 cause: None,
