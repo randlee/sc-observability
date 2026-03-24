@@ -325,9 +325,9 @@ Design direction:
 
 ```rust
 pub struct ObservabilityConfig {
-    pub tool_name: String,
+    pub tool_name: ToolName,
     pub log_root: std::path::PathBuf,
-    pub env_prefix: String,
+    pub env_prefix: EnvPrefix,
     pub queue_capacity: usize,
     pub rotation: RotationPolicy,
 }
@@ -335,16 +335,35 @@ pub struct ObservabilityConfig {
 
 Field semantics:
 
-- `tool_name` — identity of the calling tool or service; used as the log subdirectory name and as the default `service` field in log events and telemetry
+- `tool_name` — identity of the calling tool or service; used as the log subdirectory name and as the default service name in log events and telemetry
 - `log_root` — absolute path to the root logging directory; the caller is responsible for providing this; no runtime-home discovery is performed
 - `env_prefix` — prefix for environment variable overrides (e.g. `"OTEL"` for standard OTel names, or a tool-specific prefix); must not be ATM-specific in generic deployments
 - `queue_capacity` — capacity of the internal async event queue; controls backpressure before dropping
 - `rotation` — log rotation policy applied to the built-in file sink
 
+Defaults:
+
+- `env_prefix` defaults to the uppercase `tool_name` value with `-` and `.`
+  normalized to `_`
+- `queue_capacity` defaults to `1024`
+- `rotation.max_bytes` defaults to `64 * 1024 * 1024`
+- `rotation.max_files` defaults to `10`
+
+Recommended constructor shape:
+
+```rust
+impl ObservabilityConfig {
+    pub fn default_for(
+        tool_name: ToolName,
+        log_root: std::path::PathBuf,
+    ) -> Self;
+}
+```
+
 Composition rules inside `sc-observe`:
 
 - `sc-observe` derives an internal `LoggerConfig` from `ObservabilityConfig`
-- `LoggerConfig.service_name = ObservabilityConfig.tool_name`
+- `LoggerConfig.service_name = ServiceName::new(ObservabilityConfig.tool_name.as_str())?`
 - `LoggerConfig.log_root = ObservabilityConfig.log_root`
 - `LoggerConfig.queue_capacity = ObservabilityConfig.queue_capacity`
 - `LoggerConfig.rotation = ObservabilityConfig.rotation`
@@ -354,8 +373,6 @@ Composition rules inside `sc-observe`:
 - `sc-observe` does not derive or own `TelemetryConfig`
 - `TelemetryConfig` is constructed independently by the application layer and
   passed directly to `sc-observability-otlp`
-
-> **Note**: Field names may be refined at implementation time. The intent and semantics of each field are fixed by this design.
 
 Registrations are config-time only:
 
@@ -409,7 +426,16 @@ Rules:
 Producer crates should depend on narrow injected interfaces rather than always
 depending on the concrete service types directly.
 
-Recommended traits:
+One implementation-readiness correction is important here:
+
+- open cross-crate traits remain in `sc-observability-types`
+- sealed emitter traits must be crate-local to the crate that implements them
+
+That split is necessary because a trait cannot be both sealed in the base crate
+and implemented by public facade types in downstream crates without weakening
+the seal.
+
+`sc-observe` therefore owns the producer-facing sealed observation emitter:
 
 ```rust
 mod sealed_emitters {
@@ -422,42 +448,27 @@ where
 {
     fn emit(&self, observation: Observation<T>) -> Result<(), ObservationError>;
 }
-
-pub trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
-}
-
-pub trait SpanEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_span(&self, span: SpanSignal) -> Result<(), EventError>;
-}
-
-pub trait MetricEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_metric(&self, metric: MetricRecord) -> Result<(), EventError>;
-}
 ```
 
-Implementation expectations:
+Implementation expectation:
 
 - `Observability` implements `ObservationEmitter<T>`
-- `Logger` implements `LogEmitter`
-- `Telemetry` implements `LogEmitter`, `SpanEmitter`, and `MetricEmitter` where
-  appropriate
+
+Related crate-local sealed traits:
+
+- `sc-observability` owns `LogEmitter`
+- `sc-observability-otlp` owns `SpanEmitter` and `MetricEmitter`
 
 Recommended usage:
 
 - most application code should inject `ObservationEmitter<T>` for its typed
   observations
-- lower-level or specialized code may inject `LogEmitter` or telemetry emitters
-  directly when it is intentionally producing projected signals
+- logging-only code may inject `LogEmitter`
+- telemetry-specific code may inject telemetry-local signal emitter traits when
+  it is intentionally producing projected signals
 
-- `ObservationEmitter<T>` is sealed; it is not intended for external
-  implementation. Adding methods is non-breaking.
-- `LogEmitter` is sealed; it is not intended for external implementation.
-  Adding methods is non-breaking.
-- `SpanEmitter` is sealed; it is not intended for external implementation.
-  Adding methods is non-breaking.
-- `MetricEmitter` is sealed; it is not intended for external implementation.
-  Adding methods is non-breaking.
+`ObservationEmitter<T>` is sealed inside `sc-observe`; it is not intended for
+external implementation. Adding methods is non-breaking.
 
 ### 7.5 `Observable`
 
@@ -491,7 +502,7 @@ where
 {
     pub version: String,
     pub timestamp: Timestamp,
-    pub service: String,
+    pub service: ServiceName,
     pub identity: ProcessIdentity,
     pub trace: Option<TraceContext>,
     pub payload: T,
@@ -520,6 +531,9 @@ output surface, such as:
 - direct typed subscriber callback
 
 This distinction is the core architectural rule of the repo.
+
+`Observation.version` uses the shared constant
+`OBSERVATION_ENVELOPE_VERSION = "v1"`.
 
 ## 8. Core Shared Types
 
@@ -567,6 +581,65 @@ pub mod error_codes {
     ];
 }
 ```
+
+### 8.1.1 Shared Name Newtypes
+
+The carry-forward QA-5 newtypes belong in `sc-observability-types`.
+
+They exist to make the public API explicit and to keep stringly-typed
+configuration from spreading across the crate boundaries.
+
+Design direction:
+
+```rust
+pub struct ToolName(String);
+pub struct EnvPrefix(String);
+pub struct ServiceName(String);
+pub struct TargetCategory(String);
+pub struct ActionName(String);
+```
+
+Ownership and usage:
+
+- `ToolName`
+  - owner: `sc-observability-types`
+  - underlying type: validated `String`
+  - used by: `ObservabilityConfig`
+  - invariant: non-empty ASCII identifier using `[A-Za-z0-9._-]+`
+- `EnvPrefix`
+  - owner: `sc-observability-types`
+  - underlying type: validated `String`
+  - used by: env-loading helpers
+  - invariant: uppercase ASCII identifier using `[A-Z0-9_]+` with no trailing `_`
+- `ServiceName`
+  - owner: `sc-observability-types`
+  - underlying type: validated `String`
+  - used by: `LoggerConfig`, `TelemetryConfig`, `LogEvent`, `MetricRecord`,
+    `SpanRecord`
+  - invariant: non-empty ASCII identifier using `[A-Za-z0-9._-]+`
+- `TargetCategory`
+  - owner: `sc-observability-types`
+  - underlying type: validated `String`
+  - used by: `LogEvent.target`
+  - invariant: non-empty dotted, dashed, underscored, or slash-free category
+    identifier using `[A-Za-z0-9._-]+`
+- `ActionName`
+  - owner: `sc-observability-types`
+  - underlying type: validated `String`
+  - used by: `LogEvent.action`
+  - invariant: non-empty dotted, dashed, or underscored action identifier using
+    `[A-Za-z0-9._-]+`
+
+These newtypes should expose:
+
+```rust
+impl ToolName {
+    pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError>;
+    pub fn as_str(&self) -> &str;
+}
+```
+
+Equivalent constructors and accessors apply to the other four newtypes.
 
 ### 8.2 `Remediation`
 
@@ -792,9 +865,9 @@ pub struct LogEvent {
     pub version: String,
     pub timestamp: Timestamp,
     pub level: Level,
-    pub service: String,
-    pub target: String,
-    pub action: String,
+    pub service: ServiceName,
+    pub target: TargetCategory,
+    pub action: ActionName,
     pub message: Option<String>,
     pub identity: ProcessIdentity,
     pub trace: Option<TraceContext>,
@@ -869,8 +942,8 @@ pub struct SpanRecord<S> { /* private fields */ }
 impl SpanRecord<SpanStarted> {
     pub fn new(
         timestamp: Timestamp,
-        service: String,
-        name: String,
+        service: ServiceName,
+        name: ActionName,
         trace: TraceContext,
         attributes: serde_json::Map<String, serde_json::Value>,
     ) -> Self;
@@ -884,8 +957,8 @@ impl SpanRecord<SpanStarted> {
 
 impl<S> SpanRecord<S> {
     pub fn timestamp(&self) -> Timestamp;
-    pub fn service(&self) -> &str;
-    pub fn name(&self) -> &str;
+    pub fn service(&self) -> &ServiceName;
+    pub fn name(&self) -> &ActionName;
     pub fn trace(&self) -> &TraceContext;
     pub fn status(&self) -> SpanStatus;
     pub fn diagnostic(&self) -> Option<&Diagnostic>;
@@ -966,7 +1039,7 @@ Design direction:
 ```rust
 pub struct MetricRecord {
     pub timestamp: Timestamp,
-    pub service: String,
+    pub service: ServiceName,
     pub name: String,
     pub kind: MetricKind,
     pub value: f64,
@@ -989,29 +1062,37 @@ pub struct DiagnosticSummary {
 }
 ```
 
-### 9.10 Public Error Type Pattern
+### 9.10 Shared Constants And Error Registry Modules
+
+`sc-observability-types` should ship:
+
+- `src/constants.rs`
+  - `OBSERVATION_ENVELOPE_VERSION`
+  - `TRACE_ID_LEN`
+  - `SPAN_ID_LEN`
+  - `DEFAULT_ENV_PREFIX_SEPARATOR`
+- `src/error_codes.rs`
+  - `VALUE_VALIDATION_FAILED`
+  - `TRACE_ID_INVALID`
+  - `SPAN_ID_INVALID`
+  - `IDENTITY_RESOLUTION_FAILED`
+  - `DIAGNOSTIC_INVALID`
+
+### 9.11 Public Error Type Pattern
 
 Public crate-surface errors should be structured around diagnostics.
 
 Design direction:
 
 ```rust
-mod sealed {
-    pub trait Sealed {}
-}
-
-pub trait DiagnosticInfo: sealed::Sealed {
+pub trait DiagnosticInfo {
     fn diagnostic(&self) -> &Diagnostic;
 }
 
 pub struct ErrorContext { /* private fields */ }
 
 impl ErrorContext {
-    pub fn new(
-        code: ErrorCode,
-        message: impl Into<String>,
-        remediation: Remediation,
-    ) -> Self;
+    pub fn new(code: ErrorCode, message: impl Into<String>, remediation: Remediation) -> Self;
     pub fn cause(self, cause: impl Into<String>) -> Self;
     pub fn docs(self, docs: impl Into<String>) -> Self;
     pub fn detail(self, key: impl Into<String>, value: serde_json::Value) -> Self;
@@ -1047,7 +1128,8 @@ Required pattern:
 - errors that always carry diagnostics implement `DiagnosticInfo`
 - `ObservationError` and `TelemetryError` expose optional diagnostic access only
   on their contextual variants
-- `DiagnosticInfo` is defined in `sc-observability-types` and sealed there
+- `DiagnosticInfo` is defined in `sc-observability-types` as an open trait so
+  crate-local public error types can implement it
 - named error newtypes in each crate implement `DiagnosticInfo` by delegating to
   their inner `ErrorContext`
 - `ObservationError::Shutdown` and `TelemetryError::Shutdown` do not carry
@@ -1233,6 +1315,19 @@ event needs to:
 
 without requiring the producer to emit those outputs separately.
 
+### 10.7 `sc-observe` Constants And Error Registry Modules
+
+`sc-observe` should ship:
+
+- `src/constants.rs`
+  - `DEFAULT_OBSERVATION_QUEUE_CAPACITY`
+- `src/error_codes.rs`
+  - `OBSERVATION_SHUTDOWN`
+  - `OBSERVATION_QUEUE_FULL`
+  - `OBSERVATION_ROUTING_FAILURE`
+  - `OBSERVABILITY_INIT_FAILED`
+  - `OBSERVABILITY_FLUSH_FAILED`
+
 ## 11. Structured Logging Surface (`sc-observability`)
 
 The logging surface is a service with pluggable sinks.
@@ -1243,7 +1338,7 @@ Design direction:
 
 ```rust
 pub struct LoggerConfig {
-    pub service_name: String,
+    pub service_name: ServiceName,
     pub log_root: std::path::PathBuf,
     pub level: LevelFilter,
     pub queue_capacity: usize,
@@ -1251,6 +1346,30 @@ pub struct LoggerConfig {
     pub retention: RetentionPolicy,
     pub redaction: RedactionPolicy,
     pub process_identity: ProcessIdentityPolicy,
+    pub enable_file_sink: bool,
+    pub enable_console_sink: bool,
+}
+```
+
+Defaults:
+
+- `level = LevelFilter::Info`
+- `queue_capacity = 1024`
+- `rotation.max_bytes = 64 * 1024 * 1024`
+- `rotation.max_files = 10`
+- `retention.max_age_days = 7`
+- `redact_bearer_tokens = true`
+- `enable_file_sink = true`
+- `enable_console_sink = false`
+
+Recommended constructor shape:
+
+```rust
+impl LoggerConfig {
+    pub fn default_for(
+        service_name: ServiceName,
+        log_root: std::path::PathBuf,
+    ) -> Self;
 }
 ```
 
@@ -1276,6 +1395,11 @@ pub struct RotationPolicy {
 }
 ```
 
+Defaults:
+
+- `max_bytes = 64 * 1024 * 1024`
+- `max_files = 10`
+
 ### 11.4 `RetentionPolicy`
 
 ```rust
@@ -1283,6 +1407,10 @@ pub struct RetentionPolicy {
     pub max_age_days: u32,
 }
 ```
+
+Default:
+
+- `max_age_days = 7`
 
 ### 11.5 `RedactionPolicy`
 
@@ -1320,6 +1448,25 @@ impl Logger {
     pub fn flush(&self) -> Result<(), FlushError>;
     pub fn shutdown(&self) -> Result<(), ShutdownError>;
     pub fn health(&self) -> LoggingHealthReport;
+}
+```
+
+Lifecycle rules:
+
+- `emit()` validates and redacts before sink fan-out
+- `emit()` after `shutdown()` returns `EventError`
+- `flush()` after `shutdown()` is idempotent and returns `Ok(())`
+- repeated `shutdown()` calls are idempotent and return `Ok(())`
+
+Crate-local producer injection trait:
+
+```rust
+mod sealed_emitters {
+    pub trait Sealed {}
+}
+
+pub trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
+    fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
 }
 ```
 
@@ -1387,7 +1534,24 @@ Rules:
 - filtering is sink-local policy, not producer burden
 - the logger service owns sink invocation order and failure handling
 
-### 11.9 Logging Failure Model
+### 11.9 Constants And Error Registry Modules
+
+`sc-observability` should ship:
+
+- `src/constants.rs`
+  - `DEFAULT_LOG_QUEUE_CAPACITY`
+  - `DEFAULT_ROTATION_MAX_BYTES`
+  - `DEFAULT_ROTATION_MAX_FILES`
+  - `DEFAULT_RETENTION_MAX_AGE_DAYS`
+  - `DEFAULT_ENABLE_FILE_SINK`
+  - `DEFAULT_ENABLE_CONSOLE_SINK`
+- `src/error_codes.rs`
+  - `LOGGER_INVALID_EVENT`
+  - `LOGGER_SHUTDOWN`
+  - `LOGGER_SINK_WRITE_FAILED`
+  - `LOGGER_INIT_FAILED`
+  - `LOGGER_FLUSH_FAILED`
+### 11.10 Logging Failure Model
 
 Rules:
 
@@ -1397,7 +1561,7 @@ Rules:
 - sink failures do not fail the caller's core command flow
 - no panic-based contract is implied
 
-### 11.10 Logging Health
+### 11.11 Logging Health
 
 Design direction:
 
@@ -1440,7 +1604,7 @@ Design direction:
 
 ```rust
 pub struct TelemetryConfig {
-    pub service_name: String,
+    pub service_name: ServiceName,
     pub resource: ResourceAttributes,
     pub transport: OtelConfig,
     pub logs: Option<LogsConfig>,
@@ -1455,6 +1619,22 @@ Composition rule:
 - `TelemetryConfig` is passed directly to `sc-observability-otlp`
 - `TelemetryConfig.service_name`, `resource`, `transport`, and signal-specific
   settings are owned by the OTLP setup path, not by `ObservabilityConfig`
+
+Recommended construction shape:
+
+```rust
+pub struct TelemetryConfigBuilder { /* opaque */ }
+
+impl TelemetryConfigBuilder {
+    pub fn new(service_name: ServiceName) -> Self;
+    pub fn with_resource(self, resource: ResourceAttributes) -> Self;
+    pub fn with_transport(self, transport: OtelConfig) -> Self;
+    pub fn enable_logs(self, config: LogsConfig) -> Self;
+    pub fn enable_traces(self, config: TracesConfig) -> Self;
+    pub fn enable_metrics(self, config: MetricsConfig) -> Self;
+    pub fn build(self) -> TelemetryConfig;
+}
+```
 
 ### 12.1.1 `OtelConfig`
 
@@ -1486,6 +1666,20 @@ pub struct OtelConfig {
 }
 ```
 
+Defaults:
+
+- `enabled = false`
+- `endpoint = None`
+- `protocol = OtlpProtocol::HttpBinary`
+- `auth_header = None`
+- `ca_file = None`
+- `insecure_skip_verify = false`
+- `timeout_ms = 3000`
+- `debug_local_export = false`
+- `max_retries = 3`
+- `initial_backoff_ms = 250`
+- `max_backoff_ms = 5000`
+
 Initial intent of each field:
 
 - `enabled`: master switch for OTEL export behavior
@@ -1500,14 +1694,37 @@ Initial intent of each field:
 - `initial_backoff_ms`: initial retry backoff
 - `max_backoff_ms`: maximum retry backoff
 
-This shape is a baseline, not a promise that every current field name is final.
-The design intent is to preserve the proven transport knobs while neutralizing
-the old ATM-specific surface.
+This shape is the v1 transport contract. It preserves the proven transport
+knobs while neutralizing the old ATM-specific surface.
 
 Rule:
 
 - invalid OTLP transport configuration, including unsupported protocol values,
   is detected at `Telemetry::new(...)` and returns `InitError`
+
+### 12.1.2 Signal Configs
+
+```rust
+pub struct LogsConfig {
+    pub batch_size: usize,
+}
+
+pub struct TracesConfig {
+    pub batch_size: usize,
+}
+
+pub struct MetricsConfig {
+    pub batch_size: usize,
+    pub export_interval_ms: u64,
+}
+```
+
+Defaults:
+
+- `LogsConfig.batch_size = 256`
+- `TracesConfig.batch_size = 256`
+- `MetricsConfig.batch_size = 256`
+- `MetricsConfig.export_interval_ms = 5000`
 
 ### 12.2 `ResourceAttributes`
 
@@ -1544,6 +1761,24 @@ Rule:
   returns `Err(TelemetryError::Shutdown)`
 - this lifecycle rule is semantic only in this design doc; no telemetry handle
   typestate is required here
+- `flush()` attempts export of all ready batches
+- `shutdown()` performs a final flush, drops incomplete spans, and is idempotent
+
+Crate-local direct-signal injection traits:
+
+```rust
+mod sealed_emitters {
+    pub trait Sealed {}
+}
+
+pub trait SpanEmitter: sealed_emitters::Sealed + Send + Sync {
+    fn emit_span(&self, span: SpanSignal) -> Result<(), TelemetryError>;
+}
+
+pub trait MetricEmitter: sealed_emitters::Sealed + Send + Sync {
+    fn emit_metric(&self, metric: MetricRecord) -> Result<(), TelemetryError>;
+}
+```
 
 ### 12.4 Exporter Traits
 
@@ -1584,7 +1819,26 @@ Rules:
 - `LogExporter`, `TraceExporter`, and `MetricExporter` are intentionally open
 - exporter traits must remain object-safe for `Arc<dyn ...>` usage
 
-### 12.5 Telemetry Failure Model
+### 12.5 Constants And Error Registry Modules
+
+`sc-observability-otlp` should ship:
+
+- `src/constants.rs`
+  - `DEFAULT_OTLP_TIMEOUT_MS`
+  - `DEFAULT_OTLP_MAX_RETRIES`
+  - `DEFAULT_OTLP_INITIAL_BACKOFF_MS`
+  - `DEFAULT_OTLP_MAX_BACKOFF_MS`
+  - `DEFAULT_LOG_BATCH_SIZE`
+  - `DEFAULT_TRACE_BATCH_SIZE`
+  - `DEFAULT_METRIC_BATCH_SIZE`
+  - `DEFAULT_METRIC_EXPORT_INTERVAL_MS`
+- `src/error_codes.rs`
+  - `TELEMETRY_SHUTDOWN`
+  - `TELEMETRY_INVALID_PROTOCOL`
+  - `TELEMETRY_EXPORT_FAILED`
+  - `TELEMETRY_FLUSH_FAILED`
+  - `TELEMETRY_EXPORTER_INIT_FAILED`
+### 12.6 Telemetry Failure Model
 
 Rules:
 
@@ -1594,7 +1848,7 @@ Rules:
 - exporter failures do not fail the caller's core command flow
 - no panic-based contract is implied
 
-### 12.6 Telemetry Health
+### 12.7 Telemetry Health
 
 ```rust
 pub enum TelemetryHealthState {
@@ -1911,17 +2165,17 @@ The standalone API must not reintroduce:
 - health models coupled to one CLI command surface
 - transport logic embedded in the local logging crate
 
-## 19. Remaining Work
+## 19. Implementation-Readiness Summary
 
-The main architecture and public API shape are now settled.
+The public API shape is now specified to implementation-readiness level.
 
-Remaining work after design review is implementation work, not unresolved
-direction:
+The remaining effort after this document is:
 
-- translate this design into definitive `requirements.md`
-- translate this design into definitive `architecture.md`
-- add `sc-observe` to the workspace and implement the crate boundaries
-- build the required `AgentInfo`-style proving example and integration tests
+- code implementation of the documented crate surfaces
+- integration tests for the required ATM-shaped proving case
+- ATM-owned adapter implementation against the shared contracts
+
+No unresolved design TBDs remain in this document.
 
 ## 20. Review Checklist
 
