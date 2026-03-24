@@ -6,9 +6,10 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use sc_observability_types::{
-    CompleteSpan, DiagnosticSummary, ErrorContext, EventError, ExportError, ExporterHealth,
-    ExporterHealthState, FlushError, LogEvent, MetricRecord, Remediation, ServiceName, SpanEvent,
-    SpanSignal, SpanStarted, TelemetryError, TelemetryHealthReport, TelemetryHealthState,
+    DiagnosticSummary, ErrorContext, EventError, ExportError, ExporterHealth, ExporterHealthState,
+    FlushError, LogEvent, MetricRecord, Remediation, ServiceName, SpanEnded, SpanEvent,
+    SpanRecord, SpanSignal, SpanStarted, TelemetryError, TelemetryHealthReport,
+    TelemetryHealthState,
 };
 use serde_json::{Map, Value};
 
@@ -164,6 +165,12 @@ impl TelemetryConfigBuilder {
             metrics: self.metrics,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompleteSpan {
+    pub record: SpanRecord<SpanEnded>,
+    pub events: Vec<SpanEvent>,
 }
 
 pub trait LogExporter: Send + Sync {

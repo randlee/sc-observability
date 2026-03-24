@@ -91,6 +91,8 @@ This crate owns shared neutral contracts only.
 - TYP-027 `ServiceName` shall be owned by `sc-observability-types`, wrap a validated string identifier, and represent the service name carried in logs and telemetry.
 - TYP-028 `TargetCategory` shall be owned by `sc-observability-types`, wrap a validated dotted or snake-compatible category identifier, and represent the stable subsystem namespace on `LogEvent`.
 - TYP-029 `ActionName` shall be owned by `sc-observability-types`, wrap a validated dotted or snake-compatible action identifier, and represent the stable event action name on `LogEvent`.
+- TYP-030 All shared error types, health report types, and shared constants shall be owned by `sc-observability-types` as a single source of truth. Crate-specific error enums and concrete health report types are defined here and re-exported by their respective crates where needed.
+- TYP-031 Per-crate `constants.rs` files in higher-layer crates may exist only for crate-local values that are not shared across crate boundaries.
 
 ## 4. `sc-observability` Requirements
 
@@ -111,7 +113,9 @@ This crate is the lightweight logging layer.
 - LOG-013 Sink filtering shall be sink-local policy, not producer burden.
 - LOG-014 Invalid log events shall fail fast with `EventError`.
 - LOG-015 Sink failures after validation shall be fail-open and shall not block the caller’s core flow.
-- LOG-016 Logging health shall include `LoggingHealthReport`, `SinkHealth`, and typed `SinkHealthState`.
+- LOG-016 Logging health shall expose `LoggingHealthReport`, `SinkHealth`, and
+  typed `SinkHealthState` (defined in `sc-observability-types` and
+  re-exported by `sc-observability`).
 - LOG-017 `sc-observability` shall not own typed observation routing.
 - LOG-018 `sc-observability` shall not own OTLP transport or any OpenTelemetry dependency.
 - LOG-019 `sc-observability` shall not own ATM-specific metadata rules, path conventions, or compatibility behavior.
@@ -185,7 +189,9 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
 - OTLP-010 `TraceExporter` shall export `CompleteSpan`, not raw `SpanSignal`.
 - OTLP-011 `LogExporter`, `TraceExporter`, and `MetricExporter` shall remain open extension points and object-safe for `Arc<dyn ...>`.
 - OTLP-012 Exporter failures after validation shall be fail-open and shall update health and dropped-export counters.
-- OTLP-013 Telemetry health shall include `TelemetryHealthReport`, `ExporterHealth`, and typed `ExporterHealthState`.
+- OTLP-013 Telemetry health shall expose `TelemetryHealthReport`,
+  `ExporterHealth`, and typed `ExporterHealthState` (defined in
+  `sc-observability-types` and re-exported by `sc-observability-otlp`).
 - OTLP-014 `sc-observability-otlp` shall depend on `sc-observe` rather than the other way around.
 - OTLP-015 `sc-observability-otlp` shall attach OTel behavior using lower-level routing and logging infrastructure from the crates beneath it.
 - OTLP-016 `sc-observability-otlp` shall not push OTLP-specific requirements into `sc-observability`.

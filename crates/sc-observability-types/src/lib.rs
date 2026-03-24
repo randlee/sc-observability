@@ -680,12 +680,6 @@ pub struct TelemetryHealthReport {
     pub last_error: Option<DiagnosticSummary>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct CompleteSpan {
-    pub record: SpanRecord<SpanEnded>,
-    pub events: Vec<SpanEvent>,
-}
-
 pub trait ObservationSubscriber<T>: Send + Sync
 where
     T: Observable,
