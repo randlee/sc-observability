@@ -7,9 +7,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use sc_observability_types::{
     DiagnosticSummary, ErrorContext, EventError, ExportError, ExporterHealth, ExporterHealthState,
-    FlushError, LogEvent, MetricRecord, Remediation, ServiceName, SpanEnded, SpanEvent,
-    SpanRecord, SpanSignal, SpanStarted, TelemetryError, TelemetryHealthReport,
-    TelemetryHealthState,
+    FlushError, LogEvent, MetricRecord, Remediation, ServiceName, SpanEnded, SpanEvent, SpanRecord,
+    SpanSignal, SpanStarted, TelemetryError, TelemetryHealthReport, TelemetryHealthState,
 };
 use serde_json::{Map, Value};
 
