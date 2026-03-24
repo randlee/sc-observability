@@ -2,8 +2,10 @@
 members = [
   "crates/sc-observability-types",
   "crates/sc-observability",
+  "crates/sc-observe",
   "crates/sc-observability-otlp",
 ]
+exclude = ["examples/atm-adapter-example"]
 resolver = "2"
 
 [workspace.package]
@@ -18,3 +20,4 @@ homepage = "https://github.com/randlee/sc-observability"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+time = { version = "0.3", features = ["formatting", "parsing", "serde"] }

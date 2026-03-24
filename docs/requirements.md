@@ -1,54 +1,255 @@
 # SC-Observability Requirements
 
-## Purpose
+**Status**: Draft for review
+**Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
+**Source of truth**: [`api-design.md`](./api-design.md)
+**Related ATM adapter docs**:
+- [`atm-adapter-requirements.md`](./atm-adapter-requirements.md)
+- [`atm-adapter-architecture.md`](./atm-adapter-architecture.md)
+- [`atm-quickstart.md`](./atm-quickstart.md)
 
-`sc-observability` is a standalone observability toolkit for structured logging,
-traces, metrics, and OTLP export.
+## 1. Purpose And Scope
 
-This repo contains:
-- `sc-observability-types`
-- `sc-observability`
-- `sc-observability-otlp`
+This document defines enforceable requirements for the standalone
+`sc-observability` workspace.
 
-It must be reusable outside ATM.
+The workspace exists to provide reusable Rust observability infrastructure with
+clear layering:
 
-## Product Requirements
+1. neutral shared contracts
+2. lightweight structured logging
+3. typed observation routing layered on logging
+4. OpenTelemetry/OTLP export layered on the lower-level crates
 
-1. No crate in this repo may depend on any `agent-team-mail-*` crate.
-2. Shared record/config/type definitions must live in
-   `sc-observability-types`.
-3. Generic observability logic must live in `sc-observability`.
-4. OTLP transport/export logic must live in `sc-observability-otlp`.
-5. Environment-based configuration must support configurable prefixes rather
-   than hard-coding ATM-specific names into the generic API.
-6. The repo must not encode ATM daemon/socket/spool assumptions into the shared
-   crates.
-7. ATM-specific logging or fan-in behavior, if still needed, must live in ATM
-   or in a dedicated ATM adapter crate outside the generic core.
+This workspace is explicitly not:
 
-## Boundary Rules
+- a daemon-aware logging system
+- an ATM-specific library
+- a socket/spool/merge transport
+- a runtime-home discovery mechanism
 
-1. `sc-observability-types` may contain only neutral data/config/types.
-2. `sc-observability` may depend on `sc-observability-types`, but not on ATM.
-3. `sc-observability-otlp` may depend on `sc-observability-types` and generic
-   transport libraries, but not on ATM.
-4. Generic crates must not expose ATM-specific constants, spool helpers, socket
-   error contracts, or runtime-home conventions.
-5. Backward-compatibility shims for ATM belong in ATM, not in this repo.
+## 1.1 Approval Scope
 
-## Configuration Rules
+This requirements document is sufficient to approve the shared workspace
+direction and enforce the standalone crate boundaries.
 
-1. Generic APIs must support prefix-parameterized environment loading.
-2. ATM-prefixed env support may exist only as a thin compatibility wrapper or in
-   ATM-owned integration code.
-3. Local mirror/file export paths must be explicit inputs, not derived from ATM
-   home helpers.
+It is not, by itself, the full ATM migration specification. ATM-specific
+compatibility, durability, health projection, and env/config translation
+requirements are defined separately in [`atm-adapter-requirements.md`](./atm-adapter-requirements.md).
 
-## Non-Goals
+## 2. Layered Dependency Order
 
-This repo does not own:
-- ATM daemon log fan-in
-- ATM spool layout
-- ATM runtime-home discovery
-- ATM mailbox/event schemas
-- ATM plugin contracts
+The required dependency order is:
+
+```text
+sc-observability-types
+  <- sc-observability
+    <- sc-observe
+      <- sc-observability-otlp
+```
+
+Layering requirements:
+
+- LAY-001 `sc-observability-types` shall be the shared neutral base and shall not depend on any other workspace crate.
+- LAY-002 `sc-observability` shall depend on `sc-observability-types` only.
+- LAY-003 `sc-observe` shall depend on `sc-observability-types` and `sc-observability`.
+- LAY-004 `sc-observe` shall not depend on `sc-observability-otlp`.
+- LAY-005 `sc-observability-otlp` shall sit at the top of the stack and may depend on `sc-observability-types`, `sc-observability`, and `sc-observe`.
+- LAY-006 Higher-layer concerns shall not be required to understand or use lower-layer crates.
+- LAY-007 `sc-observability` requirements shall remain fully self-contained and shall not include routing or OTLP concerns.
+
+## 3. `sc-observability-types` Requirements
+
+This crate owns shared neutral contracts only.
+
+- TYP-001 `sc-observability-types` shall own shared value types, identifiers, diagnostics, health contracts, and the open cross-crate traits used across the workspace.
+- TYP-002 `sc-observability-types` shall not own sinks, routing runtimes, exporters, OTLP transports, ATM helpers, or application-specific event types.
+- TYP-003 `ErrorCode` shall be a stable string-like type using namespace prefixes and `SCREAMING_SNAKE_CASE`.
+- TYP-004 `Diagnostic` shall carry code, message, optional cause, mandatory remediation, optional docs reference, and structured details.
+- TYP-005 One `Diagnostic` shall be reusable across CLI rendering, JSON error rendering, log attachment, span attachment, and health summaries.
+- TYP-006 `DiagnosticInfo` shall be an open trait implemented by public error surfaces that can expose a `Diagnostic`.
+- TYP-007 `ErrorContext` shall not be directly constructible without remediation.
+- TYP-008 Canonical timestamps shall be UTC-only and stably serializable.
+- TYP-009 `TraceContext` shall be limited to generic W3C-style trace correlation only.
+- TYP-010 `TraceContext` shall use `TraceId` and `SpanId` newtypes rather than raw strings.
+- TYP-011 `TraceId` shall validate 32-character lowercase hex W3C trace IDs.
+- TYP-012 `SpanId` shall validate 16-character lowercase hex W3C span IDs.
+- TYP-013 Request, session, runtime, and application metadata shall not be part of `TraceContext`.
+- TYP-014 Span lifecycle shall be encoded through typestate at the producer-facing API using `SpanRecord<SpanStarted>` and `SpanRecord<SpanEnded>`.
+- TYP-015 `SpanRecord<SpanStarted>` shall have the only public constructor.
+- TYP-016 `SpanRecord<SpanEnded>` shall be reachable only through `SpanRecord<SpanStarted>::end(...)`.
+- TYP-017 Producer-facing `SpanRecord<S>` fields shall be private, with read access through accessors.
+- TYP-018 Final span duration shall be exposed only on `SpanRecord<SpanEnded>`.
+- TYP-019 `SpanState` serialization shall be derived from typestate at export/serialization time and shall not be a producer-facing mutable field.
+- TYP-020 `Observable` shall remain an open trait for consumer-owned payload types.
+- TYP-021 `ObservationSubscriber<T>`, `ObservationFilter<T>`, `LogProjector<T>`, `SpanProjector<T>`, and `MetricProjector<T>` shall remain open extension points.
+- TYP-022 Crate-local emitter traits that are sealed to their implementing facade types shall be owned by the crate that implements them rather than by `sc-observability-types`.
+- TYP-023 Traits used behind `Arc<dyn ...>` shall remain object-safe, with `T` fixed at each usage site.
+- TYP-024 Traits used in concurrent routing or injection contexts shall be `Send + Sync`.
+- TYP-025 `ToolName` shall be owned by `sc-observability-types`, wrap a validated string identifier, and represent the top-level tool or executable identity used for config and path derivation.
+- TYP-026 `EnvPrefix` shall be owned by `sc-observability-types`, wrap an uppercase validated prefix without a trailing underscore, and represent environment-loading namespaces.
+- TYP-027 `ServiceName` shall be owned by `sc-observability-types`, wrap a validated string identifier, and represent the service name carried in logs and telemetry.
+- TYP-028 `TargetCategory` shall be owned by `sc-observability-types`, wrap a validated dotted or snake-compatible category identifier, and represent the stable subsystem namespace on `LogEvent`.
+- TYP-029 `ActionName` shall be owned by `sc-observability-types`, wrap a validated dotted or snake-compatible action identifier, and represent the stable event action name on `LogEvent`.
+- TYP-030 All shared error types, health report types, and shared constants shall be owned by `sc-observability-types` as a single source of truth. Crate-specific error enums and concrete health report types are defined here and re-exported by their respective crates where needed.
+- TYP-031 Per-crate `constants.rs` files in higher-layer crates may exist only for crate-local values that are not shared across crate boundaries.
+
+## 4. `sc-observability` Requirements
+
+This crate is the lightweight logging layer.
+
+- LOG-001 `sc-observability` shall provide a lightweight logging surface usable without `sc-observe` or `sc-observability-otlp`.
+- LOG-002 `sc-observability` shall expose `Logger` and `LoggerConfig`.
+- LOG-003 `sc-observability` shall own local structured logging concerns only.
+- LOG-004 `sc-observability` shall expose `LogSink` as an open extension point and preserve object-safety for `Arc<dyn LogSink>`.
+- LOG-005 `sc-observability` shall provide built-in JSONL file sink support.
+- LOG-006 `sc-observability` shall provide a built-in human-readable console sink.
+- LOG-007 `sc-observability` shall support multi-sink fan-out.
+- LOG-008 The built-in file sink shall use the default layout `<log_root>/<service_name>/logs/<service_name>.log.jsonl`.
+- LOG-009 The log root shall be redirectable via environment helper, with explicit config taking precedence.
+- LOG-010 Redaction shall run before sink fan-out.
+- LOG-011 `RedactionPolicy` shall support built-in denylist and bearer-token redaction.
+- LOG-012 `RedactionPolicy` shall support consumer-provided `Redactor` implementations.
+- LOG-013 Sink filtering shall be sink-local policy, not producer burden.
+- LOG-014 Invalid log events shall fail fast with `EventError`.
+- LOG-015 Sink failures after validation shall be fail-open and shall not block the caller’s core flow.
+- LOG-016 Logging health shall expose `LoggingHealthReport`, `SinkHealth`, and
+  typed `SinkHealthState` (defined in `sc-observability-types` and
+  re-exported by `sc-observability`).
+- LOG-017 `sc-observability` shall not own typed observation routing.
+- LOG-018 `sc-observability` shall not own OTLP transport or any OpenTelemetry dependency.
+- LOG-019 `sc-observability` shall not own ATM-specific metadata rules, path conventions, or compatibility behavior.
+- LOG-020 `LoggerConfig` shall define documented defaults for v1:
+  - `level = Info`
+  - `queue_capacity = 1024`
+  - `rotation.max_bytes = 64 MiB`
+  - `rotation.max_files = 10`
+  - `retention.max_age_days = 7`
+  - bearer-token redaction enabled
+  - built-in file sink enabled
+  - built-in console sink disabled
+- LOG-021 Zero-configuration logging shall produce structured JSONL output using the built-in file sink and shall not require any OTLP or routing configuration.
+- LOG-022 The logging layer shall not expose or assume an HTTP health endpoint; health is available through in-process health objects only.
+- LOG-023 `Logger` lifecycle behavior shall be explicit:
+  - `emit()` after `shutdown()` returns `EventError`
+  - `flush()` after `shutdown()` is idempotent and returns `Ok(())`
+  - repeated `shutdown()` calls are idempotent and return `Ok(())`
+- LOG-024 `sc-observability` shall own a crate-local sealed `LogEmitter` trait for producer injection when logging-only use is desired.
+
+## 5. `sc-observe` Requirements
+
+This crate is the observation routing layer built on top of logging.
+
+- OBS-001 `sc-observe` shall expose `Observability` as the producer-facing routing service.
+- OBS-002 `Observability` shall emit `Observation<T>` values rather than raw payloads.
+- OBS-003 `Observation<T>` shall carry shared envelope metadata: version, timestamp, service, process identity, optional trace context, and payload.
+- OBS-004 `sc-observe` shall own subscriber registration, projector registration, routing, filtering, and fan-out for typed observations.
+- OBS-005 Registrations shall be construction-time only and shall close when `Observability` is built.
+- OBS-006 No runtime registration after `Observability::new(...)` or `ObservabilityBuilder::build()` shall be part of v1.
+- OBS-007 Subscriber and projection registrations shall be `Send + Sync`.
+- OBS-008 Matching registrations shall execute in deterministic registration order.
+- OBS-009 Failure in one subscriber or projector shall not prevent later matching registrations from running.
+- OBS-010 If no active or eligible subscriber/projector path remains for an observation, emission shall return `ObservationError::RoutingFailure`.
+- OBS-011 Calling `Observability::emit()` after `shutdown()` shall return `ObservationError::Shutdown`.
+- OBS-012 `ObservationError` shall provide named runtime-guard variants for at least `Shutdown`, `QueueFull`, and `RoutingFailure`.
+- OBS-013 `ObservabilityBuilder` shall support construction-time registration of subscribers and projections.
+- OBS-014 `sc-observe` shall depend on `sc-observability` for logging integration.
+- OBS-015 `sc-observe` shall not depend on `sc-observability-otlp`.
+- OBS-016 `sc-observe` shall route typed observations into logging and generic downstream extension points without taking ownership of OpenTelemetry transport concerns.
+- OBS-017 `ObservabilityConfig` shall be the top-level configuration for the routing runtime and logging integration.
+- OBS-018 `ObservabilityConfig` shall not own OTLP transport configuration.
+- OBS-019 `sc-observe` shall expose `ObservabilityHealthReport` as the top-level runtime health view.
+- OBS-020 `ObservabilityHealthReport` shall summarize dropped observations, subscriber failures, projection failures, and downstream attached service health where available.
+- OBS-021 `sc-observe` shall not own application-specific observation payloads or ATM compatibility behavior.
+- OBS-022 Boot-phase observability shall initialize before plugin or adapter registration so early lifecycle events can be recorded without ATM-specific context.
+- OBS-023 `ObservabilityConfig` shall define documented defaults for v1:
+  - `env_prefix` derived from `ToolName`
+  - `queue_capacity = 1024`
+  - logging defaults inherited from `LoggerConfig`
+  - no HTTP health endpoint
+- OBS-024 `Observability` lifecycle behavior shall be explicit:
+  - `emit()` after `shutdown()` returns `ObservationError::Shutdown`
+  - `flush()` delegates to logging and active routing/projector state
+  - repeated `shutdown()` calls are idempotent and return `Ok(())`
+- OBS-025 `sc-observe` shall own a crate-local sealed `ObservationEmitter<T>` trait implemented by `Observability`.
+
+## 6. `sc-observability-otlp` Requirements
+
+This crate is the OTel/OTLP layer built on top of `sc-observe`.
+
+- OTLP-001 `sc-observability-otlp` shall provide the OTLP-backed telemetry surface.
+- OTLP-002 `sc-observability-otlp` shall expose `Telemetry` and `TelemetryConfig`.
+- OTLP-003 `sc-observability-otlp` shall own all OpenTelemetry and OTLP transport concerns.
+- OTLP-004 `OtelConfig.protocol` shall be a typed `OtlpProtocol` enum rather than a free-form string.
+- OTLP-005 Invalid OTLP transport configuration shall fail at `Telemetry::new(...)` with `InitError`.
+- OTLP-006 `Telemetry` emit methods shall return `TelemetryError`.
+- OTLP-007 Calling `emit_log()`, `emit_span()`, or `emit_metric()` after `shutdown()` shall return `TelemetryError::Shutdown`.
+- OTLP-008 `SpanAssembler` shall buffer `SpanSignal::Started`, attach `SpanSignal::Event`, and emit `CompleteSpan` only on `SpanSignal::Ended`.
+- OTLP-009 In-flight started spans without a matching end shall be dropped at flush/shutdown and counted as dropped exports.
+- OTLP-010 `TraceExporter` shall export `CompleteSpan`, not raw `SpanSignal`.
+- OTLP-011 `LogExporter`, `TraceExporter`, and `MetricExporter` shall remain open extension points and object-safe for `Arc<dyn ...>`.
+- OTLP-012 Exporter failures after validation shall be fail-open and shall update health and dropped-export counters.
+- OTLP-013 Telemetry health shall expose `TelemetryHealthReport`,
+  `ExporterHealth`, and typed `ExporterHealthState` (defined in
+  `sc-observability-types` and re-exported by `sc-observability-otlp`).
+- OTLP-014 `sc-observability-otlp` shall depend on `sc-observe` rather than the other way around.
+- OTLP-015 `sc-observability-otlp` shall attach OTel behavior using lower-level routing and logging infrastructure from the crates beneath it.
+- OTLP-016 `sc-observability-otlp` shall not push OTLP-specific requirements into `sc-observability`.
+- OTLP-017 `sc-observability-otlp` shall attach to the routing layer by registering `LogProjector`, `SpanProjector`, and `MetricProjector` implementations with `ObservabilityBuilder`, not through direct internal access to `sc-observe` internals.
+- OTLP-018 `TelemetryConfig` shall be constructed independently of `ObservabilityConfig` and passed directly to `sc-observability-otlp` at setup time.
+- OTLP-019 Zero-configuration OTLP behavior shall be disabled by default until the application explicitly enables telemetry or provides a valid endpoint.
+- OTLP-020 `TelemetryConfig` and `OtelConfig` shall define documented defaults for v1:
+  - `enabled = false`
+  - `protocol = HttpBinary`
+  - `timeout_ms = 3000`
+  - `max_retries = 3`
+  - `initial_backoff_ms = 250`
+  - `max_backoff_ms = 5000`
+  - logs, traces, and metrics disabled unless explicitly configured
+- OTLP-021 `Telemetry` lifecycle behavior shall be explicit:
+  - emit methods after `shutdown()` return `TelemetryError::Shutdown`
+  - `flush()` attempts to export ready batches and drops incomplete spans only at shutdown/final flush
+  - repeated `shutdown()` calls are idempotent and return `Ok(())`
+- OTLP-022 `sc-observability-otlp` shall own crate-local sealed signal-emitter traits for direct telemetry injection where needed.
+
+## 6.1 ATM Out-Of-The-Box Baseline
+
+The shared workspace shall document the ATM-shaped out-of-the-box baseline in
+[`atm-quickstart.md`](./atm-quickstart.md).
+
+- ATM-BASE-001 Zero-configuration shared-crate behavior for an ATM-shaped workload shall be documented explicitly, including log format, built-in sink behavior, redaction defaults, rotation defaults, queue defaults, and the absence of a built-in health endpoint.
+- ATM-BASE-002 The minimal ATM production configuration surface shall be documented explicitly, covering logging, routing, OTLP attachment, and ATM-owned adapter responsibilities.
+- ATM-BASE-003 Any ATM day-one gap between the shared design and ATM production needs shall be resolved in the shared docs or explicitly assigned to the ATM adapter boundary.
+
+## 7. Non-Functional Requirements
+
+- NFR-001 The workspace shall not require a daemon, broker, or external runtime for correctness.
+- NFR-002 The logging-only crate shall remain lightweight enough for basic CLI use.
+- NFR-003 Routing complexity shall remain isolated to `sc-observe`.
+- NFR-004 OTLP transport complexity shall remain isolated to `sc-observability-otlp`.
+- NFR-005 The design shall preserve object-safe trait boundaries for dynamic registration and fan-out.
+- NFR-006 The workspace shall not mandate global mutable state for basic operation.
+- NFR-007 Backend sink/export failures shall be fail-open.
+- NFR-008 Each crate section in this document shall remain readable in isolation without requiring upward-layer concepts to understand lower-layer behavior.
+- NFR-009 The workspace shall enforce layering and repo-boundary rules in CI, including dependency bans against `agent-team-mail-*` and banned crate edges that violate the approved stack.
+- NFR-010 The workspace shall enforce basic docs consistency checks in CI so the approved crate layering does not drift out of sync across requirements, architecture, and API design documents.
+
+## 8. Source Organization Requirements
+
+- SRC-001 Each crate shall define its stable error codes in one dedicated source file or module owned by that crate.
+- SRC-002 Each crate shall expose its public error codes from that single registry location so they can be reviewed, reported, and documented consistently.
+- SRC-003 Shared non-trivial constants for a crate shall be defined in one dedicated constants file or module owned by that crate.
+- SRC-004 Error-code registries and constants modules shall remain separate concerns; error-code definitions shall not be mixed into the general constants module.
+- SRC-005 Non-trivial magic numbers shall not appear outside dedicated constants definitions, except for trivial language literals such as `0` and `1` where their meaning is self-evident.
+- SRC-006 Policy values, limits, thresholds, retry counts, timeouts, and similar operational numbers shall be named constants rather than inline numeric literals.
+
+## 9. Out Of Scope
+
+- OOS-001 daemon-owned canonical file writing
+- OOS-002 producer-to-daemon socket contracts
+- OOS-003 spool-write and merge semantics
+- OOS-004 runtime-home path derivation
+- OOS-005 ATM-specific fields in the core schema
+- OOS-006 ATM mailbox, plugin, and session contracts
+- OOS-007 application-specific event taxonomies in the shared crates
+- OOS-008 CLI success envelopes and exit-code conventions

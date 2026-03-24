@@ -9,4 +9,5 @@ homepage.workspace = true
 description = "Standalone facade crate for observability operations."
 
 [dependencies]
+serde_json.workspace = true
 sc-observability-types = { path = "../sc-observability-types", version = "0.46.2" }

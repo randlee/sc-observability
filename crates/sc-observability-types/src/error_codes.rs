@@ -1,0 +1,20 @@
+use crate::ErrorCode;
+
+pub const VALUE_VALIDATION_FAILED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED");
+pub const TRACE_ID_INVALID: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_TYPES_TRACE_ID_INVALID");
+pub const SPAN_ID_INVALID: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_TYPES_SPAN_ID_INVALID");
+pub const IDENTITY_RESOLUTION_FAILED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED");
+pub const DIAGNOSTIC_INVALID: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID");
+
+pub const ALL: &[ErrorCode] = &[
+    VALUE_VALIDATION_FAILED,
+    TRACE_ID_INVALID,
+    SPAN_ID_INVALID,
+    IDENTITY_RESOLUTION_FAILED,
+    DIAGNOSTIC_INVALID,
+];
