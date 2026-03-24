@@ -20,6 +20,10 @@ def package_deps(path: Path):
         names.update(deps.keys())
     return names
 
+def section_deps(path: Path, section: str):
+    data = load_toml(path)
+    return set(data.get(section, {}).keys())
+
 workspace = load_toml(root / "Cargo.toml")
 members = set(workspace["workspace"]["members"])
 
@@ -36,15 +40,21 @@ if missing:
 obs_deps = package_deps(root / "crates/sc-observability/Cargo.toml")
 observe_deps = package_deps(root / "crates/sc-observe/Cargo.toml")
 otlp_deps = package_deps(root / "crates/sc-observability-otlp/Cargo.toml")
+otlp_runtime_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dependencies")
+otlp_test_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dev-dependencies")
 
 if "sc-observability-otlp" in obs_deps or "sc-observe" in obs_deps:
     raise SystemExit("sc-observability must not depend on sc-observe or sc-observability-otlp")
 if "sc-observability-otlp" in observe_deps:
     raise SystemExit("sc-observe must not depend on sc-observability-otlp")
-if "sc-observability" not in otlp_deps:
-    raise SystemExit("sc-observability-otlp must depend on sc-observability")
-if "sc-observe" not in otlp_deps:
-    raise SystemExit("sc-observability-otlp must depend on sc-observe")
+if otlp_runtime_deps != {"serde_json", "thiserror", "sc-observability-types"}:
+    raise SystemExit(
+        "sc-observability-otlp runtime dependencies drifted from allowed baseline"
+    )
+if otlp_test_deps != {"sc-observability", "sc-observe"}:
+    raise SystemExit(
+        "sc-observability-otlp dev-dependencies drifted from allowed baseline"
+    )
 
 for path in root.rglob("Cargo.toml"):
     text = path.read_text(encoding="utf-8")

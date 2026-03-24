@@ -15,15 +15,13 @@ use std::sync::{Arc, Mutex};
 
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, ErrorContext, EventError, ExportError, FlushError,
-    InitError, LogEvent, MetricRecord, Observable, Observation, ProjectionError,
-    ProjectionRegistration, Remediation, ServiceName, ShutdownError, SpanEnded, SpanEvent,
-    SpanRecord, SpanSignal, SpanStarted,
+    InitError, LogEvent, MetricRecord, Remediation, ServiceName, ShutdownError, SpanEnded,
+    SpanEvent, SpanRecord, SpanSignal, SpanStarted,
 };
 pub use sc_observability_types::{
     ExporterHealth, ExporterHealthState, TelemetryError, TelemetryHealthReport,
     TelemetryHealthState,
 };
-use sc_observe::ObservabilityBuilder;
 use serde_json::{Map, Value};
 
 /// Supported OTLP transport protocols.
@@ -146,9 +144,9 @@ impl TelemetryConfigBuilder {
             service_name,
             resource: ResourceAttributes::default(),
             transport: OtelConfig::default(),
-            logs: Some(LogsConfig::default()),
-            traces: Some(TracesConfig::default()),
-            metrics: Some(MetricsConfig::default()),
+            logs: None,
+            traces: None,
+            metrics: None,
         }
     }
 
@@ -171,7 +169,11 @@ impl TelemetryConfigBuilder {
     }
 
     /// Disables log export.
-    pub fn disable_logs(mut self) -> Self {
+    #[expect(
+        dead_code,
+        reason = "builder keeps explicit crate-local disable toggles for test and internal composition paths"
+    )]
+    pub(crate) fn disable_logs(mut self) -> Self {
         self.logs = None;
         self
     }
@@ -183,7 +185,11 @@ impl TelemetryConfigBuilder {
     }
 
     /// Disables trace export.
-    pub fn disable_traces(mut self) -> Self {
+    #[expect(
+        dead_code,
+        reason = "builder keeps explicit crate-local disable toggles for test and internal composition paths"
+    )]
+    pub(crate) fn disable_traces(mut self) -> Self {
         self.traces = None;
         self
     }
@@ -195,7 +201,11 @@ impl TelemetryConfigBuilder {
     }
 
     /// Disables metric export.
-    pub fn disable_metrics(mut self) -> Self {
+    #[expect(
+        dead_code,
+        reason = "builder keeps explicit crate-local disable toggles for test and internal composition paths"
+    )]
+    pub(crate) fn disable_metrics(mut self) -> Self {
         self.metrics = None;
         self
     }
@@ -398,38 +408,6 @@ impl Telemetry {
             metric_exporter,
             runtime: Mutex::new(TelemetryRuntime::default()),
             dropped_exports_total: AtomicU64::new(0),
-        })
-    }
-
-    /// Attaches telemetry export to one typed observation projection set.
-    pub fn register_projection<T>(
-        builder: ObservabilityBuilder,
-        telemetry: Arc<Self>,
-        registration: ProjectionRegistration<T>,
-    ) -> ObservabilityBuilder
-    where
-        T: Observable,
-    {
-        builder.register_projection(ProjectionRegistration {
-            log_projector: registration.log_projector.map(|projector| {
-                Arc::new(AttachedLogProjector {
-                    telemetry: telemetry.clone(),
-                    inner: projector,
-                }) as Arc<dyn sc_observability_types::LogProjector<T>>
-            }),
-            span_projector: registration.span_projector.map(|projector| {
-                Arc::new(AttachedSpanProjector {
-                    telemetry: telemetry.clone(),
-                    inner: projector,
-                }) as Arc<dyn sc_observability_types::SpanProjector<T>>
-            }),
-            metric_projector: registration.metric_projector.map(|projector| {
-                Arc::new(AttachedMetricProjector {
-                    telemetry,
-                    inner: projector,
-                }) as Arc<dyn sc_observability_types::MetricProjector<T>>
-            }),
-            filter: registration.filter,
         })
     }
 
@@ -648,72 +626,6 @@ impl Telemetry {
     }
 }
 
-struct AttachedLogProjector<T> {
-    telemetry: Arc<Telemetry>,
-    inner: Arc<dyn sc_observability_types::LogProjector<T>>,
-}
-
-impl<T> sc_observability_types::LogProjector<T> for AttachedLogProjector<T>
-where
-    T: Observable,
-{
-    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
-        let events = self.inner.project_logs(observation)?;
-        for event in &events {
-            self.telemetry
-                .emit_log(event)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(events)
-    }
-}
-
-struct AttachedSpanProjector<T> {
-    telemetry: Arc<Telemetry>,
-    inner: Arc<dyn sc_observability_types::SpanProjector<T>>,
-}
-
-impl<T> sc_observability_types::SpanProjector<T> for AttachedSpanProjector<T>
-where
-    T: Observable,
-{
-    fn project_spans(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        let spans = self.inner.project_spans(observation)?;
-        for span in &spans {
-            self.telemetry
-                .emit_span(span)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(spans)
-    }
-}
-
-struct AttachedMetricProjector<T> {
-    telemetry: Arc<Telemetry>,
-    inner: Arc<dyn sc_observability_types::MetricProjector<T>>,
-}
-
-impl<T> sc_observability_types::MetricProjector<T> for AttachedMetricProjector<T>
-where
-    T: Observable,
-{
-    fn project_metrics(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionError> {
-        let metrics = self.inner.project_metrics(observation)?;
-        for metric in &metrics {
-            self.telemetry
-                .emit_metric(metric)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(metrics)
-    }
-}
-
 mod sealed_emitters {
     pub trait Sealed {}
 }
@@ -749,7 +661,11 @@ impl MetricEmitter for Telemetry {
 }
 
 /// Builds a telemetry export failure with the crate-local error code.
-pub fn export_failure(message: impl Into<String>) -> TelemetryError {
+#[expect(
+    dead_code,
+    reason = "crate-local export failure helper is retained for internal construction sites"
+)]
+pub(crate) fn export_failure(message: impl Into<String>) -> TelemetryError {
     TelemetryError::ExportFailure(Box::new(ErrorContext::new(
         error_codes::TELEMETRY_EXPORT_FAILED,
         message,
@@ -813,17 +729,6 @@ fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
     Ok(())
 }
 
-fn telemetry_to_projection_error(error: TelemetryError) -> ProjectionError {
-    match error {
-        TelemetryError::Shutdown => ProjectionError(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_SHUTDOWN,
-            "telemetry runtime is shut down",
-            Remediation::not_recoverable("do not project telemetry after shutdown"),
-        ))),
-        TelemetryError::ExportFailure(context) => ProjectionError(context),
-    }
-}
-
 fn error_context_from_diagnostic(diagnostic: &sc_observability_types::Diagnostic) -> ErrorContext {
     let mut context = ErrorContext::new(
         diagnostic.code.clone(),
@@ -851,88 +756,10 @@ mod tests {
     use super::*;
     use sc_observability_types::{
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-        ObservationFilter, ProcessIdentity, ProjectionRegistration, ServiceName, SpanId,
-        SpanProjector, StateTransition, TargetCategory, Timestamp, TraceContext, TraceId,
+        ProcessIdentity, ServiceName, SpanId, StateTransition, TargetCategory, Timestamp,
+        TraceContext, TraceId,
     };
-    use serde::{Deserialize, Serialize};
     use serde_json::json;
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    struct AgentPayload {
-        action: &'static str,
-        emit: bool,
-    }
-
-    struct AllowAll;
-
-    impl ObservationFilter<AgentPayload> for AllowAll {
-        fn accepts(&self, observation: &Observation<AgentPayload>) -> bool {
-            observation.payload.emit
-        }
-    }
-
-    struct StaticLogProjector;
-    struct StaticSpanProjector;
-    struct StaticMetricProjector;
-
-    impl sc_observability_types::LogProjector<AgentPayload> for StaticLogProjector {
-        fn project_logs(
-            &self,
-            observation: &Observation<AgentPayload>,
-        ) -> Result<Vec<LogEvent>, ProjectionError> {
-            Ok(vec![log_event(
-                observation.service.clone(),
-                observation.payload.action,
-            )])
-        }
-    }
-
-    impl SpanProjector<AgentPayload> for StaticSpanProjector {
-        fn project_spans(
-            &self,
-            observation: &Observation<AgentPayload>,
-        ) -> Result<Vec<SpanSignal>, ProjectionError> {
-            let trace = trace_context();
-            let started = SpanRecord::<SpanStarted>::new(
-                Timestamp::UNIX_EPOCH,
-                observation.service.clone(),
-                ActionName::new("agent.run").expect("valid action"),
-                trace.clone(),
-                Map::new(),
-            );
-            let ended = started
-                .clone()
-                .end(sc_observability_types::SpanStatus::Ok, 10);
-            Ok(vec![
-                SpanSignal::Started(started),
-                SpanSignal::Event(SpanEvent {
-                    timestamp: Timestamp::UNIX_EPOCH,
-                    trace: trace.clone(),
-                    name: ActionName::new("tool.call").expect("valid event name"),
-                    attributes: Map::new(),
-                    diagnostic: None,
-                }),
-                SpanSignal::Ended(ended),
-            ])
-        }
-    }
-
-    impl sc_observability_types::MetricProjector<AgentPayload> for StaticMetricProjector {
-        fn project_metrics(
-            &self,
-            observation: &Observation<AgentPayload>,
-        ) -> Result<Vec<MetricRecord>, ProjectionError> {
-            Ok(vec![MetricRecord {
-                timestamp: Timestamp::UNIX_EPOCH,
-                service: observation.service.clone(),
-                name: MetricName::new("agent.events_total").expect("valid metric"),
-                kind: MetricKind::Counter,
-                value: 1.0,
-                unit: Some("1".to_string()),
-                attributes: Map::new(),
-            }])
-        }
-    }
 
     #[derive(Default)]
     struct RecordingLogExporter {
@@ -998,11 +825,14 @@ mod tests {
     }
 
     fn service_name() -> ServiceName {
-        ServiceName::new("atm").expect("valid service")
+        ServiceName::new("test-service").expect("valid service")
     }
 
     fn telemetry_config() -> TelemetryConfig {
         TelemetryConfigBuilder::new(service_name())
+            .enable_logs(LogsConfig::default())
+            .enable_traces(TracesConfig::default())
+            .enable_metrics(MetricsConfig::default())
             .with_transport(OtelConfig {
                 enabled: true,
                 endpoint: Some("https://otel.example.internal".to_string()),
@@ -1025,7 +855,7 @@ mod tests {
             timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service,
-            target: TargetCategory::new("atm.agent").expect("valid target"),
+            target: TargetCategory::new("test.agent").expect("valid target"),
             action: ActionName::new("agent.observe").expect("valid action"),
             message: Some(message.to_string()),
             identity: ProcessIdentity::default(),
@@ -1053,23 +883,13 @@ mod tests {
         }
     }
 
-    fn observation() -> Observation<AgentPayload> {
-        Observation::new(
-            service_name(),
-            AgentPayload {
-                action: "tool_use",
-                emit: true,
-            },
-        )
-    }
-
     #[test]
     fn telemetry_config_builder_defaults() {
         let config = TelemetryConfigBuilder::new(service_name()).build();
 
-        assert!(config.logs.is_some());
-        assert!(config.traces.is_some());
-        assert!(config.metrics.is_some());
+        assert!(config.logs.is_none());
+        assert!(config.traces.is_none());
+        assert!(config.metrics.is_none());
         assert!(!config.transport.enabled);
         assert_eq!(config.transport.protocol, OtlpProtocol::HttpBinary);
     }
@@ -1079,6 +899,19 @@ mod tests {
         let config = TelemetryConfigBuilder::new(service_name())
             .with_transport(OtelConfig {
                 enabled: true,
+                endpoint: None,
+                ..OtelConfig::default()
+            })
+            .build();
+
+        assert!(Telemetry::new(config).is_err());
+    }
+
+    #[test]
+    fn all_signals_disabled_rejects_at_construction() {
+        let config = TelemetryConfigBuilder::new(service_name())
+            .with_transport(OtelConfig {
+                enabled: false,
                 endpoint: None,
                 ..OtelConfig::default()
             })
@@ -1280,57 +1113,10 @@ mod tests {
     }
 
     #[test]
-    fn builder_registration_attaches_logs_spans_and_metrics() {
-        let log_exporter = Arc::new(RecordingLogExporter::default());
-        let trace_exporter = Arc::new(RecordingTraceExporter::default());
-        let metric_exporter = Arc::new(RecordingMetricExporter::default());
-        let telemetry = Arc::new(
-            Telemetry::new_with_exporters(
-                telemetry_config(),
-                log_exporter.clone(),
-                trace_exporter.clone(),
-                metric_exporter.clone(),
-            )
-            .expect("telemetry"),
-        );
-        let root = std::env::temp_dir().join(format!(
-            "s4-attach-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .expect("time")
-                .as_nanos()
-        ));
-        let config = sc_observe::ObservabilityConfig::default_for(
-            sc_observability_types::ToolName::new("atm").expect("valid tool"),
-            root,
-        )
-        .expect("config");
-        let builder = sc_observe::Observability::builder(config);
-        let runtime = Telemetry::register_projection(
-            builder,
-            telemetry.clone(),
-            ProjectionRegistration {
-                log_projector: Some(Arc::new(StaticLogProjector)),
-                span_projector: Some(Arc::new(StaticSpanProjector)),
-                metric_projector: Some(Arc::new(StaticMetricProjector)),
-                filter: Some(Arc::new(AllowAll)),
-            },
-        )
-        .build()
-        .expect("runtime");
+    fn repeated_shutdown_is_idempotent() {
+        let telemetry = Telemetry::new(telemetry_config()).expect("telemetry");
 
-        runtime.emit(observation()).expect("emit");
-        telemetry.flush().expect("flush");
-
-        assert_eq!(*log_exporter.calls.lock().expect("calls poisoned"), vec![1]);
-        assert_eq!(
-            *trace_exporter.calls.lock().expect("calls poisoned"),
-            vec![1]
-        );
-        assert_eq!(
-            *metric_exporter.calls.lock().expect("calls poisoned"),
-            vec![1]
-        );
+        telemetry.shutdown().expect("first shutdown");
+        telemetry.shutdown().expect("second shutdown");
     }
 }
