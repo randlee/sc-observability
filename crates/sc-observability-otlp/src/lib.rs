@@ -1,3 +1,9 @@
+//! OTLP-backed telemetry layered on the lower `sc-observability` crates.
+//!
+//! This crate owns OTLP configuration, span assembly, exporter contracts, and
+//! telemetry lifecycle behavior. It sits above routing/logging and keeps all
+//! OpenTelemetry transport concerns out of the lower layers.
+
 pub mod constants;
 pub mod error_codes;
 
@@ -297,16 +303,21 @@ impl Telemetry {
 }
 
 mod sealed_emitters {
-    #[allow(dead_code)]
     pub trait Sealed {}
 }
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "crate-local span emitter trait is intentionally retained for direct telemetry injection"
+)]
 pub(crate) trait SpanEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_span(&self, span: SpanSignal) -> Result<(), TelemetryError>;
 }
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "crate-local metric emitter trait is intentionally retained for direct telemetry injection"
+)]
 pub(crate) trait MetricEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_metric(&self, metric: MetricRecord) -> Result<(), TelemetryError>;
 }

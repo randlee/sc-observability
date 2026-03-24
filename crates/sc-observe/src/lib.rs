@@ -1,3 +1,9 @@
+//! Typed observation routing layered on top of `sc-observability`.
+//!
+//! This crate owns construction-time subscriber/projector registration,
+//! per-type routing, and top-level observability health aggregation while
+//! remaining independent of OTLP transport details.
+
 pub mod constants;
 pub mod error_codes;
 
@@ -136,14 +142,16 @@ impl ObservabilityBuilder {
 }
 
 mod sealed_emitters {
-    #[allow(dead_code)]
     pub trait Sealed {}
 }
 
 /// ObservationEmitter<T> is intentionally per-type -- callers hold one handle
 /// per observation type. A single type-erased emitter for heterogeneous events
 /// is not supported by design.
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "crate-local observation emitter trait is intentionally retained for injection"
+)]
 pub(crate) trait ObservationEmitter<T>: sealed_emitters::Sealed + Send + Sync
 where
     T: Observable,
@@ -162,5 +170,4 @@ where
     }
 }
 
-#[allow(dead_code)]
 struct _TypeWitness<T>(PhantomData<T>);
