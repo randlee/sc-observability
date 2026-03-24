@@ -41,8 +41,8 @@ if "sc-observability-otlp" in obs_deps or "sc-observe" in obs_deps:
     raise SystemExit("sc-observability must not depend on sc-observe or sc-observability-otlp")
 if "sc-observability-otlp" in observe_deps:
     raise SystemExit("sc-observe must not depend on sc-observability-otlp")
-if "sc-observe" not in otlp_deps:
-    raise SystemExit("sc-observability-otlp must depend on sc-observe")
+if "sc-observability" not in otlp_deps:
+    raise SystemExit("sc-observability-otlp must depend on sc-observability")
 
 for path in root.rglob("Cargo.toml"):
     text = path.read_text(encoding="utf-8")
