@@ -781,3 +781,249 @@ pub enum TelemetryError {
     #[error("{0}")]
     ExportFailure(Box<ErrorContext>),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::{Deserialize, Serialize};
+    use serde_json::json;
+    use time::OffsetDateTime;
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    struct FixturePayload {
+        name: String,
+        count: u32,
+    }
+
+    fn service_name() -> ServiceName {
+        ServiceName::new("sc-observability").expect("valid service name")
+    }
+
+    fn target_category() -> TargetCategory {
+        TargetCategory::new("routing.core").expect("valid target category")
+    }
+
+    fn action_name() -> ActionName {
+        ActionName::new("observation.received").expect("valid action name")
+    }
+
+    fn metric_name() -> MetricName {
+        MetricName::new("obs.events_total").expect("valid metric name")
+    }
+
+    fn trace_context() -> TraceContext {
+        TraceContext {
+            trace_id: TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
+            span_id: SpanId::new("0123456789abcdef").expect("valid span id"),
+            parent_span_id: Some(SpanId::new("fedcba9876543210").expect("valid parent span id")),
+        }
+    }
+
+    fn diagnostic() -> Diagnostic {
+        Diagnostic {
+            code: error_codes::DIAGNOSTIC_INVALID,
+            message: "diagnostic invalid".to_string(),
+            cause: Some("invalid example".to_string()),
+            remediation: Remediation::recoverable(
+                "fix the input",
+                ["rerun the command", "review the docs"],
+            ),
+            docs: Some("https://example.test/docs".to_string()),
+            details: Map::from_iter([("key".to_string(), json!("value"))]),
+        }
+    }
+
+    #[test]
+    fn validated_name_newtypes_accept_expected_values() {
+        assert_eq!(
+            ToolName::new("codex-cli")
+                .expect("valid tool name")
+                .as_str(),
+            "codex-cli"
+        );
+        assert_eq!(
+            EnvPrefix::new("SC_OBSERVABILITY")
+                .expect("valid env prefix")
+                .as_str(),
+            "SC_OBSERVABILITY"
+        );
+        assert_eq!(
+            ServiceName::new("service.core")
+                .expect("valid service name")
+                .as_str(),
+            "service.core"
+        );
+        assert_eq!(
+            TargetCategory::new("pipeline-ingest")
+                .expect("valid target category")
+                .as_str(),
+            "pipeline-ingest"
+        );
+        assert_eq!(
+            ActionName::new("observation.received")
+                .expect("valid action name")
+                .as_str(),
+            "observation.received"
+        );
+        assert_eq!(
+            MetricName::new("obs/events_total")
+                .expect("valid metric name")
+                .as_str(),
+            "obs/events_total"
+        );
+    }
+
+    #[test]
+    fn validated_name_newtypes_reject_invalid_values() {
+        assert!(ToolName::new("").is_err());
+        assert!(EnvPrefix::new("sc_observability").is_err());
+        assert!(EnvPrefix::new("SC_OBSERVABILITY_").is_err());
+        assert!(ServiceName::new("service core").is_err());
+        assert!(TargetCategory::new("category/invalid").is_err());
+        assert!(ActionName::new("action invalid").is_err());
+        assert!(MetricName::new("metric name").is_err());
+    }
+
+    #[test]
+    fn trace_and_span_ids_validate_w3c_shapes() {
+        assert!(TraceId::new("0123456789abcdef0123456789abcdef").is_ok());
+        assert!(TraceId::new("0123456789abcdef0123456789abcde").is_err());
+        assert!(TraceId::new("0123456789ABCDEF0123456789abcdef").is_err());
+
+        assert!(SpanId::new("0123456789abcdef").is_ok());
+        assert!(SpanId::new("0123456789abcde").is_err());
+        assert!(SpanId::new("0123456789ABCDEf").is_err());
+    }
+
+    #[test]
+    fn error_context_display_includes_cause_when_present() {
+        let error = ErrorContext::new(
+            error_codes::DIAGNOSTIC_INVALID,
+            "operation failed",
+            Remediation::recoverable("fix the config", ["retry"]),
+        )
+        .cause("missing field");
+
+        assert_eq!(error.to_string(), "operation failed: missing field");
+    }
+
+    #[test]
+    fn diagnostic_round_trips_through_serde() {
+        let original = diagnostic();
+        let encoded = serde_json::to_string(&original).expect("serialize diagnostic");
+        let decoded: Diagnostic = serde_json::from_str(&encoded).expect("deserialize diagnostic");
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn observation_round_trips_through_serde() {
+        let mut observation = Observation::new(
+            service_name(),
+            FixturePayload {
+                name: "agent-info".to_string(),
+                count: 2,
+            },
+        );
+        observation.identity = ProcessIdentity {
+            hostname: Some("host-1".to_string()),
+            pid: Some(42),
+        };
+        observation.trace = Some(trace_context());
+
+        let encoded = serde_json::to_string(&observation).expect("serialize observation");
+        let decoded: Observation<FixturePayload> =
+            serde_json::from_str(&encoded).expect("deserialize observation");
+        assert_eq!(decoded, observation);
+    }
+
+    #[test]
+    fn log_event_round_trips_through_serde() {
+        let event = LogEvent {
+            version: constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+            timestamp: OffsetDateTime::UNIX_EPOCH,
+            level: Level::Info,
+            service: service_name(),
+            target: target_category(),
+            action: action_name(),
+            message: Some("observation accepted".to_string()),
+            identity: ProcessIdentity {
+                hostname: Some("host-1".to_string()),
+                pid: Some(7),
+            },
+            trace: Some(trace_context()),
+            request_id: Some("req-1".to_string()),
+            correlation_id: Some("corr-1".to_string()),
+            outcome: Some("success".to_string()),
+            diagnostic: Some(diagnostic()),
+            state_transition: Some(StateTransition {
+                entity_kind: "subagent".to_string(),
+                entity_id: Some("agent-1".to_string()),
+                from_state: "started".to_string(),
+                to_state: "running".to_string(),
+                reason: Some("hook received".to_string()),
+                trigger: Some("subagent-start".to_string()),
+            }),
+            fields: Map::from_iter([("attempt".to_string(), json!(1))]),
+        };
+
+        let encoded = serde_json::to_string(&event).expect("serialize log event");
+        let decoded: LogEvent = serde_json::from_str(&encoded).expect("deserialize log event");
+        assert_eq!(decoded, event);
+    }
+
+    #[test]
+    fn span_signal_round_trips_through_serde() {
+        let mut attributes = Map::new();
+        attributes.insert("tool".to_string(), json!("rg"));
+
+        let started = SpanRecord::<SpanStarted>::new(
+            OffsetDateTime::UNIX_EPOCH,
+            service_name(),
+            action_name(),
+            trace_context(),
+            attributes.clone(),
+        )
+        .with_diagnostic(diagnostic());
+
+        let ended = started.clone().end(SpanStatus::Ok, 123);
+        let signal = SpanSignal::Ended(ended);
+
+        let encoded = serde_json::to_string(&signal).expect("serialize span signal");
+        let decoded: SpanSignal = serde_json::from_str(&encoded).expect("deserialize span signal");
+        assert_eq!(decoded, signal);
+    }
+
+    #[test]
+    fn metric_record_round_trips_through_serde() {
+        let metric = MetricRecord {
+            timestamp: OffsetDateTime::UNIX_EPOCH,
+            service: service_name(),
+            name: metric_name(),
+            kind: MetricKind::Counter,
+            value: 4.0,
+            unit: Some("1".to_string()),
+            attributes: Map::from_iter([("state".to_string(), json!("running"))]),
+        };
+
+        let encoded = serde_json::to_string(&metric).expect("serialize metric");
+        let decoded: MetricRecord = serde_json::from_str(&encoded).expect("deserialize metric");
+        assert_eq!(decoded, metric);
+    }
+
+    #[test]
+    fn span_record_end_transitions_to_span_ended() {
+        let span = SpanRecord::<SpanStarted>::new(
+            OffsetDateTime::UNIX_EPOCH,
+            service_name(),
+            action_name(),
+            trace_context(),
+            Map::new(),
+        );
+
+        let ended = span.end(SpanStatus::Error, 88);
+
+        assert_eq!(ended.status(), SpanStatus::Error);
+        assert_eq!(ended.duration_ms(), 88);
+        assert_eq!(ended.service().as_str(), "sc-observability");
+    }
+}
