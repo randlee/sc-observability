@@ -138,6 +138,9 @@ Internal-only:
 
 - [x] `error_codes` — per-crate stable `ErrorCode` constants registry
   (SRC-001/SRC-002)
+- [x] `ObservabilityHealthReport` — re-exported from `sc-observability-types`
+- [x] `ObservationError` — re-exported from `sc-observability-types`
+- [x] `ObservationHealthState` — re-exported from `sc-observability-types`
 - [x] `ObservabilityConfig`
 - [x] `ObservabilityBuilder`
 - [x] `Observability`

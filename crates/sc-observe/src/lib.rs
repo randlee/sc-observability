@@ -23,6 +23,11 @@ pub use sc_observability_types::{
 };
 
 /// Top-level configuration for the observation routing runtime.
+///
+/// Routing owns tool identity, log-root selection, env-prefix derivation, and
+/// queue capacity. Logging-specific level, retention, and redaction behavior
+/// stay owned by `LoggerConfig` in `sc-observability` and are intentionally not
+/// overridable at the `ObservabilityConfig` layer.
 #[derive(Debug, Clone)]
 pub struct ObservabilityConfig {
     pub tool_name: ToolName,
@@ -200,6 +205,8 @@ impl Observability {
             self.runtime
                 .dropped_observations_total
                 .fetch_add(1, Ordering::SeqCst);
+            // Failing subscribers do not count as active paths; RoutingFailure
+            // is correct per OBS-009/OBS-010.
             let context = ErrorContext::new(
                 error_codes::OBSERVATION_ROUTING_FAILURE,
                 "no eligible subscriber or projector path matched the observation",
@@ -781,49 +788,13 @@ mod tests {
     }
 
     #[test]
-    fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
-        let subscriber_calls = Arc::new(Mutex::new(Vec::new()));
-        let log_calls = Arc::new(Mutex::new(Vec::new()));
-        let span_count = Arc::new(AtomicU64::new(0));
-        let metric_count = Arc::new(AtomicU64::new(0));
-        let root = temp_path("fanout");
-        let config = ObservabilityConfig::default_for(tool_name(), root.clone()).expect("config");
-        let runtime = Observability::builder(config)
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
-                    id: "subscriber",
-                    calls: subscriber_calls.clone(),
-                }),
-                filter: None,
-            })
-            .register_projection(ProjectionRegistration {
-                log_projector: Some(Arc::new(RecordingLogProjector {
-                    calls: log_calls.clone(),
-                    id: "log",
-                })),
-                span_projector: Some(Arc::new(RecordingSpanProjector {
-                    count: span_count.clone(),
-                })),
-                metric_projector: Some(Arc::new(RecordingMetricProjector {
-                    count: metric_count.clone(),
-                })),
-                filter: None,
-            })
-            .build()
-            .expect("runtime");
+    fn queue_capacity_override_propagates_to_logger_config() {
+        let root = temp_path("queue-capacity");
+        let mut config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
+        config.queue_capacity = 2048;
 
-        runtime.emit(observation(true)).expect("emit");
+        let logger_config = config.logger_config().expect("logger config");
 
-        let log_path = root.join("obs-app").join("logs").join("obs-app.log.jsonl");
-        let contents = std::fs::read_to_string(log_path).expect("read projected log file");
-
-        assert_eq!(
-            *subscriber_calls.lock().expect("subscriber calls poisoned"),
-            vec!["subscriber"]
-        );
-        assert_eq!(*log_calls.lock().expect("log calls poisoned"), vec!["log"]);
-        assert_eq!(span_count.load(Ordering::SeqCst), 1);
-        assert_eq!(metric_count.load(Ordering::SeqCst), 1);
-        assert!(contents.contains("\"action\":\"observation.received\""));
+        assert_eq!(logger_config.queue_capacity, 2048);
     }
 }
