@@ -37,4 +37,4 @@ Before the ATM workspace switches to crates.io dependencies from this repo:
 - Release workflow: `.github/workflows/release.yml`
 - Release notes template: `release/RELEASE-NOTES-TEMPLATE.md`
 - Release exit checklist:
-  [docs/release-readiness-checklist.md](/Users/randlee/Documents/github/sc-observability-worktrees/phase-1-s6/docs/release-readiness-checklist.md)
+  [docs/release-readiness-checklist.md](./release-readiness-checklist.md)
