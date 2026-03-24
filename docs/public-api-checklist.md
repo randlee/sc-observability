@@ -122,7 +122,7 @@ Note:
 
 Internal-only:
 
-- [~] `LogEmitter` — crate-local sealed logging injection trait (LOG-024;
+- [x] `LogEmitter` — crate-local sealed logging injection trait (LOG-024;
   `architecture.md` §3.2; internal-only, not part of public API)
 
 ### Finalized Public Rules
@@ -136,15 +136,15 @@ Internal-only:
 
 ### Finalized Public Types
 
-- [~] `error_codes` — per-crate stable `ErrorCode` constants registry
+- [x] `error_codes` — per-crate stable `ErrorCode` constants registry
   (SRC-001/SRC-002)
-- [~] `ObservabilityConfig`
-- [~] `ObservabilityBuilder`
-- [~] `Observability`
+- [x] `ObservabilityConfig`
+- [x] `ObservabilityBuilder`
+- [x] `Observability`
 
 Internal-only:
 
-- [~] `ObservationEmitter<T>` — crate-local sealed observation injection trait
+- [x] `ObservationEmitter<T>` — crate-local sealed observation injection trait
   (OBS-025; `architecture.md` §3.3; internal-only, not part of public API)
 
 ### Finalized Public Rules
