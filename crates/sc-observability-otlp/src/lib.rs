@@ -297,14 +297,17 @@ impl Telemetry {
 }
 
 mod sealed_emitters {
+    #[allow(dead_code)]
     pub trait Sealed {}
 }
 
-pub trait SpanEmitter: sealed_emitters::Sealed + Send + Sync {
+#[allow(dead_code)]
+pub(crate) trait SpanEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_span(&self, span: SpanSignal) -> Result<(), TelemetryError>;
 }
 
-pub trait MetricEmitter: sealed_emitters::Sealed + Send + Sync {
+#[allow(dead_code)]
+pub(crate) trait MetricEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_metric(&self, metric: MetricRecord) -> Result<(), TelemetryError>;
 }
 

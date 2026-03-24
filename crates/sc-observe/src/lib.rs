@@ -136,13 +136,15 @@ impl ObservabilityBuilder {
 }
 
 mod sealed_emitters {
+    #[allow(dead_code)]
     pub trait Sealed {}
 }
 
 /// ObservationEmitter<T> is intentionally per-type -- callers hold one handle
 /// per observation type. A single type-erased emitter for heterogeneous events
 /// is not supported by design.
-pub trait ObservationEmitter<T>: sealed_emitters::Sealed + Send + Sync
+#[allow(dead_code)]
+pub(crate) trait ObservationEmitter<T>: sealed_emitters::Sealed + Send + Sync
 where
     T: Observable,
 {

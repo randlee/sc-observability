@@ -35,6 +35,12 @@ These should land before Sprint 1 starts:
 - docs consistency checks
 - dependency-ban enforcement
 
+Status:
+- implemented in this branch via:
+  - `scripts/ci/validate_docs_consistency.sh`
+  - `scripts/ci/validate_dependency_bans.sh`
+  - `.github/workflows/ci.yml`
+
 ## 3. Sprint Assignment By Milestone
 
 ### Sprint 1 / M0-M1: `sc-observability-types`
@@ -180,12 +186,10 @@ Required integration layers across the phase:
 
 ### Blockers
 
-1. The required Sprint 1 CI gates for docs consistency and dependency-ban
-   enforcement are documented but do not appear to be implemented yet in
-   `scripts/ci/` or `.github/workflows/ci.yml`.
-
-2. The pre-Sprint cleanup items above are still open in this worktree and
-   should be completed before Sprint 1 begins.
+1. Sprint 1 should use the concrete execution packet in
+   [`sprint-1-execution-packet.md`](./sprint-1-execution-packet.md) as the
+   controlling task breakdown so implementation does not drift from the phase
+   assignment.
 
 ### Questions
 
