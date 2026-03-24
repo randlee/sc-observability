@@ -106,17 +106,19 @@ Note:
 
 ### Finalized Public Types
 
-- [~] `error_codes` — per-crate stable `ErrorCode` constants registry
+- [x] `error_codes` — per-crate stable `ErrorCode` constants registry
   (SRC-001/SRC-002)
-- [~] `LoggerConfig`
-- [~] `RotationPolicy`
-- [~] `RetentionPolicy`
-- [~] `RedactionPolicy`
-- [~] `Redactor`
-- [~] `Logger`
-- [~] `LogSink`
-- [~] `LogFilter`
-- [~] `SinkRegistration`
+- [x] `LoggerConfig`
+- [x] `RotationPolicy`
+- [x] `RetentionPolicy`
+- [x] `RedactionPolicy`
+- [x] `Redactor`
+- [x] `Logger`
+- [x] `JsonlFileSink`
+- [x] `ConsoleSink`
+- [x] `LogSink`
+- [x] `LogFilter`
+- [x] `SinkRegistration`
 
 Internal-only:
 
