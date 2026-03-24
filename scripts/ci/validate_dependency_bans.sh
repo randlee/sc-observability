@@ -17,6 +17,10 @@ def package_deps(path: Path):
         names.update(data.get(section, {}).keys())
     return names
 
+def section_deps(path: Path, section: str):
+    data = load_toml(path)
+    return set(data.get(section, {}).keys())
+
 workspace = load_toml(root / "Cargo.toml")
 members = set(workspace["workspace"]["members"])
 required_members = {
@@ -36,8 +40,10 @@ for path in root.rglob("Cargo.toml"):
         raise SystemExit(f"ATM dependency reference found in {path}")
 
 obs_deps = package_deps(root / "crates/sc-observability/Cargo.toml")
-observe_deps = package_deps(root / "crates/sc-observe/Cargo.toml")
-otlp_deps = package_deps(root / "crates/sc-observability-otlp/Cargo.toml")
+observe_runtime_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dependencies")
+observe_test_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dev-dependencies")
+otlp_runtime_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dependencies")
+otlp_test_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dev-dependencies")
 
 if obs_deps != {"serde_json", "sc-observability-types"}:
     raise SystemExit(
@@ -45,17 +51,35 @@ if obs_deps != {"serde_json", "sc-observability-types"}:
         f"{sorted(obs_deps)}"
     )
 
-if observe_deps != {"sc-observability-types", "sc-observability"}:
+if observe_runtime_deps != {"sc-observability-types", "sc-observability"}:
     raise SystemExit(
-        "sc-observe dependency set drifted from allowed baseline: "
-        f"{sorted(observe_deps)}"
+        "sc-observe runtime dependency set drifted from allowed baseline: "
+        f"{sorted(observe_runtime_deps)}"
     )
 
-required_otlp = {"serde_json", "thiserror", "sc-observability-types", "sc-observability"}
-if otlp_deps != required_otlp:
+if observe_test_deps:
     raise SystemExit(
-        "sc-observability-otlp dependency set drifted from allowed baseline: "
-        f"{sorted(otlp_deps)}"
+        "sc-observe test dependency set drifted from allowed baseline: "
+        f"{sorted(observe_test_deps)}"
+    )
+
+required_otlp = {
+    "serde_json",
+    "thiserror",
+    "sc-observability-types",
+    "sc-observe",
+}
+allowed_otlp = required_otlp | {"sc-observability"}
+if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
+    raise SystemExit(
+        "sc-observability-otlp runtime dependency set drifted from allowed baseline: "
+        f"{sorted(otlp_runtime_deps)}"
+    )
+
+if otlp_test_deps:
+    raise SystemExit(
+        "sc-observability-otlp test dependency set drifted from allowed baseline: "
+        f"{sorted(otlp_test_deps)}"
     )
 
 for path in [
@@ -63,7 +87,7 @@ for path in [
     root / "crates/sc-observability/Cargo.toml",
     root / "crates/sc-observe/Cargo.toml",
 ]:
-    deps = package_deps(path)
+    deps = section_deps(path, "dependencies")
     if any(name.startswith("opentelemetry") or "otlp" in name for name in deps):
         raise SystemExit(f"OTLP/OpenTelemetry dependency found outside sc-observability-otlp: {path}")
 

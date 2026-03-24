@@ -20,6 +20,10 @@ def package_deps(path: Path):
         names.update(deps.keys())
     return names
 
+def section_deps(path: Path, section: str):
+    data = load_toml(path)
+    return set(data.get(section, {}).keys())
+
 workspace = load_toml(root / "Cargo.toml")
 members = set(workspace["workspace"]["members"])
 
@@ -34,15 +38,27 @@ if missing:
     raise SystemExit(f"missing workspace members: {sorted(missing)}")
 
 obs_deps = package_deps(root / "crates/sc-observability/Cargo.toml")
-observe_deps = package_deps(root / "crates/sc-observe/Cargo.toml")
-otlp_deps = package_deps(root / "crates/sc-observability-otlp/Cargo.toml")
+observe_runtime_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dependencies")
+observe_test_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dev-dependencies")
+otlp_runtime_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dependencies")
+otlp_test_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dev-dependencies")
 
 if "sc-observability-otlp" in obs_deps or "sc-observe" in obs_deps:
     raise SystemExit("sc-observability must not depend on sc-observe or sc-observability-otlp")
-if "sc-observability-otlp" in observe_deps:
+if "sc-observability-otlp" in observe_runtime_deps:
     raise SystemExit("sc-observe must not depend on sc-observability-otlp")
-if "sc-observability" not in otlp_deps:
-    raise SystemExit("sc-observability-otlp must depend on sc-observability")
+required_otlp = {"serde_json", "thiserror", "sc-observability-types", "sc-observe"}
+allowed_otlp = required_otlp | {"sc-observability"}
+if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
+    raise SystemExit(
+        "sc-observability-otlp runtime dependencies drifted from allowed baseline"
+    )
+if observe_test_deps:
+    raise SystemExit("sc-observe dev-dependencies drifted from allowed baseline")
+if otlp_test_deps:
+    raise SystemExit(
+        "sc-observability-otlp dev-dependencies drifted from allowed baseline"
+    )
 
 for path in root.rglob("Cargo.toml"):
     text = path.read_text(encoding="utf-8")
@@ -92,7 +108,7 @@ for path in [
     root / "crates/sc-observability/Cargo.toml",
     root / "crates/sc-observe/Cargo.toml",
 ]:
-    deps = package_deps(path)
+    deps = section_deps(path, "dependencies")
     # Enforce the layered stack: only sc-observability-otlp may own OTLP/OpenTelemetry deps.
     if any(name.startswith("opentelemetry") or "otlp" in name for name in deps):
         raise SystemExit(f"OTLP/OpenTelemetry dependency found outside sc-observability-otlp: {path}")
