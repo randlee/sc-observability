@@ -317,9 +317,9 @@ impl MetricEmitter for Telemetry {
 }
 
 pub fn export_failure(message: impl Into<String>) -> TelemetryError {
-    TelemetryError::ExportFailure(ErrorContext::new(
+    TelemetryError::ExportFailure(Box::new(ErrorContext::new(
         error_codes::TELEMETRY_EXPORT_FAILED,
         message,
         Remediation::not_recoverable("retry/export policy is owned by telemetry runtime"),
-    ))
+    )))
 }

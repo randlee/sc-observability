@@ -206,6 +206,8 @@ impl From<&Diagnostic> for DiagnosticSummary {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ErrorContext {
     diagnostic: Diagnostic,
+    #[serde(skip)]
+    source: Option<Box<str>>,
 }
 
 impl ErrorContext {
@@ -219,6 +221,7 @@ impl ErrorContext {
                 docs: None,
                 details: Map::new(),
             },
+            source: None,
         }
     }
 
@@ -234,6 +237,11 @@ impl ErrorContext {
 
     pub fn detail(mut self, key: impl Into<String>, value: Value) -> Self {
         self.diagnostic.details.insert(key.into(), value);
+        self
+    }
+
+    pub fn source(mut self, source: Box<dyn std::error::Error + Send + Sync + 'static>) -> Self {
+        self.source = Some(source.to_string().into_boxed_str());
         self
     }
 
@@ -254,7 +262,7 @@ impl std::fmt::Display for ErrorContext {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
 #[error("{0}")]
-pub struct IdentityError(pub ErrorContext);
+pub struct IdentityError(pub Box<ErrorContext>);
 
 impl DiagnosticInfo for IdentityError {
     fn diagnostic(&self) -> &Diagnostic {
@@ -721,7 +729,7 @@ macro_rules! error_wrapper {
     ($name:ident) => {
         #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
         #[error("{0:?}")]
-        pub struct $name(pub ErrorContext);
+        pub struct $name(pub Box<ErrorContext>);
 
         impl DiagnosticInfo for $name {
             fn diagnostic(&self) -> &Diagnostic {
@@ -745,9 +753,9 @@ pub enum ObservationError {
     #[error("observation runtime is shut down")]
     Shutdown,
     #[error("{0:?}")]
-    QueueFull(ErrorContext),
+    QueueFull(Box<ErrorContext>),
     #[error("{0:?}")]
-    RoutingFailure(ErrorContext),
+    RoutingFailure(Box<ErrorContext>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
@@ -755,5 +763,5 @@ pub enum TelemetryError {
     #[error("telemetry runtime is shut down")]
     Shutdown,
     #[error("{0:?}")]
-    ExportFailure(ErrorContext),
+    ExportFailure(Box<ErrorContext>),
 }

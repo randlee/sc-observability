@@ -30,14 +30,14 @@ impl ObservabilityConfig {
                 .to_ascii_uppercase(),
         )
         .map_err(|err| {
-            InitError(
+            InitError(Box::new(
                 ErrorContext::new(
                     error_codes::OBSERVABILITY_INIT_FAILED,
                     "failed to derive env prefix",
                     Remediation::not_recoverable("use an explicit valid env prefix"),
                 )
                 .cause(err.to_string()),
-            )
+            ))
         })?;
         Ok(Self {
             tool_name,
@@ -50,14 +50,14 @@ impl ObservabilityConfig {
 
     pub fn service_name(&self) -> Result<ServiceName, InitError> {
         ServiceName::new(self.tool_name.as_str()).map_err(|err| {
-            InitError(
+            InitError(Box::new(
                 ErrorContext::new(
                     error_codes::OBSERVABILITY_INIT_FAILED,
                     "failed to derive service name",
                     Remediation::not_recoverable("use a valid tool name"),
                 )
                 .cause(err.to_string()),
-            )
+            ))
         })
     }
 }

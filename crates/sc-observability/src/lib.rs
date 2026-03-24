@@ -70,7 +70,7 @@ pub struct SinkRegistration {
 }
 
 pub struct LoggerConfig {
-    pub service_name: Option<ServiceName>,
+    pub service_name: ServiceName,
     pub log_root: std::path::PathBuf,
     pub level: LevelFilter,
     pub queue_capacity: usize,
@@ -85,28 +85,8 @@ pub struct LoggerConfig {
 impl LoggerConfig {
     pub fn default_for(service_name: ServiceName, log_root: std::path::PathBuf) -> Self {
         Self {
-            service_name: Some(service_name),
+            service_name,
             log_root,
-            level: LevelFilter::Info,
-            queue_capacity: constants::DEFAULT_LOG_QUEUE_CAPACITY,
-            rotation: RotationPolicy::default(),
-            retention: RetentionPolicy::default(),
-            redaction: RedactionPolicy {
-                redact_bearer_tokens: true,
-                ..RedactionPolicy::default()
-            },
-            process_identity: ProcessIdentityPolicy::Auto,
-            enable_file_sink: constants::DEFAULT_ENABLE_FILE_SINK,
-            enable_console_sink: constants::DEFAULT_ENABLE_CONSOLE_SINK,
-        }
-    }
-}
-
-impl Default for LoggerConfig {
-    fn default() -> Self {
-        Self {
-            service_name: None,
-            log_root: std::path::PathBuf::new(),
             level: LevelFilter::Info,
             queue_capacity: constants::DEFAULT_LOG_QUEUE_CAPACITY,
             rotation: RotationPolicy::default(),
@@ -139,10 +119,12 @@ impl Logger {
 
     pub fn emit(&self, event: LogEvent) -> Result<(), EventError> {
         if self.shutdown.load(Ordering::SeqCst) {
-            return Err(EventError(sc_observability_types::ErrorContext::new(
-                error_codes::LOGGER_SHUTDOWN,
-                "logger is shut down",
-                Remediation::not_recoverable("create a new logger before emitting"),
+            return Err(EventError(Box::new(
+                sc_observability_types::ErrorContext::new(
+                    error_codes::LOGGER_SHUTDOWN,
+                    "logger is shut down",
+                    Remediation::not_recoverable("create a new logger before emitting"),
+                ),
             )));
         }
 
@@ -170,19 +152,15 @@ impl Logger {
     }
 
     pub fn health(&self) -> LoggingHealthReport {
-        let active_log_path = if let Some(service) = &self.config.service_name {
-            self.config
-                .log_root
-                .join(service.as_str())
-                .join("logs")
-                .join(format!("{}.log.jsonl", service.as_str()))
-        } else {
-            self.config.log_root.clone()
-        };
         LoggingHealthReport {
             state: LoggingHealthState::Healthy,
             dropped_events_total: 0,
-            active_log_path,
+            active_log_path: self
+                .config
+                .log_root
+                .join(self.config.service_name.as_str())
+                .join("logs")
+                .join(format!("{}.log.jsonl", self.config.service_name.as_str())),
             sink_statuses: Vec::<SinkHealth>::new(),
             last_error: None,
         }

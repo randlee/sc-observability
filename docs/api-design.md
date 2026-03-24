@@ -995,7 +995,7 @@ Design direction:
 pub struct SpanEvent {
     pub timestamp: Timestamp,
     pub trace: TraceContext,
-    pub name: String,
+    pub name: ActionName,
     pub attributes: serde_json::Map<String, serde_json::Value>,
     pub diagnostic: Option<Diagnostic>,
 }
@@ -1096,27 +1096,30 @@ impl ErrorContext {
     pub fn cause(self, cause: impl Into<String>) -> Self;
     pub fn docs(self, docs: impl Into<String>) -> Self;
     pub fn detail(self, key: impl Into<String>, value: serde_json::Value) -> Self;
-    pub fn source(self, source: impl std::error::Error + Send + Sync + 'static) -> Self;
+    pub fn source(
+        self,
+        source: Box<dyn std::error::Error + Send + Sync + 'static>,
+    ) -> Self;
 }
 
-pub struct InitError(pub ErrorContext);
+pub struct InitError(pub Box<ErrorContext>);
 pub enum ObservationError {
     Shutdown,
-    QueueFull(ErrorContext),
-    RoutingFailure(ErrorContext),
+    QueueFull(Box<ErrorContext>),
+    RoutingFailure(Box<ErrorContext>),
 }
 pub enum TelemetryError {
     Shutdown,
-    ExportFailure(ErrorContext),
+    ExportFailure(Box<ErrorContext>),
 }
-pub struct EventError(pub ErrorContext);
-pub struct FlushError(pub ErrorContext);
-pub struct ShutdownError(pub ErrorContext);
-pub struct ProjectionError(pub ErrorContext);
-pub struct SubscriberError(pub ErrorContext);
-pub struct LogSinkError(pub ErrorContext);
-pub struct ExportError(pub ErrorContext);
-pub struct IdentityError(pub ErrorContext);
+pub struct EventError(pub Box<ErrorContext>);
+pub struct FlushError(pub Box<ErrorContext>);
+pub struct ShutdownError(pub Box<ErrorContext>);
+pub struct ProjectionError(pub Box<ErrorContext>);
+pub struct SubscriberError(pub Box<ErrorContext>);
+pub struct LogSinkError(pub Box<ErrorContext>);
+pub struct ExportError(pub Box<ErrorContext>);
+pub struct IdentityError(pub Box<ErrorContext>);
 ```
 
 Required pattern:
@@ -1124,6 +1127,8 @@ Required pattern:
 - most public API errors are named newtypes around `ErrorContext`
 - `ObservationError` and `TelemetryError` are enums because they need named
   shutdown/runtime guard variants
+- contextual public error payloads are boxed inside the error types themselves
+  so public `Result<_, Error>` surfaces remain small and clippy-clean
 - all public API errors implement `std::error::Error` and `Display`
 - errors that always carry diagnostics implement `DiagnosticInfo`
 - `ObservationError` and `TelemetryError` expose optional diagnostic access only
@@ -1372,6 +1377,9 @@ impl LoggerConfig {
     ) -> Self;
 }
 ```
+
+`service_name` is required. `LoggerConfig` does not provide a shape where
+service identity is absent.
 
 ### 11.2 Built-In Path Layout
 
