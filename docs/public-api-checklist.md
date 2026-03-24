@@ -24,6 +24,7 @@ Note:
   by their respective crates.
 - Concrete health report types are centralized in `sc-observability-types` per
   the SSOT ruling.
+- Shared constants are centralized here as SSOT per requirements.
 
 - [~] `ErrorCode`
 - [~] `ValueValidationError`

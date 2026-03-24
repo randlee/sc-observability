@@ -91,7 +91,8 @@ This crate owns shared neutral contracts only.
 - TYP-027 `ServiceName` shall be owned by `sc-observability-types`, wrap a validated string identifier, and represent the service name carried in logs and telemetry.
 - TYP-028 `TargetCategory` shall be owned by `sc-observability-types`, wrap a validated dotted or snake-compatible category identifier, and represent the stable subsystem namespace on `LogEvent`.
 - TYP-029 `ActionName` shall be owned by `sc-observability-types`, wrap a validated dotted or snake-compatible action identifier, and represent the stable event action name on `LogEvent`.
-- TYP-030 All shared error types and health report types shall be owned by `sc-observability-types` as a single source of truth. Crate-specific error enums and concrete health report types are defined here and re-exported by their respective crates where needed.
+- TYP-030 All shared error types, health report types, and shared constants shall be owned by `sc-observability-types` as a single source of truth. Crate-specific error enums and concrete health report types are defined here and re-exported by their respective crates where needed.
+- TYP-031 Per-crate `constants.rs` files in higher-layer crates may exist only for crate-local values that are not shared across crate boundaries.
 
 ## 4. `sc-observability` Requirements
 
