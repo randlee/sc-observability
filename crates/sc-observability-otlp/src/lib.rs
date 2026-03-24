@@ -117,6 +117,12 @@ impl Default for MetricsConfig {
 }
 
 /// Application-owned telemetry configuration.
+///
+/// A configuration with `logs`, `traces`, and `metrics` all set to `None` is
+/// valid for a disabled or not-yet-configured telemetry instance. When
+/// `transport.enabled` is `false`, callers may construct `TelemetryConfig`
+/// without enabling any signal exporters and still build `Telemetry`
+/// successfully.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TelemetryConfig {
     pub service_name: ServiceName,
