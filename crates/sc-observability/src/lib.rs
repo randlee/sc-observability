@@ -168,10 +168,12 @@ impl Logger {
 }
 
 mod sealed_emitters {
+    #[allow(dead_code)]
     pub trait Sealed {}
 }
 
-pub trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
+#[allow(dead_code)]
+pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
 }
 

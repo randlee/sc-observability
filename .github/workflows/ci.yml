@@ -51,9 +51,29 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+  docs-consistency:
+    name: docs-consistency (ubuntu)
+    needs: [clippy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docs consistency
+        run: bash scripts/ci/validate_docs_consistency.sh
+
+  dependency-bans:
+    name: dependency-bans (ubuntu)
+    needs: [clippy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate dependency bans
+        run: bash scripts/ci/validate_dependency_bans.sh
+
   manifest-validation:
     name: manifest-validation (ubuntu)
-    needs: [clippy]
+    needs: [clippy, docs-consistency, dependency-bans]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,6 +91,12 @@ jobs:
 
       - name: Validate publish_order dependency graph
         run: bash scripts/ci/validate_publish_order.sh
+
+      - name: Validate docs consistency
+        run: bash scripts/ci/validate_docs_consistency.sh
+
+      - name: Validate dependency bans
+        run: bash scripts/ci/validate_dependency_bans.sh
 
       - name: Validate repo boundaries
         run: bash scripts/ci/validate_repo_boundaries.sh

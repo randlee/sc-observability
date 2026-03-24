@@ -175,8 +175,8 @@ Internal-only:
 
 Internal-only:
 
-- `SpanEmitter`
-- `MetricEmitter`
+- [~] `SpanEmitter`
+- [~] `MetricEmitter`
 
 Note:
 - sealed/crate-local per `architecture.md` §3.4 and OTLP-022
