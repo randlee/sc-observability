@@ -97,7 +97,8 @@ Owns:
 - `ConsoleSink`
 - redaction
 - rotation
-- logging health
+- `LoggingHealthReport`, `SinkHealth`, and `SinkHealthState` defined in
+  `sc-observability-types`, re-exported by `sc-observability`
 
 Runtime role:
 
@@ -127,7 +128,8 @@ Owns:
 - subscriber registration
 - projector registration
 - observation routing and fan-out
-- top-level routing health
+- `ObservabilityHealthReport` and `ObservationHealthState` defined in
+  `sc-observability-types`, re-exported by `sc-observe`
 
 Runtime role:
 
@@ -162,7 +164,8 @@ Owns:
 - `CompleteSpan`
 - `LogExporter`, `TraceExporter`, `MetricExporter`
 - OTLP batching, retry, timeout, flush, and shutdown
-- exporter health
+- `TelemetryHealthReport`, `ExporterHealth`, and `ExporterHealthState` defined
+  in `sc-observability-types`, re-exported by `sc-observability-otlp`
 
 Runtime role:
 
@@ -262,10 +265,10 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, identifiers, diagnostics, traits, health types |
-| `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, redaction, rotation, logging health |
-| `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health |
-| `sc-observability-otlp` | `sc-observability-types`, `sc-observability`, `sc-observe` | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, exporter health |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, identifiers, diagnostics, traits, health type definitions |
+| `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, redaction, rotation, logging health re-exports |
+| `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
+| `sc-observability-otlp` | `sc-observability-types`, `sc-observability`, `sc-observe` | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
 
 ## 7. ADRs
 

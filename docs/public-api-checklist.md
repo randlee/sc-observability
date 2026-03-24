@@ -20,8 +20,10 @@ public list silently.
 ### Finalized Public Types
 
 Note:
-- All error types are centralized here as SSOT per requirements and re-exported
-  by their respective crates.
+- Error types are defined in `sc-observability-types` (TYP-030) and
+  re-exported by their respective crates.
+- Per-crate `error_codes.rs` files (SRC-001/SRC-002) hold `ErrorCode` string
+  constants, which are separate from error type definitions.
 - Concrete health report types are centralized in `sc-observability-types` per
   the SSOT ruling.
 - Shared constants are centralized here as SSOT per requirements.
