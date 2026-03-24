@@ -885,6 +885,7 @@ mod tests {
 
     #[test]
     fn telemetry_config_builder_defaults() {
+        // TelemetryConfig is constructed independently of ObservabilityConfig (OTLP-018).
         let config = TelemetryConfigBuilder::new(service_name()).build();
 
         assert!(config.logs.is_none());

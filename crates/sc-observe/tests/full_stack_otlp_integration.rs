@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use sc_observability_otlp::{
@@ -11,7 +10,6 @@ use sc_observability_types::{
     SpanStarted, StateTransition, TargetCategory, Timestamp, ToolName, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
-use serde_json::{Map, json};
 
 #[derive(Debug, Clone)]
 struct AgentPayload {
@@ -54,7 +52,7 @@ impl SpanProjector<AgentPayload> for StaticSpanProjector {
             observation.service.clone(),
             ActionName::new("agent.run").expect("valid action"),
             trace.clone(),
-            Map::new(),
+            Default::default(),
         );
         let ended = started
             .clone()
@@ -65,7 +63,7 @@ impl SpanProjector<AgentPayload> for StaticSpanProjector {
                 timestamp: Timestamp::UNIX_EPOCH,
                 trace: trace.clone(),
                 name: ActionName::new("tool.call").expect("valid event name"),
-                attributes: Map::new(),
+                attributes: Default::default(),
                 diagnostic: None,
             }),
             SpanSignal::Ended(ended),
@@ -85,7 +83,7 @@ impl sc_observability_types::MetricProjector<AgentPayload> for StaticMetricProje
             kind: MetricKind::Counter,
             value: 1.0,
             unit: Some("1".to_string()),
-            attributes: Map::new(),
+            attributes: Default::default(),
         }])
     }
 }
@@ -214,7 +212,7 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
             cause: None,
             remediation: Remediation::recoverable("retry", ["inspect telemetry"]),
             docs: None,
-            details: Map::new(),
+            details: Default::default(),
         }),
         state_transition: Some(StateTransition {
             entity_kind: "agent".to_string(),
@@ -224,7 +222,7 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
             reason: None,
             trigger: None,
         }),
-        fields: Map::from_iter([("kind".to_string(), json!(message))]),
+        fields: Default::default(),
     }
 }
 
@@ -238,7 +236,7 @@ fn observation() -> Observation<AgentPayload> {
     )
 }
 
-fn temp_root(name: &str) -> PathBuf {
+fn temp_root(name: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
         "s4-attach-{name}-{}-{}",
         std::process::id(),
@@ -253,8 +251,6 @@ fn temp_root(name: &str) -> PathBuf {
 fn builder_registration_attaches_logs_spans_and_metrics() {
     let telemetry = Arc::new(Telemetry::new(telemetry_config()).expect("telemetry"));
     let root = temp_root("integration");
-    // Test-only scaffolding: sc-observe owns builder registration; OTLP production
-    // code depends only on sc-observability-types and is attached by callers.
     let config = ObservabilityConfig::default_for(
         ToolName::new("test-service").expect("valid tool"),
         root.clone(),
