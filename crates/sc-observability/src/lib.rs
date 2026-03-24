@@ -19,6 +19,7 @@ use sc_observability_types::{
     LogEvent, LogSinkError, ProcessIdentityPolicy, Remediation, ServiceName, ShutdownError,
     Timestamp,
 };
+#[doc(inline)]
 pub use sc_observability_types::{
     EventError, LoggingHealthReport, LoggingHealthState, SinkHealth, SinkHealthState,
 };
@@ -120,10 +121,24 @@ pub struct LoggerConfig {
 }
 
 impl LoggerConfig {
+    /// Builds the documented v1 defaults for a service-scoped logger configuration.
+    ///
+    /// If `SC_LOG_ROOT` is set, it is used only when `log_root` is empty. A
+    /// non-empty `log_root` parameter is treated as explicit configuration and
+    /// takes precedence over the environment helper per LOG-009.
     pub fn default_for(service_name: ServiceName, log_root: PathBuf) -> Self {
+        let resolved_log_root = if log_root.as_os_str().is_empty() {
+            std::env::var("SC_LOG_ROOT")
+                .ok()
+                .map(PathBuf::from)
+                .filter(|path| !path.as_os_str().is_empty())
+                .unwrap_or(log_root)
+        } else {
+            log_root
+        };
         Self {
             service_name,
-            log_root,
+            log_root: resolved_log_root,
             level: LevelFilter::Info,
             queue_capacity: constants::DEFAULT_LOG_QUEUE_CAPACITY,
             rotation: RotationPolicy::default(),
@@ -142,6 +157,7 @@ impl LoggerConfig {
 #[derive(Default)]
 struct LoggerRuntime {
     dropped_events_total: AtomicU64,
+    flush_errors_total: AtomicU64,
     last_error: Mutex<Option<DiagnosticSummary>>,
 }
 
@@ -200,16 +216,7 @@ impl Logger {
             }
 
             if let Err(err) = registration.sink.write(&redacted) {
-                self.runtime
-                    .dropped_events_total
-                    .fetch_add(1, Ordering::SeqCst);
-                *self
-                    .runtime
-                    .last_error
-                    .lock()
-                    .expect("logger last_error poisoned") = Some(DiagnosticSummary::from(
-                    &diagnostic_for_sink_failure(err.to_string()),
-                ));
+                self.record_sink_failure(err.to_string());
             }
         }
 
@@ -228,18 +235,17 @@ impl Logger {
     fn flush_registered_sinks(&self) {
         for registration in &self.sinks {
             if let Err(err) = registration.sink.flush() {
-                self.record_sink_failure(err.to_string());
+                self.record_flush_failure(err.to_string());
             }
         }
     }
 
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
-        if self.shutdown.load(Ordering::SeqCst) {
+        if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
 
         self.flush_registered_sinks();
-        self.shutdown.store(true, Ordering::SeqCst);
         Ok(())
     }
 
@@ -256,6 +262,7 @@ impl Logger {
                 LoggingHealthState::Healthy
             },
             dropped_events_total: self.runtime.dropped_events_total.load(Ordering::SeqCst),
+            flush_errors_total: self.runtime.flush_errors_total.load(Ordering::SeqCst),
             active_log_path: default_log_path(&self.config.log_root, &self.config.service_name),
             sink_statuses,
             last_error: self
@@ -299,6 +306,20 @@ impl Logger {
         let message = message.into();
         self.runtime
             .dropped_events_total
+            .fetch_add(1, Ordering::SeqCst);
+        *self
+            .runtime
+            .last_error
+            .lock()
+            .expect("logger last_error poisoned") = Some(DiagnosticSummary::from(
+            &diagnostic_for_sink_failure(message),
+        ));
+    }
+
+    fn record_flush_failure(&self, message: impl Into<String>) {
+        let message = message.into();
+        self.runtime
+            .flush_errors_total
             .fetch_add(1, Ordering::SeqCst);
         *self
             .runtime
@@ -738,6 +759,35 @@ mod tests {
         path
     }
 
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    fn with_sc_log_root<T>(value: Option<&Path>, f: impl FnOnce() -> T) -> T {
+        let _guard = ENV_MUTEX.lock().expect("env mutex poisoned");
+        let previous = std::env::var_os("SC_LOG_ROOT");
+        match value {
+            Some(path) => {
+                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
+                unsafe { std::env::set_var("SC_LOG_ROOT", path) };
+            }
+            None => {
+                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
+                unsafe { std::env::remove_var("SC_LOG_ROOT") };
+            }
+        }
+        let result = f();
+        match previous {
+            Some(value) => {
+                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
+                unsafe { std::env::set_var("SC_LOG_ROOT", value) };
+            }
+            None => {
+                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
+                unsafe { std::env::remove_var("SC_LOG_ROOT") };
+            }
+        }
+        result
+    }
+
     fn log_event(service_name: ServiceName) -> LogEvent {
         LogEvent {
             version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
@@ -795,6 +845,27 @@ mod tests {
                 .join("logs")
                 .join("sc-observability.log.jsonl")
         );
+    }
+
+    #[test]
+    fn logger_config_default_for_uses_sc_log_root_when_log_root_is_empty() {
+        let env_root = temp_path("env-root");
+
+        with_sc_log_root(Some(&env_root), || {
+            let config = LoggerConfig::default_for(service_name(), PathBuf::new());
+            assert_eq!(config.log_root, env_root);
+        });
+    }
+
+    #[test]
+    fn logger_config_default_for_prefers_explicit_log_root_over_env() {
+        let env_root = temp_path("env-root-override");
+        let explicit_root = temp_path("explicit-root");
+
+        with_sc_log_root(Some(&env_root), || {
+            let config = LoggerConfig::default_for(service_name(), explicit_root.clone());
+            assert_eq!(config.log_root, explicit_root);
+        });
     }
 
     #[test]
@@ -946,7 +1017,8 @@ mod tests {
         logger.flush().expect("flush remains fail-open");
 
         let health = logger.health();
-        assert_eq!(health.dropped_events_total, 1);
+        assert_eq!(health.dropped_events_total, 0);
+        assert_eq!(health.flush_errors_total, 1);
         assert!(health.last_error.is_some());
     }
 

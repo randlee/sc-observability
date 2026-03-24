@@ -16,8 +16,9 @@ use std::sync::{Arc, Mutex};
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, ErrorContext, EventError, ExportError, FlushError,
     InitError, LogEvent, MetricRecord, Remediation, ServiceName, ShutdownError, SpanEnded,
-    SpanEvent, SpanRecord, SpanSignal, SpanStarted,
+    SpanEvent, SpanRecord, SpanSignal, SpanStarted, Timestamp,
 };
+#[doc(inline)]
 pub use sc_observability_types::{
     ExporterHealth, ExporterHealthState, TelemetryError, TelemetryHealthReport,
     TelemetryHealthState,
@@ -337,6 +338,7 @@ pub struct Telemetry {
     metric_exporter: Arc<dyn MetricExporter>,
     runtime: Mutex<TelemetryRuntime>,
     dropped_exports_total: AtomicU64,
+    malformed_spans_total: AtomicU64,
 }
 
 #[derive(Default)]
@@ -414,6 +416,7 @@ impl Telemetry {
             metric_exporter,
             runtime: Mutex::new(TelemetryRuntime::default()),
             dropped_exports_total: AtomicU64::new(0),
+            malformed_spans_total: AtomicU64::new(0),
         })
     }
 
@@ -432,12 +435,33 @@ impl Telemetry {
     }
 
     /// Buffers one projected span signal for later export.
+    ///
+    /// An `Ended` signal without a prior `Started` signal is absorbed and
+    /// counted in `malformed_spans_total`. No malformed or incomplete span is
+    /// ever forwarded to the OTel backend.
     pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError> {
         self.ensure_active()?;
         if self.config.traces.is_none() || !self.config.transport.enabled {
             return Ok(());
         }
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+        if let SpanSignal::Ended(record) = span {
+            let key = span_key(
+                record.trace().trace_id.as_str(),
+                record.trace().span_id.as_str(),
+            );
+            if !runtime.span_assembler.started.contains_key(&key) {
+                self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
+                let summary = DiagnosticSummary {
+                    code: Some(error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED),
+                    message: "received ended span without a matching started span".to_string(),
+                    at: span_timestamp(span),
+                };
+                runtime.last_error = Some(summary.clone());
+                runtime.trace_status.last_error = Some(summary);
+                return Ok(());
+            }
+        }
         if let Some(complete) = runtime.span_assembler.push(span.clone()).map_err(|err| {
             TelemetryError::ExportFailure(Box::new(error_context_from_diagnostic(err.diagnostic())))
         })? {
@@ -578,6 +602,7 @@ impl Telemetry {
         TelemetryHealthReport {
             state,
             dropped_exports_total: self.dropped_exports_total.load(Ordering::SeqCst),
+            malformed_spans_total: self.malformed_spans_total.load(Ordering::SeqCst),
             exporter_statuses,
             last_error: runtime.last_error.clone(),
         }
@@ -665,6 +690,14 @@ pub(crate) fn export_failure(message: impl Into<String>) -> TelemetryError {
         message,
         Remediation::not_recoverable("retry/export policy is owned by telemetry runtime"),
     )))
+}
+
+fn span_timestamp(span: &SpanSignal) -> Timestamp {
+    match span {
+        SpanSignal::Started(record) => record.timestamp(),
+        SpanSignal::Event(event) => event.timestamp,
+        SpanSignal::Ended(record) => record.timestamp(),
+    }
 }
 
 fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
@@ -982,6 +1015,23 @@ mod tests {
         let health = telemetry.health();
         assert_eq!(health.dropped_exports_total, 1);
         assert_eq!(health.state, TelemetryHealthState::Unavailable);
+    }
+
+    #[test]
+    fn orphaned_ended_span_is_absorbed_and_counted() {
+        let trace = trace_context();
+        let telemetry = Telemetry::new(telemetry_config()).expect("telemetry");
+        let ended = SpanRecord::<SpanStarted>::new(
+            Timestamp::UNIX_EPOCH,
+            service_name(),
+            ActionName::new("agent.run").expect("valid action"),
+            trace,
+            Map::new(),
+        )
+        .end(sc_observability_types::SpanStatus::Ok, 5);
+
+        assert!(telemetry.emit_span(&SpanSignal::Ended(ended)).is_ok());
+        assert_eq!(telemetry.health().malformed_spans_total, 1);
     }
 
     #[test]

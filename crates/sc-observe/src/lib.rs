@@ -18,6 +18,7 @@ use sc_observability_types::{
     Observation, ProjectionRegistration, Remediation, ServiceName, ShutdownError, SubscriberError,
     SubscriberRegistration, ToolName,
 };
+#[doc(inline)]
 pub use sc_observability_types::{
     ObservabilityHealthReport, ObservationError, ObservationHealthState,
 };
