@@ -51,7 +51,14 @@ if observe_deps != {"sc-observability-types", "sc-observability"}:
         f"{sorted(observe_deps)}"
     )
 
-required_otlp = {"serde_json", "thiserror", "sc-observability-types", "sc-observability"}
+required_otlp = {
+    "serde",
+    "serde_json",
+    "thiserror",
+    "sc-observability-types",
+    "sc-observability",
+    "sc-observe",
+}
 if otlp_deps != required_otlp:
     raise SystemExit(
         "sc-observability-otlp dependency set drifted from allowed baseline: "
