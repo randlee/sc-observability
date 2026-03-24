@@ -28,71 +28,71 @@ Note:
   the SSOT ruling.
 - Shared constants are centralized here as SSOT per requirements.
 
-- [~] `ErrorCode`
-- [~] `error_codes` — per-crate stable `ErrorCode` constants registry
+- [x] `ErrorCode`
+- [x] `error_codes` — per-crate stable `ErrorCode` constants registry
   (SRC-001/SRC-002)
-- [~] `constants` — `sc-observability-types/src/constants.rs` (SSOT for all
+- [x] `constants` — `sc-observability-types/src/constants.rs` (SSOT for all
   shared cross-crate constants per TYP-031)
-- [~] `ValueValidationError`
-- [~] `ToolName`
-- [~] `EnvPrefix`
-- [~] `ServiceName`
-- [~] `TargetCategory`
-- [~] `ActionName`
-- [~] `MetricName`
-- [~] `RecoverableSteps`
-- [~] `Remediation`
-- [~] `Diagnostic`
-- [~] `DiagnosticInfo`
-- [~] `DiagnosticSummary`
-- [~] `ErrorContext`
-- [~] `IdentityError`
-- [~] `Level`
-- [~] `LevelFilter`
-- [~] `ProcessIdentity`
-- [~] `ProcessIdentityPolicy`
-- [~] `ProcessIdentityResolver`
-- [~] `TraceId`
-- [~] `SpanId`
-- [~] `TraceContext`
-- [~] `StateTransition`
-- [~] `Observation<T>`
-- [~] `LogEvent`
-- [~] `SpanStatus`
-- [~] `SpanStarted`
-- [~] `SpanEnded`
-- [~] `SpanRecord<S>`
-- [~] `SpanEvent`
-- [~] `SpanSignal`
-- [~] `MetricKind`
-- [~] `MetricRecord`
-- [~] `LoggingHealthState`
-- [~] `SinkHealthState`
-- [~] `SinkHealth`
-- [~] `LoggingHealthReport`
-- [~] `ObservationHealthState`
-- [~] `ObservabilityHealthReport`
-- [~] `TelemetryHealthState`
-- [~] `ExporterHealthState`
-- [~] `ExporterHealth`
-- [~] `TelemetryHealthReport`
-- [~] `ObservationSubscriber<T>`
-- [~] `ObservationFilter<T>`
-- [~] `LogProjector<T>`
-- [~] `SpanProjector<T>`
-- [~] `MetricProjector<T>`
-- [~] `SubscriberRegistration<T>`
-- [~] `ProjectionRegistration<T>`
-- [~] `InitError`
-- [~] `EventError`
-- [~] `FlushError`
-- [~] `ShutdownError`
-- [~] `ProjectionError`
-- [~] `SubscriberError`
-- [~] `LogSinkError`
-- [~] `ExportError`
-- [~] `ObservationError`
-- [~] `TelemetryError`
+- [x] `ValueValidationError`
+- [x] `ToolName`
+- [x] `EnvPrefix`
+- [x] `ServiceName`
+- [x] `TargetCategory`
+- [x] `ActionName`
+- [x] `MetricName`
+- [x] `RecoverableSteps`
+- [x] `Remediation`
+- [x] `Diagnostic`
+- [x] `DiagnosticInfo`
+- [x] `DiagnosticSummary`
+- [x] `ErrorContext`
+- [x] `IdentityError`
+- [x] `Level`
+- [x] `LevelFilter`
+- [x] `ProcessIdentity`
+- [x] `ProcessIdentityPolicy` — intentionally no serde; runtime policy only
+- [x] `ProcessIdentityResolver`
+- [x] `TraceId`
+- [x] `SpanId`
+- [x] `TraceContext`
+- [x] `StateTransition`
+- [x] `Observation<T>`
+- [x] `LogEvent`
+- [x] `SpanStatus`
+- [x] `SpanStarted`
+- [x] `SpanEnded`
+- [x] `SpanRecord<S>`
+- [x] `SpanEvent`
+- [x] `SpanSignal`
+- [x] `MetricKind`
+- [x] `MetricRecord`
+- [x] `LoggingHealthState`
+- [x] `SinkHealthState`
+- [x] `SinkHealth`
+- [x] `LoggingHealthReport`
+- [x] `ObservationHealthState`
+- [x] `ObservabilityHealthReport`
+- [x] `TelemetryHealthState`
+- [x] `ExporterHealthState`
+- [x] `ExporterHealth`
+- [x] `TelemetryHealthReport`
+- [x] `ObservationSubscriber<T>`
+- [x] `ObservationFilter<T>`
+- [x] `LogProjector<T>`
+- [x] `SpanProjector<T>`
+- [x] `MetricProjector<T>`
+- [x] `SubscriberRegistration<T>` — intentionally no serde; construction-time registration only
+- [x] `ProjectionRegistration<T>` — intentionally no serde; construction-time registration only
+- [x] `InitError`
+- [x] `EventError`
+- [x] `FlushError`
+- [x] `ShutdownError`
+- [x] `ProjectionError`
+- [x] `SubscriberError`
+- [x] `LogSinkError`
+- [x] `ExportError`
+- [x] `ObservationError`
+- [x] `TelemetryError`
 
 ### Finalized Public Rules
 
