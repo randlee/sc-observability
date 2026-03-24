@@ -52,3 +52,13 @@ Any sprint plan added here must preserve the standalone boundary defined by:
 - `docs/architecture.md`
 - `docs/git-workflows.md`
 - `docs/publishing.md`
+
+## Implementation Planning Set
+
+The next implementation phase should use these planning documents together:
+
+- `docs/implementation-plan.md`
+- `docs/public-api-checklist.md`
+- `docs/atm-adapter-mapping-spec.md`
+- `docs/test-strategy.md`
+- `docs/sprint-plan.md`
