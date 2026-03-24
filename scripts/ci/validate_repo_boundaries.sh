@@ -43,6 +43,8 @@ if "sc-observability-otlp" in observe_deps:
     raise SystemExit("sc-observe must not depend on sc-observability-otlp")
 if "sc-observability" not in otlp_deps:
     raise SystemExit("sc-observability-otlp must depend on sc-observability")
+if "sc-observe" not in otlp_deps:
+    raise SystemExit("sc-observability-otlp must depend on sc-observe")
 
 for path in root.rglob("Cargo.toml"):
     text = path.read_text(encoding="utf-8")

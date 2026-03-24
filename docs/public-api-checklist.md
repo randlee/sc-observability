@@ -158,27 +158,27 @@ Internal-only:
 
 ### Finalized Public Types
 
-- [~] `error_codes` — per-crate stable `ErrorCode` constants registry
+- [x] `error_codes` — per-crate stable `ErrorCode` constants registry
   (SRC-001/SRC-002)
-- [~] `TelemetryConfig`
-- [~] `TelemetryConfigBuilder`
-- [~] `Telemetry`
-- [~] `OtlpProtocol`
-- [~] `OtelConfig`
-- [~] `LogsConfig`
-- [~] `TracesConfig`
-- [~] `MetricsConfig`
-- [~] `ResourceAttributes`
-- [~] `SpanAssembler`
-- [~] `CompleteSpan`
-- [~] `LogExporter`
-- [~] `TraceExporter`
-- [~] `MetricExporter`
+- [x] `TelemetryConfig`
+- [x] `TelemetryConfigBuilder`
+- [x] `Telemetry`
+- [x] `OtlpProtocol`
+- [x] `OtelConfig`
+- [x] `LogsConfig`
+- [x] `TracesConfig`
+- [x] `MetricsConfig`
+- [x] `ResourceAttributes`
+- [x] `SpanAssembler`
+- [x] `CompleteSpan`
+- [x] `LogExporter`
+- [x] `TraceExporter`
+- [x] `MetricExporter`
 
 Internal-only:
 
-- [~] `SpanEmitter`
-- [~] `MetricEmitter`
+- [x] `SpanEmitter`
+- [x] `MetricEmitter`
 
 Note:
 - sealed/crate-local per `architecture.md` §3.4 and OTLP-022
