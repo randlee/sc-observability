@@ -27,6 +27,8 @@ Note:
 - Shared constants are centralized here as SSOT per requirements.
 
 - [~] `ErrorCode`
+- [~] `constants` — `sc-observability-types/src/constants.rs` (SSOT for all
+  shared cross-crate constants per TYP-031)
 - [~] `ValueValidationError`
 - [~] `ToolName`
 - [~] `EnvPrefix`
@@ -100,6 +102,8 @@ Note:
 
 ### Finalized Public Types
 
+- [~] `error_codes` — per-crate stable `ErrorCode` constants registry
+  (SRC-001/SRC-002)
 - [~] `LoggerConfig`
 - [~] `RotationPolicy`
 - [~] `RetentionPolicy`
@@ -122,6 +126,8 @@ Note:
 
 ### Finalized Public Types
 
+- [~] `error_codes` — per-crate stable `ErrorCode` constants registry
+  (SRC-001/SRC-002)
 - [~] `ObservabilityConfig`
 - [~] `ObservabilityBuilder`
 - [~] `Observability`
@@ -138,6 +144,8 @@ Note:
 
 ### Finalized Public Types
 
+- [~] `error_codes` — per-crate stable `ErrorCode` constants registry
+  (SRC-001/SRC-002)
 - [~] `TelemetryConfig`
 - [~] `TelemetryConfigBuilder`
 - [~] `Telemetry`

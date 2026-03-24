@@ -85,6 +85,8 @@ Done means:
 - all public API checklist items marked finalized
 - no unresolved Important findings from QA-1 through QA-6
 - migration and release readiness checklist drafted
+- boundary preservation verified against `docs/publishing.md` and
+  `docs/git-workflows.md`
 - release and cutover tasks can start
 
 ## 3. Sprint Dependencies
