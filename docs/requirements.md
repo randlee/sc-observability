@@ -113,9 +113,9 @@ This crate is the lightweight logging layer.
 - LOG-013 Sink filtering shall be sink-local policy, not producer burden.
 - LOG-014 Invalid log events shall fail fast with `EventError`.
 - LOG-015 Sink failures after validation shall be fail-open and shall not block the caller’s core flow.
-- LOG-016 Logging health shall expose `LoggingHealthReport`, `SinkHealth`, and
-  typed `SinkHealthState` (defined in `sc-observability-types` and
-  re-exported by `sc-observability`).
+- LOG-016 Logging health shall expose `LoggingHealthReport`,
+  `LoggingHealthState`, `SinkHealth`, and typed `SinkHealthState` (defined in
+  `sc-observability-types` and re-exported by `sc-observability`).
 - LOG-017 `sc-observability` shall not own typed observation routing.
 - LOG-018 `sc-observability` shall not own OTLP transport or any OpenTelemetry dependency.
 - LOG-019 `sc-observability` shall not own ATM-specific metadata rules, path conventions, or compatibility behavior.

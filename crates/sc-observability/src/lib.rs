@@ -17,7 +17,9 @@ use std::time::{Duration, SystemTime};
 use sc_observability_types::{
     Diagnostic, DiagnosticSummary, ErrorContext, FlushError, InitError, Level, LevelFilter,
     LogEvent, LogSinkError, ProcessIdentityPolicy, Remediation, ServiceName, ShutdownError,
+    Timestamp,
 };
+#[doc(inline)]
 pub use sc_observability_types::{
     EventError, LoggingHealthReport, LoggingHealthState, SinkHealth, SinkHealthState,
 };
@@ -62,6 +64,16 @@ pub struct RedactionPolicy {
     pub custom_redactors: Vec<Arc<dyn Redactor>>,
 }
 
+impl std::fmt::Debug for RedactionPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RedactionPolicy")
+            .field("denylist_keys", &self.denylist_keys)
+            .field("redact_bearer_tokens", &self.redact_bearer_tokens)
+            .field("custom_redactors", &self.custom_redactors.len())
+            .finish()
+    }
+}
+
 pub trait LogFilter: Send + Sync {
     fn accepts(&self, event: &LogEvent) -> bool;
 }
@@ -93,10 +105,12 @@ impl SinkRegistration {
     }
 }
 
+#[derive(Debug)]
 pub struct LoggerConfig {
     pub service_name: ServiceName,
     pub log_root: PathBuf,
     pub level: LevelFilter,
+    /// Reserved for future async/backpressure implementation. Phase 1 execution is synchronous; this value is stored but not yet applied.
     pub queue_capacity: usize,
     pub rotation: RotationPolicy,
     pub retention: RetentionPolicy,
@@ -107,10 +121,24 @@ pub struct LoggerConfig {
 }
 
 impl LoggerConfig {
+    /// Builds the documented v1 defaults for a service-scoped logger configuration.
+    ///
+    /// If `SC_LOG_ROOT` is set, it is used only when `log_root` is empty. A
+    /// non-empty `log_root` parameter is treated as explicit configuration and
+    /// takes precedence over the environment helper per LOG-009.
     pub fn default_for(service_name: ServiceName, log_root: PathBuf) -> Self {
+        let resolved_log_root = if log_root.as_os_str().is_empty() {
+            std::env::var("SC_LOG_ROOT")
+                .ok()
+                .map(PathBuf::from)
+                .filter(|path| !path.as_os_str().is_empty())
+                .unwrap_or(log_root)
+        } else {
+            log_root
+        };
         Self {
             service_name,
-            log_root,
+            log_root: resolved_log_root,
             level: LevelFilter::Info,
             queue_capacity: constants::DEFAULT_LOG_QUEUE_CAPACITY,
             rotation: RotationPolicy::default(),
@@ -129,6 +157,7 @@ impl LoggerConfig {
 #[derive(Default)]
 struct LoggerRuntime {
     dropped_events_total: AtomicU64,
+    flush_errors_total: AtomicU64,
     last_error: Mutex<Option<DiagnosticSummary>>,
 }
 
@@ -187,16 +216,7 @@ impl Logger {
             }
 
             if let Err(err) = registration.sink.write(&redacted) {
-                self.runtime
-                    .dropped_events_total
-                    .fetch_add(1, Ordering::SeqCst);
-                *self
-                    .runtime
-                    .last_error
-                    .lock()
-                    .expect("logger last_error poisoned") = Some(DiagnosticSummary::from(
-                    &diagnostic_for_sink_failure(err.to_string()),
-                ));
+                self.record_sink_failure(err.to_string());
             }
         }
 
@@ -208,13 +228,16 @@ impl Logger {
             return Ok(());
         }
 
+        self.flush_registered_sinks();
+        Ok(())
+    }
+
+    fn flush_registered_sinks(&self) {
         for registration in &self.sinks {
             if let Err(err) = registration.sink.flush() {
-                self.record_sink_failure(err.to_string());
+                self.record_flush_failure(err.to_string());
             }
         }
-
-        Ok(())
     }
 
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
@@ -222,7 +245,7 @@ impl Logger {
             return Ok(());
         }
 
-        self.flush().map_err(|err| ShutdownError(err.0))?;
+        self.flush_registered_sinks();
         Ok(())
     }
 
@@ -239,6 +262,7 @@ impl Logger {
                 LoggingHealthState::Healthy
             },
             dropped_events_total: self.runtime.dropped_events_total.load(Ordering::SeqCst),
+            flush_errors_total: self.runtime.flush_errors_total.load(Ordering::SeqCst),
             active_log_path: default_log_path(&self.config.log_root, &self.config.service_name),
             sink_statuses,
             last_error: self
@@ -291,6 +315,20 @@ impl Logger {
             &diagnostic_for_sink_failure(message),
         ));
     }
+
+    fn record_flush_failure(&self, message: impl Into<String>) {
+        let message = message.into();
+        self.runtime
+            .flush_errors_total
+            .fetch_add(1, Ordering::SeqCst);
+        *self
+            .runtime
+            .last_error
+            .lock()
+            .expect("logger last_error poisoned") = Some(DiagnosticSummary::from(
+            &diagnostic_for_sink_failure(message),
+        ));
+    }
 }
 
 pub struct JsonlFileSink {
@@ -323,20 +361,30 @@ impl JsonlFileSink {
             && metadata.len().saturating_add(incoming_len) > self.rotation.max_bytes
         {
             for idx in (1..self.rotation.max_files).rev() {
-                let src = self.path.with_extension(format!("log.jsonl.{idx}"));
-                let dest = self.path.with_extension(format!("log.jsonl.{}", idx + 1));
+                let src = self.rotated_path(idx);
+                let dest = self.rotated_path(idx + 1);
                 if src.exists() {
                     let _ = fs::rename(&src, &dest);
                 }
             }
             if self.path.exists() {
-                let rotated = self.path.with_extension("log.jsonl.1");
+                let rotated = self.rotated_path(1);
                 let _ = fs::rename(&self.path, rotated);
             }
         }
 
         self.prune_old_files();
         Ok(())
+    }
+
+    fn rotated_path(&self, index: u32) -> PathBuf {
+        let parent = self.path.parent().unwrap_or_else(|| Path::new("."));
+        let file_name = self
+            .path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("active.log.jsonl");
+        parent.join(format!("{file_name}.{index}"))
     }
 
     fn prune_old_files(&self) {
@@ -545,6 +593,7 @@ impl LogEmitter for Logger {
 
 pub(crate) fn diagnostic_for_sink_failure(message: impl Into<String>) -> Diagnostic {
     Diagnostic {
+        timestamp: Timestamp::now_utc(),
         code: error_codes::LOGGER_SINK_WRITE_FAILED,
         message: message.into(),
         cause: None,
@@ -669,6 +718,30 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct RecordingFlushSink {
+        flush_calls: AtomicU64,
+    }
+
+    impl LogSink for RecordingFlushSink {
+        fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+            Ok(())
+        }
+
+        fn flush(&self) -> Result<(), LogSinkError> {
+            self.flush_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn health(&self) -> SinkHealth {
+            SinkHealth {
+                name: "recording-flush".to_string(),
+                state: SinkHealthState::Healthy,
+                last_error: None,
+            }
+        }
+    }
+
     fn service_name() -> ServiceName {
         ServiceName::new("sc-observability").expect("valid service name")
     }
@@ -686,6 +759,35 @@ mod tests {
         path
     }
 
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    fn with_sc_log_root<T>(value: Option<&Path>, f: impl FnOnce() -> T) -> T {
+        let _guard = ENV_MUTEX.lock().expect("env mutex poisoned");
+        let previous = std::env::var_os("SC_LOG_ROOT");
+        match value {
+            Some(path) => {
+                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
+                unsafe { std::env::set_var("SC_LOG_ROOT", path) };
+            }
+            None => {
+                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
+                unsafe { std::env::remove_var("SC_LOG_ROOT") };
+            }
+        }
+        let result = f();
+        match previous {
+            Some(value) => {
+                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
+                unsafe { std::env::set_var("SC_LOG_ROOT", value) };
+            }
+            None => {
+                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
+                unsafe { std::env::remove_var("SC_LOG_ROOT") };
+            }
+        }
+        result
+    }
+
     fn log_event(service_name: ServiceName) -> LogEvent {
         LogEvent {
             version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
@@ -701,6 +803,7 @@ mod tests {
             correlation_id: None,
             outcome: Some("ok".to_string()),
             diagnostic: Some(Diagnostic {
+                timestamp: Timestamp::UNIX_EPOCH,
                 code: ErrorCode::new_static("SC_TEST"),
                 message: "diagnostic".to_string(),
                 cause: None,
@@ -742,6 +845,39 @@ mod tests {
                 .join("logs")
                 .join("sc-observability.log.jsonl")
         );
+    }
+
+    #[test]
+    fn logger_config_default_for_uses_sc_log_root_when_log_root_is_empty() {
+        let env_root = temp_path("env-root");
+
+        with_sc_log_root(Some(&env_root), || {
+            let config = LoggerConfig::default_for(service_name(), PathBuf::new());
+            assert_eq!(config.log_root, env_root);
+        });
+    }
+
+    #[test]
+    fn logger_config_default_for_prefers_explicit_log_root_over_env() {
+        let env_root = temp_path("env-root-override");
+        let explicit_root = temp_path("explicit-root");
+
+        with_sc_log_root(Some(&env_root), || {
+            let config = LoggerConfig::default_for(service_name(), explicit_root.clone());
+            assert_eq!(config.log_root, explicit_root);
+        });
+    }
+
+    #[test]
+    fn logger_config_debug_renders_redaction_summary() {
+        let root = temp_path("debug");
+        let config = LoggerConfig::default_for(service_name(), root);
+
+        let rendered = format!("{config:?}");
+
+        assert!(rendered.contains("LoggerConfig"));
+        assert!(rendered.contains("RedactionPolicy"));
+        assert!(rendered.contains("custom_redactors: 0"));
     }
 
     #[test]
@@ -881,7 +1017,8 @@ mod tests {
         logger.flush().expect("flush remains fail-open");
 
         let health = logger.health();
-        assert_eq!(health.dropped_events_total, 1);
+        assert_eq!(health.dropped_events_total, 0);
+        assert_eq!(health.flush_errors_total, 1);
         assert!(health.last_error.is_some());
     }
 
@@ -895,6 +1032,24 @@ mod tests {
         assert_eq!(
             path,
             PathBuf::from("observability-root/custom-service/logs/custom-service.log.jsonl")
+        );
+    }
+
+    #[test]
+    fn rotated_log_paths_keep_the_active_filename_prefix() {
+        let sink = JsonlFileSink::new(
+            PathBuf::from("observability-root/custom-service/logs/custom-service.log.jsonl"),
+            RotationPolicy::default(),
+            RetentionPolicy::default(),
+        );
+
+        assert_eq!(
+            sink.rotated_path(1),
+            PathBuf::from("observability-root/custom-service/logs/custom-service.log.jsonl.1")
+        );
+        assert_eq!(
+            sink.rotated_path(2),
+            PathBuf::from("observability-root/custom-service/logs/custom-service.log.jsonl.2")
         );
     }
 
@@ -935,5 +1090,19 @@ mod tests {
         assert!(logger.emit(log_event(service_name())).is_err());
         assert!(logger.flush().is_ok());
         assert!(logger.shutdown().is_ok());
+    }
+
+    #[test]
+    fn shutdown_flushes_registered_sinks_before_marking_shutdown() {
+        let root = temp_path("shutdown-flush");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.enable_file_sink = false;
+        let mut logger = Logger::new(config).expect("logger");
+        let sink = Arc::new(RecordingFlushSink::default());
+        logger.register_sink(SinkRegistration::new(sink.clone()));
+
+        logger.shutdown().expect("shutdown");
+
+        assert_eq!(sink.flush_calls.load(Ordering::SeqCst), 1);
     }
 }

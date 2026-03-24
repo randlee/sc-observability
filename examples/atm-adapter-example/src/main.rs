@@ -3,8 +3,9 @@
 mod constants;
 
 use std::env;
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use sc_observability::RotationPolicy;
 use sc_observability_otlp::{
@@ -119,7 +120,7 @@ fn build_observability(
             })),
             span_projector: Some(Arc::new(AttachedSpanProjector {
                 telemetry: telemetry.clone(),
-                inner: Arc::new(AtmSpanProjector),
+                inner: Arc::new(AtmSpanProjector::default()),
             })),
             metric_projector: Some(Arc::new(AttachedMetricProjector {
                 telemetry: telemetry.clone(),
@@ -132,13 +133,6 @@ fn build_observability(
     emit_example_sequence(&runtime, service, mode)?;
     runtime.flush()?;
     telemetry.flush()?;
-    let observability_health = runtime.health();
-    let logging_health = observability_health
-        .logging
-        .clone()
-        .ok_or("observability health missing logging snapshot")?;
-    let telemetry_health = telemetry.health();
-    let health = project_health(&logging_health, &observability_health, &telemetry_health);
 
     match mode {
         RunMode::Normal => {
@@ -153,7 +147,18 @@ fn build_observability(
         }
     }
 
-    Ok(health)
+    let observability_health = runtime.health();
+    let logging_health = observability_health
+        .logging
+        .clone()
+        .ok_or("observability health missing logging snapshot")?;
+    let telemetry_health = telemetry.health();
+
+    Ok(project_health(
+        &logging_health,
+        &observability_health,
+        &telemetry_health,
+    ))
 }
 
 fn emit_example_sequence(
@@ -437,7 +442,10 @@ impl sc_observability_types::LogProjector<AgentInfoEvent> for AtmLogProjector {
     }
 }
 
-struct AtmSpanProjector;
+#[derive(Default)]
+struct AtmSpanProjector {
+    started: Mutex<HashMap<String, sc_observability_types::Timestamp>>,
+}
 
 impl sc_observability_types::SpanProjector<AgentInfoEvent> for AtmSpanProjector {
     fn project_spans(
@@ -449,13 +457,19 @@ impl sc_observability_types::SpanProjector<AgentInfoEvent> for AtmSpanProjector 
         };
 
         let signals = match &observation.payload.event {
-            HookEventKind::SubagentStart { .. } => vec![SpanSignal::Started(SpanRecord::<SpanStarted>::new(
-                observation.timestamp,
-                observation.service.clone(),
-                ActionName::new("subagent.run").expect("valid action"),
-                trace.clone(),
-                common_fields(&observation.payload),
-            ))],
+            HookEventKind::SubagentStart { .. } => {
+                self.started
+                    .lock()
+                    .expect("started span map poisoned")
+                    .insert(trace_key(trace), observation.timestamp);
+                vec![SpanSignal::Started(SpanRecord::<SpanStarted>::new(
+                    observation.timestamp,
+                    observation.service.clone(),
+                    ActionName::new("subagent.run").expect("valid action"),
+                    trace.clone(),
+                    common_fields(&observation.payload),
+                ))]
+            }
             HookEventKind::ToolUse { tool, duration_ms, .. } => vec![SpanSignal::Event(SpanEvent {
                 timestamp: observation.timestamp,
                 trace: trace.clone(),
@@ -469,24 +483,50 @@ impl sc_observability_types::SpanProjector<AgentInfoEvent> for AtmSpanProjector 
                 ]),
                 diagnostic: None,
             })],
-            HookEventKind::SubagentEnd { outcome } => vec![SpanSignal::Ended(
-                SpanRecord::<SpanStarted>::new(
-                    observation.timestamp,
-                    observation.service.clone(),
-                    ActionName::new("subagent.run").expect("valid action"),
-                    trace.clone(),
-                    common_fields(&observation.payload),
-                )
-                .with_diagnostic(Diagnostic {
-                    code: ErrorCode::new_static("SC_ATM_ADAPTER_EXAMPLE_OUTCOME"),
-                    message: format!("subagent completed with outcome={outcome}"),
-                    cause: None,
-                    remediation: Remediation::recoverable("inspect ATM output", ["review structured logs"]),
-                    docs: None,
-                    details: Map::new(),
-                })
-                .end(SpanStatus::Ok, 42),
-            )],
+            HookEventKind::SubagentEnd { outcome } => {
+                let start_timestamp = self
+                    .started
+                    .lock()
+                    .expect("started span map poisoned")
+                    .remove(&trace_key(trace))
+                    .ok_or_else(|| {
+                        sc_observability_types::ProjectionError(Box::new(
+                            sc_observability_types::ErrorContext::new(
+                                ErrorCode::new_static("SC_ATM_ADAPTER_EXAMPLE_MISSING_START"),
+                                "subagent end arrived without a matching recorded start",
+                                Remediation::recoverable(
+                                    "emit subagent.start before subagent.end",
+                                    ["preserve the trace context across the span lifecycle"],
+                                ),
+                            ),
+                        ))
+                    })?;
+                let duration_ms = (observation.timestamp - start_timestamp)
+                    .whole_milliseconds()
+                    .max(0) as u64;
+                vec![SpanSignal::Ended(
+                    SpanRecord::<SpanStarted>::new(
+                        start_timestamp,
+                        observation.service.clone(),
+                        ActionName::new("subagent.run").expect("valid action"),
+                        trace.clone(),
+                        common_fields(&observation.payload),
+                    )
+                    .with_diagnostic(Diagnostic {
+                        timestamp: observation.timestamp,
+                        code: ErrorCode::new_static("SC_ATM_ADAPTER_EXAMPLE_OUTCOME"),
+                        message: format!("subagent completed with outcome={outcome}"),
+                        cause: None,
+                        remediation: Remediation::recoverable(
+                            "inspect ATM output",
+                            ["review structured logs"],
+                        ),
+                        docs: None,
+                        details: Map::new(),
+                    })
+                    .end(SpanStatus::Ok, duration_ms),
+                )]
+            }
         };
 
         Ok(signals)
@@ -593,4 +633,76 @@ fn common_fields(payload: &AgentInfoEvent) -> Map<String, Value> {
             Value::from(payload.context.session_id.clone()),
         ),
     ])
+}
+
+fn trace_key(trace: &TraceContext) -> String {
+    format!("{}:{}", trace.trace_id.as_str(), trace.span_id.as_str())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use time::Duration;
+
+    fn service_name() -> ServiceName {
+        ServiceName::new("atm").expect("valid service")
+    }
+
+    fn base_trace() -> TraceContext {
+        TraceContext {
+            trace_id: TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace"),
+            span_id: SpanId::new("0123456789abcdef").expect("valid span"),
+            parent_span_id: None,
+        }
+    }
+
+    fn base_context() -> AgentContext {
+        AgentContext {
+            team: "atm-dev".to_string(),
+            agent_id: "agent-123".to_string(),
+            subagent_id: Some("subagent-7".to_string()),
+            session_id: "session-42".to_string(),
+        }
+    }
+
+    #[test]
+    fn subagent_end_uses_recorded_start_timestamp_and_real_duration() {
+        let projector = AtmSpanProjector::default();
+        let mut start = Observation::new(
+            service_name(),
+            AgentInfoEvent {
+                context: base_context(),
+                event: HookEventKind::SubagentStart {
+                    agent_type: "md-file".to_string(),
+                    args: vec!["docs/agent.md".to_string()],
+                },
+            },
+        );
+        start.timestamp = Timestamp::UNIX_EPOCH;
+        start.trace = Some(base_trace());
+
+        let mut end = Observation::new(
+            service_name(),
+            AgentInfoEvent {
+                context: base_context(),
+                event: HookEventKind::SubagentEnd {
+                    outcome: "success".to_string(),
+                },
+            },
+        );
+        end.timestamp = Timestamp::UNIX_EPOCH + Duration::milliseconds(250);
+        end.trace = Some(base_trace());
+
+        let start_signals = projector.project_spans(&start).expect("start");
+        let end_signals = projector.project_spans(&end).expect("end");
+
+        assert!(matches!(&start_signals[0], SpanSignal::Started(_)));
+        match &end_signals[0] {
+            SpanSignal::Ended(span) => {
+                assert_eq!(span.timestamp(), Timestamp::UNIX_EPOCH);
+                assert_eq!(span.duration_ms(), 250);
+            }
+            other => panic!("expected ended span, got {other:?}"),
+        }
+    }
 }

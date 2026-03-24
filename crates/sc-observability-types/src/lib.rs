@@ -25,14 +25,17 @@ pub type Timestamp = OffsetDateTime;
 pub struct ErrorCode(Cow<'static, str>);
 
 impl ErrorCode {
+    /// Creates an error code from a `'static` string without allocating.
     pub const fn new_static(code: &'static str) -> Self {
         Self(Cow::Borrowed(code))
     }
 
+    /// Creates an error code from owned or borrowed string data by taking ownership.
     pub fn new_owned(code: impl Into<String>) -> Self {
         Self(Cow::Owned(code.into()))
     }
 
+    /// Returns the string representation of the error code.
     pub fn as_str(&self) -> &str {
         self.0.as_ref()
     }
@@ -76,12 +79,14 @@ macro_rules! validated_name_type {
         pub struct $name(String);
 
         impl $name {
+            /// Creates a validated value from caller-provided string data.
             pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
                 let value = value.into();
                 $validator(&value)?;
                 Ok(Self(value))
             }
 
+            /// Returns the underlying validated string value.
             pub fn as_str(&self) -> &str {
                 &self.0
             }
@@ -214,6 +219,7 @@ pub enum Remediation {
 }
 
 impl Remediation {
+    /// Builds a recoverable remediation with one required first step and any remaining ordered steps.
     pub fn recoverable(
         first: impl Into<String>,
         rest: impl IntoIterator<Item = impl Into<String>>,
@@ -225,6 +231,7 @@ impl Remediation {
         }
     }
 
+    /// Builds a non-recoverable remediation with the required justification for why recovery is not possible.
     pub fn not_recoverable(justification: impl Into<String>) -> Self {
         Self::NotRecoverable {
             justification: justification.into(),
@@ -235,6 +242,7 @@ impl Remediation {
 /// Structured diagnostic payload reusable across CLI, logging, and telemetry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Diagnostic {
+    pub timestamp: Timestamp,
     pub code: ErrorCode,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -264,7 +272,7 @@ impl From<&Diagnostic> for DiagnosticSummary {
         Self {
             code: Some(value.code.clone()),
             message: value.message.clone(),
-            at: OffsetDateTime::now_utc(),
+            at: value.timestamp,
         }
     }
 }
@@ -278,9 +286,11 @@ pub struct ErrorContext {
 }
 
 impl ErrorContext {
+    /// Creates a new error context with the required code, message, and remediation.
     pub fn new(code: ErrorCode, message: impl Into<String>, remediation: Remediation) -> Self {
         Self {
             diagnostic: Diagnostic {
+                timestamp: OffsetDateTime::now_utc(),
                 code,
                 message: message.into(),
                 cause: None,
@@ -292,26 +302,31 @@ impl ErrorContext {
         }
     }
 
+    /// Adds a human-readable cause string to the error context.
     pub fn cause(mut self, cause: impl Into<String>) -> Self {
         self.diagnostic.cause = Some(cause.into());
         self
     }
 
+    /// Adds a documentation reference string to the error context.
     pub fn docs(mut self, docs: impl Into<String>) -> Self {
         self.diagnostic.docs = Some(docs.into());
         self
     }
 
+    /// Adds one structured detail field to the error context.
     pub fn detail(mut self, key: impl Into<String>, value: Value) -> Self {
         self.diagnostic.details.insert(key.into(), value);
         self
     }
 
+    /// Captures a source error string for display and diagnostics.
     pub fn source(mut self, source: Box<dyn std::error::Error + Send + Sync + 'static>) -> Self {
         self.source = Some(source.to_string().into_boxed_str());
         self
     }
 
+    /// Returns the structured diagnostic carried by this error context.
     pub fn diagnostic(&self) -> &Diagnostic {
         &self.diagnostic
     }
@@ -376,6 +391,22 @@ pub enum ProcessIdentityPolicy {
     Resolver(Arc<dyn ProcessIdentityResolver>),
 }
 
+impl std::fmt::Debug for ProcessIdentityPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Auto => f.write_str("ProcessIdentityPolicy::Auto"),
+            Self::Fixed { hostname, pid } => f
+                .debug_struct("ProcessIdentityPolicy::Fixed")
+                .field("hostname", hostname)
+                .field("pid", pid)
+                .finish(),
+            Self::Resolver(_) => {
+                f.write_str("ProcessIdentityPolicy::Resolver(<dyn ProcessIdentityResolver>)")
+            }
+        }
+    }
+}
+
 /// Open resolver contract for caller-defined process identity lookup.
 pub trait ProcessIdentityResolver: Send + Sync {
     fn resolve(&self) -> Result<ProcessIdentity, IdentityError>;
@@ -386,6 +417,7 @@ pub trait ProcessIdentityResolver: Send + Sync {
 pub struct TraceId(String);
 
 impl TraceId {
+    /// Creates a validated lowercase hexadecimal trace identifier.
     pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
         let value = value.into();
         validate_lower_hex(
@@ -396,6 +428,7 @@ impl TraceId {
         Ok(Self(value))
     }
 
+    /// Returns the underlying lowercase hexadecimal trace identifier.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -406,6 +439,7 @@ impl TraceId {
 pub struct SpanId(String);
 
 impl SpanId {
+    /// Creates a validated lowercase hexadecimal span identifier.
     pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
         let value = value.into();
         validate_lower_hex(
@@ -416,6 +450,7 @@ impl SpanId {
         Ok(Self(value))
     }
 
+    /// Returns the underlying lowercase hexadecimal span identifier.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -493,6 +528,7 @@ impl<T> Observation<T>
 where
     T: Observable,
 {
+    /// Creates a new observation envelope using the current UTC timestamp.
     pub fn new(service: ServiceName, payload: T) -> Self {
         Self {
             version: constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
@@ -711,6 +747,7 @@ pub struct SinkHealth {
 pub struct LoggingHealthReport {
     pub state: LoggingHealthState,
     pub dropped_events_total: u64,
+    pub flush_errors_total: u64,
     pub active_log_path: std::path::PathBuf,
     pub sink_statuses: Vec<SinkHealth>,
     pub last_error: Option<DiagnosticSummary>,
@@ -766,6 +803,7 @@ pub struct ExporterHealth {
 pub struct TelemetryHealthReport {
     pub state: TelemetryHealthState,
     pub dropped_exports_total: u64,
+    pub malformed_spans_total: u64,
     pub exporter_statuses: Vec<ExporterHealth>,
     pub last_error: Option<DiagnosticSummary>,
 }
@@ -945,6 +983,7 @@ mod tests {
 
     fn diagnostic() -> Diagnostic {
         Diagnostic {
+            timestamp: Timestamp::UNIX_EPOCH,
             code: error_codes::DIAGNOSTIC_INVALID,
             message: "diagnostic invalid".to_string(),
             cause: Some("invalid example".to_string()),
@@ -1268,6 +1307,7 @@ mod tests {
         let logging = LoggingHealthReport {
             state: LoggingHealthState::Healthy,
             dropped_events_total: 0,
+            flush_errors_total: 0,
             active_log_path: std::path::PathBuf::from("/var/log/service/logs/service.log.jsonl"),
             sink_statuses: vec![sink],
             last_error: None,
@@ -1275,6 +1315,7 @@ mod tests {
         let telemetry = TelemetryHealthReport {
             state: TelemetryHealthState::Healthy,
             dropped_exports_total: 1,
+            malformed_spans_total: 0,
             exporter_statuses: vec![ExporterHealth {
                 name: "otlp".to_string(),
                 state: ExporterHealthState::Degraded,

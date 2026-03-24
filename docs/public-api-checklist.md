@@ -180,8 +180,8 @@ Internal-only:
 
 Internal-only:
 
-- [~] `SpanEmitter`
-- [~] `MetricEmitter`
+- [x] `SpanEmitter` (pub(crate), sealed, internal-only)
+- [x] `MetricEmitter` (pub(crate), sealed, internal-only)
 
 Note:
 - sealed/crate-local per `architecture.md` §3.4 and OTLP-022

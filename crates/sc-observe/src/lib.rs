@@ -18,6 +18,7 @@ use sc_observability_types::{
     Observation, ProjectionRegistration, Remediation, ServiceName, ShutdownError, SubscriberError,
     SubscriberRegistration, ToolName,
 };
+#[doc(inline)]
 pub use sc_observability_types::{
     ObservabilityHealthReport, ObservationError, ObservationHealthState,
 };
@@ -33,6 +34,7 @@ pub struct ObservabilityConfig {
     pub tool_name: ToolName,
     pub log_root: PathBuf,
     pub env_prefix: EnvPrefix,
+    /// Reserved for future async/backpressure implementation. Phase 1 execution is synchronous; this value is stored but not yet applied.
     pub queue_capacity: usize,
     pub rotation: RotationPolicy,
 }
@@ -348,9 +350,9 @@ impl ObservabilityBuilder {
                 };
 
                 if let Some(projector) = &log_projector {
-                    result.matched = true;
                     match projector.project_logs(observation) {
                         Ok(events) => {
+                            result.matched = true;
                             for event in events {
                                 if let Err(err) = logger.emit(event) {
                                     record_failure(DiagnosticSummary::from(err.diagnostic()));
@@ -362,16 +364,16 @@ impl ObservabilityBuilder {
                 }
 
                 if let Some(projector) = &span_projector {
-                    result.matched = true;
-                    if let Err(err) = projector.project_spans(observation) {
-                        record_failure(DiagnosticSummary::from(err.diagnostic()));
+                    match projector.project_spans(observation) {
+                        Ok(_) => result.matched = true,
+                        Err(err) => record_failure(DiagnosticSummary::from(err.diagnostic())),
                     }
                 }
 
                 if let Some(projector) = &metric_projector {
-                    result.matched = true;
-                    if let Err(err) = projector.project_metrics(observation) {
-                        record_failure(DiagnosticSummary::from(err.diagnostic()));
+                    match projector.project_metrics(observation) {
+                        Ok(_) => result.matched = true,
+                        Err(err) => record_failure(DiagnosticSummary::from(err.diagnostic())),
                     }
                 }
 
@@ -596,6 +598,7 @@ mod tests {
             correlation_id: None,
             outcome: Some("ok".to_string()),
             diagnostic: Some(Diagnostic {
+                timestamp: Timestamp::UNIX_EPOCH,
                 code: ErrorCode::new_static("SC_TEST"),
                 message: "projected".to_string(),
                 cause: None,
@@ -747,6 +750,28 @@ mod tests {
 
         assert!(matches!(result, Err(ObservationError::RoutingFailure(_))));
         assert_eq!(runtime.health().dropped_observations_total, 1);
+    }
+
+    #[test]
+    fn routing_failure_occurs_when_all_projectors_fail() {
+        let root = temp_path("projector-routing-failure");
+        let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
+        let runtime = Observability::builder(config)
+            .register_projection(ProjectionRegistration {
+                log_projector: Some(Arc::new(FailingProjector)),
+                span_projector: None,
+                metric_projector: None,
+                filter: None,
+            })
+            .build()
+            .expect("runtime");
+
+        let result = runtime.emit(observation(true));
+
+        assert!(matches!(result, Err(ObservationError::RoutingFailure(_))));
+        let health = runtime.health();
+        assert_eq!(health.dropped_observations_total, 1);
+        assert_eq!(health.projection_failures_total, 1);
     }
 
     #[test]

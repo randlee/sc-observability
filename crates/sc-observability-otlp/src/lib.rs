@@ -16,8 +16,9 @@ use std::sync::{Arc, Mutex};
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, ErrorContext, EventError, ExportError, FlushError,
     InitError, LogEvent, MetricRecord, Remediation, ServiceName, ShutdownError, SpanEnded,
-    SpanEvent, SpanRecord, SpanSignal, SpanStarted,
+    SpanEvent, SpanRecord, SpanSignal, SpanStarted, Timestamp,
 };
+#[doc(inline)]
 pub use sc_observability_types::{
     ExporterHealth, ExporterHealthState, TelemetryError, TelemetryHealthReport,
     TelemetryHealthState,
@@ -117,6 +118,12 @@ impl Default for MetricsConfig {
 }
 
 /// Application-owned telemetry configuration.
+///
+/// A configuration with `logs`, `traces`, and `metrics` all set to `None` is
+/// valid for a disabled or not-yet-configured telemetry instance. When
+/// `transport.enabled` is `false`, callers may construct `TelemetryConfig`
+/// without enabling any signal exporters and still build `Telemetry`
+/// successfully.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TelemetryConfig {
     pub service_name: ServiceName,
@@ -331,6 +338,7 @@ pub struct Telemetry {
     metric_exporter: Arc<dyn MetricExporter>,
     runtime: Mutex<TelemetryRuntime>,
     dropped_exports_total: AtomicU64,
+    malformed_spans_total: AtomicU64,
 }
 
 #[derive(Default)]
@@ -408,6 +416,7 @@ impl Telemetry {
             metric_exporter,
             runtime: Mutex::new(TelemetryRuntime::default()),
             dropped_exports_total: AtomicU64::new(0),
+            malformed_spans_total: AtomicU64::new(0),
         })
     }
 
@@ -426,12 +435,33 @@ impl Telemetry {
     }
 
     /// Buffers one projected span signal for later export.
+    ///
+    /// An `Ended` signal without a prior `Started` signal is absorbed and
+    /// counted in `malformed_spans_total`. No malformed or incomplete span is
+    /// ever forwarded to the OTel backend.
     pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError> {
         self.ensure_active()?;
         if self.config.traces.is_none() || !self.config.transport.enabled {
             return Ok(());
         }
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+        if let SpanSignal::Ended(record) = span {
+            let key = span_key(
+                record.trace().trace_id.as_str(),
+                record.trace().span_id.as_str(),
+            );
+            if !runtime.span_assembler.started.contains_key(&key) {
+                self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
+                let summary = DiagnosticSummary {
+                    code: Some(error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED),
+                    message: "received ended span without a matching started span".to_string(),
+                    at: span_timestamp(span),
+                };
+                runtime.last_error = Some(summary.clone());
+                runtime.trace_status.last_error = Some(summary);
+                return Ok(());
+            }
+        }
         if let Some(complete) = runtime.span_assembler.push(span.clone()).map_err(|err| {
             TelemetryError::ExportFailure(Box::new(error_context_from_diagnostic(err.diagnostic())))
         })? {
@@ -456,50 +486,45 @@ impl Telemetry {
 
     /// Flushes buffered logs, spans, and metrics through the configured exporters.
     pub fn flush(&self) -> Result<(), FlushError> {
-        let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-        let mut flush_error: Option<FlushError> = None;
+        let (log_batch, span_batch, metric_batch) = {
+            let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+            let log_batch = if self.config.logs.is_some() {
+                std::mem::take(&mut runtime.log_buffer)
+            } else {
+                Vec::new()
+            };
+            let span_batch = if self.config.traces.is_some() {
+                std::mem::take(&mut runtime.span_buffer)
+            } else {
+                Vec::new()
+            };
+            let metric_batch = if self.config.metrics.is_some() {
+                std::mem::take(&mut runtime.metric_buffer)
+            } else {
+                Vec::new()
+            };
+            (log_batch, span_batch, metric_batch)
+        };
 
-        if self.config.logs.is_some() && !runtime.log_buffer.is_empty() {
-            let batch = std::mem::take(&mut runtime.log_buffer);
-            if let Err(err) = self.log_exporter.export_logs(&batch) {
-                self.record_export_failure(
-                    &mut runtime,
-                    &mut flush_error,
-                    "logs",
-                    batch.len() as u64,
-                    err,
-                );
+        if !log_batch.is_empty() {
+            match self.log_exporter.export_logs(&log_batch) {
+                Ok(()) => self.record_export_success("logs"),
+                Err(err) => self.record_export_failure("logs", log_batch.len() as u64, err),
             }
         }
 
-        if self.config.traces.is_some() && !runtime.span_buffer.is_empty() {
-            let batch = std::mem::take(&mut runtime.span_buffer);
-            if let Err(err) = self.trace_exporter.export_spans(&batch) {
-                self.record_export_failure(
-                    &mut runtime,
-                    &mut flush_error,
-                    "traces",
-                    batch.len() as u64,
-                    err,
-                );
+        if !span_batch.is_empty() {
+            match self.trace_exporter.export_spans(&span_batch) {
+                Ok(()) => self.record_export_success("traces"),
+                Err(err) => self.record_export_failure("traces", span_batch.len() as u64, err),
             }
         }
 
-        if self.config.metrics.is_some() && !runtime.metric_buffer.is_empty() {
-            let batch = std::mem::take(&mut runtime.metric_buffer);
-            if let Err(err) = self.metric_exporter.export_metrics(&batch) {
-                self.record_export_failure(
-                    &mut runtime,
-                    &mut flush_error,
-                    "metrics",
-                    batch.len() as u64,
-                    err,
-                );
+        if !metric_batch.is_empty() {
+            match self.metric_exporter.export_metrics(&metric_batch) {
+                Ok(()) => self.record_export_success("metrics"),
+                Err(err) => self.record_export_failure("metrics", metric_batch.len() as u64, err),
             }
-        }
-
-        if let Some(err) = flush_error {
-            return Err(err);
         }
 
         Ok(())
@@ -511,7 +536,7 @@ impl Telemetry {
             return Ok(());
         }
 
-        let flush_result = self.flush();
+        let _ = self.flush();
         let dropped = self
             .runtime
             .lock()
@@ -535,12 +560,6 @@ impl Telemetry {
             runtime.trace_status.state = ExporterHealthState::Degraded;
             runtime.trace_status.last_error = Some(summary.clone());
             runtime.last_error = Some(summary);
-        }
-
-        if let Err(err) = flush_result {
-            return Err(ShutdownError(Box::new(error_context_from_diagnostic(
-                err.diagnostic(),
-            ))));
         }
 
         Ok(())
@@ -574,7 +593,6 @@ impl Telemetry {
         } else if exporter_statuses
             .iter()
             .any(|status| status.state != ExporterHealthState::Healthy)
-            || self.dropped_exports_total.load(Ordering::SeqCst) > 0
         {
             TelemetryHealthState::Degraded
         } else {
@@ -584,6 +602,7 @@ impl Telemetry {
         TelemetryHealthReport {
             state,
             dropped_exports_total: self.dropped_exports_total.load(Ordering::SeqCst),
+            malformed_spans_total: self.malformed_spans_total.load(Ordering::SeqCst),
             exporter_statuses,
             last_error: runtime.last_error.clone(),
         }
@@ -596,17 +615,23 @@ impl Telemetry {
         Ok(())
     }
 
-    fn record_export_failure(
-        &self,
-        runtime: &mut TelemetryRuntime,
-        slot: &mut Option<FlushError>,
-        exporter_name: &str,
-        dropped: u64,
-        error: ExportError,
-    ) {
+    fn record_export_success(&self, exporter_name: &str) {
+        let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+        let status = match exporter_name {
+            "logs" => &mut runtime.log_status,
+            "traces" => &mut runtime.trace_status,
+            "metrics" => &mut runtime.metric_status,
+            _ => unreachable!("unknown exporter name"),
+        };
+        status.state = ExporterHealthState::Healthy;
+        status.last_error = None;
+    }
+
+    fn record_export_failure(&self, exporter_name: &str, dropped: u64, error: ExportError) {
         self.dropped_exports_total
             .fetch_add(dropped, Ordering::SeqCst);
         let summary = DiagnosticSummary::from(error.diagnostic());
+        let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         runtime.last_error = Some(summary.clone());
 
         let status = match exporter_name {
@@ -617,12 +642,6 @@ impl Telemetry {
         };
         status.state = ExporterHealthState::Degraded;
         status.last_error = Some(summary);
-
-        if slot.is_none() {
-            *slot = Some(FlushError(Box::new(error_context_from_diagnostic(
-                error.diagnostic(),
-            ))));
-        }
     }
 }
 
@@ -673,6 +692,14 @@ pub(crate) fn export_failure(message: impl Into<String>) -> TelemetryError {
     )))
 }
 
+fn span_timestamp(span: &SpanSignal) -> Timestamp {
+    match span {
+        SpanSignal::Started(record) => record.timestamp(),
+        SpanSignal::Event(event) => event.timestamp,
+        SpanSignal::Ended(record) => record.timestamp(),
+    }
+}
+
 fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
     if config.transport.enabled && config.transport.endpoint.is_none() {
         return Err(InitError(Box::new(ErrorContext::new(
@@ -701,7 +728,11 @@ fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
             Remediation::recoverable("fix the backoff configuration", ["use documented defaults"]),
         ))));
     }
-    if config.logs.is_none() && config.traces.is_none() && config.metrics.is_none() {
+    if config.transport.enabled
+        && config.logs.is_none()
+        && config.traces.is_none()
+        && config.metrics.is_none()
+    {
         return Err(InitError(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "at least one telemetry signal must be enabled",
@@ -864,6 +895,7 @@ mod tests {
             correlation_id: None,
             outcome: Some("ok".to_string()),
             diagnostic: Some(Diagnostic {
+                timestamp: Timestamp::UNIX_EPOCH,
                 code: ErrorCode::new_static("SC_TEST"),
                 message: "projected".to_string(),
                 cause: None,
@@ -918,7 +950,7 @@ mod tests {
             })
             .build();
 
-        assert!(Telemetry::new(config).is_err());
+        assert!(Telemetry::new(config).is_ok());
     }
 
     #[test]
@@ -986,6 +1018,23 @@ mod tests {
     }
 
     #[test]
+    fn orphaned_ended_span_is_absorbed_and_counted() {
+        let trace = trace_context();
+        let telemetry = Telemetry::new(telemetry_config()).expect("telemetry");
+        let ended = SpanRecord::<SpanStarted>::new(
+            Timestamp::UNIX_EPOCH,
+            service_name(),
+            ActionName::new("agent.run").expect("valid action"),
+            trace,
+            Map::new(),
+        )
+        .end(sc_observability_types::SpanStatus::Ok, 5);
+
+        assert!(telemetry.emit_span(&SpanSignal::Ended(ended)).is_ok());
+        assert_eq!(telemetry.health().malformed_spans_total, 1);
+    }
+
+    #[test]
     fn exporter_failure_accounting_is_tracked() {
         let log_exporter = Arc::new(RecordingLogExporter::default());
         log_exporter.fail.store(true, Ordering::SeqCst);
@@ -1002,7 +1051,7 @@ mod tests {
             .expect("emit");
         let result = telemetry.flush();
 
-        assert!(result.is_err());
+        assert!(result.is_ok());
         let health = telemetry.health();
         assert_eq!(health.state, TelemetryHealthState::Degraded);
         assert_eq!(health.dropped_exports_total, 1);
@@ -1010,6 +1059,39 @@ mod tests {
             health.exporter_statuses[0].state,
             ExporterHealthState::Degraded
         );
+    }
+
+    #[test]
+    fn exporter_health_recovers_after_a_successful_flush() {
+        let log_exporter = Arc::new(RecordingLogExporter::default());
+        log_exporter.fail.store(true, Ordering::SeqCst);
+        let telemetry = Telemetry::new_with_exporters(
+            telemetry_config(),
+            log_exporter.clone(),
+            Arc::new(RecordingTraceExporter::default()),
+            Arc::new(RecordingMetricExporter::default()),
+        )
+        .expect("telemetry");
+
+        telemetry
+            .emit_log(&log_event(service_name(), "first"))
+            .expect("emit first");
+        telemetry.flush().expect("first flush remains fail-open");
+        assert_eq!(telemetry.health().state, TelemetryHealthState::Degraded);
+
+        log_exporter.fail.store(false, Ordering::SeqCst);
+        telemetry
+            .emit_log(&log_event(service_name(), "second"))
+            .expect("emit second");
+        telemetry.flush().expect("second flush");
+
+        let health = telemetry.health();
+        assert_eq!(health.state, TelemetryHealthState::Healthy);
+        assert_eq!(
+            health.exporter_statuses[0].state,
+            ExporterHealthState::Healthy
+        );
+        assert!(health.exporter_statuses[0].last_error.is_none());
     }
 
     #[test]
@@ -1119,5 +1201,32 @@ mod tests {
 
         telemetry.shutdown().expect("first shutdown");
         telemetry.shutdown().expect("second shutdown");
+    }
+
+    #[test]
+    fn shutdown_absorbs_export_failures_and_records_them_in_health() {
+        let log_exporter = Arc::new(RecordingLogExporter::default());
+        log_exporter.fail.store(true, Ordering::SeqCst);
+        let telemetry = Telemetry::new_with_exporters(
+            telemetry_config(),
+            log_exporter,
+            Arc::new(RecordingTraceExporter::default()),
+            Arc::new(RecordingMetricExporter::default()),
+        )
+        .expect("telemetry");
+
+        telemetry
+            .emit_log(&log_event(service_name(), "shutdown-export"))
+            .expect("emit");
+
+        telemetry.shutdown().expect("shutdown remains fail-open");
+
+        let health = telemetry.health();
+        assert_eq!(health.state, TelemetryHealthState::Unavailable);
+        assert_eq!(health.dropped_exports_total, 1);
+        assert_eq!(
+            health.exporter_statuses[0].state,
+            ExporterHealthState::Degraded
+        );
     }
 }
