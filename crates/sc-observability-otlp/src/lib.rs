@@ -457,49 +457,26 @@ impl Telemetry {
     /// Flushes buffered logs, spans, and metrics through the configured exporters.
     pub fn flush(&self) -> Result<(), FlushError> {
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-        let mut flush_error: Option<FlushError> = None;
 
         if self.config.logs.is_some() && !runtime.log_buffer.is_empty() {
             let batch = std::mem::take(&mut runtime.log_buffer);
             if let Err(err) = self.log_exporter.export_logs(&batch) {
-                self.record_export_failure(
-                    &mut runtime,
-                    &mut flush_error,
-                    "logs",
-                    batch.len() as u64,
-                    err,
-                );
+                self.record_export_failure(&mut runtime, "logs", batch.len() as u64, err);
             }
         }
 
         if self.config.traces.is_some() && !runtime.span_buffer.is_empty() {
             let batch = std::mem::take(&mut runtime.span_buffer);
             if let Err(err) = self.trace_exporter.export_spans(&batch) {
-                self.record_export_failure(
-                    &mut runtime,
-                    &mut flush_error,
-                    "traces",
-                    batch.len() as u64,
-                    err,
-                );
+                self.record_export_failure(&mut runtime, "traces", batch.len() as u64, err);
             }
         }
 
         if self.config.metrics.is_some() && !runtime.metric_buffer.is_empty() {
             let batch = std::mem::take(&mut runtime.metric_buffer);
             if let Err(err) = self.metric_exporter.export_metrics(&batch) {
-                self.record_export_failure(
-                    &mut runtime,
-                    &mut flush_error,
-                    "metrics",
-                    batch.len() as u64,
-                    err,
-                );
+                self.record_export_failure(&mut runtime, "metrics", batch.len() as u64, err);
             }
-        }
-
-        if let Some(err) = flush_error {
-            return Err(err);
         }
 
         Ok(())
@@ -511,7 +488,7 @@ impl Telemetry {
             return Ok(());
         }
 
-        let flush_result = self.flush();
+        let _ = self.flush();
         let dropped = self
             .runtime
             .lock()
@@ -535,12 +512,6 @@ impl Telemetry {
             runtime.trace_status.state = ExporterHealthState::Degraded;
             runtime.trace_status.last_error = Some(summary.clone());
             runtime.last_error = Some(summary);
-        }
-
-        if let Err(err) = flush_result {
-            return Err(ShutdownError(Box::new(error_context_from_diagnostic(
-                err.diagnostic(),
-            ))));
         }
 
         Ok(())
@@ -599,7 +570,6 @@ impl Telemetry {
     fn record_export_failure(
         &self,
         runtime: &mut TelemetryRuntime,
-        slot: &mut Option<FlushError>,
         exporter_name: &str,
         dropped: u64,
         error: ExportError,
@@ -617,12 +587,6 @@ impl Telemetry {
         };
         status.state = ExporterHealthState::Degraded;
         status.last_error = Some(summary);
-
-        if slot.is_none() {
-            *slot = Some(FlushError(Box::new(error_context_from_diagnostic(
-                error.diagnostic(),
-            ))));
-        }
     }
 }
 
@@ -1002,7 +966,7 @@ mod tests {
             .expect("emit");
         let result = telemetry.flush();
 
-        assert!(result.is_err());
+        assert!(result.is_ok());
         let health = telemetry.health();
         assert_eq!(health.state, TelemetryHealthState::Degraded);
         assert_eq!(health.dropped_exports_total, 1);
@@ -1119,5 +1083,32 @@ mod tests {
 
         telemetry.shutdown().expect("first shutdown");
         telemetry.shutdown().expect("second shutdown");
+    }
+
+    #[test]
+    fn shutdown_absorbs_export_failures_and_records_them_in_health() {
+        let log_exporter = Arc::new(RecordingLogExporter::default());
+        log_exporter.fail.store(true, Ordering::SeqCst);
+        let telemetry = Telemetry::new_with_exporters(
+            telemetry_config(),
+            log_exporter,
+            Arc::new(RecordingTraceExporter::default()),
+            Arc::new(RecordingMetricExporter::default()),
+        )
+        .expect("telemetry");
+
+        telemetry
+            .emit_log(&log_event(service_name(), "shutdown-export"))
+            .expect("emit");
+
+        telemetry.shutdown().expect("shutdown remains fail-open");
+
+        let health = telemetry.health();
+        assert_eq!(health.state, TelemetryHealthState::Unavailable);
+        assert_eq!(health.dropped_exports_total, 1);
+        assert_eq!(
+            health.exporter_statuses[0].state,
+            ExporterHealthState::Degraded
+        );
     }
 }

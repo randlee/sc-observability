@@ -208,21 +208,25 @@ impl Logger {
             return Ok(());
         }
 
+        self.flush_registered_sinks();
+        Ok(())
+    }
+
+    fn flush_registered_sinks(&self) {
         for registration in &self.sinks {
             if let Err(err) = registration.sink.flush() {
                 self.record_sink_failure(err.to_string());
             }
         }
-
-        Ok(())
     }
 
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
-        if self.shutdown.swap(true, Ordering::SeqCst) {
+        if self.shutdown.load(Ordering::SeqCst) {
             return Ok(());
         }
 
-        self.flush().map_err(|err| ShutdownError(err.0))?;
+        self.flush_registered_sinks();
+        self.shutdown.store(true, Ordering::SeqCst);
         Ok(())
     }
 
@@ -323,20 +327,30 @@ impl JsonlFileSink {
             && metadata.len().saturating_add(incoming_len) > self.rotation.max_bytes
         {
             for idx in (1..self.rotation.max_files).rev() {
-                let src = self.path.with_extension(format!("log.jsonl.{idx}"));
-                let dest = self.path.with_extension(format!("log.jsonl.{}", idx + 1));
+                let src = self.rotated_path(idx);
+                let dest = self.rotated_path(idx + 1);
                 if src.exists() {
                     let _ = fs::rename(&src, &dest);
                 }
             }
             if self.path.exists() {
-                let rotated = self.path.with_extension("log.jsonl.1");
+                let rotated = self.rotated_path(1);
                 let _ = fs::rename(&self.path, rotated);
             }
         }
 
         self.prune_old_files();
         Ok(())
+    }
+
+    fn rotated_path(&self, index: u32) -> PathBuf {
+        let parent = self.path.parent().unwrap_or_else(|| Path::new("."));
+        let file_name = self
+            .path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("active.log.jsonl");
+        parent.join(format!("{file_name}.{index}"))
     }
 
     fn prune_old_files(&self) {
@@ -669,6 +683,30 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct RecordingFlushSink {
+        flush_calls: AtomicU64,
+    }
+
+    impl LogSink for RecordingFlushSink {
+        fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+            Ok(())
+        }
+
+        fn flush(&self) -> Result<(), LogSinkError> {
+            self.flush_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn health(&self) -> SinkHealth {
+            SinkHealth {
+                name: "recording-flush".to_string(),
+                state: SinkHealthState::Healthy,
+                last_error: None,
+            }
+        }
+    }
+
     fn service_name() -> ServiceName {
         ServiceName::new("sc-observability").expect("valid service name")
     }
@@ -899,6 +937,24 @@ mod tests {
     }
 
     #[test]
+    fn rotated_log_paths_keep_the_active_filename_prefix() {
+        let sink = JsonlFileSink::new(
+            PathBuf::from("observability-root/custom-service/logs/custom-service.log.jsonl"),
+            RotationPolicy::default(),
+            RetentionPolicy::default(),
+        );
+
+        assert_eq!(
+            sink.rotated_path(1),
+            PathBuf::from("observability-root/custom-service/logs/custom-service.log.jsonl.1")
+        );
+        assert_eq!(
+            sink.rotated_path(2),
+            PathBuf::from("observability-root/custom-service/logs/custom-service.log.jsonl.2")
+        );
+    }
+
+    #[test]
     fn sink_filter_blocks_event_delivery() {
         struct DenyAll;
 
@@ -935,5 +991,19 @@ mod tests {
         assert!(logger.emit(log_event(service_name())).is_err());
         assert!(logger.flush().is_ok());
         assert!(logger.shutdown().is_ok());
+    }
+
+    #[test]
+    fn shutdown_flushes_registered_sinks_before_marking_shutdown() {
+        let root = temp_path("shutdown-flush");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.enable_file_sink = false;
+        let mut logger = Logger::new(config).expect("logger");
+        let sink = Arc::new(RecordingFlushSink::default());
+        logger.register_sink(SinkRegistration::new(sink.clone()));
+
+        logger.shutdown().expect("shutdown");
+
+        assert_eq!(sink.flush_calls.load(Ordering::SeqCst), 1);
     }
 }
