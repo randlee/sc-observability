@@ -47,7 +47,7 @@ fn main() {
 
     let _observability_config = ObservabilityConfig {
         tool_name: ToolName::new("atm").expect("tool name"),
-        log_root: std::path::PathBuf::from("/var/log/atm"),
+        log_root: std::path::PathBuf::from("/var/log/<service>"),
         env_prefix: EnvPrefix::new("ATM").expect("env prefix"),
         queue_capacity: 1024,
         rotation: RotationPolicy::default(),

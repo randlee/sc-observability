@@ -77,7 +77,7 @@ The smallest production-ready ATM composition is:
 let observability = Observability::builder(
     ObservabilityConfig::default_for(
         ToolName::new("atm")?,
-        std::path::PathBuf::from("/var/log/atm"),
+        std::path::PathBuf::from("/var/log/<service>"),
     ),
 )
 .register_subscriber(agent_info_subscriber_registration)

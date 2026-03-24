@@ -50,7 +50,7 @@ Note:
 - [x] `Level`
 - [x] `LevelFilter`
 - [x] `ProcessIdentity`
-- [x] `ProcessIdentityPolicy`
+- [x] `ProcessIdentityPolicy` — intentionally no serde; runtime policy only
 - [x] `ProcessIdentityResolver`
 - [x] `TraceId`
 - [x] `SpanId`
@@ -81,8 +81,8 @@ Note:
 - [x] `LogProjector<T>`
 - [x] `SpanProjector<T>`
 - [x] `MetricProjector<T>`
-- [x] `SubscriberRegistration<T>`
-- [x] `ProjectionRegistration<T>`
+- [x] `SubscriberRegistration<T>` — intentionally no serde; construction-time registration only
+- [x] `ProjectionRegistration<T>` — intentionally no serde; construction-time registration only
 - [x] `InitError`
 - [x] `EventError`
 - [x] `FlushError`
