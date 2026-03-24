@@ -3,20 +3,20 @@
 **Status**: Draft for `arch-obs` review
 **Branch**: `integrate/phase-1`
 **Base**: `develop` at `5f8df2c`
-**Scope**: M0 through M4 only
-**Out of scope**: M5 ATM adapter work, M6 hardening/release work
+**Scope**: M0 through M4 plus Sprint 5 ATM example and Sprint 6 hardening/release readiness
 
 ## 1. Phase Scope
 
-Phase 1 covers the full shared-crate implementation path in dependency order:
+Phase 1 covers the full shared-crate implementation path and the immediate
+post-implementation closure work in dependency order:
 
 1. M0 workspace baseline
 2. M1 `sc-observability-types`
 3. M2 `sc-observability`
 4. M3 `sc-observe`
 5. M4 `sc-observability-otlp`
-
-No ATM-owned adapter implementation work starts in this phase.
+6. Sprint 5 working ATM adapter example
+7. Sprint 6 hardening and release readiness
 
 ## 2. Pre-Sprint-1 Cleanup
 
@@ -116,6 +116,46 @@ Exit criteria:
 - telemetry lifecycle matches documented behavior
 - API checklist frozen for `sc-observability-otlp`
 
+### Sprint 5: Working ATM Adapter Example
+
+Build:
+- a fully working out-of-the-box ATM adapter example in
+  `examples/atm-adapter-example/`
+- ATM-shaped observation payload types defined in the example, not in shared
+  crates
+- ATM-shaped projectors that emit `LogEvent`, `SpanSignal`, and `MetricRecord`
+- full-stack wiring: logging + routing + OTLP attachment via projector
+  registration
+- ATM health projection from:
+  - `LoggingHealthReport`
+  - `ObservabilityHealthReport`
+  - `TelemetryHealthReport`
+- translation of `ATM_OTEL_*` env vars into `TelemetryConfig`
+- runnable normal shutdown and fail-open shutdown paths
+
+Exit criteria:
+- `cargo run --example atm-adapter-example` works
+- the example has no dependency on `agent-team-mail-*` or any ATM runtime
+- the ATM team can use the example as a direct starting point with no shared
+  design questions remaining
+- the ATM boundary example and the shared APIs remain aligned
+
+### Sprint 6: Hardening And Release Readiness
+
+Build:
+- docs consistency checks wired into `.github/workflows/ci.yml`
+- dependency-ban enforcement wired into `.github/workflows/ci.yml`
+- performance pass for hot-path allocations
+- migration guide for existing ATM logging consumers
+- release readiness and publishing gates
+
+Exit criteria:
+- all public API checklist items marked `[x]`
+- publishing gates from [`publishing.md`](./publishing.md) are satisfied
+- Cargo versions are set for release
+- release readiness checklist is complete
+- migration guidance exists for ATM consumers
+
 ## 4. Required Test Gates Per Sprint
 
 Every sprint in this phase must keep these green:
@@ -134,6 +174,7 @@ Required integration layers across the phase:
 - routing + logging path
 - full stack path with OTLP attached through projector registration
 - ATM boundary example compile coverage
+- runnable ATM adapter example coverage
 
 ## 5. Questions And Blockers Before Implementation
 
@@ -148,16 +189,20 @@ Required integration layers across the phase:
 
 ### Questions
 
-1. Should Phase 1 run as four sprint branches/PRs (`M1` through `M4`) or one
+1. Should Phase 1 run as six sprint branches/PRs (`S1` through `S6`) or one
    integration branch with milestone checkpoints and QA after each sprint?
 
 2. For Sprint 4, should the deferred health-type `pub use` re-exports be
    treated as part of the M4 “real implementation” closure, or remain
    post-skeleton cleanup immediately after M4?
 
-3. Should docs consistency and dependency-ban enforcement be implemented in the
-   shared repo before Sprint 1 starts, or landed as explicit Sprint 1 kickoff
-   work that must close before any crate feature work merges?
+3. Should docs consistency and dependency-ban enforcement be implemented before
+   Sprint 1 starts, or landed as explicit Pre-Sprint cleanup work that must
+   close before any crate feature work merges?
+
+4. For Sprint 5, is the acceptance bar “example is runnable and complete” only,
+   or should it also include copy-paste starter documentation for ATM team
+   adoption in the example directory?
 
 ## 6. Recommended Dispatch Order
 
@@ -166,6 +211,8 @@ Required integration layers across the phase:
 3. Sprint 2 / M2 `sc-observability`
 4. Sprint 3 / M3 `sc-observe`
 5. Sprint 4 / M4 `sc-observability-otlp`
+6. Sprint 5 / working ATM adapter example
+7. Sprint 6 / hardening and release readiness
 
 This preserves the approved dependency order and avoids public API churn in
 higher layers before lower-layer contracts are stable.
