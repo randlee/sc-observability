@@ -41,6 +41,11 @@ plan. It answers four questions:
 
 ### M0. Workspace Baseline
 
+Prerequisites:
+- all 4 crates (`sc-observability-types`, `sc-observability`, `sc-observe`,
+  `sc-observability-otlp`) must be present as workspace members in the root
+  `Cargo.toml` before the M0 build gate runs
+
 Goal:
 - ensure the 4-crate workspace builds cleanly with the current skeletons
 

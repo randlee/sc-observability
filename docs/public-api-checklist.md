@@ -19,6 +19,12 @@ public list silently.
 
 ### Finalized Public Types
 
+Note:
+- All error types are centralized here as SSOT per requirements and re-exported
+  by their respective crates.
+- Concrete health report types are centralized in `sc-observability-types` per
+  the SSOT ruling.
+
 - [~] `ErrorCode`
 - [~] `ValueValidationError`
 - [~] `ToolName`
@@ -63,7 +69,6 @@ public list silently.
 - [~] `ExporterHealthState`
 - [~] `ExporterHealth`
 - [~] `TelemetryHealthReport`
-- [~] `CompleteSpan`
 - [~] `ObservationSubscriber<T>`
 - [~] `ObservationFilter<T>`
 - [~] `LogProjector<T>`
@@ -142,6 +147,7 @@ public list silently.
 - [~] `MetricsConfig`
 - [~] `ResourceAttributes`
 - [~] `SpanAssembler`
+- [~] `CompleteSpan`
 - [~] `LogExporter`
 - [~] `TraceExporter`
 - [~] `MetricExporter`

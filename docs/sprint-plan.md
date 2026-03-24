@@ -66,7 +66,7 @@ Scope:
 - implement mapping spec and proving path
 
 Done means:
-- ATM adapter mapping spec accepted
+- ATM adapter mapping spec accepted with no open blocking items
 - shared repo example and ATM repo proving path align
 
 ### Sprint 6: Hardening
