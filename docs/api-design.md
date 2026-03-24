@@ -466,6 +466,9 @@ Recommended usage:
 - logging-only code may inject `LogEmitter`
 - telemetry-specific code may inject telemetry-local signal emitter traits when
   it is intentionally producing projected signals
+- `ObservationEmitter<T>` is intentionally per-type. Callers hold one handle
+  per observation type; a single type-erased emitter for heterogeneous events
+  is not supported by design.
 
 `ObservationEmitter<T>` is sealed inside `sc-observe`; it is not intended for
 external implementation. Adding methods is non-breaking.
@@ -597,6 +600,7 @@ pub struct EnvPrefix(String);
 pub struct ServiceName(String);
 pub struct TargetCategory(String);
 pub struct ActionName(String);
+pub struct MetricName(String);
 ```
 
 Ownership and usage:
@@ -629,6 +633,11 @@ Ownership and usage:
   - used by: `LogEvent.action`
   - invariant: non-empty dotted, dashed, or underscored action identifier using
     `[A-Za-z0-9._-]+`
+- `MetricName`
+  - owner: `sc-observability-types`
+  - underlying type: validated `String`
+  - used by: `MetricRecord.name`
+  - invariant: non-empty metric identifier using `[A-Za-z0-9._\\-/]+`
 
 These newtypes should expose:
 
@@ -835,11 +844,16 @@ Design direction:
 
 ```rust
 pub struct StateTransition {
+    /// Stable category describing what changed, such as `task` or `subagent`.
     pub entity_kind: String,
     pub entity_id: Option<String>,
+    /// Previous stable state label.
     pub from_state: String,
+    /// New stable state label.
     pub to_state: String,
+    /// Optional human-readable explanation for why the transition occurred.
     pub reason: Option<String>,
+    /// Optional action or event name that triggered the transition.
     pub trigger: Option<String>,
 }
 ```
@@ -905,27 +919,12 @@ pub enum SpanStatus {
 }
 ```
 
-### 9.3 `SpanState`
+### 9.3 Span Typestate Markers
 
-Span lifecycle should be encoded in the producer-facing type system.
+Span lifecycle should be encoded in the producer-facing type system rather than
+as a public runtime enum.
 
-Runtime/serialized state:
-
-```rust
-pub enum SpanState {
-    Started,
-    Ended,
-}
-```
-
-Important rule:
-
-- a plain runtime enum is not enough to make illegal transitions a compilation
-  error
-- compile-time lifecycle guarantees require typestate or equivalent
-  state-specific types
-
-Recommended producer-facing markers:
+Producer-facing markers:
 
 ```rust
 pub struct SpanStarted;
@@ -979,8 +978,9 @@ Rules:
 - `SpanRecord<SpanEnded>` must carry a final duration and exposes it only via
   `duration_ms()`
 - producer APIs should expose only valid transitions per state
-- runtime `SpanState` is derived from the typestate parameter `S` during
-  serialization and export rather than stored as a public producer-facing field
+- runtime started/ended state is derived from the typestate parameter `S`
+  during serialization and export rather than stored as a public
+  producer-facing field
 
 This keeps span lifecycle correctness in the type system while still supporting
 generic serialization and export.
@@ -1040,9 +1040,10 @@ Design direction:
 pub struct MetricRecord {
     pub timestamp: Timestamp,
     pub service: ServiceName,
-    pub name: String,
+    pub name: MetricName,
     pub kind: MetricKind,
     pub value: f64,
+    /// Optional UCUM unit string, for example `ms`, `By`, or `1`.
     pub unit: Option<String>,
     pub attributes: serde_json::Map<String, serde_json::Value>,
 }

@@ -100,6 +100,22 @@ fn validate_env_prefix(value: &str) -> Result<(), ValueValidationError> {
     }
 }
 
+fn validate_metric_name(value: &str) -> Result<(), ValueValidationError> {
+    if value.is_empty() {
+        return Err(ValueValidationError::new("metric name must not be empty"));
+    }
+    if value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | '/'))
+    {
+        Ok(())
+    } else {
+        Err(ValueValidationError::new(
+            "metric name must match [A-Za-z0-9._\\-/]+",
+        ))
+    }
+}
+
 validated_name_type!(
     ToolName,
     "Validated tool identity used for top-level configuration.",
@@ -125,6 +141,11 @@ validated_name_type!(
     "Validated stable action name for log and span events.",
     validate_identifier
 );
+validated_name_type!(
+    MetricName,
+    "Validated metric identity using [A-Za-z0-9._\\-/]+.",
+    validate_metric_name
+);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecoverableSteps {
@@ -132,8 +153,8 @@ pub struct RecoverableSteps {
 }
 
 impl RecoverableSteps {
-    pub fn first(&self) -> &str {
-        &self.steps[0]
+    pub fn first(&self) -> Option<&str> {
+        self.steps.first().map(String::as_str)
     }
 
     pub fn all(&self) -> &[String] {
@@ -377,11 +398,17 @@ pub struct TraceContext {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StateTransition {
+    /// Stable category describing what changed, such as `task` or `subagent`.
     pub entity_kind: String,
+    /// Optional caller-owned identifier for the entity that changed.
     pub entity_id: Option<String>,
+    /// Previous stable state label.
     pub from_state: String,
+    /// New stable state label.
     pub to_state: String,
+    /// Optional human-readable explanation for why the transition occurred.
     pub reason: Option<String>,
+    /// Optional action or event name that triggered the transition.
     pub trigger: Option<String>,
 }
 
@@ -442,12 +469,6 @@ pub enum SpanStatus {
     Ok,
     Error,
     Unset,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SpanState {
-    Started,
-    Ended,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -573,9 +594,10 @@ pub enum MetricKind {
 pub struct MetricRecord {
     pub timestamp: Timestamp,
     pub service: ServiceName,
-    pub name: String,
+    pub name: MetricName,
     pub kind: MetricKind,
     pub value: f64,
+    /// Optional UCUM unit string, for example `ms`, `By`, or `1`.
     pub unit: Option<String>,
     pub attributes: Map<String, Value>,
 }
@@ -728,7 +750,7 @@ where
 macro_rules! error_wrapper {
     ($name:ident) => {
         #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
-        #[error("{0:?}")]
+        #[error("{0}")]
         pub struct $name(pub Box<ErrorContext>);
 
         impl DiagnosticInfo for $name {
@@ -752,9 +774,9 @@ error_wrapper!(ExportError);
 pub enum ObservationError {
     #[error("observation runtime is shut down")]
     Shutdown,
-    #[error("{0:?}")]
+    #[error("{0}")]
     QueueFull(Box<ErrorContext>),
-    #[error("{0:?}")]
+    #[error("{0}")]
     RoutingFailure(Box<ErrorContext>),
 }
 
@@ -762,6 +784,6 @@ pub enum ObservationError {
 pub enum TelemetryError {
     #[error("telemetry runtime is shut down")]
     Shutdown,
-    #[error("{0:?}")]
+    #[error("{0}")]
     ExportFailure(Box<ErrorContext>),
 }
