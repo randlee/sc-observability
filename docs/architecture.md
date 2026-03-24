@@ -2,167 +2,152 @@
 
 **Status**: Draft for review
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
-**Source documents**:
-- `api-design.md` on the design review branch
-- `requirements.md` on the requirements review branch
+**Related documents**:
+- [`requirements.md`](./requirements.md)
+- [`api-design.md`](./api-design.md)
+- [`atm-adapter-requirements.md`](./atm-adapter-requirements.md)
+- [`atm-adapter-architecture.md`](./atm-adapter-architecture.md)
 
 ## 1. System Overview
 
-The standalone `sc-observability` workspace is a 4-crate system:
+The workspace is a layered stack, not a monolith:
 
 ```text
-                          +---------------------------+
-                          |  sc-observability-types   |
-                          | shared contracts/types    |
-                          +------------+--------------+
-                                       |
-                  +--------------------+--------------------+
-                  |                                         |
-      +-----------v-----------+                 +-----------v-------------+
-      |   sc-observability    |                 | sc-observability-otlp   |
-      | lightweight logging   |                 | OTLP transport/export   |
-      +-----------+-----------+                 +-----------+-------------+
-                  ^                                         ^
-                  |                                         |
-                  +--------------------+--------------------+
-                                       |
-                          +------------v--------------+
-                          |        sc-observe         |
-                          | observation runtime       |
-                          | routing/subscribers       |
-                          | projectors/fan-out        |
-                          +---------------------------+
+sc-observability-types
+  shared neutral contracts only
+          |
+sc-observability
+  lightweight logging only
+          |
+sc-observe
+  observation routing / pub-sub / projection
+          |
+sc-observability-otlp
+  OpenTelemetry / OTLP integration
 ```
 
-At a glance:
+The critical architectural rule is that each layer can be understood in
+isolation:
 
-| Crate | Owns |
-| --- | --- |
-| `sc-observability-types` | Shared types, identifiers, diagnostics, health contracts, routing and emitter traits |
-| `sc-observability` | Lightweight structured logging, sinks, redaction, rotation, logging health |
-| `sc-observe` | `Observability`, builder/config, routing, subscribers, projectors, top-level health |
-| `sc-observability-otlp` | `Telemetry`, `SpanAssembler`, OTLP config, exporters, retry/flush/shutdown |
+- the types layer does not know about logging, routing, or OTLP behavior
+- the logging layer does not know about routing or OTLP behavior
+- the routing layer depends on logging but not on OTLP
+- the OTLP layer builds on the lower-level infrastructure and owns all OTel
+  transport concerns
 
-The system is observation-first:
-
-- producers emit one `Observation<T>`
-- `sc-observe` fans that observation out to typed subscribers and projectors
-- projectors derive logs, spans, and metrics
-- logging and OTLP are downstream consumers, not producer-facing primary APIs
-
-This architecture does not require:
-
-- an ATM daemon
-- socket handoff
-- spool/merge semantics
-- ATM-specific event types in core crates
-
-## 2. Component Architecture
-
-### 2.1 Producer Layer
-
-The producer-facing runtime is `Observability` in `sc-observe`.
-
-Core types:
-
-- `Observability`
-- `ObservabilityBuilder`
-- `ObservabilityConfig`
-- `Observation<T>`
-- sealed emitter traits:
-  - `ObservationEmitter<T>`
-  - `LogEmitter`
-  - `SpanEmitter`
-  - `MetricEmitter`
-
-Responsibilities:
-
-- accept canonical observations from producers
-- own construction-time registration of subscribers and projectors
-- derive internal `LoggerConfig` and `TelemetryConfig`
-- coordinate routing, failure isolation, and health aggregation
-
-### 2.2 Routing Layer
-
-The routing layer lives in `sc-observe`.
-
-Core types:
-
-- `ObservationSubscriber<T>`
-- `ObservationFilter<T>`
-- `LogProjector<T>`
-- `SpanProjector<T>`
-- `MetricProjector<T>`
-- `SubscriberRegistration<T>`
-- `ProjectionRegistration<T>`
-
-Responsibilities:
-
-- receive `Observation<T>` for a fixed `T`
-- evaluate optional registration filters
-- invoke matching registrations in deterministic registration order
-- isolate failures so one subscriber/projector failure does not block later matches
-- return `ObservationError::RoutingFailure` when no eligible path remains
-
-`SubscriberRegistration<T>` and `ProjectionRegistration<T>` are concurrent
-runtime inputs and therefore require `Send + Sync`, consistent with the
-requirements and API design.
-
-Routing model:
+## 1.1 Approval Scope
 
 ```text
-Observation<T>
-  -> matching subscribers<T>
-  -> matching projectors<T>
-     -> LogEvent -> Logger
-     -> SpanSignal -> Telemetry
-     -> MetricRecord -> Telemetry
+APPROVED for shared-repo boundary direction / blocker closure.
+NOT YET sufficient as the complete ATM migration specification.
 ```
 
-### 2.3 Logging Layer
+The shared workspace architecture is approved when the crate boundaries,
+dependency layering, and generic extension points are correct. Complete ATM
+migration confidence additionally requires the ATM adapter requirements and ATM
+adapter architecture documents that define the compatibility behavior outside
+this repo.
 
-The logging layer lives in `sc-observability`.
+## 2. Architectural Principles
 
-Core types:
+- Preserve linear layering.
+- Keep `sc-observability` lightweight and self-contained.
+- Keep `sc-observe` generic over downstream integrations.
+- Keep OpenTelemetry concerns only in `sc-observability-otlp`.
+- Keep shared contracts in `sc-observability-types` neutral and ATM-free.
+- Prevent higher-layer requirements from leaking downward.
+
+## 3. Per-Crate Architecture
+
+### 3.1 `sc-observability-types`
+
+This crate is the shared contract layer.
+
+Owns:
+
+- `ErrorCode`, `Diagnostic`, `Remediation`, `ErrorContext`
+- `TraceContext`, `TraceId`, `SpanId`
+- `SpanRecord<S>`, `SpanSignal`, `MetricRecord`, `LogEvent`
+- health report contracts
+- shared emitter, subscriber, filter, and projector traits
+
+Must not own:
+
+- sinks
+- routing runtime behavior
+- OTLP exporters or OpenTelemetry dependencies
+- application-specific observation payloads
+
+Important boundary:
+
+- this crate is neutral shared vocabulary, not a behavior layer
+
+### 3.2 `sc-observability`
+
+This crate is the lightweight logging layer.
+
+Owns:
 
 - `Logger`
 - `LoggerConfig`
 - `LogSink`
-- `LogFilter`
 - `JsonlFileSink`
 - `ConsoleSink`
-- `RedactionPolicy`
-- `Redactor`
+- redaction
+- rotation
+- logging health
 
-Responsibilities:
+Runtime role:
 
 - validate and redact `LogEvent`
-- append to the built-in JSONL file sink
-- render human-readable console output
-- fan out to multiple sinks
-- apply sink-local filtering
-- track sink health and dropped-event counts
+- fan out to local sinks
+- record sink-local health and drop behavior
 
-The built-in file sink default path layout is:
+Must not own:
 
-`<log_root>/<service_name>/logs/<service_name>.log.jsonl`
+- observation routing
+- subscriber registries
+- OTLP transport
+- OpenTelemetry dependencies
 
-Logging flow:
+This crate must remain usable on its own by a basic CLI.
 
-```text
-LogEvent
-  -> validation
-  -> redaction
-  -> Logger
-  -> sink fan-out
-  -> file / console / custom sink
-```
+### 3.3 `sc-observe`
 
-### 2.4 Telemetry Layer
+This crate is the observation runtime layered on top of logging.
 
-The telemetry layer lives in `sc-observability-otlp`.
+Owns:
 
-Core types:
+- `Observability`
+- `ObservabilityBuilder`
+- `ObservabilityConfig`
+- subscriber registration
+- projector registration
+- observation routing and fan-out
+- top-level routing health
+
+Runtime role:
+
+- accept `Observation<T>`
+- route to typed subscribers
+- project to `LogEvent`, `SpanSignal`, and `MetricRecord`
+- send logs into the logging layer
+- expose generic downstream extension points for higher-layer integrations
+
+Must not own:
+
+- OpenTelemetry transport or OTel-specific configuration
+- direct dependency on `sc-observability-otlp`
+- application-specific payload taxonomies
+
+The key point is that `sc-observe` is a routing/runtime layer, not an OTLP
+layer.
+
+### 3.4 `sc-observability-otlp`
+
+This crate is the top-of-stack OpenTelemetry layer.
+
+Owns:
 
 - `Telemetry`
 - `TelemetryConfig`
@@ -170,364 +155,234 @@ Core types:
 - `OtlpProtocol`
 - `SpanAssembler`
 - `CompleteSpan`
-- `LogExporter`
-- `TraceExporter`
-- `MetricExporter`
+- `LogExporter`, `TraceExporter`, `MetricExporter`
+- OTLP batching, retry, timeout, flush, and shutdown
+- exporter health
 
-Responsibilities:
+Runtime role:
 
-- accept projected log, span, and metric data
-- bridge `SpanSignal` into exportable completed spans
-- batch/export OTLP payloads
-- own retry, timeout, flush, and shutdown behavior
-- track exporter health and dropped exports
+- consume lower-layer projected logs, spans, and metrics
+- assemble span lifecycle signals into completed exportable spans
+- invoke actual OpenTelemetry/OTLP services and transports
 
-Telemetry flow:
+Configuration model:
+
+- `TelemetryConfig` is constructed and owned by the application layer
+- `TelemetryConfig` is passed directly to `sc-observability-otlp`
+- `TelemetryConfig` is not embedded in or derived from `ObservabilityConfig`
+
+Must not push OTLP concerns into the lower crates.
+
+## 4. Runtime Composition
+
+The layered design supports three normal application shapes.
+
+### 4.1 Logging Only
 
 ```text
-LogEvent / SpanSignal / MetricRecord
-  -> Telemetry
-  -> SpanAssembler
-  -> exporters
-  -> collector
+application -> sc-observability
 ```
 
-`SpanAssembler` exists because:
+Use when a CLI or tool needs structured logging only.
 
-- producers and projectors naturally emit started spans, in-span events, and ended spans
-- OTLP trace export requires a completed span and its events
-- `CompleteSpan { record: SpanRecord<SpanEnded>, events: Vec<SpanEvent> }` is the export boundary
+### 4.2 Logging + Routing
 
-`SpanAssembler` contract, as defined by `api-design.md` §12.4:
-
-1. `SpanSignal::Started` opens an in-flight span buffer keyed by `span_id`
-2. `SpanSignal::Event` is attached to the in-flight buffer by matching `span_id`
-3. `CompleteSpan` is emitted only on `SpanSignal::Ended`, never on `Started`
-4. in-flight spans without a matching `Ended` are dropped at flush/shutdown and counted as dropped exports
-
-Ownership and threading model:
-
-- `SpanAssembler` is owned and driven internally by `Telemetry`
-- concurrent emit paths, async tasks, and threads do not hold `SpanAssembler` directly
-- `Telemetry` is responsible for serializing `SpanSignal` delivery to
-  `SpanAssembler` using a `Mutex`, message channel, or equivalent `Send`-safe
-  mechanism
-- `RefCell` or other non-`Send` interior mutability is not acceptable in this
-  concurrency model
-
-### 2.5 Type System Layer
-
-The shared type layer lives in `sc-observability-types`.
-
-Core types:
-
-- `SpanRecord<S>`
-- `SpanStarted`
-- `SpanEnded`
-- `SpanSignal`
-- `TraceContext`
-- `TraceId`
-- `SpanId`
-- `ErrorContext`
-- `Diagnostic`
-- `Remediation`
-
-Responsibilities:
-
-- encode compile-time span lifecycle safety
-- keep trace correlation generic and W3C-style
-- require remediation-aware diagnostics
-- provide stable shared contracts without ATM coupling
-
-Important invariants:
-
-- only `SpanRecord<SpanStarted>` has a public constructor
-- `SpanRecord<SpanEnded>` is only created via `.end(...)`
-- producer-facing `SpanRecord<S>` fields are private
-- the runtime `SpanState` serialization value is derived from the typestate
-  parameter `S` at export/serialization time; it is not a public producer-facing
-  field
-- final span duration is accessible only on `SpanRecord<SpanEnded>` via a
-  duration accessor such as `duration_ms()`
-- `TraceContext` contains only `trace_id`, `span_id`, and `parent_span_id`
-- `TraceContext` is W3C-style only; `TraceId` is 32-character lowercase hex and
-  `SpanId` is 16-character lowercase hex
-- request, session, runtime, and application metadata are excluded from
-  `TraceContext`
-- error codes are stable string-like values with namespace prefixes and
-  `SCREAMING_SNAKE_CASE` formatting
-- one `Diagnostic` is reusable across CLI rendering, JSON error rendering, log
-  attachment, span attachment, and health summaries
-- `ErrorContext` is not directly constructible without remediation
-
-## 3. Trait Injection Strategy
-
-This section defines how observability is wired into producer binaries.
-
-### 3.1 Main-Level Wire-Up
-
-Producer binaries construct observability once near `main()` and then inject
-handles into the rest of the program.
-
-The standard pattern is:
-
-1. build `ObservabilityConfig`
-2. register subscribers/projectors with `ObservabilityBuilder`
-3. build a closed `Observability` runtime
-4. pass narrow emitter traits into subsystems
-
-`sc-observe` owns internally:
-
-- registration tables
-- routing and filter execution
-- logger and telemetry composition
-- failure isolation
-- health aggregation
-
-The producer sees:
-
-- `ObservationEmitter<T>` for its typed observations
-- optionally `LogEmitter`, `SpanEmitter`, or `MetricEmitter` where lower-level code needs them directly
-
-All traits used behind `Arc<dyn ...>` in this injection model are required to be
-`Send + Sync`, consistent with `api-design.md` §7.4 and the non-functional
-requirements.
-
-### 3.2 Explicit Injection vs Shared `Arc`
-
-The preferred application pattern is explicit dependency injection:
-
-- constructor args for long-lived services
-- struct fields for loops/controllers
-- function args for one-off helpers
-
-`Arc` is used to share the runtime safely across async tasks and threads.
-
-Recommended pattern:
-
-- construct `Arc<Observability>` once
-- coerce or expose narrow trait handles from that shared runtime
-- clone the `Arc` into async tasks, thread workers, or agent loops
-
-The design does not assume global mutable singletons for normal operation.
-
-### 3.3 Async Tasks, Threads, and Agent Loops
-
-When work is spawned:
-
-- clone the shared handle
-- move the handle into the task/thread
-- emit observations from inside the worker using the same shared runtime
-
-This keeps:
-
-- registration fixed
-- health centralized
-- queueing/routing semantics owned by `sc-observe`
-
-It avoids:
-
-- ad hoc runtime construction inside event paths
-- per-task logger/exporter setup
-- duplicated routing state
-
-### 3.4 Minimal Producer Wire-Up
-
-```rust
-use std::sync::Arc;
-
-use sc_observe::Observability;
-use sc_observability_types::{
-    InitError,
-    Observation,
-    ObservationEmitter,
-    ObservationSubscriber,
-    ProjectionRegistration,
-    SubscriberRegistration,
-};
-
-#[derive(Clone)]
-struct AgentLoop {
-    agent_events: Arc<dyn ObservationEmitter<AgentInfo>>,
-}
-
-impl AgentLoop {
-    fn new(agent_events: Arc<dyn ObservationEmitter<AgentInfo>>) -> Self {
-        Self { agent_events }
-    }
-
-    async fn run(&self, event: Observation<AgentInfo>) -> anyhow::Result<()> {
-        self.agent_events.emit(event)?;
-        Ok(())
-    }
-}
-
-fn build_observability(config: ObservabilityConfig) -> Result<Arc<Observability>, InitError> {
-    let observability = Observability::builder(config)
-        .register_subscriber::<AgentInfo>(SubscriberRegistration {
-            subscriber: Arc::new(AgentDashboardSubscriber::new()),
-            filter: None,
-        })
-        .register_projection::<AgentInfo>(ProjectionRegistration {
-            log_projector: Some(Arc::new(AgentInfoLogProjector::new())),
-            span_projector: Some(Arc::new(AgentInfoSpanProjector::new())),
-            metric_projector: Some(Arc::new(AgentInfoMetricProjector::new())),
-            filter: None,
-        })
-        .build()?;
-
-    Ok(Arc::new(observability))
-}
-
-async fn main_loop(config: ObservabilityConfig) -> anyhow::Result<()> {
-    let observability = build_observability(config)?;
-    let agents = AgentLoop::new(observability.clone());
-
-    // spawned tasks and loops receive cloned handles
-    let background_agents = agents.clone();
-    tokio::spawn(async move {
-        let _ = background_agents.run(next_agent_observation().await);
-    });
-
-    Ok(())
-}
+```text
+application -> sc-observe -> sc-observability
 ```
 
-The sketch above is illustrative:
+Use when one observation should fan out to logs and typed subscribers without
+any OTLP dependency.
 
-- construction happens once
-- registration happens before `build()`
-- producer code emits one typed `Observation<AgentInfo>`
-- routing, projection, logging, and OTLP export happen inside the runtime
-- `sc-observe` derives its internal logger and telemetry configuration from
-  `ObservabilityConfig`; producers do not pre-construct or inject `Logger` or
-  `Telemetry`
-- `build()` returns `Result<Observability, InitError>`; wrapping that in
-  `anyhow::Result` is an application-layer convenience, not the core API
+### 4.3 Full Stack
 
-## 4. Sealed vs Open Trait Inventory
+```text
+application -> sc-observability-otlp
+                    |
+                    v
+               sc-observe
+                    |
+                    v
+              sc-observability
+```
 
-| Trait | Crate | Sealed/Open | Rationale |
-| --- | --- | --- | --- |
-| `ObservationEmitter<T>` | `sc-observability-types` | Sealed | Producer-facing emit semantics are owned by the runtime; external crates consume but do not implement them |
-| `LogEmitter` | `sc-observability-types` | Sealed | Same reason; prevents alternate runtime semantics leaking into the API |
-| `SpanEmitter` | `sc-observability-types` | Sealed | Span emission lifecycle is owned by the runtime and telemetry wiring |
-| `MetricEmitter` | `sc-observability-types` | Sealed | Metric routing semantics remain internal to the runtime |
-| `Observable` | `sc-observability-types` | Open | Consumer crates must define their own typed observation payloads |
-| `DiagnosticInfo` | `sc-observability-types` | Sealed | Only crate-owned error types should expose canonical diagnostic access |
-| `ObservationSubscriber<T>` | `sc-observability-types` | Open | Consumers need custom typed subscribers |
-| `ObservationFilter<T>` | `sc-observability-types` | Open | Consumers need custom registration filtering policies |
-| `LogProjector<T>` | `sc-observability-types` | Open | Consumers must map their own observation families into logs |
-| `SpanProjector<T>` | `sc-observability-types` | Open | Consumers must map their own observation families into span signals |
-| `MetricProjector<T>` | `sc-observability-types` | Open | Consumers must map their own observation families into metrics |
-| `ProcessIdentityResolver` | `sc-observability-types` | Open | Consumers may need custom host/pid resolution behavior |
-| `Redactor` | `sc-observability-types` | Open | Logging callers may need custom redaction logic |
-| `LogSink` | `sc-observability` | Open | Logging is explicitly sink-extensible |
-| `LogFilter` | `sc-observability` | Open | Sink-local filtering is a supported extension point |
-| `LogExporter` | `sc-observability-otlp` | Open | OTLP logging exporters remain replaceable/testable |
-| `TraceExporter` | `sc-observability-otlp` | Open | Trace exporters remain replaceable/testable |
-| `MetricExporter` | `sc-observability-otlp` | Open | Metric exporters remain replaceable/testable |
+Use when the application needs OTel export in addition to routing and logging.
 
-Table notes:
+## 5. Producer Wiring
 
-- all open traits used behind `Arc<dyn ...>` are required to remain object-safe
-  for dynamic dispatch
-- the sealed emitter traits are also object-safe when used behind `Arc<dyn ...>`;
-  `T` is fixed at each usage site rather than erased
-- all traits used in concurrent routing, injection, and export contexts are
-  required to be `Send + Sync`
+Producer code should be wired at the highest layer it needs:
 
-## 5. ADRs
+- logging-only producers inject `Logger` or a narrow logging handle
+- routing-aware producers inject `Observability`
+- OTel-enabled producers compose the OTLP layer on top of `sc-observe`
 
-### ADR-001: Observation-First Architecture
+The important ownership rule is:
 
-- **Status**: Accepted
-- **Context**: Producers should not emit separate log, span, metric, and domain-event payloads for one fact. That duplicates work, couples producers to sinks, and makes extension awkward.
-- **Decision**: Producers emit `Observation<T>` as the canonical signal. Subscribers and projectors fan that observation out to logs, spans, metrics, and custom consumers.
-- **Consequences**:
-  - producer code stays simple
-  - logging and OTLP become downstream projections
-  - one observation can drive multiple outputs consistently
+- producers emit one canonical observation
+- lower layers do not require knowledge of higher-layer transports
 
-### ADR-002: Typestate for `SpanRecord<S>`
+### 5.1 Full-Stack Attachment Model
 
-- **Status**: Accepted
-- **Context**: Span lifecycle errors are easy to introduce when started/ended state is represented only by runtime flags or public mutable fields.
-- **Decision**: Use typestate with `SpanRecord<SpanStarted>` and `SpanRecord<SpanEnded>`, private fields, and `.end(...)` as the only transition.
-- **Consequences**:
-  - invalid producer-side span transitions become unrepresentable
-  - compile-time guarantees reduce lifecycle bugs
-  - export code still uses runtime `SpanSignal`/`CompleteSpan` where streaming assembly is needed
+Under the corrected layering, `sc-observability-otlp` attaches to
+`sc-observe` by using the existing open projector extension points.
 
-### ADR-003: Observability Lifecycle Typestate Deferred
+The attachment model is:
 
-- **Status**: Accepted
-- **Context**: Applying typestate to the whole `Observability` runtime would complicate injection and shared-handle usage across async tasks and threads.
-- **Decision**: Keep lifecycle enforcement as a semantic runtime rule for v1: `emit()` after `shutdown()` returns a named shutdown error instead of using runtime typestate wrappers.
-- **Consequences**:
-  - producer injection remains simple
-  - lifecycle misuse is still explicit and testable
-  - a future version may revisit stronger lifecycle typing if runtime ergonomics improve
+1. the application constructs `ObservabilityBuilder` for `sc-observe`
+2. the application constructs `TelemetryConfig` independently for
+   `sc-observability-otlp`
+3. `sc-observability-otlp` registers its `LogProjector`, `SpanProjector`, and
+   `MetricProjector` implementations with `ObservabilityBuilder`
+4. `sc-observe` remains generic and routes observations through those
+   registrations like any other external projector
 
-### ADR-004: Config-Time Registration Only
+Important boundary:
 
-- **Status**: Accepted
-- **Context**: Runtime registration changes complicate routing determinism, health visibility, and concurrency semantics.
-- **Decision**: Subscribers and projectors are registered through `ObservabilityBuilder` before the runtime is built. No runtime registration API is part of v1.
-- **Consequences**:
-  - routing tables are closed and deterministic
-  - health and failure semantics are easier to reason about
-  - dynamic plugin loading is intentionally deferred
+- `sc-observe` does not provide a special internal OTLP handle
+- `sc-observability-otlp` plugs in through the same registration model exposed
+  to other downstream projector consumers
 
-### ADR-005: Sealed Emitter Traits
-
-- **Status**: Accepted
-- **Context**: The emitter traits represent runtime-owned queueing, routing, lifecycle, and failure semantics. External implementations would fragment those guarantees.
-- **Decision**: `ObservationEmitter<T>`, `LogEmitter`, `SpanEmitter`, and `MetricEmitter` are sealed.
-- **Consequences**:
-  - producer injection surface stays stable
-  - the runtime keeps ownership of emit semantics
-  - extension happens through open subscriber/projector/sink/exporter traits instead
-
-### ADR-006: 4-Crate Split With `sc-observe`
-
-- **Status**: Accepted
-- **Context**: A single crate cannot stay both extremely lightweight for CLI logging and rich enough for routing, projections, and OTLP transport without accumulating unwanted cost and coupling.
-- **Decision**: Split the workspace into four crates: shared contracts, lightweight logging, observation runtime, and OTLP transport.
-- **Consequences**:
-  - basic CLIs can depend only on `sc-observability`
-  - richer applications can opt into `sc-observe`
-  - OTLP complexity stays isolated in `sc-observability-otlp`
-
-### ADR-007: Zero ATM Coupling
-
-- **Status**: Accepted
-- **Context**: The extracted workspace must serve multiple Rust tools and must not preserve ATM-specific path, daemon, or payload assumptions in the shared core.
-- **Decision**: The workspace has no `agent-team-mail-*` dependencies. `sc-observability-types` owns shared contracts, and ATM-specific observation types remain in ATM-owned crates.
-- **Consequences**:
-  - core crates stay reusable
-  - ATM becomes a consumer, not a hidden dependency
-  - daemon/socket/spool semantics remain out of scope for the shared workspace
-
-## 6. Crate Boundaries
+## 6. Crate Boundary Table
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | Rust standard ecosystem support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | Shared value types, diagnostics, identifiers, health contracts, emitter traits, routing traits |
-| `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | `Logger`, `LoggerConfig`, sinks, redaction, rotation, logging health |
-| `sc-observe` | `sc-observability-types`, `sc-observability`, `sc-observability-otlp` | `agent-team-mail-*` | `Observability`, builder/config, routing, subscribers, projectors, top-level health |
-| `sc-observability-otlp` | `sc-observability-types` | `sc-observability`, `sc-observe`, `agent-team-mail-*` | `Telemetry`, config, `SpanAssembler`, OTLP exporters, exporter health |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, identifiers, diagnostics, traits, health types |
+| `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, redaction, rotation, logging health |
+| `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health |
+| `sc-observability-otlp` | `sc-observability-types`, `sc-observability`, `sc-observe` | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, exporter health |
 
-Boundary summary:
+## 7. ADRs
 
-- `sc-observability-types` is the shared base
-- `sc-observability` remains lightweight and logging-only
-- `sc-observe` composes logging and telemetry but does not own their lower-level implementations
-- `sc-observability-otlp` owns OTLP-specific transport/export only
+### ADR-001: Observation-First Producers
 
-## 7. Pre-Implementation Cleanup Required
+- **Status**: Accepted
+- **Context**: Producers should not emit separate log, span, metric, and domain-event payloads for one fact.
+- **Decision**: Producers emit one canonical observation and the layered stack fans it out downstream.
+- **Consequences**:
+  - producer code stays simple
+  - logs and OTLP remain projections of the same observation
 
-- `ARCH-QA-010`: remove the `OtelConfig` re-export from the lightweight `sc-observability` surface
-- `ARCH-QA-011`: replace the current `TraceRecord` / `MetricRecord` stubs in `sc-observability-types`
+### ADR-002: Linear Dependency Order
 
-These cleanup items must happen before implementation begins so the codebase matches the approved crate boundaries and type ownership model.
+- **Status**: Accepted
+- **Context**: The prior document set collapsed the stack by making `sc-observe` depend on both logging and OTLP layers.
+- **Decision**: Enforce the linear dependency order `types <- logging <- observe <- otlp`.
+- **Consequences**:
+  - OTLP remains optional
+  - `sc-observe` can be used without OpenTelemetry
+  - lower layers stay readable without upper-layer concerns
+
+### ADR-003: Logging Is Self-Contained
+
+- **Status**: Accepted
+- **Context**: `sc-observability` had begun to accumulate requirements from routing and OTLP.
+- **Decision**: Keep `sc-observability` limited to logging concerns only.
+- **Consequences**:
+  - a basic CLI can adopt structured logging without extra runtime cost
+  - logging requirements and architecture can be reviewed in isolation
+
+### ADR-004: OTel Belongs Only At The Top
+
+- **Status**: Accepted
+- **Context**: OpenTelemetry transport concerns are implementation-heavy and should not pollute lower-layer APIs.
+- **Decision**: All actual OpenTelemetry/OTLP dependencies and services belong in `sc-observability-otlp`.
+- **Consequences**:
+  - lower layers remain generic
+  - OTel integration is opt-in
+  - transport concerns are isolated where they belong
+
+### ADR-005: Centralized Registries For Error Codes And Constants
+
+- **Status**: Accepted
+- **Context**: Scattered error-code definitions and inline policy numbers make review, documentation, and consistency checks harder across a multi-crate workspace.
+- **Decision**: Each crate owns one dedicated error-code registry module and one dedicated constants module. Stable error codes are defined in the registry module, shared non-trivial constants are defined in the constants module, and non-trivial magic numbers are prohibited outside those definitions.
+- **Consequences**:
+  - reviewers have one obvious place to audit error codes per crate
+  - documentation and reporting can enumerate public error codes consistently
+  - policy limits, thresholds, retry counts, and similar values are named rather than hidden in inline literals
+  - error-code registries remain separate from general-purpose constants so semantic stability is easier to enforce
+
+### ADR-006: ATM Adapter Boundary
+
+- **Status**: Accepted
+- **Context**: ATM is the first and most sophisticated downstream adopter, but this repo must remain free of ATM production contracts and `agent-team-mail-*` dependencies.
+- **Decision**: ATM-specific observability behavior belongs in an ATM-owned adapter boundary named `atm-observability-adapter`. Shared crates in this repo own only generic logging, routing, and OTLP infrastructure. ATM-specific contracts such as `LogEventV1`, daemon fan-in/spool compatibility, ATM-named env parsing, ATM health snapshots, and ATM-specific projector behavior move to the adapter boundary outside this repo.
+- **Consequences**:
+  - the shared repo remains generic and publishable without ATM coupling
+  - ATM integration is still proven here through a separate example document and unpublished proving crate
+  - production ATM compatibility logic is implemented in ATM-owned code, not in the shared repo
+
+### ADR-007: Boot-Phase Observability Precedes Plugin Registration
+
+- **Status**: Accepted
+- **Context**: Early daemon and process lifecycle events occur before optional plugin or adapter context exists. Observability must be available during that boot phase.
+- **Decision**: Core observability initialization happens before plugin registration or adapter-specific augmentation. Early lifecycle events must be recordable through the base logging/routing stack without requiring ATM plugin context.
+- **Consequences**:
+  - early startup failures remain observable
+- adapters enrich the runtime after core observability is already available
+- boot sequencing is explicit rather than left to implementation drift
+
+### ADR-008: Shared Approval Is Not ATM Migration Approval
+
+- **Status**: Accepted
+- **Context**: The shared workspace can be architecturally sound while still
+  leaving ATM-specific migration behavior under-specified.
+- **Decision**: Treat the shared-repo document set as approval for generic crate
+  boundaries and extension points only. Treat ATM migration completeness as a
+  separate approval track owned by the ATM adapter documents.
+- **Consequences**:
+  - shared boundary cleanup can proceed without over-claiming ATM migration
+    readiness
+  - ATM-specific compatibility semantics remain owned by ATM adapter documents
+  - review language stays precise about what has and has not been approved
+
+### ADR-009: Boundary CI Must Enforce Shared-Repo Purity
+
+- **Status**: Accepted
+- **Context**: The shared-repo boundary can drift silently if CI only checks
+  crate names and a few high-level doc strings.
+- **Decision**: Boundary CI must enforce no ATM-specific imports or env reads in
+  shared crates, no home/path discovery in shared crates outside generic config
+  helpers, no OTLP/OpenTelemetry dependency outside `sc-observability-otlp`, and
+  successful compilation of the unpublished ATM proving artifact.
+- **Consequences**:
+  - layer violations are caught before merge
+  - ATM-specific behavior remains in the ATM-owned adapter boundary
+  - the proving artifact remains executable evidence, not dead documentation
+
+## 8. API-Design Consistency
+
+In this docs-v2 branch, `api-design.md` is updated to match the corrected
+layering:
+
+- `sc-observe` depends on `sc-observability-types` and `sc-observability` only
+- `ObservabilityConfig` no longer owns OTLP configuration
+- `TelemetryConfig` is application-constructed and passed directly to
+  `sc-observability-otlp`
+- OTLP attachment is expressed through projector registration with
+  `ObservabilityBuilder`
+- the ATM production boundary is explicitly outside this repo in
+  `atm-observability-adapter`
+
+## 9. Pre-Implementation Cleanup
+
+- remove any requirement or architecture text that places OTLP concerns in `sc-observability`
+- remove any requirement or architecture text that requires `sc-observe -> sc-observability-otlp`
+- make OTLP integration attach from the top of the stack rather than being constructed inside `sc-observe`
+
+## 10. ATM Proving Artifact
+
+The ATM integration proving artifacts owned by this repo are:
+
+- [`docs/atm-adapter-example.md`](./atm-adapter-example.md)
+- unpublished crate `examples/atm-adapter-example`
+
+These exist to prove interface sufficiency only. They do not replace the
+ATM-owned production adapter boundary.
+
+They are intentionally narrower than a full ATM migration proof:
+
+- they prove that ATM-shaped payloads and adapter-owned mapping layers can be
+  wired through the shared crates without `agent-team-mail-*` dependencies
+- they do not prove spool semantics, daemon fan-in merge behavior, ATM health
+  JSON compatibility, or complete ATM env/config translation

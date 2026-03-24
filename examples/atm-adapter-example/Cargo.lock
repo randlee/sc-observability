@@ -3,6 +3,17 @@
 version = 4
 
 [[package]]
+name = "atm-adapter-example"
+version = "0.0.0"
+dependencies = [
+ "sc-observability",
+ "sc-observability-otlp",
+ "sc-observability-types",
+ "sc-observe",
+ "serde",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
