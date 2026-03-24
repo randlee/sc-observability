@@ -29,6 +29,8 @@ Note:
 - Shared constants are centralized here as SSOT per requirements.
 
 - [~] `ErrorCode`
+- [~] `error_codes` — per-crate stable `ErrorCode` constants registry
+  (SRC-001/SRC-002)
 - [~] `constants` — `sc-observability-types/src/constants.rs` (SSOT for all
   shared cross-crate constants per TYP-031)
 - [~] `ValueValidationError`
@@ -112,10 +114,14 @@ Note:
 - [~] `RedactionPolicy`
 - [~] `Redactor`
 - [~] `Logger`
-- [~] `LogEmitter`
 - [~] `LogSink`
 - [~] `LogFilter`
 - [~] `SinkRegistration`
+
+Internal-only:
+
+- [~] `LogEmitter` — crate-local sealed logging injection trait (LOG-024;
+  `architecture.md` §3.2; internal-only, not part of public API)
 
 ### Finalized Public Rules
 
@@ -133,7 +139,11 @@ Note:
 - [~] `ObservabilityConfig`
 - [~] `ObservabilityBuilder`
 - [~] `Observability`
-- [~] `ObservationEmitter<T>`
+
+Internal-only:
+
+- [~] `ObservationEmitter<T>` — crate-local sealed observation injection trait
+  (OBS-025; `architecture.md` §3.3; internal-only, not part of public API)
 
 ### Finalized Public Rules
 
