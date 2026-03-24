@@ -29,8 +29,15 @@ plan. It answers four questions:
   compileable and reviewed.
 - Do not introduce ATM-specific types or `agent-team-mail-*` dependencies into
   the shared workspace.
-- Keep all public error codes in one `error_codes.rs` per crate.
-- Keep all non-trivial shared constants in one `constants.rs` per crate.
+- Keep all public `ErrorCode` string constants in one `error_codes.rs` per
+  crate.
+- Keep shared cross-crate constants in
+  `sc-observability-types/src/constants.rs` as the SSOT location.
+- Higher-layer crates may keep a `constants.rs` file only for crate-local
+  values that are not shared across crate boundaries.
+- Public Rust error types (`EventError`, `ObservationError`, `TelemetryError`,
+  and related enums/structs) remain centralized in `sc-observability-types` per
+  `requirements.md` TYP-030 and are re-exported where needed.
 - No magic-number policy/config literals outside constants modules.
 - Keep the API checklist current as implementation lands.
 - All sprint plans must preserve the standalone boundary defined by

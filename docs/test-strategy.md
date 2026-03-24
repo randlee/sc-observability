@@ -101,12 +101,12 @@ Minimum CI gates per sprint:
 - `cargo clippy --workspace -- -D warnings`
 - `cargo test --workspace`
 - `bash scripts/ci/validate_repo_boundaries.sh`
+- docs consistency checks
+- dependency-ban enforcement
 
 The following can be added once behavior exists:
 
 - focused integration-test job
-- docs consistency checks
-- dependency-ban enforcement
 
 ## 6. Exit Criteria
 

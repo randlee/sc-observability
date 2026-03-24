@@ -168,12 +168,25 @@ Note:
 - invalid OTLP config fails at `Telemetry::new(...)`
 - `TelemetryError::Shutdown` is returned after shutdown
 
-## 6. API Freeze Gate
+## 6. API Freeze Gates
 
-Before the first implementation sprint is declared complete:
+API freeze is progressive by crate and sprint, not global at Sprint 1.
 
-- every item above must be either implemented or explicitly marked
-  `internal-only`
+- Sprint 1 closes only when the `sc-observability-types` public API is frozen
+  for that crate.
+- Sprint 2 closes only when the `sc-observability` public API is frozen for
+  that crate.
+- Sprint 3 closes only when the `sc-observe` public API is frozen for that
+  crate.
+- Sprint 4 closes only when the `sc-observability-otlp` public API is frozen
+  for that crate.
+- Sprint 6 / pre-release closes only when all four crate API surfaces are
+  confirmed finalized together.
+
+At each crate freeze gate:
+
+- every public item for the crate must be either implemented or explicitly
+  marked `internal-only`
 - any newly introduced public type or trait must be added here first
 - the API docs, requirements, and implementation must all agree on names and
-  signatures
+  signatures for that crate

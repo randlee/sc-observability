@@ -61,6 +61,11 @@ Done means:
 
 ### Sprint 5: ATM Adapter Integration
 
+Prerequisites:
+- ATM adapter mapping spec accepted by ATM team with no open blocking items
+- all Open ATM-Owned Decisions in [`atm-adapter-mapping-spec.md`](./atm-adapter-mapping-spec.md)
+  §9 resolved or formally deferred with documented rationale
+
 Scope:
 - ATM-owned adapter work, not shared-crate behavior
 - implement mapping spec and proving path
@@ -87,7 +92,9 @@ Done means:
 - Sprint 2 depends on Sprint 1
 - Sprint 3 depends on Sprint 2
 - Sprint 4 depends on Sprint 3
-- Sprint 5 depends on Sprint 4 and ATM adapter planning
+- Sprint 5 depends on Sprint 4, ATM adapter mapping spec acceptance with no
+  open blocking items, and resolution or formal documented deferral of the open
+  ATM-owned decisions listed in `atm-adapter-mapping-spec.md` §9
 - Sprint 6 depends on all previous sprints
 
 ## 4. Review Expectations
