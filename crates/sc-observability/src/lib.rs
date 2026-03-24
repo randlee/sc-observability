@@ -888,13 +888,13 @@ mod tests {
     #[test]
     fn default_log_path_uses_service_scoped_layout() {
         let service = ServiceName::new("custom-service").expect("valid service");
-        let log_root = PathBuf::from("/tmp/observability-root");
+        let log_root = PathBuf::from("observability-root");
 
         let path = default_log_path(&log_root, &service);
 
         assert_eq!(
             path,
-            PathBuf::from("/tmp/observability-root/custom-service/logs/custom-service.log.jsonl")
+            PathBuf::from("observability-root/custom-service/logs/custom-service.log.jsonl")
         );
     }
 
