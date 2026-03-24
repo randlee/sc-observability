@@ -139,13 +139,13 @@ mod sealed_emitters {
     pub trait Sealed {}
 }
 
+/// ObservationEmitter<T> is intentionally per-type -- callers hold one handle
+/// per observation type. A single type-erased emitter for heterogeneous events
+/// is not supported by design.
 pub trait ObservationEmitter<T>: sealed_emitters::Sealed + Send + Sync
 where
     T: Observable,
 {
-    /// ObservationEmitter<T> is intentionally per-type -- callers hold one handle
-    /// per observation type. A single type-erased emitter for heterogeneous
-    /// events is not supported by design.
     fn emit(&self, observation: Observation<T>) -> Result<(), ObservationError>;
 }
 
