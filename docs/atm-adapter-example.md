@@ -15,6 +15,9 @@ The goal is to verify that:
 - the shared repo can provide boundary evidence without pretending to be the
   full ATM migration specification
 
+For the minimal ATM production configuration and shared out-of-the-box
+defaults, see [`atm-quickstart.md`](./atm-quickstart.md).
+
 ## Boundary
 
 This repo does **not** own the real ATM adapter implementation.

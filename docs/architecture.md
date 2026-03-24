@@ -5,6 +5,7 @@
 **Related documents**:
 - [`requirements.md`](./requirements.md)
 - [`api-design.md`](./api-design.md)
+- [`atm-quickstart.md`](./atm-quickstart.md)
 - [`atm-adapter-requirements.md`](./atm-adapter-requirements.md)
 - [`atm-adapter-architecture.md`](./atm-adapter-architecture.md)
 
@@ -69,7 +70,8 @@ Owns:
 - `TraceContext`, `TraceId`, `SpanId`
 - `SpanRecord<S>`, `SpanSignal`, `MetricRecord`, `LogEvent`
 - health report contracts
-- shared emitter, subscriber, filter, and projector traits
+- shared open traits such as `Observable`, `DiagnosticInfo`,
+  subscribers, filters, and projectors
 
 Must not own:
 
@@ -102,6 +104,7 @@ Runtime role:
 - validate and redact `LogEvent`
 - fan out to local sinks
 - record sink-local health and drop behavior
+- expose crate-local logging injection traits implemented by `Logger`
 
 Must not own:
 
@@ -133,6 +136,8 @@ Runtime role:
 - project to `LogEvent`, `SpanSignal`, and `MetricRecord`
 - send logs into the logging layer
 - expose generic downstream extension points for higher-layer integrations
+- expose crate-local observation injection traits implemented by
+  `Observability`
 
 Must not own:
 
@@ -164,6 +169,8 @@ Runtime role:
 - consume lower-layer projected logs, spans, and metrics
 - assemble span lifecycle signals into completed exportable spans
 - invoke actual OpenTelemetry/OTLP services and transports
+- expose crate-local telemetry signal injection traits implemented by
+  `Telemetry`
 
 Configuration model:
 
@@ -207,6 +214,15 @@ application -> sc-observability-otlp
 ```
 
 Use when the application needs OTel export in addition to routing and logging.
+
+### 4.4 ATM-Shaped Baseline
+
+The shared stack's ATM-shaped out-of-the-box behavior and minimal production
+configuration are documented separately in [`atm-quickstart.md`](./atm-quickstart.md).
+
+That document is part of the shared-repo detailed design because ATM is the
+first sophisticated adopter, but it does not move ATM-owned compatibility
+behavior into the shared crates.
 
 ## 5. Producer Wiring
 
