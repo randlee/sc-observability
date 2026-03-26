@@ -1,7 +1,11 @@
+//! Stable `ErrorCode` registry for `sc-observability-otlp`.
+
 use sc_observability_types::ErrorCode;
 
 pub const TELEMETRY_SHUTDOWN: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN");
+pub const TELEMETRY_INVALID_CONFIG: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_INVALID_CONFIG");
 pub const TELEMETRY_INVALID_PROTOCOL: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_OTLP_INVALID_PROTOCOL");
 pub const TELEMETRY_EXPORT_FAILED: ErrorCode =
@@ -10,11 +14,18 @@ pub const TELEMETRY_FLUSH_FAILED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_OTLP_FLUSH_FAILED");
 pub const TELEMETRY_EXPORTER_INIT_FAILED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_OTLP_EXPORTER_INIT_FAILED");
+pub const TELEMETRY_INCOMPLETE_SPAN_DROPPED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_INCOMPLETE_SPAN_DROPPED");
+pub const TELEMETRY_SPAN_ASSEMBLY_FAILED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED");
 
 pub const ALL: &[ErrorCode] = &[
     TELEMETRY_SHUTDOWN,
+    TELEMETRY_INVALID_CONFIG,
     TELEMETRY_INVALID_PROTOCOL,
     TELEMETRY_EXPORT_FAILED,
     TELEMETRY_FLUSH_FAILED,
     TELEMETRY_EXPORTER_INIT_FAILED,
+    TELEMETRY_INCOMPLETE_SPAN_DROPPED,
+    TELEMETRY_SPAN_ASSEMBLY_FAILED,
 ];

@@ -1,3 +1,10 @@
+//! Shared neutral contracts for the `sc-observability` workspace.
+//!
+//! This crate defines the reusable value types, diagnostics, typestate span
+//! contracts, health reports, and open extension traits consumed by the higher
+//! layers in the workspace. It intentionally avoids owning sinks, routing
+//! runtimes, exporter behavior, or ATM-specific payload types.
+
 pub mod constants;
 pub mod error_codes;
 
@@ -10,36 +17,58 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 use time::OffsetDateTime;
 
+/// Canonical UTC timestamp type used across the workspace.
 pub type Timestamp = OffsetDateTime;
 
+/// Stable machine-readable error code used across diagnostics and error types.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ErrorCode(Cow<'static, str>);
 
 impl ErrorCode {
+    /// Creates an error code from a `'static` string without allocating.
     pub const fn new_static(code: &'static str) -> Self {
         Self(Cow::Borrowed(code))
     }
 
+    /// Creates an error code from owned or borrowed string data by taking ownership.
     pub fn new_owned(code: impl Into<String>) -> Self {
         Self(Cow::Owned(code.into()))
     }
 
+    /// Returns the string representation of the error code.
     pub fn as_str(&self) -> &str {
         self.0.as_ref()
     }
 }
 
+/// Validation error returned when a public value type rejects an input.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Error)]
 #[error("{message}")]
 pub struct ValueValidationError {
+    code: ErrorCode,
     message: String,
 }
 
 impl ValueValidationError {
+    /// Creates a validation error using the default shared validation code.
     pub fn new(message: impl Into<String>) -> Self {
         Self {
+            code: error_codes::VALUE_VALIDATION_FAILED,
             message: message.into(),
         }
+    }
+
+    /// Creates a validation error with an explicit stable error code.
+    pub fn with_code(code: ErrorCode, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+
+    /// Returns the stable error code associated with the validation failure.
+    pub fn code(&self) -> &ErrorCode {
+        &self.code
     }
 }
 
@@ -50,12 +79,14 @@ macro_rules! validated_name_type {
         pub struct $name(String);
 
         impl $name {
+            /// Creates a validated value from caller-provided string data.
             pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
                 let value = value.into();
                 $validator(&value)?;
                 Ok(Self(value))
             }
 
+            /// Returns the underlying validated string value.
             pub fn as_str(&self) -> &str {
                 &self.0
             }
@@ -147,21 +178,39 @@ validated_name_type!(
     validate_metric_name
 );
 
+/// Ordered recovery steps for a recoverable diagnostic.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecoverableSteps {
     steps: Vec<String>,
 }
 
 impl RecoverableSteps {
-    pub fn first(&self) -> Option<&str> {
+    /// Creates a recoverable step list containing exactly one first action.
+    pub fn first(step: impl Into<String>) -> Self {
+        Self {
+            steps: vec![step.into()],
+        }
+    }
+
+    /// Creates a recoverable step list from a full ordered set of actions.
+    pub fn all(steps: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            steps: steps.into_iter().map(Into::into).collect(),
+        }
+    }
+
+    /// Returns the first recommended recovery step, if present.
+    pub fn first_step(&self) -> Option<&str> {
         self.steps.first().map(String::as_str)
     }
 
-    pub fn all(&self) -> &[String] {
+    /// Returns all ordered recovery steps.
+    pub fn steps(&self) -> &[String] {
         &self.steps
     }
 }
 
+/// Required remediation metadata attached to every diagnostic.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Remediation {
@@ -170,19 +219,19 @@ pub enum Remediation {
 }
 
 impl Remediation {
+    /// Builds a recoverable remediation with one required first step and any remaining ordered steps.
     pub fn recoverable(
         first: impl Into<String>,
         rest: impl IntoIterator<Item = impl Into<String>>,
     ) -> Self {
         let mut steps = vec![first.into()];
-        for value in rest {
-            steps.push(value.into());
-        }
+        steps.extend(rest.into_iter().map(Into::into));
         Self::Recoverable {
-            steps: RecoverableSteps { steps },
+            steps: RecoverableSteps::all(steps),
         }
     }
 
+    /// Builds a non-recoverable remediation with the required justification for why recovery is not possible.
     pub fn not_recoverable(justification: impl Into<String>) -> Self {
         Self::NotRecoverable {
             justification: justification.into(),
@@ -190,8 +239,10 @@ impl Remediation {
     }
 }
 
+/// Structured diagnostic payload reusable across CLI, logging, and telemetry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Diagnostic {
+    pub timestamp: Timestamp,
     pub code: ErrorCode,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -203,10 +254,12 @@ pub struct Diagnostic {
     pub details: Map<String, Value>,
 }
 
+/// Trait for public error surfaces that can expose an attached diagnostic.
 pub trait DiagnosticInfo {
     fn diagnostic(&self) -> &Diagnostic;
 }
 
+/// Small diagnostic summary used in health and last-error reporting.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiagnosticSummary {
     pub code: Option<ErrorCode>,
@@ -219,11 +272,12 @@ impl From<&Diagnostic> for DiagnosticSummary {
         Self {
             code: Some(value.code.clone()),
             message: value.message.clone(),
-            at: OffsetDateTime::now_utc(),
+            at: value.timestamp,
         }
     }
 }
 
+/// Builder-style context wrapper used by public crate error types.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ErrorContext {
     diagnostic: Diagnostic,
@@ -232,9 +286,11 @@ pub struct ErrorContext {
 }
 
 impl ErrorContext {
+    /// Creates a new error context with the required code, message, and remediation.
     pub fn new(code: ErrorCode, message: impl Into<String>, remediation: Remediation) -> Self {
         Self {
             diagnostic: Diagnostic {
+                timestamp: OffsetDateTime::now_utc(),
                 code,
                 message: message.into(),
                 cause: None,
@@ -246,26 +302,31 @@ impl ErrorContext {
         }
     }
 
+    /// Adds a human-readable cause string to the error context.
     pub fn cause(mut self, cause: impl Into<String>) -> Self {
         self.diagnostic.cause = Some(cause.into());
         self
     }
 
+    /// Adds a documentation reference string to the error context.
     pub fn docs(mut self, docs: impl Into<String>) -> Self {
         self.diagnostic.docs = Some(docs.into());
         self
     }
 
+    /// Adds one structured detail field to the error context.
     pub fn detail(mut self, key: impl Into<String>, value: Value) -> Self {
         self.diagnostic.details.insert(key.into(), value);
         self
     }
 
+    /// Captures a source error string for display and diagnostics.
     pub fn source(mut self, source: Box<dyn std::error::Error + Send + Sync + 'static>) -> Self {
         self.source = Some(source.to_string().into_boxed_str());
         self
     }
 
+    /// Returns the structured diagnostic carried by this error context.
     pub fn diagnostic(&self) -> &Diagnostic {
         &self.diagnostic
     }
@@ -281,6 +342,7 @@ impl std::fmt::Display for ErrorContext {
     }
 }
 
+/// Error returned when process identity resolution fails.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
 #[error("{0}")]
 pub struct IdentityError(pub Box<ErrorContext>);
@@ -291,6 +353,7 @@ impl DiagnosticInfo for IdentityError {
     }
 }
 
+/// Canonical event/log severity level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Level {
     Trace,
@@ -300,6 +363,7 @@ pub enum Level {
     Error,
 }
 
+/// Level threshold used by filtering surfaces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LevelFilter {
     Trace,
@@ -310,12 +374,14 @@ pub enum LevelFilter {
     Off,
 }
 
+/// Caller-resolved process identity attached to observations and log events.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ProcessIdentity {
     pub hostname: Option<String>,
     pub pid: Option<u32>,
 }
 
+/// Policy describing how process identity is populated at runtime.
 pub enum ProcessIdentityPolicy {
     Auto,
     Fixed {
@@ -325,43 +391,66 @@ pub enum ProcessIdentityPolicy {
     Resolver(Arc<dyn ProcessIdentityResolver>),
 }
 
+impl std::fmt::Debug for ProcessIdentityPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Auto => f.write_str("ProcessIdentityPolicy::Auto"),
+            Self::Fixed { hostname, pid } => f
+                .debug_struct("ProcessIdentityPolicy::Fixed")
+                .field("hostname", hostname)
+                .field("pid", pid)
+                .finish(),
+            Self::Resolver(_) => {
+                f.write_str("ProcessIdentityPolicy::Resolver(<dyn ProcessIdentityResolver>)")
+            }
+        }
+    }
+}
+
+/// Open resolver contract for caller-defined process identity lookup.
 pub trait ProcessIdentityResolver: Send + Sync {
     fn resolve(&self) -> Result<ProcessIdentity, IdentityError>;
 }
 
+/// Validated 32-character lowercase hexadecimal trace identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TraceId(String);
 
 impl TraceId {
+    /// Creates a validated lowercase hexadecimal trace identifier.
     pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
         let value = value.into();
         validate_lower_hex(
             &value,
             constants::TRACE_ID_LEN,
-            error_codes::TRACE_ID_INVALID.as_str(),
+            &error_codes::TRACE_ID_INVALID,
         )?;
         Ok(Self(value))
     }
 
+    /// Returns the underlying lowercase hexadecimal trace identifier.
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
+/// Validated 16-character lowercase hexadecimal span identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SpanId(String);
 
 impl SpanId {
+    /// Creates a validated lowercase hexadecimal span identifier.
     pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
         let value = value.into();
         validate_lower_hex(
             &value,
             constants::SPAN_ID_LEN,
-            error_codes::SPAN_ID_INVALID.as_str(),
+            &error_codes::SPAN_ID_INVALID,
         )?;
         Ok(Self(value))
     }
 
+    /// Returns the underlying lowercase hexadecimal span identifier.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -370,12 +459,13 @@ impl SpanId {
 fn validate_lower_hex(
     value: &str,
     expected_len: usize,
-    _code: &str,
+    code: &ErrorCode,
 ) -> Result<(), ValueValidationError> {
     if value.len() != expected_len {
-        return Err(ValueValidationError::new(format!(
-            "value must be {expected_len} lowercase hex characters"
-        )));
+        return Err(ValueValidationError::with_code(
+            code.clone(),
+            format!("value must be {expected_len} lowercase hex characters"),
+        ));
     }
     if value
         .chars()
@@ -383,12 +473,14 @@ fn validate_lower_hex(
     {
         Ok(())
     } else {
-        Err(ValueValidationError::new(
+        Err(ValueValidationError::with_code(
+            code.clone(),
             "value must contain lowercase hex characters only",
         ))
     }
 }
 
+/// Generic trace correlation context shared by logs, spans, and observations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TraceContext {
     pub trace_id: TraceId,
@@ -396,6 +488,7 @@ pub struct TraceContext {
     pub parent_span_id: Option<SpanId>,
 }
 
+/// Typed description of an entity moving from one state to another.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StateTransition {
     /// Stable category describing what changed, such as `task` or `subagent`.
@@ -412,10 +505,12 @@ pub struct StateTransition {
     pub trigger: Option<String>,
 }
 
+/// Marker trait for consumer-owned observation payloads.
 pub trait Observable: Send + Sync + 'static {}
 
 impl<T> Observable for T where T: Send + Sync + 'static {}
 
+/// Shared envelope around a typed observation payload.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Observation<T>
 where
@@ -433,6 +528,7 @@ impl<T> Observation<T>
 where
     T: Observable,
 {
+    /// Creates a new observation envelope using the current UTC timestamp.
     pub fn new(service: ServiceName, payload: T) -> Self {
         Self {
             version: constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
@@ -445,6 +541,7 @@ where
     }
 }
 
+/// Structured log record emitted by the logging and routing layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
     pub version: String,
@@ -464,6 +561,7 @@ pub struct LogEvent {
     pub fields: Map<String, Value>,
 }
 
+/// Final span status for a completed span record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpanStatus {
     Ok,
@@ -471,13 +569,16 @@ pub enum SpanStatus {
     Unset,
 }
 
+/// Typestate marker for a started-but-not-yet-ended span.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpanStarted;
 
+/// Typestate marker for a completed span.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpanEnded;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Producer-facing span record whose lifecycle is encoded via typestate.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct SpanRecord<S> {
     timestamp: Timestamp,
     service: ServiceName,
@@ -491,6 +592,7 @@ pub struct SpanRecord<S> {
 }
 
 impl SpanRecord<SpanStarted> {
+    /// Creates a new started span record.
     pub fn new(
         timestamp: Timestamp,
         service: ServiceName,
@@ -511,11 +613,13 @@ impl SpanRecord<SpanStarted> {
         }
     }
 
+    /// Attaches a diagnostic to the started span before completion.
     pub fn with_diagnostic(mut self, diagnostic: Diagnostic) -> Self {
         self.diagnostic = Some(diagnostic);
         self
     }
 
+    /// Consumes the started span and returns the only valid completed span form.
     pub fn end(self, status: SpanStatus, duration_ms: u64) -> SpanRecord<SpanEnded> {
         SpanRecord {
             timestamp: self.timestamp,
@@ -532,41 +636,50 @@ impl SpanRecord<SpanStarted> {
 }
 
 impl<S> SpanRecord<S> {
+    /// Returns the timestamp recorded for the span lifecycle event.
     pub fn timestamp(&self) -> Timestamp {
         self.timestamp
     }
 
+    /// Returns the service that emitted the span.
     pub fn service(&self) -> &ServiceName {
         &self.service
     }
 
+    /// Returns the stable action/name associated with the span.
     pub fn name(&self) -> &ActionName {
         &self.name
     }
 
+    /// Returns the trace context for the span.
     pub fn trace(&self) -> &TraceContext {
         &self.trace
     }
 
+    /// Returns the current typestate-derived span status.
     pub fn status(&self) -> SpanStatus {
         self.status
     }
 
+    /// Returns the optional diagnostic attached to the span.
     pub fn diagnostic(&self) -> Option<&Diagnostic> {
         self.diagnostic.as_ref()
     }
 
+    /// Returns immutable span attributes.
     pub fn attributes(&self) -> &Map<String, Value> {
         &self.attributes
     }
 }
 
 impl SpanRecord<SpanEnded> {
+    /// Returns the final duration, available only on completed spans.
     pub fn duration_ms(&self) -> u64 {
         self.duration_ms.unwrap_or_default()
     }
 }
 
+/// Event attached to a span timeline without creating a child span.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpanEvent {
     pub timestamp: Timestamp,
@@ -576,13 +689,15 @@ pub struct SpanEvent {
     pub diagnostic: Option<Diagnostic>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// Generic span lifecycle signal used by projectors and telemetry assembly.
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum SpanSignal {
     Started(SpanRecord<SpanStarted>),
     Event(SpanEvent),
     Ended(SpanRecord<SpanEnded>),
 }
 
+/// Supported metric aggregation shapes.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum MetricKind {
     Counter,
@@ -590,6 +705,7 @@ pub enum MetricKind {
     Histogram,
 }
 
+/// Structured metric observation projected from routing or telemetry layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetricRecord {
     pub timestamp: Timestamp,
@@ -602,6 +718,7 @@ pub struct MetricRecord {
     pub attributes: Map<String, Value>,
 }
 
+/// Top-level health state for the lightweight logging layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LoggingHealthState {
     Healthy,
@@ -609,6 +726,7 @@ pub enum LoggingHealthState {
     Unavailable,
 }
 
+/// Health state for an individual log sink.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SinkHealthState {
     Healthy,
@@ -616,6 +734,7 @@ pub enum SinkHealthState {
     Unavailable,
 }
 
+/// Health summary for one concrete logging sink.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SinkHealth {
     pub name: String,
@@ -623,15 +742,18 @@ pub struct SinkHealth {
     pub last_error: Option<DiagnosticSummary>,
 }
 
+/// Aggregate logging health report.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LoggingHealthReport {
     pub state: LoggingHealthState,
     pub dropped_events_total: u64,
+    pub flush_errors_total: u64,
     pub active_log_path: std::path::PathBuf,
     pub sink_statuses: Vec<SinkHealth>,
     pub last_error: Option<DiagnosticSummary>,
 }
 
+/// Top-level health state for the observation routing runtime.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ObservationHealthState {
     Healthy,
@@ -639,6 +761,7 @@ pub enum ObservationHealthState {
     Unavailable,
 }
 
+/// Aggregate routing/runtime health report.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ObservabilityHealthReport {
     pub state: ObservationHealthState,
@@ -650,6 +773,7 @@ pub struct ObservabilityHealthReport {
     pub last_error: Option<DiagnosticSummary>,
 }
 
+/// Top-level health state for telemetry export.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TelemetryHealthState {
     Disabled,
@@ -658,6 +782,7 @@ pub enum TelemetryHealthState {
     Unavailable,
 }
 
+/// Health state for an individual telemetry exporter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExporterHealthState {
     Healthy,
@@ -665,6 +790,7 @@ pub enum ExporterHealthState {
     Unavailable,
 }
 
+/// Health summary for one configured telemetry exporter.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExporterHealth {
     pub name: String,
@@ -672,14 +798,17 @@ pub struct ExporterHealth {
     pub last_error: Option<DiagnosticSummary>,
 }
 
+/// Aggregate telemetry/export health report.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TelemetryHealthReport {
     pub state: TelemetryHealthState,
     pub dropped_exports_total: u64,
+    pub malformed_spans_total: u64,
     pub exporter_statuses: Vec<ExporterHealth>,
     pub last_error: Option<DiagnosticSummary>,
 }
 
+/// Open subscriber contract for typed observations.
 pub trait ObservationSubscriber<T>: Send + Sync
 where
     T: Observable,
@@ -687,6 +816,7 @@ where
     fn handle(&self, observation: &Observation<T>) -> Result<(), SubscriberError>;
 }
 
+/// Open filter contract evaluated before subscriber or projector execution.
 pub trait ObservationFilter<T>: Send + Sync
 where
     T: Observable,
@@ -694,6 +824,7 @@ where
     fn accepts(&self, observation: &Observation<T>) -> bool;
 }
 
+/// Open projector contract from typed observations into log events.
 pub trait LogProjector<T>: Send + Sync
 where
     T: Observable,
@@ -701,6 +832,7 @@ where
     fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>;
 }
 
+/// Open projector contract from typed observations into span signals.
 pub trait SpanProjector<T>: Send + Sync
 where
     T: Observable,
@@ -711,6 +843,7 @@ where
     ) -> Result<Vec<SpanSignal>, ProjectionError>;
 }
 
+/// Open projector contract from typed observations into metric records.
 pub trait MetricProjector<T>: Send + Sync
 where
     T: Observable,
@@ -721,6 +854,7 @@ where
     ) -> Result<Vec<MetricRecord>, ProjectionError>;
 }
 
+/// Construction-time registration for one typed observation subscriber.
 #[derive(Clone)]
 pub struct SubscriberRegistration<T>
 where
@@ -730,6 +864,7 @@ where
     pub filter: Option<Arc<dyn ObservationFilter<T>>>,
 }
 
+/// Construction-time registration for log/span/metric projection of a payload.
 #[derive(Clone)]
 pub struct ProjectionRegistration<T>
 where
@@ -742,7 +877,8 @@ where
 }
 
 macro_rules! error_wrapper {
-    ($name:ident) => {
+    ($(#[$meta:meta])* $name:ident) => {
+        $(#[$meta])*
         #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
         #[error("{0}")]
         pub struct $name(pub Box<ErrorContext>);
@@ -755,15 +891,40 @@ macro_rules! error_wrapper {
     };
 }
 
-error_wrapper!(InitError);
-error_wrapper!(EventError);
-error_wrapper!(FlushError);
-error_wrapper!(ShutdownError);
-error_wrapper!(ProjectionError);
-error_wrapper!(SubscriberError);
-error_wrapper!(LogSinkError);
-error_wrapper!(ExportError);
+error_wrapper!(
+    /// Initialization error returned by public construction entry points.
+    InitError
+);
+error_wrapper!(
+    /// Event validation or lifecycle error returned during emit paths.
+    EventError
+);
+error_wrapper!(
+    /// Flush error returned by explicit flush operations.
+    FlushError
+);
+error_wrapper!(
+    /// Shutdown error returned when graceful shutdown fails.
+    ShutdownError
+);
+error_wrapper!(
+    /// Projection error returned by log/span/metric projectors.
+    ProjectionError
+);
+error_wrapper!(
+    /// Subscriber error returned by observation subscribers.
+    SubscriberError
+);
+error_wrapper!(
+    /// Logging sink error returned by concrete sink implementations.
+    LogSinkError
+);
+error_wrapper!(
+    /// Export error returned by concrete telemetry exporters.
+    ExportError
+);
 
+/// Routing/runtime error returned by `Observability::emit`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
 pub enum ObservationError {
     #[error("observation runtime is shut down")]
@@ -774,10 +935,407 @@ pub enum ObservationError {
     RoutingFailure(Box<ErrorContext>),
 }
 
+/// Telemetry emit error returned by `Telemetry` operations.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
 pub enum TelemetryError {
     #[error("telemetry runtime is shut down")]
     Shutdown,
     #[error("{0}")]
     ExportFailure(Box<ErrorContext>),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::{Deserialize, Serialize};
+    use serde_json::json;
+    use time::OffsetDateTime;
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    struct FixturePayload {
+        name: String,
+        count: u32,
+    }
+
+    fn service_name() -> ServiceName {
+        ServiceName::new("sc-observability").expect("valid service name")
+    }
+
+    fn target_category() -> TargetCategory {
+        TargetCategory::new("routing.core").expect("valid target category")
+    }
+
+    fn action_name() -> ActionName {
+        ActionName::new("observation.received").expect("valid action name")
+    }
+
+    fn metric_name() -> MetricName {
+        MetricName::new("obs.events_total").expect("valid metric name")
+    }
+
+    fn trace_context() -> TraceContext {
+        TraceContext {
+            trace_id: TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
+            span_id: SpanId::new("0123456789abcdef").expect("valid span id"),
+            parent_span_id: Some(SpanId::new("fedcba9876543210").expect("valid parent span id")),
+        }
+    }
+
+    fn diagnostic() -> Diagnostic {
+        Diagnostic {
+            timestamp: Timestamp::UNIX_EPOCH,
+            code: error_codes::DIAGNOSTIC_INVALID,
+            message: "diagnostic invalid".to_string(),
+            cause: Some("invalid example".to_string()),
+            remediation: Remediation::recoverable(
+                "fix the input",
+                ["rerun the command", "review the docs"],
+            ),
+            docs: Some("https://example.test/docs".to_string()),
+            details: Map::from_iter([("key".to_string(), json!("value"))]),
+        }
+    }
+
+    #[test]
+    fn remediation_construction_helpers_cover_both_variants() {
+        let recoverable = Remediation::recoverable("fix the input", ["retry"]);
+        let not_recoverable = Remediation::not_recoverable("manual intervention required");
+        let first_only = RecoverableSteps::first("first");
+        let all_steps = RecoverableSteps::all(["first", "second"]);
+
+        match recoverable {
+            Remediation::Recoverable { steps } => {
+                assert_eq!(steps.first_step(), Some("fix the input"));
+                assert_eq!(
+                    steps.steps(),
+                    ["fix the input".to_string(), "retry".to_string()]
+                );
+            }
+            Remediation::NotRecoverable { .. } => panic!("expected recoverable remediation"),
+        }
+
+        match not_recoverable {
+            Remediation::NotRecoverable { justification } => {
+                assert_eq!(justification, "manual intervention required");
+            }
+            Remediation::Recoverable { .. } => panic!("expected non-recoverable remediation"),
+        }
+
+        assert_eq!(first_only.first_step(), Some("first"));
+        assert_eq!(first_only.steps(), ["first".to_string()]);
+        assert_eq!(
+            all_steps.steps(),
+            ["first".to_string(), "second".to_string()]
+        );
+    }
+
+    #[test]
+    fn validated_name_newtypes_accept_expected_values() {
+        assert_eq!(
+            ToolName::new("codex-cli")
+                .expect("valid tool name")
+                .as_str(),
+            "codex-cli"
+        );
+        assert_eq!(
+            EnvPrefix::new("SC_OBSERVABILITY")
+                .expect("valid env prefix")
+                .as_str(),
+            "SC_OBSERVABILITY"
+        );
+        assert_eq!(
+            ServiceName::new("service.core")
+                .expect("valid service name")
+                .as_str(),
+            "service.core"
+        );
+        assert_eq!(
+            TargetCategory::new("pipeline-ingest")
+                .expect("valid target category")
+                .as_str(),
+            "pipeline-ingest"
+        );
+        assert_eq!(
+            ActionName::new("observation.received")
+                .expect("valid action name")
+                .as_str(),
+            "observation.received"
+        );
+        assert_eq!(
+            MetricName::new("obs/events_total")
+                .expect("valid metric name")
+                .as_str(),
+            "obs/events_total"
+        );
+    }
+
+    #[test]
+    fn validated_name_newtypes_reject_invalid_values() {
+        assert!(ToolName::new("").is_err());
+        assert!(EnvPrefix::new("sc_observability").is_err());
+        assert!(EnvPrefix::new("SC_OBSERVABILITY_").is_err());
+        assert!(ServiceName::new("service core").is_err());
+        assert!(TargetCategory::new("category/invalid").is_err());
+        assert!(ActionName::new("action invalid").is_err());
+        assert!(MetricName::new("metric name").is_err());
+    }
+
+    #[test]
+    fn trace_and_span_ids_validate_w3c_shapes() {
+        assert!(TraceId::new("0123456789abcdef0123456789abcdef").is_ok());
+        let short_trace = TraceId::new("0123456789abcdef0123456789abcde")
+            .expect_err("short trace id should fail");
+        assert_eq!(short_trace.code(), &error_codes::TRACE_ID_INVALID);
+        let uppercase_trace = TraceId::new("0123456789ABCDEF0123456789abcdef")
+            .expect_err("uppercase trace id should fail");
+        assert_eq!(uppercase_trace.code(), &error_codes::TRACE_ID_INVALID);
+
+        assert!(SpanId::new("0123456789abcdef").is_ok());
+        let short_span = SpanId::new("0123456789abcde").expect_err("short span id should fail");
+        assert_eq!(short_span.code(), &error_codes::SPAN_ID_INVALID);
+        let uppercase_span =
+            SpanId::new("0123456789ABCDEf").expect_err("uppercase span id should fail");
+        assert_eq!(uppercase_span.code(), &error_codes::SPAN_ID_INVALID);
+    }
+
+    #[test]
+    fn error_context_display_includes_cause_when_present() {
+        let error = ErrorContext::new(
+            error_codes::DIAGNOSTIC_INVALID,
+            "operation failed",
+            Remediation::recoverable("fix the config", ["retry"]),
+        )
+        .cause("missing field");
+
+        assert_eq!(error.to_string(), "operation failed: missing field");
+    }
+
+    #[test]
+    fn error_context_builder_sets_docs_details_and_source() {
+        let error = ErrorContext::new(
+            error_codes::DIAGNOSTIC_INVALID,
+            "operation failed",
+            Remediation::not_recoverable("investigate manually"),
+        )
+        .docs("https://example.test/failure")
+        .detail("attempt", json!(3))
+        .source(Box::new(std::io::Error::other("disk full")));
+
+        assert_eq!(
+            error.diagnostic().docs.as_deref(),
+            Some("https://example.test/failure")
+        );
+        assert_eq!(error.diagnostic().details.get("attempt"), Some(&json!(3)));
+        assert_eq!(error.source.as_deref(), Some("disk full"));
+    }
+
+    #[test]
+    fn diagnostic_round_trips_through_serde() {
+        let original = diagnostic();
+        let encoded = serde_json::to_string(&original).expect("serialize diagnostic");
+        let decoded: Diagnostic = serde_json::from_str(&encoded).expect("deserialize diagnostic");
+        assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn diagnostic_summary_captures_code_and_message() {
+        let summary = DiagnosticSummary::from(&diagnostic());
+
+        assert_eq!(summary.code, Some(error_codes::DIAGNOSTIC_INVALID));
+        assert_eq!(summary.message, "diagnostic invalid");
+        assert!(summary.at <= OffsetDateTime::now_utc());
+    }
+
+    #[test]
+    fn observation_round_trips_through_serde() {
+        let mut observation = Observation::new(
+            service_name(),
+            FixturePayload {
+                name: "agent-info".to_string(),
+                count: 2,
+            },
+        );
+        observation.identity = ProcessIdentity {
+            hostname: Some("host-1".to_string()),
+            pid: Some(42),
+        };
+        observation.trace = Some(trace_context());
+
+        let encoded = serde_json::to_string(&observation).expect("serialize observation");
+        let decoded: Observation<FixturePayload> =
+            serde_json::from_str(&encoded).expect("deserialize observation");
+        assert_eq!(decoded, observation);
+    }
+
+    #[test]
+    fn log_event_round_trips_through_serde() {
+        let event = LogEvent {
+            version: constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+            timestamp: OffsetDateTime::UNIX_EPOCH,
+            level: Level::Info,
+            service: service_name(),
+            target: target_category(),
+            action: action_name(),
+            message: Some("observation accepted".to_string()),
+            identity: ProcessIdentity {
+                hostname: Some("host-1".to_string()),
+                pid: Some(7),
+            },
+            trace: Some(trace_context()),
+            request_id: Some("req-1".to_string()),
+            correlation_id: Some("corr-1".to_string()),
+            outcome: Some("success".to_string()),
+            diagnostic: Some(diagnostic()),
+            state_transition: Some(StateTransition {
+                entity_kind: "subagent".to_string(),
+                entity_id: Some("agent-1".to_string()),
+                from_state: "started".to_string(),
+                to_state: "running".to_string(),
+                reason: Some("hook received".to_string()),
+                trigger: Some("subagent-start".to_string()),
+            }),
+            fields: Map::from_iter([("attempt".to_string(), json!(1))]),
+        };
+
+        let encoded = serde_json::to_string(&event).expect("serialize log event");
+        let decoded: LogEvent = serde_json::from_str(&encoded).expect("deserialize log event");
+        assert_eq!(decoded, event);
+    }
+
+    #[test]
+    fn span_signal_round_trips_through_serde() {
+        let mut attributes = Map::new();
+        attributes.insert("tool".to_string(), json!("rg"));
+
+        let started = SpanRecord::<SpanStarted>::new(
+            OffsetDateTime::UNIX_EPOCH,
+            service_name(),
+            action_name(),
+            trace_context(),
+            attributes.clone(),
+        )
+        .with_diagnostic(diagnostic());
+
+        let ended = started.clone().end(SpanStatus::Ok, 123);
+        let signal = SpanSignal::Ended(ended);
+        let encoded = serde_json::to_value(&signal).expect("serialize span signal");
+
+        assert_eq!(encoded["Ended"]["status"], "Ok");
+        assert_eq!(encoded["Ended"]["duration_ms"], 123);
+    }
+
+    #[test]
+    fn metric_record_round_trips_through_serde() {
+        let metric = MetricRecord {
+            timestamp: OffsetDateTime::UNIX_EPOCH,
+            service: service_name(),
+            name: metric_name(),
+            kind: MetricKind::Counter,
+            value: 4.0,
+            unit: Some("1".to_string()),
+            attributes: Map::from_iter([("state".to_string(), json!("running"))]),
+        };
+
+        let encoded = serde_json::to_string(&metric).expect("serialize metric");
+        let decoded: MetricRecord = serde_json::from_str(&encoded).expect("deserialize metric");
+        assert_eq!(decoded, metric);
+    }
+
+    #[test]
+    fn span_record_end_transitions_to_span_ended() {
+        let span = SpanRecord::<SpanStarted>::new(
+            OffsetDateTime::UNIX_EPOCH,
+            service_name(),
+            action_name(),
+            trace_context(),
+            Map::new(),
+        );
+
+        let ended = span.end(SpanStatus::Error, 88);
+
+        assert_eq!(ended.status(), SpanStatus::Error);
+        assert_eq!(ended.duration_ms(), 88);
+        assert_eq!(ended.service().as_str(), "sc-observability");
+    }
+
+    #[test]
+    fn observation_new_sets_defaults() {
+        let observation = Observation::new(
+            service_name(),
+            FixturePayload {
+                name: "payload".to_string(),
+                count: 1,
+            },
+        );
+
+        assert_eq!(observation.version, constants::OBSERVATION_ENVELOPE_VERSION);
+        assert_eq!(observation.identity, ProcessIdentity::default());
+        assert!(observation.trace.is_none());
+    }
+
+    #[test]
+    fn span_record_accessors_preserve_started_values() {
+        let mut attributes = Map::new();
+        attributes.insert("count".to_string(), json!(2));
+        let span = SpanRecord::<SpanStarted>::new(
+            OffsetDateTime::UNIX_EPOCH,
+            service_name(),
+            action_name(),
+            trace_context(),
+            attributes.clone(),
+        )
+        .with_diagnostic(diagnostic());
+
+        assert_eq!(span.timestamp(), OffsetDateTime::UNIX_EPOCH);
+        assert_eq!(span.name().as_str(), "observation.received");
+        assert_eq!(
+            span.trace().trace_id.as_str(),
+            "0123456789abcdef0123456789abcdef"
+        );
+        assert_eq!(span.status(), SpanStatus::Unset);
+        assert_eq!(span.diagnostic(), Some(&diagnostic()));
+        assert_eq!(span.attributes(), &attributes);
+    }
+
+    #[test]
+    fn health_reports_round_trip_through_serde() {
+        let sink = SinkHealth {
+            name: "jsonl".to_string(),
+            state: SinkHealthState::Healthy,
+            last_error: Some(DiagnosticSummary::from(&diagnostic())),
+        };
+        let logging = LoggingHealthReport {
+            state: LoggingHealthState::Healthy,
+            dropped_events_total: 0,
+            flush_errors_total: 0,
+            active_log_path: std::path::PathBuf::from("/var/log/service/logs/service.log.jsonl"),
+            sink_statuses: vec![sink],
+            last_error: None,
+        };
+        let telemetry = TelemetryHealthReport {
+            state: TelemetryHealthState::Healthy,
+            dropped_exports_total: 1,
+            malformed_spans_total: 0,
+            exporter_statuses: vec![ExporterHealth {
+                name: "otlp".to_string(),
+                state: ExporterHealthState::Degraded,
+                last_error: Some(DiagnosticSummary::from(&diagnostic())),
+            }],
+            last_error: Some(DiagnosticSummary::from(&diagnostic())),
+        };
+        let report = ObservabilityHealthReport {
+            state: ObservationHealthState::Degraded,
+            dropped_observations_total: 2,
+            subscriber_failures_total: 3,
+            projection_failures_total: 4,
+            logging: Some(logging),
+            telemetry: Some(telemetry),
+            last_error: Some(DiagnosticSummary::from(&diagnostic())),
+        };
+
+        let encoded = serde_json::to_string(&report).expect("serialize observability health");
+        let decoded: ObservabilityHealthReport =
+            serde_json::from_str(&encoded).expect("deserialize observability health");
+        assert_eq!(decoded, report);
+    }
 }

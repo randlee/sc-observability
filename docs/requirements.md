@@ -80,7 +80,7 @@ This crate owns shared neutral contracts only.
 - TYP-016 `SpanRecord<SpanEnded>` shall be reachable only through `SpanRecord<SpanStarted>::end(...)`.
 - TYP-017 Producer-facing `SpanRecord<S>` fields shall be private, with read access through accessors.
 - TYP-018 Final span duration shall be exposed only on `SpanRecord<SpanEnded>`.
-- TYP-019 `SpanState` serialization shall be derived from typestate at export/serialization time and shall not be a producer-facing mutable field.
+- TYP-019 `SpanState` serialization shall be derived from typestate at export/serialization time and shall not be a producer-facing mutable field. The `SpanStarted` and `SpanEnded` marker structs are the span-state mechanism; no additional producer-facing state type is required.
 - TYP-020 `Observable` shall remain an open trait for consumer-owned payload types.
 - TYP-021 `ObservationSubscriber<T>`, `ObservationFilter<T>`, `LogProjector<T>`, `SpanProjector<T>`, and `MetricProjector<T>` shall remain open extension points.
 - TYP-022 Crate-local emitter traits that are sealed to their implementing facade types shall be owned by the crate that implements them rather than by `sc-observability-types`.
@@ -113,9 +113,9 @@ This crate is the lightweight logging layer.
 - LOG-013 Sink filtering shall be sink-local policy, not producer burden.
 - LOG-014 Invalid log events shall fail fast with `EventError`.
 - LOG-015 Sink failures after validation shall be fail-open and shall not block the caller’s core flow.
-- LOG-016 Logging health shall expose `LoggingHealthReport`, `SinkHealth`, and
-  typed `SinkHealthState` (defined in `sc-observability-types` and
-  re-exported by `sc-observability`).
+- LOG-016 Logging health shall expose `LoggingHealthReport`,
+  `LoggingHealthState`, `SinkHealth`, and typed `SinkHealthState` (defined in
+  `sc-observability-types` and re-exported by `sc-observability`).
 - LOG-017 `sc-observability` shall not own typed observation routing.
 - LOG-018 `sc-observability` shall not own OTLP transport or any OpenTelemetry dependency.
 - LOG-019 `sc-observability` shall not own ATM-specific metadata rules, path conventions, or compatibility behavior.

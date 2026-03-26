@@ -28,71 +28,71 @@ Note:
   the SSOT ruling.
 - Shared constants are centralized here as SSOT per requirements.
 
-- [~] `ErrorCode`
-- [~] `error_codes` — per-crate stable `ErrorCode` constants registry
+- [x] `ErrorCode`
+- [x] `error_codes` — per-crate stable `ErrorCode` constants registry
   (SRC-001/SRC-002)
-- [~] `constants` — `sc-observability-types/src/constants.rs` (SSOT for all
+- [x] `constants` — `sc-observability-types/src/constants.rs` (SSOT for all
   shared cross-crate constants per TYP-031)
-- [~] `ValueValidationError`
-- [~] `ToolName`
-- [~] `EnvPrefix`
-- [~] `ServiceName`
-- [~] `TargetCategory`
-- [~] `ActionName`
-- [~] `MetricName`
-- [~] `RecoverableSteps`
-- [~] `Remediation`
-- [~] `Diagnostic`
-- [~] `DiagnosticInfo`
-- [~] `DiagnosticSummary`
-- [~] `ErrorContext`
-- [~] `IdentityError`
-- [~] `Level`
-- [~] `LevelFilter`
-- [~] `ProcessIdentity`
-- [~] `ProcessIdentityPolicy`
-- [~] `ProcessIdentityResolver`
-- [~] `TraceId`
-- [~] `SpanId`
-- [~] `TraceContext`
-- [~] `StateTransition`
-- [~] `Observation<T>`
-- [~] `LogEvent`
-- [~] `SpanStatus`
-- [~] `SpanStarted`
-- [~] `SpanEnded`
-- [~] `SpanRecord<S>`
-- [~] `SpanEvent`
-- [~] `SpanSignal`
-- [~] `MetricKind`
-- [~] `MetricRecord`
-- [~] `LoggingHealthState`
-- [~] `SinkHealthState`
-- [~] `SinkHealth`
-- [~] `LoggingHealthReport`
-- [~] `ObservationHealthState`
-- [~] `ObservabilityHealthReport`
-- [~] `TelemetryHealthState`
-- [~] `ExporterHealthState`
-- [~] `ExporterHealth`
-- [~] `TelemetryHealthReport`
-- [~] `ObservationSubscriber<T>`
-- [~] `ObservationFilter<T>`
-- [~] `LogProjector<T>`
-- [~] `SpanProjector<T>`
-- [~] `MetricProjector<T>`
-- [~] `SubscriberRegistration<T>`
-- [~] `ProjectionRegistration<T>`
-- [~] `InitError`
-- [~] `EventError`
-- [~] `FlushError`
-- [~] `ShutdownError`
-- [~] `ProjectionError`
-- [~] `SubscriberError`
-- [~] `LogSinkError`
-- [~] `ExportError`
-- [~] `ObservationError`
-- [~] `TelemetryError`
+- [x] `ValueValidationError`
+- [x] `ToolName`
+- [x] `EnvPrefix`
+- [x] `ServiceName`
+- [x] `TargetCategory`
+- [x] `ActionName`
+- [x] `MetricName`
+- [x] `RecoverableSteps`
+- [x] `Remediation`
+- [x] `Diagnostic`
+- [x] `DiagnosticInfo`
+- [x] `DiagnosticSummary`
+- [x] `ErrorContext`
+- [x] `IdentityError`
+- [x] `Level`
+- [x] `LevelFilter`
+- [x] `ProcessIdentity`
+- [x] `ProcessIdentityPolicy` — intentionally no serde; runtime policy only
+- [x] `ProcessIdentityResolver`
+- [x] `TraceId`
+- [x] `SpanId`
+- [x] `TraceContext`
+- [x] `StateTransition`
+- [x] `Observation<T>`
+- [x] `LogEvent`
+- [x] `SpanStatus`
+- [x] `SpanStarted`
+- [x] `SpanEnded`
+- [x] `SpanRecord<S>`
+- [x] `SpanEvent`
+- [x] `SpanSignal`
+- [x] `MetricKind`
+- [x] `MetricRecord`
+- [x] `LoggingHealthState`
+- [x] `SinkHealthState`
+- [x] `SinkHealth`
+- [x] `LoggingHealthReport`
+- [x] `ObservationHealthState`
+- [x] `ObservabilityHealthReport`
+- [x] `TelemetryHealthState`
+- [x] `ExporterHealthState`
+- [x] `ExporterHealth`
+- [x] `TelemetryHealthReport`
+- [x] `ObservationSubscriber<T>`
+- [x] `ObservationFilter<T>`
+- [x] `LogProjector<T>`
+- [x] `SpanProjector<T>`
+- [x] `MetricProjector<T>`
+- [x] `SubscriberRegistration<T>` — intentionally no serde; construction-time registration only
+- [x] `ProjectionRegistration<T>` — intentionally no serde; construction-time registration only
+- [x] `InitError`
+- [x] `EventError`
+- [x] `FlushError`
+- [x] `ShutdownError`
+- [x] `ProjectionError`
+- [x] `SubscriberError`
+- [x] `LogSinkError`
+- [x] `ExportError`
+- [x] `ObservationError`
+- [x] `TelemetryError`
 
 ### Finalized Public Rules
 
@@ -106,21 +106,23 @@ Note:
 
 ### Finalized Public Types
 
-- [~] `error_codes` — per-crate stable `ErrorCode` constants registry
+- [x] `error_codes` — per-crate stable `ErrorCode` constants registry
   (SRC-001/SRC-002)
-- [~] `LoggerConfig`
-- [~] `RotationPolicy`
-- [~] `RetentionPolicy`
-- [~] `RedactionPolicy`
-- [~] `Redactor`
-- [~] `Logger`
-- [~] `LogSink`
-- [~] `LogFilter`
-- [~] `SinkRegistration`
+- [x] `LoggerConfig`
+- [x] `RotationPolicy`
+- [x] `RetentionPolicy`
+- [x] `RedactionPolicy`
+- [x] `Redactor`
+- [x] `Logger`
+- [x] `JsonlFileSink`
+- [x] `ConsoleSink`
+- [x] `LogSink`
+- [x] `LogFilter`
+- [x] `SinkRegistration`
 
 Internal-only:
 
-- [~] `LogEmitter` — crate-local sealed logging injection trait (LOG-024;
+- [x] `LogEmitter` — crate-local sealed logging injection trait (LOG-024;
   `architecture.md` §3.2; internal-only, not part of public API)
 
 ### Finalized Public Rules
@@ -134,15 +136,18 @@ Internal-only:
 
 ### Finalized Public Types
 
-- [~] `error_codes` — per-crate stable `ErrorCode` constants registry
+- [x] `error_codes` — per-crate stable `ErrorCode` constants registry
   (SRC-001/SRC-002)
-- [~] `ObservabilityConfig`
-- [~] `ObservabilityBuilder`
-- [~] `Observability`
+- [x] `ObservabilityHealthReport` — re-exported from `sc-observability-types`
+- [x] `ObservationError` — re-exported from `sc-observability-types`
+- [x] `ObservationHealthState` — re-exported from `sc-observability-types`
+- [x] `ObservabilityConfig`
+- [x] `ObservabilityBuilder`
+- [x] `Observability`
 
 Internal-only:
 
-- [~] `ObservationEmitter<T>` — crate-local sealed observation injection trait
+- [x] `ObservationEmitter<T>` — crate-local sealed observation injection trait
   (OBS-025; `architecture.md` §3.3; internal-only, not part of public API)
 
 ### Finalized Public Rules
@@ -156,27 +161,27 @@ Internal-only:
 
 ### Finalized Public Types
 
-- [~] `error_codes` — per-crate stable `ErrorCode` constants registry
+- [x] `error_codes` — per-crate stable `ErrorCode` constants registry
   (SRC-001/SRC-002)
-- [~] `TelemetryConfig`
-- [~] `TelemetryConfigBuilder`
-- [~] `Telemetry`
-- [~] `OtlpProtocol`
-- [~] `OtelConfig`
-- [~] `LogsConfig`
-- [~] `TracesConfig`
-- [~] `MetricsConfig`
-- [~] `ResourceAttributes`
-- [~] `SpanAssembler`
-- [~] `CompleteSpan`
-- [~] `LogExporter`
-- [~] `TraceExporter`
-- [~] `MetricExporter`
+- [x] `TelemetryConfig`
+- [x] `TelemetryConfigBuilder`
+- [x] `Telemetry`
+- [x] `OtlpProtocol`
+- [x] `OtelConfig`
+- [x] `LogsConfig`
+- [x] `TracesConfig`
+- [x] `MetricsConfig`
+- [x] `ResourceAttributes`
+- [x] `SpanAssembler`
+- [x] `CompleteSpan`
+- [x] `LogExporter`
+- [x] `TraceExporter`
+- [x] `MetricExporter`
 
 Internal-only:
 
-- `SpanEmitter`
-- `MetricEmitter`
+- [x] `SpanEmitter` (pub(crate), sealed, internal-only)
+- [x] `MetricEmitter` (pub(crate), sealed, internal-only)
 
 Note:
 - sealed/crate-local per `architecture.md` §3.4 and OTLP-022

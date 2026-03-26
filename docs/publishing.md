@@ -36,3 +36,5 @@ Before the ATM workspace switches to crates.io dependencies from this repo:
 - Preflight workflow: `.github/workflows/release-preflight.yml`
 - Release workflow: `.github/workflows/release.yml`
 - Release notes template: `release/RELEASE-NOTES-TEMPLATE.md`
+- Release exit checklist:
+  [docs/release-readiness-checklist.md](./release-readiness-checklist.md)

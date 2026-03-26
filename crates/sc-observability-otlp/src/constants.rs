@@ -1,3 +1,5 @@
+//! Crate-local constants for `sc-observability-otlp`.
+
 pub const DEFAULT_OTLP_TIMEOUT_MS: u64 = 3_000;
 pub const DEFAULT_OTLP_MAX_RETRIES: u32 = 3;
 pub const DEFAULT_OTLP_INITIAL_BACKOFF_MS: u64 = 250;

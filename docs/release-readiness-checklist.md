@@ -1,0 +1,18 @@
+# Release Readiness Checklist
+
+- [x] All four shared crates build in one workspace.
+- [x] API design, requirements, architecture, and implementation plan docs are present.
+- [x] ATM adapter requirement, architecture, mapping, and example docs are present.
+- [x] `docs/public-api-checklist.md` is fully marked complete.
+- [x] Workspace version is set and shared through `workspace.package.version`.
+- [x] Shared crate Cargo manifests use the workspace version.
+- [x] Publish manifest exists at `release/publish-artifacts.toml`.
+- [x] Publish order validation script exists and passes.
+- [x] Release preflight workflow exists.
+- [x] Release workflow exists.
+- [x] CI includes docs-consistency and dependency-ban validation.
+- [x] Repo-boundary validation passes.
+- [x] ATM adapter example compiles and runs in normal mode.
+- [x] ATM adapter example compiles and runs in fail-open mode.
+- [x] Migration guide for ATM consumers exists.
+- [x] Performance review is documented.
