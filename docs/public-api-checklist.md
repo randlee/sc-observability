@@ -122,10 +122,10 @@ Note:
 - [x] `RedactionPolicy`
 - [x] `Redactor`
 - [x] `Logger`
-- [~] `Logger::query(&self, &LogQuery) -> Result<LogSnapshot, QueryError>`
-- [~] `Logger::follow(&self, LogQuery) -> Result<LogFollowSession, QueryError>`
-- [~] `LogFollowSession`
-- [~] `JsonlLogReader`
+- [x] `Logger::query(&self, &LogQuery) -> Result<LogSnapshot, QueryError>`
+- [x] `Logger::follow(&self, LogQuery) -> Result<LogFollowSession, QueryError>`
+- [x] `LogFollowSession`
+- [x] `JsonlLogReader`
 - [x] `JsonlFileSink`
 - [x] `ConsoleSink`
 - [x] `LogSink`

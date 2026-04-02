@@ -1,0 +1,384 @@
+use std::fs::{self, File};
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
+
+use sc_observability_types::{
+    ErrorContext, LogEvent, LogFieldPredicate, LogOrder, LogQuery, LogSnapshot, QueryError,
+    Remediation, error_codes,
+};
+use serde_json::{Value, json};
+
+#[cfg(test)]
+use crate::rotated_log_path;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct FileIdentity {
+    #[cfg(unix)]
+    device: u64,
+    #[cfg(unix)]
+    inode: u64,
+    #[cfg(not(unix))]
+    len: u64,
+    #[cfg(not(unix))]
+    modified_nanos: Option<u128>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedLogFile {
+    pub(crate) path: PathBuf,
+    pub(crate) identity: FileIdentity,
+    pub(crate) len: u64,
+    pub(crate) is_active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TrackedFile {
+    pub(crate) identity: FileIdentity,
+    pub(crate) offset: u64,
+}
+
+pub(crate) fn query_snapshot(
+    active_log_path: &Path,
+    query: &LogQuery,
+) -> Result<LogSnapshot, QueryError> {
+    query.validate()?;
+    let resolved = resolve_visible_files(active_log_path)?;
+    read_snapshot(query, &resolved, |file| {
+        if file.is_active {
+            query.start_position.unwrap_or(0)
+        } else {
+            0
+        }
+    })
+}
+
+pub(crate) fn start_follow_tracking(
+    active_log_path: &Path,
+) -> Result<Vec<TrackedFile>, QueryError> {
+    Ok(resolve_visible_files(active_log_path)?
+        .into_iter()
+        .map(|file| TrackedFile {
+            identity: file.identity,
+            offset: file.len,
+        })
+        .collect())
+}
+
+pub(crate) fn poll_follow_snapshot(
+    active_log_path: &Path,
+    query: &LogQuery,
+    tracked_files: &mut Vec<TrackedFile>,
+) -> Result<LogSnapshot, QueryError> {
+    let resolved = resolve_visible_files(active_log_path)?;
+    let previous = std::mem::take(tracked_files);
+    *tracked_files = resolved
+        .iter()
+        .map(|file| TrackedFile {
+            identity: file.identity.clone(),
+            offset: previous
+                .iter()
+                .find(|tracked| tracked.identity == file.identity)
+                .map(|tracked| tracked.offset)
+                .unwrap_or(0),
+        })
+        .collect();
+
+    read_incremental_snapshot(query, &resolved, tracked_files)
+}
+
+pub(crate) fn shutdown_error(message: impl Into<String>) -> QueryError {
+    QueryError::Shutdown(Box::new(ErrorContext::new(
+        error_codes::SC_LOG_QUERY_SHUTDOWN,
+        message,
+        Remediation::recoverable("create a new query/follow session after restart", ["retry"]),
+    )))
+}
+
+pub(crate) fn unavailable_error(message: impl Into<String>) -> QueryError {
+    QueryError::Unavailable(Box::new(ErrorContext::new(
+        error_codes::SC_LOG_QUERY_UNAVAILABLE,
+        message,
+        Remediation::recoverable("enable or restore the JSONL log source", ["retry"]),
+    )))
+}
+
+fn io_error(
+    path: &Path,
+    action: &str,
+    error: impl std::error::Error + Send + Sync + 'static,
+) -> QueryError {
+    let rendered_path = path.display().to_string();
+    let cause = error.to_string();
+    QueryError::IoError(Box::new(
+        ErrorContext::new(
+            error_codes::SC_LOG_QUERY_IO,
+            format!("failed to {action} log file"),
+            Remediation::recoverable("verify the log path and file permissions", ["retry"]),
+        )
+        .cause(cause)
+        .detail("path", Value::String(rendered_path))
+        .source(Box::new(error)),
+    ))
+}
+
+fn decode_error(
+    path: &Path,
+    offset: u64,
+    line: &str,
+    error: impl std::error::Error + Send + Sync + 'static,
+) -> QueryError {
+    let cause = error.to_string();
+    QueryError::DecodeError(Box::new(
+        ErrorContext::new(
+            error_codes::SC_LOG_QUERY_DECODE,
+            "failed to decode JSONL log record",
+            Remediation::recoverable(
+                "repair or remove the malformed JSONL record",
+                ["retry the query"],
+            ),
+        )
+        .cause(cause)
+        .detail("path", Value::String(path.display().to_string()))
+        .detail("offset", json!(offset))
+        .detail("line", Value::String(line.to_string()))
+        .source(Box::new(error)),
+    ))
+}
+
+fn resolve_visible_files(active_log_path: &Path) -> Result<Vec<ResolvedLogFile>, QueryError> {
+    let parent = active_log_path.parent().unwrap_or_else(|| Path::new("."));
+    let active_name = active_log_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("active.log.jsonl")
+        .to_string();
+
+    let mut rotated = Vec::new();
+    if let Ok(entries) = fs::read_dir(parent) {
+        for entry in entries {
+            let entry = entry.map_err(|err| io_error(parent, "read log directory entry", err))?;
+            let path = entry.path();
+            let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            let Some(suffix) = file_name.strip_prefix(&format!("{active_name}.")) else {
+                continue;
+            };
+            let Ok(index) = suffix.parse::<u32>() else {
+                continue;
+            };
+            let metadata = entry
+                .metadata()
+                .map_err(|err| io_error(&path, "read log file metadata", err))?;
+            rotated.push((
+                index,
+                ResolvedLogFile {
+                    path,
+                    identity: file_identity(&metadata),
+                    len: metadata.len(),
+                    is_active: false,
+                },
+            ));
+        }
+    }
+
+    rotated.sort_by(|left, right| right.0.cmp(&left.0));
+    let mut resolved: Vec<ResolvedLogFile> = rotated.into_iter().map(|(_, file)| file).collect();
+
+    if let Ok(metadata) = fs::metadata(active_log_path) {
+        resolved.push(ResolvedLogFile {
+            path: active_log_path.to_path_buf(),
+            identity: file_identity(&metadata),
+            len: metadata.len(),
+            is_active: true,
+        });
+    }
+
+    Ok(resolved)
+}
+
+fn read_snapshot(
+    query: &LogQuery,
+    resolved: &[ResolvedLogFile],
+    offset_for: impl Fn(&ResolvedLogFile) -> u64,
+) -> Result<LogSnapshot, QueryError> {
+    let mut scanned = 0;
+    let mut matches = Vec::new();
+
+    for file in resolved {
+        let (events, _) = read_events_from_path(&file.path, offset_for(file))?;
+        scanned += events.len() as u64;
+        for event in events {
+            if event_matches_query(&event, query) {
+                matches.push(event);
+            }
+        }
+    }
+
+    Ok(finalize_snapshot(query, scanned, matches))
+}
+
+fn read_incremental_snapshot(
+    query: &LogQuery,
+    resolved: &[ResolvedLogFile],
+    tracked_files: &mut [TrackedFile],
+) -> Result<LogSnapshot, QueryError> {
+    let mut scanned = 0;
+    let mut matches = Vec::new();
+
+    for (file, tracked) in resolved.iter().zip(tracked_files.iter_mut()) {
+        let (events, end_offset) = read_events_from_path(&file.path, tracked.offset)?;
+        tracked.offset = end_offset;
+        scanned += events.len() as u64;
+        for event in events {
+            if event_matches_query(&event, query) {
+                matches.push(event);
+            }
+        }
+    }
+
+    Ok(finalize_snapshot(query, scanned, matches))
+}
+
+fn finalize_snapshot(
+    query: &LogQuery,
+    total_scanned: u64,
+    mut matches: Vec<LogEvent>,
+) -> LogSnapshot {
+    if matches!(query.order, LogOrder::Desc) {
+        matches.reverse();
+    }
+
+    let truncated = query
+        .limit
+        .is_some_and(|limit| (matches.len() as u64) > limit);
+
+    if let Some(limit) = query.limit {
+        let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+        matches.truncate(limit);
+    }
+
+    LogSnapshot {
+        events: matches,
+        total_scanned,
+        truncated,
+    }
+}
+
+fn read_events_from_path(
+    path: &Path,
+    start_offset: u64,
+) -> Result<(Vec<LogEvent>, u64), QueryError> {
+    let file = File::open(path).map_err(|err| io_error(path, "open", err))?;
+    let file_len = file
+        .metadata()
+        .map_err(|err| io_error(path, "read log file metadata", err))?
+        .len();
+    let start_offset = start_offset.min(file_len);
+
+    let mut reader = BufReader::new(file);
+    reader
+        .seek(SeekFrom::Start(start_offset))
+        .map_err(|err| io_error(path, "seek within", err))?;
+
+    let mut events = Vec::new();
+    let mut line = String::new();
+    loop {
+        let line_offset = reader
+            .stream_position()
+            .map_err(|err| io_error(path, "read stream position", err))?;
+        line.clear();
+        let bytes = reader
+            .read_line(&mut line)
+            .map_err(|err| io_error(path, "read", err))?;
+        if bytes == 0 {
+            break;
+        }
+        let raw = line.trim_end_matches('\n').trim_end_matches('\r');
+        let event = serde_json::from_str::<LogEvent>(raw)
+            .map_err(|err| decode_error(path, line_offset, raw, err))?;
+        events.push(event);
+    }
+
+    let end_offset = reader
+        .stream_position()
+        .map_err(|err| io_error(path, "read stream position", err))?;
+    Ok((events, end_offset))
+}
+
+fn event_matches_query(event: &LogEvent, query: &LogQuery) -> bool {
+    query
+        .service
+        .as_ref()
+        .is_none_or(|service| &event.service == service)
+        && (query.levels.is_empty() || query.levels.contains(&event.level))
+        && query
+            .target
+            .as_ref()
+            .is_none_or(|target| &event.target == target)
+        && query
+            .action
+            .as_ref()
+            .is_none_or(|action| &event.action == action)
+        && query
+            .request_id
+            .as_ref()
+            .is_none_or(|request_id| event.request_id.as_ref() == Some(request_id))
+        && query
+            .correlation_id
+            .as_ref()
+            .is_none_or(|correlation_id| event.correlation_id.as_ref() == Some(correlation_id))
+        && query.since.is_none_or(|since| event.timestamp >= since)
+        && query.until.is_none_or(|until| event.timestamp <= until)
+        && query.field_matches.iter().all(|field_match| {
+            event
+                .fields
+                .get(&field_match.field)
+                .is_some_and(|value| field_predicate_matches(value, &field_match.predicate))
+        })
+}
+
+fn field_predicate_matches(value: &Value, predicate: &LogFieldPredicate) -> bool {
+    match predicate {
+        LogFieldPredicate::Equals(expected) => value == expected,
+    }
+}
+
+fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+
+        FileIdentity {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let modified_nanos = metadata
+            .modified()
+            .ok()
+            .and_then(|modified| {
+                modified
+                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                    .ok()
+            })
+            .map(|duration| duration.as_nanos());
+        FileIdentity {
+            len: metadata.len(),
+            modified_nanos,
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn query_active_and_rotated_paths(active_path: &Path, max_files: u32) -> Vec<PathBuf> {
+    let mut paths = (1..=max_files)
+        .rev()
+        .map(|index| rotated_log_path(active_path, index))
+        .collect::<Vec<_>>();
+    paths.push(active_path.to_path_buf());
+    paths
+}

@@ -7,6 +7,11 @@
 pub mod constants;
 pub mod error_codes;
 
+mod follow;
+mod health;
+mod jsonl_reader;
+mod query;
+
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -14,10 +19,15 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
+use crate::health::QueryHealthTracker;
+#[doc(inline)]
+pub use follow::LogFollowSession;
+#[doc(inline)]
+pub use jsonl_reader::JsonlLogReader;
 use sc_observability_types::{
     Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, FlushError, InitError, Level,
-    LevelFilter, LogEvent, LogSinkError, ProcessIdentityPolicy, Remediation, ServiceName,
-    ShutdownError, Timestamp,
+    LevelFilter, LogEvent, LogQuery, LogSinkError, LogSnapshot, ProcessIdentityPolicy, QueryError,
+    QueryHealthState, Remediation, ServiceName, ShutdownError, Timestamp,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -154,11 +164,26 @@ impl LoggerConfig {
     }
 }
 
-#[derive(Default)]
 struct LoggerRuntime {
     dropped_events_total: AtomicU64,
     flush_errors_total: AtomicU64,
     last_error: Mutex<Option<DiagnosticSummary>>,
+    query_health: Arc<QueryHealthTracker>,
+}
+
+impl LoggerRuntime {
+    fn new(query_available: bool) -> Self {
+        Self {
+            dropped_events_total: AtomicU64::new(0),
+            flush_errors_total: AtomicU64::new(0),
+            last_error: Mutex::new(None),
+            query_health: Arc::new(QueryHealthTracker::new(if query_available {
+                QueryHealthState::Healthy
+            } else {
+                QueryHealthState::Unavailable
+            })),
+        }
+    }
 }
 
 pub struct Logger {
@@ -171,10 +196,12 @@ pub struct Logger {
 impl Logger {
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
+        let query_available = active_log_path.exists() || config.enable_file_sink;
         let mut sinks = Vec::new();
 
         if config.enable_file_sink {
-            let sink = JsonlFileSink::new(active_log_path, config.rotation, config.retention);
+            let sink =
+                JsonlFileSink::new(active_log_path.clone(), config.rotation, config.retention);
             sinks.push(SinkRegistration::new(Arc::new(sink)));
         }
 
@@ -186,7 +213,7 @@ impl Logger {
             config,
             sinks,
             shutdown: AtomicBool::new(false),
-            runtime: LoggerRuntime::default(),
+            runtime: LoggerRuntime::new(query_available),
         })
     }
 
@@ -232,6 +259,26 @@ impl Logger {
         Ok(())
     }
 
+    /// Queries the current JSONL log set synchronously using the shared query contract.
+    pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError> {
+        let reader = self.query_reader()?;
+        let result = reader.query(query);
+        self.runtime.query_health.record_result(&result);
+        result
+    }
+
+    /// Starts a tail-style follow session from the current end of the visible log set.
+    pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError> {
+        let active_log_path = self.ensure_query_available()?;
+        let result = LogFollowSession::with_health(
+            active_log_path,
+            query,
+            self.runtime.query_health.clone(),
+        );
+        self.runtime.query_health.record_result(&result);
+        result
+    }
+
     fn flush_registered_sinks(&self) {
         for registration in &self.sinks {
             if let Err(err) = registration.sink.flush() {
@@ -246,6 +293,7 @@ impl Logger {
         }
 
         self.flush_registered_sinks();
+        self.runtime.query_health.mark_unavailable(None);
         Ok(())
     }
 
@@ -265,7 +313,7 @@ impl Logger {
             flush_errors_total: self.runtime.flush_errors_total.load(Ordering::SeqCst),
             active_log_path: default_log_path(&self.config.log_root, &self.config.service_name),
             sink_statuses,
-            query: None,
+            query: Some(self.runtime.query_health.snapshot()),
             last_error: self
                 .runtime
                 .last_error
@@ -326,6 +374,31 @@ impl Logger {
             .expect("logger last_error poisoned") =
             Some(DiagnosticSummary::from(error.diagnostic()));
     }
+
+    fn query_reader(&self) -> Result<JsonlLogReader, QueryError> {
+        self.ensure_query_available().map(JsonlLogReader::new)
+    }
+
+    fn ensure_query_available(&self) -> Result<PathBuf, QueryError> {
+        if self.shutdown.load(Ordering::SeqCst) {
+            let error = query::shutdown_error("logger query/follow runtime is shut down");
+            self.runtime.query_health.record_error(&error);
+            return Err(error);
+        }
+
+        if !self.config.enable_file_sink {
+            let error = query::unavailable_error(
+                "logger query/follow requires the built-in JSONL file sink to be enabled",
+            );
+            self.runtime.query_health.record_error(&error);
+            return Err(error);
+        }
+
+        Ok(default_log_path(
+            &self.config.log_root,
+            &self.config.service_name,
+        ))
+    }
 }
 
 pub struct JsonlFileSink {
@@ -371,13 +444,7 @@ impl JsonlFileSink {
     }
 
     fn rotated_path(&self, index: u32) -> PathBuf {
-        let parent = self.path.parent().unwrap_or_else(|| Path::new("."));
-        let file_name = self
-            .path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("active.log.jsonl");
-        parent.join(format!("{file_name}.{index}"))
+        rotated_log_path(&self.path, index)
     }
 
     fn prune_old_files(&self) {
@@ -631,11 +698,20 @@ fn validate_event(event: &LogEvent, expected_service: &ServiceName) -> Result<()
     Ok(())
 }
 
-fn default_log_path(log_root: &Path, service_name: &ServiceName) -> PathBuf {
+pub(crate) fn default_log_path(log_root: &Path, service_name: &ServiceName) -> PathBuf {
     log_root
         .join(service_name.as_str())
         .join("logs")
         .join(format!("{}.log.jsonl", service_name.as_str()))
+}
+
+pub(crate) fn rotated_log_path(active_path: &Path, index: u32) -> PathBuf {
+    let parent = active_path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = active_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("active.log.jsonl");
+    parent.join(format!("{file_name}.{index}"))
 }
 
 fn rename_if_present(src: &Path, dest: &Path) -> std::io::Result<()> {
@@ -676,8 +752,8 @@ fn redact_bearer_token_text(input: &str) -> String {
 mod tests {
     use super::*;
     use sc_observability_types::{
-        ActionName, Diagnostic, ErrorCode, Level, LogEvent, ProcessIdentity, TargetCategory,
-        Timestamp,
+        ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogOrder, LogQuery, LogSnapshot,
+        ProcessIdentity, QueryError, QueryHealthState, TargetCategory, Timestamp,
     };
     use serde_json::json;
     use std::sync::Arc;
@@ -804,6 +880,35 @@ mod tests {
                 ("secret".to_string(), json!("raw")),
             ]),
         }
+    }
+
+    fn log_event_with_request(
+        service_name: ServiceName,
+        request_id: &str,
+        message_padding: usize,
+    ) -> LogEvent {
+        let mut event = log_event(service_name);
+        event.message = Some(format!("{request_id} {}", "x".repeat(message_padding)));
+        event.request_id = Some(request_id.to_string());
+        event
+            .fields
+            .insert("sequence".to_string(), json!(request_id.to_string()));
+        event
+    }
+
+    fn query_all(order: LogOrder) -> LogQuery {
+        LogQuery {
+            order,
+            ..LogQuery::default()
+        }
+    }
+
+    fn request_ids(snapshot: &LogSnapshot) -> Vec<String> {
+        snapshot
+            .events
+            .iter()
+            .map(|event| event.request_id.clone().expect("request_id"))
+            .collect()
     }
 
     #[test]
@@ -1091,5 +1196,169 @@ mod tests {
         logger.shutdown().expect("shutdown");
 
         assert_eq!(sink.flush_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn historical_query_reads_active_and_rotated_files() {
+        let root = temp_path("query-rotated");
+        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        config.rotation.max_bytes = 350;
+        config.rotation.max_files = 4;
+        let logger = Logger::new(config).expect("logger");
+
+        for request_id in ["req-1", "req-2", "req-3"] {
+            logger
+                .emit(log_event_with_request(service_name(), request_id, 240))
+                .expect("emit");
+        }
+
+        let active_path = default_log_path(&root, &service_name());
+        let resolved_paths = crate::query::query_active_and_rotated_paths(&active_path, 4);
+        assert!(
+            resolved_paths
+                .iter()
+                .any(|path| path.ends_with("sc-observability.log.jsonl.1"))
+        );
+        assert!(
+            resolved_paths
+                .iter()
+                .any(|path| path.ends_with("sc-observability.log.jsonl"))
+        );
+
+        let asc = logger.query(&query_all(LogOrder::Asc)).expect("asc query");
+        assert_eq!(request_ids(&asc), ["req-1", "req-2", "req-3"]);
+
+        let desc = logger
+            .query(&LogQuery {
+                order: LogOrder::Desc,
+                limit: Some(2),
+                ..LogQuery::default()
+            })
+            .expect("desc query");
+        assert_eq!(request_ids(&desc), ["req-3", "req-2"]);
+        assert!(desc.truncated);
+    }
+
+    #[test]
+    fn logger_and_jsonl_reader_query_have_parity() {
+        let root = temp_path("query-parity");
+        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        config.rotation.max_bytes = 350;
+        config.rotation.max_files = 4;
+        let logger = Logger::new(config).expect("logger");
+
+        for request_id in ["req-a", "req-b", "req-c"] {
+            logger
+                .emit(log_event_with_request(service_name(), request_id, 220))
+                .expect("emit");
+        }
+
+        let query = LogQuery {
+            order: LogOrder::Desc,
+            limit: Some(2),
+            ..LogQuery::default()
+        };
+        let logger_snapshot = logger.query(&query).expect("logger query");
+        let reader = JsonlLogReader::new(default_log_path(&root, &service_name()));
+        let reader_snapshot = reader.query(&query).expect("reader query");
+
+        assert_eq!(reader_snapshot, logger_snapshot);
+    }
+
+    #[test]
+    fn follow_starts_at_tail_and_survives_multiple_rotations() {
+        let root = temp_path("follow-rotation");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.rotation.max_bytes = 350;
+        config.rotation.max_files = 6;
+        let logger = Logger::new(config).expect("logger");
+
+        logger
+            .emit(log_event_with_request(service_name(), "backlog", 220))
+            .expect("emit backlog");
+
+        let mut follow = logger.follow(query_all(LogOrder::Asc)).expect("follow");
+        assert!(follow.poll().expect("initial poll").events.is_empty());
+
+        for request_id in ["fresh-1", "fresh-2", "fresh-3"] {
+            logger
+                .emit(log_event_with_request(service_name(), request_id, 220))
+                .expect("emit fresh");
+        }
+
+        let snapshot = follow.poll().expect("follow poll");
+        assert_eq!(request_ids(&snapshot), ["fresh-1", "fresh-2", "fresh-3"]);
+        assert_eq!(follow.health().state, QueryHealthState::Healthy);
+    }
+
+    #[test]
+    fn logger_and_jsonl_reader_follow_have_parity() {
+        let root = temp_path("follow-parity");
+        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        config.rotation.max_bytes = 350;
+        config.rotation.max_files = 6;
+        let logger = Logger::new(config).expect("logger");
+
+        logger
+            .emit(log_event_with_request(service_name(), "backlog", 220))
+            .expect("emit backlog");
+
+        let query = query_all(LogOrder::Asc);
+        let mut logger_follow = logger.follow(query.clone()).expect("logger follow");
+        let reader = JsonlLogReader::new(default_log_path(&root, &service_name()));
+        let mut reader_follow = reader.follow(query).expect("reader follow");
+
+        for request_id in ["reader-1", "reader-2"] {
+            logger
+                .emit(log_event_with_request(service_name(), request_id, 220))
+                .expect("emit fresh");
+        }
+
+        assert_eq!(
+            logger_follow.poll().expect("logger follow poll"),
+            reader_follow.poll().expect("reader follow poll")
+        );
+    }
+
+    #[test]
+    fn query_health_tracks_decode_and_shutdown_failures() {
+        use std::io::Write as _;
+
+        let root = temp_path("query-health");
+        let config = LoggerConfig::default_for(service_name(), root.clone());
+        let logger = Logger::new(config).expect("logger");
+
+        logger
+            .emit(log_event_with_request(service_name(), "healthy", 20))
+            .expect("emit");
+
+        let active_path = default_log_path(&root, &service_name());
+        let mut file = OpenOptions::new()
+            .append(true)
+            .open(&active_path)
+            .expect("open active log");
+        writeln!(file, "{{not-json").expect("append malformed json");
+
+        let decode_error = logger
+            .query(&query_all(LogOrder::Asc))
+            .expect_err("decode error");
+        assert!(matches!(decode_error, QueryError::DecodeError(_)));
+        let degraded_health = logger.health().query.expect("query health");
+        assert_eq!(degraded_health.state, QueryHealthState::Degraded);
+        assert!(degraded_health.last_error.is_some());
+
+        logger.shutdown().expect("shutdown");
+        let shutdown_error = logger
+            .query(&query_all(LogOrder::Asc))
+            .expect_err("shutdown error");
+        assert!(matches!(shutdown_error, QueryError::Shutdown(_)));
+        assert_eq!(
+            logger.health().query.expect("query health").state,
+            QueryHealthState::Unavailable
+        );
+        assert!(matches!(
+            logger.follow(query_all(LogOrder::Asc)),
+            Err(QueryError::Shutdown(_))
+        ));
     }
 }
