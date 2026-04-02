@@ -11,5 +11,6 @@ description = "Standalone OTLP export adapter for sc-observability."
 [dependencies]
 serde_json.workspace = true
 thiserror.workspace = true
+sc-observability.workspace = true
 sc-observability-types.workspace = true
 sc-observe.workspace = true

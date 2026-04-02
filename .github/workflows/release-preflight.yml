@@ -92,23 +92,43 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          url="https://crates.io/api/v1/crates/sc-observability-types"
-          response_path="${RUNNER_TEMP}/sc-observability-types.json"
-          status="$(curl --silent --show-error --location --output "$response_path" --write-out '%{http_code}' "$url")"
-          case "$status" in
-            200)
-              echo "enabled=false" >> "$GITHUB_OUTPUT"
-              echo "sc-observability-types already exists on crates.io; using cargo package preflight."
-              ;;
-            404)
-              echo "enabled=true" >> "$GITHUB_OUTPUT"
-              echo "sc-observability-types not found on crates.io; using cargo publish --dry-run --no-verify for initial release preflight."
-              ;;
-            *)
-              echo "Failed to determine crates.io state for sc-observability-types (HTTP $status)." >&2
-              exit 1
-              ;;
-          esac
+          crates=(
+            sc-observability-types
+            sc-observability
+            sc-observe
+            sc-observability-otlp
+          )
+          present=()
+          absent=()
+          for crate in "${crates[@]}"; do
+            url="https://crates.io/api/v1/crates/${crate}"
+            response_path="${RUNNER_TEMP}/${crate}.json"
+            status="$(curl --silent --show-error --location --output "$response_path" --write-out '%{http_code}' "$url")"
+            case "$status" in
+              200)
+                present+=("$crate")
+                ;;
+              404)
+                absent+=("$crate")
+                ;;
+              *)
+                echo "Failed to determine crates.io state for ${crate} (HTTP $status)." >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          if [[ ${#absent[@]} -eq ${#crates[@]} ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "All publish-order crates are absent on crates.io; using initial-release dry-run preflight."
+          elif [[ ${#present[@]} -eq ${#crates[@]} ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "All publish-order crates already exist on crates.io; using cargo package preflight."
+          else
+            echo "Mixed crates.io state detected. Present: ${present[*]:-<none>}. Absent: ${absent[*]:-<none>}." >&2
+            echo "Initial-release dry-run mode is allowed only when all 4 crates are absent; normal package mode is allowed only when all 4 crates are present." >&2
+            exit 1
+          fi
 
       - name: Run dependency-aware publish preflight checks
         shell: bash
@@ -116,6 +136,11 @@ jobs:
           set -euo pipefail
           while IFS='|' read -r package _; do
             if [[ '${{ steps.initial_release.outputs.enabled }}' == 'true' ]]; then
+              # Initial standalone publish must use --no-verify because path
+              # deps are not yet on crates.io; correctness is covered by the
+              # preceding fmt/clippy/test/package-preflight validation steps,
+              # and this path must NOT be used outside the all-crates-absent
+              # initial-release case detected above.
               cargo publish -p "$package" --dry-run --locked --no-verify
             else
               cargo package -p "$package" --locked --allow-dirty
