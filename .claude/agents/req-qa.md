@@ -51,7 +51,7 @@ Input must be fenced JSON:
 
 - Do NOT dismiss violations as "pre-existing" or "not worsened."
 - Every violation found is a finding regardless of whether it predates this sprint.
-- List each finding with source/target file:line and a remediation note.
+- List each finding with file:line and a remediation note.
 - The pre-existing/new distinction is informational only. It does not change severity or blocking status.
 
 ## Output Contract
