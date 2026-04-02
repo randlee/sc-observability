@@ -9,6 +9,7 @@ pub mod constants;
 pub mod error_codes;
 mod errors;
 mod health;
+mod query;
 
 use std::borrow::Cow;
 use std::fmt;
@@ -27,9 +28,11 @@ pub use errors::{
 };
 pub use health::{
     ExporterHealth, ExporterHealthState, LoggingHealthReport, LoggingHealthState,
-    ObservabilityHealthReport, ObservationHealthState, SinkHealth, SinkHealthState,
-    TelemetryHealthReport, TelemetryHealthState,
+    ObservabilityHealthReport, ObservationHealthState, QueryHealthReport, QueryHealthState,
+    SinkHealth, SinkHealthState, TelemetryHealthProvider, TelemetryHealthReport,
+    TelemetryHealthState,
 };
+pub use query::{LogFieldMatch, LogFieldPredicate, LogOrder, LogQuery, LogSnapshot, QueryError};
 
 /// Canonical millisecond duration type used across the workspace.
 #[derive(
@@ -1355,6 +1358,10 @@ mod tests {
             // fixture path: not accessed on disk
             active_log_path: std::path::PathBuf::from("/var/log/service/logs/service.log.jsonl"),
             sink_statuses: vec![sink],
+            query: Some(QueryHealthReport {
+                state: QueryHealthState::Healthy,
+                last_error: None,
+            }),
             last_error: None,
         };
         let telemetry = TelemetryHealthReport {

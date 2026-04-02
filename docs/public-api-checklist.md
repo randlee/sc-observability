@@ -67,16 +67,17 @@ Note:
 - [x] `LoggingHealthState`
 - [x] `SinkHealthState`
 - [x] `SinkHealth`
-- [~] `LoggingHealthReport`
+- [x] `LoggingHealthReport`
 - [x] `Timestamp` (UTC-enforced public type, not a plain alias)
-- [~] `LogOrder`
-- [~] `LogFieldMatch`
-- [~] `LogQuery`
-- [~] `LogSnapshot`
-- [~] `QueryError`
-- [~] `QueryHealthState`
-- [~] `QueryHealthReport`
-- [~] `TelemetryHealthProvider`
+- [x] `LogOrder`
+- [x] `LogFieldPredicate`
+- [x] `LogFieldMatch`
+- [x] `LogQuery`
+- [x] `LogSnapshot`
+- [x] `QueryError`
+- [x] `QueryHealthState`
+- [x] `QueryHealthReport`
+- [x] `TelemetryHealthProvider`
 - [x] `ObservationHealthState`
 - [~] `ObservabilityHealthReport`
 - [x] `TelemetryHealthState`

@@ -28,12 +28,18 @@ Required tests:
 
 - validation tests for all name newtypes
 - `TraceId` and `SpanId` validation tests
+- `LogQuery` validation tests
 - remediation construction tests
 - `ErrorContext` rendering tests
+- `QueryError` to `SC_LOG_QUERY_*` mapping tests
 - serde round-trip tests for:
   - `Diagnostic`
   - `Observation<T>` with fixture payloads
   - `LogEvent`
+  - `LogQuery`
+  - `LogSnapshot`
+  - `QueryError`
+  - `QueryHealthReport`
   - `SpanSignal`
   - `MetricRecord`
 - typestate tests for `SpanRecord<SpanStarted>::end(...)`
