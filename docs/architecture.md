@@ -161,7 +161,6 @@ pub struct LogQuery {
     pub field_matches: Vec<LogFieldMatch>,
     pub limit: Option<usize>,
     pub order: LogOrder,
-    pub start_position: Option<u64>,
 }
 
 pub struct LogSnapshot {

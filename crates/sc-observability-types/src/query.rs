@@ -48,7 +48,6 @@ pub struct LogQuery {
     pub field_matches: Vec<LogFieldMatch>,
     pub limit: Option<usize>,
     pub order: LogOrder,
-    pub start_position: Option<u64>,
 }
 
 impl LogQuery {
@@ -232,7 +231,6 @@ mod tests {
             field_matches: vec![LogFieldMatch::equals("status", json!("ok"))],
             limit: Some(25),
             order: LogOrder::NewestFirst,
-            start_position: Some(512),
         };
 
         let encoded = serde_json::to_value(&query).expect("serialize query");
