@@ -121,10 +121,10 @@ Note:
 - [x] `RedactionPolicy`
 - [x] `Redactor`
 - [x] `Logger`
-- [~] `Logger::query(&self, &LogQuery) -> Result<LogSnapshot, QueryError>`
-- [~] `Logger::follow(&self, LogQuery) -> Result<LogFollowSession, QueryError>`
-- [~] `LogFollowSession`
-- [~] `JsonlLogReader`
+- [x] `Logger::query(&self, &LogQuery) -> Result<LogSnapshot, QueryError>`
+- [x] `Logger::follow(&self, LogQuery) -> Result<LogFollowSession, QueryError>`
+- [x] `LogFollowSession`
+- [x] `JsonlLogReader`
 - [x] `JsonlFileSink`
 - [x] `ConsoleSink`
 - [x] `LogSink`
@@ -141,6 +141,8 @@ Internal-only:
 - file sink is enabled by default
 - console sink is disabled by default
 - sink failures are fail-open
+- logger-owned follow sessions become unavailable after `Logger::shutdown()`
+- `JsonlLogReader` remains independent from `Logger` lifecycle
 
 ## 4. `sc-observe`
 

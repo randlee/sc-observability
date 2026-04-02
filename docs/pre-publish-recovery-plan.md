@@ -334,10 +334,10 @@ Run the final production-readiness pass only after S0 through S3 are merged.
 - release readiness checklist is actually complete
 - team-lead receives a pass/fail publish recommendation backed by evidence
 
-### 9.5 Outstanding Important Findings From Phase Final Review
+### 9.5 Important Findings Carried Into Sprint 4
 
-These findings remain required Sprint 4 hardening scope even after the missing
-API work lands:
+Sprint 4 closed the following carried findings through shipped code changes,
+factual documentation updates, or both:
 
 - `QA-001`
 - `BP-ST-001`
@@ -355,9 +355,12 @@ API work lands:
 - `REQ-QA-008-phase`
 - `REQ-QA-009-phase`
 
-Sprint 4 also explicitly reviews `LogFollowSession` lifecycle typing,
-`BP-TS-001` on Logger and Telemetry shutdown-state hardening, and `BP-TS-002`
-on `SpanRecord<SpanEnded>` optional duration before publish.
+Sprint 4 also reviews `LogFollowSession` lifecycle typing, `BP-TS-001` on
+Logger and Telemetry shutdown-state hardening, and `BP-TS-002` on
+`SpanRecord<SpanEnded>` optional duration before publish. The closure rule for
+this branch is that none of these items remain blocking after the Sprint 4
+validation suite passes and the release-readiness checklist is marked from
+evidence rather than optimism.
 
 ## 10. Design Closure Loop
 
