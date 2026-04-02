@@ -16,9 +16,13 @@ pub(crate) struct FileIdentity {
     device: u64,
     #[cfg(unix)]
     inode: u64,
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    volume_serial_number: u32,
+    #[cfg(windows)]
+    file_index: u64,
+    #[cfg(not(any(unix, windows)))]
     len: u64,
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     modified_nanos: Option<u128>,
 }
 
@@ -31,6 +35,7 @@ pub(crate) struct ResolvedLogFile {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TrackedFile {
+    pub(crate) path: PathBuf,
     pub(crate) identity: FileIdentity,
     pub(crate) offset: u64,
 }
@@ -50,6 +55,7 @@ pub(crate) fn start_follow_tracking(
     Ok(resolve_visible_files(active_log_path)?
         .into_iter()
         .map(|file| TrackedFile {
+            path: file.path,
             identity: file.identity,
             offset: file.len,
         })
@@ -66,17 +72,38 @@ pub(crate) fn poll_follow_snapshot(
     *tracked_files = resolved
         .iter()
         .map(|file| TrackedFile {
+            path: file.path.clone(),
             identity: file.identity.clone(),
-            offset: previous
-                .iter()
-                .find(|tracked| tracked.identity == file.identity)
-                .map(|tracked| tracked.offset)
-                .filter(|offset| *offset <= file.len)
-                .unwrap_or(0),
+            offset: tracked_offset_for(file, &previous),
         })
         .collect();
 
     read_incremental_snapshot(query, &resolved, tracked_files)
+}
+
+fn tracked_offset_for(file: &ResolvedLogFile, previous: &[TrackedFile]) -> u64 {
+    if let Some(tracked) = previous.iter().find(|tracked| tracked.path == file.path) {
+        if tracked.identity != file.identity {
+            return 0;
+        }
+        return if tracked.offset <= file.len {
+            tracked.offset
+        } else {
+            0
+        };
+    }
+
+    previous
+        .iter()
+        .find(|tracked| tracked.identity == file.identity)
+        .map(|tracked| {
+            if tracked.offset <= file.len {
+                tracked.offset
+            } else {
+                0
+            }
+        })
+        .unwrap_or(0)
 }
 
 pub(crate) fn shutdown_error(message: impl Into<String>) -> QueryError {
@@ -325,7 +352,17 @@ fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
         }
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        FileIdentity {
+            volume_serial_number: metadata.volume_serial_number().unwrap_or(0),
+            file_index: metadata.file_index().unwrap_or(0),
+        }
+    }
+
+    #[cfg(not(any(unix, windows)))]
     {
         let modified_nanos = metadata
             .modified()
@@ -351,4 +388,67 @@ pub(crate) fn query_active_and_rotated_paths(active_path: &Path, max_files: u32)
         .collect::<Vec<_>>();
     paths.push(active_path.to_path_buf());
     paths
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_identity(seed: u64) -> FileIdentity {
+        #[cfg(unix)]
+        {
+            FileIdentity {
+                device: 1,
+                inode: seed,
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            FileIdentity {
+                volume_serial_number: 1,
+                file_index: seed,
+            }
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            FileIdentity {
+                len: seed,
+                modified_nanos: Some(u128::from(seed)),
+            }
+        }
+    }
+
+    #[test]
+    fn follow_tracking_resets_when_same_path_identity_changes() {
+        let previous = vec![TrackedFile {
+            path: PathBuf::from("active.log.jsonl"),
+            identity: test_identity(1),
+            offset: 128,
+        }];
+        let recreated = ResolvedLogFile {
+            path: PathBuf::from("active.log.jsonl"),
+            identity: test_identity(2),
+            len: 512,
+        };
+
+        assert_eq!(tracked_offset_for(&recreated, &previous), 0);
+    }
+
+    #[test]
+    fn follow_tracking_preserves_offset_when_rotation_moves_identity_to_new_path() {
+        let previous = vec![TrackedFile {
+            path: PathBuf::from("active.log.jsonl"),
+            identity: test_identity(7),
+            offset: 256,
+        }];
+        let rotated = ResolvedLogFile {
+            path: PathBuf::from("active.log.jsonl.1"),
+            identity: test_identity(7),
+            len: 512,
+        };
+
+        assert_eq!(tracked_offset_for(&rotated, &previous), 256);
+    }
 }
