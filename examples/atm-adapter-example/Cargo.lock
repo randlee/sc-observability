@@ -79,6 +79,7 @@ dependencies = [
 name = "sc-observability-otlp"
 version = "1.0.0"
 dependencies = [
+ "sc-observability",
  "sc-observability-types",
  "sc-observe",
  "serde_json",
