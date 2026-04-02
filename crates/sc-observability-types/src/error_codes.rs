@@ -17,6 +17,17 @@ pub const IDENTITY_RESOLUTION_FAILED: ErrorCode =
 /// Error code for generic diagnostic construction or validation failures.
 pub const DIAGNOSTIC_INVALID: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID");
+/// Error code for invalid historical/follow query inputs.
+pub const SC_LOG_QUERY_INVALID_QUERY: ErrorCode =
+    ErrorCode::new_static("SC_LOG_QUERY_INVALID_QUERY");
+/// Error code for query I/O failures.
+pub const SC_LOG_QUERY_IO: ErrorCode = ErrorCode::new_static("SC_LOG_QUERY_IO");
+/// Error code for query decode failures.
+pub const SC_LOG_QUERY_DECODE: ErrorCode = ErrorCode::new_static("SC_LOG_QUERY_DECODE");
+/// Error code for query unavailability failures.
+pub const SC_LOG_QUERY_UNAVAILABLE: ErrorCode = ErrorCode::new_static("SC_LOG_QUERY_UNAVAILABLE");
+/// Error code for query shutdown failures.
+pub const SC_LOG_QUERY_SHUTDOWN: ErrorCode = ErrorCode::new_static("SC_LOG_QUERY_SHUTDOWN");
 
 /// Enumerable registry of all public `sc-observability-types` error codes.
 pub const ALL: &[ErrorCode] = &[
@@ -25,4 +36,9 @@ pub const ALL: &[ErrorCode] = &[
     SPAN_ID_INVALID,
     IDENTITY_RESOLUTION_FAILED,
     DIAGNOSTIC_INVALID,
+    SC_LOG_QUERY_INVALID_QUERY,
+    SC_LOG_QUERY_IO,
+    SC_LOG_QUERY_DECODE,
+    SC_LOG_QUERY_UNAVAILABLE,
+    SC_LOG_QUERY_SHUTDOWN,
 ];

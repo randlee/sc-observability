@@ -1094,7 +1094,7 @@ Public crate-surface errors should be structured around diagnostics.
 Design direction:
 
 ```rust
-pub trait DiagnosticInfo {
+pub trait DiagnosticInfo: sealed::Sealed {
     fn diagnostic(&self) -> &Diagnostic;
 }
 

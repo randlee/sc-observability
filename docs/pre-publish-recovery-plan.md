@@ -113,10 +113,10 @@ The public OTLP integration surface is frozen as:
 - `TelemetryProjectors<T>::into_registration()` returns a
   `ProjectionRegistration<T>` suitable for direct registration with
   `ObservabilityBuilder`
-- `Telemetry` implements a public `TelemetryHealthProvider` trait owned by
-  `sc-observability-types`
+- `Telemetry` participates through workspace-owned plumbing around the public
+  `TelemetryHealthProvider` trait owned by `sc-observability-types`
 - `TelemetryHealthProvider` is frozen as:
-  `pub trait TelemetryHealthProvider: Send + Sync { fn telemetry_health(&self) -> TelemetryHealthReport; }`
+  `pub trait TelemetryHealthProvider: sealed::Sealed + Send + Sync { fn telemetry_health(&self) -> TelemetryHealthReport; }`
 - `ObservabilityBuilder` exposes
   `with_telemetry_health_provider(Arc<dyn TelemetryHealthProvider>)` so
   `ObservabilityHealthReport.telemetry` can be populated without adding an OTLP
@@ -165,9 +165,8 @@ Close the missing shared-contract and best-practice gaps in
 - `SC_LOG_QUERY_SHUTDOWN`
 - `LoggingHealthReport.query`
 
-The `SC_LOG_QUERY_*` stable error codes are deferred from this planning checkpoint
-to Sprint 2.1, where the shared query/follow contract ships as one coherent
-surface.
+The `SC_LOG_QUERY_*` stable error codes land in Sprint 2.1, where the shared
+query/follow contract ships as one coherent surface.
 
 `LoggingHealthReport.query` is also deferred to Sprint 2.1 so the health field
 lands together with `QueryHealthReport` and the shared query vocabulary.
@@ -218,7 +217,7 @@ Implement the missing historical query and synchronous tail APIs in
 
 - historical reads cover the active log plus the rotation set that matches the
   documented naming layout
-- `OldestFirst` and `NewestFirst` are deterministic
+- `LogOrder::OldestFirst` and `LogOrder::NewestFirst` are deterministic
 - follow sessions survive active-file rename/recreate during rotation
 - committed records are neither duplicated nor silently skipped across rotation
 - `follow().poll()` is synchronous and caller-driven
@@ -237,7 +236,7 @@ Implement the missing historical query and synchronous tail APIs in
 
 - historical query over active file only
 - historical query over active + rotated files
-- `NewestFirst` ordering with limit
+- `LogOrder::NewestFirst` ordering with limit
 - invalid query validation paths
 - malformed record decode failure path
 - follow session starts at tail, not backlog

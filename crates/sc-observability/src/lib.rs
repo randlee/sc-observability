@@ -265,6 +265,7 @@ impl Logger {
             flush_errors_total: self.runtime.flush_errors_total.load(Ordering::SeqCst),
             active_log_path: default_log_path(&self.config.log_root, &self.config.service_name),
             sink_statuses,
+            query: None,
             last_error: self
                 .runtime
                 .last_error
