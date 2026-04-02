@@ -171,11 +171,6 @@ pub enum QueryError {
     Shutdown,
 }
 
-`QueryError` is backed by the stable error-code constants
-`SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`,
-`SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN` per `requirements.md`
-TYP-036.
-
 pub enum QueryHealthState {
     Healthy,
     Degraded,
@@ -221,6 +216,11 @@ impl JsonlLogReader {
     pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>;
 }
 ```
+
+`QueryError` is backed by the stable error-code constants
+`SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`,
+`SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN` per `requirements.md`
+TYP-036.
 
 Behavioral boundaries:
 
@@ -423,7 +423,7 @@ Important boundary:
 | `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, identifiers, diagnostics, traits, health type definitions, and logging query/follow value/error contracts |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, redaction, rotation, `Logger`, `JsonlLogReader`, follow session runtime, and logging health re-exports |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
-| `sc-observability-otlp` | `sc-observability-types`, `sc-observability`, `sc-observe` | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
+| `sc-observability-otlp` | `sc-observability-types`, `sc-observe` | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
 
 ## 6.1 Query/Follow Dependency Order
 

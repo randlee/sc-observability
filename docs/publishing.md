@@ -23,7 +23,8 @@ cutover, new releases of these crate names must come from this repo instead.
   - each crate package version
 - Release preflight uses two modes:
   - if `sc-observability-types` already exists on crates.io, preflight runs the
-    normal dependency-aware `cargo package --locked` checks in publish order
+    normal dependency-aware `cargo package --locked --allow-dirty` checks in
+    publish order
   - if `sc-observability-types` is not yet on crates.io, preflight treats the
     run as the initial standalone publish and uses
     `cargo publish --dry-run --locked --no-verify` for each crate in publish

@@ -93,7 +93,8 @@ jobs:
         run: |
           set -euo pipefail
           url="https://crates.io/api/v1/crates/sc-observability-types"
-          status="$(curl --silent --show-error --location --output /tmp/sc-observability-types.json --write-out '%{http_code}' "$url")"
+          response_path="${RUNNER_TEMP}/sc-observability-types.json"
+          status="$(curl --silent --show-error --location --output "$response_path" --write-out '%{http_code}' "$url")"
           case "$status" in
             200)
               echo "enabled=false" >> "$GITHUB_OUTPUT"
@@ -109,7 +110,7 @@ jobs:
               ;;
           esac
 
-      - name: Run dependency-aware package checks
+      - name: Run dependency-aware publish preflight checks
         shell: bash
         run: |
           set -euo pipefail

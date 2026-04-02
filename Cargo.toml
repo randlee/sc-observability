@@ -21,3 +21,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
+sc-observability-types = { version = "1.0.0", path = "crates/sc-observability-types" }
+sc-observability = { version = "1.0.0", path = "crates/sc-observability" }
+sc-observe = { version = "1.0.0", path = "crates/sc-observe" }
+sc-observability-otlp = { version = "1.0.0", path = "crates/sc-observability-otlp" }
