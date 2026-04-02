@@ -70,8 +70,8 @@ Owns:
 - `Timestamp`, `DurationMs`
 - `TraceContext`, `TraceId`, `SpanId`
 - `SpanRecord<S>`, `SpanSignal`, `MetricRecord`, `LogEvent`
-- `TelemetryHealthProvider` (planned, not yet shipped — Sprint 2.3 scope)
-- `LogQuery`, `LogOrder`, `LogFieldMatch`
+- `TelemetryHealthProvider`
+- `LogQuery`, `LogOrder`, `LogFieldPredicate`, `LogFieldMatch`
 - `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
 - health report contracts
 - shared open traits such as `Observable`, `DiagnosticInfo`,
@@ -128,8 +128,9 @@ require an async runtime.
 
 Type ownership is split as follows:
 
-- `sc-observability-types` owns `LogQuery`, `LogOrder`, `LogFieldMatch`,
-  `LogSnapshot`, `QueryError`, `QueryHealthState`, and `QueryHealthReport`
+- `sc-observability-types` owns `LogQuery`, `LogOrder`,
+  `LogFieldPredicate`, `LogFieldMatch`, `LogSnapshot`, `QueryError`,
+  `QueryHealthState`, `QueryHealthReport`, and `TelemetryHealthProvider`
 - `sc-observability-types` extends `LoggingHealthReport` with
   `query: Option<QueryHealthReport>`
 - `sc-observability` owns `Logger::query`, `Logger::follow`,
@@ -139,13 +140,17 @@ Approved public API surface for this sprint:
 
 ```rust
 pub enum LogOrder {
-    OldestFirst,
-    NewestFirst,
+    Asc,
+    Desc,
+}
+
+pub enum LogFieldPredicate {
+    Equals(serde_json::Value),
 }
 
 pub struct LogFieldMatch {
     pub field: String,
-    pub value: serde_json::Value,
+    pub predicate: LogFieldPredicate,
 }
 
 pub struct LogQuery {
@@ -158,21 +163,23 @@ pub struct LogQuery {
     pub since: Option<Timestamp>,
     pub until: Option<Timestamp>,
     pub field_matches: Vec<LogFieldMatch>,
-    pub limit: Option<usize>,
+    pub limit: Option<u64>,
     pub order: LogOrder,
+    pub start_position: Option<u64>,
 }
 
 pub struct LogSnapshot {
     pub events: Vec<LogEvent>,
+    pub total_scanned: u64,
     pub truncated: bool,
 }
 
 pub enum QueryError {
     InvalidQuery(Box<ErrorContext>),
-    Io(Box<ErrorContext>),
-    Decode(Box<ErrorContext>),
+    IoError(Box<ErrorContext>),
+    DecodeError(Box<ErrorContext>),
     Unavailable(Box<ErrorContext>),
-    Shutdown,
+    Shutdown(Box<ErrorContext>),
 }
 
 pub enum QueryHealthState {
@@ -194,6 +201,10 @@ pub struct LoggingHealthReport {
     pub sink_statuses: Vec<SinkHealth>,
     pub query: Option<QueryHealthReport>,
     pub last_error: Option<DiagnosticSummary>,
+}
+
+pub trait TelemetryHealthProvider: Send + Sync {
+    fn telemetry_health(&self) -> TelemetryHealthReport;
 }
 
 impl Logger {
@@ -365,12 +376,12 @@ Historical query strategy:
 - resolve the active file and its rotated siblings once at query start
 - treat that resolved set as a point-in-time snapshot for the duration of the
   query
-- scan in oldest-to-newest order for `OldestFirst` and in reverse for
-  `NewestFirst`
+- scan in oldest-to-newest order for `LogOrder::Asc` and in reverse for
+  `LogOrder::Desc`
 - apply filtering before limit truncation and report truncation through
   `LogSnapshot.truncated`
 - surface malformed JSONL records or contract decode failures as
-  `QueryError::Decode` rather than silently dropping them
+  `QueryError::DecodeError` rather than silently dropping them
 
 Follow strategy:
 
@@ -433,7 +444,7 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `TelemetryHealthProvider` (planned, not yet shipped — Sprint 2.3 scope), health type definitions, and logging query/follow value and error contracts |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `TelemetryHealthProvider`, health type definitions, and logging query/follow value and error contracts |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, redaction, rotation, `Logger`, `JsonlLogReader`, follow session runtime, and logging health re-exports |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability`, `sc-observe` | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |

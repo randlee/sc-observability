@@ -188,12 +188,12 @@ separate JSONL rotation size-check/rename race is tracked independently as
 
 Ship the entire shared query/follow contract in `sc-observability-types`:
 
-- `REQ-QA-001`: `LogQuery`, `LogOrder`, `LogFieldMatch`
+- `REQ-QA-001`: `LogQuery`, `LogOrder`, `LogFieldPredicate`, `LogFieldMatch`
 - `REQ-QA-002`: `LogSnapshot`
 - `REQ-QA-003`: `QueryError` and `SC_LOG_QUERY_*`
 - `REQ-QA-004`: `QueryHealthReport`, `QueryHealthState`,
   `LoggingHealthReport.query`
-- shared `TelemetryHealthProvider` trait needed later by Sprint `2.4`
+- shared `TelemetryHealthProvider` trait shipped here for later Sprint `2.4` use
 
 ### Key files to modify
 
@@ -224,6 +224,7 @@ names today; this sprint is a genuine new shared-contract addition.
   - `limit = Some(0)` is invalid
   - `since > until` is invalid
   - `field_matches` use exact field-name and exact JSON value equality
+- `LogSnapshot.total_scanned` is part of the stable result contract
 - `QueryError` codes are stable and documented
 - logging health is extended with query availability
 
@@ -272,9 +273,9 @@ Implement the historical query path in `sc-observability`:
 ### Deliverables
 
 - `Logger::query(&self, &LogQuery) -> Result<LogSnapshot, QueryError>`
-- deterministic `OldestFirst` and `NewestFirst`
+- deterministic `LogOrder::Asc` and `LogOrder::Desc`
 - historical scan over the active file and resolved rotation set
-- malformed JSONL records surface as `QueryError::Decode`
+- malformed JSONL records surface as `QueryError::DecodeError`
 - query health reflects availability and last error
 
 ### Estimated waves
