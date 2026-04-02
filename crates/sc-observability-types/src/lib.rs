@@ -7,6 +7,8 @@
 
 pub mod constants;
 pub mod error_codes;
+mod errors;
+mod health;
 
 use std::borrow::Cow;
 use std::fmt;
@@ -18,6 +20,16 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use thiserror::Error;
 use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Rfc3339};
+
+pub use errors::{
+    EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ObservationError,
+    ProjectionError, ShutdownError, SubscriberError, TelemetryError,
+};
+pub use health::{
+    ExporterHealth, ExporterHealthState, LoggingHealthReport, LoggingHealthState,
+    ObservabilityHealthReport, ObservationHealthState, SinkHealth, SinkHealthState,
+    TelemetryHealthReport, TelemetryHealthState,
+};
 
 /// Canonical millisecond duration type used across the workspace.
 #[derive(
@@ -42,6 +54,12 @@ impl From<u64> for DurationMs {
 impl From<DurationMs> for u64 {
     fn from(value: DurationMs) -> Self {
         value.0
+    }
+}
+
+impl fmt::Display for DurationMs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}ms", self.0)
     }
 }
 
@@ -210,6 +228,12 @@ macro_rules! validated_name_type {
             /// Returns the underlying validated string value.
             pub fn as_str(&self) -> &str {
                 &self.0
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&self.0)
             }
         }
     };
@@ -476,17 +500,6 @@ impl std::error::Error for ErrorContext {
         self.source
             .as_deref()
             .map(|source| source as &(dyn std::error::Error + 'static))
-    }
-}
-
-/// Error returned when process identity resolution fails.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
-#[error("{0}")]
-pub struct IdentityError(pub Box<ErrorContext>);
-
-impl DiagnosticInfo for IdentityError {
-    fn diagnostic(&self) -> &Diagnostic {
-        self.0.diagnostic()
     }
 }
 
@@ -812,7 +825,8 @@ impl<S> SpanRecord<S> {
 impl SpanRecord<SpanEnded> {
     /// Returns the final duration, available only on completed spans.
     pub fn duration_ms(&self) -> DurationMs {
-        self.duration_ms.unwrap_or_default()
+        self.duration_ms
+            .expect("SpanRecord<SpanEnded> always has duration_ms set by end()")
     }
 }
 
@@ -853,96 +867,6 @@ pub struct MetricRecord {
     /// Optional UCUM unit string, for example `ms`, `By`, or `1`.
     pub unit: Option<String>,
     pub attributes: Map<String, Value>,
-}
-
-/// Top-level health state for the lightweight logging layer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum LoggingHealthState {
-    Healthy,
-    DegradedDropping,
-    Unavailable,
-}
-
-/// Health state for an individual log sink.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SinkHealthState {
-    Healthy,
-    DegradedDropping,
-    Unavailable,
-}
-
-/// Health summary for one concrete logging sink.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SinkHealth {
-    pub name: String,
-    pub state: SinkHealthState,
-    pub last_error: Option<DiagnosticSummary>,
-}
-
-/// Aggregate logging health report.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct LoggingHealthReport {
-    pub state: LoggingHealthState,
-    pub dropped_events_total: u64,
-    pub flush_errors_total: u64,
-    pub active_log_path: std::path::PathBuf,
-    pub sink_statuses: Vec<SinkHealth>,
-    pub last_error: Option<DiagnosticSummary>,
-}
-
-/// Top-level health state for the observation routing runtime.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ObservationHealthState {
-    Healthy,
-    Degraded,
-    Unavailable,
-}
-
-/// Aggregate routing/runtime health report.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ObservabilityHealthReport {
-    pub state: ObservationHealthState,
-    pub dropped_observations_total: u64,
-    pub subscriber_failures_total: u64,
-    pub projection_failures_total: u64,
-    pub logging: Option<LoggingHealthReport>,
-    pub telemetry: Option<TelemetryHealthReport>,
-    pub last_error: Option<DiagnosticSummary>,
-}
-
-/// Top-level health state for telemetry export.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TelemetryHealthState {
-    Disabled,
-    Healthy,
-    Degraded,
-    Unavailable,
-}
-
-/// Health state for an individual telemetry exporter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ExporterHealthState {
-    Healthy,
-    Degraded,
-    Unavailable,
-}
-
-/// Health summary for one configured telemetry exporter.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ExporterHealth {
-    pub name: String,
-    pub state: ExporterHealthState,
-    pub last_error: Option<DiagnosticSummary>,
-}
-
-/// Aggregate telemetry/export health report.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TelemetryHealthReport {
-    pub state: TelemetryHealthState,
-    pub dropped_exports_total: u64,
-    pub malformed_spans_total: u64,
-    pub exporter_statuses: Vec<ExporterHealth>,
-    pub last_error: Option<DiagnosticSummary>,
 }
 
 /// Open subscriber contract for typed observations.
@@ -1011,74 +935,6 @@ where
     pub span_projector: Option<Arc<dyn SpanProjector<T>>>,
     pub metric_projector: Option<Arc<dyn MetricProjector<T>>>,
     pub filter: Option<Arc<dyn ObservationFilter<T>>>,
-}
-
-macro_rules! error_wrapper {
-    ($(#[$meta:meta])* $name:ident) => {
-        $(#[$meta])*
-        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
-        #[error("{0}")]
-        pub struct $name(pub Box<ErrorContext>);
-
-        impl DiagnosticInfo for $name {
-            fn diagnostic(&self) -> &Diagnostic {
-                self.0.diagnostic()
-            }
-        }
-    };
-}
-
-error_wrapper!(
-    /// Initialization error returned by public construction entry points.
-    InitError
-);
-error_wrapper!(
-    /// Event validation or lifecycle error returned during emit paths.
-    EventError
-);
-error_wrapper!(
-    /// Flush error returned by explicit flush operations.
-    FlushError
-);
-error_wrapper!(
-    /// Shutdown error returned when graceful shutdown fails.
-    ShutdownError
-);
-error_wrapper!(
-    /// Projection error returned by log/span/metric projectors.
-    ProjectionError
-);
-error_wrapper!(
-    /// Subscriber error returned by observation subscribers.
-    SubscriberError
-);
-error_wrapper!(
-    /// Logging sink error returned by concrete sink implementations.
-    LogSinkError
-);
-error_wrapper!(
-    /// Export error returned by concrete telemetry exporters.
-    ExportError
-);
-
-/// Routing/runtime error returned by `Observability::emit`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
-pub enum ObservationError {
-    #[error("observation runtime is shut down")]
-    Shutdown,
-    #[error("{0}")]
-    QueueFull(Box<ErrorContext>),
-    #[error("{0}")]
-    RoutingFailure(Box<ErrorContext>),
-}
-
-/// Telemetry emit error returned by `Telemetry` operations.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
-pub enum TelemetryError {
-    #[error("telemetry runtime is shut down")]
-    Shutdown,
-    #[error("{0}")]
-    ExportFailure(Box<ErrorContext>),
 }
 
 #[cfg(test)]
@@ -1172,6 +1028,12 @@ mod tests {
             ToolName::new("codex-cli")
                 .expect("valid tool name")
                 .as_str(),
+            "codex-cli"
+        );
+        assert_eq!(
+            ToolName::new("codex-cli")
+                .expect("valid tool name")
+                .to_string(),
             "codex-cli"
         );
         assert_eq!(
@@ -1271,6 +1133,25 @@ mod tests {
             std::error::Error::source(&error)
                 .map(ToString::to_string)
                 .as_deref(),
+            Some("disk full")
+        );
+    }
+
+    #[test]
+    fn wrapper_errors_expose_source_context() {
+        let wrapped = InitError(Box::new(
+            ErrorContext::new(
+                error_codes::DIAGNOSTIC_INVALID,
+                "operation failed",
+                Remediation::not_recoverable("investigate manually"),
+            )
+            .source(Box::new(std::io::Error::other("disk full"))),
+        ));
+
+        let source = std::error::Error::source(&wrapped).expect("context source");
+        assert_eq!(source.to_string(), "operation failed");
+        assert_eq!(
+            source.source().map(ToString::to_string).as_deref(),
             Some("disk full")
         );
     }
@@ -1453,6 +1334,11 @@ mod tests {
 
         assert_eq!(encoded, "\"1970-01-01T00:00:00Z\"");
         assert_eq!(decoded, timestamp);
+    }
+
+    #[test]
+    fn duration_ms_displays_in_milliseconds() {
+        assert_eq!(DurationMs::from(250).to_string(), "250ms");
     }
 
     #[test]

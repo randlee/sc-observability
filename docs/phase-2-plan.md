@@ -125,6 +125,10 @@ This sprint fixes all non-new-feature findings first:
 - `QA-002` through `QA-007`, `BP-IMC-003`, `BP-IMC-004`, `BP-NT-003`,
   `BP-NT-004`, `BP-NT-005`
 
+Sprint `2.0` scopes `BP-IMC-001` to the telemetry shutdown race only. The
+separate JSONL rotation size-check/rename race is tracked independently as
+`BP-IMC-001-rotation` in Sprint `2.2`.
+
 ### Key files to modify
 
 - `crates/sc-observability-types/src/lib.rs`
@@ -245,6 +249,8 @@ Implement the historical query path in `sc-observability`:
 - historical scan across active file plus rotated siblings
 - filter application, ordering, truncation, and decode failure behavior
 - query health population on `LoggingHealthReport`
+- `BP-IMC-001-rotation`: resolve the JSONL rotation size-check/rename TOCTOU
+  in the file-sink/query file model
 
 ### Key files to create or modify
 

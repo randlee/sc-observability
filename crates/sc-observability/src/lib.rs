@@ -15,9 +15,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use sc_observability_types::{
-    Diagnostic, DiagnosticSummary, ErrorContext, FlushError, InitError, Level, LevelFilter,
-    LogEvent, LogSinkError, ProcessIdentityPolicy, Remediation, ServiceName, ShutdownError,
-    Timestamp,
+    Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, FlushError, InitError, Level,
+    LevelFilter, LogEvent, LogSinkError, ProcessIdentityPolicy, Remediation, ServiceName,
+    ShutdownError, Timestamp,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -216,7 +216,7 @@ impl Logger {
             }
 
             if let Err(err) = registration.sink.write(&redacted) {
-                self.record_sink_failure(err.to_string());
+                self.record_sink_failure(&err);
             }
         }
 
@@ -235,7 +235,7 @@ impl Logger {
     fn flush_registered_sinks(&self) {
         for registration in &self.sinks {
             if let Err(err) = registration.sink.flush() {
-                self.record_flush_failure(err.to_string());
+                self.record_flush_failure(&err);
             }
         }
     }
@@ -302,8 +302,7 @@ impl Logger {
         event
     }
 
-    fn record_sink_failure(&self, message: impl Into<String>) {
-        let message = message.into();
+    fn record_sink_failure(&self, error: &LogSinkError) {
         self.runtime
             .dropped_events_total
             .fetch_add(1, Ordering::SeqCst);
@@ -311,13 +310,11 @@ impl Logger {
             .runtime
             .last_error
             .lock()
-            .expect("logger last_error poisoned") = Some(DiagnosticSummary::from(
-            &diagnostic_for_sink_failure(message),
-        ));
+            .expect("logger last_error poisoned") =
+            Some(DiagnosticSummary::from(error.diagnostic()));
     }
 
-    fn record_flush_failure(&self, message: impl Into<String>) {
-        let message = message.into();
+    fn record_flush_failure(&self, error: &LogSinkError) {
         self.runtime
             .flush_errors_total
             .fetch_add(1, Ordering::SeqCst);
@@ -325,9 +322,8 @@ impl Logger {
             .runtime
             .last_error
             .lock()
-            .expect("logger last_error poisoned") = Some(DiagnosticSummary::from(
-            &diagnostic_for_sink_failure(message),
-        ));
+            .expect("logger last_error poisoned") =
+            Some(DiagnosticSummary::from(error.diagnostic()));
     }
 }
 

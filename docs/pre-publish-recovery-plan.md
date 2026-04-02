@@ -165,6 +165,13 @@ Close the missing shared-contract and best-practice gaps in
 - `SC_LOG_QUERY_SHUTDOWN`
 - `LoggingHealthReport.query`
 
+The `SC_LOG_QUERY_*` stable error codes are deferred from this planning checkpoint
+to Sprint 2.1, where the shared query/follow contract ships as one coherent
+surface.
+
+`LoggingHealthReport.query` is also deferred to Sprint 2.1 so the health field
+lands together with `QueryHealthReport` and the shared query vocabulary.
+
 ### 6.3 File targets
 
 - `crates/sc-observability-types/src/lib.rs`

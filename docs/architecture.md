@@ -70,7 +70,7 @@ Owns:
 - `Timestamp`, `DurationMs`
 - `TraceContext`, `TraceId`, `SpanId`
 - `SpanRecord<S>`, `SpanSignal`, `MetricRecord`, `LogEvent`
-- `TelemetryHealthProvider`
+- `TelemetryHealthProvider` (planned, not yet shipped — Sprint 2.3 scope)
 - `LogQuery`, `LogOrder`, `LogFieldMatch`
 - `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
 - health report contracts
@@ -433,7 +433,7 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `TelemetryHealthProvider`, health type definitions, and logging query/follow value and error contracts |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `TelemetryHealthProvider` (planned, not yet shipped — Sprint 2.3 scope), health type definitions, and logging query/follow value and error contracts |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, redaction, rotation, `Logger`, `JsonlLogReader`, follow session runtime, and logging health re-exports |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability`, `sc-observe` | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
