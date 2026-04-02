@@ -7,26 +7,26 @@
 - [`architecture.md`](./architecture.md)
 - [`api-design.md`](./api-design.md)
 - [`project-plan.md`](./project-plan.md)
-- [`atm-adapter-mapping-spec.md`](./atm-adapter-mapping-spec.md)
+- [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md)
+- [`public-api-checklist.md`](./public-api-checklist.md)
 - [`test-strategy.md`](./test-strategy.md)
 - [`sprint-plan.md`](./sprint-plan.md)
 
 ## 1. Purpose
 
 This document turns the approved design into an implementation-ready build
-plan. It answers four questions:
+plan.
 
-1. what gets built first
-2. what each crate must ship before the next crate starts
-3. what tests are required at each milestone
-4. what ATM-specific work stays outside the shared workspace
+The current execution mode is the pre-publish recovery program in
+[`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md). That recovery
+plan is the controlling sequence for current work.
 
 ## 2. Implementation Rules
 
-- Implement in dependency order:
-  `sc-observability-types -> sc-observability -> sc-observe -> sc-observability-otlp`
-- Do not start a higher-layer public API before the lower-layer public API is
-  compileable and reviewed.
+- Implement in dependency order unless the recovery plan explicitly calls out a
+  docs-only sprint.
+- Do not start higher-layer public API work before lower-layer public API gaps
+  are closed.
 - Do not introduce ATM-specific types or `agent-team-mail-*` dependencies into
   the shared workspace.
 - Keep all public `ErrorCode` string constants in one `error_codes.rs` per
@@ -35,181 +35,119 @@ plan. It answers four questions:
   `sc-observability-types/src/constants.rs` as the SSOT location.
 - Higher-layer crates may keep a `constants.rs` file only for crate-local
   values that are not shared across crate boundaries.
-- Public Rust error types (`EventError`, `ObservationError`, `TelemetryError`,
-  and related enums/structs) remain centralized in `sc-observability-types` per
+- Public Rust error types remain centralized in `sc-observability-types` per
   `requirements.md` TYP-030 and are re-exported where needed.
 - No magic-number policy/config literals outside constants modules.
 - Keep the API checklist current as implementation lands.
-- All sprint plans must preserve the standalone boundary defined by
-  `docs/requirements.md`, `docs/architecture.md`, `docs/git-workflows.md`, and
-  `docs/publishing.md` as required by `docs/project-plan.md`.
+- Keep the release-readiness checklist truthful at all times.
+- No sprint closes on deferred documentation cleanup.
 
-## 3. Milestone Order
+## 3. Active Recovery Milestones
 
-### M0. Workspace Baseline
-
-Prerequisites:
-- all 4 crates (`sc-observability-types`, `sc-observability`, `sc-observe`,
-  `sc-observability-otlp`) must be present as workspace members in the root
-  `Cargo.toml` before the M0 build gate runs
+### S0. Truth Reset And Design Freeze
 
 Goal:
-- ensure the 4-crate workspace builds cleanly with the current skeletons
+- make the planning docs and release gates truthful
+- freeze the exact missing public design before coding resumes
 
 Required outputs:
-- workspace members and dependency order correct
-- per-crate `constants.rs` and `error_codes.rs` present
-- boundary CI green
+- controlling recovery plan published in docs
+- release readiness checklist corrected
+- public API checklist updated with all missing planned public items
+- exact design choices frozen for query/follow semantics, OTLP attachment, and
+  UTC timestamp enforcement
 
 Exit criteria:
-- `cargo check --workspace --all-targets` passes
-- `bash scripts/ci/validate_repo_boundaries.sh` passes
+- no open naming or behavior ambiguity remains for S1 through S3
 
-### M1. `sc-observability-types`
+### S1. Shared Contract Hardening
 
 Goal:
-- finalize the shared contracts and validation logic
+- close the missing shared query/follow and timestamp contract gaps in
+  `sc-observability-types`
 
 Required outputs:
-- validated name newtypes
-- `ErrorCode`, `Diagnostic`, `Remediation`, `ErrorContext`
-- `TraceId`, `SpanId`, `TraceContext`
-- `Observation<T>`, `LogEvent`, `SpanRecord<S>`, `SpanSignal`, `MetricRecord`
-- shared health models
-- shared open traits
-- serde coverage for all public data contracts
-
-Implementation notes:
-- finish constructors, accessors, and invariants
-- keep typestate-only span lifecycle
-- preserve object safety on open traits used behind `Arc<dyn ...>`
+- UTC-enforced `Timestamp`
+- `LogOrder`, `LogFieldMatch`, `LogQuery`, `LogSnapshot`
+- `QueryError`, `QueryHealthState`, `QueryHealthReport`
+- query error-code constants
+- `TelemetryHealthProvider`
+- `LoggingHealthReport.query`
 
 Exit criteria:
-- all public shared types compile without placeholder fields
-- unit tests cover validation, serialization, and error rendering
-- API checklist marks `sc-observability-types` as finalized
+- the shared query/follow contract exists in shipped code
+- UTC-only timestamps are enforced in code
+- tests cover validation and serde behavior for the new shared contracts
 
-### M2. `sc-observability`
+### S2. Logging Query/Follow Runtime
 
 Goal:
-- ship lightweight structured logging with no routing or OTLP dependency
+- ship the missing logging query/follow runtime in `sc-observability`
 
 Required outputs:
-- `LoggerConfig::default_for(...)`
-- `Logger`
-- `LogSink`, `LogFilter`, `SinkRegistration`
-- JSONL file sink
-- human-readable console sink
-- redaction pipeline
-- rotation/retention behavior
-- logging health reporting
-
-Implementation notes:
-- default path layout must match docs
-- validation failures return `EventError`
-- sink failures stay fail-open and update health/drop counters
+- `Logger::query`
+- `Logger::follow`
+- `LogFollowSession`
+- `JsonlLogReader`
+- rotation-aware query/follow behavior
+- query health population on logging health
 
 Exit criteria:
-- logger works with file sink only
-- logger works with file + console fan-out
-- redaction runs before sink fan-out
-- logging-only integration test passes without `sc-observe`
+- the logging crate ships the full approved query/follow API
+- tests prove no duplicate or silently skipped committed records across
+  rotation
+- no async runtime or ATM-specific dependency is introduced
 
-### M3. `sc-observe`
+### S3. Routing And OTLP Attachment Closure
 
 Goal:
-- ship typed observation routing layered on logging
+- turn the OTLP attachment model into a real public integration surface
 
 Required outputs:
-- `ObservabilityConfig`
-- `ObservabilityBuilder`
-- `Observability`
-- registration of subscribers and projectors
-- per-type routing and filtering
-- top-level health aggregation
-- sealed `ObservationEmitter<T>`
-
-Implementation notes:
-- registration remains construction-time only
-- per-type routing order must be deterministic
-- no direct dependency on `sc-observability-otlp`
+- `TelemetryProjectors<T>`
+- `TelemetryProjectors<T>::into_registration()`
+- telemetry health provider integration for `ObservabilityBuilder`
+- public full-stack wiring path with no test-only scaffolding
 
 Exit criteria:
-- one typed observation can fan out to:
-  - one or more subscribers
-  - one or more log projectors
-  - one or more metric/span projectors
-- post-shutdown emission returns `ObservationError::Shutdown`
-- no runtime registration after `build()`
+- downstream users can wire `sc-observe` and `sc-observability-otlp` together
+  using shipped public APIs only
+- `ObservabilityHealthReport.telemetry` is populated when configured
 
-### M4. `sc-observability-otlp`
+### S4. Hardening And Final Publish Gate
 
 Goal:
-- ship OTLP-backed telemetry layered on `sc-observe`
+- run the final production-readiness pass only after S0 through S3 are complete
 
 Required outputs:
-- `TelemetryConfigBuilder`
-- `Telemetry`
-- `OtelConfig`, `OtlpProtocol`
-- `SpanAssembler`
-- `CompleteSpan`
-- `LogExporter`, `TraceExporter`, `MetricExporter`
-- telemetry health
-
-Implementation notes:
-- `TelemetryConfig` stays independent of `ObservabilityConfig`
-- attachment happens through projector registration
-- incomplete spans are only exported after assembly completes
+- all docs aligned with shipped behavior
+- all checklist items finalized
+- final severity-tagged review
+- explicit publish/no-publish recommendation
 
 Exit criteria:
-- logs, spans, and metrics can be attached through builder registration
-- `Telemetry::new(...)` rejects invalid OTLP config eagerly
-- emit methods return `TelemetryError::Shutdown` after `shutdown()` is called
-- all in-flight spans are flushed or explicitly dropped and counted before
-  shutdown completes
-- flush and shutdown behavior matches the documented telemetry lifecycle
+- final review reports zero blocking findings
+- release-readiness checklist is fully and truthfully complete
 
-### M5. ATM Adapter Integration
+## 4. Required Deliverables Per Recovery Milestone
 
-Goal:
-- prove that ATM can adopt the shared workspace without shared-repo design
-  churn
-
-Required outputs:
-- ATM-owned adapter work in the ATM repo
-- mapping from ATM payloads to `Observation<T>` and projections
-- env/config translation
-- health JSON projection
-- durability behavior outside shared crates
-
-Shared-repo proving outputs:
-- ATM boundary example remains green
-- shared docs stay aligned with ATM adapter docs
-
-Exit criteria:
-- ATM adapter mapping spec accepted by the ATM team with no open blocking items
-- ATM proving path exercises logging, routing, and OTLP attachment
-- no shared-repo boundary regressions
-
-## 4. Required Deliverables Per Crate
-
-| Crate | Required code | Required tests | Required docs check |
+| Milestone | Required code | Required tests | Required docs check |
 | --- | --- | --- | --- |
-| `sc-observability-types` | real constructors, validation, serde, errors | unit tests | public API checklist updated |
-| `sc-observability` | logger + sinks + redaction + health | unit + integration tests | path/default behavior verified |
-| `sc-observe` | builder + routing + filtering + health | unit + integration tests | routing rules verified |
-| `sc-observability-otlp` | config + exporters + span assembly + health | unit + integration tests | attachment model verified |
+| `S0` | none required beyond docs and checklist updates | docs consistency | recovery plan becomes controlling |
+| `S1` | shared query/follow contracts + UTC timestamps | unit + serde tests | API checklist updated |
+| `S2` | logger query/follow runtime | unit + integration tests | runtime signatures and behavior verified |
+| `S3` | OTLP attachment surface + telemetry health bridge | unit + integration tests | attachment model verified |
+| `S4` | no new feature work by default; hardening only | full workspace validation | release checklist and final review aligned |
 
 ## 5. Cross-Crate Acceptance Gates
 
 The next milestone cannot start until the previous one has:
 
-- compileable public API
+- compileable public API for its scope
 - tests at the level required by [`test-strategy.md`](./test-strategy.md)
-- no unresolved public API checklist items
+- no unresolved checklist items in its own scope
 - docs aligned with implemented behavior
-
-See also: [`test-strategy.md`](./test-strategy.md) §6 Exit Criteria.
+- design-closure loop completed with no remaining ambiguity in scope
 
 ## 6. Out Of Scope For Shared Implementation
 
@@ -222,4 +160,4 @@ The following are not part of the shared implementation sprint:
 - any `agent-team-mail-*` runtime dependency
 
 Those remain governed by [`atm-adapter-mapping-spec.md`](./atm-adapter-mapping-spec.md)
-and the ATM-owned adapter work.
+and ATM-owned adapter work.

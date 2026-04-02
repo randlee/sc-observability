@@ -69,6 +69,9 @@ Owns:
 - `ErrorCode`, `Diagnostic`, `Remediation`, `ErrorContext`
 - `TraceContext`, `TraceId`, `SpanId`
 - `SpanRecord<S>`, `SpanSignal`, `MetricRecord`, `LogEvent`
+- `TelemetryHealthProvider`
+- `LogQuery`, `LogOrder`, `LogFieldMatch`
+- `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
 - health report contracts
 - shared open traits such as `Observable`, `DiagnosticInfo`,
   subscribers, filters, and projectors
@@ -370,6 +373,9 @@ Historical query strategy:
 
 Follow strategy:
 
+- follow sessions begin at the tail of the currently visible log set and do not
+  replay historical backlog; callers needing backlog plus tail must call
+  `query()` first
 - `LogFollowSession` tracks the active path, file identity, and current read
   offset
 - `poll()` reads appended records since the last successful poll
@@ -378,6 +384,12 @@ Follow strategy:
   offset `0`
 - the follow path remains poll-based and caller-driven; no async watch service
   is introduced
+
+Validation:
+
+- `limit = Some(0)` is invalid and returns `QueryError::InvalidQuery`
+- `since > until` is invalid and returns `QueryError::InvalidQuery`
+- `field_matches` use exact field-name lookup and exact JSON value equality
 
 This strategy keeps the logging layer self-contained while still making
 rotation behavior explicit enough for implementation and QA.
@@ -420,7 +432,7 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, identifiers, diagnostics, traits, health type definitions, and logging query/follow value/error contracts |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, identifiers, diagnostics, shared traits including `TelemetryHealthProvider`, health type definitions, and logging query/follow value and error contracts |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, redaction, rotation, `Logger`, `JsonlLogReader`, follow session runtime, and logging health re-exports |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability`, `sc-observe` | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
