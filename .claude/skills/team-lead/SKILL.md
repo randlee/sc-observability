@@ -32,7 +32,7 @@ context (format: `SESSION_ID=<uuid>`). Compare with `leadSessionId` in the
 team config:
 
 ```bash
-python3 -c "import json; print(json.load(open('/Users/randlee/.claude/teams/atm-dev/config.json'))['leadSessionId'])"
+python3 -c "import json,os; print(json.load(open(os.path.expanduser(f'~/.claude/teams/{os.environ[\"ATM_TEAM\"]}/config.json')))['leadSessionId'])"
 ```
 
 - **Match** → team is already initialized for this session. Proceed directly

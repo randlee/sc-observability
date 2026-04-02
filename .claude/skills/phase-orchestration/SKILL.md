@@ -161,7 +161,7 @@ atm inbox                        # Summary
 
 Nudge via tmux if no reply:
 ```bash
-tmux send-keys -t <pane-id> -l "You have unread ATM messages. Run: atm read --team atm-dev" && sleep 0.5 && tmux send-keys -t <pane-id> Enter
+tmux send-keys -t <pane-id> -l "You have unread ATM messages. Run: atm read --team $ATM_TEAM" && sleep 0.5 && tmux send-keys -t <pane-id> Enter
 ```
 
 ## Task Tracking
