@@ -4,10 +4,11 @@ use sc_observability_otlp::{
     LogsConfig, MetricsConfig, OtelConfig, Telemetry, TelemetryConfigBuilder, TracesConfig,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
-    Observation, ObservationFilter, ProcessIdentity, ProjectionError, ProjectionRegistration,
-    Remediation, ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal,
-    SpanStarted, StateTransition, TargetCategory, Timestamp, ToolName, TraceContext, TraceId,
+    ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
+    MetricRecord, Observation, ObservationFilter, ProcessIdentity, ProjectionError,
+    ProjectionRegistration, Remediation, ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord,
+    SpanSignal, SpanStarted, StateTransition, TargetCategory, Timestamp, ToolName, TraceContext,
+    TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 
@@ -56,7 +57,7 @@ impl SpanProjector<AgentPayload> for StaticSpanProjector {
         );
         let ended = started
             .clone()
-            .end(sc_observability_types::SpanStatus::Ok, 10);
+            .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(10));
         Ok(vec![
             SpanSignal::Started(started),
             SpanSignal::Event(SpanEvent {
