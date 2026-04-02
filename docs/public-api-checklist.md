@@ -70,14 +70,13 @@ Note:
 - [x] `LoggingHealthReport`
 - [x] `Timestamp` (UTC-enforced public type, not a plain alias)
 - [x] `LogOrder`
-- [x] `LogFieldPredicate`
 - [x] `LogFieldMatch`
 - [x] `LogQuery`
 - [x] `LogSnapshot`
 - [x] `QueryError`
 - [x] `QueryHealthState`
 - [x] `QueryHealthReport`
-- [x] `TelemetryHealthProvider`
+- [x] `TelemetryHealthProvider` (sealed)
 - [x] `ObservationHealthState`
 - [~] `ObservabilityHealthReport`
 - [x] `TelemetryHealthState`
@@ -122,10 +121,10 @@ Note:
 - [x] `RedactionPolicy`
 - [x] `Redactor`
 - [x] `Logger`
-- [x] `Logger::query(&self, &LogQuery) -> Result<LogSnapshot, QueryError>`
-- [x] `Logger::follow(&self, LogQuery) -> Result<LogFollowSession, QueryError>`
-- [x] `LogFollowSession`
-- [x] `JsonlLogReader`
+- [~] `Logger::query(&self, &LogQuery) -> Result<LogSnapshot, QueryError>`
+- [~] `Logger::follow(&self, LogQuery) -> Result<LogFollowSession, QueryError>`
+- [~] `LogFollowSession`
+- [~] `JsonlLogReader`
 - [x] `JsonlFileSink`
 - [x] `ConsoleSink`
 - [x] `LogSink`

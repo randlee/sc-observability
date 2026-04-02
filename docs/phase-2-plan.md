@@ -188,12 +188,13 @@ separate JSONL rotation size-check/rename race is tracked independently as
 
 Ship the entire shared query/follow contract in `sc-observability-types`:
 
-- `REQ-QA-001`: `LogQuery`, `LogOrder`, `LogFieldPredicate`, `LogFieldMatch`
+- `REQ-QA-001`: `LogQuery`, `LogOrder`, and `LogFieldMatch`
 - `REQ-QA-002`: `LogSnapshot`
 - `REQ-QA-003`: `QueryError` and `SC_LOG_QUERY_*`
 - `REQ-QA-004`: `QueryHealthReport`, `QueryHealthState`,
   `LoggingHealthReport.query`
-- shared `TelemetryHealthProvider` trait shipped here for later Sprint `2.4` use
+- sealed `TelemetryHealthProvider` trait shipped here for later workspace-owned
+  Sprint `2.4` plumbing
 
 ### Key files to modify
 
@@ -223,8 +224,8 @@ names today; this sprint is a genuine new shared-contract addition.
   - `levels.is_empty()` means all levels
   - `limit = Some(0)` is invalid
   - `since > until` is invalid
-  - `field_matches` use exact field-name and exact JSON value equality
-- `LogSnapshot.total_scanned` is part of the stable result contract
+  - `field_matches` use exact field-name and exact JSON value equality via
+    `LogFieldMatch { field, value }`
 - `QueryError` codes are stable and documented
 - logging health is extended with query availability
 
@@ -273,9 +274,9 @@ Implement the historical query path in `sc-observability`:
 ### Deliverables
 
 - `Logger::query(&self, &LogQuery) -> Result<LogSnapshot, QueryError>`
-- deterministic `LogOrder::Asc` and `LogOrder::Desc`
+- deterministic `LogOrder::OldestFirst` and `LogOrder::NewestFirst`
 - historical scan over the active file and resolved rotation set
-- malformed JSONL records surface as `QueryError::DecodeError`
+- malformed JSONL records surface as `QueryError::Decode`
 - query health reflects availability and last error
 
 ### Estimated waves
@@ -374,7 +375,7 @@ Close `COBS-2` by shipping the actual public OTLP attachment surface:
 
 - `TelemetryProjectors<T>`
 - `TelemetryProjectors<T>::into_registration()`
-- `TelemetryHealthProvider` implementation for `Telemetry`
+- workspace-owned `TelemetryHealthProvider` plumbing for `Telemetry`
 - `ObservabilityBuilder::with_telemetry_health_provider(...)`
 - `ObservabilityHealthReport.telemetry` populated when configured
 

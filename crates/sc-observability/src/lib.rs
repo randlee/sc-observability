@@ -167,6 +167,8 @@ impl LoggerConfig {
 struct LoggerRuntime {
     dropped_events_total: AtomicU64,
     flush_errors_total: AtomicU64,
+    // MUTEX: sink failures update the shared last_error summary from multiple sinks and call paths;
+    // Mutex is sufficient because reads are rare and the value is replaced atomically as one unit.
     last_error: Mutex<Option<DiagnosticSummary>>,
     query_health: Arc<QueryHealthTracker>,
 }
@@ -405,6 +407,8 @@ pub struct JsonlFileSink {
     path: PathBuf,
     rotation: RotationPolicy,
     retention: RetentionPolicy,
+    // MUTEX: sink health mutates as one small shared struct during writes and health reads;
+    // Mutex keeps updates simple and coherent, while RwLock would not reduce contention materially.
     health: Mutex<SinkHealth>,
 }
 
@@ -539,14 +543,14 @@ impl LogSink for JsonlFileSink {
     }
 }
 
-trait ConsoleWriter: Send {
-    fn write_line(&mut self, line: &str) -> std::io::Result<()>;
+trait ConsoleWriter: Send + Sync {
+    fn write_line(&self, line: &str) -> std::io::Result<()>;
 }
 
 struct StdoutConsoleWriter;
 
 impl ConsoleWriter for StdoutConsoleWriter {
-    fn write_line(&mut self, line: &str) -> std::io::Result<()> {
+    fn write_line(&self, line: &str) -> std::io::Result<()> {
         let mut stdout = std::io::stdout().lock();
         stdout.write_all(line.as_bytes())?;
         stdout.write_all(b"\n")?;
@@ -555,7 +559,9 @@ impl ConsoleWriter for StdoutConsoleWriter {
 }
 
 pub struct ConsoleSink {
-    writer: Mutex<Box<dyn ConsoleWriter>>,
+    writer: Box<dyn ConsoleWriter>,
+    // MUTEX: console sink health mutates as one shared status struct on write failures and reads;
+    // Mutex is simpler than RwLock because writes dominate and the payload is tiny.
     health: Mutex<SinkHealth>,
 }
 
@@ -566,7 +572,7 @@ impl ConsoleSink {
 
     pub(crate) fn from_writer(writer: Box<dyn ConsoleWriter>) -> Self {
         Self {
-            writer: Mutex::new(writer),
+            writer,
             health: Mutex::new(SinkHealth {
                 name: "console".to_string(),
                 state: SinkHealthState::Healthy,
@@ -621,8 +627,6 @@ impl LogSink for ConsoleSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         let line = Self::format_line(event);
         self.writer
-            .lock()
-            .expect("console writer poisoned")
             .write_line(&line)
             .map_err(|err| self.mark_failure(err))?;
         let mut health = self.health.lock().expect("console sink health poisoned");
@@ -764,7 +768,7 @@ mod tests {
     }
 
     impl ConsoleWriter for SharedBuffer {
-        fn write_line(&mut self, line: &str) -> std::io::Result<()> {
+        fn write_line(&self, line: &str) -> std::io::Result<()> {
             self.lines
                 .lock()
                 .expect("buffer poisoned")
@@ -1225,12 +1229,14 @@ mod tests {
                 .any(|path| path.ends_with("sc-observability.log.jsonl"))
         );
 
-        let asc = logger.query(&query_all(LogOrder::Asc)).expect("asc query");
+        let asc = logger
+            .query(&query_all(LogOrder::OldestFirst))
+            .expect("asc query");
         assert_eq!(request_ids(&asc), ["req-1", "req-2", "req-3"]);
 
         let desc = logger
             .query(&LogQuery {
-                order: LogOrder::Desc,
+                order: LogOrder::NewestFirst,
                 limit: Some(2),
                 ..LogQuery::default()
             })
@@ -1254,7 +1260,7 @@ mod tests {
         }
 
         let query = LogQuery {
-            order: LogOrder::Desc,
+            order: LogOrder::NewestFirst,
             limit: Some(2),
             ..LogQuery::default()
         };
@@ -1277,7 +1283,9 @@ mod tests {
             .emit(log_event_with_request(service_name(), "backlog", 220))
             .expect("emit backlog");
 
-        let mut follow = logger.follow(query_all(LogOrder::Asc)).expect("follow");
+        let mut follow = logger
+            .follow(query_all(LogOrder::OldestFirst))
+            .expect("follow");
         assert!(follow.poll().expect("initial poll").events.is_empty());
 
         for request_id in ["fresh-1", "fresh-2", "fresh-3"] {
@@ -1303,7 +1311,7 @@ mod tests {
             .emit(log_event_with_request(service_name(), "backlog", 220))
             .expect("emit backlog");
 
-        let query = query_all(LogOrder::Asc);
+        let query = query_all(LogOrder::OldestFirst);
         let mut logger_follow = logger.follow(query.clone()).expect("logger follow");
         let reader = JsonlLogReader::new(default_log_path(&root, &service_name()));
         let mut reader_follow = reader.follow(query).expect("reader follow");
@@ -1340,25 +1348,128 @@ mod tests {
         writeln!(file, "{{not-json").expect("append malformed json");
 
         let decode_error = logger
-            .query(&query_all(LogOrder::Asc))
+            .query(&query_all(LogOrder::OldestFirst))
             .expect_err("decode error");
-        assert!(matches!(decode_error, QueryError::DecodeError(_)));
+        assert!(matches!(decode_error, QueryError::Decode(_)));
         let degraded_health = logger.health().query.expect("query health");
         assert_eq!(degraded_health.state, QueryHealthState::Degraded);
         assert!(degraded_health.last_error.is_some());
 
         logger.shutdown().expect("shutdown");
         let shutdown_error = logger
-            .query(&query_all(LogOrder::Asc))
+            .query(&query_all(LogOrder::OldestFirst))
             .expect_err("shutdown error");
-        assert!(matches!(shutdown_error, QueryError::Shutdown(_)));
+        assert!(matches!(shutdown_error, QueryError::Shutdown));
         assert_eq!(
             logger.health().query.expect("query health").state,
             QueryHealthState::Unavailable
         );
         assert!(matches!(
-            logger.follow(query_all(LogOrder::Asc)),
-            Err(QueryError::Shutdown(_))
+            logger.follow(query_all(LogOrder::OldestFirst)),
+            Err(QueryError::Shutdown)
         ));
+    }
+
+    #[test]
+    fn logger_query_and_follow_reject_invalid_queries() {
+        let root = temp_path("invalid-query");
+        let config = LoggerConfig::default_for(service_name(), root);
+        let logger = Logger::new(config).expect("logger");
+
+        let invalid_limit = LogQuery {
+            limit: Some(0),
+            ..LogQuery::default()
+        };
+        let invalid_range = LogQuery {
+            since: Some(Timestamp::now_utc()),
+            until: Some(Timestamp::UNIX_EPOCH),
+            ..LogQuery::default()
+        };
+
+        assert!(matches!(
+            logger.query(&invalid_limit),
+            Err(QueryError::InvalidQuery(_))
+        ));
+        assert!(matches!(
+            logger.follow(invalid_limit),
+            Err(QueryError::InvalidQuery(_))
+        ));
+        assert!(matches!(
+            logger.query(&invalid_range),
+            Err(QueryError::InvalidQuery(_))
+        ));
+        assert!(matches!(
+            logger.follow(invalid_range),
+            Err(QueryError::InvalidQuery(_))
+        ));
+    }
+
+    #[test]
+    fn query_and_follow_are_unavailable_without_file_sink() {
+        let root = temp_path("query-unavailable");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.enable_file_sink = false;
+        let logger = Logger::new(config).expect("logger");
+
+        assert!(matches!(
+            logger.query(&query_all(LogOrder::OldestFirst)),
+            Err(QueryError::Unavailable(_))
+        ));
+        assert!(matches!(
+            logger.follow(query_all(LogOrder::OldestFirst)),
+            Err(QueryError::Unavailable(_))
+        ));
+        assert_eq!(
+            logger.health().query.expect("query health").state,
+            QueryHealthState::Unavailable
+        );
+    }
+
+    #[test]
+    fn follow_recovers_after_active_file_truncate_and_recreate() {
+        let root = temp_path("follow-truncate-recreate");
+        let config = LoggerConfig::default_for(service_name(), root.clone());
+        let logger = Logger::new(config).expect("logger");
+
+        logger
+            .emit(log_event_with_request(service_name(), "backlog", 20))
+            .expect("emit backlog");
+
+        let mut follow = logger
+            .follow(query_all(LogOrder::OldestFirst))
+            .expect("follow");
+        assert!(follow.poll().expect("initial poll").events.is_empty());
+
+        logger
+            .emit(log_event_with_request(
+                service_name(),
+                "before-truncate",
+                20,
+            ))
+            .expect("emit before truncate");
+        assert_eq!(
+            request_ids(&follow.poll().expect("poll before truncate")),
+            ["before-truncate"]
+        );
+
+        let active_path = default_log_path(&root, &service_name());
+        fs::File::create(&active_path).expect("truncate active log");
+
+        logger
+            .emit(log_event_with_request(service_name(), "after-truncate", 20))
+            .expect("emit after truncate");
+        assert_eq!(
+            request_ids(&follow.poll().expect("poll after truncate")),
+            ["after-truncate"]
+        );
+
+        fs::remove_file(&active_path).expect("remove active log");
+        logger
+            .emit(log_event_with_request(service_name(), "after-recreate", 20))
+            .expect("emit after recreate");
+        assert_eq!(
+            request_ids(&follow.poll().expect("poll after recreate")),
+            ["after-recreate"]
+        );
     }
 }

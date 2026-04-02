@@ -5,6 +5,8 @@ use sc_observability_types::{DiagnosticSummary, QueryError, QueryHealthReport, Q
 /// Internal tracker for query/follow health reporting.
 #[derive(Debug)]
 pub(crate) struct QueryHealthTracker {
+    // MUTEX: query/follow health updates must change state and last_error together; Mutex keeps
+    // the compound report coherent, and RwLock adds no value because writes happen on every query result.
     report: Mutex<QueryHealthReport>,
 }
 
@@ -39,11 +41,11 @@ impl QueryHealthTracker {
         let mut report = self.report.lock().expect("query health poisoned");
         match error {
             QueryError::InvalidQuery(_) => {}
-            QueryError::DecodeError(_) => {
+            QueryError::Decode(_) => {
                 report.state = QueryHealthState::Degraded;
                 report.last_error = summary;
             }
-            QueryError::IoError(_) | QueryError::Unavailable(_) | QueryError::Shutdown(_) => {
+            QueryError::Io(_) | QueryError::Unavailable(_) | QueryError::Shutdown => {
                 report.state = QueryHealthState::Unavailable;
                 report.last_error = summary;
             }

@@ -3,8 +3,7 @@ use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use sc_observability_types::{
-    ErrorContext, LogEvent, LogFieldPredicate, LogOrder, LogQuery, LogSnapshot, QueryError,
-    Remediation, error_codes,
+    ErrorContext, LogEvent, LogOrder, LogQuery, LogSnapshot, QueryError, Remediation, error_codes,
 };
 use serde_json::{Value, json};
 
@@ -28,7 +27,6 @@ pub(crate) struct ResolvedLogFile {
     pub(crate) path: PathBuf,
     pub(crate) identity: FileIdentity,
     pub(crate) len: u64,
-    pub(crate) is_active: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,13 +41,7 @@ pub(crate) fn query_snapshot(
 ) -> Result<LogSnapshot, QueryError> {
     query.validate()?;
     let resolved = resolve_visible_files(active_log_path)?;
-    read_snapshot(query, &resolved, |file| {
-        if file.is_active {
-            query.start_position.unwrap_or(0)
-        } else {
-            0
-        }
-    })
+    read_snapshot(query, &resolved, |_file| 0)
 }
 
 pub(crate) fn start_follow_tracking(
@@ -79,6 +71,7 @@ pub(crate) fn poll_follow_snapshot(
                 .iter()
                 .find(|tracked| tracked.identity == file.identity)
                 .map(|tracked| tracked.offset)
+                .filter(|offset| *offset <= file.len)
                 .unwrap_or(0),
         })
         .collect();
@@ -87,11 +80,8 @@ pub(crate) fn poll_follow_snapshot(
 }
 
 pub(crate) fn shutdown_error(message: impl Into<String>) -> QueryError {
-    QueryError::Shutdown(Box::new(ErrorContext::new(
-        error_codes::SC_LOG_QUERY_SHUTDOWN,
-        message,
-        Remediation::recoverable("create a new query/follow session after restart", ["retry"]),
-    )))
+    let _ = message.into();
+    QueryError::Shutdown
 }
 
 pub(crate) fn unavailable_error(message: impl Into<String>) -> QueryError {
@@ -109,7 +99,7 @@ fn io_error(
 ) -> QueryError {
     let rendered_path = path.display().to_string();
     let cause = error.to_string();
-    QueryError::IoError(Box::new(
+    QueryError::Io(Box::new(
         ErrorContext::new(
             error_codes::SC_LOG_QUERY_IO,
             format!("failed to {action} log file"),
@@ -128,7 +118,7 @@ fn decode_error(
     error: impl std::error::Error + Send + Sync + 'static,
 ) -> QueryError {
     let cause = error.to_string();
-    QueryError::DecodeError(Box::new(
+    QueryError::Decode(Box::new(
         ErrorContext::new(
             error_codes::SC_LOG_QUERY_DECODE,
             "failed to decode JSONL log record",
@@ -176,7 +166,6 @@ fn resolve_visible_files(active_log_path: &Path) -> Result<Vec<ResolvedLogFile>,
                     path,
                     identity: file_identity(&metadata),
                     len: metadata.len(),
-                    is_active: false,
                 },
             ));
         }
@@ -190,7 +179,6 @@ fn resolve_visible_files(active_log_path: &Path) -> Result<Vec<ResolvedLogFile>,
             path: active_log_path.to_path_buf(),
             identity: file_identity(&metadata),
             len: metadata.len(),
-            is_active: true,
         });
     }
 
@@ -202,12 +190,10 @@ fn read_snapshot(
     resolved: &[ResolvedLogFile],
     offset_for: impl Fn(&ResolvedLogFile) -> u64,
 ) -> Result<LogSnapshot, QueryError> {
-    let mut scanned = 0;
     let mut matches = Vec::new();
 
     for file in resolved {
         let (events, _) = read_events_from_path(&file.path, offset_for(file))?;
-        scanned += events.len() as u64;
         for event in events {
             if event_matches_query(&event, query) {
                 matches.push(event);
@@ -215,7 +201,7 @@ fn read_snapshot(
         }
     }
 
-    Ok(finalize_snapshot(query, scanned, matches))
+    Ok(finalize_snapshot(query, matches))
 }
 
 fn read_incremental_snapshot(
@@ -223,13 +209,11 @@ fn read_incremental_snapshot(
     resolved: &[ResolvedLogFile],
     tracked_files: &mut [TrackedFile],
 ) -> Result<LogSnapshot, QueryError> {
-    let mut scanned = 0;
     let mut matches = Vec::new();
 
     for (file, tracked) in resolved.iter().zip(tracked_files.iter_mut()) {
         let (events, end_offset) = read_events_from_path(&file.path, tracked.offset)?;
         tracked.offset = end_offset;
-        scanned += events.len() as u64;
         for event in events {
             if event_matches_query(&event, query) {
                 matches.push(event);
@@ -237,30 +221,22 @@ fn read_incremental_snapshot(
         }
     }
 
-    Ok(finalize_snapshot(query, scanned, matches))
+    Ok(finalize_snapshot(query, matches))
 }
 
-fn finalize_snapshot(
-    query: &LogQuery,
-    total_scanned: u64,
-    mut matches: Vec<LogEvent>,
-) -> LogSnapshot {
-    if matches!(query.order, LogOrder::Desc) {
+fn finalize_snapshot(query: &LogQuery, mut matches: Vec<LogEvent>) -> LogSnapshot {
+    if matches!(query.order, LogOrder::NewestFirst) {
         matches.reverse();
     }
 
-    let truncated = query
-        .limit
-        .is_some_and(|limit| (matches.len() as u64) > limit);
+    let truncated = query.limit.is_some_and(|limit| matches.len() > limit);
 
     if let Some(limit) = query.limit {
-        let limit = usize::try_from(limit).unwrap_or(usize::MAX);
         matches.truncate(limit);
     }
 
     LogSnapshot {
         events: matches,
-        total_scanned,
         truncated,
     }
 }
@@ -334,14 +310,8 @@ fn event_matches_query(event: &LogEvent, query: &LogQuery) -> bool {
             event
                 .fields
                 .get(&field_match.field)
-                .is_some_and(|value| field_predicate_matches(value, &field_match.predicate))
+                .is_some_and(|value| value == &field_match.value)
         })
-}
-
-fn field_predicate_matches(value: &Value, predicate: &LogFieldPredicate) -> bool {
-    match predicate {
-        LogFieldPredicate::Equals(expected) => value == expected,
-    }
 }
 
 fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
