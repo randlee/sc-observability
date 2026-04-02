@@ -93,6 +93,12 @@ This crate owns shared neutral contracts only.
 - TYP-029 `ActionName` shall be owned by `sc-observability-types`, wrap a validated dotted or snake-compatible action identifier, and represent the stable event action name on `LogEvent`.
 - TYP-030 All shared error types, health report types, and shared constants shall be owned by `sc-observability-types` as a single source of truth. Crate-specific error enums and concrete health report types are defined here and re-exported by their respective crates where needed.
 - TYP-031 Per-crate `constants.rs` files in higher-layer crates may exist only for crate-local values that are not shared across crate boundaries.
+- TYP-032 `sc-observability-types` shall own the stable historical/follow query contracts: `LogQuery`, `LogOrder`, and `LogFieldMatch`.
+- TYP-033 `LogQuery` shall support filtering by `service`, `levels`, `target`, `action`, `request_id`, `correlation_id`, `since`, `until`, `field_matches`, `limit`, and `order`.
+- TYP-034 `sc-observability-types` shall own `LogSnapshot` as the stable synchronous result contract returned by historical query and follow polling APIs.
+- TYP-035 `sc-observability-types` shall own `QueryError` with variants `InvalidQuery`, `Io`, `Decode`, `Unavailable`, and `Shutdown`.
+- TYP-036 `QueryError` shall map to stable error codes `SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`, `SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN`.
+- TYP-037 `sc-observability-types` shall own `QueryHealthReport` and `QueryHealthState` as the shared health contract for log query/follow availability.
 
 ## 4. `sc-observability` Requirements
 
@@ -135,6 +141,25 @@ This crate is the lightweight logging layer.
   - `flush()` after `shutdown()` is idempotent and returns `Ok(())`
   - repeated `shutdown()` calls are idempotent and return `Ok(())`
 - LOG-024 `sc-observability` shall own a crate-local sealed `LogEmitter` trait for producer injection when logging-only use is desired.
+- LOG-025 `Logger` shall expose a synchronous historical query API `query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>`.
+- LOG-026 `Logger` shall expose a synchronous follow/tail API `follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>`.
+- LOG-027 `LogFollowSession` shall expose synchronous polling and shall not require an async runtime, background task, or file watcher to deliver new records.
+- LOG-028 `sc-observability` shall provide `JsonlLogReader` as an independent JSONL file reader for historical query and follow operations without requiring a live `Logger`, `sc-observe`, or `sc-observability-otlp`.
+- LOG-029 Historical query and follow behavior shall operate over the active JSONL log and its rotation set using the documented `sc-observability` naming/layout rules.
+- LOG-030 Rotation handling for query/follow shall avoid duplicating or silently skipping committed log records when the active file is renamed or recreated.
+- LOG-031 `LoggingHealthReport` shall expose query/follow availability through an optional `QueryHealthReport`.
+- LOG-032 Query/follow APIs shall remain usable in logging-only deployments and shall not introduce ATM-specific types, daemon requirements, or `agent-team-mail-*` dependencies.
+
+### 4.1 Query/Follow Issue Traceability
+
+| GitHub issue | Scope | Requirement IDs |
+| --- | --- | --- |
+| #24 | `LogQuery`, `LogOrder`, `LogFieldMatch` contract | TYP-032, TYP-033 |
+| #25 | `QueryError` surface and stable error codes | TYP-035, TYP-036 |
+| #26 | historical query API and `LogSnapshot` result | TYP-034, LOG-025, LOG-029 |
+| #27 | follow/tail API and synchronous polling | LOG-026, LOG-027, LOG-030 |
+| #28 | query health signal on logging health | TYP-037, LOG-031 |
+| #29 | independent `JsonlLogReader` surface | LOG-028, LOG-029, LOG-032 |
 
 ## 5. `sc-observe` Requirements
 
