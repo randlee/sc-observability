@@ -915,6 +915,25 @@ mod tests {
             .collect()
     }
 
+    fn drain_follow_until_request_id(
+        follow: &mut LogFollowSession,
+        expected_request_id: &str,
+    ) -> Vec<String> {
+        let mut drained = Vec::new();
+        for _ in 0..3 {
+            let snapshot = follow.poll().expect("follow poll");
+            drained.extend(request_ids(&snapshot));
+            if drained
+                .iter()
+                .any(|request_id| request_id == expected_request_id)
+            {
+                return drained;
+            }
+        }
+
+        panic!("follow session never yielded {expected_request_id}");
+    }
+
     #[test]
     fn logger_config_default_for_sets_documented_defaults() {
         let root = temp_path("defaults");
@@ -1458,9 +1477,12 @@ mod tests {
         logger
             .emit(log_event_with_request(service_name(), "after-truncate", 20))
             .expect("emit after truncate");
-        assert_eq!(
-            request_ids(&follow.poll().expect("poll after truncate")),
-            ["after-truncate"]
+        // Windows can replay previously read records once a truncate resets the file position,
+        // while Unix platforms often yield only the new post-truncate record.
+        let after_truncate = drain_follow_until_request_id(&mut follow, "after-truncate");
+        assert!(
+            after_truncate == vec!["after-truncate"]
+                || after_truncate == vec!["backlog", "before-truncate", "after-truncate"]
         );
 
         fs::remove_file(&active_path).expect("remove active log");
