@@ -1,32 +1,27 @@
+use std::sync::LazyLock;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
 use crate::{
     ActionName, Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, Level, LogEvent, Remediation,
-    ServiceName, TargetCategory, Timestamp, error_codes,
+    ServiceName, TargetCategory, Timestamp, error_codes, sealed,
 };
 
 /// Deterministic result ordering for historical query and follow polling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum LogOrder {
     #[default]
-    Asc,
-    Desc,
-}
-
-/// Predicate applied to one structured log-event field.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
-pub enum LogFieldPredicate {
-    Equals(Value),
+    OldestFirst,
+    NewestFirst,
 }
 
 /// One exact-match field filter in a historical/follow log query.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogFieldMatch {
     pub field: String,
-    pub predicate: LogFieldPredicate,
+    pub value: Value,
 }
 
 impl LogFieldMatch {
@@ -34,7 +29,7 @@ impl LogFieldMatch {
     pub fn equals(field: impl Into<String>, value: Value) -> Self {
         Self {
             field: field.into(),
-            predicate: LogFieldPredicate::Equals(value),
+            value,
         }
     }
 }
@@ -51,7 +46,7 @@ pub struct LogQuery {
     pub since: Option<Timestamp>,
     pub until: Option<Timestamp>,
     pub field_matches: Vec<LogFieldMatch>,
-    pub limit: Option<u64>,
+    pub limit: Option<usize>,
     pub order: LogOrder,
     pub start_position: Option<u64>,
 }
@@ -89,7 +84,6 @@ impl LogQuery {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LogSnapshot {
     pub events: Vec<LogEvent>,
-    pub total_scanned: u64,
     pub truncated: bool,
 }
 
@@ -99,13 +93,13 @@ pub enum QueryError {
     #[error("{0}")]
     InvalidQuery(#[source] Box<ErrorContext>),
     #[error("{0}")]
-    IoError(#[source] Box<ErrorContext>),
+    Io(#[source] Box<ErrorContext>),
     #[error("{0}")]
-    DecodeError(#[source] Box<ErrorContext>),
+    Decode(#[source] Box<ErrorContext>),
     #[error("{0}")]
     Unavailable(#[source] Box<ErrorContext>),
-    #[error("{0}")]
-    Shutdown(#[source] Box<ErrorContext>),
+    #[error("query runtime shut down")]
+    Shutdown,
 }
 
 impl QueryError {
@@ -113,10 +107,10 @@ impl QueryError {
     pub fn code(&self) -> ErrorCode {
         match self {
             Self::InvalidQuery(_) => error_codes::SC_LOG_QUERY_INVALID_QUERY,
-            Self::IoError(_) => error_codes::SC_LOG_QUERY_IO,
-            Self::DecodeError(_) => error_codes::SC_LOG_QUERY_DECODE,
+            Self::Io(_) => error_codes::SC_LOG_QUERY_IO,
+            Self::Decode(_) => error_codes::SC_LOG_QUERY_DECODE,
             Self::Unavailable(_) => error_codes::SC_LOG_QUERY_UNAVAILABLE,
-            Self::Shutdown(_) => error_codes::SC_LOG_QUERY_SHUTDOWN,
+            Self::Shutdown => error_codes::SC_LOG_QUERY_SHUTDOWN,
         }
     }
 
@@ -124,10 +118,10 @@ impl QueryError {
     pub fn diagnostic(&self) -> &Diagnostic {
         match self {
             Self::InvalidQuery(context)
-            | Self::IoError(context)
-            | Self::DecodeError(context)
-            | Self::Unavailable(context)
-            | Self::Shutdown(context) => context.diagnostic(),
+            | Self::Io(context)
+            | Self::Decode(context)
+            | Self::Unavailable(context) => context.diagnostic(),
+            Self::Shutdown => shutdown_diagnostic(),
         }
     }
 
@@ -141,10 +135,26 @@ impl QueryError {
     }
 }
 
+impl sealed::Sealed for QueryError {}
+
 impl DiagnosticInfo for QueryError {
     fn diagnostic(&self) -> &Diagnostic {
         self.diagnostic()
     }
+}
+
+fn shutdown_diagnostic() -> &'static Diagnostic {
+    static DIAGNOSTIC: LazyLock<Diagnostic> = LazyLock::new(|| Diagnostic {
+        timestamp: Timestamp::UNIX_EPOCH,
+        code: error_codes::SC_LOG_QUERY_SHUTDOWN,
+        message: "query runtime shut down".to_string(),
+        cause: None,
+        remediation: Remediation::recoverable("restart the logger", ["retry"]),
+        docs: None,
+        details: serde_json::Map::new(),
+    });
+
+    &DIAGNOSTIC
 }
 
 #[cfg(test)]
@@ -221,7 +231,7 @@ mod tests {
             until: Some(Timestamp::UNIX_EPOCH + Duration::minutes(5)),
             field_matches: vec![LogFieldMatch::equals("status", json!("ok"))],
             limit: Some(25),
-            order: LogOrder::Desc,
+            order: LogOrder::NewestFirst,
             start_position: Some(512),
         };
 
@@ -268,7 +278,6 @@ mod tests {
     fn log_snapshot_round_trips_through_serde() {
         let snapshot = LogSnapshot {
             events: vec![log_event()],
-            total_scanned: 42,
             truncated: true,
         };
 
@@ -285,12 +294,12 @@ mod tests {
                 "invalid query",
                 Remediation::recoverable("fix the query", ["retry"]),
             ))),
-            QueryError::IoError(Box::new(ErrorContext::new(
+            QueryError::Io(Box::new(ErrorContext::new(
                 error_codes::SC_LOG_QUERY_IO,
                 "i/o failure",
                 Remediation::recoverable("check the log path", ["retry"]),
             ))),
-            QueryError::DecodeError(Box::new(ErrorContext::new(
+            QueryError::Decode(Box::new(ErrorContext::new(
                 error_codes::SC_LOG_QUERY_DECODE,
                 "decode failure",
                 Remediation::recoverable("repair the malformed record", ["retry"]),
@@ -300,11 +309,7 @@ mod tests {
                 "query unavailable",
                 Remediation::recoverable("wait for logging to recover", ["retry"]),
             ))),
-            QueryError::Shutdown(Box::new(ErrorContext::new(
-                error_codes::SC_LOG_QUERY_SHUTDOWN,
-                "query runtime shut down",
-                Remediation::recoverable("restart the logger", ["retry"]),
-            ))),
+            QueryError::Shutdown,
         ];
 
         for error in variants {
@@ -313,6 +318,13 @@ mod tests {
             assert_eq!(decoded, error);
             assert_eq!(decoded.diagnostic().code, decoded.code());
         }
+    }
+
+    #[test]
+    fn query_shutdown_uses_static_diagnostic() {
+        let error = QueryError::Shutdown;
+        assert_eq!(error.code(), error_codes::SC_LOG_QUERY_SHUTDOWN);
+        assert_eq!(error.diagnostic().message, "query runtime shut down");
     }
 
     #[test]

@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{Diagnostic, DiagnosticInfo, ErrorContext};
+use crate::{Diagnostic, DiagnosticInfo, ErrorContext, sealed};
 
 /// Error returned when process identity resolution fails.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
 #[error("{0}")]
 pub struct IdentityError(#[source] pub Box<ErrorContext>);
+
+impl sealed::Sealed for IdentityError {}
 
 impl DiagnosticInfo for IdentityError {
     fn diagnostic(&self) -> &Diagnostic {
@@ -20,6 +22,8 @@ macro_rules! error_wrapper {
         #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
         #[error("{0}")]
         pub struct $name(#[source] pub Box<ErrorContext>);
+
+        impl sealed::Sealed for $name {}
 
         impl DiagnosticInfo for $name {
             fn diagnostic(&self) -> &Diagnostic {

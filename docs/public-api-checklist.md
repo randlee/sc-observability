@@ -70,14 +70,13 @@ Note:
 - [x] `LoggingHealthReport`
 - [x] `Timestamp` (UTC-enforced public type, not a plain alias)
 - [x] `LogOrder`
-- [x] `LogFieldPredicate`
 - [x] `LogFieldMatch`
 - [x] `LogQuery`
 - [x] `LogSnapshot`
 - [x] `QueryError`
 - [x] `QueryHealthState`
 - [x] `QueryHealthReport`
-- [x] `TelemetryHealthProvider`
+- [x] `TelemetryHealthProvider` (sealed)
 - [x] `ObservationHealthState`
 - [~] `ObservabilityHealthReport`
 - [x] `TelemetryHealthState`

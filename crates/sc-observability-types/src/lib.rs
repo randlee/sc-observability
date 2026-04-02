@@ -11,6 +11,10 @@ mod errors;
 mod health;
 mod query;
 
+mod sealed {
+    pub trait Sealed {}
+}
+
 use std::borrow::Cow;
 use std::fmt;
 use std::marker::PhantomData;
@@ -32,7 +36,7 @@ pub use health::{
     SinkHealth, SinkHealthState, TelemetryHealthProvider, TelemetryHealthReport,
     TelemetryHealthState,
 };
-pub use query::{LogFieldMatch, LogFieldPredicate, LogOrder, LogQuery, LogSnapshot, QueryError};
+pub use query::{LogFieldMatch, LogOrder, LogQuery, LogSnapshot, QueryError};
 
 /// Canonical millisecond duration type used across the workspace.
 #[derive(
@@ -403,7 +407,7 @@ pub struct Diagnostic {
 }
 
 /// Trait for public error surfaces that can expose an attached diagnostic.
-pub trait DiagnosticInfo {
+pub trait DiagnosticInfo: sealed::Sealed {
     fn diagnostic(&self) -> &Diagnostic;
 }
 

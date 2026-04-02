@@ -71,7 +71,7 @@ Owns:
 - `TraceContext`, `TraceId`, `SpanId`
 - `SpanRecord<S>`, `SpanSignal`, `MetricRecord`, `LogEvent`
 - `TelemetryHealthProvider`
-- `LogQuery`, `LogOrder`, `LogFieldPredicate`, `LogFieldMatch`
+- `LogQuery`, `LogOrder`, `LogFieldMatch`
 - `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
 - health report contracts
 - shared open traits such as `Observable`, `DiagnosticInfo`,
@@ -129,7 +129,7 @@ require an async runtime.
 Type ownership is split as follows:
 
 - `sc-observability-types` owns `LogQuery`, `LogOrder`,
-  `LogFieldPredicate`, `LogFieldMatch`, `LogSnapshot`, `QueryError`,
+  `LogFieldMatch`, `LogSnapshot`, `QueryError`,
   `QueryHealthState`, `QueryHealthReport`, and `TelemetryHealthProvider`
 - `sc-observability-types` extends `LoggingHealthReport` with
   `query: Option<QueryHealthReport>`
@@ -140,17 +140,13 @@ Approved public API surface for this sprint:
 
 ```rust
 pub enum LogOrder {
-    Asc,
-    Desc,
-}
-
-pub enum LogFieldPredicate {
-    Equals(serde_json::Value),
+    OldestFirst,
+    NewestFirst,
 }
 
 pub struct LogFieldMatch {
     pub field: String,
-    pub predicate: LogFieldPredicate,
+    pub value: serde_json::Value,
 }
 
 pub struct LogQuery {
@@ -163,23 +159,22 @@ pub struct LogQuery {
     pub since: Option<Timestamp>,
     pub until: Option<Timestamp>,
     pub field_matches: Vec<LogFieldMatch>,
-    pub limit: Option<u64>,
+    pub limit: Option<usize>,
     pub order: LogOrder,
     pub start_position: Option<u64>,
 }
 
 pub struct LogSnapshot {
     pub events: Vec<LogEvent>,
-    pub total_scanned: u64,
     pub truncated: bool,
 }
 
 pub enum QueryError {
     InvalidQuery(Box<ErrorContext>),
-    IoError(Box<ErrorContext>),
-    DecodeError(Box<ErrorContext>),
+    Io(Box<ErrorContext>),
+    Decode(Box<ErrorContext>),
     Unavailable(Box<ErrorContext>),
-    Shutdown(Box<ErrorContext>),
+    Shutdown,
 }
 
 pub enum QueryHealthState {
@@ -203,7 +198,7 @@ pub struct LoggingHealthReport {
     pub last_error: Option<DiagnosticSummary>,
 }
 
-pub trait TelemetryHealthProvider: Send + Sync {
+pub trait TelemetryHealthProvider: sealed::Sealed + Send + Sync {
     fn telemetry_health(&self) -> TelemetryHealthReport;
 }
 
@@ -376,12 +371,12 @@ Historical query strategy:
 - resolve the active file and its rotated siblings once at query start
 - treat that resolved set as a point-in-time snapshot for the duration of the
   query
-- scan in oldest-to-newest order for `LogOrder::Asc` and in reverse for
-  `LogOrder::Desc`
+- scan in oldest-to-newest order for `LogOrder::OldestFirst` and in reverse for
+  `LogOrder::NewestFirst`
 - apply filtering before limit truncation and report truncation through
   `LogSnapshot.truncated`
 - surface malformed JSONL records or contract decode failures as
-  `QueryError::DecodeError` rather than silently dropping them
+  `QueryError::Decode` rather than silently dropping them
 
 Follow strategy:
 
