@@ -1507,9 +1507,7 @@ mod tests {
         logger
             .emit(log_event_with_request(service_name(), "after-recreate", 20))
             .expect("emit after recreate");
-        assert_eq!(
-            request_ids(&follow.poll().expect("poll after recreate")),
-            ["after-recreate"]
-        );
+        let after_recreate = drain_follow_until_request_id(&mut follow, "after-recreate");
+        assert_eq!(after_recreate, vec!["after-recreate"]);
     }
 }
