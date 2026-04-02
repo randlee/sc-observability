@@ -18,6 +18,12 @@ post-implementation closure work in dependency order:
 6. Sprint 5 working ATM adapter example
 7. Sprint 6 hardening and release readiness
 
+Query/follow placement within Phase 1:
+
+- Wave 1 (`#24`) and Wave 2 (`#25`) ship in Sprint 1 / M0-M1
+- Wave 3 (`#26`, `#27`, `#28`) and Wave 4 (`#29`) ship in Sprint 2 / M2
+- later sprints consume this logging/query surface rather than redefining it
+
 ## 2. Pre-Sprint-1 Cleanup
 
 These should land before Sprint 1 starts:
@@ -54,12 +60,17 @@ Build:
 - shared health models
 - shared open traits
 - serde coverage for public contracts
+- query/follow Wave 1 and Wave 2 shared contracts:
+  `LogQuery`, `LogOrder`, `LogFieldMatch`, `QueryError`, and the
+  `SC_LOG_QUERY_*` stable error codes
 
 Exit criteria:
 - `cargo check --workspace --all-targets`
 - unit tests for validation, error rendering, serialization
 - typestate span lifecycle tests
 - API checklist frozen for `sc-observability-types`
+- query/follow shared types and error vocabulary are frozen for implementation
+  waves in Sprint 2
 
 ### Sprint 2 / M2: `sc-observability`
 
@@ -72,6 +83,9 @@ Build:
 - redaction pipeline
 - rotation and retention behavior
 - logging health reporting
+- query/follow Wave 3 and Wave 4 runtime:
+  `LogSnapshot`, `Logger::query`, `Logger::follow`, `LogFollowSession`,
+  `QueryHealthReport`, `LoggingHealthReport.query`, and `JsonlLogReader`
 
 Exit criteria:
 - file sink path/default behavior matches docs
@@ -80,6 +94,9 @@ Exit criteria:
 - sink failures remain fail-open and are counted
 - logging-only integration path passes without `sc-observe`
 - API checklist frozen for `sc-observability`
+- historical query and follow behavior handle active + rotated JSONL files
+- query/follow remains synchronous with no async runtime required
+- no ATM-specific types or `agent-team-mail-*` dependencies are introduced
 
 ### Sprint 3 / M3: `sc-observe`
 

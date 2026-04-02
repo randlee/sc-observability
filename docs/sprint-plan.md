@@ -24,20 +24,30 @@ compression, not the default.
 Scope:
 - finish `sc-observability-types`
 - finalize newtypes, diagnostics, trace/span/metric contracts, shared errors
+- ship query/follow Wave 1 and Wave 2 for issues `#24` and `#25`:
+  `LogQuery`, `LogOrder`, `LogFieldMatch`, `QueryError`, and the
+  `SC_LOG_QUERY_*` stable error codes
 
 Done means:
 - public API checklist complete for `sc-observability-types`
 - unit tests and serde tests green
+- query/follow shared contract and error vocabulary are frozen in
+  `sc-observability-types`
 
 ### Sprint 2: Lightweight Logging
 
 Scope:
 - build `sc-observability`
 - file sink, console sink, redaction, fan-out, health
+- ship query/follow Wave 3 and Wave 4 for issues `#26` through `#29`:
+  `LogSnapshot`, `Logger::query`, `Logger::follow`, `LogFollowSession`,
+  `QueryHealthReport`, `LoggingHealthReport.query`, and `JsonlLogReader`
 
 Done means:
 - logging-only example works
 - fail-open sink behavior verified
+- rotation-aware historical query/follow behavior verified
+- query/follow remains synchronous and ATM-free
 
 ### Sprint 3: Observation Routing
 
@@ -98,6 +108,13 @@ Done means:
   open blocking items, and resolution or formal documented deferral of the open
   ATM-owned decisions listed in `atm-adapter-mapping-spec.md` §9
 - Sprint 6 depends on all previous sprints
+
+Query/follow dependency placement:
+
+- Wave 1 (`#24`) and Wave 2 (`#25`) close in Sprint 1
+- Wave 3 (`#26`, `#27`, `#28`) and Wave 4 (`#29`) close in Sprint 2
+- Sprint 3 and later sprints consume the stabilized logging/query surface; they
+  do not redefine it
 
 ## 4. Review Expectations
 
