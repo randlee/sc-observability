@@ -17,9 +17,18 @@ cutover, new releases of these crate names must come from this repo instead.
 - All published crates in this repo must share that version.
 - The initial standalone release must be strictly higher than the last version
   published from the ATM workspace for these crate names.
+- The initial standalone release for this repo is `1.0.0`.
 - Release workflows verify that the requested release version matches:
   - workspace version
   - each crate package version
+- Release preflight uses two modes:
+  - if `sc-observability-types` already exists on crates.io, preflight runs the
+    normal dependency-aware `cargo package --locked --allow-dirty` checks in
+    publish order
+  - if `sc-observability-types` is not yet on crates.io, preflight treats the
+    run as the initial standalone publish and uses
+    `cargo publish --dry-run --locked --no-verify` for each crate in publish
+    order so downstream path dependencies do not fail crates.io resolution
 
 ## Replacement/Cutover Rule
 

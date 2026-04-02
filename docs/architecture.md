@@ -171,11 +171,6 @@ pub enum QueryError {
     Shutdown,
 }
 
-`QueryError` is backed by the stable error-code constants
-`SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`,
-`SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN` per `requirements.md`
-TYP-036.
-
 pub enum QueryHealthState {
     Healthy,
     Degraded,
@@ -221,6 +216,11 @@ impl JsonlLogReader {
     pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>;
 }
 ```
+
+`QueryError` is backed by the stable error-code constants
+`SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`,
+`SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN` per `requirements.md`
+TYP-036.
 
 Behavioral boundaries:
 

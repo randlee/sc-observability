@@ -3,7 +3,7 @@
 //! This crate defines the reusable value types, diagnostics, typestate span
 //! contracts, health reports, and open extension traits consumed by the higher
 //! layers in the workspace. It intentionally avoids owning sinks, routing
-//! runtimes, exporter behavior, or ATM-specific payload types.
+//! runtimes, exporter behavior, or application-specific payload types.
 
 pub mod constants;
 pub mod error_codes;
@@ -1308,6 +1308,7 @@ mod tests {
             state: LoggingHealthState::Healthy,
             dropped_events_total: 0,
             flush_errors_total: 0,
+            // fixture path: not accessed on disk
             active_log_path: std::path::PathBuf::from("/var/log/service/logs/service.log.jsonl"),
             sink_statuses: vec![sink],
             last_error: None,
