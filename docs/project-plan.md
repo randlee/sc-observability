@@ -24,11 +24,16 @@ The immediate goal is no longer "ship quickly". The immediate goal is:
    - [`git-workflows.md`](./git-workflows.md)
    - [`publishing.md`](./publishing.md)
 3. Complete the pre-publish recovery sprints in strict order:
-   - truth reset and design freeze
-   - shared contract hardening
-   - logging query/follow runtime
-   - routing and OTLP attachment closure
-   - hardening and final publish gate
+   - Sprint 0 truth reset and design freeze
+     Exit criteria: [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) §5.4
+   - Sprint 1 shared contract hardening
+     Exit criteria: [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) §6.5
+   - Sprint 2 logging query/follow runtime
+     Exit criteria: [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) §7.6
+   - Sprint 3 routing and OTLP attachment closure
+     Exit criteria: [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) §8.6
+   - Sprint 4 hardening and final publish gate
+     Exit criteria: [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) §9.4
 4. Resume release-readiness work only after the final recovery review reports
    zero blocking findings.
 5. Maintain extraction inventory and boundary ADRs as modules move from ATM to

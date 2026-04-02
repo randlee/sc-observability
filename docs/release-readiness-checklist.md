@@ -15,8 +15,8 @@
 - [x] Release workflow exists.
 - [x] CI includes docs-consistency and dependency-ban validation.
 - [x] Repo-boundary validation passes.
-- [x] ATM adapter example compiles and runs in normal mode.
-- [x] ATM adapter example compiles and runs in fail-open mode.
+- [ ] ATM adapter example compiles and runs in normal mode. Re-verify after S3 ships.
+- [ ] ATM adapter example compiles and runs in fail-open mode. Re-verify after S3 ships.
 - [x] Migration guide for ATM consumers exists.
 - [x] Performance review is documented.
 - [ ] Final pre-publish review reports zero blocking findings.

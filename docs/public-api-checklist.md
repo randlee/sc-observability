@@ -58,7 +58,8 @@ Note:
 - [x] `SpanStatus`
 - [x] `SpanStarted`
 - [x] `SpanEnded`
-- [x] `SpanRecord<S>`
+- [~] `DurationMs`
+- [~] `SpanRecord<S>`
 - [x] `SpanEvent`
 - [x] `SpanSignal`
 - [x] `MetricKind`
@@ -66,7 +67,7 @@ Note:
 - [x] `LoggingHealthState`
 - [x] `SinkHealthState`
 - [x] `SinkHealth`
-- [x] `LoggingHealthReport`
+- [~] `LoggingHealthReport`
 - [~] `Timestamp` (UTC-enforced public type, not a plain alias)
 - [~] `LogOrder`
 - [~] `LogFieldMatch`
@@ -77,7 +78,7 @@ Note:
 - [~] `QueryHealthReport`
 - [~] `TelemetryHealthProvider`
 - [x] `ObservationHealthState`
-- [x] `ObservabilityHealthReport`
+- [~] `ObservabilityHealthReport`
 - [x] `TelemetryHealthState`
 - [x] `ExporterHealthState`
 - [x] `ExporterHealth`
@@ -104,9 +105,12 @@ Note:
 
 - span lifecycle is typestate-only on producer-facing APIs
 - `Diagnostic` always carries remediation
-- timestamps are UTC-only
 - trace correlation uses `TraceId` / `SpanId`
 - ATM metadata is not part of the core schema
+
+Planned / pending rules tied to `[~]` items:
+
+- `Timestamp` becomes UTC-only once Sprint 1 ships.
 
 ## 3. `sc-observability`
 
@@ -145,7 +149,7 @@ Internal-only:
 ### Finalized Public Types
 
 - [x] `error_codes`
-- [x] `ObservabilityHealthReport`
+- [~] `ObservabilityHealthReport`
 - [x] `ObservationError`
 - [x] `ObservationHealthState`
 - [x] `ObservabilityConfig`
@@ -173,10 +177,10 @@ Internal-only:
 - [x] `TelemetryConfigBuilder`
 - [x] `Telemetry`
 - [x] `OtlpProtocol`
-- [x] `OtelConfig`
+- [~] `OtelConfig`
 - [x] `LogsConfig`
 - [x] `TracesConfig`
-- [x] `MetricsConfig`
+- [~] `MetricsConfig`
 - [x] `ResourceAttributes`
 - [x] `SpanAssembler`
 - [x] `CompleteSpan`

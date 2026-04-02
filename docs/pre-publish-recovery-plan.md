@@ -46,6 +46,9 @@ These are publish blockers, not cleanup items.
   that sprint.
 - No sprint closes with `[~]` or `[ ]` checklist items in its own scope unless
   they are explicitly deferred in this document.
+- BP-NT-001 and BP-NT-002 are pre-publish scope, not silently deferred:
+  Sprint 1 introduces shared `DurationMs` and updates `SpanRecord::end(...)`;
+  Sprint 3 replaces raw OTLP millisecond fields with `DurationMs`.
 - No publish gate may be marked complete until the final review reports zero
   blocking findings.
 
@@ -112,6 +115,8 @@ The public OTLP integration surface is frozen as:
   `ObservabilityBuilder`
 - `Telemetry` implements a public `TelemetryHealthProvider` trait owned by
   `sc-observability-types`
+- `TelemetryHealthProvider` is frozen as:
+  `pub trait TelemetryHealthProvider: Send + Sync { fn telemetry_health(&self) -> TelemetryHealthReport; }`
 - `ObservabilityBuilder` exposes
   `with_telemetry_health_provider(Arc<dyn TelemetryHealthProvider>)` so
   `ObservabilityHealthReport.telemetry` can be populated without adding an OTLP
@@ -143,6 +148,7 @@ Close the missing shared-contract and best-practice gaps in
 ### 6.2 Required code outputs
 
 - UTC-enforced `Timestamp`
+- `DurationMs`
 - `LogOrder`
 - `LogFieldMatch`
 - `LogQuery`
@@ -151,6 +157,7 @@ Close the missing shared-contract and best-practice gaps in
 - `QueryHealthState`
 - `QueryHealthReport`
 - `TelemetryHealthProvider`
+- `SpanRecord::end(DurationMs)` update
 - `SC_LOG_QUERY_INVALID_QUERY`
 - `SC_LOG_QUERY_IO`
 - `SC_LOG_QUERY_DECODE`
@@ -171,6 +178,7 @@ Close the missing shared-contract and best-practice gaps in
 ### 6.4 Required tests
 
 - UTC normalization and serde tests for `Timestamp`
+- validation and serde tests for `DurationMs`
 - validation tests for `LogQuery`
 - serde round-trip tests for all new query types
 - `QueryError` to stable error-code mapping tests
@@ -251,6 +259,8 @@ reviewable public integration surface.
 - `TelemetryHealthProvider` implementation for `Telemetry`
 - `ObservabilityBuilder::with_telemetry_health_provider(...)`
 - `ObservabilityHealthReport.telemetry` populated when a provider is attached
+- `OtelConfig.timeout_ms`, `initial_backoff_ms`, `max_backoff_ms`, and
+  `MetricsConfig.export_interval_ms` converted from raw `u64` to `DurationMs`
 
 ### 8.3 Required behavior
 
@@ -297,6 +307,8 @@ Run the final production-readiness pass only after S0 through S3 are merged.
 - release readiness checklist updated from factual verification, not optimism
 - final critical review with severity-tagged findings
 - explicit publish/no-publish decision captured in ATM
+- `LogFollowSession` lifecycle typing reviewed and either finalized or
+  explicitly deferred with rationale
 
 ### 9.3 Required validation gates
 
@@ -315,6 +327,31 @@ Run the final production-readiness pass only after S0 through S3 are merged.
 - final review reports zero blocking findings
 - release readiness checklist is actually complete
 - team-lead receives a pass/fail publish recommendation backed by evidence
+
+### 9.5 Outstanding Important Findings From Phase Final Review
+
+These findings remain required Sprint 4 hardening scope even after the missing
+API work lands:
+
+- `QA-001`
+- `BP-ST-001`
+- `BP-ST-002`
+- `BP-TS-001`
+- `BP-TS-002`
+- `BP-IMC-001`
+- `BP-IMC-002`
+- `BP-NT-003`
+- `BP-NT-004`
+- `BP-NT-005`
+- `BP-ECR-001`
+- `BP-ECR-002`
+- `BP-ECR-003`
+- `REQ-QA-008-phase`
+- `REQ-QA-009-phase`
+
+Sprint 4 also explicitly reviews `LogFollowSession` lifecycle typing,
+`BP-TS-001` on Logger and Telemetry shutdown-state hardening, and `BP-TS-002`
+on `SpanRecord<SpanEnded>` optional duration before publish.
 
 ## 10. Design Closure Loop
 
