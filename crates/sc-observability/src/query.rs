@@ -16,13 +16,9 @@ pub(crate) struct FileIdentity {
     device: u64,
     #[cfg(unix)]
     inode: u64,
-    #[cfg(windows)]
-    volume_serial_number: u32,
-    #[cfg(windows)]
-    file_index: u64,
-    #[cfg(not(any(unix, windows)))]
+    #[cfg(not(unix))]
     len: u64,
-    #[cfg(not(any(unix, windows)))]
+    #[cfg(not(unix))]
     modified_nanos: Option<u128>,
 }
 
@@ -352,17 +348,7 @@ fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
         }
     }
 
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
-
-        FileIdentity {
-            volume_serial_number: metadata.volume_serial_number().unwrap_or(0),
-            file_index: metadata.file_index().unwrap_or(0),
-        }
-    }
-
-    #[cfg(not(any(unix, windows)))]
+    #[cfg(not(unix))]
     {
         let modified_nanos = metadata
             .modified()
@@ -403,15 +389,7 @@ mod tests {
             }
         }
 
-        #[cfg(windows)]
-        {
-            FileIdentity {
-                volume_serial_number: 1,
-                file_index: seed,
-            }
-        }
-
-        #[cfg(not(any(unix, windows)))]
+        #[cfg(not(unix))]
         {
             FileIdentity {
                 len: seed,
