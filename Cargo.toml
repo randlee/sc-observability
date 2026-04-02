@@ -9,7 +9,7 @@ exclude = ["examples/atm-adapter-example"]
 resolver = "2"
 
 [workspace.package]
-version = "0.46.2"
+version = "1.0.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.85"

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version candidate (e.g. 0.46.2 or v0.46.2)"
+        description: "Release version candidate (e.g. 1.0.0 or v1.0.0)"
         required: true
         type: string
       run_by_agent:
@@ -87,10 +87,36 @@ jobs:
             --workspace-toml Cargo.toml \
             --version '${{ steps.meta.outputs.release_version }}'
 
+      - name: Detect initial standalone release mode
+        id: initial_release
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://crates.io/api/v1/crates/sc-observability-types"
+          status="$(curl --silent --show-error --location --output /tmp/sc-observability-types.json --write-out '%{http_code}' "$url")"
+          case "$status" in
+            200)
+              echo "enabled=false" >> "$GITHUB_OUTPUT"
+              echo "sc-observability-types already exists on crates.io; using cargo package preflight."
+              ;;
+            404)
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+              echo "sc-observability-types not found on crates.io; using cargo publish --dry-run --no-verify for initial release preflight."
+              ;;
+            *)
+              echo "Failed to determine crates.io state for sc-observability-types (HTTP $status)." >&2
+              exit 1
+              ;;
+          esac
+
       - name: Run dependency-aware package checks
         shell: bash
         run: |
           set -euo pipefail
           while IFS='|' read -r package _; do
-            cargo package -p "$package" --locked --allow-dirty
+            if [[ '${{ steps.initial_release.outputs.enabled }}' == 'true' ]]; then
+              cargo publish -p "$package" --dry-run --locked --no-verify
+            else
+              cargo package -p "$package" --locked --allow-dirty
+            fi
           done < <(python3 scripts/release_artifacts.py list-publish-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")

@@ -69,7 +69,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability"
-version = "0.46.2"
+version = "1.0.0"
 dependencies = [
  "sc-observability-types",
  "serde_json",
@@ -77,7 +77,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-otlp"
-version = "0.46.2"
+version = "1.0.0"
 dependencies = [
  "sc-observability-types",
  "sc-observe",
@@ -87,7 +87,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-types"
-version = "0.46.2"
+version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -97,7 +97,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observe"
-version = "0.46.2"
+version = "1.0.0"
 dependencies = [
  "sc-observability",
  "sc-observability-types",
