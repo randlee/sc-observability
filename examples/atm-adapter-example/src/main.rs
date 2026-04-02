@@ -13,8 +13,8 @@ use sc_observability_otlp::{
     TelemetryConfigBuilder, TracesConfig,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
-    LoggingHealthReport, Observation, ObservabilityHealthReport, ProcessIdentity,
+    ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
+    MetricRecord, LoggingHealthReport, Observation, ObservabilityHealthReport, ProcessIdentity,
     ProjectionError, ProjectionRegistration, Remediation, ServiceName, SpanEvent, SpanId,
     SpanRecord, SpanSignal, SpanStarted, SpanStatus, StateTransition, TargetCategory,
     TelemetryHealthReport, TraceContext, TraceId,
@@ -255,11 +255,11 @@ fn telemetry_config_from_env(
             auth_header,
             ca_file,
             insecure_skip_verify,
-            timeout_ms: constants::OTLP_TIMEOUT_MS,
+            timeout_ms: constants::OTLP_TIMEOUT_MS.into(),
             debug_local_export,
             max_retries: constants::OTLP_MAX_RETRIES,
-            initial_backoff_ms: constants::OTLP_INITIAL_BACKOFF_MS,
-            max_backoff_ms: constants::OTLP_MAX_BACKOFF_MS,
+            initial_backoff_ms: constants::OTLP_INITIAL_BACKOFF_MS.into(),
+            max_backoff_ms: constants::OTLP_MAX_BACKOFF_MS.into(),
         })
         .with_resource(sc_observability_otlp::ResourceAttributes {
             attributes: [
@@ -524,7 +524,7 @@ impl sc_observability_types::SpanProjector<AgentInfoEvent> for AtmSpanProjector 
                         docs: None,
                         details: Map::new(),
                     })
-                    .end(SpanStatus::Ok, duration_ms),
+                    .end(SpanStatus::Ok, DurationMs::from(duration_ms)),
                 )]
             }
         };
@@ -700,7 +700,7 @@ mod tests {
         match &end_signals[0] {
             SpanSignal::Ended(span) => {
                 assert_eq!(span.timestamp(), Timestamp::UNIX_EPOCH);
-                assert_eq!(span.duration_ms(), 250);
+                assert_eq!(span.duration_ms(), DurationMs::from(250));
             }
             other => panic!("expected ended span, got {other:?}"),
         }

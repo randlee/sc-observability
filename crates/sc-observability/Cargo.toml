@@ -11,3 +11,6 @@ description = "Standalone facade crate for observability operations."
 [dependencies]
 serde_json.workspace = true
 sc-observability-types.workspace = true
+
+[dev-dependencies]
+temp-env = "0.3.6"

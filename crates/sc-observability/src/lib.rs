@@ -363,14 +363,10 @@ impl JsonlFileSink {
             for idx in (1..self.rotation.max_files).rev() {
                 let src = self.rotated_path(idx);
                 let dest = self.rotated_path(idx + 1);
-                if src.exists() {
-                    let _ = fs::rename(&src, &dest);
-                }
+                let _ = rename_if_present(&src, &dest);
             }
-            if self.path.exists() {
-                let rotated = self.rotated_path(1);
-                let _ = fs::rename(&self.path, rotated);
-            }
+            let rotated = self.rotated_path(1);
+            let _ = rename_if_present(&self.path, &rotated);
         }
 
         self.prune_old_files();
@@ -424,8 +420,11 @@ impl JsonlFileSink {
         }
     }
 
-    fn mark_failure(&self, message: impl Into<String>) -> LogSinkError {
-        let message = message.into();
+    fn mark_failure<E>(&self, error: E) -> LogSinkError
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        let message = error.to_string();
         let diagnostic = diagnostic_for_sink_failure(message.clone());
         let mut health = self.health.lock().expect("file sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
@@ -438,7 +437,8 @@ impl JsonlFileSink {
                     "file sink write failure handling is owned by the logger runtime",
                 ),
             )
-            .cause(message),
+            .cause(message)
+            .source(Box::new(error)),
         ))
     }
 }
@@ -446,11 +446,10 @@ impl JsonlFileSink {
 impl LogSink for JsonlFileSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|err| self.mark_failure(err.to_string()))?;
+            fs::create_dir_all(parent).map_err(|err| self.mark_failure(err))?;
         }
 
-        let mut line =
-            serde_json::to_vec(event).map_err(|err| self.mark_failure(err.to_string()))?;
+        let mut line = serde_json::to_vec(event).map_err(|err| self.mark_failure(err))?;
         line.push(b'\n');
         self.rotate_if_needed(line.len() as u64)?;
 
@@ -458,10 +457,10 @@ impl LogSink for JsonlFileSink {
             .create(true)
             .append(true)
             .open(&self.path)
-            .map_err(|err| self.mark_failure(err.to_string()))?;
+            .map_err(|err| self.mark_failure(err))?;
         file.write_all(&line)
             .and_then(|_| file.flush())
-            .map_err(|err| self.mark_failure(err.to_string()))?;
+            .map_err(|err| self.mark_failure(err))?;
 
         let mut health = self.health.lock().expect("file sink health poisoned");
         health.state = SinkHealthState::Healthy;
@@ -531,8 +530,11 @@ impl ConsoleSink {
         )
     }
 
-    fn mark_failure(&self, message: impl Into<String>) -> LogSinkError {
-        let message = message.into();
+    fn mark_failure<E>(&self, error: E) -> LogSinkError
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        let message = error.to_string();
         let diagnostic = diagnostic_for_sink_failure(message.clone());
         let mut health = self.health.lock().expect("console sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
@@ -545,7 +547,8 @@ impl ConsoleSink {
                     "console sink write failure handling is owned by the logger runtime",
                 ),
             )
-            .cause(message),
+            .cause(message)
+            .source(Box::new(error)),
         ))
     }
 }
@@ -557,7 +560,7 @@ impl LogSink for ConsoleSink {
             .lock()
             .expect("console writer poisoned")
             .write_line(&line)
-            .map_err(|err| self.mark_failure(err.to_string()))?;
+            .map_err(|err| self.mark_failure(err))?;
         let mut health = self.health.lock().expect("console sink health poisoned");
         health.state = SinkHealthState::Healthy;
         Ok(())
@@ -638,6 +641,14 @@ fn default_log_path(log_root: &Path, service_name: &ServiceName) -> PathBuf {
         .join(format!("{}.log.jsonl", service_name.as_str()))
 }
 
+fn rename_if_present(src: &Path, dest: &Path) -> std::io::Result<()> {
+    match fs::rename(src, dest) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err),
+    }
+}
+
 fn redact_string_value(value: &mut Value) {
     if let Value::String(text) = value {
         *text = redact_bearer_token_text(text);
@@ -673,6 +684,7 @@ mod tests {
     };
     use serde_json::json;
     use std::sync::Arc;
+    use temp_env::{with_var, with_var_unset};
 
     struct SharedBuffer {
         lines: Arc<Mutex<Vec<String>>>,
@@ -759,33 +771,11 @@ mod tests {
         path
     }
 
-    static ENV_MUTEX: Mutex<()> = Mutex::new(());
-
     fn with_sc_log_root<T>(value: Option<&Path>, f: impl FnOnce() -> T) -> T {
-        let _guard = ENV_MUTEX.lock().expect("env mutex poisoned");
-        let previous = std::env::var_os("SC_LOG_ROOT");
         match value {
-            Some(path) => {
-                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
-                unsafe { std::env::set_var("SC_LOG_ROOT", path) };
-            }
-            None => {
-                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
-                unsafe { std::env::remove_var("SC_LOG_ROOT") };
-            }
+            Some(path) => with_var("SC_LOG_ROOT", Some(path), f),
+            None => with_var_unset("SC_LOG_ROOT", f),
         }
-        let result = f();
-        match previous {
-            Some(value) => {
-                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
-                unsafe { std::env::set_var("SC_LOG_ROOT", value) };
-            }
-            None => {
-                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
-                unsafe { std::env::remove_var("SC_LOG_ROOT") };
-            }
-        }
-        result
     }
 
     fn log_event(service_name: ServiceName) -> LogEvent {

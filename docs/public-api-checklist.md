@@ -1,6 +1,6 @@
 # SC-Observability Public API Checklist
 
-**Status**: Draft for review
+**Status**: Approved
 **Purpose**: Track the intended public API so implementation does not invent or
 change the public surface opportunistically.
 
@@ -58,8 +58,8 @@ Note:
 - [x] `SpanStatus`
 - [x] `SpanStarted`
 - [x] `SpanEnded`
-- [~] `DurationMs`
-- [~] `SpanRecord<S>`
+- [x] `DurationMs`
+- [x] `SpanRecord<S>`
 - [x] `SpanEvent`
 - [x] `SpanSignal`
 - [x] `MetricKind`
@@ -68,7 +68,7 @@ Note:
 - [x] `SinkHealthState`
 - [x] `SinkHealth`
 - [~] `LoggingHealthReport`
-- [~] `Timestamp` (UTC-enforced public type, not a plain alias)
+- [x] `Timestamp` (UTC-enforced public type, not a plain alias)
 - [~] `LogOrder`
 - [~] `LogFieldMatch`
 - [~] `LogQuery`
@@ -108,9 +108,7 @@ Note:
 - trace correlation uses `TraceId` / `SpanId`
 - ATM metadata is not part of the core schema
 
-Planned / pending rules tied to `[~]` items:
-
-- `Timestamp` becomes UTC-only once Sprint 1 ships.
+- `Timestamp` is UTC-only and serializes in canonical UTC RFC3339 form.
 
 ## 3. `sc-observability`
 
@@ -177,10 +175,10 @@ Internal-only:
 - [x] `TelemetryConfigBuilder`
 - [x] `Telemetry`
 - [x] `OtlpProtocol`
-- [~] `OtelConfig`
+- [x] `OtelConfig`
 - [x] `LogsConfig`
 - [x] `TracesConfig`
-- [~] `MetricsConfig`
+- [x] `MetricsConfig`
 - [x] `ResourceAttributes`
 - [x] `SpanAssembler`
 - [x] `CompleteSpan`

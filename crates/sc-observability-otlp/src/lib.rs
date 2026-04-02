@@ -14,9 +14,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, ErrorContext, EventError, ExportError, FlushError,
-    InitError, LogEvent, MetricRecord, Remediation, ServiceName, ShutdownError, SpanEnded,
-    SpanEvent, SpanRecord, SpanSignal, SpanStarted, Timestamp,
+    DiagnosticInfo, DiagnosticSummary, DurationMs, ErrorContext, EventError, ExportError,
+    FlushError, InitError, LogEvent, MetricRecord, Remediation, ServiceName, ShutdownError,
+    SpanEnded, SpanEvent, SpanRecord, SpanSignal, SpanStarted, Timestamp,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -42,11 +42,11 @@ pub struct OtelConfig {
     pub auth_header: Option<String>,
     pub ca_file: Option<PathBuf>,
     pub insecure_skip_verify: bool,
-    pub timeout_ms: u64,
+    pub timeout_ms: DurationMs,
     pub debug_local_export: bool,
     pub max_retries: u32,
-    pub initial_backoff_ms: u64,
-    pub max_backoff_ms: u64,
+    pub initial_backoff_ms: DurationMs,
+    pub max_backoff_ms: DurationMs,
 }
 
 impl Default for OtelConfig {
@@ -58,11 +58,11 @@ impl Default for OtelConfig {
             auth_header: None,
             ca_file: None,
             insecure_skip_verify: false,
-            timeout_ms: constants::DEFAULT_OTLP_TIMEOUT_MS,
+            timeout_ms: constants::DEFAULT_OTLP_TIMEOUT_MS.into(),
             debug_local_export: false,
             max_retries: constants::DEFAULT_OTLP_MAX_RETRIES,
-            initial_backoff_ms: constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS,
-            max_backoff_ms: constants::DEFAULT_OTLP_MAX_BACKOFF_MS,
+            initial_backoff_ms: constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS.into(),
+            max_backoff_ms: constants::DEFAULT_OTLP_MAX_BACKOFF_MS.into(),
         }
     }
 }
@@ -105,14 +105,14 @@ impl Default for TracesConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MetricsConfig {
     pub batch_size: usize,
-    pub export_interval_ms: u64,
+    pub export_interval_ms: DurationMs,
 }
 
 impl Default for MetricsConfig {
     fn default() -> Self {
         Self {
             batch_size: constants::DEFAULT_METRIC_BATCH_SIZE,
-            export_interval_ms: constants::DEFAULT_METRIC_EXPORT_INTERVAL_MS,
+            export_interval_ms: constants::DEFAULT_METRIC_EXPORT_INTERVAL_MS.into(),
         }
     }
 }
@@ -711,7 +711,7 @@ fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
             ),
         ))));
     }
-    if config.transport.timeout_ms == 0 {
+    if u64::from(config.transport.timeout_ms) == 0 {
         return Err(InitError(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "timeout_ms must be greater than zero",
@@ -746,7 +746,7 @@ fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
         || config.traces.is_some_and(|cfg| cfg.batch_size == 0)
         || config
             .metrics
-            .is_some_and(|cfg| cfg.batch_size == 0 || cfg.export_interval_ms == 0)
+            .is_some_and(|cfg| cfg.batch_size == 0 || u64::from(cfg.export_interval_ms) == 0)
     {
         return Err(InitError(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
@@ -965,7 +965,7 @@ mod tests {
         );
         let ended = started
             .clone()
-            .end(sc_observability_types::SpanStatus::Ok, 42);
+            .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(42));
         let mut assembler = SpanAssembler::new();
 
         assert!(
@@ -992,7 +992,7 @@ mod tests {
             .expect("complete span");
 
         assert_eq!(complete.events.len(), 1);
-        assert_eq!(complete.record.duration_ms(), 42);
+        assert_eq!(complete.record.duration_ms(), DurationMs::from(42));
     }
 
     #[test]
@@ -1028,7 +1028,7 @@ mod tests {
             trace,
             Map::new(),
         )
-        .end(sc_observability_types::SpanStatus::Ok, 5);
+        .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(5));
 
         assert!(telemetry.emit_span(&SpanSignal::Ended(ended)).is_ok());
         assert_eq!(telemetry.health().malformed_spans_total, 1);
@@ -1163,7 +1163,7 @@ mod tests {
         );
         let ended = started
             .clone()
-            .end(sc_observability_types::SpanStatus::Ok, 5);
+            .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(5));
         telemetry
             .emit_span(&SpanSignal::Started(started))
             .expect("started");

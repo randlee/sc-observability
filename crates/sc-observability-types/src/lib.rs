@@ -9,16 +9,137 @@ pub mod constants;
 pub mod error_codes;
 
 use std::borrow::Cow;
+use std::fmt;
 use std::marker::PhantomData;
+use std::ops::{Add, Sub};
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use thiserror::Error;
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Rfc3339};
+
+/// Canonical millisecond duration type used across the workspace.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct DurationMs(u64);
+
+impl DurationMs {
+    /// Returns the raw millisecond count.
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
+}
+
+impl From<u64> for DurationMs {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+impl From<DurationMs> for u64 {
+    fn from(value: DurationMs) -> Self {
+        value.0
+    }
+}
 
 /// Canonical UTC timestamp type used across the workspace.
-pub type Timestamp = OffsetDateTime;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Timestamp(OffsetDateTime);
+
+impl Timestamp {
+    /// Canonical Unix epoch timestamp in UTC.
+    pub const UNIX_EPOCH: Self = Self(OffsetDateTime::UNIX_EPOCH);
+
+    /// Returns the current UTC timestamp.
+    pub fn now_utc() -> Self {
+        Self(OffsetDateTime::now_utc())
+    }
+
+    /// Normalizes an arbitrary offset date-time into the canonical UTC timestamp.
+    pub fn from_offset_date_time(value: OffsetDateTime) -> Self {
+        Self(value.to_offset(UtcOffset::UTC))
+    }
+
+    /// Returns the normalized inner UTC date-time value.
+    pub fn into_inner(self) -> OffsetDateTime {
+        self.0
+    }
+}
+
+impl From<OffsetDateTime> for Timestamp {
+    fn from(value: OffsetDateTime) -> Self {
+        Self::from_offset_date_time(value)
+    }
+}
+
+impl From<Timestamp> for OffsetDateTime {
+    fn from(value: Timestamp) -> Self {
+        value.0
+    }
+}
+
+impl Add<Duration> for Timestamp {
+    type Output = Self;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Self::from_offset_date_time(self.0 + rhs)
+    }
+}
+
+impl Sub<Duration> for Timestamp {
+    type Output = Self;
+
+    fn sub(self, rhs: Duration) -> Self::Output {
+        Self::from_offset_date_time(self.0 - rhs)
+    }
+}
+
+impl Sub for Timestamp {
+    type Output = Duration;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        self.0 - rhs.0
+    }
+}
+
+impl fmt::Display for Timestamp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let rendered = self
+            .0
+            .to_offset(UtcOffset::UTC)
+            .format(&Rfc3339)
+            .map_err(|_| fmt::Error)?;
+        f.write_str(&rendered)
+    }
+}
+
+impl Serialize for Timestamp {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let rendered = self
+            .0
+            .to_offset(UtcOffset::UTC)
+            .format(&Rfc3339)
+            .map_err(serde::ser::Error::custom)?;
+        serializer.serialize_str(&rendered)
+    }
+}
+
+impl<'de> Deserialize<'de> for Timestamp {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        let parsed = OffsetDateTime::parse(&value, &Rfc3339).map_err(serde::de::Error::custom)?;
+        Ok(Self::from_offset_date_time(parsed))
+    }
+}
 
 /// Stable machine-readable error code used across diagnostics and error types.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -278,11 +399,19 @@ impl From<&Diagnostic> for DiagnosticSummary {
 }
 
 /// Builder-style context wrapper used by public crate error types.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorContext {
     diagnostic: Diagnostic,
     #[serde(skip)]
-    source: Option<Box<str>>,
+    source: Option<Arc<dyn std::error::Error + Send + Sync + 'static>>,
+}
+
+impl PartialEq for ErrorContext {
+    fn eq(&self, other: &Self) -> bool {
+        self.diagnostic == other.diagnostic
+            && self.source.as_ref().map(ToString::to_string)
+                == other.source.as_ref().map(ToString::to_string)
+    }
 }
 
 impl ErrorContext {
@@ -290,7 +419,7 @@ impl ErrorContext {
     pub fn new(code: ErrorCode, message: impl Into<String>, remediation: Remediation) -> Self {
         Self {
             diagnostic: Diagnostic {
-                timestamp: OffsetDateTime::now_utc(),
+                timestamp: Timestamp::now_utc(),
                 code,
                 message: message.into(),
                 cause: None,
@@ -320,9 +449,9 @@ impl ErrorContext {
         self
     }
 
-    /// Captures a source error string for display and diagnostics.
+    /// Captures the real source error for display and error chaining.
     pub fn source(mut self, source: Box<dyn std::error::Error + Send + Sync + 'static>) -> Self {
-        self.source = Some(source.to_string().into_boxed_str());
+        self.source = Some(Arc::from(source));
         self
     }
 
@@ -339,6 +468,14 @@ impl std::fmt::Display for ErrorContext {
             write!(f, ": {cause}")?;
         }
         Ok(())
+    }
+}
+
+impl std::error::Error for ErrorContext {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source
+            .as_deref()
+            .map(|source| source as &(dyn std::error::Error + 'static))
     }
 }
 
@@ -532,7 +669,7 @@ where
     pub fn new(service: ServiceName, payload: T) -> Self {
         Self {
             version: constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
-            timestamp: OffsetDateTime::now_utc(),
+            timestamp: Timestamp::now_utc(),
             service,
             identity: ProcessIdentity::default(),
             trace: None,
@@ -587,7 +724,7 @@ pub struct SpanRecord<S> {
     status: SpanStatus,
     diagnostic: Option<Diagnostic>,
     attributes: Map<String, Value>,
-    duration_ms: Option<u64>,
+    duration_ms: Option<DurationMs>,
     marker: PhantomData<S>,
 }
 
@@ -620,7 +757,7 @@ impl SpanRecord<SpanStarted> {
     }
 
     /// Consumes the started span and returns the only valid completed span form.
-    pub fn end(self, status: SpanStatus, duration_ms: u64) -> SpanRecord<SpanEnded> {
+    pub fn end(self, status: SpanStatus, duration: DurationMs) -> SpanRecord<SpanEnded> {
         SpanRecord {
             timestamp: self.timestamp,
             service: self.service,
@@ -629,7 +766,7 @@ impl SpanRecord<SpanStarted> {
             status,
             diagnostic: self.diagnostic,
             attributes: self.attributes,
-            duration_ms: Some(duration_ms),
+            duration_ms: Some(duration),
             marker: PhantomData,
         }
     }
@@ -674,7 +811,7 @@ impl<S> SpanRecord<S> {
 
 impl SpanRecord<SpanEnded> {
     /// Returns the final duration, available only on completed spans.
-    pub fn duration_ms(&self) -> u64 {
+    pub fn duration_ms(&self) -> DurationMs {
         self.duration_ms.unwrap_or_default()
     }
 }
@@ -949,7 +1086,7 @@ mod tests {
     use super::*;
     use serde::{Deserialize, Serialize};
     use serde_json::json;
-    use time::OffsetDateTime;
+    use time::{OffsetDateTime, UtcOffset};
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     struct FixturePayload {
@@ -1126,7 +1263,16 @@ mod tests {
             Some("https://example.test/failure")
         );
         assert_eq!(error.diagnostic().details.get("attempt"), Some(&json!(3)));
-        assert_eq!(error.source.as_deref(), Some("disk full"));
+        assert_eq!(
+            error.source.as_ref().map(ToString::to_string).as_deref(),
+            Some("disk full")
+        );
+        assert_eq!(
+            std::error::Error::source(&error)
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("disk full")
+        );
     }
 
     #[test]
@@ -1143,7 +1289,7 @@ mod tests {
 
         assert_eq!(summary.code, Some(error_codes::DIAGNOSTIC_INVALID));
         assert_eq!(summary.message, "diagnostic invalid");
-        assert!(summary.at <= OffsetDateTime::now_utc());
+        assert!(summary.at <= Timestamp::now_utc());
     }
 
     #[test]
@@ -1171,7 +1317,7 @@ mod tests {
     fn log_event_round_trips_through_serde() {
         let event = LogEvent {
             version: constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
-            timestamp: OffsetDateTime::UNIX_EPOCH,
+            timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service: service_name(),
             target: target_category(),
@@ -1208,7 +1354,7 @@ mod tests {
         attributes.insert("tool".to_string(), json!("rg"));
 
         let started = SpanRecord::<SpanStarted>::new(
-            OffsetDateTime::UNIX_EPOCH,
+            Timestamp::UNIX_EPOCH,
             service_name(),
             action_name(),
             trace_context(),
@@ -1216,7 +1362,7 @@ mod tests {
         )
         .with_diagnostic(diagnostic());
 
-        let ended = started.clone().end(SpanStatus::Ok, 123);
+        let ended = started.clone().end(SpanStatus::Ok, DurationMs::from(123));
         let signal = SpanSignal::Ended(ended);
         let encoded = serde_json::to_value(&signal).expect("serialize span signal");
 
@@ -1227,7 +1373,7 @@ mod tests {
     #[test]
     fn metric_record_round_trips_through_serde() {
         let metric = MetricRecord {
-            timestamp: OffsetDateTime::UNIX_EPOCH,
+            timestamp: Timestamp::UNIX_EPOCH,
             service: service_name(),
             name: metric_name(),
             kind: MetricKind::Counter,
@@ -1244,17 +1390,17 @@ mod tests {
     #[test]
     fn span_record_end_transitions_to_span_ended() {
         let span = SpanRecord::<SpanStarted>::new(
-            OffsetDateTime::UNIX_EPOCH,
+            Timestamp::UNIX_EPOCH,
             service_name(),
             action_name(),
             trace_context(),
             Map::new(),
         );
 
-        let ended = span.end(SpanStatus::Error, 88);
+        let ended = span.end(SpanStatus::Error, DurationMs::from(88));
 
         assert_eq!(ended.status(), SpanStatus::Error);
-        assert_eq!(ended.duration_ms(), 88);
+        assert_eq!(ended.duration_ms(), DurationMs::from(88));
         assert_eq!(ended.service().as_str(), "sc-observability");
     }
 
@@ -1278,7 +1424,7 @@ mod tests {
         let mut attributes = Map::new();
         attributes.insert("count".to_string(), json!(2));
         let span = SpanRecord::<SpanStarted>::new(
-            OffsetDateTime::UNIX_EPOCH,
+            Timestamp::UNIX_EPOCH,
             service_name(),
             action_name(),
             trace_context(),
@@ -1286,7 +1432,7 @@ mod tests {
         )
         .with_diagnostic(diagnostic());
 
-        assert_eq!(span.timestamp(), OffsetDateTime::UNIX_EPOCH);
+        assert_eq!(span.timestamp(), Timestamp::UNIX_EPOCH);
         assert_eq!(span.name().as_str(), "observation.received");
         assert_eq!(
             span.trace().trace_id.as_str(),
@@ -1295,6 +1441,18 @@ mod tests {
         assert_eq!(span.status(), SpanStatus::Unset);
         assert_eq!(span.diagnostic(), Some(&diagnostic()));
         assert_eq!(span.attributes(), &attributes);
+    }
+
+    #[test]
+    fn timestamp_serde_round_trips_as_utc_rfc3339() {
+        let timestamp = Timestamp::from(
+            OffsetDateTime::UNIX_EPOCH.to_offset(UtcOffset::from_hms(2, 0, 0).expect("offset")),
+        );
+        let encoded = serde_json::to_string(&timestamp).expect("serialize timestamp");
+        let decoded: Timestamp = serde_json::from_str(&encoded).expect("deserialize timestamp");
+
+        assert_eq!(encoded, "\"1970-01-01T00:00:00Z\"");
+        assert_eq!(decoded, timestamp);
     }
 
     #[test]

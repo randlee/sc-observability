@@ -55,7 +55,8 @@ impl ObservabilityConfig {
                     "failed to derive env prefix",
                     Remediation::not_recoverable("use an explicit valid env prefix"),
                 )
-                .cause(err.to_string()),
+                .cause(err.to_string())
+                .source(Box::new(err)),
             ))
         })?;
         Ok(Self {
@@ -76,7 +77,8 @@ impl ObservabilityConfig {
                     "failed to derive service name",
                     Remediation::not_recoverable("use a valid tool name"),
                 )
-                .cause(err.to_string()),
+                .cause(err.to_string())
+                .source(Box::new(err)),
             ))
         })
     }

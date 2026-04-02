@@ -1,6 +1,6 @@
 # SC-Observability Requirements
 
-**Status**: Draft for review
+**Status**: Approved
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Source of truth**: [`api-design.md`](./api-design.md)
 **Related ATM adapter docs**:
@@ -69,7 +69,7 @@ This crate owns shared neutral contracts only.
 - TYP-005 One `Diagnostic` shall be reusable across CLI rendering, JSON error rendering, log attachment, span attachment, and health summaries.
 - TYP-006 `DiagnosticInfo` shall be an open trait implemented by public error surfaces that can expose a `Diagnostic`.
 - TYP-007 `ErrorContext` shall not be directly constructible without remediation.
-- TYP-008 Canonical timestamps shall be UTC-only and stably serializable.
+- TYP-008 `Timestamp` shall be a UTC-enforcing public newtype. Public constructors and serde input shall normalize to UTC, serde output shall use stable UTC-only RFC3339 form, and raw non-UTC `OffsetDateTime` values shall not cross the public API boundary.
 - TYP-009 `TraceContext` shall be limited to generic W3C-style trace correlation only.
 - TYP-010 `TraceContext` shall use `TraceId` and `SpanId` newtypes rather than raw strings.
 - TYP-011 `TraceId` shall validate 32-character lowercase hex W3C trace IDs.
