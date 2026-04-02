@@ -22,17 +22,14 @@ public list silently.
 Note:
 - Error types are defined in `sc-observability-types` (TYP-030) and
   re-exported by their respective crates.
-- Per-crate `error_codes.rs` files (SRC-001/SRC-002) hold `ErrorCode` string
-  constants, which are separate from error type definitions.
-- Concrete health report types are centralized in `sc-observability-types` per
-  the SSOT ruling.
+- Per-crate `error_codes.rs` files hold `ErrorCode` string constants, which are
+  separate from error type definitions.
+- Concrete health report types are centralized in `sc-observability-types`.
 - Shared constants are centralized here as SSOT per requirements.
 
 - [x] `ErrorCode`
-- [x] `error_codes` — per-crate stable `ErrorCode` constants registry
-  (SRC-001/SRC-002)
-- [x] `constants` — `sc-observability-types/src/constants.rs` (SSOT for all
-  shared cross-crate constants per TYP-031)
+- [x] `error_codes`
+- [x] `constants`
 - [x] `ValueValidationError`
 - [x] `ToolName`
 - [x] `EnvPrefix`
@@ -50,7 +47,7 @@ Note:
 - [x] `Level`
 - [x] `LevelFilter`
 - [x] `ProcessIdentity`
-- [x] `ProcessIdentityPolicy` — intentionally no serde; runtime policy only
+- [x] `ProcessIdentityPolicy`
 - [x] `ProcessIdentityResolver`
 - [x] `TraceId`
 - [x] `SpanId`
@@ -70,6 +67,7 @@ Note:
 - [x] `SinkHealthState`
 - [x] `SinkHealth`
 - [x] `LoggingHealthReport`
+- [~] `Timestamp` (UTC-enforced public type, not a plain alias)
 - [~] `LogOrder`
 - [~] `LogFieldMatch`
 - [~] `LogQuery`
@@ -77,6 +75,7 @@ Note:
 - [~] `QueryError`
 - [~] `QueryHealthState`
 - [~] `QueryHealthReport`
+- [~] `TelemetryHealthProvider`
 - [x] `ObservationHealthState`
 - [x] `ObservabilityHealthReport`
 - [x] `TelemetryHealthState`
@@ -88,8 +87,8 @@ Note:
 - [x] `LogProjector<T>`
 - [x] `SpanProjector<T>`
 - [x] `MetricProjector<T>`
-- [x] `SubscriberRegistration<T>` — intentionally no serde; construction-time registration only
-- [x] `ProjectionRegistration<T>` — intentionally no serde; construction-time registration only
+- [x] `SubscriberRegistration<T>`
+- [x] `ProjectionRegistration<T>`
 - [x] `InitError`
 - [x] `EventError`
 - [x] `FlushError`
@@ -113,8 +112,7 @@ Note:
 
 ### Finalized Public Types
 
-- [x] `error_codes` — per-crate stable `ErrorCode` constants registry
-  (SRC-001/SRC-002)
+- [x] `error_codes`
 - [x] `LoggerConfig`
 - [x] `RotationPolicy`
 - [x] `RetentionPolicy`
@@ -133,8 +131,7 @@ Note:
 
 Internal-only:
 
-- [x] `LogEmitter` — crate-local sealed logging injection trait (LOG-024;
-  `architecture.md` §3.2; internal-only, not part of public API)
+- [x] `LogEmitter`
 
 ### Finalized Public Rules
 
@@ -147,19 +144,18 @@ Internal-only:
 
 ### Finalized Public Types
 
-- [x] `error_codes` — per-crate stable `ErrorCode` constants registry
-  (SRC-001/SRC-002)
-- [x] `ObservabilityHealthReport` — re-exported from `sc-observability-types`
-- [x] `ObservationError` — re-exported from `sc-observability-types`
-- [x] `ObservationHealthState` — re-exported from `sc-observability-types`
+- [x] `error_codes`
+- [x] `ObservabilityHealthReport`
+- [x] `ObservationError`
+- [x] `ObservationHealthState`
 - [x] `ObservabilityConfig`
 - [x] `ObservabilityBuilder`
+- [~] `ObservabilityBuilder::with_telemetry_health_provider(...)`
 - [x] `Observability`
 
 Internal-only:
 
-- [x] `ObservationEmitter<T>` — crate-local sealed observation injection trait
-  (OBS-025; `architecture.md` §3.3; internal-only, not part of public API)
+- [x] `ObservationEmitter<T>`
 
 ### Finalized Public Rules
 
@@ -172,8 +168,7 @@ Internal-only:
 
 ### Finalized Public Types
 
-- [x] `error_codes` — per-crate stable `ErrorCode` constants registry
-  (SRC-001/SRC-002)
+- [x] `error_codes`
 - [x] `TelemetryConfig`
 - [x] `TelemetryConfigBuilder`
 - [x] `Telemetry`
@@ -188,19 +183,17 @@ Internal-only:
 - [x] `LogExporter`
 - [x] `TraceExporter`
 - [x] `MetricExporter`
+- [~] `TelemetryProjectors<T>`
 
 Internal-only:
 
-- [x] `SpanEmitter` (pub(crate), sealed, internal-only)
-- [x] `MetricEmitter` (pub(crate), sealed, internal-only)
-
-Note:
-- sealed/crate-local per `architecture.md` §3.4 and OTLP-022
+- [x] `SpanEmitter`
+- [x] `MetricEmitter`
 
 ### Finalized Public Rules
 
 - `TelemetryConfig` is application-constructed
-- OTLP attaches via projector registration
+- OTLP attaches through shipped projector-registration helpers
 - invalid OTLP config fails at `Telemetry::new(...)`
 - `TelemetryError::Shutdown` is returned after shutdown
 
@@ -212,11 +205,9 @@ API freeze is progressive by crate and sprint, not global at Sprint 1.
   for that crate.
 - Sprint 2 closes only when the `sc-observability` public API is frozen for
   that crate.
-- Sprint 3 closes only when the `sc-observe` public API is frozen for that
-  crate.
-- Sprint 4 closes only when the `sc-observability-otlp` public API is frozen
-  for that crate.
-- Sprint 6 / pre-release closes only when all four crate API surfaces are
+- Sprint 3 closes only when the `sc-observe` and
+  `sc-observability-otlp` recovery-scope public APIs are frozen together.
+- Sprint 4 / pre-release closes only when all four crate API surfaces are
   confirmed finalized together.
 
 At each crate freeze gate:
