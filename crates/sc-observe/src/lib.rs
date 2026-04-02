@@ -16,7 +16,7 @@ use sc_observability::{Logger, LoggerConfig, RotationPolicy};
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError, Observable,
     Observation, ProjectionRegistration, Remediation, ServiceName, ShutdownError, SubscriberError,
-    SubscriberRegistration, ToolName,
+    SubscriberRegistration, TelemetryHealthProvider, TelemetryHealthState, ToolName,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -96,6 +96,7 @@ pub struct ObservabilityBuilder {
     config: ObservabilityConfig,
     subscribers: Vec<ErasedSubscriberRegistration>,
     projections: Vec<ErasedProjectionRegistration>,
+    telemetry_health_provider: Option<Arc<dyn TelemetryHealthProvider>>,
 }
 
 /// Producer-facing routing runtime for typed observations.
@@ -104,6 +105,7 @@ pub struct Observability {
     shutdown: AtomicBool,
     subscriber_registrations: Vec<ErasedSubscriberRegistration>,
     projection_registrations: Vec<ErasedProjectionRegistration>,
+    telemetry_health_provider: Option<Arc<dyn TelemetryHealthProvider>>,
     runtime: RuntimeState,
 }
 
@@ -155,6 +157,7 @@ impl Observability {
             config,
             subscribers: Vec::new(),
             projections: Vec::new(),
+            telemetry_health_provider: None,
         }
     }
 
@@ -242,6 +245,10 @@ impl Observability {
     /// Returns the aggregate runtime health view.
     pub fn health(&self) -> ObservabilityHealthReport {
         let logging = self.logger.health();
+        let telemetry = self
+            .telemetry_health_provider
+            .as_ref()
+            .map(|provider| provider.telemetry_health());
         let subscriber_failures = self
             .runtime
             .subscriber_failures_total
@@ -261,6 +268,12 @@ impl Observability {
             || subscriber_failures > 0
             || projection_failures > 0
             || logging.state != sc_observability_types::LoggingHealthState::Healthy
+            || telemetry.as_ref().is_some_and(|health| {
+                matches!(
+                    health.state,
+                    TelemetryHealthState::Degraded | TelemetryHealthState::Unavailable
+                )
+            })
         {
             ObservationHealthState::Degraded
         } else {
@@ -273,7 +286,7 @@ impl Observability {
             subscriber_failures_total: subscriber_failures,
             projection_failures_total: projection_failures,
             logging: Some(logging),
-            telemetry: None,
+            telemetry,
             last_error: self
                 .runtime
                 .last_error
@@ -293,6 +306,15 @@ impl Observability {
 }
 
 impl ObservabilityBuilder {
+    /// Attaches a generic telemetry health provider without introducing an OTLP crate dependency.
+    pub fn with_telemetry_health_provider(
+        mut self,
+        provider: Arc<dyn TelemetryHealthProvider>,
+    ) -> Self {
+        self.telemetry_health_provider = Some(provider);
+        self
+    }
+
     /// Registers one typed observation subscriber at construction time.
     pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self
     where
@@ -393,6 +415,7 @@ impl ObservabilityBuilder {
             shutdown: AtomicBool::new(false),
             subscriber_registrations: self.subscribers,
             projection_registrations: self.projections,
+            telemetry_health_provider: self.telemetry_health_provider,
             runtime: RuntimeState::default(),
         })
     }
@@ -434,7 +457,7 @@ mod tests {
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
         ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError, SpanId,
         SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError, TargetCategory,
-        Timestamp, TraceContext, TraceId,
+        TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext, TraceId,
     };
 
     #[derive(Debug, Clone)]
@@ -547,6 +570,24 @@ mod tests {
                 "projector failed",
                 Remediation::not_recoverable("test projector intentionally fails"),
             ))))
+        }
+    }
+
+    struct FakeTelemetryProvider {
+        state: TelemetryHealthState,
+    }
+
+    impl sc_observability_types::telemetry_health_provider_sealed::Sealed for FakeTelemetryProvider {}
+
+    impl TelemetryHealthProvider for FakeTelemetryProvider {
+        fn telemetry_health(&self) -> TelemetryHealthReport {
+            TelemetryHealthReport {
+                state: self.state,
+                dropped_exports_total: 0,
+                malformed_spans_total: 0,
+                exporter_statuses: Vec::new(),
+                last_error: None,
+            }
         }
     }
 
@@ -812,6 +853,26 @@ mod tests {
         assert!(health.logging.is_some());
         assert!(health.last_error.is_some());
         assert!(health.telemetry.is_none());
+    }
+
+    #[test]
+    fn top_level_health_exposes_attached_telemetry_provider() {
+        let root = temp_path("telemetry-health");
+        let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
+        let runtime = Observability::builder(config)
+            .with_telemetry_health_provider(Arc::new(FakeTelemetryProvider {
+                state: TelemetryHealthState::Degraded,
+            }))
+            .build()
+            .expect("runtime");
+
+        let health = runtime.health();
+
+        assert_eq!(health.state, ObservationHealthState::Degraded);
+        assert_eq!(
+            health.telemetry.expect("telemetry health").state,
+            TelemetryHealthState::Degraded
+        );
     }
 
     #[test]

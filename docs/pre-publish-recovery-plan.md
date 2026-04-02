@@ -116,7 +116,7 @@ The public OTLP integration surface is frozen as:
 - `Telemetry` participates through workspace-owned plumbing around the public
   `TelemetryHealthProvider` trait owned by `sc-observability-types`
 - `TelemetryHealthProvider` is frozen as:
-  `pub trait TelemetryHealthProvider: sealed::Sealed + Send + Sync { fn telemetry_health(&self) -> TelemetryHealthReport; }`
+  `pub trait TelemetryHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync { fn telemetry_health(&self) -> TelemetryHealthReport; }`
 - `ObservabilityBuilder` exposes
   `with_telemetry_health_provider(Arc<dyn TelemetryHealthProvider>)` so
   `ObservabilityHealthReport.telemetry` can be populated without adding an OTLP

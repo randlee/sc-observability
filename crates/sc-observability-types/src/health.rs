@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{DiagnosticSummary, sealed};
+use crate::{DiagnosticSummary, telemetry_health_provider_sealed};
 
 /// Top-level health state for the lightweight logging layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -99,7 +99,7 @@ pub struct TelemetryHealthReport {
 }
 
 /// Shared contract for exposing telemetry health without an OTLP crate dependency.
-pub trait TelemetryHealthProvider: sealed::Sealed + Send + Sync {
+pub trait TelemetryHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync {
     fn telemetry_health(&self) -> TelemetryHealthReport;
 }
 
