@@ -171,6 +171,11 @@ pub enum QueryError {
     Shutdown,
 }
 
+`QueryError` is backed by the stable error-code constants
+`SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`,
+`SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN` per `requirements.md`
+TYP-036.
+
 pub enum QueryHealthState {
     Healthy,
     Degraded,
@@ -541,8 +546,7 @@ Consequences:
 
 ## 8. API-Design Consistency
 
-In this docs-v2 branch, `api-design.md` is updated to match the corrected
-layering:
+`api-design.md` matches the corrected layering:
 
 - `sc-observe` depends on `sc-observability-types` and `sc-observability` only
 - `ObservabilityConfig` no longer owns OTLP configuration
@@ -553,11 +557,16 @@ layering:
 - the ATM production boundary is explicitly outside this repo in
   `atm-observability-adapter`
 
-## 9. Pre-Implementation Cleanup
+## 9. Pre-Implementation Cleanup Status
 
-- remove any requirement or architecture text that places OTLP concerns in `sc-observability`
-- remove any requirement or architecture text that requires `sc-observe -> sc-observability-otlp`
-- make OTLP integration attach from the top of the stack rather than being constructed inside `sc-observe`
+The document set now reflects the required cleanup:
+
+- requirement and architecture text no longer places OTLP concerns in
+  `sc-observability`
+- requirement and architecture text no longer requires
+  `sc-observe -> sc-observability-otlp`
+- OTLP integration is documented as attaching from the top of the stack rather
+  than being constructed inside `sc-observe`
 
 ## 10. ATM Proving Artifact
 

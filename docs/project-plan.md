@@ -108,8 +108,6 @@ Deliverables:
 - `QueryError` enum with `InvalidQuery`, `Io`, `Decode`, `Unavailable`, and
   `Shutdown`
 - stable error-code constants for each variant path
-- `DiagnosticInfo` integration where the implementation needs diagnostic
-  projection
 
 Acceptance criteria:
 - req-qa can trace the shipped error surface to TYP-035 and TYP-036
@@ -137,7 +135,7 @@ Deliverables:
 
 Acceptance criteria:
 - req-qa can trace the shipped runtime to TYP-034, TYP-037, and LOG-025
-  through LOG-031
+  through LOG-032
 - arch-qa can verify crate placement, exact signatures, and the synchronous
   poll model match `architecture.md`
 - tests prove no duplicate or silently skipped committed records across file

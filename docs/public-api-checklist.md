@@ -70,6 +70,13 @@ Note:
 - [x] `SinkHealthState`
 - [x] `SinkHealth`
 - [x] `LoggingHealthReport`
+- [~] `LogOrder`
+- [~] `LogFieldMatch`
+- [~] `LogQuery`
+- [~] `LogSnapshot`
+- [~] `QueryError`
+- [~] `QueryHealthState`
+- [~] `QueryHealthReport`
 - [x] `ObservationHealthState`
 - [x] `ObservabilityHealthReport`
 - [x] `TelemetryHealthState`
@@ -114,6 +121,10 @@ Note:
 - [x] `RedactionPolicy`
 - [x] `Redactor`
 - [x] `Logger`
+- [~] `Logger::query(&self, &LogQuery) -> Result<LogSnapshot, QueryError>`
+- [~] `Logger::follow(&self, LogQuery) -> Result<LogFollowSession, QueryError>`
+- [~] `LogFollowSession`
+- [~] `JsonlLogReader`
 - [x] `JsonlFileSink`
 - [x] `ConsoleSink`
 - [x] `LogSink`
