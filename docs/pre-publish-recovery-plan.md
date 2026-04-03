@@ -344,24 +344,25 @@ Run the final production-readiness pass only after S0 through S3 are merged.
 
 ### 9.5 Important Findings Carried Into Sprint 4
 
-Sprint 4 closed the following carried findings through shipped code changes,
-factual documentation updates, or both:
+Sprint 4 never executed, so this section must not claim blanket closure. Each
+carry-over ID below is reconciled against the current branch using either
+branch-local source evidence or the open production-readiness review findings.
 
-- `QA-001`
-- `BP-ST-001`
-- `BP-ST-002`
-- `BP-TS-001`
-- `BP-TS-002`
-- `BP-IMC-001`
-- `BP-IMC-002`
-- `BP-NT-003`
-- `BP-NT-004`
-- `BP-NT-005`
-- `BP-ECR-001`
-- `BP-ECR-002`
-- `BP-ECR-003`
-- `REQ-QA-008-phase`
-- `REQ-QA-009-phase`
+| Carry-over ID | Current status | Evidence / open mapping | Notes |
+| --- | --- | --- | --- |
+| `QA-001` | fixed with evidence | [`crates/sc-observability/Cargo.toml:15-16`](../crates/sc-observability/Cargo.toml), [`crates/sc-observability/src/lib.rs:885-888`](../crates/sc-observability/src/lib.rs) | test env mutation now uses `temp-env` helpers instead of raw process-env mutation |
+| `BP-ST-001` | still open | `PRR-B-008`, `PRR-I-007` | the original finding text is not preserved anywhere on this branch, so closure cannot be proven from source evidence |
+| `BP-ST-002` | still open | `PRR-B-008`, `PRR-I-007` | the original finding text is not preserved anywhere on this branch, so closure cannot be proven from source evidence |
+| `BP-IMC-001` | still open | `PRR-B-008`, `PRR-I-007` | the tag meaning drifted between planning and later QA; do not claim closure until it is reconciled to one stable issue statement |
+| `BP-IMC-002` | still open | `PRR-B-008`, `PRR-I-007` | the original finding text is not preserved in the branch-local docs, so the current code cannot be truthfully mapped back to a closed issue |
+| `BP-NT-003` | still open | `PRR-B-008`, `PRR-I-007` | the original newtype-related finding text is not preserved in the branch-local docs |
+| `BP-NT-004` | still open | `PRR-B-008`, `PRR-I-007` | the original newtype-related finding text is not preserved in the branch-local docs |
+| `BP-NT-005` | still open | `PRR-B-008`, `PRR-I-007` | the original newtype-related finding text is not preserved in the branch-local docs |
+| `BP-ECR-001` | fixed with evidence | [`crates/sc-observability-types/src/errors.rs:7-9`](../crates/sc-observability-types/src/errors.rs), [`crates/sc-observability-types/src/errors.rs:24`](../crates/sc-observability-types/src/errors.rs), [`crates/sc-observability-types/src/errors.rs:75-86`](../crates/sc-observability-types/src/errors.rs) | public error wrappers and enums now expose the underlying `ErrorContext` via `#[source]` instead of hiding the real source chain |
+| `BP-ECR-002` | still open | `PRR-B-001`, [`crates/sc-observability-otlp/src/lib.rs:716-723`](../crates/sc-observability-otlp/src/lib.rs) | `Telemetry::shutdown()` still discards `flush()` with `let _ = self.flush()` |
+| `BP-ECR-003` | still open | `PRR-B-008`, `PRR-I-007` | the original error-contract finding text is not preserved in the branch-local docs |
+| `REQ-QA-008-phase` | still open | `PRR-B-008`, `PRR-I-007` | this phase-level QA tag survives only as an ID; the branch-local plan does not preserve enough detail to prove closure |
+| `REQ-QA-009-phase` | still open | `PRR-B-008`, `PRR-I-007` | this phase-level QA tag survives only as an ID; the branch-local plan does not preserve enough detail to prove closure |
 
 LogFollowSession lifecycle typing: accepted at current design
 (synchronous poll-only, no typestate on session lifetime). The only
@@ -402,15 +403,8 @@ and own the mapping to the corresponding exporter health slot.
 - `BP-TS-002`: replacing the runtime shutdown checks with richer compile-time
   lifecycle encoding would add shared-state complexity without changing the
   synchronous query/follow surface.
-- `BP-TS-003`: broader session-lifecycle typestate work is deferred because it
-  would require ergonomic-breaking API refactors after the public surface is
-  already frozen.
-- `BP-NT-001`: additional newtype tightening beyond the shipped stable
-  contracts would force cross-crate signature churn too late in the release
-  process.
-- `BP-NT-002`: further newtype refactors are deferred because they require
-  invasive downstream-facing changes that are incompatible with a
-  stability-first publish gate.
+
+No other Sprint 4 carry-over item is allowed to remain deferred.
 
 ## 10. Design Closure Loop
 
