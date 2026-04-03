@@ -693,6 +693,8 @@ impl Telemetry {
             return Ok(());
         }
 
+        // Best-effort flush on shutdown: exporter failures are recorded in health,
+        // but shutdown itself stays fail-open so callers can continue teardown.
         let _ = self.flush();
         let dropped = self
             .runtime

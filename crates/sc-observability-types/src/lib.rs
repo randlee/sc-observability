@@ -388,7 +388,7 @@ impl Remediation {
         }
     }
 
-    /// Builds a non-recoverable remediation with the required justification for why recovery is not possible.
+    /// Builds a non-recoverable remediation with the required justification.
     pub fn not_recoverable(justification: impl Into<String>) -> Self {
         Self::NotRecoverable {
             justification: justification.into(),
