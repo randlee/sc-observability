@@ -181,7 +181,7 @@ fn builder_registration_attaches_logs_spans_and_metrics() {
     )
     .expect("config");
     let runtime = Observability::builder(config)
-        .with_telemetry_health_provider(telemetry.clone())
+        .with_observability_health_provider(telemetry.clone())
         .register_projection(
             TelemetryProjectors::new(telemetry.clone())
                 .with_log_projector(Arc::new(StaticLogProjector))

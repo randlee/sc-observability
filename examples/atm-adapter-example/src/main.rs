@@ -112,7 +112,7 @@ fn build_observability(
     let telemetry = Arc::new(Telemetry::new(telemetry_config)?);
 
     let runtime = Observability::builder(observability_config)
-        .with_telemetry_health_provider(telemetry.clone())
+        .with_observability_health_provider(telemetry.clone())
         .register_projection(
             TelemetryProjectors::new(telemetry.clone())
                 .with_log_projector(Arc::new(AtmLogProjector))

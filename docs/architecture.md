@@ -70,7 +70,7 @@ Owns:
 - `Timestamp`, `DurationMs`
 - `TraceContext`, `TraceId`, `SpanId`
 - `SpanRecord<S>`, `SpanSignal`, `MetricRecord`, `LogEvent`
-- `TelemetryHealthProvider`
+- `ObservabilityHealthProvider`
 - `LogQuery`, `LogOrder`, `LogFieldMatch`
 - `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
 - health report contracts
@@ -130,7 +130,7 @@ Type ownership is split as follows:
 
 - `sc-observability-types` owns `LogQuery`, `LogOrder`,
   `LogFieldMatch`, `LogSnapshot`, `QueryError`,
-  `QueryHealthState`, `QueryHealthReport`, and `TelemetryHealthProvider`
+  `QueryHealthState`, `QueryHealthReport`, and `ObservabilityHealthProvider`
 - `sc-observability-types` extends `LoggingHealthReport` with
   `query: Option<QueryHealthReport>`
 - `sc-observability` owns `Logger::query`, `Logger::follow`,
@@ -197,7 +197,7 @@ pub struct LoggingHealthReport {
     pub last_error: Option<DiagnosticSummary>,
 }
 
-pub trait TelemetryHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync {
+pub trait ObservabilityHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync {
     fn telemetry_health(&self) -> TelemetryHealthReport;
 }
 
@@ -444,7 +444,7 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `TelemetryHealthProvider`, health type definitions, and logging query/follow value and error contracts |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions, and logging query/follow value and error contracts |
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, redaction, rotation, `Logger`, `JsonlLogReader`, follow session runtime, and logging health re-exports |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
