@@ -7,6 +7,11 @@
 pub mod constants;
 pub mod error_codes;
 
+mod follow;
+mod health;
+mod jsonl_reader;
+mod query;
+
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -14,10 +19,15 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
+use crate::health::QueryHealthTracker;
+#[doc(inline)]
+pub use follow::LogFollowSession;
+#[doc(inline)]
+pub use jsonl_reader::JsonlLogReader;
 use sc_observability_types::{
-    Diagnostic, DiagnosticSummary, ErrorContext, FlushError, InitError, Level, LevelFilter,
-    LogEvent, LogSinkError, ProcessIdentityPolicy, Remediation, ServiceName, ShutdownError,
-    Timestamp,
+    Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, FlushError, InitError, Level,
+    LevelFilter, LogEvent, LogQuery, LogSinkError, LogSnapshot, ProcessIdentityPolicy, QueryError,
+    QueryHealthState, Remediation, ServiceName, ShutdownError, Timestamp,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -25,6 +35,7 @@ pub use sc_observability_types::{
 };
 use serde_json::Value;
 
+/// Rotation limits for the built-in JSONL file sink.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RotationPolicy {
     pub max_bytes: u64,
@@ -40,6 +51,7 @@ impl Default for RotationPolicy {
     }
 }
 
+/// Retention limits for rotated JSONL files owned by the built-in file sink.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RetentionPolicy {
     pub max_age_days: u32,
@@ -53,10 +65,13 @@ impl Default for RetentionPolicy {
     }
 }
 
+/// Redacts one key/value pair before an event reaches registered sinks.
 pub trait Redactor: Send + Sync {
+    /// Redacts one event field in place.
     fn redact(&self, key: &str, value: &mut Value);
 }
 
+/// Redaction settings applied to log events before sink fan-out.
 #[derive(Default)]
 pub struct RedactionPolicy {
     pub denylist_keys: Vec<String>,
@@ -74,20 +89,27 @@ impl std::fmt::Debug for RedactionPolicy {
     }
 }
 
+/// Filters events before they are written to one registered sink.
 pub trait LogFilter: Send + Sync {
+    /// Returns whether the sink should receive the event.
     fn accepts(&self, event: &LogEvent) -> bool;
 }
 
+/// One concrete event sink used by the logger runtime.
 pub trait LogSink: Send + Sync {
+    /// Writes one event to the sink.
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
 
+    /// Flushes any buffered sink state.
     fn flush(&self) -> Result<(), LogSinkError> {
         Ok(())
     }
 
+    /// Returns the current sink health snapshot.
     fn health(&self) -> SinkHealth;
 }
 
+/// Construction-time sink registration pairing one sink with an optional filter.
 #[derive(Clone)]
 pub struct SinkRegistration {
     pub sink: Arc<dyn LogSink>,
@@ -95,16 +117,19 @@ pub struct SinkRegistration {
 }
 
 impl SinkRegistration {
+    /// Wraps a sink for logger registration.
     pub fn new(sink: Arc<dyn LogSink>) -> Self {
         Self { sink, filter: None }
     }
 
+    /// Adds a sink-local filter to the registration.
     pub fn with_filter(mut self, filter: Arc<dyn LogFilter>) -> Self {
         self.filter = Some(filter);
         self
     }
 }
 
+/// Public configuration for the lightweight logging runtime.
 #[derive(Debug)]
 pub struct LoggerConfig {
     pub service_name: ServiceName,
@@ -154,27 +179,48 @@ impl LoggerConfig {
     }
 }
 
-#[derive(Default)]
 struct LoggerRuntime {
     dropped_events_total: AtomicU64,
     flush_errors_total: AtomicU64,
+    // MUTEX: sink failures update the shared last_error summary from multiple sinks and call paths;
+    // Mutex is sufficient because reads are rare and the value is replaced atomically as one unit.
     last_error: Mutex<Option<DiagnosticSummary>>,
+    query_health: Arc<QueryHealthTracker>,
 }
 
+impl LoggerRuntime {
+    fn new(query_available: bool) -> Self {
+        Self {
+            dropped_events_total: AtomicU64::new(0),
+            flush_errors_total: AtomicU64::new(0),
+            last_error: Mutex::new(None),
+            query_health: Arc::new(QueryHealthTracker::new(if query_available {
+                QueryHealthState::Healthy
+            } else {
+                QueryHealthState::Unavailable
+            })),
+        }
+    }
+}
+
+/// Lightweight structured logging runtime with built-in query and follow support.
 pub struct Logger {
     config: LoggerConfig,
     sinks: Vec<SinkRegistration>,
-    shutdown: AtomicBool,
+    shutdown: Arc<AtomicBool>,
     runtime: LoggerRuntime,
 }
 
 impl Logger {
+    /// Creates a logger with the configured built-in sinks and runtime state.
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
+        let query_available = active_log_path.exists() || config.enable_file_sink;
         let mut sinks = Vec::new();
 
         if config.enable_file_sink {
-            let sink = JsonlFileSink::new(active_log_path, config.rotation, config.retention);
+            let sink =
+                JsonlFileSink::new(active_log_path.clone(), config.rotation, config.retention);
             sinks.push(SinkRegistration::new(Arc::new(sink)));
         }
 
@@ -185,15 +231,17 @@ impl Logger {
         Ok(Self {
             config,
             sinks,
-            shutdown: AtomicBool::new(false),
-            runtime: LoggerRuntime::default(),
+            shutdown: Arc::new(AtomicBool::new(false)),
+            runtime: LoggerRuntime::new(query_available),
         })
     }
 
+    /// Registers one additional sink before log emission begins.
     pub fn register_sink(&mut self, registration: SinkRegistration) {
         self.sinks.push(registration);
     }
 
+    /// Emits one structured log event through the configured sinks.
     pub fn emit(&self, event: LogEvent) -> Result<(), EventError> {
         if self.shutdown.load(Ordering::SeqCst) {
             return Err(EventError(Box::new(ErrorContext::new(
@@ -216,13 +264,14 @@ impl Logger {
             }
 
             if let Err(err) = registration.sink.write(&redacted) {
-                self.record_sink_failure(err.to_string());
+                self.record_sink_failure(&err);
             }
         }
 
         Ok(())
     }
 
+    /// Flushes all registered sinks.
     pub fn flush(&self) -> Result<(), FlushError> {
         if self.shutdown.load(Ordering::SeqCst) {
             return Ok(());
@@ -232,23 +281,47 @@ impl Logger {
         Ok(())
     }
 
+    /// Queries the current JSONL log set synchronously using the shared query contract.
+    pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError> {
+        let reader = self.query_reader()?;
+        let result = reader.query(query);
+        self.runtime.query_health.record_result(&result);
+        result
+    }
+
+    /// Starts a tail-style follow session from the current end of the visible log set.
+    pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError> {
+        let active_log_path = self.ensure_query_available()?;
+        let result = LogFollowSession::with_health(
+            active_log_path,
+            query,
+            self.runtime.query_health.clone(),
+            Some(self.shutdown.clone()),
+        );
+        self.runtime.query_health.record_result(&result);
+        result
+    }
+
     fn flush_registered_sinks(&self) {
         for registration in &self.sinks {
             if let Err(err) = registration.sink.flush() {
-                self.record_flush_failure(err.to_string());
+                self.record_flush_failure(&err);
             }
         }
     }
 
+    /// Shuts the logger down and makes logger-owned query/follow unavailable.
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
 
         self.flush_registered_sinks();
+        self.runtime.query_health.mark_unavailable(None);
         Ok(())
     }
 
+    /// Returns aggregate logging and query/follow health for the runtime.
     pub fn health(&self) -> LoggingHealthReport {
         let sink_statuses: Vec<SinkHealth> =
             self.sinks.iter().map(|entry| entry.sink.health()).collect();
@@ -265,6 +338,7 @@ impl Logger {
             flush_errors_total: self.runtime.flush_errors_total.load(Ordering::SeqCst),
             active_log_path: default_log_path(&self.config.log_root, &self.config.service_name),
             sink_statuses,
+            query: Some(self.runtime.query_health.snapshot()),
             last_error: self
                 .runtime
                 .last_error
@@ -302,8 +376,7 @@ impl Logger {
         event
     }
 
-    fn record_sink_failure(&self, message: impl Into<String>) {
-        let message = message.into();
+    fn record_sink_failure(&self, error: &LogSinkError) {
         self.runtime
             .dropped_events_total
             .fetch_add(1, Ordering::SeqCst);
@@ -311,13 +384,11 @@ impl Logger {
             .runtime
             .last_error
             .lock()
-            .expect("logger last_error poisoned") = Some(DiagnosticSummary::from(
-            &diagnostic_for_sink_failure(message),
-        ));
+            .expect("logger last_error poisoned") =
+            Some(DiagnosticSummary::from(error.diagnostic()));
     }
 
-    fn record_flush_failure(&self, message: impl Into<String>) {
-        let message = message.into();
+    fn record_flush_failure(&self, error: &LogSinkError) {
         self.runtime
             .flush_errors_total
             .fetch_add(1, Ordering::SeqCst);
@@ -325,20 +396,48 @@ impl Logger {
             .runtime
             .last_error
             .lock()
-            .expect("logger last_error poisoned") = Some(DiagnosticSummary::from(
-            &diagnostic_for_sink_failure(message),
-        ));
+            .expect("logger last_error poisoned") =
+            Some(DiagnosticSummary::from(error.diagnostic()));
+    }
+
+    fn query_reader(&self) -> Result<JsonlLogReader, QueryError> {
+        self.ensure_query_available().map(JsonlLogReader::new)
+    }
+
+    fn ensure_query_available(&self) -> Result<PathBuf, QueryError> {
+        if self.shutdown.load(Ordering::SeqCst) {
+            let error = query::shutdown_error();
+            self.runtime.query_health.record_error(&error);
+            return Err(error);
+        }
+
+        if !self.config.enable_file_sink {
+            let error = query::unavailable_error(
+                "logger query/follow requires the built-in JSONL file sink to be enabled",
+            );
+            self.runtime.query_health.record_error(&error);
+            return Err(error);
+        }
+
+        Ok(default_log_path(
+            &self.config.log_root,
+            &self.config.service_name,
+        ))
     }
 }
 
+/// Built-in JSONL file sink with rotation and retention handling.
 pub struct JsonlFileSink {
     path: PathBuf,
     rotation: RotationPolicy,
     retention: RetentionPolicy,
+    // MUTEX: sink health mutates as one small shared struct during writes and health reads;
+    // Mutex keeps updates simple and coherent, while RwLock would not reduce contention materially.
     health: Mutex<SinkHealth>,
 }
 
 impl JsonlFileSink {
+    /// Creates a JSONL file sink at the given active log path.
     pub fn new(path: PathBuf, rotation: RotationPolicy, retention: RetentionPolicy) -> Self {
         Self {
             path,
@@ -352,6 +451,7 @@ impl JsonlFileSink {
         }
     }
 
+    /// Returns the active JSONL file path for the sink.
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -363,14 +463,14 @@ impl JsonlFileSink {
             for idx in (1..self.rotation.max_files).rev() {
                 let src = self.rotated_path(idx);
                 let dest = self.rotated_path(idx + 1);
-                if src.exists() {
-                    let _ = fs::rename(&src, &dest);
-                }
+                // Rotation is best-effort: if a file is absent or another rename wins,
+                // later writes still succeed and the next rotation pass will heal state.
+                let _ = rename_if_present(&src, &dest);
             }
-            if self.path.exists() {
-                let rotated = self.rotated_path(1);
-                let _ = fs::rename(&self.path, rotated);
-            }
+            let rotated = self.rotated_path(1);
+            // The active file rename is also best-effort so logging stays fail-open
+            // even when the platform cannot complete the rotation move immediately.
+            let _ = rename_if_present(&self.path, &rotated);
         }
 
         self.prune_old_files();
@@ -378,13 +478,7 @@ impl JsonlFileSink {
     }
 
     fn rotated_path(&self, index: u32) -> PathBuf {
-        let parent = self.path.parent().unwrap_or_else(|| Path::new("."));
-        let file_name = self
-            .path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("active.log.jsonl");
-        parent.join(format!("{file_name}.{index}"))
+        rotated_log_path(&self.path, index)
     }
 
     fn prune_old_files(&self) {
@@ -396,8 +490,8 @@ impl JsonlFileSink {
         let Ok(entries) = fs::read_dir(parent) else {
             return;
         };
-        let retention_cutoff =
-            SystemTime::now() - Duration::from_secs((self.retention.max_age_days as u64) * 86_400);
+        let retention_cutoff = SystemTime::now()
+            - Duration::from_secs((self.retention.max_age_days as u64) * constants::SECS_PER_DAY);
 
         for entry in entries.flatten() {
             let path = entry.path();
@@ -419,13 +513,18 @@ impl JsonlFileSink {
                 && let Ok(modified) = metadata.modified()
                 && modified < retention_cutoff
             {
+                // Retention cleanup is best-effort: failure to delete an old file should not
+                // block new writes or turn routine pruning into a runtime error.
                 let _ = fs::remove_file(path);
             }
         }
     }
 
-    fn mark_failure(&self, message: impl Into<String>) -> LogSinkError {
-        let message = message.into();
+    fn mark_failure<E>(&self, error: E) -> LogSinkError
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        let message = error.to_string();
         let diagnostic = diagnostic_for_sink_failure(message.clone());
         let mut health = self.health.lock().expect("file sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
@@ -438,7 +537,8 @@ impl JsonlFileSink {
                     "file sink write failure handling is owned by the logger runtime",
                 ),
             )
-            .cause(message),
+            .cause(message)
+            .source(Box::new(error)),
         ))
     }
 }
@@ -446,11 +546,10 @@ impl JsonlFileSink {
 impl LogSink for JsonlFileSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|err| self.mark_failure(err.to_string()))?;
+            fs::create_dir_all(parent).map_err(|err| self.mark_failure(err))?;
         }
 
-        let mut line =
-            serde_json::to_vec(event).map_err(|err| self.mark_failure(err.to_string()))?;
+        let mut line = serde_json::to_vec(event).map_err(|err| self.mark_failure(err))?;
         line.push(b'\n');
         self.rotate_if_needed(line.len() as u64)?;
 
@@ -458,10 +557,10 @@ impl LogSink for JsonlFileSink {
             .create(true)
             .append(true)
             .open(&self.path)
-            .map_err(|err| self.mark_failure(err.to_string()))?;
+            .map_err(|err| self.mark_failure(err))?;
         file.write_all(&line)
             .and_then(|_| file.flush())
-            .map_err(|err| self.mark_failure(err.to_string()))?;
+            .map_err(|err| self.mark_failure(err))?;
 
         let mut health = self.health.lock().expect("file sink health poisoned");
         health.state = SinkHealthState::Healthy;
@@ -476,14 +575,14 @@ impl LogSink for JsonlFileSink {
     }
 }
 
-trait ConsoleWriter: Send {
-    fn write_line(&mut self, line: &str) -> std::io::Result<()>;
+trait ConsoleWriter: Send + Sync {
+    fn write_line(&self, line: &str) -> std::io::Result<()>;
 }
 
 struct StdoutConsoleWriter;
 
 impl ConsoleWriter for StdoutConsoleWriter {
-    fn write_line(&mut self, line: &str) -> std::io::Result<()> {
+    fn write_line(&self, line: &str) -> std::io::Result<()> {
         let mut stdout = std::io::stdout().lock();
         stdout.write_all(line.as_bytes())?;
         stdout.write_all(b"\n")?;
@@ -491,19 +590,23 @@ impl ConsoleWriter for StdoutConsoleWriter {
     }
 }
 
+/// Built-in sink that renders log events to stdout.
 pub struct ConsoleSink {
-    writer: Mutex<Box<dyn ConsoleWriter>>,
+    writer: Box<dyn ConsoleWriter>,
+    // MUTEX: console sink health mutates as one shared status struct on write failures and reads;
+    // Mutex is simpler than RwLock because writes dominate and the payload is tiny.
     health: Mutex<SinkHealth>,
 }
 
 impl ConsoleSink {
+    /// Creates a console sink backed by stdout.
     pub fn stdout() -> Self {
         Self::from_writer(Box::new(StdoutConsoleWriter))
     }
 
     pub(crate) fn from_writer(writer: Box<dyn ConsoleWriter>) -> Self {
         Self {
-            writer: Mutex::new(writer),
+            writer,
             health: Mutex::new(SinkHealth {
                 name: "console".to_string(),
                 state: SinkHealthState::Healthy,
@@ -531,8 +634,11 @@ impl ConsoleSink {
         )
     }
 
-    fn mark_failure(&self, message: impl Into<String>) -> LogSinkError {
-        let message = message.into();
+    fn mark_failure<E>(&self, error: E) -> LogSinkError
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        let message = error.to_string();
         let diagnostic = diagnostic_for_sink_failure(message.clone());
         let mut health = self.health.lock().expect("console sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
@@ -545,7 +651,8 @@ impl ConsoleSink {
                     "console sink write failure handling is owned by the logger runtime",
                 ),
             )
-            .cause(message),
+            .cause(message)
+            .source(Box::new(error)),
         ))
     }
 }
@@ -554,10 +661,8 @@ impl LogSink for ConsoleSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         let line = Self::format_line(event);
         self.writer
-            .lock()
-            .expect("console writer poisoned")
             .write_line(&line)
-            .map_err(|err| self.mark_failure(err.to_string()))?;
+            .map_err(|err| self.mark_failure(err))?;
         let mut health = self.health.lock().expect("console sink health poisoned");
         health.state = SinkHealthState::Healthy;
         Ok(())
@@ -631,11 +736,28 @@ fn validate_event(event: &LogEvent, expected_service: &ServiceName) -> Result<()
     Ok(())
 }
 
-fn default_log_path(log_root: &Path, service_name: &ServiceName) -> PathBuf {
+pub(crate) fn default_log_path(log_root: &Path, service_name: &ServiceName) -> PathBuf {
     log_root
         .join(service_name.as_str())
         .join("logs")
         .join(format!("{}.log.jsonl", service_name.as_str()))
+}
+
+pub(crate) fn rotated_log_path(active_path: &Path, index: u32) -> PathBuf {
+    let parent = active_path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = active_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("active.log.jsonl");
+    parent.join(format!("{file_name}.{index}"))
+}
+
+fn rename_if_present(src: &Path, dest: &Path) -> std::io::Result<()> {
+    match fs::rename(src, dest) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err),
+    }
 }
 
 fn redact_string_value(value: &mut Value) {
@@ -668,18 +790,19 @@ fn redact_bearer_token_text(input: &str) -> String {
 mod tests {
     use super::*;
     use sc_observability_types::{
-        ActionName, Diagnostic, ErrorCode, Level, LogEvent, ProcessIdentity, TargetCategory,
-        Timestamp,
+        ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogOrder, LogQuery, LogSnapshot,
+        ProcessIdentity, QueryError, QueryHealthState, TargetCategory, Timestamp,
     };
     use serde_json::json;
     use std::sync::Arc;
+    use temp_env::{with_var, with_var_unset};
 
     struct SharedBuffer {
         lines: Arc<Mutex<Vec<String>>>,
     }
 
     impl ConsoleWriter for SharedBuffer {
-        fn write_line(&mut self, line: &str) -> std::io::Result<()> {
+        fn write_line(&self, line: &str) -> std::io::Result<()> {
             self.lines
                 .lock()
                 .expect("buffer poisoned")
@@ -759,33 +882,11 @@ mod tests {
         path
     }
 
-    static ENV_MUTEX: Mutex<()> = Mutex::new(());
-
     fn with_sc_log_root<T>(value: Option<&Path>, f: impl FnOnce() -> T) -> T {
-        let _guard = ENV_MUTEX.lock().expect("env mutex poisoned");
-        let previous = std::env::var_os("SC_LOG_ROOT");
         match value {
-            Some(path) => {
-                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
-                unsafe { std::env::set_var("SC_LOG_ROOT", path) };
-            }
-            None => {
-                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
-                unsafe { std::env::remove_var("SC_LOG_ROOT") };
-            }
+            Some(path) => with_var("SC_LOG_ROOT", Some(path), f),
+            None => with_var_unset("SC_LOG_ROOT", f),
         }
-        let result = f();
-        match previous {
-            Some(value) => {
-                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
-                unsafe { std::env::set_var("SC_LOG_ROOT", value) };
-            }
-            None => {
-                // SAFETY: tests serialize environment mutation through ENV_MUTEX.
-                unsafe { std::env::remove_var("SC_LOG_ROOT") };
-            }
-        }
-        result
     }
 
     fn log_event(service_name: ServiceName) -> LogEvent {
@@ -817,6 +918,54 @@ mod tests {
                 ("secret".to_string(), json!("raw")),
             ]),
         }
+    }
+
+    fn log_event_with_request(
+        service_name: ServiceName,
+        request_id: &str,
+        message_padding: usize,
+    ) -> LogEvent {
+        let mut event = log_event(service_name);
+        event.message = Some(format!("{request_id} {}", "x".repeat(message_padding)));
+        event.request_id = Some(request_id.to_string());
+        event
+            .fields
+            .insert("sequence".to_string(), json!(request_id.to_string()));
+        event
+    }
+
+    fn query_all(order: LogOrder) -> LogQuery {
+        LogQuery {
+            order,
+            ..LogQuery::default()
+        }
+    }
+
+    fn request_ids(snapshot: &LogSnapshot) -> Vec<String> {
+        snapshot
+            .events
+            .iter()
+            .map(|event| event.request_id.clone().expect("request_id"))
+            .collect()
+    }
+
+    fn drain_follow_until_request_id(
+        follow: &mut LogFollowSession,
+        expected_request_id: &str,
+    ) -> Vec<String> {
+        let mut drained = Vec::new();
+        for _ in 0..3 {
+            let snapshot = follow.poll().expect("follow poll");
+            drained.extend(request_ids(&snapshot));
+            if drained
+                .iter()
+                .any(|request_id| request_id == expected_request_id)
+            {
+                return drained;
+            }
+        }
+
+        panic!("follow session never yielded {expected_request_id}");
     }
 
     #[test]
@@ -1104,5 +1253,346 @@ mod tests {
         logger.shutdown().expect("shutdown");
 
         assert_eq!(sink.flush_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn historical_query_reads_active_and_rotated_files() {
+        let root = temp_path("query-rotated");
+        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        config.rotation.max_bytes = 350;
+        config.rotation.max_files = 4;
+        let logger = Logger::new(config).expect("logger");
+
+        for request_id in ["req-1", "req-2", "req-3"] {
+            logger
+                .emit(log_event_with_request(service_name(), request_id, 240))
+                .expect("emit");
+        }
+
+        let active_path = default_log_path(&root, &service_name());
+        let resolved_paths = crate::query::query_active_and_rotated_paths(&active_path, 4);
+        assert!(
+            resolved_paths
+                .iter()
+                .any(|path| path.ends_with("sc-observability.log.jsonl.1"))
+        );
+        assert!(
+            resolved_paths
+                .iter()
+                .any(|path| path.ends_with("sc-observability.log.jsonl"))
+        );
+
+        let asc = logger
+            .query(&query_all(LogOrder::OldestFirst))
+            .expect("asc query");
+        assert_eq!(request_ids(&asc), ["req-1", "req-2", "req-3"]);
+
+        let desc = logger
+            .query(&LogQuery {
+                order: LogOrder::NewestFirst,
+                limit: Some(2),
+                ..LogQuery::default()
+            })
+            .expect("desc query");
+        assert_eq!(request_ids(&desc), ["req-3", "req-2"]);
+        assert!(desc.truncated);
+    }
+
+    #[test]
+    fn historical_query_preserves_order_across_multiple_rotated_files() {
+        let root = temp_path("query-multi-rotation-order");
+        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        config.rotation.max_bytes = 350;
+        config.rotation.max_files = 6;
+        let logger = Logger::new(config).expect("logger");
+
+        for request_id in ["req-1", "req-2", "req-3", "req-4", "req-5"] {
+            logger
+                .emit(log_event_with_request(service_name(), request_id, 220))
+                .expect("emit");
+        }
+
+        let oldest_first = logger
+            .query(&query_all(LogOrder::OldestFirst))
+            .expect("oldest-first query");
+        assert_eq!(
+            request_ids(&oldest_first),
+            ["req-1", "req-2", "req-3", "req-4", "req-5"]
+        );
+
+        let newest_first = logger
+            .query(&LogQuery {
+                order: LogOrder::NewestFirst,
+                ..LogQuery::default()
+            })
+            .expect("newest-first query");
+        assert_eq!(
+            request_ids(&newest_first),
+            ["req-5", "req-4", "req-3", "req-2", "req-1"]
+        );
+    }
+
+    #[test]
+    fn logger_and_jsonl_reader_query_have_parity() {
+        let root = temp_path("query-parity");
+        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        config.rotation.max_bytes = 350;
+        config.rotation.max_files = 4;
+        let logger = Logger::new(config).expect("logger");
+
+        for request_id in ["req-a", "req-b", "req-c"] {
+            logger
+                .emit(log_event_with_request(service_name(), request_id, 220))
+                .expect("emit");
+        }
+
+        let query = LogQuery {
+            order: LogOrder::NewestFirst,
+            limit: Some(2),
+            ..LogQuery::default()
+        };
+        let logger_snapshot = logger.query(&query).expect("logger query");
+        let reader = JsonlLogReader::new(default_log_path(&root, &service_name()));
+        let reader_snapshot = reader.query(&query).expect("reader query");
+
+        assert_eq!(reader_snapshot, logger_snapshot);
+    }
+
+    #[test]
+    fn follow_starts_at_tail_and_survives_multiple_rotations() {
+        let root = temp_path("follow-rotation");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.rotation.max_bytes = 350;
+        config.rotation.max_files = 6;
+        let logger = Logger::new(config).expect("logger");
+
+        logger
+            .emit(log_event_with_request(service_name(), "backlog", 220))
+            .expect("emit backlog");
+
+        let mut follow = logger
+            .follow(query_all(LogOrder::OldestFirst))
+            .expect("follow");
+        assert!(follow.poll().expect("initial poll").events.is_empty());
+
+        for request_id in ["fresh-1", "fresh-2", "fresh-3"] {
+            logger
+                .emit(log_event_with_request(service_name(), request_id, 220))
+                .expect("emit fresh");
+        }
+
+        let snapshot = follow.poll().expect("follow poll");
+        assert_eq!(request_ids(&snapshot), ["fresh-1", "fresh-2", "fresh-3"]);
+        assert_eq!(follow.health().state, QueryHealthState::Healthy);
+    }
+
+    #[test]
+    fn logger_and_jsonl_reader_follow_have_parity() {
+        let root = temp_path("follow-parity");
+        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        config.rotation.max_bytes = 350;
+        config.rotation.max_files = 6;
+        let logger = Logger::new(config).expect("logger");
+
+        logger
+            .emit(log_event_with_request(service_name(), "backlog", 220))
+            .expect("emit backlog");
+
+        let query = query_all(LogOrder::OldestFirst);
+        let mut logger_follow = logger.follow(query.clone()).expect("logger follow");
+        let reader = JsonlLogReader::new(default_log_path(&root, &service_name()));
+        let mut reader_follow = reader.follow(query).expect("reader follow");
+
+        for request_id in ["reader-1", "reader-2"] {
+            logger
+                .emit(log_event_with_request(service_name(), request_id, 220))
+                .expect("emit fresh");
+        }
+
+        assert_eq!(
+            logger_follow.poll().expect("logger follow poll"),
+            reader_follow.poll().expect("reader follow poll")
+        );
+    }
+
+    #[test]
+    fn query_health_tracks_decode_and_shutdown_failures() {
+        use std::io::Write as _;
+
+        let root = temp_path("query-health");
+        let config = LoggerConfig::default_for(service_name(), root.clone());
+        let logger = Logger::new(config).expect("logger");
+
+        logger
+            .emit(log_event_with_request(service_name(), "healthy", 20))
+            .expect("emit");
+
+        let active_path = default_log_path(&root, &service_name());
+        let mut file = OpenOptions::new()
+            .append(true)
+            .open(&active_path)
+            .expect("open active log");
+        writeln!(file, "{{not-json").expect("append malformed json");
+
+        let decode_error = logger
+            .query(&query_all(LogOrder::OldestFirst))
+            .expect_err("decode error");
+        assert!(matches!(decode_error, QueryError::Decode(_)));
+        let degraded_health = logger.health().query.expect("query health");
+        assert_eq!(degraded_health.state, QueryHealthState::Degraded);
+        assert!(degraded_health.last_error.is_some());
+
+        logger.shutdown().expect("shutdown");
+        let shutdown_error = logger
+            .query(&query_all(LogOrder::OldestFirst))
+            .expect_err("shutdown error");
+        assert!(matches!(shutdown_error, QueryError::Shutdown));
+        assert_eq!(
+            logger.health().query.expect("query health").state,
+            QueryHealthState::Unavailable
+        );
+        assert!(matches!(
+            logger.follow(query_all(LogOrder::OldestFirst)),
+            Err(QueryError::Shutdown)
+        ));
+    }
+
+    #[test]
+    fn logger_query_returns_shutdown_variant_after_shutdown() {
+        let root = temp_path("query-shutdown-variant");
+        let config = LoggerConfig::default_for(service_name(), root);
+        let logger = Logger::new(config).expect("logger");
+
+        logger.shutdown().expect("shutdown");
+
+        let error = logger
+            .query(&query_all(LogOrder::OldestFirst))
+            .expect_err("shutdown error");
+        assert!(matches!(error, QueryError::Shutdown));
+    }
+
+    #[test]
+    fn logger_follow_session_becomes_unavailable_after_shutdown() {
+        let root = temp_path("follow-shutdown");
+        let config = LoggerConfig::default_for(service_name(), root);
+        let logger = Logger::new(config).expect("logger");
+
+        let mut follow = logger
+            .follow(query_all(LogOrder::OldestFirst))
+            .expect("follow");
+        assert!(follow.poll().expect("initial poll").events.is_empty());
+
+        logger.shutdown().expect("shutdown");
+
+        assert!(matches!(follow.poll(), Err(QueryError::Shutdown)));
+        assert_eq!(follow.health().state, QueryHealthState::Unavailable);
+    }
+
+    #[test]
+    fn logger_query_and_follow_reject_invalid_queries() {
+        let root = temp_path("invalid-query");
+        let config = LoggerConfig::default_for(service_name(), root);
+        let logger = Logger::new(config).expect("logger");
+
+        let invalid_limit = LogQuery {
+            limit: Some(0),
+            ..LogQuery::default()
+        };
+        let invalid_range = LogQuery {
+            since: Some(Timestamp::now_utc()),
+            until: Some(Timestamp::UNIX_EPOCH),
+            ..LogQuery::default()
+        };
+
+        assert!(matches!(
+            logger.query(&invalid_limit),
+            Err(QueryError::InvalidQuery(_))
+        ));
+        assert!(matches!(
+            logger.follow(invalid_limit),
+            Err(QueryError::InvalidQuery(_))
+        ));
+        assert!(matches!(
+            logger.query(&invalid_range),
+            Err(QueryError::InvalidQuery(_))
+        ));
+        assert!(matches!(
+            logger.follow(invalid_range),
+            Err(QueryError::InvalidQuery(_))
+        ));
+    }
+
+    #[test]
+    fn query_and_follow_are_unavailable_without_file_sink() {
+        let root = temp_path("query-unavailable");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.enable_file_sink = false;
+        let logger = Logger::new(config).expect("logger");
+
+        assert!(matches!(
+            logger.query(&query_all(LogOrder::OldestFirst)),
+            Err(QueryError::Unavailable(_))
+        ));
+        assert!(matches!(
+            logger.follow(query_all(LogOrder::OldestFirst)),
+            Err(QueryError::Unavailable(_))
+        ));
+        assert_eq!(
+            logger.health().query.expect("query health").state,
+            QueryHealthState::Unavailable
+        );
+    }
+
+    // On Windows, the non-Unix file-identity approach (len + modified_nanos) cannot
+    // distinguish appends from file recreation because every write changes `len`.
+    // Follow truncation/recreation semantics are tested on Unix and macOS.
+    #[cfg_attr(windows, ignore)]
+    #[test]
+    fn follow_recovers_after_active_file_truncate_and_recreate() {
+        let root = temp_path("follow-truncate-recreate");
+        let config = LoggerConfig::default_for(service_name(), root.clone());
+        let logger = Logger::new(config).expect("logger");
+
+        logger
+            .emit(log_event_with_request(service_name(), "backlog", 20))
+            .expect("emit backlog");
+
+        let mut follow = logger
+            .follow(query_all(LogOrder::OldestFirst))
+            .expect("follow");
+        assert!(follow.poll().expect("initial poll").events.is_empty());
+
+        logger
+            .emit(log_event_with_request(
+                service_name(),
+                "before-truncate",
+                20,
+            ))
+            .expect("emit before truncate");
+        assert_eq!(
+            request_ids(&follow.poll().expect("poll before truncate")),
+            ["before-truncate"]
+        );
+
+        let active_path = default_log_path(&root, &service_name());
+        fs::File::create(&active_path).expect("truncate active log");
+
+        logger
+            .emit(log_event_with_request(service_name(), "after-truncate", 20))
+            .expect("emit after truncate");
+        // Windows can replay previously read records once a truncate resets the file position,
+        // while Unix platforms often yield only the new post-truncate record.
+        let after_truncate = drain_follow_until_request_id(&mut follow, "after-truncate");
+        assert!(
+            after_truncate == vec!["after-truncate"]
+                || after_truncate == vec!["backlog", "before-truncate", "after-truncate"]
+        );
+
+        fs::remove_file(&active_path).expect("remove active log");
+        logger
+            .emit(log_event_with_request(service_name(), "after-recreate", 20))
+            .expect("emit after recreate");
+        let after_recreate = drain_follow_until_request_id(&mut follow, "after-recreate");
+        assert_eq!(after_recreate, vec!["after-recreate"]);
     }
 }

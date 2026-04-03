@@ -14,9 +14,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, ErrorContext, EventError, ExportError, FlushError,
-    InitError, LogEvent, MetricRecord, Remediation, ServiceName, ShutdownError, SpanEnded,
-    SpanEvent, SpanRecord, SpanSignal, SpanStarted, Timestamp,
+    DiagnosticInfo, DiagnosticSummary, DurationMs, ErrorContext, EventError, ExportError,
+    FlushError, InitError, LogEvent, LogProjector, MetricProjector, MetricRecord, Observable,
+    Observation, ObservationFilter, ProjectionError, ProjectionRegistration, Remediation,
+    ServiceName, ShutdownError, SpanEnded, SpanEvent, SpanProjector, SpanRecord, SpanSignal,
+    SpanStarted, TelemetryHealthProvider, Timestamp, telemetry_health_provider_sealed,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -42,11 +44,11 @@ pub struct OtelConfig {
     pub auth_header: Option<String>,
     pub ca_file: Option<PathBuf>,
     pub insecure_skip_verify: bool,
-    pub timeout_ms: u64,
+    pub timeout_ms: DurationMs,
     pub debug_local_export: bool,
     pub max_retries: u32,
-    pub initial_backoff_ms: u64,
-    pub max_backoff_ms: u64,
+    pub initial_backoff_ms: DurationMs,
+    pub max_backoff_ms: DurationMs,
 }
 
 impl Default for OtelConfig {
@@ -58,11 +60,11 @@ impl Default for OtelConfig {
             auth_header: None,
             ca_file: None,
             insecure_skip_verify: false,
-            timeout_ms: constants::DEFAULT_OTLP_TIMEOUT_MS,
+            timeout_ms: constants::DEFAULT_OTLP_TIMEOUT_MS.into(),
             debug_local_export: false,
             max_retries: constants::DEFAULT_OTLP_MAX_RETRIES,
-            initial_backoff_ms: constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS,
-            max_backoff_ms: constants::DEFAULT_OTLP_MAX_BACKOFF_MS,
+            initial_backoff_ms: constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS.into(),
+            max_backoff_ms: constants::DEFAULT_OTLP_MAX_BACKOFF_MS.into(),
         }
     }
 }
@@ -105,14 +107,14 @@ impl Default for TracesConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MetricsConfig {
     pub batch_size: usize,
-    pub export_interval_ms: u64,
+    pub export_interval_ms: DurationMs,
 }
 
 impl Default for MetricsConfig {
     fn default() -> Self {
         Self {
             batch_size: constants::DEFAULT_METRIC_BATCH_SIZE,
-            export_interval_ms: constants::DEFAULT_METRIC_EXPORT_INTERVAL_MS,
+            export_interval_ms: constants::DEFAULT_METRIC_EXPORT_INTERVAL_MS.into(),
         }
     }
 }
@@ -237,6 +239,158 @@ pub struct CompleteSpan {
     pub events: Vec<SpanEvent>,
 }
 
+/// Public helper for attaching telemetry export to ordinary observation projection registration.
+pub struct TelemetryProjectors<T>
+where
+    T: Observable,
+{
+    telemetry: Arc<Telemetry>,
+    log_projector: Option<Arc<dyn LogProjector<T>>>,
+    span_projector: Option<Arc<dyn SpanProjector<T>>>,
+    metric_projector: Option<Arc<dyn MetricProjector<T>>>,
+    filter: Option<Arc<dyn ObservationFilter<T>>>,
+}
+
+impl<T> TelemetryProjectors<T>
+where
+    T: Observable,
+{
+    /// Starts a wrapped projector set for one observation payload type.
+    pub fn new(telemetry: Arc<Telemetry>) -> Self {
+        Self {
+            telemetry,
+            log_projector: None,
+            span_projector: None,
+            metric_projector: None,
+            filter: None,
+        }
+    }
+
+    /// Attaches a log projector whose output is also forwarded into telemetry.
+    pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
+        self.log_projector = Some(projector);
+        self
+    }
+
+    /// Attaches a span projector whose output is also forwarded into telemetry.
+    pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
+        self.span_projector = Some(projector);
+        self
+    }
+
+    /// Attaches a metric projector whose output is also forwarded into telemetry.
+    pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
+        self.metric_projector = Some(projector);
+        self
+    }
+
+    /// Attaches the same observation filter the wrapped projector registration should honor.
+    pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self {
+        self.filter = Some(filter);
+        self
+    }
+
+    /// Converts the wrapped helper into ordinary sc-observe projection registration.
+    pub fn into_registration(self) -> ProjectionRegistration<T> {
+        ProjectionRegistration {
+            log_projector: self.log_projector.map(|inner| {
+                Arc::new(AttachedLogProjector {
+                    telemetry: self.telemetry.clone(),
+                    inner,
+                }) as Arc<dyn LogProjector<T>>
+            }),
+            span_projector: self.span_projector.map(|inner| {
+                Arc::new(AttachedSpanProjector {
+                    telemetry: self.telemetry.clone(),
+                    inner,
+                }) as Arc<dyn SpanProjector<T>>
+            }),
+            metric_projector: self.metric_projector.map(|inner| {
+                Arc::new(AttachedMetricProjector {
+                    telemetry: self.telemetry,
+                    inner,
+                }) as Arc<dyn MetricProjector<T>>
+            }),
+            filter: self.filter,
+        }
+    }
+}
+
+struct AttachedLogProjector<T>
+where
+    T: Observable,
+{
+    telemetry: Arc<Telemetry>,
+    inner: Arc<dyn LogProjector<T>>,
+}
+
+impl<T> LogProjector<T> for AttachedLogProjector<T>
+where
+    T: Observable,
+{
+    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
+        let events = self.inner.project_logs(observation)?;
+        for event in &events {
+            self.telemetry
+                .emit_log(event)
+                .map_err(telemetry_to_projection_error)?;
+        }
+        Ok(events)
+    }
+}
+
+struct AttachedSpanProjector<T>
+where
+    T: Observable,
+{
+    telemetry: Arc<Telemetry>,
+    inner: Arc<dyn SpanProjector<T>>,
+}
+
+impl<T> SpanProjector<T> for AttachedSpanProjector<T>
+where
+    T: Observable,
+{
+    fn project_spans(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<SpanSignal>, ProjectionError> {
+        let spans = self.inner.project_spans(observation)?;
+        for span in &spans {
+            self.telemetry
+                .emit_span(span)
+                .map_err(telemetry_to_projection_error)?;
+        }
+        Ok(spans)
+    }
+}
+
+struct AttachedMetricProjector<T>
+where
+    T: Observable,
+{
+    telemetry: Arc<Telemetry>,
+    inner: Arc<dyn MetricProjector<T>>,
+}
+
+impl<T> MetricProjector<T> for AttachedMetricProjector<T>
+where
+    T: Observable,
+{
+    fn project_metrics(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<MetricRecord>, ProjectionError> {
+        let metrics = self.inner.project_metrics(observation)?;
+        for metric in &metrics {
+            self.telemetry
+                .emit_metric(metric)
+                .map_err(telemetry_to_projection_error)?;
+        }
+        Ok(metrics)
+    }
+}
+
 /// Exporter contract for projected log records.
 pub trait LogExporter: Send + Sync {
     fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError>;
@@ -336,6 +490,9 @@ pub struct Telemetry {
     log_exporter: Arc<dyn LogExporter>,
     trace_exporter: Arc<dyn TraceExporter>,
     metric_exporter: Arc<dyn MetricExporter>,
+    // MUTEX: exporter flush/shutdown paths mutate buffers and per-signal runtime health together;
+    // Mutex keeps the buffered state and last_error snapshot consistent, and RwLock would not help
+    // because these operations are write-heavy critical sections.
     runtime: Mutex<TelemetryRuntime>,
     dropped_exports_total: AtomicU64,
     malformed_spans_total: AtomicU64,
@@ -357,6 +514,23 @@ struct TelemetryRuntime {
 struct ExporterRuntime {
     state: ExporterHealthState,
     last_error: Option<DiagnosticSummary>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ExporterKind {
+    Logs,
+    Traces,
+    Metrics,
+}
+
+impl ExporterKind {
+    fn status_mut(self, runtime: &mut TelemetryRuntime) -> &mut ExporterRuntime {
+        match self {
+            Self::Logs => &mut runtime.log_status,
+            Self::Traces => &mut runtime.trace_status,
+            Self::Metrics => &mut runtime.metric_status,
+        }
+    }
 }
 
 impl Default for ExporterRuntime {
@@ -508,22 +682,30 @@ impl Telemetry {
 
         if !log_batch.is_empty() {
             match self.log_exporter.export_logs(&log_batch) {
-                Ok(()) => self.record_export_success("logs"),
-                Err(err) => self.record_export_failure("logs", log_batch.len() as u64, err),
+                Ok(()) => self.record_export_success(ExporterKind::Logs),
+                Err(err) => {
+                    self.record_export_failure(ExporterKind::Logs, log_batch.len() as u64, err)
+                }
             }
         }
 
         if !span_batch.is_empty() {
             match self.trace_exporter.export_spans(&span_batch) {
-                Ok(()) => self.record_export_success("traces"),
-                Err(err) => self.record_export_failure("traces", span_batch.len() as u64, err),
+                Ok(()) => self.record_export_success(ExporterKind::Traces),
+                Err(err) => {
+                    self.record_export_failure(ExporterKind::Traces, span_batch.len() as u64, err)
+                }
             }
         }
 
         if !metric_batch.is_empty() {
             match self.metric_exporter.export_metrics(&metric_batch) {
-                Ok(()) => self.record_export_success("metrics"),
-                Err(err) => self.record_export_failure("metrics", metric_batch.len() as u64, err),
+                Ok(()) => self.record_export_success(ExporterKind::Metrics),
+                Err(err) => self.record_export_failure(
+                    ExporterKind::Metrics,
+                    metric_batch.len() as u64,
+                    err,
+                ),
             }
         }
 
@@ -536,6 +718,8 @@ impl Telemetry {
             return Ok(());
         }
 
+        // Best-effort flush on shutdown: exporter failures are recorded in health,
+        // but shutdown itself stays fail-open so callers can continue teardown.
         let _ = self.flush();
         let dropped = self
             .runtime
@@ -615,33 +799,31 @@ impl Telemetry {
         Ok(())
     }
 
-    fn record_export_success(&self, exporter_name: &str) {
+    fn record_export_success(&self, exporter_kind: ExporterKind) {
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-        let status = match exporter_name {
-            "logs" => &mut runtime.log_status,
-            "traces" => &mut runtime.trace_status,
-            "metrics" => &mut runtime.metric_status,
-            _ => unreachable!("unknown exporter name"),
-        };
+        let status = exporter_kind.status_mut(&mut runtime);
         status.state = ExporterHealthState::Healthy;
         status.last_error = None;
     }
 
-    fn record_export_failure(&self, exporter_name: &str, dropped: u64, error: ExportError) {
+    fn record_export_failure(&self, exporter_kind: ExporterKind, dropped: u64, error: ExportError) {
         self.dropped_exports_total
             .fetch_add(dropped, Ordering::SeqCst);
         let summary = DiagnosticSummary::from(error.diagnostic());
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         runtime.last_error = Some(summary.clone());
 
-        let status = match exporter_name {
-            "logs" => &mut runtime.log_status,
-            "traces" => &mut runtime.trace_status,
-            "metrics" => &mut runtime.metric_status,
-            _ => unreachable!("unknown exporter name"),
-        };
+        let status = exporter_kind.status_mut(&mut runtime);
         status.state = ExporterHealthState::Degraded;
         status.last_error = Some(summary);
+    }
+}
+
+impl telemetry_health_provider_sealed::Sealed for Telemetry {}
+
+impl TelemetryHealthProvider for Telemetry {
+    fn telemetry_health(&self) -> TelemetryHealthReport {
+        self.health()
     }
 }
 
@@ -692,6 +874,19 @@ pub(crate) fn export_failure(message: impl Into<String>) -> TelemetryError {
     )))
 }
 
+fn telemetry_to_projection_error(error: sc_observability_types::TelemetryError) -> ProjectionError {
+    match error {
+        sc_observability_types::TelemetryError::Shutdown => {
+            ProjectionError(Box::new(ErrorContext::new(
+                error_codes::TELEMETRY_EXPORT_FAILED,
+                "telemetry runtime is shut down",
+                Remediation::not_recoverable("do not project telemetry after shutdown"),
+            )))
+        }
+        sc_observability_types::TelemetryError::ExportFailure(context) => ProjectionError(context),
+    }
+}
+
 fn span_timestamp(span: &SpanSignal) -> Timestamp {
     match span {
         SpanSignal::Started(record) => record.timestamp(),
@@ -711,7 +906,7 @@ fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
             ),
         ))));
     }
-    if config.transport.timeout_ms == 0 {
+    if u64::from(config.transport.timeout_ms) == 0 {
         return Err(InitError(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "timeout_ms must be greater than zero",
@@ -746,7 +941,7 @@ fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
         || config.traces.is_some_and(|cfg| cfg.batch_size == 0)
         || config
             .metrics
-            .is_some_and(|cfg| cfg.batch_size == 0 || cfg.export_interval_ms == 0)
+            .is_some_and(|cfg| cfg.batch_size == 0 || u64::from(cfg.export_interval_ms) == 0)
     {
         return Err(InitError(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
@@ -965,7 +1160,7 @@ mod tests {
         );
         let ended = started
             .clone()
-            .end(sc_observability_types::SpanStatus::Ok, 42);
+            .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(42));
         let mut assembler = SpanAssembler::new();
 
         assert!(
@@ -992,7 +1187,7 @@ mod tests {
             .expect("complete span");
 
         assert_eq!(complete.events.len(), 1);
-        assert_eq!(complete.record.duration_ms(), 42);
+        assert_eq!(complete.record.duration_ms(), DurationMs::from(42));
     }
 
     #[test]
@@ -1028,7 +1223,7 @@ mod tests {
             trace,
             Map::new(),
         )
-        .end(sc_observability_types::SpanStatus::Ok, 5);
+        .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(5));
 
         assert!(telemetry.emit_span(&SpanSignal::Ended(ended)).is_ok());
         assert_eq!(telemetry.health().malformed_spans_total, 1);
@@ -1163,7 +1358,7 @@ mod tests {
         );
         let ended = started
             .clone()
-            .end(sc_observability_types::SpanStatus::Ok, 5);
+            .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(5));
         telemetry
             .emit_span(&SpanSignal::Started(started))
             .expect("started");

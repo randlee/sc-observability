@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
 use sc_observability_otlp::{
-    LogsConfig, MetricsConfig, OtelConfig, Telemetry, TelemetryConfigBuilder, TracesConfig,
+    LogsConfig, MetricsConfig, OtelConfig, Telemetry, TelemetryConfigBuilder, TelemetryProjectors,
+    TracesConfig,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
-    Observation, ObservationFilter, ProcessIdentity, ProjectionError, ProjectionRegistration,
-    Remediation, ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal,
-    SpanStarted, StateTransition, TargetCategory, Timestamp, ToolName, TraceContext, TraceId,
+    ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
+    MetricRecord, Observation, ObservationFilter, ProcessIdentity, ProjectionError, Remediation,
+    ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
+    StateTransition, TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext,
+    TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 
@@ -56,7 +58,7 @@ impl SpanProjector<AgentPayload> for StaticSpanProjector {
         );
         let ended = started
             .clone()
-            .end(sc_observability_types::SpanStatus::Ok, 10);
+            .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(10));
         Ok(vec![
             SpanSignal::Started(started),
             SpanSignal::Event(SpanEvent {
@@ -85,85 +87,6 @@ impl sc_observability_types::MetricProjector<AgentPayload> for StaticMetricProje
             unit: Some("1".to_string()),
             attributes: Default::default(),
         }])
-    }
-}
-
-struct AttachedLogProjector<T> {
-    telemetry: Arc<Telemetry>,
-    inner: Arc<dyn sc_observability_types::LogProjector<T>>,
-}
-
-impl<T> sc_observability_types::LogProjector<T> for AttachedLogProjector<T>
-where
-    T: sc_observability_types::Observable,
-{
-    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
-        let events = self.inner.project_logs(observation)?;
-        for event in &events {
-            self.telemetry
-                .emit_log(event)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(events)
-    }
-}
-
-struct AttachedSpanProjector<T> {
-    telemetry: Arc<Telemetry>,
-    inner: Arc<dyn sc_observability_types::SpanProjector<T>>,
-}
-
-impl<T> sc_observability_types::SpanProjector<T> for AttachedSpanProjector<T>
-where
-    T: sc_observability_types::Observable,
-{
-    fn project_spans(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        let spans = self.inner.project_spans(observation)?;
-        for span in &spans {
-            self.telemetry
-                .emit_span(span)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(spans)
-    }
-}
-
-struct AttachedMetricProjector<T> {
-    telemetry: Arc<Telemetry>,
-    inner: Arc<dyn sc_observability_types::MetricProjector<T>>,
-}
-
-impl<T> sc_observability_types::MetricProjector<T> for AttachedMetricProjector<T>
-where
-    T: sc_observability_types::Observable,
-{
-    fn project_metrics(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionError> {
-        let metrics = self.inner.project_metrics(observation)?;
-        for metric in &metrics {
-            self.telemetry
-                .emit_metric(metric)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(metrics)
-    }
-}
-
-fn telemetry_to_projection_error(error: sc_observability_types::TelemetryError) -> ProjectionError {
-    match error {
-        sc_observability_types::TelemetryError::Shutdown => {
-            ProjectionError(Box::new(sc_observability_types::ErrorContext::new(
-                sc_observability_types::ErrorCode::new_static("SC_OTLP_TEST_SHUTDOWN"),
-                "telemetry runtime is shut down",
-                Remediation::not_recoverable("do not project telemetry after shutdown"),
-            )))
-        }
-        sc_observability_types::TelemetryError::ExportFailure(context) => ProjectionError(context),
     }
 }
 
@@ -252,29 +175,21 @@ fn temp_root(name: &str) -> std::path::PathBuf {
 fn builder_registration_attaches_logs_spans_and_metrics() {
     let telemetry = Arc::new(Telemetry::new(telemetry_config()).expect("telemetry"));
     let root = temp_root("integration");
-    // Test-only scaffolding: sc-observe owns builder registration; OTLP plugs in
-    // by registering projectors through the same public routing surface callers use.
     let config = ObservabilityConfig::default_for(
         ToolName::new("test-service").expect("valid tool"),
         root.clone(),
     )
     .expect("config");
     let runtime = Observability::builder(config)
-        .register_projection(ProjectionRegistration {
-            log_projector: Some(Arc::new(AttachedLogProjector {
-                telemetry: telemetry.clone(),
-                inner: Arc::new(StaticLogProjector),
-            })),
-            span_projector: Some(Arc::new(AttachedSpanProjector {
-                telemetry: telemetry.clone(),
-                inner: Arc::new(StaticSpanProjector),
-            })),
-            metric_projector: Some(Arc::new(AttachedMetricProjector {
-                telemetry: telemetry.clone(),
-                inner: Arc::new(StaticMetricProjector),
-            })),
-            filter: Some(Arc::new(AllowAll)),
-        })
+        .with_telemetry_health_provider(telemetry.clone())
+        .register_projection(
+            TelemetryProjectors::new(telemetry.clone())
+                .with_log_projector(Arc::new(StaticLogProjector))
+                .with_span_projector(Arc::new(StaticSpanProjector))
+                .with_metric_projector(Arc::new(StaticMetricProjector))
+                .with_filter(Arc::new(AllowAll))
+                .into_registration(),
+        )
         .build()
         .expect("runtime");
 
@@ -287,13 +202,18 @@ fn builder_registration_attaches_logs_spans_and_metrics() {
         .join("test-service.log.jsonl");
     let contents = std::fs::read_to_string(log_path).expect("read projected log file");
     let health = telemetry.health();
+    let runtime_health = runtime.health();
 
     assert!(contents.contains("\"action\":\"agent.observe\""));
-    assert_eq!(
-        health.state,
-        sc_observability_types::TelemetryHealthState::Healthy
-    );
+    assert_eq!(health.state, TelemetryHealthState::Healthy);
     assert_eq!(health.dropped_exports_total, 0);
+    assert_eq!(
+        runtime_health
+            .telemetry
+            .expect("attached telemetry health")
+            .state,
+        TelemetryHealthState::Healthy
+    );
     assert!(
         health
             .exporter_statuses

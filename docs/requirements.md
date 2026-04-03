@@ -1,6 +1,6 @@
 # SC-Observability Requirements
 
-**Status**: Draft for review
+**Status**: Approved
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Source of truth**: [`api-design.md`](./api-design.md)
 **Related ATM adapter docs**:
@@ -54,7 +54,7 @@ Layering requirements:
 - LAY-002 `sc-observability` shall depend on `sc-observability-types` only.
 - LAY-003 `sc-observe` shall depend on `sc-observability-types` and `sc-observability`.
 - LAY-004 `sc-observe` shall not depend on `sc-observability-otlp`.
-- LAY-005 `sc-observability-otlp` shall sit at the top of the stack and may depend on `sc-observability-types`, `sc-observability`, and `sc-observe`.
+- LAY-005 `sc-observability-otlp` shall sit at the top of the stack and may depend on `sc-observability-types` and `sc-observability`; `sc-observe` is permitted only as a dev-only dependency for integration tests.
 - LAY-006 Higher-layer concerns shall not be required to understand or use lower-layer crates.
 - LAY-007 `sc-observability` requirements shall remain fully self-contained and shall not include routing or OTLP concerns.
 
@@ -69,7 +69,7 @@ This crate owns shared neutral contracts only.
 - TYP-005 One `Diagnostic` shall be reusable across CLI rendering, JSON error rendering, log attachment, span attachment, and health summaries.
 - TYP-006 `DiagnosticInfo` shall be an open trait implemented by public error surfaces that can expose a `Diagnostic`.
 - TYP-007 `ErrorContext` shall not be directly constructible without remediation.
-- TYP-008 Canonical timestamps shall be UTC-only and stably serializable.
+- TYP-008 `Timestamp` shall be a UTC-enforcing public newtype. Public constructors and serde input shall normalize to UTC, serde output shall use stable UTC-only RFC3339 form, and raw non-UTC `OffsetDateTime` values shall not cross the public API boundary.
 - TYP-009 `TraceContext` shall be limited to generic W3C-style trace correlation only.
 - TYP-010 `TraceContext` shall use `TraceId` and `SpanId` newtypes rather than raw strings.
 - TYP-011 `TraceId` shall validate 32-character lowercase hex W3C trace IDs.
@@ -95,10 +95,11 @@ This crate owns shared neutral contracts only.
 - TYP-031 Per-crate `constants.rs` files in higher-layer crates may exist only for crate-local values that are not shared across crate boundaries.
 - TYP-032 `sc-observability-types` shall own the stable historical/follow query contracts: `LogQuery`, `LogOrder`, and `LogFieldMatch`.
 - TYP-033 `LogQuery` shall support filtering by `service`, `levels`, `target`, `action`, `request_id`, `correlation_id`, `since`, `until`, `field_matches`, `limit`, and `order`.
-- TYP-034 `sc-observability-types` shall own `LogSnapshot` as the stable synchronous result contract returned by historical query and follow polling APIs.
+- TYP-034 `sc-observability-types` shall own `LogSnapshot` as the stable synchronous result contract returned by historical query and follow polling APIs, with `events` and `truncated` as its stable fields.
 - TYP-035 `sc-observability-types` shall own `QueryError` with variants `InvalidQuery`, `Io`, `Decode`, `Unavailable`, and `Shutdown`.
 - TYP-036 `QueryError` shall map to stable error codes `SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`, `SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN`.
 - TYP-037 `sc-observability-types` shall own `QueryHealthReport` and `QueryHealthState` as the shared health contract for log query/follow availability.
+- TYP-038 `sc-observability-types` shall own `TelemetryHealthProvider` as a sealed shared telemetry-health trait reserved for workspace-owned implementations.
 
 ## 4. `sc-observability` Requirements
 
@@ -140,6 +141,8 @@ This crate is the lightweight logging layer.
   - `emit()` after `shutdown()` returns `EventError`
   - `flush()` after `shutdown()` is idempotent and returns `Ok(())`
   - repeated `shutdown()` calls are idempotent and return `Ok(())`
+  - `query()` after `shutdown()` returns `QueryError::Shutdown`
+  - logger-created `LogFollowSession::poll()` after `shutdown()` returns `QueryError::Shutdown`
 - LOG-024 `sc-observability` shall own a crate-local sealed `LogEmitter` trait for producer injection when logging-only use is desired.
 - LOG-025 `Logger` shall expose a synchronous historical query API `query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>`.
 - LOG-026 `Logger` shall expose a synchronous follow/tail API `follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>`.
@@ -149,6 +152,7 @@ This crate is the lightweight logging layer.
 - LOG-030 Rotation handling for query/follow shall avoid duplicating or silently skipping committed log records when the active file is renamed or recreated.
 - LOG-031 `LoggingHealthReport` shall expose query/follow availability through an optional `QueryHealthReport`.
 - LOG-032 Query/follow APIs shall remain usable in logging-only deployments and shall not introduce ATM-specific types, daemon requirements, or `agent-team-mail-*` dependencies.
+- LOG-033 `JsonlLogReader` query/follow operations shall remain independent of `Logger` lifecycle and shall stay usable for offline inspection after a logger-owned runtime shuts down.
 
 ### 4.1 Query/Follow Issue Traceability
 
@@ -217,7 +221,7 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
 - OTLP-013 Telemetry health shall expose `TelemetryHealthReport`,
   `ExporterHealth`, and typed `ExporterHealthState` (defined in
   `sc-observability-types` and re-exported by `sc-observability-otlp`).
-- OTLP-014 `sc-observability-otlp` shall depend on `sc-observe` rather than the other way around.
+- OTLP-014 `sc-observability-otlp` shall use `sc-observe` only as a dev-only dependency for integration tests; runtime layering remains governed by [LAY-005](#2-layering-requirements).
 - OTLP-015 `sc-observability-otlp` shall attach OTel behavior using lower-level routing and logging infrastructure from the crates beneath it.
 - OTLP-016 `sc-observability-otlp` shall not push OTLP-specific requirements into `sc-observability`.
 - OTLP-017 `sc-observability-otlp` shall attach to the routing layer by registering `LogProjector`, `SpanProjector`, and `MetricProjector` implementations with `ObservabilityBuilder`, not through direct internal access to `sc-observe` internals.

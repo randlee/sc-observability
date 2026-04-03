@@ -103,17 +103,17 @@ let telemetry_config = TelemetryConfigBuilder::new(ServiceName::new("atm")?)
         auth_header: None,
         ca_file: None,
         insecure_skip_verify: false,
-        timeout_ms: 3000,
+        timeout_ms: DurationMs::from(3000),
         debug_local_export: false,
         max_retries: 3,
-        initial_backoff_ms: 250,
-        max_backoff_ms: 5000,
+        initial_backoff_ms: DurationMs::from(250),
+        max_backoff_ms: DurationMs::from(5000),
     })
     .enable_logs(LogsConfig { batch_size: 256 })
     .enable_traces(TracesConfig { batch_size: 256 })
     .enable_metrics(MetricsConfig {
         batch_size: 256,
-        export_interval_ms: 5000,
+        export_interval_ms: DurationMs::from(5000),
     })
     .build();
 

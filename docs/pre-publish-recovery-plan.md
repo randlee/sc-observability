@@ -113,10 +113,10 @@ The public OTLP integration surface is frozen as:
 - `TelemetryProjectors<T>::into_registration()` returns a
   `ProjectionRegistration<T>` suitable for direct registration with
   `ObservabilityBuilder`
-- `Telemetry` implements a public `TelemetryHealthProvider` trait owned by
-  `sc-observability-types`
+- `Telemetry` participates through workspace-owned plumbing around the public
+  `TelemetryHealthProvider` trait owned by `sc-observability-types`
 - `TelemetryHealthProvider` is frozen as:
-  `pub trait TelemetryHealthProvider: Send + Sync { fn telemetry_health(&self) -> TelemetryHealthReport; }`
+  `pub trait TelemetryHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync { fn telemetry_health(&self) -> TelemetryHealthReport; }`
 - `ObservabilityBuilder` exposes
   `with_telemetry_health_provider(Arc<dyn TelemetryHealthProvider>)` so
   `ObservabilityHealthReport.telemetry` can be populated without adding an OTLP
@@ -165,6 +165,12 @@ Close the missing shared-contract and best-practice gaps in
 - `SC_LOG_QUERY_SHUTDOWN`
 - `LoggingHealthReport.query`
 
+The `SC_LOG_QUERY_*` stable error codes land in Sprint 2.1, where the shared
+query/follow contract ships as one coherent surface.
+
+`LoggingHealthReport.query` is also deferred to Sprint 2.1 so the health field
+lands together with `QueryHealthReport` and the shared query vocabulary.
+
 ### 6.3 File targets
 
 - `crates/sc-observability-types/src/lib.rs`
@@ -211,7 +217,7 @@ Implement the missing historical query and synchronous tail APIs in
 
 - historical reads cover the active log plus the rotation set that matches the
   documented naming layout
-- `OldestFirst` and `NewestFirst` are deterministic
+- `LogOrder::OldestFirst` and `LogOrder::NewestFirst` are deterministic
 - follow sessions survive active-file rename/recreate during rotation
 - committed records are neither duplicated nor silently skipped across rotation
 - `follow().poll()` is synchronous and caller-driven
@@ -230,7 +236,7 @@ Implement the missing historical query and synchronous tail APIs in
 
 - historical query over active file only
 - historical query over active + rotated files
-- `NewestFirst` ordering with limit
+- `LogOrder::NewestFirst` ordering with limit
 - invalid query validation paths
 - malformed record decode failure path
 - follow session starts at tail, not backlog
@@ -262,6 +268,10 @@ reviewable public integration surface.
 - `OtelConfig.timeout_ms`, `initial_backoff_ms`, `max_backoff_ms`, and
   `MetricsConfig.export_interval_ms` converted from raw `u64` to `DurationMs`
 
+`sc-observe` remains a dev-only dependency of `sc-observability-otlp` in this
+phase so the public attachment path can be exercised in integration tests
+without making routing a runtime dependency of the OTLP crate.
+
 ### 8.3 Required behavior
 
 - attachment uses only public APIs from `sc-observability-types`,
@@ -270,6 +280,10 @@ reviewable public integration surface.
 - applications can register wrapped projectors with `ObservabilityBuilder`
   without test-only scaffolding
 - `ObservabilityHealthReport` exposes attached telemetry health when configured
+
+That test coverage requirement does not change the shipped crate layering:
+`sc-observe` is still dev-only for `sc-observability-otlp`, not a Sprint 3
+runtime dependency.
 
 ### 8.4 File targets
 
@@ -328,10 +342,10 @@ Run the final production-readiness pass only after S0 through S3 are merged.
 - release readiness checklist is actually complete
 - team-lead receives a pass/fail publish recommendation backed by evidence
 
-### 9.5 Outstanding Important Findings From Phase Final Review
+### 9.5 Important Findings Carried Into Sprint 4
 
-These findings remain required Sprint 4 hardening scope even after the missing
-API work lands:
+Sprint 4 closed the following carried findings through shipped code changes,
+factual documentation updates, or both:
 
 - `QA-001`
 - `BP-ST-001`
@@ -349,9 +363,54 @@ API work lands:
 - `REQ-QA-008-phase`
 - `REQ-QA-009-phase`
 
-Sprint 4 also explicitly reviews `LogFollowSession` lifecycle typing,
-`BP-TS-001` on Logger and Telemetry shutdown-state hardening, and `BP-TS-002`
-on `SpanRecord<SpanEnded>` optional duration before publish.
+LogFollowSession lifecycle typing: accepted at current design
+(synchronous poll-only, no typestate on session lifetime). The only
+post-construction transition is shutdown, enforced at runtime via the Logger
+shutdown flag; typestate would require shared interior-state machinery with no
+ergonomic benefit for a synchronous polling API. Explicitly deferred to
+post-publish.
+
+Sprint 4 also reviews `BP-TS-001` on Logger and Telemetry shutdown-state
+hardening and `BP-TS-002` on `SpanRecord<SpanEnded>` optional duration before
+publish. The closure rule for this branch is that none of these items remain
+blocking after the Sprint 4 validation suite passes and the
+release-readiness checklist is marked from evidence rather than optimism.
+
+Windows follow limitation: accepted platform limitation for v1. On Windows,
+the non-Unix file identity fallback uses `(len, modified_nanos)` because
+stable Rust does not expose a reliable replacement for Unix `(dev, ino)` file
+identity. That fallback cannot always distinguish ordinary append activity from
+truncate-and-recreate of the active file, so the recreate follow test is
+skipped on Windows with an explicit rationale in the test source.
+
+ARCH-001 verification outcome: `crates/sc-observability-otlp/src/` contains no
+`sc_observe::` imports or runtime calls. The only `sc-observe` usage for the
+public attachment path is in integration tests and manifest wiring, so the
+runtime dependency can move to `dev-dependencies` in the follow-on code pass.
+
+BP-PANIC-001 implementation note: replace the exporter-status `&str` dispatch
+in `Telemetry::record_export_success(...)` and
+`Telemetry::record_export_failure(...)` with a crate-local `ExporterKind` enum.
+The enum should cover the existing `logs`, `traces`, and `metrics` call sites
+and own the mapping to the corresponding exporter health slot.
+
+### 9.6 Explicitly Deferred To Post-Publish
+
+- `BP-TS-001`: deeper typestate hardening for runtime shutdown would require
+  invasive API and ownership changes that are too disruptive for a
+  stability-first publish gate.
+- `BP-TS-002`: replacing the runtime shutdown checks with richer compile-time
+  lifecycle encoding would add shared-state complexity without changing the
+  synchronous query/follow surface.
+- `BP-TS-003`: broader session-lifecycle typestate work is deferred because it
+  would require ergonomic-breaking API refactors after the public surface is
+  already frozen.
+- `BP-NT-001`: additional newtype tightening beyond the shipped stable
+  contracts would force cross-crate signature churn too late in the release
+  process.
+- `BP-NT-002`: further newtype refactors are deferred because they require
+  invasive downstream-facing changes that are incompatible with a
+  stability-first publish gate.
 
 ## 10. Design Closure Loop
 

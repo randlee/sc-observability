@@ -1,3 +1,5 @@
+//! Stable `ErrorCode` registry for `sc-observability`.
+
 use sc_observability_types::ErrorCode;
 
 pub const LOGGER_INVALID_EVENT: ErrorCode =

@@ -1,6 +1,6 @@
 # SC-Observability Public API Checklist
 
-**Status**: Draft for review
+**Status**: Approved
 **Purpose**: Track the intended public API so implementation does not invent or
 change the public surface opportunistically.
 
@@ -58,8 +58,8 @@ Note:
 - [x] `SpanStatus`
 - [x] `SpanStarted`
 - [x] `SpanEnded`
-- [~] `DurationMs`
-- [~] `SpanRecord<S>`
+- [x] `DurationMs`
+- [x] `SpanRecord<S>`
 - [x] `SpanEvent`
 - [x] `SpanSignal`
 - [x] `MetricKind`
@@ -67,18 +67,18 @@ Note:
 - [x] `LoggingHealthState`
 - [x] `SinkHealthState`
 - [x] `SinkHealth`
-- [~] `LoggingHealthReport`
-- [~] `Timestamp` (UTC-enforced public type, not a plain alias)
-- [~] `LogOrder`
-- [~] `LogFieldMatch`
-- [~] `LogQuery`
-- [~] `LogSnapshot`
-- [~] `QueryError`
-- [~] `QueryHealthState`
-- [~] `QueryHealthReport`
-- [~] `TelemetryHealthProvider`
+- [x] `LoggingHealthReport`
+- [x] `Timestamp` (UTC-enforced public type, not a plain alias)
+- [x] `LogOrder`
+- [x] `LogFieldMatch`
+- [x] `LogQuery`
+- [x] `LogSnapshot`
+- [x] `QueryError`
+- [x] `QueryHealthState`
+- [x] `QueryHealthReport`
+- [x] `TelemetryHealthProvider` (sealed)
 - [x] `ObservationHealthState`
-- [~] `ObservabilityHealthReport`
+- [x] `ObservabilityHealthReport`
 - [x] `TelemetryHealthState`
 - [x] `ExporterHealthState`
 - [x] `ExporterHealth`
@@ -108,9 +108,7 @@ Note:
 - trace correlation uses `TraceId` / `SpanId`
 - ATM metadata is not part of the core schema
 
-Planned / pending rules tied to `[~]` items:
-
-- `Timestamp` becomes UTC-only once Sprint 1 ships.
+- `Timestamp` is UTC-only and serializes in canonical UTC RFC3339 form.
 
 ## 3. `sc-observability`
 
@@ -123,10 +121,10 @@ Planned / pending rules tied to `[~]` items:
 - [x] `RedactionPolicy`
 - [x] `Redactor`
 - [x] `Logger`
-- [~] `Logger::query(&self, &LogQuery) -> Result<LogSnapshot, QueryError>`
-- [~] `Logger::follow(&self, LogQuery) -> Result<LogFollowSession, QueryError>`
-- [~] `LogFollowSession`
-- [~] `JsonlLogReader`
+- [x] `Logger::query(&self, &LogQuery) -> Result<LogSnapshot, QueryError>`
+- [x] `Logger::follow(&self, LogQuery) -> Result<LogFollowSession, QueryError>`
+- [x] `LogFollowSession`
+- [x] `JsonlLogReader`
 - [x] `JsonlFileSink`
 - [x] `ConsoleSink`
 - [x] `LogSink`
@@ -143,18 +141,20 @@ Internal-only:
 - file sink is enabled by default
 - console sink is disabled by default
 - sink failures are fail-open
+- logger-owned follow sessions become unavailable after `Logger::shutdown()`
+- `JsonlLogReader` remains independent from `Logger` lifecycle
 
 ## 4. `sc-observe`
 
 ### Finalized Public Types
 
 - [x] `error_codes`
-- [~] `ObservabilityHealthReport`
+- [x] `ObservabilityHealthReport`
 - [x] `ObservationError`
 - [x] `ObservationHealthState`
 - [x] `ObservabilityConfig`
 - [x] `ObservabilityBuilder`
-- [~] `ObservabilityBuilder::with_telemetry_health_provider(...)`
+- [x] `ObservabilityBuilder::with_telemetry_health_provider(...)`
 - [x] `Observability`
 
 Internal-only:
@@ -177,17 +177,17 @@ Internal-only:
 - [x] `TelemetryConfigBuilder`
 - [x] `Telemetry`
 - [x] `OtlpProtocol`
-- [~] `OtelConfig`
+- [x] `OtelConfig`
 - [x] `LogsConfig`
 - [x] `TracesConfig`
-- [~] `MetricsConfig`
+- [x] `MetricsConfig`
 - [x] `ResourceAttributes`
 - [x] `SpanAssembler`
 - [x] `CompleteSpan`
 - [x] `LogExporter`
 - [x] `TraceExporter`
 - [x] `MetricExporter`
-- [~] `TelemetryProjectors<T>`
+- [x] `TelemetryProjectors<T>`
 
 Internal-only:
 
