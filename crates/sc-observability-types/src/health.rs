@@ -99,7 +99,9 @@ pub struct TelemetryHealthReport {
 }
 
 /// Shared contract for exposing telemetry health without an OTLP crate dependency.
-pub trait TelemetryHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync {
+pub trait ObservabilityHealthProvider:
+    telemetry_health_provider_sealed::Sealed + Send + Sync
+{
     fn telemetry_health(&self) -> TelemetryHealthReport;
 }
 

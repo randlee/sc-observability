@@ -53,7 +53,7 @@ It demonstrates the intended integration pattern:
 4. OTLP attaches from `sc-observability-otlp` through the shipped
    `TelemetryProjectors<T>` registration path on `ObservabilityBuilder`
 5. top-level routing health includes the attached telemetry health snapshot via
-   `ObservabilityBuilder::with_telemetry_health_provider(...)`
+   `ObservabilityBuilder::with_observability_health_provider(...)`
 
 ## What The Example Must Prove
 

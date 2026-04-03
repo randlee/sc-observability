@@ -20,7 +20,7 @@ struct RecordingSubscriber {
 }
 
 impl ObservationSubscriber<AgentEvent> for RecordingSubscriber {
-    fn handle(
+    fn observe(
         &self,
         _observation: &Observation<AgentEvent>,
     ) -> Result<(), sc_observability_types::SubscriberError> {

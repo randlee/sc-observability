@@ -2,10 +2,10 @@
 
 /// Seconds in one calendar day; used as the retention-age multiplier.
 pub(crate) const SECS_PER_DAY: u64 = 86_400;
-pub const DEFAULT_LOG_QUEUE_CAPACITY: usize = 1024;
-pub const DEFAULT_ROTATION_MAX_BYTES: u64 = 64 * 1024 * 1024;
-pub const DEFAULT_ROTATION_MAX_FILES: u32 = 10;
-pub const DEFAULT_RETENTION_MAX_AGE_DAYS: u32 = 7;
-pub const DEFAULT_ENABLE_FILE_SINK: bool = true;
-pub const DEFAULT_ENABLE_CONSOLE_SINK: bool = false;
-pub const REDACTED_VALUE: &str = "[REDACTED]";
+pub(crate) const DEFAULT_LOG_QUEUE_CAPACITY: usize = 1024;
+pub(crate) const DEFAULT_ROTATION_MAX_BYTES: u64 = 64 * 1024 * 1024;
+pub(crate) const DEFAULT_ROTATION_MAX_FILES: u32 = 10;
+pub(crate) const DEFAULT_RETENTION_MAX_AGE_DAYS: u32 = 7;
+pub(crate) const DEFAULT_ENABLE_FILE_SINK: bool = true;
+pub(crate) const DEFAULT_ENABLE_CONSOLE_SINK: bool = false;
+pub(crate) const REDACTED_VALUE: &str = "[REDACTED]";

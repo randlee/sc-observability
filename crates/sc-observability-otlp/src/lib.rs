@@ -15,10 +15,11 @@ use std::sync::{Arc, Mutex};
 
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, DurationMs, ErrorContext, EventError, ExportError,
-    FlushError, InitError, LogEvent, LogProjector, MetricProjector, MetricRecord, Observable,
-    Observation, ObservationFilter, ProjectionError, ProjectionRegistration, Remediation,
-    ServiceName, ShutdownError, SpanEnded, SpanEvent, SpanProjector, SpanRecord, SpanSignal,
-    SpanStarted, TelemetryHealthProvider, Timestamp, telemetry_health_provider_sealed,
+    FlushError, InitError, LogEvent, LogProjector, MetricProjector, MetricRecord,
+    ObservabilityHealthProvider, Observable, Observation, ObservationFilter, ProjectionError,
+    ProjectionRegistration, Remediation, ServiceName, ShutdownError, SpanEnded, SpanEvent,
+    SpanProjector, SpanRecord, SpanSignal, SpanStarted, Timestamp,
+    telemetry_health_provider_sealed,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -852,7 +853,7 @@ impl Telemetry {
 
 impl telemetry_health_provider_sealed::Sealed for Telemetry {}
 
-impl TelemetryHealthProvider for Telemetry {
+impl ObservabilityHealthProvider for Telemetry {
     fn telemetry_health(&self) -> TelemetryHealthReport {
         self.health()
     }

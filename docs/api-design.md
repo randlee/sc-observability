@@ -1178,7 +1178,7 @@ pub trait ObservationSubscriber<T>: Send + Sync
 where
     T: Observable,
 {
-    fn handle(&self, observation: &Observation<T>) -> Result<(), SubscriberError>;
+    fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>;
 }
 ```
 

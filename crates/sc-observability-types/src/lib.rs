@@ -39,8 +39,8 @@ pub use errors::{
 #[doc(inline)]
 pub use health::{
     ExporterHealth, ExporterHealthState, LoggingHealthReport, LoggingHealthState,
-    ObservabilityHealthReport, ObservationHealthState, QueryHealthReport, QueryHealthState,
-    SinkHealth, SinkHealthState, TelemetryHealthProvider, TelemetryHealthReport,
+    ObservabilityHealthProvider, ObservabilityHealthReport, ObservationHealthState,
+    QueryHealthReport, QueryHealthState, SinkHealth, SinkHealthState, TelemetryHealthReport,
     TelemetryHealthState,
 };
 #[doc(inline)]
@@ -889,7 +889,7 @@ pub trait ObservationSubscriber<T>: Send + Sync
 where
     T: Observable,
 {
-    fn handle(&self, observation: &Observation<T>) -> Result<(), SubscriberError>;
+    fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>;
 }
 
 /// Open filter contract evaluated before subscriber or projector execution.
