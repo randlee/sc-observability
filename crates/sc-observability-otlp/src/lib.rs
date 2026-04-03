@@ -524,7 +524,7 @@ enum ExporterKind {
 }
 
 impl ExporterKind {
-    fn status_mut<'a>(self, runtime: &'a mut TelemetryRuntime) -> &'a mut ExporterRuntime {
+    fn status_mut(self, runtime: &mut TelemetryRuntime) -> &mut ExporterRuntime {
         match self {
             Self::Logs => &mut runtime.log_status,
             Self::Traces => &mut runtime.trace_status,
