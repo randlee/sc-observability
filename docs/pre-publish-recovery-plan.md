@@ -268,6 +268,10 @@ reviewable public integration surface.
 - `OtelConfig.timeout_ms`, `initial_backoff_ms`, `max_backoff_ms`, and
   `MetricsConfig.export_interval_ms` converted from raw `u64` to `DurationMs`
 
+`sc-observe` remains a dev-only dependency of `sc-observability-otlp` in this
+phase so the public attachment path can be exercised in integration tests
+without making routing a runtime dependency of the OTLP crate.
+
 ### 8.3 Required behavior
 
 - attachment uses only public APIs from `sc-observability-types`,
@@ -276,6 +280,10 @@ reviewable public integration surface.
 - applications can register wrapped projectors with `ObservabilityBuilder`
   without test-only scaffolding
 - `ObservabilityHealthReport` exposes attached telemetry health when configured
+
+That test coverage requirement does not change the shipped crate layering:
+`sc-observe` is still dev-only for `sc-observability-otlp`, not a Sprint 3
+runtime dependency.
 
 ### 8.4 File targets
 
