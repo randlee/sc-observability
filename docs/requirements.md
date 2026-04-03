@@ -54,7 +54,7 @@ Layering requirements:
 - LAY-002 `sc-observability` shall depend on `sc-observability-types` only.
 - LAY-003 `sc-observe` shall depend on `sc-observability-types` and `sc-observability`.
 - LAY-004 `sc-observe` shall not depend on `sc-observability-otlp`.
-- LAY-005 `sc-observability-otlp` shall sit at the top of the stack and may depend on `sc-observability-types`, `sc-observability`, and `sc-observe`.
+- LAY-005 `sc-observability-otlp` shall sit at the top of the stack and may depend on `sc-observability-types` and `sc-observability`; `sc-observe` is permitted only as a dev-only dependency for integration tests.
 - LAY-006 Higher-layer concerns shall not be required to understand or use lower-layer crates.
 - LAY-007 `sc-observability` requirements shall remain fully self-contained and shall not include routing or OTLP concerns.
 
@@ -221,7 +221,7 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
 - OTLP-013 Telemetry health shall expose `TelemetryHealthReport`,
   `ExporterHealth`, and typed `ExporterHealthState` (defined in
   `sc-observability-types` and re-exported by `sc-observability-otlp`).
-- OTLP-014 `sc-observability-otlp` shall depend on `sc-observe` rather than the other way around.
+- OTLP-014 `sc-observability-otlp` shall use `sc-observe` only as a dev-only dependency for integration tests; runtime layering remains governed by [LAY-005](#2-layering-requirements).
 - OTLP-015 `sc-observability-otlp` shall attach OTel behavior using lower-level routing and logging infrastructure from the crates beneath it.
 - OTLP-016 `sc-observability-otlp` shall not push OTLP-specific requirements into `sc-observability`.
 - OTLP-017 `sc-observability-otlp` shall attach to the routing layer by registering `LogProjector`, `SpanProjector`, and `MetricProjector` implementations with `ObservabilityBuilder`, not through direct internal access to `sc-observe` internals.

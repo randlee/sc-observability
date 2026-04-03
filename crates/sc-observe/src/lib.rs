@@ -319,6 +319,11 @@ impl ObservabilityBuilder {
     }
 
     /// Registers one typed observation subscriber at construction time.
+    ///
+    /// # Panics
+    ///
+    /// Panics if internal type-erased routing calls this registration with the
+    /// wrong observation payload type.
     pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self
     where
         T: Observable,
@@ -347,6 +352,11 @@ impl ObservabilityBuilder {
     }
 
     /// Registers one typed observation projection set at construction time.
+    ///
+    /// # Panics
+    ///
+    /// Panics if internal type-erased routing calls this registration with the
+    /// wrong observation payload type.
     pub fn register_projection<T>(mut self, registration: ProjectionRegistration<T>) -> Self
     where
         T: Observable,

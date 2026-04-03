@@ -35,6 +35,7 @@ pub use sc_observability_types::{
 };
 use serde_json::Value;
 
+/// Rotation limits for the built-in JSONL file sink.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RotationPolicy {
     pub max_bytes: u64,
@@ -50,6 +51,7 @@ impl Default for RotationPolicy {
     }
 }
 
+/// Retention limits for rotated JSONL files owned by the built-in file sink.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RetentionPolicy {
     pub max_age_days: u32,
@@ -63,10 +65,13 @@ impl Default for RetentionPolicy {
     }
 }
 
+/// Redacts one key/value pair before an event reaches registered sinks.
 pub trait Redactor: Send + Sync {
+    /// Redacts one event field in place.
     fn redact(&self, key: &str, value: &mut Value);
 }
 
+/// Redaction settings applied to log events before sink fan-out.
 #[derive(Default)]
 pub struct RedactionPolicy {
     pub denylist_keys: Vec<String>,
@@ -84,20 +89,27 @@ impl std::fmt::Debug for RedactionPolicy {
     }
 }
 
+/// Filters events before they are written to one registered sink.
 pub trait LogFilter: Send + Sync {
+    /// Returns whether the sink should receive the event.
     fn accepts(&self, event: &LogEvent) -> bool;
 }
 
+/// One concrete event sink used by the logger runtime.
 pub trait LogSink: Send + Sync {
+    /// Writes one event to the sink.
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
 
+    /// Flushes any buffered sink state.
     fn flush(&self) -> Result<(), LogSinkError> {
         Ok(())
     }
 
+    /// Returns the current sink health snapshot.
     fn health(&self) -> SinkHealth;
 }
 
+/// Construction-time sink registration pairing one sink with an optional filter.
 #[derive(Clone)]
 pub struct SinkRegistration {
     pub sink: Arc<dyn LogSink>,
@@ -105,16 +117,19 @@ pub struct SinkRegistration {
 }
 
 impl SinkRegistration {
+    /// Wraps a sink for logger registration.
     pub fn new(sink: Arc<dyn LogSink>) -> Self {
         Self { sink, filter: None }
     }
 
+    /// Adds a sink-local filter to the registration.
     pub fn with_filter(mut self, filter: Arc<dyn LogFilter>) -> Self {
         self.filter = Some(filter);
         self
     }
 }
 
+/// Public configuration for the lightweight logging runtime.
 #[derive(Debug)]
 pub struct LoggerConfig {
     pub service_name: ServiceName,
@@ -188,6 +203,7 @@ impl LoggerRuntime {
     }
 }
 
+/// Lightweight structured logging runtime with built-in query and follow support.
 pub struct Logger {
     config: LoggerConfig,
     sinks: Vec<SinkRegistration>,
@@ -196,6 +212,7 @@ pub struct Logger {
 }
 
 impl Logger {
+    /// Creates a logger with the configured built-in sinks and runtime state.
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let query_available = active_log_path.exists() || config.enable_file_sink;
@@ -219,10 +236,12 @@ impl Logger {
         })
     }
 
+    /// Registers one additional sink before log emission begins.
     pub fn register_sink(&mut self, registration: SinkRegistration) {
         self.sinks.push(registration);
     }
 
+    /// Emits one structured log event through the configured sinks.
     pub fn emit(&self, event: LogEvent) -> Result<(), EventError> {
         if self.shutdown.load(Ordering::SeqCst) {
             return Err(EventError(Box::new(ErrorContext::new(
@@ -252,6 +271,7 @@ impl Logger {
         Ok(())
     }
 
+    /// Flushes all registered sinks.
     pub fn flush(&self) -> Result<(), FlushError> {
         if self.shutdown.load(Ordering::SeqCst) {
             return Ok(());
@@ -290,6 +310,7 @@ impl Logger {
         }
     }
 
+    /// Shuts the logger down and makes logger-owned query/follow unavailable.
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
@@ -300,6 +321,7 @@ impl Logger {
         Ok(())
     }
 
+    /// Returns aggregate logging and query/follow health for the runtime.
     pub fn health(&self) -> LoggingHealthReport {
         let sink_statuses: Vec<SinkHealth> =
             self.sinks.iter().map(|entry| entry.sink.health()).collect();
@@ -404,6 +426,7 @@ impl Logger {
     }
 }
 
+/// Built-in JSONL file sink with rotation and retention handling.
 pub struct JsonlFileSink {
     path: PathBuf,
     rotation: RotationPolicy,
@@ -414,6 +437,7 @@ pub struct JsonlFileSink {
 }
 
 impl JsonlFileSink {
+    /// Creates a JSONL file sink at the given active log path.
     pub fn new(path: PathBuf, rotation: RotationPolicy, retention: RetentionPolicy) -> Self {
         Self {
             path,
@@ -427,6 +451,7 @@ impl JsonlFileSink {
         }
     }
 
+    /// Returns the active JSONL file path for the sink.
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -438,9 +463,13 @@ impl JsonlFileSink {
             for idx in (1..self.rotation.max_files).rev() {
                 let src = self.rotated_path(idx);
                 let dest = self.rotated_path(idx + 1);
+                // Rotation is best-effort: if a file is absent or another rename wins,
+                // later writes still succeed and the next rotation pass will heal state.
                 let _ = rename_if_present(&src, &dest);
             }
             let rotated = self.rotated_path(1);
+            // The active file rename is also best-effort so logging stays fail-open
+            // even when the platform cannot complete the rotation move immediately.
             let _ = rename_if_present(&self.path, &rotated);
         }
 
@@ -461,8 +490,8 @@ impl JsonlFileSink {
         let Ok(entries) = fs::read_dir(parent) else {
             return;
         };
-        let retention_cutoff =
-            SystemTime::now() - Duration::from_secs((self.retention.max_age_days as u64) * 86_400);
+        let retention_cutoff = SystemTime::now()
+            - Duration::from_secs((self.retention.max_age_days as u64) * constants::SECS_PER_DAY);
 
         for entry in entries.flatten() {
             let path = entry.path();
@@ -484,6 +513,8 @@ impl JsonlFileSink {
                 && let Ok(modified) = metadata.modified()
                 && modified < retention_cutoff
             {
+                // Retention cleanup is best-effort: failure to delete an old file should not
+                // block new writes or turn routine pruning into a runtime error.
                 let _ = fs::remove_file(path);
             }
         }
@@ -559,6 +590,7 @@ impl ConsoleWriter for StdoutConsoleWriter {
     }
 }
 
+/// Built-in sink that renders log events to stdout.
 pub struct ConsoleSink {
     writer: Box<dyn ConsoleWriter>,
     // MUTEX: console sink health mutates as one shared status struct on write failures and reads;
@@ -567,6 +599,7 @@ pub struct ConsoleSink {
 }
 
 impl ConsoleSink {
+    /// Creates a console sink backed by stdout.
     pub fn stdout() -> Self {
         Self::from_writer(Box::new(StdoutConsoleWriter))
     }
@@ -1263,6 +1296,40 @@ mod tests {
             .expect("desc query");
         assert_eq!(request_ids(&desc), ["req-3", "req-2"]);
         assert!(desc.truncated);
+    }
+
+    #[test]
+    fn historical_query_preserves_order_across_multiple_rotated_files() {
+        let root = temp_path("query-multi-rotation-order");
+        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        config.rotation.max_bytes = 350;
+        config.rotation.max_files = 6;
+        let logger = Logger::new(config).expect("logger");
+
+        for request_id in ["req-1", "req-2", "req-3", "req-4", "req-5"] {
+            logger
+                .emit(log_event_with_request(service_name(), request_id, 220))
+                .expect("emit");
+        }
+
+        let oldest_first = logger
+            .query(&query_all(LogOrder::OldestFirst))
+            .expect("oldest-first query");
+        assert_eq!(
+            request_ids(&oldest_first),
+            ["req-1", "req-2", "req-3", "req-4", "req-5"]
+        );
+
+        let newest_first = logger
+            .query(&LogQuery {
+                order: LogOrder::NewestFirst,
+                ..LogQuery::default()
+            })
+            .expect("newest-first query");
+        assert_eq!(
+            request_ids(&newest_first),
+            ["req-5", "req-4", "req-3", "req-2", "req-1"]
+        );
     }
 
     #[test]

@@ -268,6 +268,10 @@ reviewable public integration surface.
 - `OtelConfig.timeout_ms`, `initial_backoff_ms`, `max_backoff_ms`, and
   `MetricsConfig.export_interval_ms` converted from raw `u64` to `DurationMs`
 
+`sc-observe` remains a dev-only dependency of `sc-observability-otlp` in this
+phase so the public attachment path can be exercised in integration tests
+without making routing a runtime dependency of the OTLP crate.
+
 ### 8.3 Required behavior
 
 - attachment uses only public APIs from `sc-observability-types`,
@@ -276,6 +280,10 @@ reviewable public integration surface.
 - applications can register wrapped projectors with `ObservabilityBuilder`
   without test-only scaffolding
 - `ObservabilityHealthReport` exposes attached telemetry health when configured
+
+That test coverage requirement does not change the shipped crate layering:
+`sc-observe` is still dev-only for `sc-observability-otlp`, not a Sprint 3
+runtime dependency.
 
 ### 8.4 File targets
 
@@ -367,6 +375,24 @@ hardening and `BP-TS-002` on `SpanRecord<SpanEnded>` optional duration before
 publish. The closure rule for this branch is that none of these items remain
 blocking after the Sprint 4 validation suite passes and the
 release-readiness checklist is marked from evidence rather than optimism.
+
+Windows follow limitation: accepted platform limitation for v1. On Windows,
+the non-Unix file identity fallback uses `(len, modified_nanos)` because
+stable Rust does not expose a reliable replacement for Unix `(dev, ino)` file
+identity. That fallback cannot always distinguish ordinary append activity from
+truncate-and-recreate of the active file, so the recreate follow test is
+skipped on Windows with an explicit rationale in the test source.
+
+ARCH-001 verification outcome: `crates/sc-observability-otlp/src/` contains no
+`sc_observe::` imports or runtime calls. The only `sc-observe` usage for the
+public attachment path is in integration tests and manifest wiring, so the
+runtime dependency can move to `dev-dependencies` in the follow-on code pass.
+
+BP-PANIC-001 implementation note: replace the exporter-status `&str` dispatch
+in `Telemetry::record_export_success(...)` and
+`Telemetry::record_export_failure(...)` with a crate-local `ExporterKind` enum.
+The enum should cover the existing `logs`, `traces`, and `metrics` call sites
+and own the mapping to the corresponding exporter health slot.
 
 ### 9.6 Explicitly Deferred To Post-Publish
 

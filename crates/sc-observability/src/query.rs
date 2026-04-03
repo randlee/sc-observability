@@ -428,4 +428,27 @@ mod tests {
 
         assert_eq!(tracked_offset_for(&rotated, &previous), 256);
     }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_follow_tracking_resets_when_truncate_recreate_changes_identity() {
+        let previous = vec![TrackedFile {
+            path: PathBuf::from("active.log.jsonl"),
+            identity: FileIdentity {
+                len: 256,
+                modified_nanos: Some(1),
+            },
+            offset: 256,
+        }];
+        let recreated = ResolvedLogFile {
+            path: PathBuf::from("active.log.jsonl"),
+            identity: FileIdentity {
+                len: 0,
+                modified_nanos: Some(2),
+            },
+            len: 64,
+        };
+
+        assert_eq!(tracked_offset_for(&recreated, &previous), 0);
+    }
 }

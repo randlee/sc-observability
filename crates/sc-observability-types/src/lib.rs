@@ -31,16 +31,19 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Rfc3339};
 
+#[doc(inline)]
 pub use errors::{
     EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ObservationError,
     ProjectionError, ShutdownError, SubscriberError, TelemetryError,
 };
+#[doc(inline)]
 pub use health::{
     ExporterHealth, ExporterHealthState, LoggingHealthReport, LoggingHealthState,
     ObservabilityHealthReport, ObservationHealthState, QueryHealthReport, QueryHealthState,
     SinkHealth, SinkHealthState, TelemetryHealthProvider, TelemetryHealthReport,
     TelemetryHealthState,
 };
+#[doc(inline)]
 pub use query::{LogFieldMatch, LogOrder, LogQuery, LogSnapshot, QueryError};
 
 /// Canonical millisecond duration type used across the workspace.
@@ -388,7 +391,7 @@ impl Remediation {
         }
     }
 
-    /// Builds a non-recoverable remediation with the required justification for why recovery is not possible.
+    /// Builds a non-recoverable remediation with the required justification.
     pub fn not_recoverable(justification: impl Into<String>) -> Self {
         Self::NotRecoverable {
             justification: justification.into(),
@@ -1146,6 +1149,30 @@ mod tests {
                 .map(ToString::to_string)
                 .as_deref(),
             Some("disk full")
+        );
+    }
+
+    #[test]
+    fn identity_error_exposes_inner_diagnostic() {
+        let context = ErrorContext::new(
+            error_codes::IDENTITY_RESOLUTION_FAILED,
+            "failed to resolve process identity",
+            Remediation::not_recoverable("configure a valid identity source"),
+        )
+        .detail("source", json!("test"));
+        let error = IdentityError(Box::new(context));
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::IDENTITY_RESOLUTION_FAILED
+        );
+        assert_eq!(
+            error.diagnostic().message,
+            "failed to resolve process identity"
+        );
+        assert_eq!(
+            error.diagnostic().details.get("source"),
+            Some(&json!("test"))
         );
     }
 

@@ -47,7 +47,7 @@ if "sc-observability-otlp" in obs_deps or "sc-observe" in obs_deps:
     raise SystemExit("sc-observability must not depend on sc-observe or sc-observability-otlp")
 if "sc-observability-otlp" in observe_runtime_deps:
     raise SystemExit("sc-observe must not depend on sc-observability-otlp")
-required_otlp = {"serde_json", "thiserror", "sc-observability-types", "sc-observe"}
+required_otlp = {"serde_json", "thiserror", "sc-observability-types"}
 allowed_otlp = required_otlp | {"sc-observability"}
 if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
     raise SystemExit(
@@ -55,7 +55,7 @@ if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubs
     )
 if observe_test_deps:
     raise SystemExit("sc-observe dev-dependencies drifted from allowed baseline")
-if otlp_test_deps:
+if otlp_test_deps - {"sc-observe"}:
     raise SystemExit(
         "sc-observability-otlp dev-dependencies drifted from allowed baseline"
     )
