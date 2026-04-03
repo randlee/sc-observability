@@ -221,7 +221,7 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
 - OTLP-013 Telemetry health shall expose `TelemetryHealthReport`,
   `ExporterHealth`, and typed `ExporterHealthState` (defined in
   `sc-observability-types` and re-exported by `sc-observability-otlp`).
-- OTLP-014 `sc-observability-otlp` shall use `sc-observe` only as a dev-only dependency for integration tests; runtime layering remains governed by [LAY-005](#2-layering-requirements).
+- OTLP-014 `sc-observability-otlp` shall use `sc-observe` only as a dev-only dependency for integration tests; runtime layering remains governed by [LAY-005](#2-layered-dependency-order).
 - OTLP-015 `sc-observability-otlp` shall attach OTel behavior using lower-level routing and logging infrastructure from the crates beneath it.
 - OTLP-016 `sc-observability-otlp` shall not push OTLP-specific requirements into `sc-observability`.
 - OTLP-017 `sc-observability-otlp` shall attach to the routing layer by registering `LogProjector`, `SpanProjector`, and `MetricProjector` implementations with `ObservabilityBuilder`, not through direct internal access to `sc-observe` internals.
