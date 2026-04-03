@@ -494,8 +494,8 @@ mod tests {
         LogFilter, LogSink, Logger, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
     };
     use sc_observability_types::{
-        ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
-        LogSinkError, ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError,
+        ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
+        MetricRecord, ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError,
         SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError,
         TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext,
         TraceId,
