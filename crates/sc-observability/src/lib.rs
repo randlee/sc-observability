@@ -35,8 +35,6 @@ pub use sc_observability_types::{
 };
 use serde_json::Value;
 
-const SECS_PER_DAY: u64 = 86_400;
-
 /// Rotation limits for the built-in JSONL file sink.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RotationPolicy {
@@ -493,7 +491,7 @@ impl JsonlFileSink {
             return;
         };
         let retention_cutoff = SystemTime::now()
-            - Duration::from_secs((self.retention.max_age_days as u64) * SECS_PER_DAY);
+            - Duration::from_secs((self.retention.max_age_days as u64) * constants::SECS_PER_DAY);
 
         for entry in entries.flatten() {
             let path = entry.path();

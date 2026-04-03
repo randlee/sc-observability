@@ -54,7 +54,7 @@ Layering requirements:
 - LAY-002 `sc-observability` shall depend on `sc-observability-types` only.
 - LAY-003 `sc-observe` shall depend on `sc-observability-types` and `sc-observability`.
 - LAY-004 `sc-observe` shall not depend on `sc-observability-otlp`.
-- LAY-005 `sc-observability-otlp` shall sit at the top of the stack and may depend on `sc-observability-types`, `sc-observability`, and `sc-observe`.
+- LAY-005 `sc-observability-otlp` shall sit at the top of the stack and may depend on `sc-observability-types` and `sc-observability`; `sc-observe` is permitted only as a dev-only dependency for integration tests that exercise the public attachment path.
 - LAY-006 Higher-layer concerns shall not be required to understand or use lower-layer crates.
 - LAY-007 `sc-observability` requirements shall remain fully self-contained and shall not include routing or OTLP concerns.
 

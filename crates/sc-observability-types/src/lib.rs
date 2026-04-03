@@ -1153,6 +1153,30 @@ mod tests {
     }
 
     #[test]
+    fn identity_error_exposes_inner_diagnostic() {
+        let context = ErrorContext::new(
+            error_codes::IDENTITY_RESOLUTION_FAILED,
+            "failed to resolve process identity",
+            Remediation::not_recoverable("configure a valid identity source"),
+        )
+        .detail("source", json!("test"));
+        let error = IdentityError(Box::new(context));
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::IDENTITY_RESOLUTION_FAILED
+        );
+        assert_eq!(
+            error.diagnostic().message,
+            "failed to resolve process identity"
+        );
+        assert_eq!(
+            error.diagnostic().details.get("source"),
+            Some(&json!("test"))
+        );
+    }
+
+    #[test]
     fn wrapper_errors_expose_source_context() {
         let wrapped = InitError(Box::new(
             ErrorContext::new(

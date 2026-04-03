@@ -66,7 +66,6 @@ required_otlp = {
     "serde_json",
     "thiserror",
     "sc-observability-types",
-    "sc-observe",
 }
 allowed_otlp = required_otlp | {"sc-observability"}
 if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
@@ -75,10 +74,10 @@ if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubs
         f"{sorted(otlp_runtime_deps)}"
     )
 
-if otlp_test_deps:
+if otlp_test_deps - {"sc-observe"}:
     raise SystemExit(
         "sc-observability-otlp test dependency set drifted from allowed baseline: "
-        f"{sorted(otlp_test_deps)}"
+        f"{sorted(otlp_test_deps - {'sc-observe'})}"
     )
 
 for path in [
