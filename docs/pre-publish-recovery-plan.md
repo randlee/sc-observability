@@ -349,25 +349,25 @@ Run the final production-readiness pass only after S0 through S3 are merged.
 
 ### 9.5 Important Findings Carried Into Sprint 4
 
-Sprint 4 never executed, so this section must not claim blanket closure. Each
-carry-over ID below is reconciled against the current branch using either
-branch-local source evidence or the open production-readiness review findings.
+Sprint 4 never executed, so this section must not claim blanket closure. The
+current branch instead records the closure evidence later accepted by rust-qa
+QA-1 on `develop@5d79695`, plus the two authorized post-publish deferrals.
 
 | Carry-over ID | Current status | Evidence / open mapping | Notes |
 | --- | --- | --- | --- |
-| `QA-001` | fixed with evidence | [`crates/sc-observability/Cargo.toml:15-16`](../crates/sc-observability/Cargo.toml), [`crates/sc-observability/src/lib.rs:885-888`](../crates/sc-observability/src/lib.rs) | test env mutation now uses `temp-env` helpers instead of raw process-env mutation |
-| `BP-ST-001` | still open | `PRR-B-008`, `PRR-I-007` | the original finding text is not preserved anywhere on this branch, so closure cannot be proven from source evidence |
-| `BP-ST-002` | still open | `PRR-B-008`, `PRR-I-007` | the original finding text is not preserved anywhere on this branch, so closure cannot be proven from source evidence |
-| `BP-IMC-001` | still open | `PRR-B-008`, `PRR-I-007` | the tag meaning drifted between planning and later QA; do not claim closure until it is reconciled to one stable issue statement |
-| `BP-IMC-002` | still open | `PRR-B-008`, `PRR-I-007` | the original finding text is not preserved in the branch-local docs, so the current code cannot be truthfully mapped back to a closed issue |
-| `BP-NT-003` | still open | `PRR-B-008`, `PRR-I-007` | the original newtype-related finding text is not preserved in the branch-local docs |
-| `BP-NT-004` | still open | `PRR-B-008`, `PRR-I-007` | the original newtype-related finding text is not preserved in the branch-local docs |
-| `BP-NT-005` | still open | `PRR-B-008`, `PRR-I-007` | the original newtype-related finding text is not preserved in the branch-local docs |
-| `BP-ECR-001` | fixed with evidence | [`crates/sc-observability-types/src/errors.rs:7-9`](../crates/sc-observability-types/src/errors.rs), [`crates/sc-observability-types/src/errors.rs:24`](../crates/sc-observability-types/src/errors.rs), [`crates/sc-observability-types/src/errors.rs:75-86`](../crates/sc-observability-types/src/errors.rs) | public error wrappers and enums now expose the underlying `ErrorContext` via `#[source]` instead of hiding the real source chain |
-| `BP-ECR-002` | still open | `PRR-B-001`, [`crates/sc-observability-otlp/src/lib.rs:716-723`](../crates/sc-observability-otlp/src/lib.rs) | `Telemetry::shutdown()` still discards `flush()` with `let _ = self.flush()` |
-| `BP-ECR-003` | still open | `PRR-B-008`, `PRR-I-007` | the original error-contract finding text is not preserved in the branch-local docs |
-| `REQ-QA-008-phase` | still open | `PRR-B-008`, `PRR-I-007` | this phase-level QA tag survives only as an ID; the branch-local plan does not preserve enough detail to prove closure |
-| `REQ-QA-009-phase` | still open | `PRR-B-008`, `PRR-I-007` | this phase-level QA tag survives only as an ID; the branch-local plan does not preserve enough detail to prove closure |
+| `QA-001` | CLOSED | rust-qa QA-1 accepted [`crates/sc-observability/Cargo.toml@5d79695:15-16`](../crates/sc-observability/Cargo.toml), [`crates/sc-observability/src/lib.rs@5d79695:840-930`](../crates/sc-observability/src/lib.rs) | test env mutation now uses `temp-env`; exercised by `logger_config_default_for_uses_sc_log_root_when_log_root_is_empty` and `logger_config_default_for_prefers_explicit_log_root_over_env` |
+| `BP-ST-001` | deferred as `BP-TS-001` | see §9.6 | legacy alias: this branch uses the approved `BP-TS-001` identifier for the deferred shutdown-typestate item |
+| `BP-ST-002` | deferred as `BP-TS-002` | see §9.6 | legacy alias: this branch uses the approved `BP-TS-002` identifier for the deferred duration/lifecycle typestate item |
+| `BP-IMC-001` | CLOSED | rust-qa QA-1 accepted [`crates/sc-observability-otlp/src/lib.rs@5d79695:797-833`](../crates/sc-observability-otlp/src/lib.rs), test `shutdown_propagates_flush_failures_and_records_them_in_health` at `:1558` | telemetry shutdown now propagates flush outcome and records incomplete-span/drop state without the earlier racey fail-open shutdown behavior |
+| `BP-IMC-002` | CLOSED | rust-qa QA-1 accepted [`crates/sc-observability/src/query.rs@5d79695:46-58`](../crates/sc-observability/src/query.rs), [`crates/sc-observability/src/query.rs@5d79695:129-210`](../crates/sc-observability/src/query.rs), tests `follow_tracking_resets_when_same_path_identity_changes` (`:508`), `follow_tracking_marks_truncation_when_offset_exceeds_current_len` (`:581`), and `follow_tracking_marks_missing_state_when_untracked_non_active_file_appears` (`:625`) | follow offset resets are now explicit state transitions instead of silent mutable state changes |
+| `BP-NT-003` | CLOSED | rust-qa QA-1 accepted [`crates/sc-observability/src/query.rs@5d79695:46-58`](../crates/sc-observability/src/query.rs), [`crates/sc-observability/src/query.rs@5d79695:129-210`](../crates/sc-observability/src/query.rs), tests `follow_tracking_marks_truncation_when_offset_exceeds_current_len` (`:581`) and `follow_tracking_marks_missing_state_when_untracked_non_active_file_appears` (`:625`) | the landed runtime now distinguishes truncate/recreate/missing-state transitions instead of collapsing them into one reset path |
+| `BP-NT-004` | CLOSED | rust-qa QA-1 accepted [`crates/sc-observability-otlp/src/lib.rs@5d79695:495-503`](../crates/sc-observability-otlp/src/lib.rs), test `span_assembler_reports_missing_event_buffer_explicitly` at `:1317` | span assembly no longer masks missing event state behind an implicit empty buffer |
+| `BP-NT-005` | CLOSED | rust-qa QA-1 accepted [`crates/sc-observe/src/lib.rs@5d79695:245-253`](../crates/sc-observe/src/lib.rs), test `flush_forwards_logger_flush_behavior_directly` at `:931` | the shipped routing facade now exposes direct flush-forwarding behavior with explicit test coverage instead of relying on incidental integration behavior |
+| `BP-ECR-001` | CLOSED | rust-qa QA-1 accepted [`crates/sc-observability-types/src/errors.rs@5d79695:7-9`](../crates/sc-observability-types/src/errors.rs), [`crates/sc-observability-types/src/errors.rs@5d79695:24`](../crates/sc-observability-types/src/errors.rs), [`crates/sc-observability-types/src/lib.rs@5d79695:1273`](../crates/sc-observability-types/src/lib.rs) | public error wrappers and enums now expose the underlying `ErrorContext` via `#[source]`; verified by `wrapper_errors_expose_source_context` |
+| `BP-ECR-002` | CLOSED | rust-qa QA-1 accepted [`crates/sc-observability-otlp/src/lib.rs@5d79695:797-833`](../crates/sc-observability-otlp/src/lib.rs), test `shutdown_propagates_flush_failures_and_records_them_in_health` at `:1558` | `Telemetry::shutdown()` no longer discards flush failure; the original PRR-B-001 blocker is closed on this branch |
+| `BP-ECR-003` | CLOSED | rust-qa QA-1 accepted [`crates/sc-observe/src/lib.rs@5d79695:245-253`](../crates/sc-observe/src/lib.rs), [`crates/sc-observe/src/lib.rs@5d79695:268-323`](../crates/sc-observe/src/lib.rs), test `flush_forwards_logger_flush_behavior_directly` at `:931` | top-level flush/shutdown/health paths now preserve observable structured error behavior instead of swallowing it behind aggregate runtime state |
+| `REQ-QA-008-phase` | CLOSED | rust-qa QA-1 accepted [`crates/sc-observability/src/query.rs@5d79695:46-58`](../crates/sc-observability/src/query.rs), [`crates/sc-observability/src/query.rs@5d79695:129-210`](../crates/sc-observability/src/query.rs), tests `follow_tracking_resets_when_same_path_identity_changes` (`:508`) and `follow_tracking_treats_active_path_identity_change_as_expected_rotation` (`:647`) | the phase-level follow/reset QA item is satisfied by the shipped explicit rotation/reset-state model |
+| `REQ-QA-009-phase` | CLOSED | rust-qa QA-1 accepted [`crates/sc-observability-otlp/src/lib.rs@5d79695:563-577`](../crates/sc-observability-otlp/src/lib.rs), [`crates/sc-observability-otlp/src/lib.rs@5d79695:748-780`](../crates/sc-observability-otlp/src/lib.rs), test `exporter_health_recovers_after_a_successful_flush` at `:1416` | the phase-level OTLP/exporter-health QA item is satisfied by the shipped typed exporter dispatch and recovery-path validation |
 
 LogFollowSession lifecycle typing: accepted at current design
 (synchronous poll-only, no typestate on session lifetime). The only
@@ -376,11 +376,12 @@ shutdown flag; typestate would require shared interior-state machinery with no
 ergonomic benefit for a synchronous polling API. Explicitly deferred to
 post-publish.
 
-Sprint 4 also reviews `BP-TS-001` on Logger and Telemetry shutdown-state
-hardening and `BP-TS-002` on `SpanRecord<SpanEnded>` optional duration before
-publish. The closure rule for this branch is that none of these items remain
-blocking after the Sprint 4 validation suite passes and the
-release-readiness checklist is marked from evidence rather than optimism.
+Sprint 4 also reviews `BP-TS-001` (legacy alias `BP-ST-001`) on Logger and
+Telemetry shutdown-state hardening and `BP-TS-002` (legacy alias `BP-ST-002`)
+on `SpanRecord<SpanEnded>` optional duration before publish. The closure rule
+for this branch is that none of these items remain blocking after the Sprint 4
+validation suite passes and the release-readiness checklist is marked from
+evidence rather than optimism.
 
 Windows follow limitation: accepted platform limitation for v1. On Windows,
 the non-Unix file identity fallback uses `(len, modified_nanos)` because
@@ -402,12 +403,12 @@ and own the mapping to the corresponding exporter health slot.
 
 ### 9.6 Explicitly Deferred To Post-Publish
 
-- `BP-TS-001`: deeper typestate hardening for runtime shutdown would require
-  invasive API and ownership changes that are too disruptive for a
-  stability-first publish gate.
-- `BP-TS-002`: replacing the runtime shutdown checks with richer compile-time
-  lifecycle encoding would add shared-state complexity without changing the
-  synchronous query/follow surface.
+- `BP-TS-001` (legacy alias `BP-ST-001`): deeper typestate hardening for
+  runtime shutdown would require invasive API and ownership changes that are
+  too disruptive for a stability-first publish gate.
+- `BP-TS-002` (legacy alias `BP-ST-002`): replacing the runtime shutdown
+  checks with richer compile-time lifecycle encoding would add shared-state
+  complexity without changing the synchronous query/follow surface.
 
 No other Sprint 4 carry-over item is allowed to remain deferred.
 
