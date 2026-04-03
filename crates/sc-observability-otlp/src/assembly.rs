@@ -1,3 +1,10 @@
+//! Span assembly state machine for OTLP export.
+//!
+//! This module turns ordered `Started`/`Event`/`Ended` span signals into a
+//! `CompleteSpan`, reports orphaned or inconsistent lifecycle transitions as
+//! explicit errors, and maintains incomplete-span accounting for runtime
+//! shutdown handling.
+
 use std::collections::HashMap;
 
 use crate::error_codes;

@@ -1,3 +1,9 @@
+//! OTLP configuration types, builder defaults, and construction-time validation.
+//!
+//! This module defines the caller-facing telemetry config surface used to build
+//! a `Telemetry` runtime, including transport options, per-signal batch
+//! settings, and the eager validation rules enforced at initialization time.
+
 use std::path::PathBuf;
 
 use crate::{constants, error_codes};

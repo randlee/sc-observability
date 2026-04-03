@@ -1,3 +1,10 @@
+//! Telemetry projector adapters layered on top of generic observation routing.
+//!
+//! `TelemetryProjectors<T>` wraps ordinary `sc-observe` projectors for one
+//! `Observable` payload type and forwards projected logs, spans, and metrics
+//! into a shared `Telemetry` runtime without changing downstream registration
+//! paths.
+
 use std::sync::Arc;
 
 use crate::{Telemetry, error_codes};
