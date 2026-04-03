@@ -71,7 +71,7 @@ Required outputs:
 - `LogOrder`, `LogFieldMatch`, `LogQuery`, `LogSnapshot`
 - `QueryError`, `QueryHealthState`, `QueryHealthReport`
 - query error-code constants
-- `TelemetryHealthProvider`
+- `ObservabilityHealthProvider`
 - `LoggingHealthReport.query`
 
 Exit criteria:

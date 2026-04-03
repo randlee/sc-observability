@@ -114,11 +114,11 @@ The public OTLP integration surface is frozen as:
   `ProjectionRegistration<T>` suitable for direct registration with
   `ObservabilityBuilder`
 - `Telemetry` participates through workspace-owned plumbing around the public
-  `TelemetryHealthProvider` trait owned by `sc-observability-types`
-- `TelemetryHealthProvider` is frozen as:
-  `pub trait TelemetryHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync { fn telemetry_health(&self) -> TelemetryHealthReport; }`
+  `ObservabilityHealthProvider` trait owned by `sc-observability-types`
+- `ObservabilityHealthProvider` is frozen as:
+  `pub trait ObservabilityHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync { fn telemetry_health(&self) -> TelemetryHealthReport; }`
 - `ObservabilityBuilder` exposes
-  `with_telemetry_health_provider(Arc<dyn TelemetryHealthProvider>)` so
+  `with_observability_health_provider(Arc<dyn ObservabilityHealthProvider>)` so
   `ObservabilityHealthReport.telemetry` can be populated without adding an OTLP
   dependency to `sc-observe`
 
@@ -156,7 +156,7 @@ Close the missing shared-contract and best-practice gaps in
 - `QueryError`
 - `QueryHealthState`
 - `QueryHealthReport`
-- `TelemetryHealthProvider`
+- `ObservabilityHealthProvider`
 - `SpanRecord::end(DurationMs)` update
 - `SC_LOG_QUERY_INVALID_QUERY`
 - `SC_LOG_QUERY_IO`
@@ -267,8 +267,8 @@ reviewable public integration surface.
 
 - `TelemetryProjectors<T>`
 - `TelemetryProjectors<T>::into_registration() -> ProjectionRegistration<T>`
-- `TelemetryHealthProvider` implementation for `Telemetry`
-- `ObservabilityBuilder::with_telemetry_health_provider(...)`
+- `ObservabilityHealthProvider` implementation for `Telemetry`
+- `ObservabilityBuilder::with_observability_health_provider(...)`
 - `ObservabilityHealthReport.telemetry` populated when a provider is attached
 - `OtelConfig.timeout_ms`, `initial_backoff_ms`, `max_backoff_ms`, and
   `MetricsConfig.export_interval_ms` converted from raw `u64` to `DurationMs`

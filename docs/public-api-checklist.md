@@ -76,7 +76,7 @@ Note:
 - [x] `QueryError`
 - [x] `QueryHealthState`
 - [x] `QueryHealthReport`
-- [x] `TelemetryHealthProvider` (sealed)
+- [x] `ObservabilityHealthProvider` (sealed)
 - [x] `ObservationHealthState`
 - [x] `ObservabilityHealthReport`
 - [x] `TelemetryHealthState`
@@ -84,6 +84,7 @@ Note:
 - [x] `ExporterHealth`
 - [x] `TelemetryHealthReport`
 - [x] `ObservationSubscriber<T>`
+- [x] `ObservationSubscriber<T>::observe(...)`
 - [x] `ObservationFilter<T>`
 - [x] `LogProjector<T>`
 - [x] `SpanProjector<T>`
@@ -154,7 +155,7 @@ Internal-only:
 - [x] `ObservationHealthState`
 - [x] `ObservabilityConfig`
 - [x] `ObservabilityBuilder`
-- [x] `ObservabilityBuilder::with_telemetry_health_provider(...)`
+- [x] `ObservabilityBuilder::with_observability_health_provider(...)`
 - [x] `Observability`
 
 Internal-only:

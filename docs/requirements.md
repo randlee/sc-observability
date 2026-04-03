@@ -99,7 +99,7 @@ This crate owns shared neutral contracts only.
 - TYP-035 `sc-observability-types` shall own `QueryError` with variants `InvalidQuery`, `Io`, `Decode`, `Unavailable`, and `Shutdown`.
 - TYP-036 `QueryError` shall map to stable error codes `SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`, `SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN`.
 - TYP-037 `sc-observability-types` shall own `QueryHealthReport` and `QueryHealthState` as the shared health contract for log query/follow availability.
-- TYP-038 `sc-observability-types` shall own `TelemetryHealthProvider` as a sealed shared telemetry-health trait reserved for workspace-owned implementations.
+- TYP-038 `sc-observability-types` shall own `ObservabilityHealthProvider` as a sealed shared telemetry-health trait reserved for workspace-owned implementations.
 
 ## 4. `sc-observability` Requirements
 

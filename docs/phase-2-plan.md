@@ -193,7 +193,7 @@ Ship the entire shared query/follow contract in `sc-observability-types`:
 - `REQ-QA-003`: `QueryError` and `SC_LOG_QUERY_*`
 - `REQ-QA-004`: `QueryHealthReport`, `QueryHealthState`,
   `LoggingHealthReport.query`
-- sealed `TelemetryHealthProvider` trait shipped here for later workspace-owned
+- sealed `ObservabilityHealthProvider` trait shipped here for later workspace-owned
   Sprint `2.4` plumbing
 
 ### Key files to modify
@@ -375,8 +375,8 @@ Close `COBS-2` by shipping the actual public OTLP attachment surface:
 
 - `TelemetryProjectors<T>`
 - `TelemetryProjectors<T>::into_registration()`
-- workspace-owned `TelemetryHealthProvider` plumbing for `Telemetry`
-- `ObservabilityBuilder::with_telemetry_health_provider(...)`
+- workspace-owned `ObservabilityHealthProvider` plumbing for `Telemetry`
+- `ObservabilityBuilder::with_observability_health_provider(...)`
 - `ObservabilityHealthReport.telemetry` populated when configured
 
 ### Estimated waves

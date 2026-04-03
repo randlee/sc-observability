@@ -14,9 +14,10 @@ use std::sync::{Arc, Mutex};
 
 use sc_observability::{Logger, LoggerConfig, RotationPolicy};
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError, Observable,
-    Observation, ProjectionRegistration, Remediation, ServiceName, ShutdownError, SubscriberError,
-    SubscriberRegistration, TelemetryHealthProvider, TelemetryHealthState, ToolName,
+    DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError,
+    ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, Remediation,
+    ServiceName, ShutdownError, SubscriberError, SubscriberRegistration, TelemetryHealthState,
+    ToolName,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -96,7 +97,7 @@ pub struct ObservabilityBuilder {
     config: ObservabilityConfig,
     subscribers: Vec<ErasedSubscriberRegistration>,
     projections: Vec<ErasedProjectionRegistration>,
-    telemetry_health_provider: Option<Arc<dyn TelemetryHealthProvider>>,
+    observability_health_provider: Option<Arc<dyn ObservabilityHealthProvider>>,
 }
 
 /// Producer-facing routing runtime for typed observations.
@@ -105,7 +106,7 @@ pub struct Observability {
     shutdown: AtomicBool,
     subscriber_registrations: Vec<ErasedSubscriberRegistration>,
     projection_registrations: Vec<ErasedProjectionRegistration>,
-    telemetry_health_provider: Option<Arc<dyn TelemetryHealthProvider>>,
+    observability_health_provider: Option<Arc<dyn ObservabilityHealthProvider>>,
     runtime: RuntimeState,
 }
 
@@ -160,7 +161,7 @@ impl Observability {
             config,
             subscribers: Vec::new(),
             projections: Vec::new(),
-            telemetry_health_provider: None,
+            observability_health_provider: None,
         }
     }
 
@@ -249,7 +250,7 @@ impl Observability {
     pub fn health(&self) -> ObservabilityHealthReport {
         let logging = self.logger.health();
         let telemetry = self
-            .telemetry_health_provider
+            .observability_health_provider
             .as_ref()
             .map(|provider| provider.telemetry_health());
         let subscriber_failures = self
@@ -310,11 +311,11 @@ impl Observability {
 
 impl ObservabilityBuilder {
     /// Attaches a generic telemetry health provider without introducing an OTLP crate dependency.
-    pub fn with_telemetry_health_provider(
+    pub fn with_observability_health_provider(
         mut self,
-        provider: Arc<dyn TelemetryHealthProvider>,
+        provider: Arc<dyn ObservabilityHealthProvider>,
     ) -> Self {
-        self.telemetry_health_provider = Some(provider);
+        self.observability_health_provider = Some(provider);
         self
     }
 
@@ -344,7 +345,7 @@ impl ObservabilityBuilder {
                     return Ok(DispatchMatch::Skipped);
                 }
 
-                subscriber.handle(observation)?;
+                subscriber.observe(observation)?;
                 Ok(DispatchMatch::Delivered)
             }),
         });
@@ -428,7 +429,7 @@ impl ObservabilityBuilder {
             shutdown: AtomicBool::new(false),
             subscriber_registrations: self.subscribers,
             projection_registrations: self.projections,
-            telemetry_health_provider: self.telemetry_health_provider,
+            observability_health_provider: self.observability_health_provider,
             runtime: RuntimeState::default(),
         })
     }
@@ -485,7 +486,7 @@ mod tests {
     }
 
     impl ObservationSubscriber<AgentEvent> for RecordingSubscriber {
-        fn handle(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
+        fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
             self.calls.lock().expect("calls poisoned").push(self.id);
             Ok(())
         }
@@ -502,7 +503,7 @@ mod tests {
     struct FailingSubscriber;
 
     impl ObservationSubscriber<AgentEvent> for FailingSubscriber {
-        fn handle(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
+        fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
             Err(SubscriberError(Box::new(ErrorContext::new(
                 error_codes::OBSERVATION_ROUTING_FAILURE,
                 "subscriber failed",
@@ -592,7 +593,7 @@ mod tests {
 
     impl sc_observability_types::telemetry_health_provider_sealed::Sealed for FakeTelemetryProvider {}
 
-    impl TelemetryHealthProvider for FakeTelemetryProvider {
+    impl ObservabilityHealthProvider for FakeTelemetryProvider {
         fn telemetry_health(&self) -> TelemetryHealthReport {
             TelemetryHealthReport {
                 state: self.state,
@@ -873,7 +874,7 @@ mod tests {
         let root = temp_path("telemetry-health");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .with_telemetry_health_provider(Arc::new(FakeTelemetryProvider {
+            .with_observability_health_provider(Arc::new(FakeTelemetryProvider {
                 state: TelemetryHealthState::Degraded,
             }))
             .build()
