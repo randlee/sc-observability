@@ -31,16 +31,19 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Rfc3339};
 
+#[doc(inline)]
 pub use errors::{
     EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ObservationError,
     ProjectionError, ShutdownError, SubscriberError, TelemetryError,
 };
+#[doc(inline)]
 pub use health::{
     ExporterHealth, ExporterHealthState, LoggingHealthReport, LoggingHealthState,
     ObservabilityHealthReport, ObservationHealthState, QueryHealthReport, QueryHealthState,
     SinkHealth, SinkHealthState, TelemetryHealthProvider, TelemetryHealthReport,
     TelemetryHealthState,
 };
+#[doc(inline)]
 pub use query::{LogFieldMatch, LogOrder, LogQuery, LogSnapshot, QueryError};
 
 /// Canonical millisecond duration type used across the workspace.

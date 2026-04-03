@@ -516,6 +516,23 @@ struct ExporterRuntime {
     last_error: Option<DiagnosticSummary>,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum ExporterKind {
+    Logs,
+    Traces,
+    Metrics,
+}
+
+impl ExporterKind {
+    fn status_mut<'a>(self, runtime: &'a mut TelemetryRuntime) -> &'a mut ExporterRuntime {
+        match self {
+            Self::Logs => &mut runtime.log_status,
+            Self::Traces => &mut runtime.trace_status,
+            Self::Metrics => &mut runtime.metric_status,
+        }
+    }
+}
+
 impl Default for ExporterRuntime {
     fn default() -> Self {
         Self {
@@ -665,22 +682,30 @@ impl Telemetry {
 
         if !log_batch.is_empty() {
             match self.log_exporter.export_logs(&log_batch) {
-                Ok(()) => self.record_export_success("logs"),
-                Err(err) => self.record_export_failure("logs", log_batch.len() as u64, err),
+                Ok(()) => self.record_export_success(ExporterKind::Logs),
+                Err(err) => {
+                    self.record_export_failure(ExporterKind::Logs, log_batch.len() as u64, err)
+                }
             }
         }
 
         if !span_batch.is_empty() {
             match self.trace_exporter.export_spans(&span_batch) {
-                Ok(()) => self.record_export_success("traces"),
-                Err(err) => self.record_export_failure("traces", span_batch.len() as u64, err),
+                Ok(()) => self.record_export_success(ExporterKind::Traces),
+                Err(err) => {
+                    self.record_export_failure(ExporterKind::Traces, span_batch.len() as u64, err)
+                }
             }
         }
 
         if !metric_batch.is_empty() {
             match self.metric_exporter.export_metrics(&metric_batch) {
-                Ok(()) => self.record_export_success("metrics"),
-                Err(err) => self.record_export_failure("metrics", metric_batch.len() as u64, err),
+                Ok(()) => self.record_export_success(ExporterKind::Metrics),
+                Err(err) => self.record_export_failure(
+                    ExporterKind::Metrics,
+                    metric_batch.len() as u64,
+                    err,
+                ),
             }
         }
 
@@ -774,31 +799,21 @@ impl Telemetry {
         Ok(())
     }
 
-    fn record_export_success(&self, exporter_name: &str) {
+    fn record_export_success(&self, exporter_kind: ExporterKind) {
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-        let status = match exporter_name {
-            "logs" => &mut runtime.log_status,
-            "traces" => &mut runtime.trace_status,
-            "metrics" => &mut runtime.metric_status,
-            _ => unreachable!("unknown exporter name"),
-        };
+        let status = exporter_kind.status_mut(&mut runtime);
         status.state = ExporterHealthState::Healthy;
         status.last_error = None;
     }
 
-    fn record_export_failure(&self, exporter_name: &str, dropped: u64, error: ExportError) {
+    fn record_export_failure(&self, exporter_kind: ExporterKind, dropped: u64, error: ExportError) {
         self.dropped_exports_total
             .fetch_add(dropped, Ordering::SeqCst);
         let summary = DiagnosticSummary::from(error.diagnostic());
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         runtime.last_error = Some(summary.clone());
 
-        let status = match exporter_name {
-            "logs" => &mut runtime.log_status,
-            "traces" => &mut runtime.trace_status,
-            "metrics" => &mut runtime.metric_status,
-            _ => unreachable!("unknown exporter name"),
-        };
+        let status = exporter_kind.status_mut(&mut runtime);
         status.state = ExporterHealthState::Degraded;
         status.last_error = Some(summary);
     }
