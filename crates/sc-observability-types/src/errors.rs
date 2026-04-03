@@ -70,10 +70,13 @@ error_wrapper!(
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
 pub enum ObservationError {
     #[error("observation runtime is shut down")]
+    /// The routing runtime has already been shut down.
     Shutdown,
     #[error("{0}")]
+    /// The runtime could not accept more observations.
     QueueFull(#[source] Box<ErrorContext>),
     #[error("{0}")]
+    /// No eligible subscriber or projector path handled the observation.
     RoutingFailure(#[source] Box<ErrorContext>),
 }
 
@@ -81,7 +84,9 @@ pub enum ObservationError {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
 pub enum TelemetryError {
     #[error("telemetry runtime is shut down")]
+    /// The telemetry runtime has already been shut down.
     Shutdown,
     #[error("{0}")]
+    /// Export or span-assembly work failed for the requested telemetry operation.
     ExportFailure(#[source] Box<ErrorContext>),
 }

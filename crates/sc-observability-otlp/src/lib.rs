@@ -31,24 +31,38 @@ use serde_json::{Map, Value};
 /// Supported OTLP transport protocols.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OtlpProtocol {
+    /// OTLP over HTTP with protobuf/binary payloads.
     HttpBinary,
+    /// OTLP over HTTP with JSON payloads.
     HttpJson,
+    /// OTLP over gRPC.
     Grpc,
 }
 
 /// Transport-level OTLP configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OtelConfig {
+    /// Whether transport/export is enabled.
     pub enabled: bool,
+    /// Optional OTLP endpoint URL.
     pub endpoint: Option<String>,
+    /// Transport protocol to use.
     pub protocol: OtlpProtocol,
+    /// Optional authorization header value.
     pub auth_header: Option<String>,
+    /// Optional CA bundle path for TLS validation.
     pub ca_file: Option<PathBuf>,
+    /// Whether TLS certificate verification is skipped.
     pub insecure_skip_verify: bool,
+    /// Per-export timeout.
     pub timeout_ms: DurationMs,
+    /// Whether local debug export output is enabled.
     pub debug_local_export: bool,
+    /// Maximum export retry attempts.
     pub max_retries: u32,
+    /// Initial retry backoff.
     pub initial_backoff_ms: DurationMs,
+    /// Maximum retry backoff.
     pub max_backoff_ms: DurationMs,
 }
 
@@ -73,12 +87,14 @@ impl Default for OtelConfig {
 /// Resource attributes attached to exported telemetry.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ResourceAttributes {
+    /// Resource-level key/value attributes attached to exports.
     pub attributes: Map<String, Value>,
 }
 
 /// Log export batching configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LogsConfig {
+    /// Maximum logs per export batch.
     pub batch_size: usize,
 }
 
@@ -93,6 +109,7 @@ impl Default for LogsConfig {
 /// Trace export batching configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TracesConfig {
+    /// Maximum complete spans per export batch.
     pub batch_size: usize,
 }
 
@@ -107,7 +124,9 @@ impl Default for TracesConfig {
 /// Metric export batching configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MetricsConfig {
+    /// Maximum metrics per export batch.
     pub batch_size: usize,
+    /// Periodic export interval for metric flushes.
     pub export_interval_ms: DurationMs,
 }
 
@@ -129,11 +148,17 @@ impl Default for MetricsConfig {
 /// successfully.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TelemetryConfig {
+    /// Service name attached to all exported telemetry.
     pub service_name: ServiceName,
+    /// Resource attributes attached to all exported telemetry.
     pub resource: ResourceAttributes,
+    /// Transport-level OTLP configuration.
     pub transport: OtelConfig,
+    /// Optional log export configuration.
     pub logs: Option<LogsConfig>,
+    /// Optional trace export configuration.
     pub traces: Option<TracesConfig>,
+    /// Optional metric export configuration.
     pub metrics: Option<MetricsConfig>,
 }
 
@@ -236,7 +261,9 @@ impl TelemetryConfigBuilder {
 /// Completed span assembled from a start/event/end stream.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompleteSpan {
+    /// Final completed span record.
     pub record: SpanRecord<SpanEnded>,
+    /// Ordered span events attached before completion.
     pub events: Vec<SpanEvent>,
 }
 
@@ -394,16 +421,19 @@ where
 
 /// Exporter contract for projected log records.
 pub trait LogExporter: Send + Sync {
+    /// Exports one batch of log events.
     fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError>;
 }
 
 /// Exporter contract for completed spans.
 pub trait TraceExporter: Send + Sync {
+    /// Exports one batch of completed spans.
     fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError>;
 }
 
 /// Exporter contract for projected metrics.
 pub trait MetricExporter: Send + Sync {
+    /// Exports one batch of metric records.
     fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError>;
 }
 
@@ -608,6 +638,10 @@ impl Telemetry {
     }
 
     /// Buffers one projected log event for later export.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned.
     pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError> {
         self.ensure_active()?;
         if self.config.logs.is_none() || !self.config.transport.enabled {
@@ -626,6 +660,10 @@ impl Telemetry {
     /// An `Ended` signal without a prior `Started` signal is absorbed and
     /// counted in `malformed_spans_total`. No malformed or incomplete span is
     /// ever forwarded to the OTel backend.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned.
     pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError> {
         self.ensure_active()?;
         if self.config.traces.is_none() || !self.config.transport.enabled {
@@ -658,6 +696,10 @@ impl Telemetry {
     }
 
     /// Buffers one projected metric record for later export.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned.
     pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError> {
         self.ensure_active()?;
         if self.config.metrics.is_none() || !self.config.transport.enabled {
@@ -672,6 +714,10 @@ impl Telemetry {
     }
 
     /// Flushes buffered logs, spans, and metrics through the configured exporters.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned.
     pub fn flush(&self) -> Result<(), FlushError> {
         let _ = self.flush_outcome()?;
         Ok(())
@@ -737,6 +783,12 @@ impl Telemetry {
     }
 
     /// Flushes buffers, drops incomplete spans, and transitions the runtime to shutdown.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned while
+    /// flushing, dropping incomplete spans, or constructing the final shutdown
+    /// error state.
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
@@ -782,6 +834,10 @@ impl Telemetry {
     }
 
     /// Returns the current telemetry health view.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned.
     pub fn health(&self) -> TelemetryHealthReport {
         let runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         let exporter_statuses = vec![
