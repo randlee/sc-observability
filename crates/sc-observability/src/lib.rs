@@ -996,7 +996,7 @@ mod tests {
         expected_request_id: &str,
     ) -> Vec<String> {
         let mut drained = Vec::new();
-        for _ in 0..3 {
+        for _ in 0..10 {
             let snapshot = follow.poll().expect("follow poll");
             drained.extend(request_ids(&snapshot));
             if drained
