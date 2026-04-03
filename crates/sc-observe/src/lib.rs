@@ -491,14 +491,14 @@ where
 mod tests {
     use super::*;
     use sc_observability::{
-        LogFilter, LogSink, LogSinkError, Logger, LoggerConfig, SinkHealth, SinkHealthState,
-        SinkRegistration,
+        LogFilter, LogSink, Logger, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
     };
     use sc_observability_types::{
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
-        ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError, SpanId,
-        SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError, TargetCategory,
-        TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext, TraceId,
+        LogSinkError, ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError,
+        SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError,
+        TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext,
+        TraceId,
     };
 
     #[derive(Debug, Clone)]
