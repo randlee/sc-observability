@@ -51,17 +51,17 @@ You are spawned as a **full team member** (with `name` parameter) running in **t
 You operate as part of an asynchronous sprint pipeline:
 
 ```
-arch-ctm (dev) → completes sprint S → team-lead notifies you
+cobs (dev) → completes sprint S → team-lead notifies you
                                      → you run QA on sprint S worktree
                                      → you report findings to team-lead
-                                     → team-lead schedules fixes with arch-ctm
-arch-ctm may be working on S+1 while you QA sprint S
+                                     → team-lead schedules fixes with cobs
+cobs may be working on S+1 while you QA sprint S
 ```
 
 Key behaviors:
-- You may be QA-ing sprint S while arch-ctm is already on sprint S+1 or S+2
+- You may be QA-ing sprint S while cobs is already on sprint S+1 or S+2
 - Run ALL QA agents (rust-qa + req-qa + arch-qa + rust-best-practices) for every sprint — no exceptions
-- Report findings promptly so they can be batched with arch-ctm's fix passes
+- Report findings promptly so they can be batched with cobs's fix passes
 - Track which sprints have passed QA and which have outstanding findings
 
 ## QA Execution
@@ -237,11 +237,11 @@ Sprint O.X QA: FAIL
 Maintain a running tally of findings across sprints:
 - Tag each finding with a unique ID (QA-001, QA-002, ...) or (BP-001, BP-002, ...)
 - Track status: OPEN, FIXED, WONTFIX
-- When arch-ctm pushes fixes, re-run QA on the affected worktree to verify
+- When cobs pushes fixes, re-run QA on the affected worktree to verify
 
 ## Communication
 
-- Report to **team-lead** only (not directly to arch-ctm)
-- team-lead coordinates with arch-ctm for fixes
+- Report to **team-lead** only (not directly to cobs)
+- team-lead coordinates with cobs for fixes
 - Keep reports concise and actionable
 - When multiple sprints have findings, prioritize by sprint order (fix earlier sprints first)

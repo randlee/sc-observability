@@ -47,8 +47,13 @@ Severity: IMPORTANT
 
 Prefix-parameterized config APIs are preferred over ATM-only generic APIs.
 
-### RULE-005: No file over 1000 lines of non-test code
-Severity: BLOCKING
+### RULE-005: Files over 1000 lines of non-test code warrant modularization review
+Severity: IMPORTANT
+
+A file exceeding 1000 non-test lines is a signal that a module may be doing too
+much or that related concerns have not been separated. Flag it and describe what
+logical groupings exist that could become sub-modules. The goal is genuine
+simplification — not a mechanical re-export split to hit a line count.
 
 ### RULE-006: No hardcoded `/tmp/` paths in production code
 Severity: IMPORTANT

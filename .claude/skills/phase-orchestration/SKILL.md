@@ -1,6 +1,6 @@
 ---
 name: phase-orchestration
-description: Orchestrate multi-sprint phase execution as team-lead (ARCH-ATM). Manages sprint waves, scrum-master lifecycle, PR merges, arch-ctm reviews, and integration branch strategy. This skill is for the TEAM-LEAD only, not for scrum-masters.
+description: Orchestrate multi-sprint phase execution as team-lead (ARCH-ATM). Manages sprint waves, scrum-master lifecycle, PR merges, cobs reviews, and integration branch strategy. This skill is for the TEAM-LEAD only, not for scrum-masters.
 ---
 
 # Phase Orchestration
@@ -14,8 +14,8 @@ This skill defines how the team-lead (ARCH-ATM) orchestrates a development phase
 Before starting a phase:
 1. Phase plan document exists (e.g., `docs/phase-{N}-*.md`) with sprint specs
 2. Integration branch `integrate/phase-{N}` exists and is up to date with `develop`
-3. Claude Code team exists (e.g., `atm-dev`) — do NOT recreate between phases
-4. arch-ctm (Codex) is running and reachable via ATM CLI
+3. Claude Code team exists (e.g., `sc-observability`) — do NOT recreate between phases
+4. cobs (Codex) is running and reachable via ATM CLI
 
 ## Phase Execution Loop
 
@@ -92,36 +92,36 @@ After each scrum-master reports completion:
 
 ### 4. Post-Sprint: Arch-CTM Critical Design Review
 
-**After EVERY sprint PR is merged to `integrate/phase-{N}`**, request arch-ctm review:
+**After EVERY sprint PR is merged to `integrate/phase-{N}`**, request cobs review:
 
-1. Send arch-ctm the diff via ATM CLI:
+1. Send cobs the diff via ATM CLI:
    ```
-   atm send arch-ctm "Sprint {P}.{S} merged (PR #{N}). Critical design review requested. Review: gh pr diff {N} --repo randlee/agent-team-mail. Focus: correctness bugs, architectural violations, missing edge cases."
+   atm send cobs "Sprint {P}.{S} merged (PR #{N}). Critical design review requested. Review: gh pr diff {N} --repo randlee/agent-team-mail. Focus: correctness bugs, architectural violations, missing edge cases."
    ```
-2. Start the next eligible sprint immediately (dependency permitting) — do NOT wait for arch-ctm review before continuing development
-3. Run arch-ctm review in parallel (use delay agent, nudge via tmux if no reply in 2 min)
-4. Track arch-ctm findings:
+2. Start the next eligible sprint immediately (dependency permitting) — do NOT wait for cobs review before continuing development
+3. Run cobs review in parallel (use delay agent, nudge via tmux if no reply in 2 min)
+4. Track cobs findings:
    - **No issues**: Continue to next sprint
-   - **Issues found**: Create/update a **parallel arch-ctm fix track** in a separate worktree (`feature/{P}-fixes-arch-review`) to address findings while later sprint waves continue
-5. arch-ctm is authorized to implement fixes directly in the fix worktree for review findings
-6. Every arch-ctm fix PR MUST be validated by QA agents (`rust-qa-agent` and `atm-qa-agent`) before merge
-7. Do NOT block ongoing sprint execution unless arch-ctm marks findings as critical/blocking
+   - **Issues found**: Create/update a **parallel cobs fix track** in a separate worktree (`feature/{P}-fixes-arch-review`) to address findings while later sprint waves continue
+5. cobs is authorized to implement fixes directly in the fix worktree for review findings
+6. Every cobs fix PR MUST be validated by QA agents (`rust-qa-agent` and `atm-qa-agent`) before merge
+7. Do NOT block ongoing sprint execution unless cobs marks findings as critical/blocking
 
 ### 5. Arch-CTM Fix Sprint (if needed)
 
-If arch-ctm found issues across sprints:
+If cobs found issues across sprints:
 1. Create a new worktree branched from `integrate/phase-{N}` (after all sprint PRs merged)
-2. arch-ctm may execute fixes directly OR team-lead may delegate to a fresh scrum-master
+2. cobs may execute fixes directly OR team-lead may delegate to a fresh scrum-master
 3. Regardless of who implements fixes, run QA validation (`rust-qa-agent` + `atm-qa-agent`) before merge
 4. Follow normal CI loop and merge fix PR to integration branch
-5. Request arch-ctm re-review of fixes if delegated implementation was used
+5. Request cobs re-review of fixes if delegated implementation was used
 
 ### 6. Wave Transitions (for parallel sprints)
 
 Before starting the next wave:
 1. All prerequisite sprints from previous wave must be merged
 2. Integration branch must be updated (`git pull` in worktree)
-3. Any arch-ctm critical/blocking findings must be addressed first
+3. Any cobs critical/blocking findings must be addressed first
 4. New scrum-masters get fresh worktrees branched from updated `integrate/phase-{N}`
 
 ### 7. Phase Completion
@@ -146,15 +146,15 @@ After all sprints (including fix sprint if needed) merge to `integrate/phase-{N}
 
 - **Team persists across phases** — NEVER use TeamDelete on persistent teams
 - **Scrum-masters are ephemeral** — shutdown after their sprint completes
-- **arch-ctm is persistent** — communicates exclusively via ATM CLI (not Claude Code SendMessage)
+- **cobs is persistent** — communicates exclusively via ATM CLI (not Claude Code SendMessage)
 - Between sprints: team stays alive, only scrum-master panes come and go
 
-## ATM CLI Communication (arch-ctm)
+## ATM CLI Communication (cobs)
 
-arch-ctm is a Codex agent that does NOT receive Claude Code team messages. Use ATM CLI only:
+cobs is a Codex agent that does NOT receive Claude Code team messages. Use ATM CLI only:
 
 ```bash
-atm send arch-ctm "message"     # Send
+atm send cobs "message"     # Send
 atm read                         # Check replies
 atm inbox                        # Summary
 ```
@@ -176,8 +176,8 @@ Create one task per sprint at phase start:
 - Do NOT use `rust-developer` as scrum-master subagent_type — use `scrum-master`
 - Do NOT tell scrum-masters to "do the work yourself" — they are coordinators
 - Do NOT do dev or QA work as team-lead — delegate to scrum-masters
-- Do NOT skip post-merge arch-ctm sprint review — every merged sprint requires it
-- Do NOT merge arch-ctm fix PRs without QA validation from both QA agents
+- Do NOT skip post-merge cobs sprint review — every merged sprint requires it
+- Do NOT merge cobs fix PRs without QA validation from both QA agents
 - Do NOT merge without QA pass + CI green
 - Do NOT delete the team between sprints or phases
 - Do NOT clean up worktrees without user approval
