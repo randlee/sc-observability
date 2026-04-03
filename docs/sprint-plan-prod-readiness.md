@@ -44,11 +44,12 @@ production-ready.
 
 Release should remain blocked until:
 
-1. runtime correctness blockers are fixed
-2. the public surface is either documented or intentionally reduced
-3. platform limitations are either eliminated or explicitly downgraded from
+1. Sprint 4 closure accounting is made truthful again
+2. runtime correctness blockers are fixed
+3. the public surface is either documented or intentionally reduced
+4. platform limitations are either eliminated or explicitly downgraded from
    promised semantics before release
-4. the remaining important gaps are closed or formally deferred with updated
+5. the remaining important gaps are closed or formally deferred with updated
    release criteria
 
 ## 3. Finding Inventory
@@ -163,6 +164,26 @@ Release should remain blocked until:
   behavior is explicitly degraded and non-promissory before publish.
 - Breaking API change: `no`
 
+#### PRR-B-008
+
+- Severity: `blocking`
+- Category: documentation / release accounting
+- Location: `docs/pre-publish-recovery-plan.md:345-402`
+- Issue: the controlling recovery plan currently claims Sprint 4 "closed" the
+  carried finding set in §9.5 even though Sprint 4 never executed. That leaves
+  release accounting in an untrustworthy state for the following IDs:
+  `QA-001`, `BP-ST-001`, `BP-ST-002`, `BP-TS-001`, `BP-TS-002`,
+  `BP-IMC-001`, `BP-IMC-002`, `BP-NT-003`, `BP-NT-004`, `BP-NT-005`,
+  `BP-ECR-001`, `BP-ECR-002`, `BP-ECR-003`, `REQ-QA-008-phase`, and
+  `REQ-QA-009-phase`.
+- Required fix:
+  replace the optimistic closure text with a per-ID reconciliation table that
+  maps each carry-over tag to one of:
+  `fixed with evidence`, `still open`, or `explicitly deferred`. Per the
+  addendum for this review, only `BP-TS-001` and `BP-TS-002` may remain
+  deferred post-publish.
+- Breaking API change: `no`
+
 ### 3.2 Important Findings
 
 #### PRR-I-001 / `BP-NAMES-002`
@@ -253,6 +274,22 @@ Release should remain blocked until:
   on broader integration coverage to imply the behavior.
 - Breaking API change: `no`
 
+#### PRR-I-007
+
+- Severity: `important`
+- Category: release planning / traceability
+- Location: `docs/pre-publish-recovery-plan.md:350-364`
+- Issue: the carry-over IDs in §9.5 are listed without preserving their
+  underlying finding text, code references, or acceptance evidence. That means
+  the plan no longer lets a reviewer distinguish "implemented but unverified"
+  from "still unfixed" for `QA-001`, `BP-ST-001`, `BP-ST-002`, `BP-IMC-001`,
+  `BP-IMC-002`, `BP-NT-003`, `BP-NT-004`, `BP-NT-005`, `BP-ECR-001`,
+  `BP-ECR-003`, `REQ-QA-008-phase`, and `REQ-QA-009-phase`.
+- Required fix:
+  rebuild the Sprint 4 carry-over list as a traceable status table with links
+  to the source file, code evidence, or reopened work item for each ID.
+- Breaking API change: `no`
+
 ### 3.3 Minor Findings
 
 #### PRR-M-001 / `REQ-QA-001`
@@ -280,7 +317,54 @@ should not be mixed into non-breaking cleanup without explicit approval:
 No other finding identified in this review requires a mandatory public API
 rename or visibility break.
 
-## 5. Recommended Fix Sprints
+## 5. Sprint 4 Carry-Over Accounting Set
+
+The addendum to this review requires every §9.5 carry-over item to appear in
+the plan, even when the current repo already contains partial code for it.
+
+The production-readiness stance for those IDs is:
+
+| Carry-over ID | Current readiness status in this review | Planning treatment |
+| --- | --- | --- |
+| `QA-001` | not release-closed because Sprint 4 accounting is untrusted | reconcile with evidence |
+| `BP-ST-001` | not release-closed because Sprint 4 accounting is untrusted | reconcile with evidence |
+| `BP-ST-002` | not release-closed because Sprint 4 accounting is untrusted | reconcile with evidence |
+| `BP-IMC-001` | not release-closed because Sprint 4 accounting is untrusted | reconcile with evidence |
+| `BP-IMC-002` | not release-closed because Sprint 4 accounting is untrusted | reconcile with evidence |
+| `BP-NT-003` | not release-closed because Sprint 4 accounting is untrusted | reconcile with evidence |
+| `BP-NT-004` | not release-closed because Sprint 4 accounting is untrusted | reconcile with evidence |
+| `BP-NT-005` | not release-closed because Sprint 4 accounting is untrusted | reconcile with evidence |
+| `BP-ECR-001` | not release-closed because Sprint 4 accounting is untrusted | reconcile with evidence |
+| `BP-ECR-002` | open concrete defect in this review | handled by `PRR-B-001` and reconciliation |
+| `BP-ECR-003` | not release-closed because Sprint 4 accounting is untrusted | reconcile with evidence |
+| `REQ-QA-008-phase` | not release-closed because Sprint 4 accounting is untrusted | reconcile with evidence |
+| `REQ-QA-009-phase` | not release-closed because Sprint 4 accounting is untrusted | reconcile with evidence |
+| `BP-TS-001` | explicit post-publish deferral allowed | keep deferred |
+| `BP-TS-002` | explicit post-publish deferral allowed | keep deferred |
+
+No other §9.5 item should remain in a deferred state for release accounting.
+
+## 6. Recommended Fix Sprints
+
+### Sprint PR-0: Sprint 4 Closure Reconciliation
+
+- Goal: repair the release-accounting baseline before additional fix work is
+  treated as "done"
+- Scope:
+  - `PRR-B-008`
+  - `PRR-I-007`
+  - all required §9.5 carry-over IDs:
+    `QA-001`, `BP-ST-001`, `BP-ST-002`, `BP-IMC-001`, `BP-IMC-002`,
+    `BP-NT-003`, `BP-NT-004`, `BP-NT-005`, `BP-ECR-001`, `BP-ECR-002`,
+    `BP-ECR-003`, `REQ-QA-008-phase`, `REQ-QA-009-phase`
+  - explicit deferral confirmation for `BP-TS-001` and `BP-TS-002`
+- Estimated scope: `medium`
+- Deliverables:
+  - truthful replacement for the optimistic §9.5 closure text
+  - per-ID evidence mapping for every carry-over tag
+  - reopened concrete findings for any carry-over ID that is not fully proven
+  - explicit statement that only `BP-TS-001` and `BP-TS-002` remain deferred
+- Dependencies: none
 
 ### Sprint PR-1: Runtime Correctness And Platform Parity
 
@@ -296,7 +380,8 @@ rename or visibility break.
   - stable follow-tracking behavior across truncate/recreate transitions
   - Windows follow strategy decision implemented and tested
   - invariant-masking defaults removed from span assembly and query tracking
-- Dependencies: none
+- Dependencies:
+  - start after `PR-0` so the repo is no longer claiming unverified closure
 
 ### Sprint PR-2: Public API Containment And Breaking-Surface Decisions
 
@@ -349,31 +434,34 @@ rename or visibility break.
   - start after `PR-1`
   - may run in parallel with the end of `PR-3` once public names are frozen
 
-## 6. Sprint Dependency Order
+## 7. Sprint Dependency Order
 
 The recommended sequence is:
 
-1. `PR-1` runtime correctness and platform parity
-2. `PR-2` public API containment and breaking-surface decisions
-3. `PR-3` rustdoc completeness sweep
-4. `PR-4` panic contract and test hardening
-5. rerun a full production-readiness review on the merged result
+1. `PR-0` Sprint 4 closure reconciliation
+2. `PR-1` runtime correctness and platform parity
+3. `PR-2` public API containment and breaking-surface decisions
+4. `PR-3` rustdoc completeness sweep
+5. `PR-4` panic contract and test hardening
+6. rerun a full production-readiness review on the merged result
 
 Reasoning:
 
+- `PR-0` restores a truthful release baseline and prevents false closure
 - `PR-1` removes the highest-risk runtime ambiguity first
 - `PR-2` freezes the public shape before the docs sweep
 - `PR-3` avoids writing docs against names or exports that will immediately
   change
 - `PR-4` then locks down operational guarantees and release confidence
 
-## 7. Exit Criteria For Re-Review
+## 8. Exit Criteria For Re-Review
 
 Do not rerun a production-readiness signoff until all of the following are
 true:
 
 - every finding in Section 3 is either fixed or explicitly accepted in a signed
   release exception
+- every §9.5 carry-over ID in Section 5 is reconciled with evidence
 - all breaking API changes have approved migration notes
 - `cargo test --workspace` passes
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings` passes
