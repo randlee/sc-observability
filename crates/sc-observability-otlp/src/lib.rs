@@ -638,6 +638,10 @@ impl Telemetry {
     }
 
     /// Buffers one projected log event for later export.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned.
     pub fn emit_log(&self, event: &LogEvent) -> Result<(), TelemetryError> {
         self.ensure_active()?;
         if self.config.logs.is_none() || !self.config.transport.enabled {
@@ -656,6 +660,10 @@ impl Telemetry {
     /// An `Ended` signal without a prior `Started` signal is absorbed and
     /// counted in `malformed_spans_total`. No malformed or incomplete span is
     /// ever forwarded to the OTel backend.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned.
     pub fn emit_span(&self, span: &SpanSignal) -> Result<(), TelemetryError> {
         self.ensure_active()?;
         if self.config.traces.is_none() || !self.config.transport.enabled {
@@ -688,6 +696,10 @@ impl Telemetry {
     }
 
     /// Buffers one projected metric record for later export.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned.
     pub fn emit_metric(&self, metric: &MetricRecord) -> Result<(), TelemetryError> {
         self.ensure_active()?;
         if self.config.metrics.is_none() || !self.config.transport.enabled {
@@ -702,6 +714,10 @@ impl Telemetry {
     }
 
     /// Flushes buffered logs, spans, and metrics through the configured exporters.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned.
     pub fn flush(&self) -> Result<(), FlushError> {
         let _ = self.flush_outcome()?;
         Ok(())
@@ -767,6 +783,12 @@ impl Telemetry {
     }
 
     /// Flushes buffers, drops incomplete spans, and transitions the runtime to shutdown.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned while
+    /// flushing, dropping incomplete spans, or constructing the final shutdown
+    /// error state.
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
@@ -812,6 +834,10 @@ impl Telemetry {
     }
 
     /// Returns the current telemetry health view.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned.
     pub fn health(&self) -> TelemetryHealthReport {
         let runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         let exporter_statuses = vec![

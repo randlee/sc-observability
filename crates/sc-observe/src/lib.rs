@@ -170,6 +170,11 @@ impl Observability {
     }
 
     /// Routes one typed observation through the registered subscribers and projections.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal last-error mutex has been poisoned while the
+    /// runtime records a routing, subscriber, or projection failure summary.
     pub fn emit<T>(&self, observation: Observation<T>) -> Result<(), ObservationError>
     where
         T: Observable,
@@ -238,11 +243,21 @@ impl Observability {
     }
 
     /// Flushes the attached logger. Routing itself does not keep an async queue in v1.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the attached logger encounters a poisoned internal mutex while
+    /// flushing its registered sinks.
     pub fn flush(&self) -> Result<(), FlushError> {
         self.logger.flush()
     }
 
     /// Shuts down the routing runtime. Repeated calls are idempotent.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the attached logger encounters a poisoned internal mutex while
+    /// flushing sinks or updating query/follow health during shutdown.
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
@@ -251,6 +266,10 @@ impl Observability {
     }
 
     /// Returns the aggregate runtime health view.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal last-error mutex has been poisoned.
     pub fn health(&self) -> ObservabilityHealthReport {
         let logging = self.logger.health();
         let telemetry = self
@@ -471,11 +490,15 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sc_observability::{
+        LogFilter, LogSink, Logger, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
+    };
     use sc_observability_types::{
-        ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
-        ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError, SpanId,
-        SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError, TargetCategory,
-        TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext, TraceId,
+        ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
+        MetricRecord, ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError,
+        SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError,
+        TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext,
+        TraceId,
     };
 
     #[derive(Debug, Clone)]
@@ -902,5 +925,70 @@ mod tests {
         let logger_config = config.logger_config().expect("logger config");
 
         assert_eq!(logger_config.queue_capacity, 2048);
+    }
+
+    #[test]
+    fn flush_forwards_logger_flush_behavior_directly() {
+        struct PassthroughFilter;
+
+        impl LogFilter for PassthroughFilter {
+            fn accepts(&self, _event: &LogEvent) -> bool {
+                true
+            }
+        }
+
+        struct FlushFailSink;
+
+        impl LogSink for FlushFailSink {
+            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+                Ok(())
+            }
+
+            fn flush(&self) -> Result<(), LogSinkError> {
+                Err(LogSinkError(Box::new(ErrorContext::new(
+                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                    "flush failed",
+                    Remediation::not_recoverable("test sink intentionally fails flush"),
+                ))))
+            }
+
+            fn health(&self) -> SinkHealth {
+                SinkHealth {
+                    name: "flush-fail".to_string(),
+                    state: SinkHealthState::DegradedDropping,
+                    last_error: None,
+                }
+            }
+        }
+
+        let ok_root = temp_path("flush-ok");
+        let ok_config =
+            ObservabilityConfig::default_for(tool_name(), ok_root.clone()).expect("config");
+        let ok_runtime = Observability::builder(ok_config).build().expect("runtime");
+        assert!(ok_runtime.flush().is_ok());
+
+        let fail_root = temp_path("flush-fail");
+        let mut logger_config =
+            LoggerConfig::default_for(ServiceName::new("obs-app").expect("service"), fail_root);
+        logger_config.enable_file_sink = false;
+        logger_config.enable_console_sink = false;
+        let mut logger = Logger::new(logger_config).expect("logger");
+        logger.register_sink(
+            SinkRegistration::new(Arc::new(FlushFailSink)).with_filter(Arc::new(PassthroughFilter)),
+        );
+
+        let runtime = Observability {
+            logger,
+            shutdown: AtomicBool::new(false),
+            subscriber_registrations: Vec::new(),
+            projection_registrations: Vec::new(),
+            observability_health_provider: None,
+            runtime: RuntimeState::default(),
+        };
+
+        assert!(runtime.flush().is_ok());
+        let logging = runtime.health().logging.expect("logging health");
+        assert_eq!(logging.flush_errors_total, 1);
+        assert!(logging.last_error.is_some());
     }
 }

@@ -289,6 +289,11 @@ impl Logger {
     }
 
     /// Flushes all registered sinks.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an internal sink-health mutex has been poisoned while one of
+    /// the built-in sink implementations is updating its flush state.
     pub fn flush(&self) -> Result<(), FlushError> {
         if self.shutdown.load(Ordering::SeqCst) {
             return Ok(());
@@ -299,6 +304,11 @@ impl Logger {
     }
 
     /// Queries the current JSONL log set synchronously using the shared query contract.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal query-health mutex has been poisoned while the
+    /// runtime records the result of this query.
     pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError> {
         let reader = self.query_reader()?;
         let result = reader.query(query);
@@ -307,6 +317,11 @@ impl Logger {
     }
 
     /// Starts a tail-style follow session from the current end of the visible log set.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal query-health mutex has been poisoned while the
+    /// runtime records the result of this follow-start operation.
     pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError> {
         let active_log_path = self.ensure_query_available()?;
         let result = LogFollowSession::with_health(
@@ -328,6 +343,12 @@ impl Logger {
     }
 
     /// Shuts the logger down and makes logger-owned query/follow unavailable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an internal sink-health mutex or the internal query-health
+    /// mutex has been poisoned while shutdown is flushing sinks and marking
+    /// query/follow unavailable.
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
@@ -339,6 +360,10 @@ impl Logger {
     }
 
     /// Returns aggregate logging and query/follow health for the runtime.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal last-error mutex has been poisoned.
     pub fn health(&self) -> LoggingHealthReport {
         let sink_statuses: Vec<SinkHealth> =
             self.sinks.iter().map(|entry| entry.sink.health()).collect();
@@ -971,7 +996,7 @@ mod tests {
         expected_request_id: &str,
     ) -> Vec<String> {
         let mut drained = Vec::new();
-        for _ in 0..3 {
+        for _ in 0..10 {
             let snapshot = follow.poll().expect("follow poll");
             drained.extend(request_ids(&snapshot));
             if drained
