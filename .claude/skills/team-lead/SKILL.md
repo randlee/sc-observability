@@ -48,8 +48,8 @@ After initialization, the team-lead uses these skills to coordinate the team:
 
 | Skill | Trigger |
 |-------|---------|
-| `/phase-orchestration` | Orchestrate a multi-sprint phase (sprint waves, scrum-master lifecycle, integration branch, arch-ctm reviews) |
-| `/codex-orchestration` | Run phases where arch-ctm (Codex) is sole dev, with pipelined QA via quality-mgr |
+| `/phase-orchestration` | Orchestrate a multi-sprint phase (sprint waves, scrum-master lifecycle, integration branch, cobs reviews) |
+| `/codex-orchestration` | Run phases where cobs (Codex) is sole dev, with pipelined QA via quality-mgr |
 | `/quality-management-gh` | Multi-pass QA on GitHub PRs; CI monitoring; findings/final quality reports. **Simple fixes/small features only** — team-lead runs `atm-qa-agent` + `rust-qa-agent` directly in parallel. For multi-sprint phases use `/phase-orchestration` or `/codex-orchestration` instead. |
 | `/sprint-report` | Generate phase status table or detailed report |
 | `/atm-doctor` | Run ATM health diagnostics; escalate critical findings to atm-doctor agent |
@@ -98,7 +98,7 @@ When assigning work to any teammate:
 
 - **No ACK = work is not being done.** If a teammate does not acknowledge within a reasonable
   window, assume the message was not received and follow up (nudge via tmux for Codex agents).
-- **Codex agents (arch-ctm, arch-ctask)** do not receive message injection — they only see
+- **Codex agents (cobs, arch-ctask)** do not receive message injection — they only see
   new messages when they check mail after their current task completes. Do not assume they
   received a message until they ACK.
 
