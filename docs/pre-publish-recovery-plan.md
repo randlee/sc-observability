@@ -355,12 +355,36 @@ factual documentation updates, or both:
 - `REQ-QA-008-phase`
 - `REQ-QA-009-phase`
 
-Sprint 4 also reviews `LogFollowSession` lifecycle typing, `BP-TS-001` on
-Logger and Telemetry shutdown-state hardening, and `BP-TS-002` on
-`SpanRecord<SpanEnded>` optional duration before publish. The closure rule for
-this branch is that none of these items remain blocking after the Sprint 4
-validation suite passes and the release-readiness checklist is marked from
-evidence rather than optimism.
+LogFollowSession lifecycle typing: accepted at current design
+(synchronous poll-only, no typestate on session lifetime). The only
+post-construction transition is shutdown, enforced at runtime via the Logger
+shutdown flag; typestate would require shared interior-state machinery with no
+ergonomic benefit for a synchronous polling API. Explicitly deferred to
+post-publish.
+
+Sprint 4 also reviews `BP-TS-001` on Logger and Telemetry shutdown-state
+hardening and `BP-TS-002` on `SpanRecord<SpanEnded>` optional duration before
+publish. The closure rule for this branch is that none of these items remain
+blocking after the Sprint 4 validation suite passes and the
+release-readiness checklist is marked from evidence rather than optimism.
+
+### 9.6 Explicitly Deferred To Post-Publish
+
+- `BP-TS-001`: deeper typestate hardening for runtime shutdown would require
+  invasive API and ownership changes that are too disruptive for a
+  stability-first publish gate.
+- `BP-TS-002`: replacing the runtime shutdown checks with richer compile-time
+  lifecycle encoding would add shared-state complexity without changing the
+  synchronous query/follow surface.
+- `BP-TS-003`: broader session-lifecycle typestate work is deferred because it
+  would require ergonomic-breaking API refactors after the public surface is
+  already frozen.
+- `BP-NT-001`: additional newtype tightening beyond the shipped stable
+  contracts would force cross-crate signature churn too late in the release
+  process.
+- `BP-NT-002`: further newtype refactors are deferred because they require
+  invasive downstream-facing changes that are incompatible with a
+  stability-first publish gate.
 
 ## 10. Design Closure Loop
 

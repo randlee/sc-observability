@@ -114,6 +114,9 @@ struct RuntimeState {
     dropped_observations_total: AtomicU64,
     subscriber_failures_total: AtomicU64,
     projection_failures_total: AtomicU64,
+    // MUTEX: routing failures update the shared last_error summary from multiple subscriber and
+    // projector call paths; Mutex keeps the optional summary coherent as one unit, and RwLock
+    // adds no value because writes dominate error reporting.
     last_error: Mutex<Option<DiagnosticSummary>>,
 }
 

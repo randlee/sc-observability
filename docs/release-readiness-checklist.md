@@ -19,4 +19,4 @@
 - [x] ATM adapter example compiles and runs in fail-open mode.
 - [x] Migration guide for ATM consumers exists.
 - [x] Performance review is documented.
-- [x] Final pre-publish review reports zero blocking findings.
+- [ ] Final pre-publish review reports zero blocking findings.

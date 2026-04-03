@@ -384,7 +384,7 @@ impl Logger {
 
     fn ensure_query_available(&self) -> Result<PathBuf, QueryError> {
         if self.shutdown.load(Ordering::SeqCst) {
-            let error = query::shutdown_error("logger query/follow runtime is shut down");
+            let error = query::shutdown_error();
             self.runtime.query_health.record_error(&error);
             return Err(error);
         }
@@ -1388,6 +1388,20 @@ mod tests {
             logger.follow(query_all(LogOrder::OldestFirst)),
             Err(QueryError::Shutdown)
         ));
+    }
+
+    #[test]
+    fn logger_query_returns_shutdown_variant_after_shutdown() {
+        let root = temp_path("query-shutdown-variant");
+        let config = LoggerConfig::default_for(service_name(), root);
+        let logger = Logger::new(config).expect("logger");
+
+        logger.shutdown().expect("shutdown");
+
+        let error = logger
+            .query(&query_all(LogOrder::OldestFirst))
+            .expect_err("shutdown error");
+        assert!(matches!(error, QueryError::Shutdown));
     }
 
     #[test]

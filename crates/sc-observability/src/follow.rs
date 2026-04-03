@@ -42,9 +42,7 @@ impl LogFollowSession {
             .as_ref()
             .is_some_and(|shutdown| shutdown.load(Ordering::SeqCst))
         {
-            let result = Err(query::shutdown_error(
-                "logger query/follow runtime is shut down",
-            ));
+            let result = Err(query::shutdown_error());
             self.health.record_result(&result);
             return result;
         }
