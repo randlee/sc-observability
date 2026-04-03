@@ -78,7 +78,7 @@ Note:
 - [x] `QueryHealthReport`
 - [x] `TelemetryHealthProvider` (sealed)
 - [x] `ObservationHealthState`
-- [~] `ObservabilityHealthReport`
+- [x] `ObservabilityHealthReport`
 - [x] `TelemetryHealthState`
 - [x] `ExporterHealthState`
 - [x] `ExporterHealth`
@@ -147,12 +147,12 @@ Internal-only:
 ### Finalized Public Types
 
 - [x] `error_codes`
-- [~] `ObservabilityHealthReport`
+- [x] `ObservabilityHealthReport`
 - [x] `ObservationError`
 - [x] `ObservationHealthState`
 - [x] `ObservabilityConfig`
 - [x] `ObservabilityBuilder`
-- [~] `ObservabilityBuilder::with_telemetry_health_provider(...)`
+- [x] `ObservabilityBuilder::with_telemetry_health_provider(...)`
 - [x] `Observability`
 
 Internal-only:
@@ -185,7 +185,7 @@ Internal-only:
 - [x] `LogExporter`
 - [x] `TraceExporter`
 - [x] `MetricExporter`
-- [~] `TelemetryProjectors<T>`
+- [x] `TelemetryProjectors<T>`
 
 Internal-only:
 

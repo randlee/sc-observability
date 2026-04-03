@@ -15,6 +15,11 @@ mod sealed {
     pub trait Sealed {}
 }
 
+#[doc(hidden)]
+pub mod telemetry_health_provider_sealed {
+    pub trait Sealed {}
+}
+
 use std::borrow::Cow;
 use std::fmt;
 use std::marker::PhantomData;

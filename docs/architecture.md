@@ -197,7 +197,7 @@ pub struct LoggingHealthReport {
     pub last_error: Option<DiagnosticSummary>,
 }
 
-pub trait TelemetryHealthProvider: sealed::Sealed + Send + Sync {
+pub trait TelemetryHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync {
     fn telemetry_health(&self) -> TelemetryHealthReport;
 }
 
