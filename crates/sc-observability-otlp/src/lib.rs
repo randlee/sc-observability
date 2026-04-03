@@ -5,20 +5,21 @@
 //! routing through ordinary projector registration and keeps OpenTelemetry
 //! transport concerns out of the lower crates.
 
+mod assembly;
+mod config;
+mod projectors;
+
 pub mod constants;
 pub mod error_codes;
 
-use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use assembly::span_timestamp;
+use config::validate_config;
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, DurationMs, ErrorContext, EventError, ExportError,
-    FlushError, InitError, LogEvent, LogProjector, MetricProjector, MetricRecord,
-    ObservabilityHealthProvider, Observable, Observation, ObservationFilter, ProjectionError,
-    ProjectionRegistration, Remediation, ServiceName, ShutdownError, SpanEnded, SpanEvent,
-    SpanProjector, SpanRecord, SpanSignal, SpanStarted, Timestamp,
+    DiagnosticInfo, DiagnosticSummary, ErrorContext, ExportError, FlushError, InitError, LogEvent,
+    MetricRecord, ObservabilityHealthProvider, Remediation, ShutdownError, SpanSignal,
     telemetry_health_provider_sealed,
 };
 #[doc(inline)]
@@ -26,398 +27,17 @@ pub use sc_observability_types::{
     ExporterHealth, ExporterHealthState, TelemetryError, TelemetryHealthReport,
     TelemetryHealthState,
 };
-use serde_json::{Map, Value};
+use serde_json::Value;
 
-/// Supported OTLP transport protocols.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OtlpProtocol {
-    /// OTLP over HTTP with protobuf/binary payloads.
-    HttpBinary,
-    /// OTLP over HTTP with JSON payloads.
-    HttpJson,
-    /// OTLP over gRPC.
-    Grpc,
-}
-
-/// Transport-level OTLP configuration.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OtelConfig {
-    /// Whether transport/export is enabled.
-    pub enabled: bool,
-    /// Optional OTLP endpoint URL.
-    pub endpoint: Option<String>,
-    /// Transport protocol to use.
-    pub protocol: OtlpProtocol,
-    /// Optional authorization header value.
-    pub auth_header: Option<String>,
-    /// Optional CA bundle path for TLS validation.
-    pub ca_file: Option<PathBuf>,
-    /// Whether TLS certificate verification is skipped.
-    pub insecure_skip_verify: bool,
-    /// Per-export timeout.
-    pub timeout_ms: DurationMs,
-    /// Whether local debug export output is enabled.
-    pub debug_local_export: bool,
-    /// Maximum export retry attempts.
-    pub max_retries: u32,
-    /// Initial retry backoff.
-    pub initial_backoff_ms: DurationMs,
-    /// Maximum retry backoff.
-    pub max_backoff_ms: DurationMs,
-}
-
-impl Default for OtelConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            endpoint: None,
-            protocol: OtlpProtocol::HttpBinary,
-            auth_header: None,
-            ca_file: None,
-            insecure_skip_verify: false,
-            timeout_ms: constants::DEFAULT_OTLP_TIMEOUT_MS.into(),
-            debug_local_export: false,
-            max_retries: constants::DEFAULT_OTLP_MAX_RETRIES,
-            initial_backoff_ms: constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS.into(),
-            max_backoff_ms: constants::DEFAULT_OTLP_MAX_BACKOFF_MS.into(),
-        }
-    }
-}
-
-/// Resource attributes attached to exported telemetry.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct ResourceAttributes {
-    /// Resource-level key/value attributes attached to exports.
-    pub attributes: Map<String, Value>,
-}
-
-/// Log export batching configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LogsConfig {
-    /// Maximum logs per export batch.
-    pub batch_size: usize,
-}
-
-impl Default for LogsConfig {
-    fn default() -> Self {
-        Self {
-            batch_size: constants::DEFAULT_LOG_BATCH_SIZE,
-        }
-    }
-}
-
-/// Trace export batching configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TracesConfig {
-    /// Maximum complete spans per export batch.
-    pub batch_size: usize,
-}
-
-impl Default for TracesConfig {
-    fn default() -> Self {
-        Self {
-            batch_size: constants::DEFAULT_TRACE_BATCH_SIZE,
-        }
-    }
-}
-
-/// Metric export batching configuration.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MetricsConfig {
-    /// Maximum metrics per export batch.
-    pub batch_size: usize,
-    /// Periodic export interval for metric flushes.
-    pub export_interval_ms: DurationMs,
-}
-
-impl Default for MetricsConfig {
-    fn default() -> Self {
-        Self {
-            batch_size: constants::DEFAULT_METRIC_BATCH_SIZE,
-            export_interval_ms: constants::DEFAULT_METRIC_EXPORT_INTERVAL_MS.into(),
-        }
-    }
-}
-
-/// Application-owned telemetry configuration.
-///
-/// A configuration with `logs`, `traces`, and `metrics` all set to `None` is
-/// valid for a disabled or not-yet-configured telemetry instance. When
-/// `transport.enabled` is `false`, callers may construct `TelemetryConfig`
-/// without enabling any signal exporters and still build `Telemetry`
-/// successfully.
-#[derive(Debug, Clone, PartialEq)]
-pub struct TelemetryConfig {
-    /// Service name attached to all exported telemetry.
-    pub service_name: ServiceName,
-    /// Resource attributes attached to all exported telemetry.
-    pub resource: ResourceAttributes,
-    /// Transport-level OTLP configuration.
-    pub transport: OtelConfig,
-    /// Optional log export configuration.
-    pub logs: Option<LogsConfig>,
-    /// Optional trace export configuration.
-    pub traces: Option<TracesConfig>,
-    /// Optional metric export configuration.
-    pub metrics: Option<MetricsConfig>,
-}
-
-/// Builder for documented v1 telemetry defaults.
-pub struct TelemetryConfigBuilder {
-    service_name: ServiceName,
-    resource: ResourceAttributes,
-    transport: OtelConfig,
-    logs: Option<LogsConfig>,
-    traces: Option<TracesConfig>,
-    metrics: Option<MetricsConfig>,
-}
-
-impl TelemetryConfigBuilder {
-    /// Starts a builder from the required service name.
-    pub fn new(service_name: ServiceName) -> Self {
-        Self {
-            service_name,
-            resource: ResourceAttributes::default(),
-            transport: OtelConfig::default(),
-            logs: None,
-            traces: None,
-            metrics: None,
-        }
-    }
-
-    /// Overrides the resource attributes attached to exports.
-    pub fn with_resource(mut self, resource: ResourceAttributes) -> Self {
-        self.resource = resource;
-        self
-    }
-
-    /// Overrides the transport configuration.
-    pub fn with_transport(mut self, transport: OtelConfig) -> Self {
-        self.transport = transport;
-        self
-    }
-
-    /// Enables log export with the provided batch policy.
-    pub fn enable_logs(mut self, config: LogsConfig) -> Self {
-        self.logs = Some(config);
-        self
-    }
-
-    /// Disables log export.
-    #[expect(
-        dead_code,
-        reason = "builder keeps explicit crate-local disable toggles for test and internal composition paths"
-    )]
-    pub(crate) fn disable_logs(mut self) -> Self {
-        self.logs = None;
-        self
-    }
-
-    /// Enables trace export with the provided batch policy.
-    pub fn enable_traces(mut self, config: TracesConfig) -> Self {
-        self.traces = Some(config);
-        self
-    }
-
-    /// Disables trace export.
-    #[expect(
-        dead_code,
-        reason = "builder keeps explicit crate-local disable toggles for test and internal composition paths"
-    )]
-    pub(crate) fn disable_traces(mut self) -> Self {
-        self.traces = None;
-        self
-    }
-
-    /// Enables metric export with the provided batch policy.
-    pub fn enable_metrics(mut self, config: MetricsConfig) -> Self {
-        self.metrics = Some(config);
-        self
-    }
-
-    /// Disables metric export.
-    #[expect(
-        dead_code,
-        reason = "builder keeps explicit crate-local disable toggles for test and internal composition paths"
-    )]
-    pub(crate) fn disable_metrics(mut self) -> Self {
-        self.metrics = None;
-        self
-    }
-
-    /// Finalizes the telemetry configuration.
-    pub fn build(self) -> TelemetryConfig {
-        TelemetryConfig {
-            service_name: self.service_name,
-            resource: self.resource,
-            transport: self.transport,
-            logs: self.logs,
-            traces: self.traces,
-            metrics: self.metrics,
-        }
-    }
-}
-
-/// Completed span assembled from a start/event/end stream.
-#[derive(Debug, Clone, PartialEq)]
-pub struct CompleteSpan {
-    /// Final completed span record.
-    pub record: SpanRecord<SpanEnded>,
-    /// Ordered span events attached before completion.
-    pub events: Vec<SpanEvent>,
-}
-
-/// Public helper for attaching telemetry export to ordinary observation projection registration.
-pub struct TelemetryProjectors<T>
-where
-    T: Observable,
-{
-    telemetry: Arc<Telemetry>,
-    log_projector: Option<Arc<dyn LogProjector<T>>>,
-    span_projector: Option<Arc<dyn SpanProjector<T>>>,
-    metric_projector: Option<Arc<dyn MetricProjector<T>>>,
-    filter: Option<Arc<dyn ObservationFilter<T>>>,
-}
-
-impl<T> TelemetryProjectors<T>
-where
-    T: Observable,
-{
-    /// Starts a wrapped projector set for one observation payload type.
-    pub fn new(telemetry: Arc<Telemetry>) -> Self {
-        Self {
-            telemetry,
-            log_projector: None,
-            span_projector: None,
-            metric_projector: None,
-            filter: None,
-        }
-    }
-
-    /// Attaches a log projector whose output is also forwarded into telemetry.
-    pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
-        self.log_projector = Some(projector);
-        self
-    }
-
-    /// Attaches a span projector whose output is also forwarded into telemetry.
-    pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
-        self.span_projector = Some(projector);
-        self
-    }
-
-    /// Attaches a metric projector whose output is also forwarded into telemetry.
-    pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
-        self.metric_projector = Some(projector);
-        self
-    }
-
-    /// Attaches the same observation filter the wrapped projector registration should honor.
-    pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self {
-        self.filter = Some(filter);
-        self
-    }
-
-    /// Converts the wrapped helper into ordinary sc-observe projection registration.
-    pub fn into_registration(self) -> ProjectionRegistration<T> {
-        ProjectionRegistration {
-            log_projector: self.log_projector.map(|inner| {
-                Arc::new(AttachedLogProjector {
-                    telemetry: self.telemetry.clone(),
-                    inner,
-                }) as Arc<dyn LogProjector<T>>
-            }),
-            span_projector: self.span_projector.map(|inner| {
-                Arc::new(AttachedSpanProjector {
-                    telemetry: self.telemetry.clone(),
-                    inner,
-                }) as Arc<dyn SpanProjector<T>>
-            }),
-            metric_projector: self.metric_projector.map(|inner| {
-                Arc::new(AttachedMetricProjector {
-                    telemetry: self.telemetry,
-                    inner,
-                }) as Arc<dyn MetricProjector<T>>
-            }),
-            filter: self.filter,
-        }
-    }
-}
-
-struct AttachedLogProjector<T>
-where
-    T: Observable,
-{
-    telemetry: Arc<Telemetry>,
-    inner: Arc<dyn LogProjector<T>>,
-}
-
-impl<T> LogProjector<T> for AttachedLogProjector<T>
-where
-    T: Observable,
-{
-    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
-        let events = self.inner.project_logs(observation)?;
-        for event in &events {
-            self.telemetry
-                .emit_log(event)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(events)
-    }
-}
-
-struct AttachedSpanProjector<T>
-where
-    T: Observable,
-{
-    telemetry: Arc<Telemetry>,
-    inner: Arc<dyn SpanProjector<T>>,
-}
-
-impl<T> SpanProjector<T> for AttachedSpanProjector<T>
-where
-    T: Observable,
-{
-    fn project_spans(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        let spans = self.inner.project_spans(observation)?;
-        for span in &spans {
-            self.telemetry
-                .emit_span(span)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(spans)
-    }
-}
-
-struct AttachedMetricProjector<T>
-where
-    T: Observable,
-{
-    telemetry: Arc<Telemetry>,
-    inner: Arc<dyn MetricProjector<T>>,
-}
-
-impl<T> MetricProjector<T> for AttachedMetricProjector<T>
-where
-    T: Observable,
-{
-    fn project_metrics(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionError> {
-        let metrics = self.inner.project_metrics(observation)?;
-        for metric in &metrics {
-            self.telemetry
-                .emit_metric(metric)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(metrics)
-    }
-}
+#[doc(inline)]
+pub use assembly::{CompleteSpan, SpanAssembler};
+#[doc(inline)]
+pub use config::{
+    LogsConfig, MetricsConfig, OtelConfig, OtlpProtocol, ResourceAttributes, TelemetryConfig,
+    TelemetryConfigBuilder, TracesConfig,
+};
+#[doc(inline)]
+pub use projectors::TelemetryProjectors;
 
 /// Exporter contract for projected log records.
 pub trait LogExporter: Send + Sync {
@@ -435,90 +55,6 @@ pub trait TraceExporter: Send + Sync {
 pub trait MetricExporter: Send + Sync {
     /// Exports one batch of metric records.
     fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError>;
-}
-
-/// Stateful span assembler used by telemetry export.
-pub struct SpanAssembler {
-    started: HashMap<String, SpanRecord<SpanStarted>>,
-    events: HashMap<String, Vec<SpanEvent>>,
-}
-
-impl SpanAssembler {
-    /// Creates an empty assembler.
-    pub fn new() -> Self {
-        Self {
-            started: HashMap::new(),
-            events: HashMap::new(),
-        }
-    }
-
-    /// Pushes one lifecycle signal through the assembler.
-    pub fn push(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventError> {
-        match signal {
-            SpanSignal::Started(record) => {
-                let key = span_key(
-                    record.trace().trace_id.as_str(),
-                    record.trace().span_id.as_str(),
-                );
-                self.events.insert(key.clone(), Vec::new());
-                self.started.insert(key, record);
-                Ok(None)
-            }
-            SpanSignal::Event(event) => {
-                let key = span_key(event.trace.trace_id.as_str(), event.trace.span_id.as_str());
-                if !self.started.contains_key(&key) {
-                    return Err(EventError(Box::new(ErrorContext::new(
-                        error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
-                        "received span event without a matching started span",
-                        Remediation::not_recoverable(
-                            "emit started, event, and ended span signals in order",
-                        ),
-                    ))));
-                }
-                self.events.entry(key).or_default().push(event);
-                Ok(None)
-            }
-            SpanSignal::Ended(record) => {
-                let key = span_key(
-                    record.trace().trace_id.as_str(),
-                    record.trace().span_id.as_str(),
-                );
-                if self.started.remove(&key).is_none() {
-                    return Err(EventError(Box::new(ErrorContext::new(
-                        error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
-                        "received ended span without a matching started span",
-                        Remediation::not_recoverable(
-                            "emit started and ended span signals with the same trace context",
-                        ),
-                    ))));
-                }
-                let Some(events) = self.events.remove(&key) else {
-                    return Err(EventError(Box::new(ErrorContext::new(
-                        error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
-                        "missing span event buffer for a started span",
-                        Remediation::not_recoverable(
-                            "restart telemetry to restore span assembly state",
-                        ),
-                    ))));
-                };
-                Ok(Some(CompleteSpan { record, events }))
-            }
-        }
-    }
-
-    /// Drops any incomplete span state and returns the number of dropped spans.
-    pub fn flush_incomplete(&mut self) -> usize {
-        let dropped = self.started.len();
-        self.started.clear();
-        self.events.clear();
-        dropped
-    }
-}
-
-impl Default for SpanAssembler {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 /// OTLP-backed telemetry runtime.
@@ -671,11 +207,10 @@ impl Telemetry {
         }
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         if let SpanSignal::Ended(record) = span {
-            let key = span_key(
+            if !runtime.span_assembler.has_started(
                 record.trace().trace_id.as_str(),
                 record.trace().span_id.as_str(),
-            );
-            if !runtime.span_assembler.started.contains_key(&key) {
+            ) {
                 self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
                 let summary = DiagnosticSummary {
                     code: Some(error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED),
@@ -962,87 +497,6 @@ pub(crate) fn export_failure(message: impl Into<String>) -> TelemetryError {
     )))
 }
 
-fn telemetry_to_projection_error(error: sc_observability_types::TelemetryError) -> ProjectionError {
-    match error {
-        sc_observability_types::TelemetryError::Shutdown => {
-            ProjectionError(Box::new(ErrorContext::new(
-                error_codes::TELEMETRY_EXPORT_FAILED,
-                "telemetry runtime is shut down",
-                Remediation::not_recoverable("do not project telemetry after shutdown"),
-            )))
-        }
-        sc_observability_types::TelemetryError::ExportFailure(context) => ProjectionError(context),
-    }
-}
-
-fn span_timestamp(span: &SpanSignal) -> Timestamp {
-    match span {
-        SpanSignal::Started(record) => record.timestamp(),
-        SpanSignal::Event(event) => event.timestamp,
-        SpanSignal::Ended(record) => record.timestamp(),
-    }
-}
-
-fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
-    if config.transport.enabled && config.transport.endpoint.is_none() {
-        return Err(InitError(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
-            "enabled telemetry requires an endpoint",
-            Remediation::recoverable(
-                "set OtelConfig.endpoint before constructing Telemetry",
-                ["disable telemetry for local-only runs if OTLP is not required"],
-            ),
-        ))));
-    }
-    if u64::from(config.transport.timeout_ms) == 0 {
-        return Err(InitError(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
-            "timeout_ms must be greater than zero",
-            Remediation::recoverable(
-                "set timeout_ms to a positive value",
-                ["use documented defaults"],
-            ),
-        ))));
-    }
-    if config.transport.initial_backoff_ms > config.transport.max_backoff_ms {
-        return Err(InitError(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
-            "initial_backoff_ms must not exceed max_backoff_ms",
-            Remediation::recoverable("fix the backoff configuration", ["use documented defaults"]),
-        ))));
-    }
-    if config.transport.enabled
-        && config.logs.is_none()
-        && config.traces.is_none()
-        && config.metrics.is_none()
-    {
-        return Err(InitError(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
-            "at least one telemetry signal must be enabled",
-            Remediation::recoverable(
-                "enable logs, traces, or metrics before constructing Telemetry",
-                ["disable the OTLP layer entirely if telemetry is not needed"],
-            ),
-        ))));
-    }
-    if config.logs.is_some_and(|cfg| cfg.batch_size == 0)
-        || config.traces.is_some_and(|cfg| cfg.batch_size == 0)
-        || config
-            .metrics
-            .is_some_and(|cfg| cfg.batch_size == 0 || u64::from(cfg.export_interval_ms) == 0)
-    {
-        return Err(InitError(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
-            "telemetry batch sizing and export intervals must be positive",
-            Remediation::recoverable(
-                "set batch sizes and export intervals above zero",
-                ["use documented defaults"],
-            ),
-        ))));
-    }
-    Ok(())
-}
-
 fn error_context_from_diagnostic(diagnostic: &sc_observability_types::Diagnostic) -> ErrorContext {
     let mut context = ErrorContext::new(
         diagnostic.code.clone(),
@@ -1096,19 +550,17 @@ fn shutdown_export_failure(summary: Option<DiagnosticSummary>) -> ShutdownError 
     ShutdownError(Box::new(context))
 }
 
-fn span_key(trace_id: &str, span_id: &str) -> String {
-    format!("{trace_id}:{span_id}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use sc_observability_types::{
-        ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-        ProcessIdentity, ServiceName, SpanId, StateTransition, TargetCategory, Timestamp,
-        TraceContext, TraceId,
+        ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
+        ProcessIdentity, ServiceName, SpanEvent, SpanId, SpanRecord, SpanStarted, StateTransition,
+        TargetCategory, Timestamp, TraceContext, TraceId,
     };
-    use serde_json::json;
+    use serde_json::{Map, json};
+
+    use crate::assembly::span_key;
 
     #[derive(Default)]
     struct RecordingLogExporter {
@@ -1335,7 +787,7 @@ mod tests {
                 .is_none()
         );
         let key = span_key(trace.trace_id.as_str(), trace.span_id.as_str());
-        assembler.events.remove(&key);
+        assembler.remove_event_buffer(&key);
 
         let error = assembler
             .push(SpanSignal::Ended(ended))
