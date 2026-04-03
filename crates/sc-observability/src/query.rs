@@ -102,8 +102,7 @@ fn tracked_offset_for(file: &ResolvedLogFile, previous: &[TrackedFile]) -> u64 {
         .unwrap_or(0)
 }
 
-pub(crate) fn shutdown_error(message: impl Into<String>) -> QueryError {
-    let _ = message.into();
+pub(crate) fn shutdown_error() -> QueryError {
     QueryError::Shutdown
 }
 

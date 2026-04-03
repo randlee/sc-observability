@@ -191,7 +191,7 @@ impl LoggerRuntime {
 pub struct Logger {
     config: LoggerConfig,
     sinks: Vec<SinkRegistration>,
-    shutdown: AtomicBool,
+    shutdown: Arc<AtomicBool>,
     runtime: LoggerRuntime,
 }
 
@@ -214,7 +214,7 @@ impl Logger {
         Ok(Self {
             config,
             sinks,
-            shutdown: AtomicBool::new(false),
+            shutdown: Arc::new(AtomicBool::new(false)),
             runtime: LoggerRuntime::new(query_available),
         })
     }
@@ -276,6 +276,7 @@ impl Logger {
             active_log_path,
             query,
             self.runtime.query_health.clone(),
+            Some(self.shutdown.clone()),
         );
         self.runtime.query_health.record_result(&result);
         result
@@ -383,7 +384,7 @@ impl Logger {
 
     fn ensure_query_available(&self) -> Result<PathBuf, QueryError> {
         if self.shutdown.load(Ordering::SeqCst) {
-            let error = query::shutdown_error("logger query/follow runtime is shut down");
+            let error = query::shutdown_error();
             self.runtime.query_health.record_error(&error);
             return Err(error);
         }
@@ -1387,6 +1388,37 @@ mod tests {
             logger.follow(query_all(LogOrder::OldestFirst)),
             Err(QueryError::Shutdown)
         ));
+    }
+
+    #[test]
+    fn logger_query_returns_shutdown_variant_after_shutdown() {
+        let root = temp_path("query-shutdown-variant");
+        let config = LoggerConfig::default_for(service_name(), root);
+        let logger = Logger::new(config).expect("logger");
+
+        logger.shutdown().expect("shutdown");
+
+        let error = logger
+            .query(&query_all(LogOrder::OldestFirst))
+            .expect_err("shutdown error");
+        assert!(matches!(error, QueryError::Shutdown));
+    }
+
+    #[test]
+    fn logger_follow_session_becomes_unavailable_after_shutdown() {
+        let root = temp_path("follow-shutdown");
+        let config = LoggerConfig::default_for(service_name(), root);
+        let logger = Logger::new(config).expect("logger");
+
+        let mut follow = logger
+            .follow(query_all(LogOrder::OldestFirst))
+            .expect("follow");
+        assert!(follow.poll().expect("initial poll").events.is_empty());
+
+        logger.shutdown().expect("shutdown");
+
+        assert!(matches!(follow.poll(), Err(QueryError::Shutdown)));
+        assert_eq!(follow.health().state, QueryHealthState::Unavailable);
     }
 
     #[test]

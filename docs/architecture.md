@@ -239,6 +239,8 @@ Behavioral boundaries:
   live logger instance
 - `LogFollowSession` stays synchronous and caller-driven: no runtime-managed
   background work, async executor, or socket-style streaming surface
+- logger-created `LogFollowSession` instances become unavailable once the
+  owning `Logger` shuts down; `JsonlLogReader` sessions remain independent
 - `QueryError` stays in `sc-observability-types` so all logging query surfaces
   share one stable error vocabulary
 

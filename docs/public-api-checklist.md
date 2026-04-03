@@ -141,6 +141,8 @@ Internal-only:
 - file sink is enabled by default
 - console sink is disabled by default
 - sink failures are fail-open
+- logger-owned follow sessions become unavailable after `Logger::shutdown()`
+- `JsonlLogReader` remains independent from `Logger` lifecycle
 
 ## 4. `sc-observe`
 

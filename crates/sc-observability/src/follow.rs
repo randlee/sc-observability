@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use sc_observability_types::{LogQuery, LogSnapshot, QueryError, QueryHealthReport};
 
@@ -13,6 +14,7 @@ pub struct LogFollowSession {
     query: LogQuery,
     tracked_files: Vec<TrackedFile>,
     health: Arc<QueryHealthTracker>,
+    shutdown: Option<Arc<AtomicBool>>,
 }
 
 impl LogFollowSession {
@@ -20,6 +22,7 @@ impl LogFollowSession {
         active_log_path: PathBuf,
         query: LogQuery,
         health: Arc<QueryHealthTracker>,
+        shutdown: Option<Arc<AtomicBool>>,
     ) -> Result<Self, QueryError> {
         query.validate()?;
         let tracked_files = query::start_follow_tracking(&active_log_path)?;
@@ -28,11 +31,22 @@ impl LogFollowSession {
             query,
             tracked_files,
             health,
+            shutdown,
         })
     }
 
     /// Polls for newly appended matching log records since the last call.
     pub fn poll(&mut self) -> Result<LogSnapshot, QueryError> {
+        if self
+            .shutdown
+            .as_ref()
+            .is_some_and(|shutdown| shutdown.load(Ordering::SeqCst))
+        {
+            let result = Err(query::shutdown_error());
+            self.health.record_result(&result);
+            return result;
+        }
+
         let result = query::poll_follow_snapshot(
             &self.active_log_path,
             &self.query,

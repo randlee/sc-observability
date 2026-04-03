@@ -2,22 +2,21 @@
 
 mod constants;
 
-use std::env;
 use std::collections::HashMap;
+use std::env;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use sc_observability::RotationPolicy;
 use sc_observability_otlp::{
     LogsConfig, MetricsConfig, OtelConfig, OtlpProtocol, Telemetry, TelemetryConfig,
-    TelemetryConfigBuilder, TracesConfig,
+    TelemetryConfigBuilder, TelemetryProjectors, TracesConfig,
 };
 use sc_observability_types::{
     ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
     MetricRecord, LoggingHealthReport, Observation, ObservabilityHealthReport, ProcessIdentity,
-    ProjectionError, ProjectionRegistration, Remediation, ServiceName, SpanEvent, SpanId,
-    SpanRecord, SpanSignal, SpanStarted, SpanStatus, StateTransition, TargetCategory,
-    TelemetryHealthReport, TraceContext, TraceId,
+    Remediation, ServiceName, SpanEvent, SpanId, SpanRecord, SpanSignal, SpanStarted,
+    SpanStatus, StateTransition, TargetCategory, TelemetryHealthReport, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde::{Deserialize, Serialize};
@@ -113,21 +112,14 @@ fn build_observability(
     let telemetry = Arc::new(Telemetry::new(telemetry_config)?);
 
     let runtime = Observability::builder(observability_config)
-        .register_projection(ProjectionRegistration {
-            log_projector: Some(Arc::new(AttachedLogProjector {
-                telemetry: telemetry.clone(),
-                inner: Arc::new(AtmLogProjector),
-            })),
-            span_projector: Some(Arc::new(AttachedSpanProjector {
-                telemetry: telemetry.clone(),
-                inner: Arc::new(AtmSpanProjector::default()),
-            })),
-            metric_projector: Some(Arc::new(AttachedMetricProjector {
-                telemetry: telemetry.clone(),
-                inner: Arc::new(AtmMetricProjector),
-            })),
-            filter: None,
-        })
+        .with_telemetry_health_provider(telemetry.clone())
+        .register_projection(
+            TelemetryProjectors::new(telemetry.clone())
+                .with_log_projector(Arc::new(AtmLogProjector))
+                .with_span_projector(Arc::new(AtmSpanProjector::default()))
+                .with_metric_projector(Arc::new(AtmMetricProjector))
+                .into_registration(),
+        )
         .build()?;
 
     emit_example_sequence(&runtime, service, mode)?;
@@ -152,7 +144,10 @@ fn build_observability(
         .logging
         .clone()
         .ok_or("observability health missing logging snapshot")?;
-    let telemetry_health = telemetry.health();
+    let telemetry_health = observability_health
+        .telemetry
+        .clone()
+        .ok_or("observability health missing telemetry snapshot")?;
 
     Ok(project_health(
         &logging_health,
@@ -310,90 +305,6 @@ fn project_health(
             .as_ref()
             .map(|summary| summary.message.clone())
             .or_else(|| telemetry.last_error.as_ref().map(|summary| summary.message.clone())),
-    }
-}
-
-struct AttachedLogProjector<T> {
-    telemetry: Arc<Telemetry>,
-    inner: Arc<dyn sc_observability_types::LogProjector<T>>,
-}
-
-impl<T> sc_observability_types::LogProjector<T> for AttachedLogProjector<T>
-where
-    T: sc_observability_types::Observable,
-{
-    fn project_logs(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<LogEvent>, ProjectionError> {
-        let events = self.inner.project_logs(observation)?;
-        for event in &events {
-            self.telemetry
-                .emit_log(event)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(events)
-    }
-}
-
-struct AttachedSpanProjector<T> {
-    telemetry: Arc<Telemetry>,
-    inner: Arc<dyn sc_observability_types::SpanProjector<T>>,
-}
-
-impl<T> sc_observability_types::SpanProjector<T> for AttachedSpanProjector<T>
-where
-    T: sc_observability_types::Observable,
-{
-    fn project_spans(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        let spans = self.inner.project_spans(observation)?;
-        for span in &spans {
-            self.telemetry
-                .emit_span(span)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(spans)
-    }
-}
-
-struct AttachedMetricProjector<T> {
-    telemetry: Arc<Telemetry>,
-    inner: Arc<dyn sc_observability_types::MetricProjector<T>>,
-}
-
-impl<T> sc_observability_types::MetricProjector<T> for AttachedMetricProjector<T>
-where
-    T: sc_observability_types::Observable,
-{
-    fn project_metrics(
-        &self,
-        observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionError> {
-        let metrics = self.inner.project_metrics(observation)?;
-        for metric in &metrics {
-            self.telemetry
-                .emit_metric(metric)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(metrics)
-    }
-}
-
-fn telemetry_to_projection_error(
-    error: sc_observability_types::TelemetryError,
-) -> ProjectionError {
-    match error {
-        sc_observability_types::TelemetryError::Shutdown => {
-            ProjectionError(Box::new(sc_observability_types::ErrorContext::new(
-                sc_observability_types::ErrorCode::new_static("SC_ATM_EXAMPLE_SHUTDOWN"),
-                "telemetry runtime is shut down",
-                Remediation::not_recoverable("do not project telemetry after shutdown"),
-            )))
-        }
-        sc_observability_types::TelemetryError::ExportFailure(context) => ProjectionError(context),
     }
 }
 

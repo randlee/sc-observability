@@ -490,6 +490,9 @@ pub struct Telemetry {
     log_exporter: Arc<dyn LogExporter>,
     trace_exporter: Arc<dyn TraceExporter>,
     metric_exporter: Arc<dyn MetricExporter>,
+    // MUTEX: exporter flush/shutdown paths mutate buffers and per-signal runtime health together;
+    // Mutex keeps the buffered state and last_error snapshot consistent, and RwLock would not help
+    // because these operations are write-heavy critical sections.
     runtime: Mutex<TelemetryRuntime>,
     dropped_exports_total: AtomicU64,
     malformed_spans_total: AtomicU64,

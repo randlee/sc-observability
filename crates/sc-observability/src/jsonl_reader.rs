@@ -30,6 +30,7 @@ impl JsonlLogReader {
             self.active_log_path.clone(),
             query,
             Arc::new(QueryHealthTracker::new(QueryHealthState::Healthy)),
+            None,
         )
     }
 }

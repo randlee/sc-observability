@@ -3,10 +3,10 @@
 - [x] All four shared crates build in one workspace.
 - [x] API design, requirements, architecture, and implementation plan docs are present.
 - [x] ATM adapter requirement, architecture, mapping, and example docs are present.
-- [ ] `docs/public-api-checklist.md` is fully marked complete.
-- [ ] Query/follow public API is implemented and matches `requirements.md` and `architecture.md`.
-- [ ] OTLP attachment is shipped as a public integration surface rather than test-only scaffolding.
-- [ ] UTC-only timestamp behavior is enforced in the shared public type system.
+- [x] `docs/public-api-checklist.md` is fully marked complete.
+- [x] Query/follow public API is implemented and matches `requirements.md` and `architecture.md`.
+- [x] OTLP attachment is shipped as a public integration surface rather than test-only scaffolding.
+- [x] UTC-only timestamp behavior is enforced in the shared public type system.
 - [x] Workspace version is set and shared through `workspace.package.version`.
 - [x] Shared crate Cargo manifests use the workspace version.
 - [x] Publish manifest exists at `release/publish-artifacts.toml`.
@@ -15,8 +15,8 @@
 - [x] Release workflow exists.
 - [x] CI includes docs-consistency and dependency-ban validation.
 - [x] Repo-boundary validation passes.
-- [ ] ATM adapter example compiles and runs in normal mode. Re-verify after S3 ships.
-- [ ] ATM adapter example compiles and runs in fail-open mode. Re-verify after S3 ships.
+- [x] ATM adapter example compiles and runs in normal mode.
+- [x] ATM adapter example compiles and runs in fail-open mode.
 - [x] Migration guide for ATM consumers exists.
 - [x] Performance review is documented.
 - [ ] Final pre-publish review reports zero blocking findings.

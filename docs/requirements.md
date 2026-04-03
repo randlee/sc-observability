@@ -141,6 +141,8 @@ This crate is the lightweight logging layer.
   - `emit()` after `shutdown()` returns `EventError`
   - `flush()` after `shutdown()` is idempotent and returns `Ok(())`
   - repeated `shutdown()` calls are idempotent and return `Ok(())`
+  - `query()` after `shutdown()` returns `QueryError::Shutdown`
+  - logger-created `LogFollowSession::poll()` after `shutdown()` returns `QueryError::Shutdown`
 - LOG-024 `sc-observability` shall own a crate-local sealed `LogEmitter` trait for producer injection when logging-only use is desired.
 - LOG-025 `Logger` shall expose a synchronous historical query API `query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>`.
 - LOG-026 `Logger` shall expose a synchronous follow/tail API `follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>`.
@@ -150,6 +152,7 @@ This crate is the lightweight logging layer.
 - LOG-030 Rotation handling for query/follow shall avoid duplicating or silently skipping committed log records when the active file is renamed or recreated.
 - LOG-031 `LoggingHealthReport` shall expose query/follow availability through an optional `QueryHealthReport`.
 - LOG-032 Query/follow APIs shall remain usable in logging-only deployments and shall not introduce ATM-specific types, daemon requirements, or `agent-team-mail-*` dependencies.
+- LOG-033 `JsonlLogReader` query/follow operations shall remain independent of `Logger` lifecycle and shall stay usable for offline inspection after a logger-owned runtime shuts down.
 
 ### 4.1 Query/Follow Issue Traceability
 
