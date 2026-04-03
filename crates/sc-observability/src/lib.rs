@@ -38,7 +38,9 @@ use serde_json::Value;
 /// Rotation limits for the built-in JSONL file sink.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RotationPolicy {
+    /// Maximum size of the active JSONL file before rotation.
     pub max_bytes: u64,
+    /// Maximum number of rotated files to retain.
     pub max_files: u32,
 }
 
@@ -54,6 +56,7 @@ impl Default for RotationPolicy {
 /// Retention limits for rotated JSONL files owned by the built-in file sink.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RetentionPolicy {
+    /// Maximum age in days for rotated JSONL files.
     pub max_age_days: u32,
 }
 
@@ -74,8 +77,11 @@ pub trait Redactor: Send + Sync {
 /// Redaction settings applied to log events before sink fan-out.
 #[derive(Default)]
 pub struct RedactionPolicy {
+    /// Exact field names that must always be redacted.
     pub denylist_keys: Vec<String>,
+    /// Whether bearer-token shaped values should be redacted.
     pub redact_bearer_tokens: bool,
+    /// Additional caller-supplied redactors.
     pub custom_redactors: Vec<Arc<dyn Redactor>>,
 }
 
@@ -112,7 +118,9 @@ pub trait LogSink: Send + Sync {
 /// Construction-time sink registration pairing one sink with an optional filter.
 #[derive(Clone)]
 pub struct SinkRegistration {
+    /// Concrete sink implementation.
     pub sink: Arc<dyn LogSink>,
+    /// Optional sink-local filter.
     pub filter: Option<Arc<dyn LogFilter>>,
 }
 
@@ -132,16 +140,25 @@ impl SinkRegistration {
 /// Public configuration for the lightweight logging runtime.
 #[derive(Debug)]
 pub struct LoggerConfig {
+    /// Stable service name attached to emitted records.
     pub service_name: ServiceName,
+    /// Root directory that owns the service log tree.
     pub log_root: PathBuf,
+    /// Minimum severity level emitted by the logger.
     pub level: LevelFilter,
     /// Reserved for future async/backpressure implementation. Phase 1 execution is synchronous; this value is stored but not yet applied.
     pub queue_capacity: usize,
+    /// Rotation settings for the built-in JSONL sink.
     pub rotation: RotationPolicy,
+    /// Retention settings for rotated JSONL files.
     pub retention: RetentionPolicy,
+    /// Redaction policy applied before sink fan-out.
     pub redaction: RedactionPolicy,
+    /// Process identity policy for emitted records.
     pub process_identity: ProcessIdentityPolicy,
+    /// Whether the built-in JSONL file sink is enabled.
     pub enable_file_sink: bool,
+    /// Whether the built-in console sink is enabled.
     pub enable_console_sink: bool,
 }
 

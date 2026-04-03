@@ -374,8 +374,16 @@ impl RecoverableSteps {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Remediation {
-    Recoverable { steps: RecoverableSteps },
-    NotRecoverable { justification: String },
+    /// The caller can recover by following the ordered steps.
+    Recoverable {
+        /// Ordered recovery steps the caller can take.
+        steps: RecoverableSteps,
+    },
+    /// The caller cannot recover automatically and must accept the justification.
+    NotRecoverable {
+        /// Reason the failure cannot be recovered automatically.
+        justification: String,
+    },
 }
 
 impl Remediation {
@@ -402,28 +410,39 @@ impl Remediation {
 /// Structured diagnostic payload reusable across CLI, logging, and telemetry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Diagnostic {
+    /// UTC timestamp when the diagnostic was created.
     pub timestamp: Timestamp,
+    /// Stable machine-readable error code.
     pub code: ErrorCode,
+    /// Human-readable summary message.
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable cause string.
     pub cause: Option<String>,
+    /// Required remediation guidance.
     pub remediation: Remediation,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional documentation reference or URL.
     pub docs: Option<String>,
     #[serde(default, skip_serializing_if = "Map::is_empty")]
+    /// Structured machine-readable details.
     pub details: Map<String, Value>,
 }
 
 /// Trait for public error surfaces that can expose an attached diagnostic.
 pub trait DiagnosticInfo: sealed::Sealed {
+    /// Returns the structured diagnostic attached to this error surface.
     fn diagnostic(&self) -> &Diagnostic;
 }
 
 /// Small diagnostic summary used in health and last-error reporting.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiagnosticSummary {
+    /// Optional stable error code for the last reported failure.
     pub code: Option<ErrorCode>,
+    /// Human-readable summary message.
     pub message: String,
+    /// UTC timestamp when the summarized diagnostic occurred.
     pub at: Timestamp,
 }
 
@@ -521,38 +540,56 @@ impl std::error::Error for ErrorContext {
 /// Canonical event/log severity level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Level {
+    /// Verbose trace-level event.
     Trace,
+    /// Debug-level event intended for development or diagnostics.
     Debug,
+    /// Informational event for normal operation.
     Info,
+    /// Warning event signaling degraded or unexpected behavior.
     Warn,
+    /// Error event signaling a failure.
     Error,
 }
 
 /// Level threshold used by filtering surfaces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LevelFilter {
+    /// Allow trace, debug, info, warn, and error events.
     Trace,
+    /// Allow debug, info, warn, and error events.
     Debug,
+    /// Allow info, warn, and error events.
     Info,
+    /// Allow warn and error events.
     Warn,
+    /// Allow only error events.
     Error,
+    /// Disable all events.
     Off,
 }
 
 /// Caller-resolved process identity attached to observations and log events.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ProcessIdentity {
+    /// Optional hostname attached to the event or observation.
     pub hostname: Option<String>,
+    /// Optional process identifier attached to the event or observation.
     pub pid: Option<u32>,
 }
 
 /// Policy describing how process identity is populated at runtime.
 pub enum ProcessIdentityPolicy {
+    /// Resolve process identity automatically using the default runtime behavior.
     Auto,
+    /// Use a fixed caller-supplied identity.
     Fixed {
+        /// Fixed hostname value.
         hostname: Option<String>,
+        /// Fixed process identifier value.
         pid: Option<u32>,
     },
+    /// Delegate identity resolution to a caller-supplied resolver.
     Resolver(Arc<dyn ProcessIdentityResolver>),
 }
 
@@ -574,6 +611,7 @@ impl std::fmt::Debug for ProcessIdentityPolicy {
 
 /// Open resolver contract for caller-defined process identity lookup.
 pub trait ProcessIdentityResolver: Send + Sync {
+    /// Resolves the process identity to attach to emitted records.
     fn resolve(&self) -> Result<ProcessIdentity, IdentityError>;
 }
 
@@ -648,8 +686,11 @@ fn validate_lower_hex(
 /// Generic trace correlation context shared by logs, spans, and observations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TraceContext {
+    /// W3C-compatible trace identifier.
     pub trace_id: TraceId,
+    /// Current span identifier.
     pub span_id: SpanId,
+    /// Optional parent span identifier.
     pub parent_span_id: Option<SpanId>,
 }
 
@@ -681,11 +722,17 @@ pub struct Observation<T>
 where
     T: Observable,
 {
+    /// Envelope schema version.
     pub version: String,
+    /// UTC observation timestamp.
     pub timestamp: Timestamp,
+    /// Service that emitted the observation.
     pub service: ServiceName,
+    /// Process identity attached to the observation.
     pub identity: ProcessIdentity,
+    /// Optional trace context for correlation.
     pub trace: Option<TraceContext>,
+    /// Caller-owned typed payload.
     pub payload: T,
 }
 
@@ -709,28 +756,46 @@ where
 /// Structured log record emitted by the logging and routing layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
+    /// Log schema version.
     pub version: String,
+    /// UTC event timestamp.
     pub timestamp: Timestamp,
+    /// Event severity.
     pub level: Level,
+    /// Service that emitted the event.
     pub service: ServiceName,
+    /// Stable target/category label.
     pub target: TargetCategory,
+    /// Stable action label.
     pub action: ActionName,
+    /// Optional human-readable message.
     pub message: Option<String>,
+    /// Process identity attached to the event.
     pub identity: ProcessIdentity,
+    /// Optional trace context for correlation.
     pub trace: Option<TraceContext>,
+    /// Optional request identifier.
     pub request_id: Option<String>,
+    /// Optional correlation identifier.
     pub correlation_id: Option<String>,
+    /// Optional stable outcome label.
     pub outcome: Option<String>,
+    /// Optional structured diagnostic payload.
     pub diagnostic: Option<Diagnostic>,
+    /// Optional state transition payload.
     pub state_transition: Option<StateTransition>,
+    /// Arbitrary structured event fields.
     pub fields: Map<String, Value>,
 }
 
 /// Final span status for a completed span record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpanStatus {
+    /// The span completed successfully.
     Ok,
+    /// The span completed with an error.
     Error,
+    /// The span completed without an explicit outcome.
     Unset,
 }
 
@@ -848,39 +913,56 @@ impl SpanRecord<SpanEnded> {
 /// Event attached to a span timeline without creating a child span.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpanEvent {
+    /// UTC event timestamp.
     pub timestamp: Timestamp,
+    /// Trace/span correlation for the event.
     pub trace: TraceContext,
+    /// Stable event name.
     pub name: ActionName,
+    /// Structured event attributes.
     pub attributes: Map<String, Value>,
+    /// Optional diagnostic attached to the event.
     pub diagnostic: Option<Diagnostic>,
 }
 
 /// Generic span lifecycle signal used by projectors and telemetry assembly.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum SpanSignal {
+    /// Started span record.
     Started(SpanRecord<SpanStarted>),
+    /// Point-in-time event on an existing span.
     Event(SpanEvent),
+    /// Completed span record.
     Ended(SpanRecord<SpanEnded>),
 }
 
 /// Supported metric aggregation shapes.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum MetricKind {
+    /// Monotonic counter metric.
     Counter,
+    /// Gauge metric representing the latest value.
     Gauge,
+    /// Histogram metric representing a sampled distribution.
     Histogram,
 }
 
 /// Structured metric observation projected from routing or telemetry layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetricRecord {
+    /// UTC metric timestamp.
     pub timestamp: Timestamp,
+    /// Service that emitted the metric.
     pub service: ServiceName,
+    /// Stable metric name.
     pub name: MetricName,
+    /// Aggregation shape for the metric.
     pub kind: MetricKind,
+    /// Numeric metric value.
     pub value: f64,
     /// Optional UCUM unit string, for example `ms`, `By`, or `1`.
     pub unit: Option<String>,
+    /// Structured metric attributes.
     pub attributes: Map<String, Value>,
 }
 
@@ -889,6 +971,7 @@ pub trait ObservationSubscriber<T>: Send + Sync
 where
     T: Observable,
 {
+    /// Consumes one routed observation.
     fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>;
 }
 
@@ -897,6 +980,7 @@ pub trait ObservationFilter<T>: Send + Sync
 where
     T: Observable,
 {
+    /// Returns whether the observation should proceed to the subscriber or projector.
     fn accepts(&self, observation: &Observation<T>) -> bool;
 }
 
@@ -905,6 +989,7 @@ pub trait LogProjector<T>: Send + Sync
 where
     T: Observable,
 {
+    /// Projects one observation into zero or more log events.
     fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>;
 }
 
@@ -913,6 +998,7 @@ pub trait SpanProjector<T>: Send + Sync
 where
     T: Observable,
 {
+    /// Projects one observation into zero or more span lifecycle signals.
     fn project_spans(
         &self,
         observation: &Observation<T>,
@@ -924,6 +1010,7 @@ pub trait MetricProjector<T>: Send + Sync
 where
     T: Observable,
 {
+    /// Projects one observation into zero or more metric records.
     fn project_metrics(
         &self,
         observation: &Observation<T>,
@@ -936,7 +1023,9 @@ pub struct SubscriberRegistration<T>
 where
     T: Observable,
 {
+    /// Registered subscriber implementation.
     pub subscriber: Arc<dyn ObservationSubscriber<T>>,
+    /// Optional filter evaluated before subscriber execution.
     pub filter: Option<Arc<dyn ObservationFilter<T>>>,
 }
 
@@ -946,9 +1035,13 @@ pub struct ProjectionRegistration<T>
 where
     T: Observable,
 {
+    /// Optional log projector.
     pub log_projector: Option<Arc<dyn LogProjector<T>>>,
+    /// Optional span projector.
     pub span_projector: Option<Arc<dyn SpanProjector<T>>>,
+    /// Optional metric projector.
     pub metric_projector: Option<Arc<dyn MetricProjector<T>>>,
+    /// Optional filter evaluated before projection.
     pub filter: Option<Arc<dyn ObservationFilter<T>>>,
 }
 

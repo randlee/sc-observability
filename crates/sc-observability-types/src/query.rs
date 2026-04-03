@@ -13,14 +13,18 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum LogOrder {
     #[default]
+    /// Return records from oldest to newest.
     OldestFirst,
+    /// Return records from newest to oldest.
     NewestFirst,
 }
 
 /// One exact-match field filter in a historical/follow log query.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogFieldMatch {
+    /// Structured field name to compare.
     pub field: String,
+    /// Exact JSON value to match.
     pub value: Value,
 }
 
@@ -37,16 +41,27 @@ impl LogFieldMatch {
 /// Shared historical/follow query contract used by the logging reader/runtime layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LogQuery {
+    /// Optional service filter.
     pub service: Option<ServiceName>,
+    /// Allowed severity levels; empty means any level.
     pub levels: Vec<Level>,
+    /// Optional target/category filter.
     pub target: Option<TargetCategory>,
+    /// Optional action filter.
     pub action: Option<ActionName>,
+    /// Optional request identifier filter.
     pub request_id: Option<String>,
+    /// Optional correlation identifier filter.
     pub correlation_id: Option<String>,
+    /// Optional inclusive lower timestamp bound.
     pub since: Option<Timestamp>,
+    /// Optional inclusive upper timestamp bound.
     pub until: Option<Timestamp>,
+    /// Exact-match field predicates.
     pub field_matches: Vec<LogFieldMatch>,
+    /// Optional maximum number of returned events.
     pub limit: Option<usize>,
+    /// Result ordering.
     pub order: LogOrder,
 }
 
@@ -82,7 +97,9 @@ impl LogQuery {
 /// Stable synchronous result contract returned by query/follow polling surfaces.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct LogSnapshot {
+    /// Matching events returned by the query or poll.
     pub events: Vec<LogEvent>,
+    /// Whether the result set was truncated by the configured limit.
     pub truncated: bool,
 }
 
@@ -90,14 +107,19 @@ pub struct LogSnapshot {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
 pub enum QueryError {
     #[error("{0}")]
+    /// The query contract was invalid before execution.
     InvalidQuery(#[source] Box<ErrorContext>),
     #[error("{0}")]
+    /// I/O failed while reading log data.
     Io(#[source] Box<ErrorContext>),
     #[error("{0}")]
+    /// A JSONL record failed to decode.
     Decode(#[source] Box<ErrorContext>),
     #[error("{0}")]
+    /// Query or follow is unavailable in the current runtime state.
     Unavailable(#[source] Box<ErrorContext>),
     #[error("query runtime shut down")]
+    /// The query runtime was shut down.
     Shutdown,
 }
 

@@ -32,11 +32,15 @@ pub use sc_observability_types::{
 /// overridable at the `ObservabilityConfig` layer.
 #[derive(Debug, Clone)]
 pub struct ObservabilityConfig {
+    /// Stable tool name used to derive service and log layout defaults.
     pub tool_name: ToolName,
+    /// Root directory that owns the routing runtime log tree.
     pub log_root: PathBuf,
+    /// Environment-variable prefix used by the owning application.
     pub env_prefix: EnvPrefix,
     /// Reserved for future async/backpressure implementation. Phase 1 execution is synchronous; this value is stored but not yet applied.
     pub queue_capacity: usize,
+    /// Rotation settings forwarded to the built-in logging layer.
     pub rotation: RotationPolicy,
 }
 
