@@ -94,7 +94,7 @@ This crate owns shared neutral contracts only.
 - TYP-030 All shared error types, health report types, and shared constants shall be owned by `sc-observability-types` as a single source of truth. Crate-specific error enums and concrete health report types are defined here and re-exported by their respective crates where needed.
 - TYP-031 Per-crate `constants.rs` files in higher-layer crates may exist only for crate-local values that are not shared across crate boundaries.
 - TYP-032 `sc-observability-types` shall own the stable historical/follow query contracts: `LogQuery`, `LogOrder`, and `LogFieldMatch`.
-- TYP-033 `LogQuery` shall support filtering by `service`, `levels`, `target`, `action`, `request_id`, `correlation_id`, `since`, `until`, `field_matches`, `limit`, `order`, and `start_position`.
+- TYP-033 `LogQuery` shall support filtering by `service`, `levels`, `target`, `action`, `request_id`, `correlation_id`, `since`, `until`, `field_matches`, `limit`, and `order`.
 - TYP-034 `sc-observability-types` shall own `LogSnapshot` as the stable synchronous result contract returned by historical query and follow polling APIs, with `events` and `truncated` as its stable fields.
 - TYP-035 `sc-observability-types` shall own `QueryError` with variants `InvalidQuery`, `Io`, `Decode`, `Unavailable`, and `Shutdown`.
 - TYP-036 `QueryError` shall map to stable error codes `SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`, `SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN`.

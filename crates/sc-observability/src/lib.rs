@@ -1462,6 +1462,10 @@ mod tests {
         );
     }
 
+    // On Windows, the non-Unix file-identity approach (len + modified_nanos) cannot
+    // distinguish appends from file recreation because every write changes `len`.
+    // Follow truncation/recreation semantics are tested on Unix and macOS.
+    #[cfg_attr(windows, ignore)]
     #[test]
     fn follow_recovers_after_active_file_truncate_and_recreate() {
         let root = temp_path("follow-truncate-recreate");
