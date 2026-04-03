@@ -52,6 +52,12 @@ impl QueryHealthTracker {
         }
     }
 
+    pub(crate) fn record_nonfatal_summary(&self, summary: DiagnosticSummary) {
+        let mut report = self.report.lock().expect("query health poisoned");
+        report.state = QueryHealthState::Degraded;
+        report.last_error = Some(summary);
+    }
+
     pub(crate) fn record_result<T>(&self, result: &Result<T, QueryError>) {
         match result {
             Ok(_) => self.mark_healthy(),

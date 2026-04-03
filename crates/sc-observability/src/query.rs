@@ -3,7 +3,8 @@ use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use sc_observability_types::{
-    ErrorContext, LogEvent, LogOrder, LogQuery, LogSnapshot, QueryError, Remediation, error_codes,
+    DiagnosticSummary, ErrorContext, LogEvent, LogOrder, LogQuery, LogSnapshot, QueryError,
+    Remediation, Timestamp, error_codes,
 };
 use serde_json::{Value, json};
 
@@ -36,6 +37,26 @@ pub(crate) struct TrackedFile {
     pub(crate) offset: u64,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct FollowPollOutcome {
+    pub(crate) snapshot: LogSnapshot,
+    pub(crate) reset_summary: Option<DiagnosticSummary>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FollowOffsetResetReason {
+    NewActiveFile,
+    Recreated,
+    Truncated,
+    MissingState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TrackedOffsetDecision {
+    offset: u64,
+    reset_reason: Option<FollowOffsetResetReason>,
+}
+
 pub(crate) fn query_snapshot(
     active_log_path: &Path,
     query: &LogQuery,
@@ -62,44 +83,130 @@ pub(crate) fn poll_follow_snapshot(
     active_log_path: &Path,
     query: &LogQuery,
     tracked_files: &mut Vec<TrackedFile>,
-) -> Result<LogSnapshot, QueryError> {
+) -> Result<FollowPollOutcome, QueryError> {
     let resolved = resolve_visible_files(active_log_path)?;
     let previous = std::mem::take(tracked_files);
+    let mut reset_summary = None;
     *tracked_files = resolved
         .iter()
-        .map(|file| TrackedFile {
-            path: file.path.clone(),
-            identity: file.identity.clone(),
-            offset: tracked_offset_for(file, &previous),
+        .map(|file| {
+            let expected_active_rotation = file.path == active_log_path
+                && previous
+                    .iter()
+                    .find(|tracked| tracked.path == file.path)
+                    .is_some_and(|tracked| {
+                        tracked.identity != file.identity
+                            && resolved.iter().any(|other| {
+                                other.path != file.path && other.identity == tracked.identity
+                            })
+                    });
+            let decision = tracked_offset_for(
+                file,
+                &previous,
+                file.path == active_log_path,
+                expected_active_rotation,
+            );
+            if reset_summary.is_none() {
+                reset_summary = decision
+                    .reset_reason
+                    .and_then(|reason| follow_reset_summary(&file.path, reason));
+            }
+
+            TrackedFile {
+                path: file.path.clone(),
+                identity: file.identity.clone(),
+                offset: decision.offset,
+            }
         })
         .collect();
 
-    read_incremental_snapshot(query, &resolved, tracked_files)
+    Ok(FollowPollOutcome {
+        snapshot: read_incremental_snapshot(query, &resolved, tracked_files)?,
+        reset_summary,
+    })
 }
 
-fn tracked_offset_for(file: &ResolvedLogFile, previous: &[TrackedFile]) -> u64 {
+fn tracked_offset_for(
+    file: &ResolvedLogFile,
+    previous: &[TrackedFile],
+    is_active_file: bool,
+    expected_active_rotation: bool,
+) -> TrackedOffsetDecision {
     if let Some(tracked) = previous.iter().find(|tracked| tracked.path == file.path) {
         if tracked.identity != file.identity {
-            return 0;
+            return TrackedOffsetDecision {
+                offset: 0,
+                reset_reason: Some(if expected_active_rotation {
+                    FollowOffsetResetReason::NewActiveFile
+                } else {
+                    FollowOffsetResetReason::Recreated
+                }),
+            };
         }
         return if tracked.offset <= file.len {
-            tracked.offset
+            TrackedOffsetDecision {
+                offset: tracked.offset,
+                reset_reason: None,
+            }
         } else {
-            0
+            TrackedOffsetDecision {
+                offset: 0,
+                reset_reason: Some(FollowOffsetResetReason::Truncated),
+            }
         };
     }
 
-    previous
+    if let Some(tracked) = previous
         .iter()
         .find(|tracked| tracked.identity == file.identity)
-        .map(|tracked| {
-            if tracked.offset <= file.len {
-                tracked.offset
-            } else {
-                0
+    {
+        return if tracked.offset <= file.len {
+            TrackedOffsetDecision {
+                offset: tracked.offset,
+                reset_reason: None,
             }
-        })
-        .unwrap_or(0)
+        } else {
+            TrackedOffsetDecision {
+                offset: 0,
+                reset_reason: Some(FollowOffsetResetReason::Truncated),
+            }
+        };
+    }
+
+    TrackedOffsetDecision {
+        offset: 0,
+        reset_reason: (!previous.is_empty()).then_some(if is_active_file {
+            FollowOffsetResetReason::NewActiveFile
+        } else {
+            FollowOffsetResetReason::MissingState
+        }),
+    }
+}
+
+fn follow_reset_summary(path: &Path, reason: FollowOffsetResetReason) -> Option<DiagnosticSummary> {
+    let message = match reason {
+        FollowOffsetResetReason::NewActiveFile | FollowOffsetResetReason::MissingState => {
+            return None;
+        }
+        FollowOffsetResetReason::Recreated => {
+            format!(
+                "follow offset reset after log identity changed at {}",
+                path.display()
+            )
+        }
+        FollowOffsetResetReason::Truncated => {
+            format!(
+                "follow offset reset after log truncation at {}",
+                path.display()
+            )
+        }
+    };
+
+    Some(DiagnosticSummary {
+        code: None,
+        message,
+        at: Timestamp::now_utc(),
+    })
 }
 
 pub(crate) fn shutdown_error() -> QueryError {
@@ -410,7 +517,13 @@ mod tests {
             len: 512,
         };
 
-        assert_eq!(tracked_offset_for(&recreated, &previous), 0);
+        assert_eq!(
+            tracked_offset_for(&recreated, &previous, true, false),
+            TrackedOffsetDecision {
+                offset: 0,
+                reset_reason: Some(FollowOffsetResetReason::Recreated),
+            }
+        );
     }
 
     #[test]
@@ -426,7 +539,13 @@ mod tests {
             len: 512,
         };
 
-        assert_eq!(tracked_offset_for(&rotated, &previous), 256);
+        assert_eq!(
+            tracked_offset_for(&rotated, &previous, false, false),
+            TrackedOffsetDecision {
+                offset: 256,
+                reset_reason: None,
+            }
+        );
     }
 
     #[cfg(windows)]
@@ -449,6 +568,100 @@ mod tests {
             len: 64,
         };
 
-        assert_eq!(tracked_offset_for(&recreated, &previous), 0);
+        assert_eq!(
+            tracked_offset_for(&recreated, &previous, true, false),
+            TrackedOffsetDecision {
+                offset: 0,
+                reset_reason: Some(FollowOffsetResetReason::Recreated),
+            }
+        );
+    }
+
+    #[test]
+    fn follow_tracking_marks_truncation_when_offset_exceeds_current_len() {
+        let previous = vec![TrackedFile {
+            path: PathBuf::from("active.log.jsonl"),
+            identity: test_identity(1),
+            offset: 256,
+        }];
+        let truncated = ResolvedLogFile {
+            path: PathBuf::from("active.log.jsonl"),
+            identity: test_identity(1),
+            len: 32,
+        };
+
+        assert_eq!(
+            tracked_offset_for(&truncated, &previous, true, false),
+            TrackedOffsetDecision {
+                offset: 0,
+                reset_reason: Some(FollowOffsetResetReason::Truncated),
+            }
+        );
+    }
+
+    #[test]
+    fn follow_tracking_treats_new_active_file_as_expected_rotation() {
+        let previous = vec![TrackedFile {
+            path: PathBuf::from("rotated.log.jsonl.1"),
+            identity: test_identity(7),
+            offset: 256,
+        }];
+        let new_file = ResolvedLogFile {
+            path: PathBuf::from("active.log.jsonl"),
+            identity: test_identity(9),
+            len: 64,
+        };
+
+        assert_eq!(
+            tracked_offset_for(&new_file, &previous, true, false),
+            TrackedOffsetDecision {
+                offset: 0,
+                reset_reason: Some(FollowOffsetResetReason::NewActiveFile),
+            }
+        );
+    }
+
+    #[test]
+    fn follow_tracking_marks_missing_state_when_untracked_non_active_file_appears() {
+        let previous = vec![TrackedFile {
+            path: PathBuf::from("active.log.jsonl"),
+            identity: test_identity(7),
+            offset: 256,
+        }];
+        let new_file = ResolvedLogFile {
+            path: PathBuf::from("active.log.jsonl.2"),
+            identity: test_identity(9),
+            len: 64,
+        };
+
+        assert_eq!(
+            tracked_offset_for(&new_file, &previous, false, false),
+            TrackedOffsetDecision {
+                offset: 0,
+                reset_reason: Some(FollowOffsetResetReason::MissingState),
+            }
+        );
+    }
+
+    #[test]
+    fn follow_tracking_treats_active_path_identity_change_as_expected_rotation() {
+        let previous = vec![TrackedFile {
+            path: PathBuf::from("active.log.jsonl"),
+            identity: test_identity(7),
+            offset: 256,
+        }];
+        let new_active = ResolvedLogFile {
+            path: PathBuf::from("active.log.jsonl"),
+            identity: test_identity(9),
+            len: 64,
+        };
+
+        assert_eq!(
+            tracked_offset_for(&new_active, &previous, true, true),
+            TrackedOffsetDecision {
+                offset: 0,
+                reset_reason: Some(FollowOffsetResetReason::NewActiveFile),
+            }
+        );
     }
 }

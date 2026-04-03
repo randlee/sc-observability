@@ -389,7 +389,11 @@ Follow strategy:
 - `poll()` reads appended records since the last successful poll
 - if the active file shrinks or its file identity changes, the session treats
   that as rotation/truncation, reopens the new active file, and resumes from
-  offset `0`
+  offset `0` on Unix-family platforms
+- Windows uses a best-effort `(len, modified_nanos)` fallback because stable
+  Rust does not expose a standard-library file identity equivalent to Unix
+  `(dev, ino)`, so truncate/recreate detection there is explicitly
+  non-promissory for v1
 - the follow path remains poll-based and caller-driven; no async watch service
   is introduced
 

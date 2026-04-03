@@ -52,8 +52,20 @@ impl LogFollowSession {
             &self.query,
             &mut self.tracked_files,
         );
-        self.health.record_result(&result);
-        result
+        match result {
+            Ok(outcome) => {
+                if let Some(summary) = outcome.reset_summary {
+                    self.health.record_nonfatal_summary(summary);
+                } else {
+                    self.health.mark_healthy();
+                }
+                Ok(outcome.snapshot)
+            }
+            Err(error) => {
+                self.health.record_error(&error);
+                Err(error)
+            }
+        }
     }
 
     /// Returns the current query/follow health snapshot for this session.

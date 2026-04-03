@@ -149,7 +149,7 @@ This crate is the lightweight logging layer.
 - LOG-027 `LogFollowSession` shall expose synchronous polling and shall not require an async runtime, background task, or file watcher to deliver new records.
 - LOG-028 `sc-observability` shall provide `JsonlLogReader` as an independent JSONL file reader for historical query and follow operations without requiring a live `Logger`, `sc-observe`, or `sc-observability-otlp`.
 - LOG-029 Historical query and follow behavior shall operate over the active JSONL log and its rotation set using the documented `sc-observability` naming/layout rules.
-- LOG-030 Rotation handling for query/follow shall avoid duplicating or silently skipping committed log records when the active file is renamed or recreated.
+- LOG-030 Rotation handling for query/follow shall avoid duplicating or silently skipping committed log records when the active file is renamed or recreated on Unix-family platforms. On Windows, stable Rust does not expose a reliable file identity equivalent to `(dev, ino)`, so truncate/recreate detection remains best-effort and is not a release guarantee for v1.
 - LOG-031 `LoggingHealthReport` shall expose query/follow availability through an optional `QueryHealthReport`.
 - LOG-032 Query/follow APIs shall remain usable in logging-only deployments and shall not introduce ATM-specific types, daemon requirements, or `agent-team-mail-*` dependencies.
 - LOG-033 `JsonlLogReader` query/follow operations shall remain independent of `Logger` lifecycle and shall stay usable for offline inspection after a logger-owned runtime shuts down.
@@ -238,6 +238,7 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
 - OTLP-021 `Telemetry` lifecycle behavior shall be explicit:
   - emit methods after `shutdown()` return `TelemetryError::Shutdown`
   - `flush()` attempts to export ready batches and drops incomplete spans only at shutdown/final flush
+  - the first `shutdown()` surfaces any final flush failure as `ShutdownError`
   - repeated `shutdown()` calls are idempotent and return `Ok(())`
 - OTLP-022 `sc-observability-otlp` shall own crate-local sealed signal-emitter traits for direct telemetry injection where needed.
 

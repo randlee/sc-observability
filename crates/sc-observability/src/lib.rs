@@ -1587,6 +1587,15 @@ mod tests {
             after_truncate == vec!["after-truncate"]
                 || after_truncate == vec!["backlog", "before-truncate", "after-truncate"]
         );
+        let truncate_health = follow.health();
+        assert_eq!(truncate_health.state, QueryHealthState::Degraded);
+        assert!(
+            truncate_health
+                .last_error
+                .expect("truncate health summary")
+                .message
+                .contains("truncation")
+        );
 
         fs::remove_file(&active_path).expect("remove active log");
         logger
@@ -1594,5 +1603,14 @@ mod tests {
             .expect("emit after recreate");
         let after_recreate = drain_follow_until_request_id(&mut follow, "after-recreate");
         assert_eq!(after_recreate, vec!["after-recreate"]);
+        let recreate_health = follow.health();
+        assert_eq!(recreate_health.state, QueryHealthState::Degraded);
+        assert!(
+            recreate_health
+                .last_error
+                .expect("recreate health summary")
+                .message
+                .contains("identity changed")
+        );
     }
 }

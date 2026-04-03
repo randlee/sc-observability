@@ -429,6 +429,7 @@ impl SpanAssembler {
                     record.trace().trace_id.as_str(),
                     record.trace().span_id.as_str(),
                 );
+                self.events.insert(key.clone(), Vec::new());
                 self.started.insert(key, record);
                 Ok(None)
             }
@@ -460,10 +461,16 @@ impl SpanAssembler {
                         ),
                     ))));
                 }
-                Ok(Some(CompleteSpan {
-                    record,
-                    events: self.events.remove(&key).unwrap_or_default(),
-                }))
+                let Some(events) = self.events.remove(&key) else {
+                    return Err(EventError(Box::new(ErrorContext::new(
+                        error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
+                        "missing span event buffer for a started span",
+                        Remediation::not_recoverable(
+                            "restart telemetry to restore span assembly state",
+                        ),
+                    ))));
+                };
+                Ok(Some(CompleteSpan { record, events }))
             }
         }
     }
@@ -496,6 +503,11 @@ pub struct Telemetry {
     runtime: Mutex<TelemetryRuntime>,
     dropped_exports_total: AtomicU64,
     malformed_spans_total: AtomicU64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FlushOutcome {
+    had_export_failure: bool,
 }
 
 #[derive(Default)]
@@ -660,6 +672,11 @@ impl Telemetry {
 
     /// Flushes buffered logs, spans, and metrics through the configured exporters.
     pub fn flush(&self) -> Result<(), FlushError> {
+        let _ = self.flush_outcome()?;
+        Ok(())
+    }
+
+    fn flush_outcome(&self) -> Result<FlushOutcome, FlushError> {
         let (log_batch, span_batch, metric_batch) = {
             let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
             let log_batch = if self.config.logs.is_some() {
@@ -679,11 +696,13 @@ impl Telemetry {
             };
             (log_batch, span_batch, metric_batch)
         };
+        let mut had_export_failure = false;
 
         if !log_batch.is_empty() {
             match self.log_exporter.export_logs(&log_batch) {
                 Ok(()) => self.record_export_success(ExporterKind::Logs),
                 Err(err) => {
+                    had_export_failure = true;
                     self.record_export_failure(ExporterKind::Logs, log_batch.len() as u64, err)
                 }
             }
@@ -693,6 +712,7 @@ impl Telemetry {
             match self.trace_exporter.export_spans(&span_batch) {
                 Ok(()) => self.record_export_success(ExporterKind::Traces),
                 Err(err) => {
+                    had_export_failure = true;
                     self.record_export_failure(ExporterKind::Traces, span_batch.len() as u64, err)
                 }
             }
@@ -701,15 +721,18 @@ impl Telemetry {
         if !metric_batch.is_empty() {
             match self.metric_exporter.export_metrics(&metric_batch) {
                 Ok(()) => self.record_export_success(ExporterKind::Metrics),
-                Err(err) => self.record_export_failure(
-                    ExporterKind::Metrics,
-                    metric_batch.len() as u64,
-                    err,
-                ),
+                Err(err) => {
+                    had_export_failure = true;
+                    self.record_export_failure(
+                        ExporterKind::Metrics,
+                        metric_batch.len() as u64,
+                        err,
+                    )
+                }
             }
         }
 
-        Ok(())
+        Ok(FlushOutcome { had_export_failure })
     }
 
     /// Flushes buffers, drops incomplete spans, and transitions the runtime to shutdown.
@@ -718,9 +741,7 @@ impl Telemetry {
             return Ok(());
         }
 
-        // Best-effort flush on shutdown: exporter failures are recorded in health,
-        // but shutdown itself stays fail-open so callers can continue teardown.
-        let _ = self.flush();
+        let flush_outcome = self.flush_outcome().map_err(shutdown_flush_error)?;
         let dropped = self
             .runtime
             .lock()
@@ -744,6 +765,16 @@ impl Telemetry {
             runtime.trace_status.state = ExporterHealthState::Degraded;
             runtime.trace_status.last_error = Some(summary.clone());
             runtime.last_error = Some(summary);
+        }
+
+        if flush_outcome.had_export_failure {
+            return Err(shutdown_export_failure(
+                self.runtime
+                    .lock()
+                    .expect("telemetry runtime poisoned")
+                    .last_error
+                    .clone(),
+            ));
         }
 
         Ok(())
@@ -973,6 +1004,41 @@ fn error_context_from_diagnostic(diagnostic: &sc_observability_types::Diagnostic
     context
 }
 
+fn shutdown_flush_error(error: FlushError) -> ShutdownError {
+    ShutdownError(Box::new(
+        ErrorContext::new(
+            error_codes::TELEMETRY_FLUSH_FAILED,
+            "failed to flush telemetry during shutdown",
+            Remediation::recoverable(
+                "inspect telemetry health and retry shutdown after the exporter recovers",
+                ["retry shutdown"],
+            ),
+        )
+        .source(Box::new(error)),
+    ))
+}
+
+fn shutdown_export_failure(summary: Option<DiagnosticSummary>) -> ShutdownError {
+    let mut context = ErrorContext::new(
+        error_codes::TELEMETRY_FLUSH_FAILED,
+        "failed to flush telemetry during shutdown",
+        Remediation::recoverable(
+            "inspect telemetry health and retry shutdown after the exporter recovers",
+            ["retry shutdown"],
+        ),
+    );
+    if let Some(summary) = summary {
+        context = context.cause(summary.message);
+        if let Some(code) = summary.code {
+            context = context.detail(
+                "exporter_error_code",
+                Value::String(code.as_str().to_owned()),
+            );
+        }
+    }
+    ShutdownError(Box::new(context))
+}
+
 fn span_key(trace_id: &str, span_id: &str) -> String {
     format!("{trace_id}:{span_id}")
 }
@@ -1191,6 +1257,39 @@ mod tests {
     }
 
     #[test]
+    fn span_assembler_reports_missing_event_buffer_explicitly() {
+        let trace = trace_context();
+        let started = SpanRecord::<SpanStarted>::new(
+            Timestamp::UNIX_EPOCH,
+            service_name(),
+            ActionName::new("agent.run").expect("valid action"),
+            trace.clone(),
+            Map::new(),
+        );
+        let ended = started
+            .clone()
+            .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(42));
+        let mut assembler = SpanAssembler::new();
+
+        assert!(
+            assembler
+                .push(SpanSignal::Started(started))
+                .expect("started")
+                .is_none()
+        );
+        let key = span_key(trace.trace_id.as_str(), trace.span_id.as_str());
+        assembler.events.remove(&key);
+
+        let error = assembler
+            .push(SpanSignal::Ended(ended))
+            .expect_err("missing event buffer should be explicit");
+        assert_eq!(
+            error.diagnostic().message,
+            "missing span event buffer for a started span"
+        );
+    }
+
+    #[test]
     fn incomplete_span_drop_accounting_is_tracked() {
         let trace = trace_context();
         let started = SpanRecord::<SpanStarted>::new(
@@ -1399,7 +1498,7 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_absorbs_export_failures_and_records_them_in_health() {
+    fn shutdown_propagates_flush_failures_and_records_them_in_health() {
         let log_exporter = Arc::new(RecordingLogExporter::default());
         log_exporter.fail.store(true, Ordering::SeqCst);
         let telemetry = Telemetry::new_with_exporters(
@@ -1414,7 +1513,13 @@ mod tests {
             .emit_log(&log_event(service_name(), "shutdown-export"))
             .expect("emit");
 
-        telemetry.shutdown().expect("shutdown remains fail-open");
+        let error = telemetry
+            .shutdown()
+            .expect_err("shutdown should surface flush failures");
+        assert_eq!(
+            error.diagnostic().message,
+            "failed to flush telemetry during shutdown"
+        );
 
         let health = telemetry.health();
         assert_eq!(health.state, TelemetryHealthState::Unavailable);

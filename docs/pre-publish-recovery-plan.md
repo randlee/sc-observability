@@ -218,8 +218,11 @@ Implement the missing historical query and synchronous tail APIs in
 - historical reads cover the active log plus the rotation set that matches the
   documented naming layout
 - `LogOrder::OldestFirst` and `LogOrder::NewestFirst` are deterministic
-- follow sessions survive active-file rename/recreate during rotation
+- follow sessions survive active-file rename/recreate during rotation on
+  Unix-family platforms
 - committed records are neither duplicated nor silently skipped across rotation
+  on Unix-family platforms; Windows remains best-effort because stable Rust
+  does not expose a reliable file identity equivalent to `(dev, ino)`
 - `follow().poll()` is synchronous and caller-driven
 - `query()` and `follow()` remain available without `sc-observe` or OTLP
 
@@ -240,7 +243,9 @@ Implement the missing historical query and synchronous tail APIs in
 - invalid query validation paths
 - malformed record decode failure path
 - follow session starts at tail, not backlog
-- follow session after rotation/recreate
+- follow session after rotation/recreate on Unix-family platforms
+- explicit Windows limitation coverage for best-effort truncate/recreate
+  detection
 - logger shutdown makes query/follow unavailable where appropriate
 - offline `JsonlLogReader` parity tests against `Logger`
 
