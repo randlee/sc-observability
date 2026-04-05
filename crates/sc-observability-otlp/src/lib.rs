@@ -206,21 +206,21 @@ impl Telemetry {
             return Ok(());
         }
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-        if let SpanSignal::Ended(record) = span {
-            if !runtime.span_assembler.has_started(
+        if let SpanSignal::Ended(record) = span
+            && !runtime.span_assembler.has_started(
                 record.trace().trace_id.as_str(),
                 record.trace().span_id.as_str(),
-            ) {
-                self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
-                let summary = DiagnosticSummary {
-                    code: Some(error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED),
-                    message: "received ended span without a matching started span".to_string(),
-                    at: span_timestamp(span),
-                };
-                runtime.last_error = Some(summary.clone());
-                runtime.trace_status.last_error = Some(summary);
-                return Ok(());
-            }
+            )
+        {
+            self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
+            let summary = DiagnosticSummary {
+                code: Some(error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED),
+                message: "received ended span without a matching started span".to_string(),
+                at: span_timestamp(span),
+            };
+            runtime.last_error = Some(summary.clone());
+            runtime.trace_status.last_error = Some(summary);
+            return Ok(());
         }
         if let Some(complete) = runtime.span_assembler.push(span.clone()).map_err(|err| {
             TelemetryError::ExportFailure(Box::new(error_context_from_diagnostic(err.diagnostic())))
