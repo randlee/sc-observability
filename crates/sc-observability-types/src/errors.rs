@@ -90,3 +90,28 @@ pub enum TelemetryError {
     /// Export or span-assembly work failed for the requested telemetry operation.
     ExportFailure(#[source] Box<ErrorContext>),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Remediation, error_codes};
+
+    #[test]
+    fn wrapper_errors_expose_source_context() {
+        let wrapped = InitError(Box::new(
+            ErrorContext::new(
+                error_codes::DIAGNOSTIC_INVALID,
+                "operation failed",
+                Remediation::not_recoverable("investigate manually"),
+            )
+            .source(Box::new(std::io::Error::other("disk full"))),
+        ));
+
+        let source = std::error::Error::source(&wrapped).expect("context source");
+        assert_eq!(source.to_string(), "operation failed");
+        assert_eq!(
+            source.source().map(ToString::to_string).as_deref(),
+            Some("disk full")
+        );
+    }
+}

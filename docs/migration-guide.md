@@ -54,6 +54,24 @@ For consumers that only need structured logging:
 3. Register additional sinks only if required.
 4. Do not pull in `sc-observe` or `sc-observability-otlp`.
 
+## Default Log Path Change
+
+`LOG-008` now uses a flatter built-in file sink path.
+
+- Before: `<log_root>/<service_name>/logs/<service_name>.log.jsonl`
+- After: `<log_root>/logs/<service_name>.log.jsonl`
+
+Example for `schook`:
+
+- Before: `<log_root>/schook/logs/schook.log.jsonl`
+- After: `<log_root>/logs/schook.log.jsonl`
+
+If your consumer hardcodes or configures the previous path, update file tailing,
+rotation scripts, log shipping configuration, tests, and health assertions to
+the new `<log_root>/logs/<service_name>.log.jsonl` layout. Prefer using
+`Logger::health().active_log_path` where possible instead of hardcoding the
+resolved file path.
+
 ## Observation Routing Consumers
 
 For consumers that emit typed observations:

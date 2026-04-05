@@ -15,8 +15,8 @@ Shared structured logging, routing, and OTLP observability crates.
 
 | If you need... | Start with... |
 | --- | --- |
-| Logging only | `sc-observability` + `sc-observability-types` |
-| Query/follow on JSONL logs | `sc-observability` + `sc-observability-types` |
+| Logging only | `sc-observability` |
+| Query/follow on JSONL logs | `sc-observability` |
 | Routing one observation to logs and subscribers | `sc-observe` + `sc-observability` + `sc-observability-types` |
 | OTLP export | `sc-observability-otlp` + lower layers |
 | Shared value types only | `sc-observability-types` |
@@ -26,9 +26,9 @@ Shared structured logging, routing, and OTLP observability crates.
 ```rust
 use std::path::PathBuf;
 
-use sc_observability::{Logger, LoggerConfig};
-use sc_observability_types::{
+use sc_observability::{
     ActionName, Level, LogEvent, ProcessIdentity, ServiceName, TargetCategory, Timestamp,
+    Logger, LoggerConfig,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ))?;
 
     logger.emit(LogEvent {
-        version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+        version: "1".to_string(),
         timestamp: Timestamp::now_utc(),
         level: Level::Info,
         service,
@@ -63,6 +63,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 Default output goes to `<log_root>/logs/<service>.log.jsonl`.
+
+## Fault Injection For Retained Sinks
+
+The `fault-injection` feature exposes a `RetainedSinkFaultInjector` for live
+validation. It wraps one retained sink and forces that sink to report degraded
+or unavailable health through the normal `LoggingHealthReport` path without
+filesystem sabotage.
+
+Enable it only for validation runs:
+
+```bash
+cargo test --features fault-injection
+```
+
+Never enable `fault-injection` in production builds.
 
 ## Start Here
 

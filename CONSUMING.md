@@ -4,14 +4,20 @@ This document is the consumer-facing starting point for logging-only adoption.
 
 ## 1. Logging-Only Setup
 
-Add the logging crate and shared types:
+Add the logging crate:
 
 ```toml
 [dependencies]
 sc-observability = "1"
-sc-observability-types = "1"
 serde_json = "1"
 ```
+
+`sc-observability` re-exports the shared contract types from
+`sc-observability-types`, so consumers can import `LogEvent`, `Level`,
+`ErrorCode`, `ServiceName`, and related types directly from `sc_observability`.
+Add `sc-observability-types` as a direct dependency only if you need the types
+crate independently, such as for trait implementations or for sharing the
+contract crate across package boundaries.
 
 Create a logger with the documented defaults:
 
@@ -114,3 +120,17 @@ for sink in &health.sink_statuses {
 - Contract details: [docs/requirements.md](./docs/requirements.md)
 - Query/follow surface: [docs/api-design.md](./docs/api-design.md)
 - ATM-shaped defaults: [docs/atm-quickstart.md](./docs/atm-quickstart.md)
+
+## 8. Fault Injection For Retained Sinks
+
+The optional `fault-injection` feature adds `RetainedSinkFaultInjector`, which
+forces one retained sink to report degraded or unavailable health through the
+same `LoggingHealthReport` transitions consumers see during normal operation.
+
+Enable it only for validation runs:
+
+```bash
+cargo test --features fault-injection
+```
+
+Never enable `fault-injection` in production builds.
