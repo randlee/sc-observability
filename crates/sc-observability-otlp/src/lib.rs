@@ -15,7 +15,6 @@ pub mod error_codes;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use assembly::span_timestamp;
 use config::validate_config;
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, ErrorContext, ExportError, FlushError, InitError, LogEvent,
@@ -206,21 +205,26 @@ impl Telemetry {
             return Ok(());
         }
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
-        if let SpanSignal::Ended(record) = span {
-            if !runtime.span_assembler.has_started(
+        if let SpanSignal::Ended(record) = span
+            && !runtime.span_assembler.has_started(
                 record.trace().trace_id.as_str(),
                 record.trace().span_id.as_str(),
-            ) {
-                self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
-                let summary = DiagnosticSummary {
-                    code: Some(error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED),
-                    message: "received ended span without a matching started span".to_string(),
-                    at: span_timestamp(span),
-                };
-                runtime.last_error = Some(summary.clone());
-                runtime.trace_status.last_error = Some(summary);
-                return Ok(());
-            }
+            )
+        {
+            self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
+            let context = ErrorContext::new(
+                error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
+                "received ended span without a matching started span",
+                Remediation::not_recoverable(
+                    "emit the started span before the matching ended span",
+                ),
+            )
+            .detail("trace_id", record.trace().trace_id.as_str().into())
+            .detail("span_id", record.trace().span_id.as_str().into());
+            let summary = DiagnosticSummary::from(context.diagnostic());
+            runtime.last_error = Some(summary.clone());
+            runtime.trace_status.last_error = Some(summary);
+            return Ok(());
         }
         if let Some(complete) = runtime.span_assembler.push(span.clone()).map_err(|err| {
             TelemetryError::ExportFailure(Box::new(error_context_from_diagnostic(err.diagnostic())))
@@ -834,7 +838,12 @@ mod tests {
         .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(5));
 
         assert!(telemetry.emit_span(&SpanSignal::Ended(ended)).is_ok());
-        assert_eq!(telemetry.health().malformed_spans_total, 1);
+        let health = telemetry.health();
+        assert_eq!(health.malformed_spans_total, 1);
+        assert_eq!(
+            health.last_error.and_then(|summary| summary.code),
+            Some(error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED)
+        );
     }
 
     #[test]

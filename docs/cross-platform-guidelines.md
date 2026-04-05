@@ -23,6 +23,17 @@
    `JsonlLogReader::follow()` is best-effort only in v1 and must not be
    documented as a parity guarantee with Unix/macOS behavior.
 
+## Toolchain Baseline
+
+1. The approved Rust toolchain baseline for this repo is `1.94.1`.
+2. Toolchain bumps must update `rust-toolchain.toml`, the workspace
+   `rust-version`, and every CI/release workflow toolchain pin in the same
+   change.
+3. Every toolchain bump must rerun `cargo fmt --check --all`,
+   `cargo test --workspace`, and
+   `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+   before merge.
+
 ## Test Rules
 
 1. Tests must isolate any local file output in temporary directories.

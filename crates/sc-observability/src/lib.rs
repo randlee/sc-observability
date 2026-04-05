@@ -391,10 +391,10 @@ impl Logger {
     }
 
     fn redact_event(&self, mut event: LogEvent) -> LogEvent {
-        if self.config.redaction.redact_bearer_tokens {
-            if let Some(message) = event.message.as_mut() {
-                *message = redact_bearer_token_text(message);
-            }
+        if self.config.redaction.redact_bearer_tokens
+            && let Some(message) = event.message.as_mut()
+        {
+            *message = redact_bearer_token_text(message);
         }
 
         for (key, value) in &mut event.fields {
@@ -922,6 +922,45 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&path);
         path
+    }
+
+    #[cfg(unix)]
+    fn unix_file_identity(path: &Path) -> crate::query::FileIdentity {
+        crate::query::file_identity_for_path(path)
+    }
+
+    #[cfg(unix)]
+    fn recreate_with_distinct_unix_identity(active_path: &Path) {
+        let previous_identity = unix_file_identity(active_path);
+        fs::remove_file(active_path).expect("remove active log");
+
+        let active_name = active_path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .expect("active log file name");
+
+        for attempt in 0..256 {
+            let replacement =
+                active_path.with_file_name(format!("{active_name}.replacement-{attempt}"));
+            fs::File::create(&replacement).expect("create replacement file");
+            if unix_file_identity(&replacement) != previous_identity {
+                fs::rename(&replacement, active_path).expect("install replacement active log");
+                return;
+            }
+            fs::remove_file(&replacement).expect("remove reused replacement inode");
+        }
+
+        panic!("failed to create replacement active log with distinct Unix identity");
+    }
+
+    #[cfg(not(unix))]
+    fn recreate_with_distinct_unix_identity(active_path: &Path) {
+        // Non-Unix follow tests only verify that truncate/recreate remains
+        // callable. Identity-distinctness is intentionally not asserted here,
+        // and both cfg variants must stay behaviorally aligned when this helper
+        // changes.
+        fs::remove_file(active_path).expect("remove active log");
+        fs::File::create(active_path).expect("recreate active log");
     }
 
     fn with_sc_log_root<T>(value: Option<&Path>, f: impl FnOnce() -> T) -> T {
@@ -1639,7 +1678,7 @@ mod tests {
                 .contains("truncation")
         );
 
-        fs::remove_file(&active_path).expect("remove active log");
+        recreate_with_distinct_unix_identity(&active_path);
         logger
             .emit(log_event_with_request(service_name(), "after-recreate", 20))
             .expect("emit after recreate");
