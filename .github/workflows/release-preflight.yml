@@ -78,7 +78,7 @@ jobs:
         run: bash scripts/ci/validate_publish_order.sh
 
       - name: Validate version literals
-        run: bash scripts/ci/validate_version_literals.sh
+        run: python3 scripts/ci/validate_version_literals.py
 
       - name: Validate repo boundaries
         run: bash scripts/ci/validate_repo_boundaries.sh

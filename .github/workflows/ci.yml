@@ -80,7 +80,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate version literals
-        run: bash scripts/ci/validate_version_literals.sh
+        run: python3 scripts/ci/validate_version_literals.py
 
   manifest-validation:
     name: manifest-validation (ubuntu)
@@ -110,7 +110,7 @@ jobs:
         run: bash scripts/ci/validate_dependency_bans.sh
 
       - name: Validate version literals
-        run: bash scripts/ci/validate_version_literals.sh
+        run: python3 scripts/ci/validate_version_literals.py
 
       - name: Validate repo boundaries
         run: bash scripts/ci/validate_repo_boundaries.sh

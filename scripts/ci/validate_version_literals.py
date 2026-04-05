@@ -1,11 +1,9 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-python3 - <<'PY'
+#!/usr/bin/env python3
 import re
 import tomllib
 from collections import defaultdict
 from pathlib import Path
+
 
 root = Path(".")
 workspace = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))
@@ -55,4 +53,3 @@ print(
     "version literal validation passed "
     f"(workspace.package.version={workspace_version})"
 )
-PY
