@@ -473,6 +473,12 @@ fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
 }
 
 #[cfg(test)]
+pub(crate) fn file_identity_for_path(path: &Path) -> FileIdentity {
+    let metadata = fs::metadata(path).expect("metadata");
+    file_identity(&metadata)
+}
+
+#[cfg(test)]
 pub(crate) fn query_active_and_rotated_paths(active_path: &Path, max_files: u32) -> Vec<PathBuf> {
     let mut paths = (1..=max_files)
         .rev()

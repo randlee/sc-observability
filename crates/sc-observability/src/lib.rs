@@ -925,11 +925,8 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn unix_file_identity(path: &Path) -> (u64, u64) {
-        use std::os::unix::fs::MetadataExt;
-
-        let metadata = fs::metadata(path).expect("metadata");
-        (metadata.dev(), metadata.ino())
+    fn unix_file_identity(path: &Path) -> crate::query::FileIdentity {
+        crate::query::file_identity_for_path(path)
     }
 
     #[cfg(unix)]
@@ -958,6 +955,10 @@ mod tests {
 
     #[cfg(not(unix))]
     fn recreate_with_distinct_unix_identity(active_path: &Path) {
+        // Non-Unix follow tests only verify that truncate/recreate remains
+        // callable. Identity-distinctness is intentionally not asserted here,
+        // and both cfg variants must stay behaviorally aligned when this helper
+        // changes.
         fs::remove_file(active_path).expect("remove active log");
         fs::File::create(active_path).expect("recreate active log");
     }

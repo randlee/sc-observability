@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use crate::error_codes;
 use sc_observability_types::{
     ErrorContext, EventError, Remediation, SpanEnded, SpanEvent, SpanRecord, SpanSignal,
-    SpanStarted, Timestamp,
+    SpanStarted,
 };
 
 /// Completed span assembled from a start/event/end stream.
@@ -112,14 +112,6 @@ impl SpanAssembler {
 impl Default for SpanAssembler {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-pub(crate) fn span_timestamp(span: &SpanSignal) -> Timestamp {
-    match span {
-        SpanSignal::Started(record) => record.timestamp(),
-        SpanSignal::Event(event) => event.timestamp,
-        SpanSignal::Ended(record) => record.timestamp(),
     }
 }
 

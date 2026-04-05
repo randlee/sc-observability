@@ -378,7 +378,10 @@ No other §9.5 item should remain in a deferred state for release accounting.
 - Deliverables:
   - explicit shutdown/flush outcome handling in OTLP
   - stable follow-tracking behavior across truncate/recreate transitions
-  - Windows follow strategy decision implemented and tested
+  - `PRR-B-007` resolved with accepted Windows platform limitation: Unix
+    recreate coverage is deterministic, Windows remains explicitly
+    best-effort-only per `docs/pre-publish-recovery-plan.md:386-391` and this
+    fix-r1 change on `fix/ubuntu-test-flake`
   - invariant-masking defaults removed from span assembly and query tracking
 - Dependencies:
   - start after `PR-0` so the repo is no longer claiming unverified closure
