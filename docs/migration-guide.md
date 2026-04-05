@@ -72,6 +72,17 @@ For consumers that export to OTLP:
 3. Attach OTLP by wrapping projector implementations locally, following the
    pattern used by `examples/atm-adapter-example`.
 
+## Breaking API Renames
+
+The production-readiness review approved these source-breaking API updates:
+
+1. The sealed telemetry-health provider trait now uses the
+   `ObservabilityHealthProvider` name.
+2. `ObservabilityBuilder` now exposes
+   `with_observability_health_provider(...)`.
+3. `ObservationSubscriber<T>` implementations now provide
+   `observe(...)`.
+
 ## ATM Adoption Sequence
 
 1. Move shared crate usage in ATM to the published standalone crates.

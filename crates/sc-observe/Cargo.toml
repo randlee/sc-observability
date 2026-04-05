@@ -9,5 +9,5 @@ homepage.workspace = true
 description = "Observation routing runtime layered on sc-observability."
 
 [dependencies]
-sc-observability-types = { path = "../sc-observability-types", version = "0.46.2" }
-sc-observability = { path = "../sc-observability", version = "0.46.2" }
+sc-observability-types.workspace = true
+sc-observability.workspace = true

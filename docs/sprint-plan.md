@@ -1,103 +1,106 @@
 # SC-Observability Sprint Plan
 
 **Status**: Draft for review
-**Purpose**: Sequence implementation into predictable, reviewable sprints.
+**Purpose**: Sequence the current pre-publish recovery work into predictable,
+reviewable sprints.
 
 ## 1. Expected Sprint Count
 
-Plan for 6 implementation sprints:
+Plan for 5 recovery sprints:
 
-1. shared contracts
-2. lightweight logging
-3. observation routing
-4. OTLP telemetry
-5. ATM adapter integration
-6. hardening and release readiness
+1. truth reset and design freeze
+2. shared contract hardening
+3. logging query/follow runtime
+4. routing and OTLP attachment closure
+5. hardening and final publish gate
 
-This is the safer plan. Combining any of these should be treated as schedule
-compression, not the default.
+This is the required order for the current recovery phase. Combining any of
+these should be treated as schedule compression and must be justified
+explicitly.
 
 ## 2. Sprint Breakdown
 
-### Sprint 1: Shared Contracts
+### Sprint 0: Truth Reset And Design Freeze
 
 Scope:
-- finish `sc-observability-types`
-- finalize newtypes, diagnostics, trace/span/metric contracts, shared errors
+- make planning docs and release gates truthful
+- freeze the exact missing public design before implementation resumes
+- settle query/follow semantics, OTLP attachment shape, and UTC timestamp
+  enforcement
 
 Done means:
-- public API checklist complete for `sc-observability-types`
-- unit tests and serde tests green
+- [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) is the
+  controlling plan
+- release-readiness claims match reality
+- no open naming or behavior ambiguity remains for the missing public APIs
 
-### Sprint 2: Lightweight Logging
+### Sprint 1: Shared Contract Hardening
 
 Scope:
-- build `sc-observability`
-- file sink, console sink, redaction, fan-out, health
+- finish the missing `sc-observability-types` query/follow contract
+- replace the timestamp alias with a UTC-enforced public type
+- add the shared health/provider surfaces required for full-stack integration
 
 Done means:
-- logging-only example works
-- fail-open sink behavior verified
+- `LogQuery`, `LogSnapshot`, `QueryError`, `QueryHealthReport`, and query error
+  codes are shipped
+- `LoggingHealthReport.query` exists
+- UTC-only timestamp behavior is enforced in code
+- the checklist is `[x]` for Sprint 1 scope
 
-### Sprint 3: Observation Routing
+### Sprint 2: Logging Query/Follow Runtime
 
 Scope:
-- build `sc-observe`
-- builder, subscriber/projector registration, filtering, routing, health
+- implement the missing query/follow runtime in `sc-observability`
+- ship `Logger::query`, `Logger::follow`, `LogFollowSession`, and
+  `JsonlLogReader`
+- prove rotation-safe historical and follow behavior
 
 Done means:
-- one typed observation fans out correctly
-- shutdown/routing failure behavior verified
+- historical query and follow are implemented and synchronous
+- rotation behavior is proven with tests
+- logging-only deployments can use the full query/follow surface
 
-### Sprint 4: OTLP Telemetry
+### Sprint 3: Routing And OTLP Attachment Closure
 
 Scope:
-- build `sc-observability-otlp`
-- config builder, span assembler, exporters, telemetry health
+- ship the real public OTLP attachment path
+- add telemetry health bridging without creating an OTLP dependency in
+  `sc-observe`
+- remove test-only scaffolding from the full-stack integration story
 
 Done means:
-- OTLP attaches through projector registration
-- telemetry lifecycle behavior verified
+- `TelemetryProjectors<T>` is shipped
+- `ObservabilityBuilder` can expose attached telemetry health through a generic
+  provider
+- a downstream user can wire the full stack through shipped public APIs only
 
-### Sprint 5: ATM Adapter Integration
-
-Prerequisites:
-- ATM adapter mapping spec accepted by ATM team with no open blocking items
-- all Open ATM-Owned Decisions in [`atm-adapter-mapping-spec.md`](./atm-adapter-mapping-spec.md)
-  §9 resolved or formally deferred with documented rationale
+### Sprint 4: Hardening And Final Publish Gate
 
 Scope:
-- ATM-owned adapter work, not shared-crate behavior
-- implement mapping spec and proving path
+- rerun the design-closure loop on the finished implementation
+- update all docs and checklists to the shipped truth
+- execute the final pre-publish review and release gate
 
 Done means:
-- ATM adapter mapping spec accepted with no open blocking items
-- shared repo example and ATM repo proving path align
-
-### Sprint 6: Hardening
-
-Scope:
-- CI strengthening
-- performance pass
-- migration and release readiness
-
-Done means:
-- all public API checklist items marked finalized
-- no unresolved Important findings from QA-1 through QA-6
-- migration and release readiness checklist drafted
-- boundary preservation verified against `docs/publishing.md` and
-  `docs/git-workflows.md`
-- release and cutover tasks can start
+- all public API checklist items are marked finalized
+- release-readiness checklist is truthful and complete
+- final review returns zero blocking findings
+- publish work can begin only after Sprint 4 passes
 
 ## 3. Sprint Dependencies
 
+- Sprint 1 depends on Sprint 0
 - Sprint 2 depends on Sprint 1
 - Sprint 3 depends on Sprint 2
 - Sprint 4 depends on Sprint 3
-- Sprint 5 depends on Sprint 4, ATM adapter mapping spec acceptance with no
-  open blocking items, and resolution or formal documented deferral of the open
-  ATM-owned decisions listed in `atm-adapter-mapping-spec.md` §9
-- Sprint 6 depends on all previous sprints
+
+Query/follow dependency placement:
+
+- shared query/follow contracts close in Sprint 1
+- logging query/follow runtime closes in Sprint 2
+- Sprint 3 consumes the stabilized logging/query surface; it does not redefine
+  it
 
 ## 4. Review Expectations
 
@@ -109,5 +112,4 @@ Each sprint should end with:
 - branch pushed
 - ATM review requested
 
-No sprint should rely on “we will tighten the docs later” to close a public API
-decision.
+No sprint should rely on later cleanup to close a public API decision.

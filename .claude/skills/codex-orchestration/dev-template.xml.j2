@@ -1,7 +1,7 @@
 ---
 name: dev-task
 version: 1.0.0
-description: arch-ctm sprint assignment template for codex-orchestration phases.
+description: cobs sprint assignment template for codex-orchestration phases.
 format: xml
 required_variables:
   - task_id
@@ -13,8 +13,9 @@ required_variables:
   - deliverables
   - acceptance_criteria
   - references
+  - merge_forward  # merge commands to run before coding, e.g. "git merge origin/sprint-2.1" or "none — integrate/phase-2 is sufficient"
 ---
-<atm-task id="{{ task_id }}" sprint="{{ sprint }}" assignee="arch-ctm">
+<atm-task id="{{ task_id }}" sprint="{{ sprint }}" assignee="cobs">
   <description>{{ description }}</description>
 
   <worktree>{{ worktree_path }}</worktree>
@@ -34,12 +35,15 @@ required_variables:
   </references>
 
   <workflow>
-    <step id="a">ACK this message immediately. Make reasonable assumptions and do not ask clarifying questions unless a real blocker prevents execution.</step>
-    <step id="b">Immediately after ACK, begin executing the task in the same work session. Do not pause to summarize the task to the user or wait for further confirmation.</step>
-    <step id="c">Before coding: run `git fetch origin && git merge origin/{{ pr_target }}` to include all prior sprint fixes on the target branch. Then complete the assigned development work end-to-end.</step>
-    <step id="d">As soon as the development changes are complete and the branch is in a pushable state, commit and push immediately. Send me the branch name + commit hash right away so I can open the PR and prepare the next worktree in parallel.</step>
-    <step id="e">After the push report, run the required validation/tests. Do not wait for PR creation before starting validation.</step>
-    <step id="f">When validation completes, send a second report with PASS or FAIL, concrete failure details if any, and whether follow-up fixes are required.</step>
-    <step id="g">After the validation report, read ATM again for follow-up work.</step>
+    <step id="a">ACK this message immediately, then START WORK in the same response. Do not wait for confirmation. Do not summarize the task back. Do not ask clarifying questions unless a hard blocker prevents any progress.</step>
+    <step id="b">Before coding — merge-forward required:
+      1. `git fetch origin`
+      2. `git merge origin/{{ pr_target }}` — pulls all merged sprints from the integration branch
+      3. {{ merge_forward }}
+      Then implement the full sprint end-to-end without pausing.</step>
+    <step id="c">As soon as the implementation is complete and the branch is in a pushable state: `git commit` and `git push` IMMEDIATELY. Send me the branch name and commit hash in the same message so I can open the PR and stage the next sprint in parallel.</step>
+    <step id="d">After pushing, run required validation (cargo test, cargo clippy, docs-consistency). Do NOT wait for PR creation before starting validation.</step>
+    <step id="e">Send a validation report: PASS or FAIL, with concrete failure details if any. This is a separate message from the push report.</step>
+    <step id="f">After sending the validation report: READ ATM IMMEDIATELY for the next task. Do not go idle. The next sprint assignment will already be waiting.</step>
   </workflow>
 </atm-task>

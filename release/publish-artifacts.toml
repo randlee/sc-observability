@@ -1,5 +1,10 @@
 schema_version = 1
 
+# ATM baseline publish history:
+# - sc-observability was previously published at 0.45.2
+# - sc-observability-types, sc-observe, and sc-observability-otlp were not
+#   previously published under these names
+
 [[crates]]
 artifact = "sc-observability-types"
 package = "sc-observability-types"

@@ -5,6 +5,7 @@ on:
     branches: [develop, main, "integrate/*"]
   push:
     branches: [develop, main]
+  workflow_dispatch:
 
 jobs:
   fmt:
@@ -16,7 +17,8 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          toolchain: "1.94.1"
+          components: rustfmt, clippy
 
       - name: Check formatting
         run: cargo fmt --check --all
@@ -29,6 +31,9 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+          components: rustfmt, clippy
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -71,9 +76,24 @@ jobs:
       - name: Validate dependency bans
         run: bash scripts/ci/validate_dependency_bans.sh
 
+  version-literals:
+    name: version-literals (ubuntu)
+    needs: [clippy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate version literals
+        run: python3 scripts/ci/validate_version_literals.py
+
   manifest-validation:
     name: manifest-validation (ubuntu)
-    needs: [clippy, docs-consistency, dependency-bans]
+    needs: [clippy, docs-consistency, dependency-bans, version-literals]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,6 +118,9 @@ jobs:
       - name: Validate dependency bans
         run: bash scripts/ci/validate_dependency_bans.sh
 
+      - name: Validate version literals
+        run: python3 scripts/ci/validate_version_literals.py
+
       - name: Validate repo boundaries
         run: bash scripts/ci/validate_repo_boundaries.sh
 
@@ -113,6 +136,9 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+          components: rustfmt, clippy
 
       - name: Cache cargo registry
         uses: actions/cache@v4

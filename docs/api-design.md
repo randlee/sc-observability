@@ -732,7 +732,13 @@ The shared timestamp contract is UTC-only.
 Design direction:
 
 ```rust
-pub type Timestamp = time::OffsetDateTime;
+pub struct Timestamp(time::OffsetDateTime);
+
+impl Timestamp {
+    pub const UNIX_EPOCH: Self;
+    pub fn now_utc() -> Self;
+    pub fn from_offset_date_time(value: time::OffsetDateTime) -> Self;
+}
 ```
 
 Requirements:
@@ -936,6 +942,8 @@ pub struct SpanEnded;
 Design direction:
 
 ```rust
+pub struct DurationMs(u64);
+
 pub struct SpanRecord<S> { /* private fields */ }
 
 impl SpanRecord<SpanStarted> {
@@ -950,7 +958,7 @@ impl SpanRecord<SpanStarted> {
     pub fn end(
         self,
         status: SpanStatus,
-        duration_ms: u64,
+        duration: DurationMs,
     ) -> SpanRecord<SpanEnded>;
 }
 
@@ -965,7 +973,7 @@ impl<S> SpanRecord<S> {
 }
 
 impl SpanRecord<SpanEnded> {
-    pub fn duration_ms(&self) -> u64;
+    pub fn duration_ms(&self) -> DurationMs;
 }
 ```
 
@@ -1086,7 +1094,7 @@ Public crate-surface errors should be structured around diagnostics.
 Design direction:
 
 ```rust
-pub trait DiagnosticInfo {
+pub trait DiagnosticInfo: sealed::Sealed {
     fn diagnostic(&self) -> &Diagnostic;
 }
 
@@ -1170,7 +1178,7 @@ pub trait ObservationSubscriber<T>: Send + Sync
 where
     T: Observable,
 {
-    fn handle(&self, observation: &Observation<T>) -> Result<(), SubscriberError>;
+    fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>;
 }
 ```
 
@@ -1667,11 +1675,11 @@ pub struct OtelConfig {
     pub auth_header: Option<String>,
     pub ca_file: Option<std::path::PathBuf>,
     pub insecure_skip_verify: bool,
-    pub timeout_ms: u64,
+    pub timeout_ms: DurationMs,
     pub debug_local_export: bool,
     pub max_retries: u32,
-    pub initial_backoff_ms: u64,
-    pub max_backoff_ms: u64,
+    pub initial_backoff_ms: DurationMs,
+    pub max_backoff_ms: DurationMs,
 }
 ```
 
@@ -1724,7 +1732,7 @@ pub struct TracesConfig {
 
 pub struct MetricsConfig {
     pub batch_size: usize,
-    pub export_interval_ms: u64,
+    pub export_interval_ms: DurationMs,
 }
 ```
 

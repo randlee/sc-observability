@@ -54,3 +54,9 @@ for needle in phase_checks:
 
 print("docs consistency validation passed")
 PY
+
+for crate in sc-observability-types sc-observability sc-observe sc-observability-otlp; do
+  cargo rustdoc -p "$crate" -- -Dmissing-docs >/dev/null
+done
+
+echo "rustdoc missing-docs validation passed"

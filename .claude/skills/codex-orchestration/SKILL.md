@@ -1,6 +1,6 @@
 ---
 name: codex-orchestration
-description: Orchestrate phased work where arch-ctm is the sole developer and quality-mgr enforces the QA gate for sc-observability.
+description: Orchestrate phased work where cobs is the sole developer and quality-mgr enforces the QA gate for sc-observability.
 ---
 
 # Codex Orchestration
@@ -11,7 +11,7 @@ This skill defines a lightweight phase workflow for standalone repos like
 ## Model
 
 - `team-lead` coordinates
-- `arch-ctm` is the sole developer
+- `cobs` is the sole developer
 - `quality-mgr` runs QA after each sprint delivery
 
 The repo may use either:
@@ -31,8 +31,8 @@ Before starting:
 
 ## Sprint Flow
 
-1. Team-lead sends a sprint assignment to `arch-ctm` using `dev-template.xml.j2`.
-2. `arch-ctm` ACKs, implements, commits, pushes, and reports the branch + SHA.
+1. Team-lead sends a sprint assignment to `cobs` using `dev-template.xml.j2`.
+2. `cobs` ACKs, implements, commits, pushes, and reports the branch + SHA.
 3. Team-lead opens/updates the PR.
 4. Team-lead assigns QA to `quality-mgr` using `qa-template.xml.j2`.
 5. `quality-mgr` runs:
@@ -40,7 +40,7 @@ Before starting:
    - `req-qa`
    - `arch-qa`
 6. If QA passes and CI is green, merge proceeds.
-7. If QA fails, team-lead routes the fixes back to `arch-ctm`.
+7. If QA fails, team-lead routes the fixes back to `cobs`.
 
 ## CI
 

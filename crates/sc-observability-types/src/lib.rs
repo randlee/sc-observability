@@ -3,22 +3,176 @@
 //! This crate defines the reusable value types, diagnostics, typestate span
 //! contracts, health reports, and open extension traits consumed by the higher
 //! layers in the workspace. It intentionally avoids owning sinks, routing
-//! runtimes, exporter behavior, or ATM-specific payload types.
+//! runtimes, exporter behavior, or application-specific payload types.
 
 pub mod constants;
 pub mod error_codes;
+mod errors;
+mod health;
+mod query;
+
+mod sealed {
+    pub trait Sealed {}
+}
+
+#[doc(hidden)]
+pub mod telemetry_health_provider_sealed {
+    pub trait Sealed {}
+}
 
 use std::borrow::Cow;
+use std::fmt;
 use std::marker::PhantomData;
+use std::ops::{Add, Sub};
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use thiserror::Error;
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime, UtcOffset, format_description::well_known::Rfc3339};
+
+#[doc(inline)]
+pub use errors::{
+    EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ObservationError,
+    ProjectionError, ShutdownError, SubscriberError, TelemetryError,
+};
+#[doc(inline)]
+pub use health::{
+    ExporterHealth, ExporterHealthState, LoggingHealthReport, LoggingHealthState,
+    ObservabilityHealthProvider, ObservabilityHealthReport, ObservationHealthState,
+    QueryHealthReport, QueryHealthState, SinkHealth, SinkHealthState, TelemetryHealthReport,
+    TelemetryHealthState,
+};
+#[doc(inline)]
+pub use query::{LogFieldMatch, LogOrder, LogQuery, LogSnapshot, QueryError};
+
+/// Canonical millisecond duration type used across the workspace.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct DurationMs(u64);
+
+impl DurationMs {
+    /// Returns the raw millisecond count.
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
+}
+
+impl From<u64> for DurationMs {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+impl From<DurationMs> for u64 {
+    fn from(value: DurationMs) -> Self {
+        value.0
+    }
+}
+
+impl fmt::Display for DurationMs {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}ms", self.0)
+    }
+}
 
 /// Canonical UTC timestamp type used across the workspace.
-pub type Timestamp = OffsetDateTime;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Timestamp(OffsetDateTime);
+
+impl Timestamp {
+    /// Canonical Unix epoch timestamp in UTC.
+    pub const UNIX_EPOCH: Self = Self(OffsetDateTime::UNIX_EPOCH);
+
+    /// Returns the current UTC timestamp.
+    pub fn now_utc() -> Self {
+        Self(OffsetDateTime::now_utc())
+    }
+
+    /// Normalizes an arbitrary offset date-time into the canonical UTC timestamp.
+    pub fn from_offset_date_time(value: OffsetDateTime) -> Self {
+        Self(value.to_offset(UtcOffset::UTC))
+    }
+
+    /// Returns the normalized inner UTC date-time value.
+    pub fn into_inner(self) -> OffsetDateTime {
+        self.0
+    }
+}
+
+impl From<OffsetDateTime> for Timestamp {
+    fn from(value: OffsetDateTime) -> Self {
+        Self::from_offset_date_time(value)
+    }
+}
+
+impl From<Timestamp> for OffsetDateTime {
+    fn from(value: Timestamp) -> Self {
+        value.0
+    }
+}
+
+impl Add<Duration> for Timestamp {
+    type Output = Self;
+
+    fn add(self, rhs: Duration) -> Self::Output {
+        Self::from_offset_date_time(self.0 + rhs)
+    }
+}
+
+impl Sub<Duration> for Timestamp {
+    type Output = Self;
+
+    fn sub(self, rhs: Duration) -> Self::Output {
+        Self::from_offset_date_time(self.0 - rhs)
+    }
+}
+
+impl Sub for Timestamp {
+    type Output = Duration;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        self.0 - rhs.0
+    }
+}
+
+impl fmt::Display for Timestamp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let rendered = self
+            .0
+            .to_offset(UtcOffset::UTC)
+            .format(&Rfc3339)
+            .map_err(|_| fmt::Error)?;
+        f.write_str(&rendered)
+    }
+}
+
+impl Serialize for Timestamp {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let rendered = self
+            .0
+            .to_offset(UtcOffset::UTC)
+            .format(&Rfc3339)
+            .map_err(serde::ser::Error::custom)?;
+        serializer.serialize_str(&rendered)
+    }
+}
+
+impl<'de> Deserialize<'de> for Timestamp {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        let parsed = OffsetDateTime::parse(&value, &Rfc3339).map_err(serde::de::Error::custom)?;
+        Ok(Self::from_offset_date_time(parsed))
+    }
+}
 
 /// Stable machine-readable error code used across diagnostics and error types.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -89,6 +243,12 @@ macro_rules! validated_name_type {
             /// Returns the underlying validated string value.
             pub fn as_str(&self) -> &str {
                 &self.0
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&self.0)
             }
         }
     };
@@ -214,8 +374,16 @@ impl RecoverableSteps {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Remediation {
-    Recoverable { steps: RecoverableSteps },
-    NotRecoverable { justification: String },
+    /// The caller can recover by following the ordered steps.
+    Recoverable {
+        /// Ordered recovery steps the caller can take.
+        steps: RecoverableSteps,
+    },
+    /// The caller cannot recover automatically and must accept the justification.
+    NotRecoverable {
+        /// Reason the failure cannot be recovered automatically.
+        justification: String,
+    },
 }
 
 impl Remediation {
@@ -231,7 +399,7 @@ impl Remediation {
         }
     }
 
-    /// Builds a non-recoverable remediation with the required justification for why recovery is not possible.
+    /// Builds a non-recoverable remediation with the required justification.
     pub fn not_recoverable(justification: impl Into<String>) -> Self {
         Self::NotRecoverable {
             justification: justification.into(),
@@ -242,28 +410,39 @@ impl Remediation {
 /// Structured diagnostic payload reusable across CLI, logging, and telemetry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Diagnostic {
+    /// UTC timestamp when the diagnostic was created.
     pub timestamp: Timestamp,
+    /// Stable machine-readable error code.
     pub code: ErrorCode,
+    /// Human-readable summary message.
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable cause string.
     pub cause: Option<String>,
+    /// Required remediation guidance.
     pub remediation: Remediation,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional documentation reference or URL.
     pub docs: Option<String>,
     #[serde(default, skip_serializing_if = "Map::is_empty")]
+    /// Structured machine-readable details.
     pub details: Map<String, Value>,
 }
 
 /// Trait for public error surfaces that can expose an attached diagnostic.
-pub trait DiagnosticInfo {
+pub trait DiagnosticInfo: sealed::Sealed {
+    /// Returns the structured diagnostic attached to this error surface.
     fn diagnostic(&self) -> &Diagnostic;
 }
 
 /// Small diagnostic summary used in health and last-error reporting.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiagnosticSummary {
+    /// Optional stable error code for the last reported failure.
     pub code: Option<ErrorCode>,
+    /// Human-readable summary message.
     pub message: String,
+    /// UTC timestamp when the summarized diagnostic occurred.
     pub at: Timestamp,
 }
 
@@ -278,11 +457,19 @@ impl From<&Diagnostic> for DiagnosticSummary {
 }
 
 /// Builder-style context wrapper used by public crate error types.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorContext {
     diagnostic: Diagnostic,
     #[serde(skip)]
-    source: Option<Box<str>>,
+    source: Option<Arc<dyn std::error::Error + Send + Sync + 'static>>,
+}
+
+impl PartialEq for ErrorContext {
+    fn eq(&self, other: &Self) -> bool {
+        self.diagnostic == other.diagnostic
+            && self.source.as_ref().map(ToString::to_string)
+                == other.source.as_ref().map(ToString::to_string)
+    }
 }
 
 impl ErrorContext {
@@ -290,7 +477,7 @@ impl ErrorContext {
     pub fn new(code: ErrorCode, message: impl Into<String>, remediation: Remediation) -> Self {
         Self {
             diagnostic: Diagnostic {
-                timestamp: OffsetDateTime::now_utc(),
+                timestamp: Timestamp::now_utc(),
                 code,
                 message: message.into(),
                 cause: None,
@@ -320,9 +507,9 @@ impl ErrorContext {
         self
     }
 
-    /// Captures a source error string for display and diagnostics.
+    /// Captures the real source error for display and error chaining.
     pub fn source(mut self, source: Box<dyn std::error::Error + Send + Sync + 'static>) -> Self {
-        self.source = Some(source.to_string().into_boxed_str());
+        self.source = Some(Arc::from(source));
         self
     }
 
@@ -342,52 +529,67 @@ impl std::fmt::Display for ErrorContext {
     }
 }
 
-/// Error returned when process identity resolution fails.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
-#[error("{0}")]
-pub struct IdentityError(pub Box<ErrorContext>);
-
-impl DiagnosticInfo for IdentityError {
-    fn diagnostic(&self) -> &Diagnostic {
-        self.0.diagnostic()
+impl std::error::Error for ErrorContext {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source
+            .as_deref()
+            .map(|source| source as &(dyn std::error::Error + 'static))
     }
 }
 
 /// Canonical event/log severity level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Level {
+    /// Verbose trace-level event.
     Trace,
+    /// Debug-level event intended for development or diagnostics.
     Debug,
+    /// Informational event for normal operation.
     Info,
+    /// Warning event signaling degraded or unexpected behavior.
     Warn,
+    /// Error event signaling a failure.
     Error,
 }
 
 /// Level threshold used by filtering surfaces.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LevelFilter {
+    /// Allow trace, debug, info, warn, and error events.
     Trace,
+    /// Allow debug, info, warn, and error events.
     Debug,
+    /// Allow info, warn, and error events.
     Info,
+    /// Allow warn and error events.
     Warn,
+    /// Allow only error events.
     Error,
+    /// Disable all events.
     Off,
 }
 
 /// Caller-resolved process identity attached to observations and log events.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ProcessIdentity {
+    /// Optional hostname attached to the event or observation.
     pub hostname: Option<String>,
+    /// Optional process identifier attached to the event or observation.
     pub pid: Option<u32>,
 }
 
 /// Policy describing how process identity is populated at runtime.
 pub enum ProcessIdentityPolicy {
+    /// Resolve process identity automatically using the default runtime behavior.
     Auto,
+    /// Use a fixed caller-supplied identity.
     Fixed {
+        /// Fixed hostname value.
         hostname: Option<String>,
+        /// Fixed process identifier value.
         pid: Option<u32>,
     },
+    /// Delegate identity resolution to a caller-supplied resolver.
     Resolver(Arc<dyn ProcessIdentityResolver>),
 }
 
@@ -409,6 +611,7 @@ impl std::fmt::Debug for ProcessIdentityPolicy {
 
 /// Open resolver contract for caller-defined process identity lookup.
 pub trait ProcessIdentityResolver: Send + Sync {
+    /// Resolves the process identity to attach to emitted records.
     fn resolve(&self) -> Result<ProcessIdentity, IdentityError>;
 }
 
@@ -483,8 +686,11 @@ fn validate_lower_hex(
 /// Generic trace correlation context shared by logs, spans, and observations.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TraceContext {
+    /// W3C-compatible trace identifier.
     pub trace_id: TraceId,
+    /// Current span identifier.
     pub span_id: SpanId,
+    /// Optional parent span identifier.
     pub parent_span_id: Option<SpanId>,
 }
 
@@ -516,11 +722,17 @@ pub struct Observation<T>
 where
     T: Observable,
 {
+    /// Envelope schema version.
     pub version: String,
+    /// UTC observation timestamp.
     pub timestamp: Timestamp,
+    /// Service that emitted the observation.
     pub service: ServiceName,
+    /// Process identity attached to the observation.
     pub identity: ProcessIdentity,
+    /// Optional trace context for correlation.
     pub trace: Option<TraceContext>,
+    /// Caller-owned typed payload.
     pub payload: T,
 }
 
@@ -532,7 +744,7 @@ where
     pub fn new(service: ServiceName, payload: T) -> Self {
         Self {
             version: constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
-            timestamp: OffsetDateTime::now_utc(),
+            timestamp: Timestamp::now_utc(),
             service,
             identity: ProcessIdentity::default(),
             trace: None,
@@ -544,28 +756,46 @@ where
 /// Structured log record emitted by the logging and routing layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
+    /// Log schema version.
     pub version: String,
+    /// UTC event timestamp.
     pub timestamp: Timestamp,
+    /// Event severity.
     pub level: Level,
+    /// Service that emitted the event.
     pub service: ServiceName,
+    /// Stable target/category label.
     pub target: TargetCategory,
+    /// Stable action label.
     pub action: ActionName,
+    /// Optional human-readable message.
     pub message: Option<String>,
+    /// Process identity attached to the event.
     pub identity: ProcessIdentity,
+    /// Optional trace context for correlation.
     pub trace: Option<TraceContext>,
+    /// Optional request identifier.
     pub request_id: Option<String>,
+    /// Optional correlation identifier.
     pub correlation_id: Option<String>,
+    /// Optional stable outcome label.
     pub outcome: Option<String>,
+    /// Optional structured diagnostic payload.
     pub diagnostic: Option<Diagnostic>,
+    /// Optional state transition payload.
     pub state_transition: Option<StateTransition>,
+    /// Arbitrary structured event fields.
     pub fields: Map<String, Value>,
 }
 
 /// Final span status for a completed span record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SpanStatus {
+    /// The span completed successfully.
     Ok,
+    /// The span completed with an error.
     Error,
+    /// The span completed without an explicit outcome.
     Unset,
 }
 
@@ -587,7 +817,7 @@ pub struct SpanRecord<S> {
     status: SpanStatus,
     diagnostic: Option<Diagnostic>,
     attributes: Map<String, Value>,
-    duration_ms: Option<u64>,
+    duration_ms: Option<DurationMs>,
     marker: PhantomData<S>,
 }
 
@@ -620,7 +850,7 @@ impl SpanRecord<SpanStarted> {
     }
 
     /// Consumes the started span and returns the only valid completed span form.
-    pub fn end(self, status: SpanStatus, duration_ms: u64) -> SpanRecord<SpanEnded> {
+    pub fn end(self, status: SpanStatus, duration: DurationMs) -> SpanRecord<SpanEnded> {
         SpanRecord {
             timestamp: self.timestamp,
             service: self.service,
@@ -629,7 +859,7 @@ impl SpanRecord<SpanStarted> {
             status,
             diagnostic: self.diagnostic,
             attributes: self.attributes,
-            duration_ms: Some(duration_ms),
+            duration_ms: Some(duration),
             marker: PhantomData,
         }
     }
@@ -674,138 +904,66 @@ impl<S> SpanRecord<S> {
 
 impl SpanRecord<SpanEnded> {
     /// Returns the final duration, available only on completed spans.
-    pub fn duration_ms(&self) -> u64 {
-        self.duration_ms.unwrap_or_default()
+    pub fn duration_ms(&self) -> DurationMs {
+        self.duration_ms
+            .expect("SpanRecord<SpanEnded> always has duration_ms set by end()")
     }
 }
 
 /// Event attached to a span timeline without creating a child span.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpanEvent {
+    /// UTC event timestamp.
     pub timestamp: Timestamp,
+    /// Trace/span correlation for the event.
     pub trace: TraceContext,
+    /// Stable event name.
     pub name: ActionName,
+    /// Structured event attributes.
     pub attributes: Map<String, Value>,
+    /// Optional diagnostic attached to the event.
     pub diagnostic: Option<Diagnostic>,
 }
 
 /// Generic span lifecycle signal used by projectors and telemetry assembly.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum SpanSignal {
+    /// Started span record.
     Started(SpanRecord<SpanStarted>),
+    /// Point-in-time event on an existing span.
     Event(SpanEvent),
+    /// Completed span record.
     Ended(SpanRecord<SpanEnded>),
 }
 
 /// Supported metric aggregation shapes.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum MetricKind {
+    /// Monotonic counter metric.
     Counter,
+    /// Gauge metric representing the latest value.
     Gauge,
+    /// Histogram metric representing a sampled distribution.
     Histogram,
 }
 
 /// Structured metric observation projected from routing or telemetry layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetricRecord {
+    /// UTC metric timestamp.
     pub timestamp: Timestamp,
+    /// Service that emitted the metric.
     pub service: ServiceName,
+    /// Stable metric name.
     pub name: MetricName,
+    /// Aggregation shape for the metric.
     pub kind: MetricKind,
+    /// Numeric metric value.
     pub value: f64,
     /// Optional UCUM unit string, for example `ms`, `By`, or `1`.
     pub unit: Option<String>,
+    /// Structured metric attributes.
     pub attributes: Map<String, Value>,
-}
-
-/// Top-level health state for the lightweight logging layer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum LoggingHealthState {
-    Healthy,
-    DegradedDropping,
-    Unavailable,
-}
-
-/// Health state for an individual log sink.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SinkHealthState {
-    Healthy,
-    DegradedDropping,
-    Unavailable,
-}
-
-/// Health summary for one concrete logging sink.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SinkHealth {
-    pub name: String,
-    pub state: SinkHealthState,
-    pub last_error: Option<DiagnosticSummary>,
-}
-
-/// Aggregate logging health report.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct LoggingHealthReport {
-    pub state: LoggingHealthState,
-    pub dropped_events_total: u64,
-    pub flush_errors_total: u64,
-    pub active_log_path: std::path::PathBuf,
-    pub sink_statuses: Vec<SinkHealth>,
-    pub last_error: Option<DiagnosticSummary>,
-}
-
-/// Top-level health state for the observation routing runtime.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ObservationHealthState {
-    Healthy,
-    Degraded,
-    Unavailable,
-}
-
-/// Aggregate routing/runtime health report.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ObservabilityHealthReport {
-    pub state: ObservationHealthState,
-    pub dropped_observations_total: u64,
-    pub subscriber_failures_total: u64,
-    pub projection_failures_total: u64,
-    pub logging: Option<LoggingHealthReport>,
-    pub telemetry: Option<TelemetryHealthReport>,
-    pub last_error: Option<DiagnosticSummary>,
-}
-
-/// Top-level health state for telemetry export.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TelemetryHealthState {
-    Disabled,
-    Healthy,
-    Degraded,
-    Unavailable,
-}
-
-/// Health state for an individual telemetry exporter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ExporterHealthState {
-    Healthy,
-    Degraded,
-    Unavailable,
-}
-
-/// Health summary for one configured telemetry exporter.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ExporterHealth {
-    pub name: String,
-    pub state: ExporterHealthState,
-    pub last_error: Option<DiagnosticSummary>,
-}
-
-/// Aggregate telemetry/export health report.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TelemetryHealthReport {
-    pub state: TelemetryHealthState,
-    pub dropped_exports_total: u64,
-    pub malformed_spans_total: u64,
-    pub exporter_statuses: Vec<ExporterHealth>,
-    pub last_error: Option<DiagnosticSummary>,
 }
 
 /// Open subscriber contract for typed observations.
@@ -813,7 +971,8 @@ pub trait ObservationSubscriber<T>: Send + Sync
 where
     T: Observable,
 {
-    fn handle(&self, observation: &Observation<T>) -> Result<(), SubscriberError>;
+    /// Consumes one routed observation.
+    fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError>;
 }
 
 /// Open filter contract evaluated before subscriber or projector execution.
@@ -821,6 +980,7 @@ pub trait ObservationFilter<T>: Send + Sync
 where
     T: Observable,
 {
+    /// Returns whether the observation should proceed to the subscriber or projector.
     fn accepts(&self, observation: &Observation<T>) -> bool;
 }
 
@@ -829,6 +989,7 @@ pub trait LogProjector<T>: Send + Sync
 where
     T: Observable,
 {
+    /// Projects one observation into zero or more log events.
     fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError>;
 }
 
@@ -837,6 +998,7 @@ pub trait SpanProjector<T>: Send + Sync
 where
     T: Observable,
 {
+    /// Projects one observation into zero or more span lifecycle signals.
     fn project_spans(
         &self,
         observation: &Observation<T>,
@@ -848,6 +1010,7 @@ pub trait MetricProjector<T>: Send + Sync
 where
     T: Observable,
 {
+    /// Projects one observation into zero or more metric records.
     fn project_metrics(
         &self,
         observation: &Observation<T>,
@@ -860,7 +1023,9 @@ pub struct SubscriberRegistration<T>
 where
     T: Observable,
 {
+    /// Registered subscriber implementation.
     pub subscriber: Arc<dyn ObservationSubscriber<T>>,
+    /// Optional filter evaluated before subscriber execution.
     pub filter: Option<Arc<dyn ObservationFilter<T>>>,
 }
 
@@ -870,78 +1035,14 @@ pub struct ProjectionRegistration<T>
 where
     T: Observable,
 {
+    /// Optional log projector.
     pub log_projector: Option<Arc<dyn LogProjector<T>>>,
+    /// Optional span projector.
     pub span_projector: Option<Arc<dyn SpanProjector<T>>>,
+    /// Optional metric projector.
     pub metric_projector: Option<Arc<dyn MetricProjector<T>>>,
+    /// Optional filter evaluated before projection.
     pub filter: Option<Arc<dyn ObservationFilter<T>>>,
-}
-
-macro_rules! error_wrapper {
-    ($(#[$meta:meta])* $name:ident) => {
-        $(#[$meta])*
-        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
-        #[error("{0}")]
-        pub struct $name(pub Box<ErrorContext>);
-
-        impl DiagnosticInfo for $name {
-            fn diagnostic(&self) -> &Diagnostic {
-                self.0.diagnostic()
-            }
-        }
-    };
-}
-
-error_wrapper!(
-    /// Initialization error returned by public construction entry points.
-    InitError
-);
-error_wrapper!(
-    /// Event validation or lifecycle error returned during emit paths.
-    EventError
-);
-error_wrapper!(
-    /// Flush error returned by explicit flush operations.
-    FlushError
-);
-error_wrapper!(
-    /// Shutdown error returned when graceful shutdown fails.
-    ShutdownError
-);
-error_wrapper!(
-    /// Projection error returned by log/span/metric projectors.
-    ProjectionError
-);
-error_wrapper!(
-    /// Subscriber error returned by observation subscribers.
-    SubscriberError
-);
-error_wrapper!(
-    /// Logging sink error returned by concrete sink implementations.
-    LogSinkError
-);
-error_wrapper!(
-    /// Export error returned by concrete telemetry exporters.
-    ExportError
-);
-
-/// Routing/runtime error returned by `Observability::emit`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
-pub enum ObservationError {
-    #[error("observation runtime is shut down")]
-    Shutdown,
-    #[error("{0}")]
-    QueueFull(Box<ErrorContext>),
-    #[error("{0}")]
-    RoutingFailure(Box<ErrorContext>),
-}
-
-/// Telemetry emit error returned by `Telemetry` operations.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
-pub enum TelemetryError {
-    #[error("telemetry runtime is shut down")]
-    Shutdown,
-    #[error("{0}")]
-    ExportFailure(Box<ErrorContext>),
 }
 
 #[cfg(test)]
@@ -949,7 +1050,7 @@ mod tests {
     use super::*;
     use serde::{Deserialize, Serialize};
     use serde_json::json;
-    use time::OffsetDateTime;
+    use time::{OffsetDateTime, UtcOffset};
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     struct FixturePayload {
@@ -1035,6 +1136,12 @@ mod tests {
             ToolName::new("codex-cli")
                 .expect("valid tool name")
                 .as_str(),
+            "codex-cli"
+        );
+        assert_eq!(
+            ToolName::new("codex-cli")
+                .expect("valid tool name")
+                .to_string(),
             "codex-cli"
         );
         assert_eq!(
@@ -1126,7 +1233,59 @@ mod tests {
             Some("https://example.test/failure")
         );
         assert_eq!(error.diagnostic().details.get("attempt"), Some(&json!(3)));
-        assert_eq!(error.source.as_deref(), Some("disk full"));
+        assert_eq!(
+            error.source.as_ref().map(ToString::to_string).as_deref(),
+            Some("disk full")
+        );
+        assert_eq!(
+            std::error::Error::source(&error)
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("disk full")
+        );
+    }
+
+    #[test]
+    fn identity_error_exposes_inner_diagnostic() {
+        let context = ErrorContext::new(
+            error_codes::IDENTITY_RESOLUTION_FAILED,
+            "failed to resolve process identity",
+            Remediation::not_recoverable("configure a valid identity source"),
+        )
+        .detail("source", json!("test"));
+        let error = IdentityError(Box::new(context));
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::IDENTITY_RESOLUTION_FAILED
+        );
+        assert_eq!(
+            error.diagnostic().message,
+            "failed to resolve process identity"
+        );
+        assert_eq!(
+            error.diagnostic().details.get("source"),
+            Some(&json!("test"))
+        );
+    }
+
+    #[test]
+    fn wrapper_errors_expose_source_context() {
+        let wrapped = InitError(Box::new(
+            ErrorContext::new(
+                error_codes::DIAGNOSTIC_INVALID,
+                "operation failed",
+                Remediation::not_recoverable("investigate manually"),
+            )
+            .source(Box::new(std::io::Error::other("disk full"))),
+        ));
+
+        let source = std::error::Error::source(&wrapped).expect("context source");
+        assert_eq!(source.to_string(), "operation failed");
+        assert_eq!(
+            source.source().map(ToString::to_string).as_deref(),
+            Some("disk full")
+        );
     }
 
     #[test]
@@ -1143,7 +1302,7 @@ mod tests {
 
         assert_eq!(summary.code, Some(error_codes::DIAGNOSTIC_INVALID));
         assert_eq!(summary.message, "diagnostic invalid");
-        assert!(summary.at <= OffsetDateTime::now_utc());
+        assert!(summary.at <= Timestamp::now_utc());
     }
 
     #[test]
@@ -1171,7 +1330,7 @@ mod tests {
     fn log_event_round_trips_through_serde() {
         let event = LogEvent {
             version: constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
-            timestamp: OffsetDateTime::UNIX_EPOCH,
+            timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service: service_name(),
             target: target_category(),
@@ -1208,7 +1367,7 @@ mod tests {
         attributes.insert("tool".to_string(), json!("rg"));
 
         let started = SpanRecord::<SpanStarted>::new(
-            OffsetDateTime::UNIX_EPOCH,
+            Timestamp::UNIX_EPOCH,
             service_name(),
             action_name(),
             trace_context(),
@@ -1216,7 +1375,7 @@ mod tests {
         )
         .with_diagnostic(diagnostic());
 
-        let ended = started.clone().end(SpanStatus::Ok, 123);
+        let ended = started.clone().end(SpanStatus::Ok, DurationMs::from(123));
         let signal = SpanSignal::Ended(ended);
         let encoded = serde_json::to_value(&signal).expect("serialize span signal");
 
@@ -1227,7 +1386,7 @@ mod tests {
     #[test]
     fn metric_record_round_trips_through_serde() {
         let metric = MetricRecord {
-            timestamp: OffsetDateTime::UNIX_EPOCH,
+            timestamp: Timestamp::UNIX_EPOCH,
             service: service_name(),
             name: metric_name(),
             kind: MetricKind::Counter,
@@ -1244,17 +1403,17 @@ mod tests {
     #[test]
     fn span_record_end_transitions_to_span_ended() {
         let span = SpanRecord::<SpanStarted>::new(
-            OffsetDateTime::UNIX_EPOCH,
+            Timestamp::UNIX_EPOCH,
             service_name(),
             action_name(),
             trace_context(),
             Map::new(),
         );
 
-        let ended = span.end(SpanStatus::Error, 88);
+        let ended = span.end(SpanStatus::Error, DurationMs::from(88));
 
         assert_eq!(ended.status(), SpanStatus::Error);
-        assert_eq!(ended.duration_ms(), 88);
+        assert_eq!(ended.duration_ms(), DurationMs::from(88));
         assert_eq!(ended.service().as_str(), "sc-observability");
     }
 
@@ -1278,7 +1437,7 @@ mod tests {
         let mut attributes = Map::new();
         attributes.insert("count".to_string(), json!(2));
         let span = SpanRecord::<SpanStarted>::new(
-            OffsetDateTime::UNIX_EPOCH,
+            Timestamp::UNIX_EPOCH,
             service_name(),
             action_name(),
             trace_context(),
@@ -1286,7 +1445,7 @@ mod tests {
         )
         .with_diagnostic(diagnostic());
 
-        assert_eq!(span.timestamp(), OffsetDateTime::UNIX_EPOCH);
+        assert_eq!(span.timestamp(), Timestamp::UNIX_EPOCH);
         assert_eq!(span.name().as_str(), "observation.received");
         assert_eq!(
             span.trace().trace_id.as_str(),
@@ -1295,6 +1454,23 @@ mod tests {
         assert_eq!(span.status(), SpanStatus::Unset);
         assert_eq!(span.diagnostic(), Some(&diagnostic()));
         assert_eq!(span.attributes(), &attributes);
+    }
+
+    #[test]
+    fn timestamp_serde_round_trips_as_utc_rfc3339() {
+        let timestamp = Timestamp::from(
+            OffsetDateTime::UNIX_EPOCH.to_offset(UtcOffset::from_hms(2, 0, 0).expect("offset")),
+        );
+        let encoded = serde_json::to_string(&timestamp).expect("serialize timestamp");
+        let decoded: Timestamp = serde_json::from_str(&encoded).expect("deserialize timestamp");
+
+        assert_eq!(encoded, "\"1970-01-01T00:00:00Z\"");
+        assert_eq!(decoded, timestamp);
+    }
+
+    #[test]
+    fn duration_ms_displays_in_milliseconds() {
+        assert_eq!(DurationMs::from(250).to_string(), "250ms");
     }
 
     #[test]
@@ -1308,8 +1484,13 @@ mod tests {
             state: LoggingHealthState::Healthy,
             dropped_events_total: 0,
             flush_errors_total: 0,
+            // fixture path: not accessed on disk
             active_log_path: std::path::PathBuf::from("/var/log/service/logs/service.log.jsonl"),
             sink_statuses: vec![sink],
+            query: Some(QueryHealthReport {
+                state: QueryHealthState::Healthy,
+                last_error: None,
+            }),
             last_error: None,
         };
         let telemetry = TelemetryHealthReport {

@@ -1,6 +1,6 @@
 # SC-Observability Architecture
 
-**Status**: Draft for review
+**Status**: Approved
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Related documents**:
 - [`requirements.md`](./requirements.md)
@@ -67,8 +67,12 @@ This crate is the shared contract layer.
 Owns:
 
 - `ErrorCode`, `Diagnostic`, `Remediation`, `ErrorContext`
+- `Timestamp`, `DurationMs`
 - `TraceContext`, `TraceId`, `SpanId`
 - `SpanRecord<S>`, `SpanSignal`, `MetricRecord`, `LogEvent`
+- `ObservabilityHealthProvider`
+- `LogQuery`, `LogOrder`, `LogFieldMatch`
+- `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
 - health report contracts
 - shared open traits such as `Observable`, `DiagnosticInfo`,
   subscribers, filters, and projectors
@@ -115,6 +119,130 @@ Must not own:
 - OpenTelemetry dependencies
 
 This crate must remain usable on its own by a basic CLI.
+
+### 3.2.1 Query And Follow Extension
+
+The query/follow feature remains part of the logging layer. It does not move
+into `sc-observe`, does not depend on `sc-observability-otlp`, and does not
+require an async runtime.
+
+Type ownership is split as follows:
+
+- `sc-observability-types` owns `LogQuery`, `LogOrder`,
+  `LogFieldMatch`, `LogSnapshot`, `QueryError`,
+  `QueryHealthState`, `QueryHealthReport`, and `ObservabilityHealthProvider`
+- `sc-observability-types` extends `LoggingHealthReport` with
+  `query: Option<QueryHealthReport>`
+- `sc-observability` owns `Logger::query`, `Logger::follow`,
+  `LogFollowSession`, and `JsonlLogReader`
+
+Approved public API surface for this sprint:
+
+```rust
+pub enum LogOrder {
+    OldestFirst,
+    NewestFirst,
+}
+
+pub struct LogFieldMatch {
+    pub field: String,
+    pub value: serde_json::Value,
+}
+
+pub struct LogQuery {
+    pub service: Option<ServiceName>,
+    pub levels: Vec<Level>,
+    pub target: Option<TargetCategory>,
+    pub action: Option<ActionName>,
+    pub request_id: Option<String>,
+    pub correlation_id: Option<String>,
+    pub since: Option<Timestamp>,
+    pub until: Option<Timestamp>,
+    pub field_matches: Vec<LogFieldMatch>,
+    pub limit: Option<usize>,
+    pub order: LogOrder,
+}
+
+pub struct LogSnapshot {
+    pub events: Vec<LogEvent>,
+    pub truncated: bool,
+}
+
+pub enum QueryError {
+    InvalidQuery(Box<ErrorContext>),
+    Io(Box<ErrorContext>),
+    Decode(Box<ErrorContext>),
+    Unavailable(Box<ErrorContext>),
+    Shutdown,
+}
+
+pub enum QueryHealthState {
+    Healthy,
+    Degraded,
+    Unavailable,
+}
+
+pub struct QueryHealthReport {
+    pub state: QueryHealthState,
+    pub last_error: Option<DiagnosticSummary>,
+}
+
+pub struct LoggingHealthReport {
+    pub state: LoggingHealthState,
+    pub dropped_events_total: u64,
+    pub flush_errors_total: u64,
+    pub active_log_path: std::path::PathBuf,
+    pub sink_statuses: Vec<SinkHealth>,
+    pub query: Option<QueryHealthReport>,
+    pub last_error: Option<DiagnosticSummary>,
+}
+
+pub trait ObservabilityHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync {
+    fn telemetry_health(&self) -> TelemetryHealthReport;
+}
+
+impl Logger {
+    pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>;
+    pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>;
+}
+
+pub struct LogFollowSession {
+    /* opaque */
+}
+
+impl LogFollowSession {
+    pub fn poll(&mut self) -> Result<LogSnapshot, QueryError>;
+    pub fn health(&self) -> QueryHealthReport;
+}
+
+pub struct JsonlLogReader {
+    /* opaque */
+}
+
+impl JsonlLogReader {
+    pub fn new(active_log_path: std::path::PathBuf) -> Self;
+    pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>;
+    pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>;
+}
+```
+
+`QueryError` is backed by the stable error-code constants
+`SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`,
+`SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN` per `requirements.md`
+TYP-036.
+
+Behavioral boundaries:
+
+- `Logger::query` and `Logger::follow` are convenience entry points over the
+  logger's active JSONL path and documented rotation layout
+- `JsonlLogReader` is reusable by tools that need offline inspection without a
+  live logger instance
+- `LogFollowSession` stays synchronous and caller-driven: no runtime-managed
+  background work, async executor, or socket-style streaming surface
+- logger-created `LogFollowSession` instances become unavailable once the
+  owning `Logger` shuts down; `JsonlLogReader` sessions remain independent
+- `QueryError` stays in `sc-observability-types` so all logging query surfaces
+  share one stable error vocabulary
 
 ### 3.3 `sc-observe`
 
@@ -195,6 +323,10 @@ application -> sc-observability
 
 Use when a CLI or tool needs structured logging only.
 
+The query/follow API is part of this shape. An application may use `Logger`,
+`Logger::query`, `Logger::follow`, or `JsonlLogReader` without enabling
+`sc-observe` or `sc-observability-otlp`.
+
 ### 4.2 Logging + Routing
 
 ```text
@@ -226,6 +358,53 @@ configuration are documented separately in [`atm-quickstart.md`](./atm-quickstar
 That document is part of the shared-repo detailed design because ATM is the
 first sophisticated adopter, but it does not move ATM-owned compatibility
 behavior into the shared crates.
+
+### 4.5 Rotation-Aware Query/Follow
+
+Historical query and follow behavior operate on one logical log stream made
+from:
+
+- the active path `<log_root>/<service>/logs/<service>.log.jsonl`
+- rotated siblings using the existing `.N` suffix convention
+
+Historical query strategy:
+
+- resolve the active file and its rotated siblings once at query start
+- treat that resolved set as a point-in-time snapshot for the duration of the
+  query
+- scan in oldest-to-newest order for `LogOrder::OldestFirst` and in reverse for
+  `LogOrder::NewestFirst`
+- apply filtering before limit truncation and report truncation through
+  `LogSnapshot.truncated`
+- surface malformed JSONL records or contract decode failures as
+  `QueryError::Decode` rather than silently dropping them
+
+Follow strategy:
+
+- follow sessions begin at the tail of the currently visible log set and do not
+  replay historical backlog; callers needing backlog plus tail must call
+  `query()` first
+- `LogFollowSession` tracks the active path, file identity, and current read
+  offset
+- `poll()` reads appended records since the last successful poll
+- if the active file shrinks or its file identity changes, the session treats
+  that as rotation/truncation, reopens the new active file, and resumes from
+  offset `0` on Unix-family platforms
+- Windows uses a best-effort `(len, modified_nanos)` fallback because stable
+  Rust does not expose a standard-library file identity equivalent to Unix
+  `(dev, ino)`, so truncate/recreate detection there is explicitly
+  non-promissory for v1
+- the follow path remains poll-based and caller-driven; no async watch service
+  is introduced
+
+Validation:
+
+- `limit = Some(0)` is invalid and returns `QueryError::InvalidQuery`
+- `since > until` is invalid and returns `QueryError::InvalidQuery`
+- `field_matches` use exact field-name lookup and exact JSON value equality
+
+This strategy keeps the logging layer self-contained while still making
+rotation behavior explicit enough for implementation and QA.
 
 ## 5. Producer Wiring
 
@@ -265,10 +444,30 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, identifiers, diagnostics, traits, health type definitions |
-| `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, redaction, rotation, logging health re-exports |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions, and logging query/follow value and error contracts |
+| `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, redaction, rotation, `Logger`, `JsonlLogReader`, follow session runtime, and logging health re-exports |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
-| `sc-observability-otlp` | `sc-observability-types`, `sc-observability`, `sc-observe` | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
+| `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
+
+## 6.1 Query/Follow Dependency Order
+
+The implementation dependency order for the query/follow work is:
+
+```text
+#24 LogQuery
+  -> #25 QueryError
+    -> (#26 historical query, #27 follow/tail, #28 query health)
+      -> #29 JsonlLogReader
+```
+
+Consequences:
+
+- the contract and error vocabulary land before runtime behavior
+- issues `#26`, `#27`, and `#28` may proceed in parallel once `#24` and `#25`
+  are merged
+- `#29` finalizes the standalone reader after the logger-facing API and health
+  behavior are already fixed
+- the public signatures above must remain stable across that sequence
 
 ## 7. ADRs
 
@@ -371,8 +570,7 @@ Important boundary:
 
 ## 8. API-Design Consistency
 
-In this docs-v2 branch, `api-design.md` is updated to match the corrected
-layering:
+`api-design.md` matches the corrected layering:
 
 - `sc-observe` depends on `sc-observability-types` and `sc-observability` only
 - `ObservabilityConfig` no longer owns OTLP configuration
@@ -383,11 +581,16 @@ layering:
 - the ATM production boundary is explicitly outside this repo in
   `atm-observability-adapter`
 
-## 9. Pre-Implementation Cleanup
+## 9. Pre-Implementation Cleanup Status
 
-- remove any requirement or architecture text that places OTLP concerns in `sc-observability`
-- remove any requirement or architecture text that requires `sc-observe -> sc-observability-otlp`
-- make OTLP integration attach from the top of the stack rather than being constructed inside `sc-observe`
+The document set now reflects the required cleanup:
+
+- requirement and architecture text no longer places OTLP concerns in
+  `sc-observability`
+- requirement and architecture text no longer requires
+  `sc-observe -> sc-observability-otlp`
+- OTLP integration is documented as attaching from the top of the stack rather
+  than being constructed inside `sc-observe`
 
 ## 10. ATM Proving Artifact
 

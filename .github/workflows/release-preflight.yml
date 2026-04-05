@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version candidate (e.g. 0.46.2 or v0.46.2)"
+        description: "Release version candidate (e.g. 1.0.0 or v1.0.0)"
         required: true
         type: string
       run_by_agent:
@@ -38,11 +38,14 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+          components: rustfmt, clippy
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.11"
 
       - name: Normalize version input
         id: meta
@@ -77,6 +80,15 @@ jobs:
       - name: Validate publish_order dependency graph
         run: bash scripts/ci/validate_publish_order.sh
 
+      - name: Validate docs consistency
+        run: bash scripts/ci/validate_docs_consistency.sh
+
+      - name: Validate dependency bans
+        run: bash scripts/ci/validate_dependency_bans.sh
+
+      - name: Validate version literals
+        run: python3 scripts/ci/validate_version_literals.py
+
       - name: Validate repo boundaries
         run: bash scripts/ci/validate_repo_boundaries.sh
 
@@ -87,10 +99,62 @@ jobs:
             --workspace-toml Cargo.toml \
             --version '${{ steps.meta.outputs.release_version }}'
 
-      - name: Run dependency-aware package checks
+      - name: Detect initial standalone release mode
+        id: initial_release
+        shell: bash
+        run: |
+          set -euo pipefail
+          crates=(
+            sc-observability-types
+            sc-observability
+            sc-observe
+            sc-observability-otlp
+          )
+          present=()
+          absent=()
+          for crate in "${crates[@]}"; do
+            url="https://crates.io/api/v1/crates/${crate}"
+            response_path="${RUNNER_TEMP}/${crate}.json"
+            status="$(curl --silent --show-error --location --output "$response_path" --write-out '%{http_code}' "$url")"
+            case "$status" in
+              200)
+                present+=("$crate")
+                ;;
+              404)
+                absent+=("$crate")
+                ;;
+              *)
+                echo "Failed to determine crates.io state for ${crate} (HTTP $status)." >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          if [[ ${#absent[@]} -eq ${#crates[@]} ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "All publish-order crates are absent on crates.io; using initial-release dry-run preflight."
+          elif [[ ${#present[@]} -eq ${#crates[@]} ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "All publish-order crates already exist on crates.io; using cargo package preflight."
+          else
+            echo "Mixed crates.io state detected. Present: ${present[*]:-<none>}. Absent: ${absent[*]:-<none>}." >&2
+            echo "Initial-release dry-run mode is allowed only when all 4 crates are absent; normal package mode is allowed only when all 4 crates are present." >&2
+            exit 1
+          fi
+
+      - name: Run dependency-aware publish preflight checks
         shell: bash
         run: |
           set -euo pipefail
           while IFS='|' read -r package _; do
-            cargo package -p "$package" --locked --allow-dirty
+            if [[ '${{ steps.initial_release.outputs.enabled }}' == 'true' ]]; then
+              # Initial standalone publish must use --no-verify because path
+              # deps are not yet on crates.io; correctness is covered by the
+              # preceding fmt/clippy/test/package-preflight validation steps,
+              # and this path must NOT be used outside the all-crates-absent
+              # initial-release case detected above.
+              cargo publish -p "$package" --dry-run --locked --no-verify
+            else
+              cargo package -p "$package" --locked --allow-dirty
+            fi
           done < <(python3 scripts/release_artifacts.py list-publish-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")

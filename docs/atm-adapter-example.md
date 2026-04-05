@@ -50,13 +50,16 @@ It demonstrates the intended integration pattern:
 1. ATM-shaped payload types are defined locally in the example crate
 2. logging uses the lower-level `sc-observability` crate
 3. routing uses `sc-observe`
-4. OTLP attaches from `sc-observability-otlp` by registering projectors with
-   `ObservabilityBuilder`
+4. OTLP attaches from `sc-observability-otlp` through the shipped
+   `TelemetryProjectors<T>` registration path on `ObservabilityBuilder`
+5. top-level routing health includes the attached telemetry health snapshot via
+   `ObservabilityBuilder::with_observability_health_provider(...)`
 
 ## What The Example Must Prove
 
 - the shared repo boundaries are sufficient for ATM integration
-- OTLP attachment uses projector registration, not a special internal OTLP hook
+- OTLP attachment uses the shipped `TelemetryProjectors<T>` registration path,
+  not a special internal OTLP hook
 - the shared repo remains free of `agent-team-mail-*` dependencies
 
 ## What The Example Does Not Prove

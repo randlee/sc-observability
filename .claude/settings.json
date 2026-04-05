@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "enabledPlugins": {
+    "sc-git-worktree@synaptic-canvas": true
+  }
+}

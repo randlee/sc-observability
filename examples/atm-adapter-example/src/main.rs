@@ -167,7 +167,7 @@ fn emit_example_sequence(
     mode: RunMode,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let base = AgentContext {
-        team: "atm-dev".to_string(),
+        team: "<YOUR-TEAM-NAME>".to_string(),
         agent_id: "agent-123".to_string(),
         subagent_id: Some("subagent-7".to_string()),
         session_id: "session-42".to_string(),
@@ -255,11 +255,11 @@ fn telemetry_config_from_env(
             auth_header,
             ca_file,
             insecure_skip_verify,
-            timeout_ms: constants::OTLP_TIMEOUT_MS,
+            timeout_ms: constants::OTLP_TIMEOUT_MS.into(),
             debug_local_export,
             max_retries: constants::OTLP_MAX_RETRIES,
-            initial_backoff_ms: constants::OTLP_INITIAL_BACKOFF_MS,
-            max_backoff_ms: constants::OTLP_MAX_BACKOFF_MS,
+            initial_backoff_ms: constants::OTLP_INITIAL_BACKOFF_MS.into(),
+            max_backoff_ms: constants::OTLP_MAX_BACKOFF_MS.into(),
         })
         .with_resource(sc_observability_otlp::ResourceAttributes {
             attributes: [
@@ -524,7 +524,7 @@ impl sc_observability_types::SpanProjector<AgentInfoEvent> for AtmSpanProjector 
                         docs: None,
                         details: Map::new(),
                     })
-                    .end(SpanStatus::Ok, duration_ms),
+                    .end(SpanStatus::Ok, duration_ms.into()),
                 )]
             }
         };
@@ -658,7 +658,7 @@ mod tests {
 
     fn base_context() -> AgentContext {
         AgentContext {
-            team: "atm-dev".to_string(),
+            team: "<YOUR-TEAM-NAME>".to_string(),
             agent_id: "agent-123".to_string(),
             subagent_id: Some("subagent-7".to_string()),
             session_id: "session-42".to_string(),

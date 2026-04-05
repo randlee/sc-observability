@@ -14,9 +14,10 @@ use std::sync::{Arc, Mutex};
 
 use sc_observability::{Logger, LoggerConfig, RotationPolicy};
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError, Observable,
-    Observation, ProjectionRegistration, Remediation, ServiceName, ShutdownError, SubscriberError,
-    SubscriberRegistration, ToolName,
+    DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError,
+    ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, Remediation,
+    ServiceName, ShutdownError, SubscriberError, SubscriberRegistration, TelemetryHealthState,
+    ToolName,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -31,11 +32,15 @@ pub use sc_observability_types::{
 /// overridable at the `ObservabilityConfig` layer.
 #[derive(Debug, Clone)]
 pub struct ObservabilityConfig {
+    /// Stable tool name used to derive service and log layout defaults.
     pub tool_name: ToolName,
+    /// Root directory that owns the routing runtime log tree.
     pub log_root: PathBuf,
+    /// Environment-variable prefix used by the owning application.
     pub env_prefix: EnvPrefix,
     /// Reserved for future async/backpressure implementation. Phase 1 execution is synchronous; this value is stored but not yet applied.
     pub queue_capacity: usize,
+    /// Rotation settings forwarded to the built-in logging layer.
     pub rotation: RotationPolicy,
 }
 
@@ -55,7 +60,8 @@ impl ObservabilityConfig {
                     "failed to derive env prefix",
                     Remediation::not_recoverable("use an explicit valid env prefix"),
                 )
-                .cause(err.to_string()),
+                .cause(err.to_string())
+                .source(Box::new(err)),
             ))
         })?;
         Ok(Self {
@@ -76,7 +82,8 @@ impl ObservabilityConfig {
                     "failed to derive service name",
                     Remediation::not_recoverable("use a valid tool name"),
                 )
-                .cause(err.to_string()),
+                .cause(err.to_string())
+                .source(Box::new(err)),
             ))
         })
     }
@@ -94,6 +101,7 @@ pub struct ObservabilityBuilder {
     config: ObservabilityConfig,
     subscribers: Vec<ErasedSubscriberRegistration>,
     projections: Vec<ErasedProjectionRegistration>,
+    observability_health_provider: Option<Arc<dyn ObservabilityHealthProvider>>,
 }
 
 /// Producer-facing routing runtime for typed observations.
@@ -102,6 +110,7 @@ pub struct Observability {
     shutdown: AtomicBool,
     subscriber_registrations: Vec<ErasedSubscriberRegistration>,
     projection_registrations: Vec<ErasedProjectionRegistration>,
+    observability_health_provider: Option<Arc<dyn ObservabilityHealthProvider>>,
     runtime: RuntimeState,
 }
 
@@ -110,6 +119,9 @@ struct RuntimeState {
     dropped_observations_total: AtomicU64,
     subscriber_failures_total: AtomicU64,
     projection_failures_total: AtomicU64,
+    // MUTEX: routing failures update the shared last_error summary from multiple subscriber and
+    // projector call paths; Mutex keeps the optional summary coherent as one unit, and RwLock
+    // adds no value because writes dominate error reporting.
     last_error: Mutex<Option<DiagnosticSummary>>,
 }
 
@@ -153,10 +165,16 @@ impl Observability {
             config,
             subscribers: Vec::new(),
             projections: Vec::new(),
+            observability_health_provider: None,
         }
     }
 
     /// Routes one typed observation through the registered subscribers and projections.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal last-error mutex has been poisoned while the
+    /// runtime records a routing, subscriber, or projection failure summary.
     pub fn emit<T>(&self, observation: Observation<T>) -> Result<(), ObservationError>
     where
         T: Observable,
@@ -225,11 +243,21 @@ impl Observability {
     }
 
     /// Flushes the attached logger. Routing itself does not keep an async queue in v1.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the attached logger encounters a poisoned internal mutex while
+    /// flushing its registered sinks.
     pub fn flush(&self) -> Result<(), FlushError> {
         self.logger.flush()
     }
 
     /// Shuts down the routing runtime. Repeated calls are idempotent.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the attached logger encounters a poisoned internal mutex while
+    /// flushing sinks or updating query/follow health during shutdown.
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
@@ -238,8 +266,16 @@ impl Observability {
     }
 
     /// Returns the aggregate runtime health view.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal last-error mutex has been poisoned.
     pub fn health(&self) -> ObservabilityHealthReport {
         let logging = self.logger.health();
+        let telemetry = self
+            .observability_health_provider
+            .as_ref()
+            .map(|provider| provider.telemetry_health());
         let subscriber_failures = self
             .runtime
             .subscriber_failures_total
@@ -259,6 +295,12 @@ impl Observability {
             || subscriber_failures > 0
             || projection_failures > 0
             || logging.state != sc_observability_types::LoggingHealthState::Healthy
+            || telemetry.as_ref().is_some_and(|health| {
+                matches!(
+                    health.state,
+                    TelemetryHealthState::Degraded | TelemetryHealthState::Unavailable
+                )
+            })
         {
             ObservationHealthState::Degraded
         } else {
@@ -271,7 +313,7 @@ impl Observability {
             subscriber_failures_total: subscriber_failures,
             projection_failures_total: projection_failures,
             logging: Some(logging),
-            telemetry: None,
+            telemetry,
             last_error: self
                 .runtime
                 .last_error
@@ -291,7 +333,21 @@ impl Observability {
 }
 
 impl ObservabilityBuilder {
+    /// Attaches a generic telemetry health provider without introducing an OTLP crate dependency.
+    pub fn with_observability_health_provider(
+        mut self,
+        provider: Arc<dyn ObservabilityHealthProvider>,
+    ) -> Self {
+        self.observability_health_provider = Some(provider);
+        self
+    }
+
     /// Registers one typed observation subscriber at construction time.
+    ///
+    /// # Panics
+    ///
+    /// Panics if internal type-erased routing calls this registration with the
+    /// wrong observation payload type.
     pub fn register_subscriber<T>(mut self, registration: SubscriberRegistration<T>) -> Self
     where
         T: Observable,
@@ -312,7 +368,7 @@ impl ObservabilityBuilder {
                     return Ok(DispatchMatch::Skipped);
                 }
 
-                subscriber.handle(observation)?;
+                subscriber.observe(observation)?;
                 Ok(DispatchMatch::Delivered)
             }),
         });
@@ -320,6 +376,11 @@ impl ObservabilityBuilder {
     }
 
     /// Registers one typed observation projection set at construction time.
+    ///
+    /// # Panics
+    ///
+    /// Panics if internal type-erased routing calls this registration with the
+    /// wrong observation payload type.
     pub fn register_projection<T>(mut self, registration: ProjectionRegistration<T>) -> Self
     where
         T: Observable,
@@ -391,6 +452,7 @@ impl ObservabilityBuilder {
             shutdown: AtomicBool::new(false),
             subscriber_registrations: self.subscribers,
             projection_registrations: self.projections,
+            observability_health_provider: self.observability_health_provider,
             runtime: RuntimeState::default(),
         })
     }
@@ -428,11 +490,15 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sc_observability::{
+        LogFilter, LogSink, Logger, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
+    };
     use sc_observability_types::{
-        ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
-        ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError, SpanId,
-        SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError, TargetCategory,
-        Timestamp, TraceContext, TraceId,
+        ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
+        MetricRecord, ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError,
+        SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError,
+        TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext,
+        TraceId,
     };
 
     #[derive(Debug, Clone)]
@@ -447,7 +513,7 @@ mod tests {
     }
 
     impl ObservationSubscriber<AgentEvent> for RecordingSubscriber {
-        fn handle(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
+        fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
             self.calls.lock().expect("calls poisoned").push(self.id);
             Ok(())
         }
@@ -464,7 +530,7 @@ mod tests {
     struct FailingSubscriber;
 
     impl ObservationSubscriber<AgentEvent> for FailingSubscriber {
-        fn handle(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
+        fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
             Err(SubscriberError(Box::new(ErrorContext::new(
                 error_codes::OBSERVATION_ROUTING_FAILURE,
                 "subscriber failed",
@@ -545,6 +611,24 @@ mod tests {
                 "projector failed",
                 Remediation::not_recoverable("test projector intentionally fails"),
             ))))
+        }
+    }
+
+    struct FakeTelemetryProvider {
+        state: TelemetryHealthState,
+    }
+
+    impl sc_observability_types::telemetry_health_provider_sealed::Sealed for FakeTelemetryProvider {}
+
+    impl ObservabilityHealthProvider for FakeTelemetryProvider {
+        fn telemetry_health(&self) -> TelemetryHealthReport {
+            TelemetryHealthReport {
+                state: self.state,
+                dropped_exports_total: 0,
+                malformed_spans_total: 0,
+                exporter_statuses: Vec::new(),
+                last_error: None,
+            }
         }
     }
 
@@ -813,6 +897,26 @@ mod tests {
     }
 
     #[test]
+    fn top_level_health_exposes_attached_telemetry_provider() {
+        let root = temp_path("telemetry-health");
+        let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
+        let runtime = Observability::builder(config)
+            .with_observability_health_provider(Arc::new(FakeTelemetryProvider {
+                state: TelemetryHealthState::Degraded,
+            }))
+            .build()
+            .expect("runtime");
+
+        let health = runtime.health();
+
+        assert_eq!(health.state, ObservationHealthState::Degraded);
+        assert_eq!(
+            health.telemetry.expect("telemetry health").state,
+            TelemetryHealthState::Degraded
+        );
+    }
+
+    #[test]
     fn queue_capacity_override_propagates_to_logger_config() {
         let root = temp_path("queue-capacity");
         let mut config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
@@ -821,5 +925,70 @@ mod tests {
         let logger_config = config.logger_config().expect("logger config");
 
         assert_eq!(logger_config.queue_capacity, 2048);
+    }
+
+    #[test]
+    fn flush_forwards_logger_flush_behavior_directly() {
+        struct PassthroughFilter;
+
+        impl LogFilter for PassthroughFilter {
+            fn accepts(&self, _event: &LogEvent) -> bool {
+                true
+            }
+        }
+
+        struct FlushFailSink;
+
+        impl LogSink for FlushFailSink {
+            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+                Ok(())
+            }
+
+            fn flush(&self) -> Result<(), LogSinkError> {
+                Err(LogSinkError(Box::new(ErrorContext::new(
+                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                    "flush failed",
+                    Remediation::not_recoverable("test sink intentionally fails flush"),
+                ))))
+            }
+
+            fn health(&self) -> SinkHealth {
+                SinkHealth {
+                    name: "flush-fail".to_string(),
+                    state: SinkHealthState::DegradedDropping,
+                    last_error: None,
+                }
+            }
+        }
+
+        let ok_root = temp_path("flush-ok");
+        let ok_config =
+            ObservabilityConfig::default_for(tool_name(), ok_root.clone()).expect("config");
+        let ok_runtime = Observability::builder(ok_config).build().expect("runtime");
+        assert!(ok_runtime.flush().is_ok());
+
+        let fail_root = temp_path("flush-fail");
+        let mut logger_config =
+            LoggerConfig::default_for(ServiceName::new("obs-app").expect("service"), fail_root);
+        logger_config.enable_file_sink = false;
+        logger_config.enable_console_sink = false;
+        let mut logger = Logger::new(logger_config).expect("logger");
+        logger.register_sink(
+            SinkRegistration::new(Arc::new(FlushFailSink)).with_filter(Arc::new(PassthroughFilter)),
+        );
+
+        let runtime = Observability {
+            logger,
+            shutdown: AtomicBool::new(false),
+            subscriber_registrations: Vec::new(),
+            projection_registrations: Vec::new(),
+            observability_health_provider: None,
+            runtime: RuntimeState::default(),
+        };
+
+        assert!(runtime.flush().is_ok());
+        let logging = runtime.health().logging.expect("logging health");
+        assert_eq!(logging.flush_errors_total, 1);
+        assert!(logging.last_error.is_some());
     }
 }
