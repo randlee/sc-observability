@@ -197,9 +197,11 @@ fn builder_registration_attaches_logs_spans_and_metrics() {
     telemetry.flush().expect("flush");
 
     let log_path = root
-        .join("test-service")
-        .join("logs")
-        .join("test-service.log.jsonl");
+        .join(sc_observability::constants::DEFAULT_LOG_DIR_NAME)
+        .join(format!(
+            "test-service{}",
+            sc_observability::constants::DEFAULT_LOG_FILE_SUFFIX
+        ));
     let contents = std::fs::read_to_string(log_path).expect("read projected log file");
     let health = telemetry.health();
     let runtime_health = runtime.health();

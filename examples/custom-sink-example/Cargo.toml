@@ -1,0 +1,12 @@
+[package]
+name = "custom-sink-example"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+serde_json = "1"
+sc-observability = { path = "../../crates/sc-observability" }
+sc-observability-types = { path = "../../crates/sc-observability-types" }

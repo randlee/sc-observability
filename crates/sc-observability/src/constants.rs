@@ -1,5 +1,14 @@
 //! Crate-local constants for `sc-observability`.
 
+/// Directory name used by the built-in JSONL file sink beneath the configured
+/// log root.
+pub const DEFAULT_LOG_DIR_NAME: &str = "logs";
+/// File suffix used by the built-in JSONL file sink.
+pub const DEFAULT_LOG_FILE_SUFFIX: &str = ".log.jsonl";
+/// Stable sink name reported by the built-in JSONL file sink.
+pub const JSONL_FILE_SINK_NAME: &str = "jsonl-file";
+/// Stable sink name reported by the built-in console sink.
+pub const CONSOLE_SINK_NAME: &str = "console";
 /// Seconds in one calendar day; used as the retention-age multiplier.
 pub(crate) const SECS_PER_DAY: u64 = 86_400;
 pub(crate) const DEFAULT_LOG_QUEUE_CAPACITY: usize = 1024;

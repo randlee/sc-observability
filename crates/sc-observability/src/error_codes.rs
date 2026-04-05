@@ -16,6 +16,9 @@ pub const LOGGER_INIT_FAILED: ErrorCode =
 /// Stable error code for flush failures.
 pub const LOGGER_FLUSH_FAILED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_FLUSH_FAILED");
+/// Stable error code for deliberate retained-sink fault injection.
+pub const LOGGER_SINK_FAULT_INJECTED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_SINK_FAULT_INJECTED");
 
 /// All stable error codes exported by this crate.
 pub const ALL: &[ErrorCode] = &[
@@ -24,4 +27,5 @@ pub const ALL: &[ErrorCode] = &[
     LOGGER_SINK_WRITE_FAILED,
     LOGGER_INIT_FAILED,
     LOGGER_FLUSH_FAILED,
+    LOGGER_SINK_FAULT_INJECTED,
 ];

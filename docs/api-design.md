@@ -1395,7 +1395,7 @@ service identity is absent.
 The built-in file sink uses this default layout:
 
 ```text
-<log_root>/<service_name>/logs/<service_name>.log.jsonl
+<log_root>/logs/<service_name>.log.jsonl
 ```
 
 This is the prescribed default path for the built-in file sink.

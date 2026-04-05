@@ -1,60 +1,77 @@
 # sc-observability
 
-Structured logging and OpenTelemetry observability infrastructure crates for use across projects.
+Shared structured logging, routing, and OTLP observability crates.
 
-## Crates
+## Workspace Crates
 
-| Crate | Description |
-|-------|-------------|
-| [`sc-observability-types`](crates/sc-observability-types/) | Shared log type contracts — payload types, severity levels, structured field definitions |
-| [`sc-observability`](crates/sc-observability/) | Core structured logging backend — `AppLogger` initialization, sink routing, and session lifecycle |
-| [`sc-observe`](crates/sc-observe/) | Lightweight observer façade — emit structured log events without owning the logger lifecycle |
-| [`sc-observability-otlp`](crates/sc-observability-otlp/) | OpenTelemetry export adapter — bridges `sc-observability` events to OTLP collectors |
+| Crate | Purpose |
+| --- | --- |
+| [`sc-observability-types`](./crates/sc-observability-types/) | Shared contracts: identifiers, timestamps, diagnostics, health reports, query/follow value types, and error surfaces. |
+| [`sc-observability`](./crates/sc-observability/) | Logging-only runtime: `Logger`, built-in file/console sinks, custom sink registration, redaction, health, query, and follow. |
+| [`sc-observe`](./crates/sc-observe/) | Observation routing layer on top of logging for subscribers and projectors. |
+| [`sc-observability-otlp`](./crates/sc-observability-otlp/) | OTLP/OTel export layer for logs, spans, and metrics. |
 
-## Usage
+## Which Crate Do I Need?
 
-Add the crates you need to your `Cargo.toml`:
+| If you need... | Start with... |
+| --- | --- |
+| Logging only | `sc-observability` + `sc-observability-types` |
+| Query/follow on JSONL logs | `sc-observability` + `sc-observability-types` |
+| Routing one observation to logs and subscribers | `sc-observe` + `sc-observability` + `sc-observability-types` |
+| OTLP export | `sc-observability-otlp` + lower layers |
+| Shared value types only | `sc-observability-types` |
 
-```toml
-# For applications that own the logger lifecycle
-sc-observability = "1"
-sc-observability-types = "1"
-
-# For libraries that emit log events but don't own the logger
-sc-observe = "1"
-
-# Optional: export to an OpenTelemetry collector
-sc-observability-otlp = "1"
-```
-
-### Quick start
+## Minimal Logging-Only Snippet
 
 ```rust
-use sc_observability::{AppLogger, LoggerConfig};
-use sc_observability_types::Severity;
+use std::path::PathBuf;
 
-fn main() {
-    let logger = AppLogger::init(LoggerConfig::default()).expect("logger init failed");
+use sc_observability::{Logger, LoggerConfig};
+use sc_observability_types::{
+    ActionName, Level, LogEvent, ProcessIdentity, ServiceName, TargetCategory, Timestamp,
+};
 
-    logger.emit(sc_observe::event!(
-        severity: Severity::Info,
-        message: "application started",
-        fields: { "version" => env!("CARGO_PKG_VERSION") },
-    ));
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let service = ServiceName::new("example-service")?;
+    let logger = Logger::new(LoggerConfig::default_for(
+        service.clone(),
+        PathBuf::from("./observability"),
+    ))?;
 
-    // logger shuts down cleanly on drop
+    logger.emit(LogEvent {
+        version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+        timestamp: Timestamp::now_utc(),
+        level: Level::Info,
+        service,
+        target: TargetCategory::new("example.app")?,
+        action: ActionName::new("startup")?,
+        message: Some("service booted".to_string()),
+        identity: ProcessIdentity::default(),
+        trace: None,
+        request_id: None,
+        correlation_id: None,
+        outcome: Some("ok".to_string()),
+        diagnostic: None,
+        state_transition: None,
+        fields: serde_json::Map::new(),
+    })?;
+
+    let health = logger.health();
+    println!("active log path: {}", health.active_log_path.display());
+    Ok(())
 }
 ```
 
-See [`examples/`](examples/) for complete usage patterns including OTLP export and adapter integration.
+Default output goes to `<log_root>/logs/<service>.log.jsonl`.
 
-## Design
+## Start Here
 
-- **`sc-observability-types`** is the only shared contract crate — consumers and producers depend on it, never on each other.
-- **`sc-observability`** owns logger initialization and sink configuration; only the application binary or top-level integration crate should initialize it.
-- **`sc-observe`** provides a zero-lifecycle façade for library crates that need to emit events without coupling to the backend.
-- **`sc-observability-otlp`** is an optional adapter; include it only when exporting to an OTLP-compatible collector.
+- Consumer onboarding: [CONSUMING.md](./CONSUMING.md)
+- Public architecture: [docs/architecture.md](./docs/architecture.md)
+- Requirements and contract decisions: [docs/requirements.md](./docs/requirements.md)
+- Custom sink example: [`examples/custom-sink-example/`](./examples/custom-sink-example/)
+- ATM-shaped proving example: [`examples/atm-adapter-example/`](./examples/atm-adapter-example/)
 
-## Publishing
+## Release / Publishing
 
-See [PUBLISHING.md](PUBLISHING.md) for release and publish procedures.
+- Publish procedure: [PUBLISHING.md](./PUBLISHING.md)

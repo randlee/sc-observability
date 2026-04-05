@@ -1485,7 +1485,7 @@ mod tests {
             dropped_events_total: 0,
             flush_errors_total: 0,
             // fixture path: not accessed on disk
-            active_log_path: std::path::PathBuf::from("/var/log/service/logs/service.log.jsonl"),
+            active_log_path: std::path::PathBuf::from("/var/log/logs/service.log.jsonl"),
             sink_statuses: vec![sink],
             query: Some(QueryHealthReport {
                 state: QueryHealthState::Healthy,

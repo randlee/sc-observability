@@ -177,7 +177,12 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
 
     runtime.emit(observation()).expect("emit");
 
-    let log_path = root.join("obs-app").join("logs").join("obs-app.log.jsonl");
+    let log_path = root
+        .join(sc_observability::constants::DEFAULT_LOG_DIR_NAME)
+        .join(format!(
+            "obs-app{}",
+            sc_observability::constants::DEFAULT_LOG_FILE_SUFFIX
+        ));
     let contents = std::fs::read_to_string(log_path).expect("read projected log file");
 
     assert_eq!(

@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+use sc_observability::constants::{DEFAULT_LOG_DIR_NAME, DEFAULT_LOG_FILE_SUFFIX};
 use sc_observability::{Logger, LoggerConfig};
 use sc_observability_types::{
     ActionName, Diagnostic, ErrorCode, Level, LogEvent, ProcessIdentity, Remediation, ServiceName,
@@ -64,9 +65,8 @@ fn logging_only_consumer_can_emit_without_routing_or_otlp() {
     logger.flush().expect("flush");
 
     let path = root
-        .join("logging-only-app")
-        .join("logs")
-        .join("logging-only-app.log.jsonl");
+        .join(DEFAULT_LOG_DIR_NAME)
+        .join(format!("logging-only-app{DEFAULT_LOG_FILE_SUFFIX}"));
     let contents = fs::read_to_string(path).expect("read log output");
     assert!(contents.contains("\"action\":\"startup\""));
     assert!(contents.contains("\"message\":\"boot complete\""));
