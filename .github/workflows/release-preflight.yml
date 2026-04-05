@@ -77,6 +77,9 @@ jobs:
       - name: Validate publish_order dependency graph
         run: bash scripts/ci/validate_publish_order.sh
 
+      - name: Validate version literals
+        run: bash scripts/ci/validate_version_literals.sh
+
       - name: Validate repo boundaries
         run: bash scripts/ci/validate_repo_boundaries.sh
 

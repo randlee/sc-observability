@@ -263,6 +263,7 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
 - NFR-008 Each crate section in this document shall remain readable in isolation without requiring upward-layer concepts to understand lower-layer behavior.
 - NFR-009 The workspace shall enforce layering and repo-boundary rules in CI, including dependency bans against `agent-team-mail-*` and banned crate edges that violate the approved stack.
 - NFR-010 The workspace shall enforce basic docs consistency checks in CI so the approved crate layering does not drift out of sync across requirements, architecture, and API design documents.
+- NFR-011 The workspace shall enforce version-literal consistency in CI: if a plain-text release version appears in more than one maintained file, every occurrence shall match `workspace.package.version`.
 
 ## 8. Source Organization Requirements
 

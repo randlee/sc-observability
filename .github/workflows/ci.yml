@@ -72,9 +72,19 @@ jobs:
       - name: Validate dependency bans
         run: bash scripts/ci/validate_dependency_bans.sh
 
+  version-literals:
+    name: version-literals (ubuntu)
+    needs: [clippy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate version literals
+        run: bash scripts/ci/validate_version_literals.sh
+
   manifest-validation:
     name: manifest-validation (ubuntu)
-    needs: [clippy, docs-consistency, dependency-bans]
+    needs: [clippy, docs-consistency, dependency-bans, version-literals]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,6 +108,9 @@ jobs:
 
       - name: Validate dependency bans
         run: bash scripts/ci/validate_dependency_bans.sh
+
+      - name: Validate version literals
+        run: bash scripts/ci/validate_version_literals.sh
 
       - name: Validate repo boundaries
         run: bash scripts/ci/validate_repo_boundaries.sh
