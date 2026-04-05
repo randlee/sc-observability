@@ -706,7 +706,8 @@ impl ConsoleWriter for StderrConsoleWriter {
     }
 }
 
-/// Built-in sink that renders log events to stdout.
+/// Built-in sink that renders log events to a configured output stream
+/// (stdout or stderr).
 pub struct ConsoleSink {
     writer: Box<dyn ConsoleWriter>,
     // MUTEX: console sink health mutates as one shared status struct on write failures and reads;

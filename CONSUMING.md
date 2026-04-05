@@ -13,9 +13,19 @@ serde_json = "1"
 ```
 
 `sc-observability` re-exports the shared contract types from
-`sc-observability-types`, so consumers can import `LogEvent`, `Level`,
-`ErrorCode`, `ServiceName`, and related types directly from `sc_observability`.
-Add `sc-observability-types` as a direct dependency only if you need the types
+`sc-observability-types`, so consumers can import the common surface directly
+from `sc_observability`. That re-export set includes:
+
+- event and value contracts such as `LogEvent`, `Level`, `ErrorCode`,
+  `ServiceName`, `TargetCategory`, `ActionName`, `Timestamp`, and
+  `ProcessIdentity`
+- runtime error and health types such as `EventError`, `LoggingHealthReport`,
+  `LoggingHealthState`, `SinkHealth`, and `SinkHealthState`
+- historical access helpers such as `LogQuery`, `LogSnapshot`,
+  `LogFollowSession`, and `JsonlLogReader`
+
+Consumers only need to depend on `sc-observability` for that surface. Add
+`sc-observability-types` as a direct dependency only if you need the types
 crate independently, such as for trait implementations or for sharing the
 contract crate across package boundaries.
 

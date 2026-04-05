@@ -49,3 +49,41 @@ pub trait ProcessIdentityResolver: Send + Sync {
     /// Resolves the process identity to attach to emitted records.
     fn resolve(&self) -> Result<ProcessIdentity, IdentityError>;
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+
+    struct FixtureResolver;
+
+    impl ProcessIdentityResolver for FixtureResolver {
+        fn resolve(&self) -> Result<ProcessIdentity, IdentityError> {
+            Ok(ProcessIdentity::default())
+        }
+    }
+
+    #[test]
+    fn process_identity_policy_fixed_debug_is_descriptive() {
+        let policy = ProcessIdentityPolicy::Fixed {
+            hostname: Some("host-1".to_string()),
+            pid: Some(42),
+        };
+
+        assert_eq!(
+            format!("{policy:?}"),
+            "ProcessIdentityPolicy::Fixed { hostname: Some(\"host-1\"), pid: Some(42) }"
+        );
+    }
+
+    #[test]
+    fn process_identity_policy_resolver_debug_is_descriptive() {
+        let policy = ProcessIdentityPolicy::Resolver(Arc::new(FixtureResolver));
+
+        assert_eq!(
+            format!("{policy:?}"),
+            "ProcessIdentityPolicy::Resolver(<dyn ProcessIdentityResolver>)"
+        );
+    }
+}
