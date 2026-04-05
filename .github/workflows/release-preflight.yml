@@ -42,7 +42,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.11"
 
       - name: Normalize version input
         id: meta
@@ -76,6 +76,15 @@ jobs:
 
       - name: Validate publish_order dependency graph
         run: bash scripts/ci/validate_publish_order.sh
+
+      - name: Validate docs consistency
+        run: bash scripts/ci/validate_docs_consistency.sh
+
+      - name: Validate dependency bans
+        run: bash scripts/ci/validate_dependency_bans.sh
+
+      - name: Validate version literals
+        run: python3 scripts/ci/validate_version_literals.py
 
       - name: Validate repo boundaries
         run: bash scripts/ci/validate_repo_boundaries.sh

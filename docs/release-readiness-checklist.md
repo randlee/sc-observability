@@ -9,6 +9,7 @@
 - [x] UTC-only timestamp behavior is enforced in the shared public type system.
 - [x] Workspace version is set and shared through `workspace.package.version`.
 - [x] Shared crate Cargo manifests use the workspace version.
+- [x] Duplicate plain-text release version literals are validated against `workspace.package.version`.
 - [x] Publish manifest exists at `release/publish-artifacts.toml`.
 - [x] Publish order validation script exists and passes.
 - [x] Release preflight workflow exists.
