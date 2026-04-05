@@ -2,11 +2,11 @@
 
 ## Critical Workflow Rule
 
-Do not switch the main checkout away from `main` for sprint work.
+Do not switch the primary checkout away from `develop` for sprint work.
 
-- Keep the primary repo checkout on `main`
-- Use git worktrees for feature work when parallel branches are needed
-- Prefer short-lived feature branches targeting `main`
+- Keep the primary repo checkout on `develop`
+- Use git worktrees for all feature/sprint branches
+- All branches other than `develop` must live in worktrees
 
 ## Project Overview
 
