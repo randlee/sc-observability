@@ -112,7 +112,7 @@ This crate is the lightweight logging layer.
 - LOG-005 `sc-observability` shall provide built-in JSONL file sink support.
 - LOG-006 `sc-observability` shall provide a built-in human-readable console sink.
 - LOG-007 `sc-observability` shall support multi-sink fan-out.
-- LOG-008 The built-in file sink shall use the default layout `<log_root>/<service_name>/logs/<service_name>.log.jsonl`.
+- LOG-008 The built-in file sink shall use the default layout `<log_root>/logs/<service_name>.log.jsonl`.
 - LOG-009 The log root shall be redirectable via environment helper, with explicit config taking precedence.
 - LOG-010 Redaction shall run before sink fan-out.
 - LOG-011 `RedactionPolicy` shall support built-in denylist and bearer-token redaction.
@@ -153,8 +153,27 @@ This crate is the lightweight logging layer.
 - LOG-031 `LoggingHealthReport` shall expose query/follow availability through an optional `QueryHealthReport`.
 - LOG-032 Query/follow APIs shall remain usable in logging-only deployments and shall not introduce ATM-specific types, daemon requirements, or `agent-team-mail-*` dependencies.
 - LOG-033 `JsonlLogReader` query/follow operations shall remain independent of `Logger` lifecycle and shall stay usable for offline inspection after a logger-owned runtime shuts down.
+- LOG-034 `ConsoleSink` shall expose public `stdout()` and `stderr()` convenience constructors. Arbitrary writer selection shall not be added to the public v1 surface.
+- LOG-035 `sc-observability` shall expose a public retained-sink fault-injection surface for live validation runs, gated behind `#[cfg(test)]` or a dedicated `fault-injection` feature, with at least `degraded` and `unavailable` states.
+- LOG-036 Retained-sink fault injection shall live in the retained-sink layer and exercise the same health-state transitions consumers observe in production, without filesystem sabotage or internal-only hooks.
 
-### 4.1 Query/Follow Issue Traceability
+### 4.2 Consumer Documentation Requirements
+
+- DOC-001 `README.md` shall be a real consumer entrypoint that includes a workspace crate summary, a "which crate do I need?" decision table, one minimal logging-only snippet, and "start here" links into deeper docs.
+- DOC-002 A root-level `CONSUMING.md` shall exist and cover logging-only setup, the default log root/path, `SC_LOG_ROOT` behavior, enable/disable controls for file and console sinks, custom sink registration, `Logger::health()` usage, and links to deeper docs.
+- DOC-003 A runnable `examples/custom-sink-example/` shall exist and demonstrate a public-only `LogSink` implementation, `SinkRegistration`, optional `LogFilter`, `logger.register_sink(...)`, and `logger.health()`.
+- DOC-004 Default sink behavior, path layout, and environment override behavior shall be documented in a consumer-facing section, which may live in `CONSUMING.md`.
+
+### 4.3 Pre-Publish Usability Issue Traceability
+
+| GitHub issue | Scope | Requirement IDs |
+| --- | --- | --- |
+| #20 | consumer onboarding docs and custom sink example | DOC-001, DOC-002, DOC-003, DOC-004 |
+| #21 | default file sink path simplification | LOG-008 |
+| #55 | public console writer parity | LOG-034 |
+| #57 | public retained-sink fault injection | LOG-035, LOG-036 |
+
+### 4.4 Query/Follow Issue Traceability
 
 | GitHub issue | Scope | Requirement IDs |
 | --- | --- | --- |

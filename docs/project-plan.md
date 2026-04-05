@@ -36,9 +36,12 @@ The immediate goal is no longer "ship quickly". The immediate goal is:
      Exit criteria: [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) §9.4
 4. Resume release-readiness work only after the final recovery review reports
    zero blocking findings.
-5. Maintain extraction inventory and boundary ADRs as modules move from ATM to
+5. Execute the post-Phase-2 pre-publish usability sprint before cutting the
+   1.0 release candidate so the shipped public logging surface is usable and
+   documented for downstream adopters.
+6. Maintain extraction inventory and boundary ADRs as modules move from ATM to
    the standalone repo.
-6. Keep ATM-specific adapter work outside the shared crates.
+7. Keep ATM-specific adapter work outside the shared crates.
 
 ## Rule
 
@@ -71,3 +74,39 @@ The current phase is not a release cut. It is a recovery program that:
 
 The detailed sprint-by-sprint execution order is defined in
 [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md).
+
+## Post-Recovery Pre-Publish Usability Sprint
+
+This follow-up sprint is plan-approved work that executes after the current
+pre-publish recovery program closes and before the 1.0 release candidate is
+cut. It exists to address consumer-facing usability and validation gaps that
+are release-blocking but intentionally separate from the earlier runtime
+recovery sprints.
+
+1. Consumer onboarding sprint (`#20`)
+   Exit criteria:
+   - `README.md` is a real consumer entrypoint with crate-selection guidance
+     and a minimal logging-only snippet
+   - root `CONSUMING.md` documents logging-only setup, default paths,
+     `SC_LOG_ROOT`, sink toggles, custom sink registration, and `Logger::health()`
+   - `examples/custom-sink-example/` exists and compiles against the public API only
+   - consumer-facing default sink/path/environment behavior is documented
+2. Default file sink path cleanup (`#21`)
+   Exit criteria:
+   - the default file sink layout is simplified to
+     `<log_root>/logs/<service>.log.jsonl`
+   - all user-facing docs, examples, and tests reflect the new layout
+   - any migration note for the old nested path is documented before release
+3. Console sink writer parity (`#55`)
+   Exit criteria:
+   - `ConsoleSink::stderr()` is added as a public companion to `stdout()`
+   - the public writer-selection surface is explicitly limited to stdout/stderr
+   - consumer docs include the stdout/stderr selection guidance
+4. Retained-sink fault-injection sprint (`#57`)
+   Exit criteria:
+   - a public retained-sink fault-injection surface exists for live validation
+     of `degraded` and `unavailable` sink health states
+   - the hook is intentionally gated for validation use and lives in the
+     retained-sink layer, not the query/follow layer
+   - docs explain how downstream consumers exercise the same failure paths they
+     rely on in production health checks

@@ -120,7 +120,28 @@ Must not own:
 
 This crate must remain usable on its own by a basic CLI.
 
-### 3.2.1 Query And Follow Extension
+### 3.2.1 Pre-Publish Usability Follow-Ups
+
+The remaining pre-publish logging-surface follow-ups stay in
+`sc-observability` and do not move into `sc-observe` or
+`sc-observability-otlp`.
+
+- the default active JSONL path becomes
+  `<log_root>/logs/<service>.log.jsonl`
+- `ConsoleSink` keeps a small public writer-selection surface:
+  `ConsoleSink::stdout()` and `ConsoleSink::stderr()` are public, while
+  arbitrary writer injection remains non-public
+- retained-sink fault injection lives in the retained-sink layer, not in the
+  query/follow layer, and is exposed only through a deliberate validation-only
+  surface such as `#[cfg(test)]` or a `fault-injection` feature
+- consumer-facing onboarding artifacts (`README.md`, `CONSUMING.md`, and
+  `examples/custom-sink-example/`) document and validate the public logging
+  surface without relying on workspace-internal APIs
+- `examples/custom-sink-example/` must compile against the public API only so
+  it continuously proves that the shipped sink extension points are sufficient
+  for downstream consumers
+
+### 3.2.2 Query And Follow Extension
 
 The query/follow feature remains part of the logging layer. It does not move
 into `sc-observe`, does not depend on `sc-observability-otlp`, and does not
@@ -364,7 +385,7 @@ behavior into the shared crates.
 Historical query and follow behavior operate on one logical log stream made
 from:
 
-- the active path `<log_root>/<service>/logs/<service>.log.jsonl`
+- the active path `<log_root>/logs/<service>.log.jsonl`
 - rotated siblings using the existing `.N` suffix convention
 
 Historical query strategy:
