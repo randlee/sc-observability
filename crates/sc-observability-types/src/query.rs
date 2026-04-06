@@ -5,8 +5,8 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::{
-    ActionName, Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, Level, LogEvent, Remediation,
-    ServiceName, TargetCategory, Timestamp, error_codes, sealed,
+    ActionName, CorrelationId, Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, Level,
+    LogEvent, Remediation, ServiceName, TargetCategory, Timestamp, error_codes, sealed,
 };
 
 /// Deterministic result ordering for historical query and follow polling.
@@ -30,6 +30,7 @@ pub struct LogFieldMatch {
 
 impl LogFieldMatch {
     /// Creates an exact-value field match.
+    #[must_use]
     pub fn equals(field: impl Into<String>, value: Value) -> Self {
         Self {
             field: field.into(),
@@ -50,9 +51,9 @@ pub struct LogQuery {
     /// Optional action filter.
     pub action: Option<ActionName>,
     /// Optional request identifier filter.
-    pub request_id: Option<String>,
+    pub request_id: Option<CorrelationId>,
     /// Optional correlation identifier filter.
-    pub correlation_id: Option<String>,
+    pub correlation_id: Option<CorrelationId>,
     /// Optional inclusive lower timestamp bound.
     pub since: Option<Timestamp>,
     /// Optional inclusive upper timestamp bound.
@@ -67,6 +68,11 @@ pub struct LogQuery {
 
 impl LogQuery {
     /// Validates the frozen shared query semantics before runtime execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QueryError::InvalidQuery`] when the query violates the shared
+    /// contract for limit or timestamp-range semantics.
     pub fn validate(&self) -> Result<(), QueryError> {
         if self.limit == Some(0) {
             return Err(QueryError::invalid_query(
@@ -104,7 +110,7 @@ pub struct LogSnapshot {
 }
 
 /// Stable shared error contract for historical query and follow operations.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
 pub enum QueryError {
     #[error("{0}")]
     /// The query contract was invalid before execution.
@@ -125,6 +131,7 @@ pub enum QueryError {
 
 impl QueryError {
     /// Returns the stable machine-readable error code for this variant.
+    #[must_use]
     pub fn code(&self) -> ErrorCode {
         match self {
             Self::InvalidQuery(_) => error_codes::SC_LOG_QUERY_INVALID_QUERY,
@@ -136,6 +143,7 @@ impl QueryError {
     }
 
     /// Returns the attached diagnostic for the error.
+    #[must_use]
     pub fn diagnostic(&self) -> &Diagnostic {
         match self {
             Self::InvalidQuery(context)
@@ -147,6 +155,7 @@ impl QueryError {
     }
 
     /// Builds an invalid-query error using the stable shared code.
+    #[must_use]
     pub fn invalid_query(message: impl Into<String>) -> Self {
         Self::InvalidQuery(Box::new(ErrorContext::new(
             error_codes::SC_LOG_QUERY_INVALID_QUERY,
@@ -221,7 +230,7 @@ mod tests {
 
     fn log_event() -> LogEvent {
         LogEvent {
-            version: "1".to_string(),
+            version: crate::SchemaVersion::new("v1").expect("valid schema version"),
             timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service: service_name(),
@@ -230,9 +239,9 @@ mod tests {
             message: Some("query event".to_string()),
             identity: ProcessIdentity::default(),
             trace: Some(trace_context()),
-            request_id: Some("req-1".to_string()),
-            correlation_id: Some("corr-1".to_string()),
-            outcome: Some("success".to_string()),
+            request_id: Some(CorrelationId::new("req-1").expect("valid request id")),
+            correlation_id: Some(CorrelationId::new("corr-1").expect("valid correlation id")),
+            outcome: Some(crate::OutcomeLabel::new("success").expect("valid outcome")),
             diagnostic: None,
             state_transition: None,
             fields: Map::from_iter([("status".to_string(), json!("ok"))]),
@@ -246,8 +255,8 @@ mod tests {
             levels: vec![Level::Info, Level::Warn],
             target: Some(target_category()),
             action: Some(action_name()),
-            request_id: Some("req-1".to_string()),
-            correlation_id: Some("corr-1".to_string()),
+            request_id: Some(CorrelationId::new("req-1").expect("valid request id")),
+            correlation_id: Some(CorrelationId::new("corr-1").expect("valid correlation id")),
             since: Some(Timestamp::UNIX_EPOCH),
             until: Some(Timestamp::UNIX_EPOCH + Duration::minutes(5)),
             field_matches: vec![LogFieldMatch::equals("status", json!("ok"))],

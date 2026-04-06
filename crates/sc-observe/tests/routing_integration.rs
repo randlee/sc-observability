@@ -2,12 +2,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, Observation,
-    ObservationSubscriber, ProcessIdentity, ProjectionRegistration, Remediation, ServiceName,
-    SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberRegistration,
-    TargetCategory, Timestamp, TraceContext, TraceId,
+    ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricUnit,
+    Observation, ObservationSubscriber, OutcomeLabel, ProcessIdentity, ProjectionRegistration,
+    Remediation, SchemaVersion, ServiceName, SpanId, SpanProjector, SpanRecord, SpanSignal,
+    SpanStarted, SubscriberRegistration, TargetCategory, Timestamp, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
+use serde_json::Map;
 
 #[derive(Debug, Clone)]
 struct AgentEvent {
@@ -41,7 +42,10 @@ impl sc_observability_types::LogProjector<AgentEvent> for RecordingLogProjector 
     ) -> Result<Vec<LogEvent>, sc_observability_types::ProjectionError> {
         self.calls.lock().expect("calls poisoned").push(self.id);
         Ok(vec![LogEvent {
-            version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+            version: SchemaVersion::new(
+                sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+            )
+            .expect("valid schema version"),
             timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service: observation.service.clone(),
@@ -52,7 +56,7 @@ impl sc_observability_types::LogProjector<AgentEvent> for RecordingLogProjector 
             trace: Some(trace_context()),
             request_id: None,
             correlation_id: None,
-            outcome: Some("ok".to_string()),
+            outcome: Some(OutcomeLabel::new("ok").expect("valid outcome label")),
             diagnostic: Some(Diagnostic {
                 timestamp: Timestamp::UNIX_EPOCH,
                 code: ErrorCode::new_static("SC_TEST"),
@@ -60,10 +64,10 @@ impl sc_observability_types::LogProjector<AgentEvent> for RecordingLogProjector 
                 cause: None,
                 remediation: Remediation::recoverable("retry", ["inspect log output"]),
                 docs: None,
-                details: Default::default(),
+                details: Map::default(),
             }),
             state_transition: None,
-            fields: Default::default(),
+            fields: Map::default(),
         }])
     }
 }
@@ -83,7 +87,7 @@ impl SpanProjector<AgentEvent> for RecordingSpanProjector {
             observation.service.clone(),
             ActionName::new("span.started").expect("valid action"),
             trace_context(),
-            Default::default(),
+            Map::default(),
         ))])
     }
 }
@@ -105,8 +109,8 @@ impl sc_observability_types::MetricProjector<AgentEvent> for RecordingMetricProj
             name: MetricName::new("obs.events_total").expect("valid metric"),
             kind: MetricKind::Counter,
             value: 1.0,
-            unit: Some("1".to_string()),
-            attributes: Default::default(),
+            unit: Some(MetricUnit::new("1").expect("valid metric unit")),
+            attributes: Map::default(),
         }])
     }
 }
@@ -152,32 +156,34 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
     let root = temp_path("fanout");
     let config = ObservabilityConfig::default_for(tool_name(), root.clone()).expect("config");
     let runtime = Observability::builder(config)
-        .register_subscriber(SubscriberRegistration {
-            subscriber: Arc::new(RecordingSubscriber {
-                id: "subscriber",
-                calls: subscriber_calls.clone(),
-            }),
-            filter: None,
-        })
-        .register_projection(ProjectionRegistration {
-            log_projector: Some(Arc::new(RecordingLogProjector {
-                calls: log_calls.clone(),
-                id: "log",
-            })),
-            span_projector: Some(Arc::new(RecordingSpanProjector {
-                count: span_count.clone(),
-            })),
-            metric_projector: Some(Arc::new(RecordingMetricProjector {
-                count: metric_count.clone(),
-            })),
-            filter: None,
-        })
+        .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+            id: "subscriber",
+            calls: subscriber_calls.clone(),
+        })))
+        .register_projection(
+            ProjectionRegistration::new()
+                .with_log_projector(Arc::new(RecordingLogProjector {
+                    calls: log_calls.clone(),
+                    id: "log",
+                }))
+                .with_span_projector(Arc::new(RecordingSpanProjector {
+                    count: span_count.clone(),
+                }))
+                .with_metric_projector(Arc::new(RecordingMetricProjector {
+                    count: metric_count.clone(),
+                })),
+        )
         .build()
         .expect("runtime");
 
     runtime.emit(observation()).expect("emit");
 
-    let log_path = root.join("obs-app").join("logs").join("obs-app.log.jsonl");
+    let log_path = root
+        .join(sc_observability::constants::DEFAULT_LOG_DIR_NAME)
+        .join(format!(
+            "obs-app{}",
+            sc_observability::constants::DEFAULT_LOG_FILE_SUFFIX
+        ));
     let contents = std::fs::read_to_string(log_path).expect("read projected log file");
 
     assert_eq!(

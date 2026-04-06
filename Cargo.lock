@@ -149,6 +149,7 @@ version = "1.0.0"
 dependencies = [
  "sc-observability",
  "sc-observability-types",
+ "serde_json",
 ]
 
 [[package]]

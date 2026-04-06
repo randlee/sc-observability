@@ -1,0 +1,318 @@
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::{ErrorCode, constants, error_codes};
+
+/// Validation error returned when a public value type rejects an input.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Error)]
+#[error("{message}")]
+pub struct ValueValidationError {
+    code: ErrorCode,
+    message: String,
+}
+
+impl ValueValidationError {
+    /// Creates a validation error using the default shared validation code.
+    #[must_use]
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            code: error_codes::VALUE_VALIDATION_FAILED,
+            message: message.into(),
+        }
+    }
+
+    /// Creates a validation error with an explicit stable error code.
+    #[must_use]
+    pub fn with_code(code: ErrorCode, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+
+    /// Returns the stable error code associated with the validation failure.
+    #[must_use]
+    pub fn code(&self) -> &ErrorCode {
+        &self.code
+    }
+}
+
+macro_rules! validated_name_type {
+    ($name:ident, $doc:literal, $validator:expr) => {
+        #[doc = $doc]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        pub struct $name(String);
+
+        impl $name {
+            /// Creates a validated value from caller-provided string data.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ValueValidationError`] when the supplied string does
+            /// not satisfy the documented validation rules for this type.
+            pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
+                let value = value.into();
+                $validator(&value)?;
+                Ok(Self(value))
+            }
+
+            /// Returns the underlying validated string value.
+            #[must_use]
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                self.as_str()
+            }
+        }
+
+        impl TryFrom<String> for $name {
+            type Error = ValueValidationError;
+
+            fn try_from(value: String) -> Result<Self, Self::Error> {
+                Self::new(value)
+            }
+        }
+    };
+}
+
+pub(crate) fn validate_identifier(value: &str) -> Result<(), ValueValidationError> {
+    if value.is_empty() {
+        return Err(ValueValidationError::new("identifier must not be empty"));
+    }
+    if value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+    {
+        Ok(())
+    } else {
+        Err(ValueValidationError::new(
+            "identifier must match [A-Za-z0-9._-]+",
+        ))
+    }
+}
+
+pub(crate) fn validate_env_prefix(value: &str) -> Result<(), ValueValidationError> {
+    if value.is_empty() {
+        return Err(ValueValidationError::new("env prefix must not be empty"));
+    }
+    if value.ends_with(constants::DEFAULT_ENV_PREFIX_SEPARATOR) {
+        return Err(ValueValidationError::new(
+            "env prefix must not end with underscore",
+        ));
+    }
+    if value
+        .chars()
+        .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_')
+    {
+        Ok(())
+    } else {
+        Err(ValueValidationError::new(
+            "env prefix must match [A-Z0-9_]+",
+        ))
+    }
+}
+
+pub(crate) fn validate_metric_name(value: &str) -> Result<(), ValueValidationError> {
+    if value.is_empty() {
+        return Err(ValueValidationError::new("metric name must not be empty"));
+    }
+    if value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | '/'))
+    {
+        Ok(())
+    } else {
+        Err(ValueValidationError::new(
+            "metric name must match [A-Za-z0-9._\\-/]+",
+        ))
+    }
+}
+
+pub(crate) fn validate_metric_unit(value: &str) -> Result<(), ValueValidationError> {
+    if value.is_empty() {
+        return Err(ValueValidationError::new("metric unit must not be empty"));
+    }
+    if value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | '/' | '%'))
+    {
+        Ok(())
+    } else {
+        Err(ValueValidationError::new(
+            "metric unit must match [A-Za-z0-9._\\-/%]+",
+        ))
+    }
+}
+
+validated_name_type!(
+    ToolName,
+    "Validated tool identity used for top-level configuration.",
+    validate_identifier
+);
+validated_name_type!(
+    EnvPrefix,
+    "Validated environment prefix used for config loading namespaces.",
+    validate_env_prefix
+);
+validated_name_type!(
+    ServiceName,
+    "Validated service name carried in logs and telemetry.",
+    validate_identifier
+);
+validated_name_type!(
+    TargetCategory,
+    "Validated stable target category for log events.",
+    validate_identifier
+);
+validated_name_type!(
+    ActionName,
+    "Validated stable action name for log and span events.",
+    validate_identifier
+);
+validated_name_type!(
+    MetricName,
+    "Validated metric identity using [A-Za-z0-9._\\-/]+.",
+    validate_metric_name
+);
+validated_name_type!(
+    MetricUnit,
+    "Validated metric unit using [A-Za-z0-9._\\-/%]+.",
+    validate_metric_unit
+);
+validated_name_type!(
+    StateName,
+    "Validated stable state name for state-transition payloads.",
+    validate_identifier
+);
+validated_name_type!(
+    CorrelationId,
+    "Validated request/correlation identifier used for cross-record joins.",
+    validate_identifier
+);
+validated_name_type!(
+    OutcomeLabel,
+    "Validated stable outcome label for event results.",
+    validate_identifier
+);
+validated_name_type!(
+    SinkName,
+    "Validated stable name for a logging sink or telemetry exporter.",
+    validate_identifier
+);
+validated_name_type!(
+    SchemaVersion,
+    "Validated schema version label for shared envelopes and log records.",
+    validate_identifier
+);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validated_name_newtypes_accept_expected_values() {
+        assert_eq!(
+            ToolName::new("codex-cli")
+                .expect("valid tool name")
+                .as_str(),
+            "codex-cli"
+        );
+        assert_eq!(
+            ToolName::new("codex-cli")
+                .expect("valid tool name")
+                .to_string(),
+            "codex-cli"
+        );
+        assert_eq!(
+            EnvPrefix::new("SC_OBSERVABILITY")
+                .expect("valid env prefix")
+                .as_str(),
+            "SC_OBSERVABILITY"
+        );
+        assert_eq!(
+            ServiceName::new("service.core")
+                .expect("valid service name")
+                .as_str(),
+            "service.core"
+        );
+        assert_eq!(
+            TargetCategory::new("pipeline-ingest")
+                .expect("valid target category")
+                .as_str(),
+            "pipeline-ingest"
+        );
+        assert_eq!(
+            ActionName::new("observation.received")
+                .expect("valid action name")
+                .as_str(),
+            "observation.received"
+        );
+        assert_eq!(
+            MetricName::new("obs/events_total")
+                .expect("valid metric name")
+                .as_str(),
+            "obs/events_total"
+        );
+        assert_eq!(
+            MetricUnit::new("ms").expect("valid metric unit").as_str(),
+            "ms"
+        );
+        assert_eq!(
+            StateName::new("running")
+                .expect("valid state name")
+                .as_ref(),
+            "running"
+        );
+        assert_eq!(
+            CorrelationId::try_from("req-1".to_string())
+                .expect("valid correlation id")
+                .to_string(),
+            "req-1"
+        );
+        assert_eq!(
+            OutcomeLabel::new("success")
+                .expect("valid outcome label")
+                .as_str(),
+            "success"
+        );
+        assert_eq!(
+            SinkName::new("jsonl").expect("valid sink name").as_str(),
+            "jsonl"
+        );
+        assert_eq!(
+            SchemaVersion::new("v1")
+                .expect("valid schema version")
+                .as_str(),
+            "v1"
+        );
+    }
+
+    #[test]
+    fn validated_name_newtypes_reject_invalid_values() {
+        assert!(ToolName::new("").is_err());
+        assert!(EnvPrefix::new("sc_observability").is_err());
+        assert!(EnvPrefix::new("SC_OBSERVABILITY_").is_err());
+        assert!(ServiceName::new("service core").is_err());
+        assert!(TargetCategory::new("category/invalid").is_err());
+        assert!(ActionName::new("action invalid").is_err());
+        assert!(MetricName::new("metric name").is_err());
+        assert!(MetricUnit::new("metric unit").is_err());
+        assert!(StateName::new("state invalid").is_err());
+        assert!(CorrelationId::new("corr invalid").is_err());
+        assert!(OutcomeLabel::new("outcome invalid").is_err());
+        assert!(SinkName::new("sink invalid").is_err());
+        assert!(SchemaVersion::new("schema invalid").is_err());
+    }
+}

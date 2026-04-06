@@ -25,3 +25,10 @@ sc-observability-types = { version = "1.0.0", path = "crates/sc-observability-ty
 sc-observability = { version = "1.0.0", path = "crates/sc-observability" }
 sc-observe = { version = "1.0.0", path = "crates/sc-observe" }
 sc-observability-otlp = { version = "1.0.0", path = "crates/sc-observability-otlp" }
+
+[workspace.lints.rust]
+missing_debug_implementations = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+pedantic = "warn"

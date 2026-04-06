@@ -53,8 +53,11 @@ if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubs
     raise SystemExit(
         "sc-observability-otlp runtime dependencies drifted from allowed baseline"
     )
-if observe_test_deps:
-    raise SystemExit("sc-observe dev-dependencies drifted from allowed baseline")
+if observe_test_deps - {"serde_json"}:
+    raise SystemExit(
+        "sc-observe dev-dependencies drifted from allowed baseline: "
+        f"{sorted(observe_test_deps - {'serde_json'})}"
+    )
 if otlp_test_deps - {"sc-observe"}:
     raise SystemExit(
         "sc-observability-otlp dev-dependencies drifted from allowed baseline"

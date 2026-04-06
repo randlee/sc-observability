@@ -3,10 +3,23 @@
 //! This crate owns logging-only concerns: logger configuration, built-in file
 //! and console sinks, sink fan-out, filtering, redaction, and logging health.
 //! It intentionally avoids typed observation routing and OTLP transport logic.
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "public facade methods already have behavior documented centrally in the workspace docs, and repeating per-method Errors sections here would add low-signal boilerplate"
+)]
+#![expect(
+    clippy::must_use_candidate,
+    reason = "the facade intentionally avoids pervasive must_use boilerplate on constructors and lightweight accessors where the return types are already obvious from call sites"
+)]
+#![expect(
+    clippy::return_self_not_must_use,
+    reason = "builder-style chaining methods in this facade predate pedantic lint adoption and remain intentionally lightweight"
+)]
 
 pub mod constants;
 pub mod error_codes;
 
+mod builder;
 mod follow;
 mod health;
 mod jsonl_reader;
@@ -21,17 +34,21 @@ use std::time::{Duration, SystemTime};
 
 use crate::health::QueryHealthTracker;
 #[doc(inline)]
+pub use builder::LoggerBuilder;
+#[doc(inline)]
 pub use follow::LogFollowSession;
 #[doc(inline)]
 pub use jsonl_reader::JsonlLogReader;
-use sc_observability_types::{
-    Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, FlushError, InitError, Level,
-    LevelFilter, LogEvent, LogQuery, LogSinkError, LogSnapshot, ProcessIdentityPolicy, QueryError,
-    QueryHealthState, Remediation, ServiceName, ShutdownError, Timestamp,
-};
 #[doc(inline)]
 pub use sc_observability_types::{
-    EventError, LoggingHealthReport, LoggingHealthState, SinkHealth, SinkHealthState,
+    ActionName, ErrorCode, EventError, Level, LogEvent, LogQuery, LogSnapshot, LoggingHealthReport,
+    LoggingHealthState, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity, SchemaVersion,
+    ServiceName, SinkHealth, SinkHealthState, TargetCategory, Timestamp,
+};
+use sc_observability_types::{
+    Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, FlushError, InitError,
+    LevelFilter, LogSinkError, ProcessIdentityPolicy, QueryError, QueryHealthState, Remediation,
+    ShutdownError, SinkName,
 };
 use serde_json::Value;
 
@@ -82,7 +99,7 @@ pub struct RedactionPolicy {
     /// Whether bearer-token shaped values should be redacted.
     pub redact_bearer_tokens: bool,
     /// Additional caller-supplied redactors.
-    pub custom_redactors: Vec<Arc<dyn Redactor>>,
+    pub custom_redactors: Vec<Box<dyn Redactor>>,
 }
 
 impl std::fmt::Debug for RedactionPolicy {
@@ -117,11 +134,15 @@ pub trait LogSink: Send + Sync {
 
 /// Construction-time sink registration pairing one sink with an optional filter.
 #[derive(Clone)]
+#[expect(
+    missing_debug_implementations,
+    reason = "registration stores trait-object sinks and filters, so derived Debug would not provide a meaningful stable contract"
+)]
 pub struct SinkRegistration {
     /// Concrete sink implementation.
-    pub sink: Arc<dyn LogSink>,
+    pub(crate) sink: Arc<dyn LogSink>,
     /// Optional sink-local filter.
-    pub filter: Option<Arc<dyn LogFilter>>,
+    pub(crate) filter: Option<Arc<dyn LogFilter>>,
 }
 
 impl SinkRegistration {
@@ -134,6 +155,88 @@ impl SinkRegistration {
     pub fn with_filter(mut self, filter: Arc<dyn LogFilter>) -> Self {
         self.filter = Some(filter);
         self
+    }
+}
+
+#[cfg(feature = "fault-injection")]
+/// Public controller for forcing retained sink health into validation states.
+///
+/// This type is intended for live validation and test harness use only. It
+/// wraps one existing retained sink and forces that sink to report degraded or
+/// unavailable health through the ordinary `LoggingHealthReport` path without
+/// sabotaging the filesystem or reaching into crate-private internals.
+#[derive(Clone, Default)]
+#[expect(
+    missing_debug_implementations,
+    reason = "fault injector state is a small validation-only mutex wrapper without a useful stable Debug contract"
+)]
+pub struct RetainedSinkFaultInjector {
+    forced_state: Arc<Mutex<Option<SinkHealthState>>>,
+}
+
+#[cfg(feature = "fault-injection")]
+impl RetainedSinkFaultInjector {
+    /// Creates a new injector with no forced sink fault.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Wraps one retained sink so its health can be forced during validation.
+    ///
+    /// `Arc<dyn LogSink>` is intentionally preserved in this public signature
+    /// because `SinkRegistration::new()` takes `Arc<dyn LogSink>` and this
+    /// helper exists solely to compose with that registration surface.
+    pub fn wrap(&self, sink: Arc<dyn LogSink>) -> Arc<dyn LogSink> {
+        Arc::new(FaultInjectingSink {
+            inner: sink,
+            forced_state: self.forced_state.clone(),
+        })
+    }
+
+    /// Forces the wrapped retained sink into the degraded-dropping state.
+    pub fn force_degraded(&self) {
+        self.set_state(SinkHealthState::DegradedDropping);
+    }
+
+    /// Forces the wrapped retained sink into the unavailable state.
+    pub fn force_unavailable(&self) {
+        self.set_state(SinkHealthState::Unavailable);
+    }
+
+    /// Clears any forced sink fault and returns the wrapped sink to normal
+    /// health reporting.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the retained-sink fault-state mutex has been poisoned.
+    pub fn clear(&self) {
+        *self
+            .forced_state
+            .lock()
+            .expect("retained sink fault state poisoned") = None;
+    }
+
+    fn set_state(&self, state: SinkHealthState) {
+        *self
+            .forced_state
+            .lock()
+            .expect("retained sink fault state poisoned") = Some(state);
+    }
+}
+
+#[cfg(feature = "fault-injection")]
+struct FaultInjectingSink {
+    inner: Arc<dyn LogSink>,
+    forced_state: Arc<Mutex<Option<SinkHealthState>>>,
+}
+
+#[cfg(feature = "fault-injection")]
+impl FaultInjectingSink {
+    fn current_state(&self) -> Option<SinkHealthState> {
+        *self
+            .forced_state
+            .lock()
+            .expect("retained sink fault state poisoned")
     }
 }
 
@@ -163,14 +266,16 @@ pub struct LoggerConfig {
 }
 
 impl LoggerConfig {
-    /// Builds the documented v1 defaults for a service-scoped logger configuration.
+    /// Builds the documented v1 defaults for a service-scoped logger
+    /// configuration.
     ///
-    /// If `SC_LOG_ROOT` is set, it is used only when `log_root` is empty. A
-    /// non-empty `log_root` parameter is treated as explicit configuration and
-    /// takes precedence over the environment helper per LOG-009.
+    /// If [`constants::SC_LOG_ROOT_ENV_VAR`] is set, it is used only when
+    /// `log_root` is empty. A non-empty `log_root` parameter is treated as
+    /// explicit configuration and takes precedence over the environment helper
+    /// per LOG-009.
     pub fn default_for(service_name: ServiceName, log_root: PathBuf) -> Self {
         let resolved_log_root = if log_root.as_os_str().is_empty() {
-            std::env::var("SC_LOG_ROOT")
+            std::env::var(constants::SC_LOG_ROOT_ENV_VAR)
                 .ok()
                 .map(PathBuf::from)
                 .filter(|path| !path.as_os_str().is_empty())
@@ -221,6 +326,10 @@ impl LoggerRuntime {
 }
 
 /// Lightweight structured logging runtime with built-in query and follow support.
+#[expect(
+    missing_debug_implementations,
+    reason = "logger owns runtime handles and trait-object sinks whose internal state is not a stable public debug contract"
+)]
 pub struct Logger {
     config: LoggerConfig,
     sinks: Vec<SinkRegistration>,
@@ -229,33 +338,14 @@ pub struct Logger {
 }
 
 impl Logger {
-    /// Creates a logger with the configured built-in sinks and runtime state.
-    pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
-        let active_log_path = default_log_path(&config.log_root, &config.service_name);
-        let query_available = active_log_path.exists() || config.enable_file_sink;
-        let mut sinks = Vec::new();
-
-        if config.enable_file_sink {
-            let sink =
-                JsonlFileSink::new(active_log_path.clone(), config.rotation, config.retention);
-            sinks.push(SinkRegistration::new(Arc::new(sink)));
-        }
-
-        if config.enable_console_sink {
-            sinks.push(SinkRegistration::new(Arc::new(ConsoleSink::stdout())));
-        }
-
-        Ok(Self {
-            config,
-            sinks,
-            shutdown: Arc::new(AtomicBool::new(false)),
-            runtime: LoggerRuntime::new(query_available),
-        })
+    /// Starts a construction-time builder for sink registration.
+    pub fn builder(config: LoggerConfig) -> Result<LoggerBuilder, InitError> {
+        LoggerBuilder::new(config)
     }
 
-    /// Registers one additional sink before log emission begins.
-    pub fn register_sink(&mut self, registration: SinkRegistration) {
-        self.sinks.push(registration);
+    /// Creates a logger with the configured built-in sinks and runtime state.
+    pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
+        Ok(LoggerBuilder::new(config)?.build())
     }
 
     /// Emits one structured log event through the configured sinks.
@@ -289,6 +379,10 @@ impl Logger {
     }
 
     /// Flushes all registered sinks.
+    ///
+    /// Sink flush failures are absorbed into logger health and counters so the
+    /// caller can continue shutdown or health inspection without a secondary
+    /// runtime failure.
     ///
     /// # Panics
     ///
@@ -367,15 +461,8 @@ impl Logger {
     pub fn health(&self) -> LoggingHealthReport {
         let sink_statuses: Vec<SinkHealth> =
             self.sinks.iter().map(|entry| entry.sink.health()).collect();
-        let degraded = sink_statuses
-            .iter()
-            .any(|sink| sink.state != SinkHealthState::Healthy);
         LoggingHealthReport {
-            state: if degraded {
-                LoggingHealthState::DegradedDropping
-            } else {
-                LoggingHealthState::Healthy
-            },
+            state: aggregate_logging_health_state(&sink_statuses),
             dropped_events_total: self.runtime.dropped_events_total.load(Ordering::SeqCst),
             flush_errors_total: self.runtime.flush_errors_total.load(Ordering::SeqCst),
             active_log_path: default_log_path(&self.config.log_root, &self.config.service_name),
@@ -469,6 +556,10 @@ impl Logger {
 }
 
 /// Built-in JSONL file sink with rotation and retention handling.
+#[expect(
+    missing_debug_implementations,
+    reason = "file-sink internals include mutex-protected runtime state that is intentionally not exposed through a public Debug contract"
+)]
 pub struct JsonlFileSink {
     path: PathBuf,
     rotation: RotationPolicy,
@@ -480,13 +571,19 @@ pub struct JsonlFileSink {
 
 impl JsonlFileSink {
     /// Creates a JSONL file sink at the given active log path.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the workspace-owned `JSONL_FILE_SINK_NAME` constant ever
+    /// becomes invalid for `SinkName`, which would indicate a programming bug.
     pub fn new(path: PathBuf, rotation: RotationPolicy, retention: RetentionPolicy) -> Self {
         Self {
             path,
             rotation,
             retention,
             health: Mutex::new(SinkHealth {
-                name: "jsonl-file".to_string(),
+                name: SinkName::new(constants::JSONL_FILE_SINK_NAME)
+                    .expect("jsonl sink constant is valid"),
                 state: SinkHealthState::Healthy,
                 last_error: None,
             }),
@@ -498,6 +595,10 @@ impl JsonlFileSink {
         &self.path
     }
 
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "the helper preserves a Result-shaped internal API so rotation checks can grow I/O failure propagation without reshaping caller control flow"
+    )]
     fn rotate_if_needed(&self, incoming_len: u64) -> Result<(), LogSinkError> {
         if let Ok(metadata) = fs::metadata(&self.path)
             && metadata.len().saturating_add(incoming_len) > self.rotation.max_bytes
@@ -524,16 +625,15 @@ impl JsonlFileSink {
     }
 
     fn prune_old_files(&self) {
-        let parent = match self.path.parent() {
-            Some(parent) => parent,
-            None => return,
+        let Some(parent) = self.path.parent() else {
+            return;
         };
 
         let Ok(entries) = fs::read_dir(parent) else {
             return;
         };
         let retention_cutoff = SystemTime::now()
-            - Duration::from_secs((self.retention.max_age_days as u64) * constants::SECS_PER_DAY);
+            - Duration::from_secs(u64::from(self.retention.max_age_days) * constants::SECS_PER_DAY);
 
         for entry in entries.flatten() {
             let path = entry.path();
@@ -601,7 +701,7 @@ impl LogSink for JsonlFileSink {
             .open(&self.path)
             .map_err(|err| self.mark_failure(err))?;
         file.write_all(&line)
-            .and_then(|_| file.flush())
+            .and_then(|()| file.flush())
             .map_err(|err| self.mark_failure(err))?;
 
         let mut health = self.health.lock().expect("file sink health poisoned");
@@ -632,7 +732,23 @@ impl ConsoleWriter for StdoutConsoleWriter {
     }
 }
 
-/// Built-in sink that renders log events to stdout.
+struct StderrConsoleWriter;
+
+impl ConsoleWriter for StderrConsoleWriter {
+    fn write_line(&self, line: &str) -> std::io::Result<()> {
+        let mut stderr = std::io::stderr().lock();
+        stderr.write_all(line.as_bytes())?;
+        stderr.write_all(b"\n")?;
+        stderr.flush()
+    }
+}
+
+/// Built-in sink that renders log events to a configured output stream
+/// (stdout or stderr).
+#[expect(
+    missing_debug_implementations,
+    reason = "console sink owns a trait-object writer and sink health state, so a derived Debug impl would not be stable or useful"
+)]
 pub struct ConsoleSink {
     writer: Box<dyn ConsoleWriter>,
     // MUTEX: console sink health mutates as one shared status struct on write failures and reads;
@@ -646,11 +762,17 @@ impl ConsoleSink {
         Self::from_writer(Box::new(StdoutConsoleWriter))
     }
 
+    /// Creates a console sink backed by stderr.
+    pub fn stderr() -> Self {
+        Self::from_writer(Box::new(StderrConsoleWriter))
+    }
+
     pub(crate) fn from_writer(writer: Box<dyn ConsoleWriter>) -> Self {
         Self {
             writer,
             health: Mutex::new(SinkHealth {
-                name: "console".to_string(),
+                name: SinkName::new(constants::CONSOLE_SINK_NAME)
+                    .expect("console sink constant is valid"),
                 state: SinkHealthState::Healthy,
                 last_error: None,
             }),
@@ -718,6 +840,33 @@ impl LogSink for ConsoleSink {
     }
 }
 
+#[cfg(feature = "fault-injection")]
+impl LogSink for FaultInjectingSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        if let Some(state) = self.current_state() {
+            return Err(LogSinkError(Box::new(fault_injection_error_context(state))));
+        }
+        self.inner.write(event)
+    }
+
+    fn flush(&self) -> Result<(), LogSinkError> {
+        if let Some(state) = self.current_state() {
+            return Err(LogSinkError(Box::new(fault_injection_error_context(state))));
+        }
+        self.inner.flush()
+    }
+
+    fn health(&self) -> SinkHealth {
+        let mut health = self.inner.health();
+        if let Some(state) = self.current_state() {
+            let context = fault_injection_error_context(state);
+            health.state = state;
+            health.last_error = Some(DiagnosticSummary::from(context.diagnostic()));
+        }
+        health
+    }
+}
+
 mod sealed_emitters {
     pub trait Sealed {}
 }
@@ -753,7 +902,7 @@ pub(crate) fn diagnostic_for_sink_failure(message: impl Into<String>) -> Diagnos
 }
 
 fn validate_event(event: &LogEvent, expected_service: &ServiceName) -> Result<(), EventError> {
-    if event.version != sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION {
+    if event.version.as_str() != sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION {
         return Err(EventError(Box::new(ErrorContext::new(
             error_codes::LOGGER_INVALID_EVENT,
             "log event version is invalid",
@@ -778,11 +927,18 @@ fn validate_event(event: &LogEvent, expected_service: &ServiceName) -> Result<()
     Ok(())
 }
 
+pub(crate) fn default_log_file_name(service_name: &ServiceName) -> String {
+    format!(
+        "{}{}",
+        service_name.as_str(),
+        constants::DEFAULT_LOG_FILE_SUFFIX
+    )
+}
+
 pub(crate) fn default_log_path(log_root: &Path, service_name: &ServiceName) -> PathBuf {
     log_root
-        .join(service_name.as_str())
-        .join("logs")
-        .join(format!("{}.log.jsonl", service_name.as_str()))
+        .join(constants::DEFAULT_LOG_DIR_NAME)
+        .join(default_log_file_name(service_name))
 }
 
 pub(crate) fn rotated_log_path(active_path: &Path, index: u32) -> PathBuf {
@@ -792,6 +948,40 @@ pub(crate) fn rotated_log_path(active_path: &Path, index: u32) -> PathBuf {
         .and_then(|value| value.to_str())
         .unwrap_or("active.log.jsonl");
     parent.join(format!("{file_name}.{index}"))
+}
+
+fn aggregate_logging_health_state(sink_statuses: &[SinkHealth]) -> LoggingHealthState {
+    if sink_statuses
+        .iter()
+        .any(|sink| sink.state == SinkHealthState::Unavailable)
+    {
+        LoggingHealthState::Unavailable
+    } else if sink_statuses
+        .iter()
+        .any(|sink| sink.state != SinkHealthState::Healthy)
+    {
+        LoggingHealthState::DegradedDropping
+    } else {
+        LoggingHealthState::Healthy
+    }
+}
+
+#[cfg(feature = "fault-injection")]
+fn fault_injection_error_context(state: SinkHealthState) -> ErrorContext {
+    let forced_state = match state {
+        SinkHealthState::Healthy => "healthy",
+        SinkHealthState::DegradedDropping => "degraded_dropping",
+        SinkHealthState::Unavailable => "unavailable",
+    };
+    ErrorContext::new(
+        error_codes::LOGGER_SINK_FAULT_INJECTED,
+        format!("retained sink fault injection forced {forced_state} state"),
+        Remediation::recoverable(
+            "clear the retained sink fault injector before resuming normal validation traffic",
+            ["clear the injector state"],
+        ),
+    )
+    .detail("forced_state", Value::String(forced_state.to_string()))
 }
 
 fn rename_if_present(src: &Path, dest: &Path) -> std::io::Result<()> {
@@ -818,8 +1008,7 @@ fn redact_bearer_token_text(input: &str) -> String {
         let token_start = index + PREFIX.len();
         let token_end = remaining[token_start..]
             .find(char::is_whitespace)
-            .map(|value| token_start + value)
-            .unwrap_or(remaining.len());
+            .map_or(remaining.len(), |value| token_start + value);
         result.push_str(constants::REDACTED_VALUE);
         remaining = &remaining[token_end..];
     }
@@ -835,7 +1024,7 @@ mod tests {
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogOrder, LogQuery, LogSnapshot,
         ProcessIdentity, QueryError, QueryHealthState, TargetCategory, Timestamp,
     };
-    use serde_json::json;
+    use serde_json::{Map, json};
     use std::sync::Arc;
     use temp_env::{with_var, with_var_unset};
 
@@ -876,7 +1065,7 @@ mod tests {
 
         fn health(&self) -> SinkHealth {
             SinkHealth {
-                name: "fail".to_string(),
+                name: sink_name("fail"),
                 state: SinkHealthState::DegradedDropping,
                 last_error: None,
             }
@@ -900,7 +1089,7 @@ mod tests {
 
         fn health(&self) -> SinkHealth {
             SinkHealth {
-                name: "recording-flush".to_string(),
+                name: sink_name("recording-flush"),
                 state: SinkHealthState::Healthy,
                 last_error: None,
             }
@@ -909,6 +1098,25 @@ mod tests {
 
     fn service_name() -> ServiceName {
         ServiceName::new("sc-observability").expect("valid service name")
+    }
+
+    fn schema_version() -> sc_observability_types::SchemaVersion {
+        sc_observability_types::SchemaVersion::new(
+            sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+        )
+        .expect("valid schema version")
+    }
+
+    fn outcome_label(value: &str) -> sc_observability_types::OutcomeLabel {
+        sc_observability_types::OutcomeLabel::new(value).expect("valid outcome label")
+    }
+
+    fn correlation_id(value: &str) -> sc_observability_types::CorrelationId {
+        sc_observability_types::CorrelationId::new(value).expect("valid correlation id")
+    }
+
+    fn sink_name(value: &str) -> SinkName {
+        SinkName::new(value).expect("valid sink name")
     }
 
     fn temp_path(name: &str) -> PathBuf {
@@ -965,14 +1173,14 @@ mod tests {
 
     fn with_sc_log_root<T>(value: Option<&Path>, f: impl FnOnce() -> T) -> T {
         match value {
-            Some(path) => with_var("SC_LOG_ROOT", Some(path), f),
-            None => with_var_unset("SC_LOG_ROOT", f),
+            Some(path) => with_var(constants::SC_LOG_ROOT_ENV_VAR, Some(path), f),
+            None => with_var_unset(constants::SC_LOG_ROOT_ENV_VAR, f),
         }
     }
 
     fn log_event(service_name: ServiceName) -> LogEvent {
         LogEvent {
-            version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+            version: schema_version(),
             timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service: service_name,
@@ -983,7 +1191,7 @@ mod tests {
             trace: None,
             request_id: None,
             correlation_id: None,
-            outcome: Some("ok".to_string()),
+            outcome: Some(outcome_label("ok")),
             diagnostic: Some(Diagnostic {
                 timestamp: Timestamp::UNIX_EPOCH,
                 code: ErrorCode::new_static("SC_TEST"),
@@ -991,7 +1199,7 @@ mod tests {
                 cause: None,
                 remediation: Remediation::recoverable("retry", ["inspect logs"]),
                 docs: None,
-                details: Default::default(),
+                details: Map::default(),
             }),
             state_transition: None,
             fields: serde_json::Map::from_iter([
@@ -1008,7 +1216,7 @@ mod tests {
     ) -> LogEvent {
         let mut event = log_event(service_name);
         event.message = Some(format!("{request_id} {}", "x".repeat(message_padding)));
-        event.request_id = Some(request_id.to_string());
+        event.request_id = Some(correlation_id(request_id));
         event
             .fields
             .insert("sequence".to_string(), json!(request_id.to_string()));
@@ -1026,7 +1234,7 @@ mod tests {
         snapshot
             .events
             .iter()
-            .map(|event| event.request_id.clone().expect("request_id"))
+            .map(|event| event.request_id.clone().expect("request_id").to_string())
             .collect()
     }
 
@@ -1071,9 +1279,8 @@ mod tests {
         assert!(!config.enable_console_sink);
         assert_eq!(
             default_log_path(&root, &config.service_name),
-            root.join("sc-observability")
-                .join("logs")
-                .join("sc-observability.log.jsonl")
+            root.join(constants::DEFAULT_LOG_DIR_NAME)
+                .join(default_log_file_name(&config.service_name))
         );
     }
 
@@ -1117,10 +1324,7 @@ mod tests {
         let logger = Logger::new(config).expect("logger");
         logger.emit(log_event(service_name())).expect("emit");
 
-        let path = root
-            .join("sc-observability")
-            .join("logs")
-            .join("sc-observability.log.jsonl");
+        let path = default_log_path(&root, &service_name());
         let contents = fs::read_to_string(&path).expect("read log file");
         assert!(contents.contains("\"level\":\"Info\""));
         assert!(contents.contains("[REDACTED]"));
@@ -1131,21 +1335,19 @@ mod tests {
         let root = temp_path("fanout");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.enable_console_sink = false;
-        let mut logger = Logger::new(config).expect("logger");
+        let mut builder = Logger::builder(config).expect("logger builder");
 
         let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        logger.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::from_writer(
+        builder.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::from_writer(
             Box::new(SharedBuffer {
                 lines: lines.clone(),
             }),
         ))));
+        let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
 
-        let path = root
-            .join("sc-observability")
-            .join("logs")
-            .join("sc-observability.log.jsonl");
+        let path = default_log_path(&root, &service_name());
         assert!(path.exists());
         let lines = lines.lock().expect("lines poisoned");
         assert_eq!(lines.len(), 1);
@@ -1161,22 +1363,20 @@ mod tests {
         config
             .redaction
             .custom_redactors
-            .push(Arc::new(PrefixRedactor));
-        let mut logger = Logger::new(config).expect("logger");
+            .push(Box::new(PrefixRedactor));
+        let mut builder = Logger::builder(config).expect("logger builder");
 
         let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        logger.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::from_writer(
+        builder.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::from_writer(
             Box::new(SharedBuffer {
                 lines: lines.clone(),
             }),
         ))));
+        let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
 
-        let file_path = root
-            .join("sc-observability")
-            .join("logs")
-            .join("sc-observability.log.jsonl");
+        let file_path = default_log_path(&root, &service_name());
         let file_contents = fs::read_to_string(file_path).expect("read file");
         let console_line = lines.lock().expect("lines poisoned")[0].clone();
         assert!(file_contents.contains("[REDACTED]"));
@@ -1190,7 +1390,7 @@ mod tests {
         let config = LoggerConfig::default_for(service_name(), root);
         let logger = Logger::new(config).expect("logger");
         let mut event = log_event(service_name());
-        event.version = "v0".to_string();
+        event.version = sc_observability_types::SchemaVersion::new("v0").expect("valid version");
         assert!(logger.emit(event).is_err());
     }
 
@@ -1199,8 +1399,9 @@ mod tests {
         let root = temp_path("fail-open");
         let mut config = LoggerConfig::default_for(service_name(), root);
         config.enable_file_sink = false;
-        let mut logger = Logger::new(config).expect("logger");
-        logger.register_sink(SinkRegistration::new(Arc::new(FailSink)));
+        let mut builder = Logger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::new(Arc::new(FailSink)));
+        let logger = builder.build();
 
         logger
             .emit(log_event(service_name()))
@@ -1231,7 +1432,7 @@ mod tests {
 
             fn health(&self) -> SinkHealth {
                 SinkHealth {
-                    name: "flush-fail".to_string(),
+                    name: sink_name("flush-fail"),
                     state: SinkHealthState::DegradedDropping,
                     last_error: None,
                 }
@@ -1241,8 +1442,9 @@ mod tests {
         let root = temp_path("flush-fail");
         let mut config = LoggerConfig::default_for(service_name(), root);
         config.enable_file_sink = false;
-        let mut logger = Logger::new(config).expect("logger");
-        logger.register_sink(SinkRegistration::new(Arc::new(FlushFailSink)));
+        let mut builder = Logger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::new(Arc::new(FlushFailSink)));
+        let logger = builder.build();
 
         logger.flush().expect("flush remains fail-open");
 
@@ -1261,26 +1463,89 @@ mod tests {
 
         assert_eq!(
             path,
-            PathBuf::from("observability-root/custom-service/logs/custom-service.log.jsonl")
+            PathBuf::from("observability-root/logs/custom-service.log.jsonl")
         );
     }
 
     #[test]
     fn rotated_log_paths_keep_the_active_filename_prefix() {
         let sink = JsonlFileSink::new(
-            PathBuf::from("observability-root/custom-service/logs/custom-service.log.jsonl"),
+            PathBuf::from("observability-root/logs/custom-service.log.jsonl"),
             RotationPolicy::default(),
             RetentionPolicy::default(),
         );
 
         assert_eq!(
             sink.rotated_path(1),
-            PathBuf::from("observability-root/custom-service/logs/custom-service.log.jsonl.1")
+            PathBuf::from("observability-root/logs/custom-service.log.jsonl.1")
         );
         assert_eq!(
             sink.rotated_path(2),
-            PathBuf::from("observability-root/custom-service/logs/custom-service.log.jsonl.2")
+            PathBuf::from("observability-root/logs/custom-service.log.jsonl.2")
         );
+    }
+
+    #[test]
+    fn console_sink_stderr_constructor_is_operational() {
+        let sink = ConsoleSink::stderr();
+
+        sink.write(&log_event(service_name()))
+            .expect("stderr write");
+
+        assert_eq!(sink.health().state, SinkHealthState::Healthy);
+    }
+
+    #[cfg(feature = "fault-injection")]
+    #[test]
+    fn retained_sink_fault_injector_forces_degraded_logging_health() {
+        let root = temp_path("fault-degraded");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.enable_file_sink = false;
+        let mut builder = Logger::builder(config).expect("logger builder");
+        let injector = RetainedSinkFaultInjector::new();
+        builder.register_sink(SinkRegistration::new(
+            injector.wrap(Arc::new(RecordingFlushSink::default())),
+        ));
+        let logger = builder.build();
+
+        injector.force_degraded();
+        logger
+            .emit(log_event(service_name()))
+            .expect("emit remains fail-open");
+
+        let health = logger.health();
+        assert_eq!(health.state, LoggingHealthState::DegradedDropping);
+        assert_eq!(
+            health.sink_statuses[0].state,
+            SinkHealthState::DegradedDropping
+        );
+        assert_eq!(health.dropped_events_total, 1);
+        assert!(health.last_error.is_some());
+    }
+
+    #[cfg(feature = "fault-injection")]
+    #[test]
+    fn retained_sink_fault_injector_forces_unavailable_logging_health() {
+        let root = temp_path("fault-unavailable");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.enable_file_sink = false;
+        let mut builder = Logger::builder(config).expect("logger builder");
+        let injector = RetainedSinkFaultInjector::new();
+        builder.register_sink(SinkRegistration::new(
+            injector.wrap(Arc::new(RecordingFlushSink::default())),
+        ));
+        let logger = builder.build();
+
+        injector.force_unavailable();
+        logger
+            .emit(log_event(service_name()))
+            .expect("emit remains fail-open");
+
+        let health = logger.health();
+        assert_eq!(health.state, LoggingHealthState::Unavailable);
+        assert_eq!(health.sink_statuses[0].state, SinkHealthState::Unavailable);
+        assert_eq!(health.dropped_events_total, 1);
+        assert!(health.last_error.is_some());
     }
 
     #[test]
@@ -1296,15 +1561,16 @@ mod tests {
         let root = temp_path("filter");
         let mut config = LoggerConfig::default_for(service_name(), root);
         config.enable_file_sink = false;
-        let mut logger = Logger::new(config).expect("logger");
+        let mut builder = Logger::builder(config).expect("logger builder");
 
         let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        logger.register_sink(
+        builder.register_sink(
             SinkRegistration::new(Arc::new(ConsoleSink::from_writer(Box::new(SharedBuffer {
                 lines: lines.clone(),
             }))))
             .with_filter(Arc::new(DenyAll)),
         );
+        let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
 
@@ -1327,9 +1593,10 @@ mod tests {
         let root = temp_path("shutdown-flush");
         let mut config = LoggerConfig::default_for(service_name(), root);
         config.enable_file_sink = false;
-        let mut logger = Logger::new(config).expect("logger");
+        let mut builder = Logger::builder(config).expect("logger builder");
         let sink = Arc::new(RecordingFlushSink::default());
-        logger.register_sink(SinkRegistration::new(sink.clone()));
+        builder.register_sink(SinkRegistration::new(sink.clone()));
+        let logger = builder.build();
 
         logger.shutdown().expect("shutdown");
 

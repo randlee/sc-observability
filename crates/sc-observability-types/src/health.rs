@@ -1,8 +1,9 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{DiagnosticSummary, telemetry_health_provider_sealed};
+use crate::{DiagnosticSummary, SinkName, telemetry_health_provider_sealed};
 
 /// Top-level health state for the lightweight logging layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,7 +31,7 @@ pub enum SinkHealthState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SinkHealth {
     /// Stable sink name.
-    pub name: String,
+    pub name: SinkName,
     /// Current sink health state.
     pub state: SinkHealthState,
     /// Optional last sink error summary.
@@ -115,7 +116,7 @@ pub enum ExporterHealthState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExporterHealth {
     /// Stable exporter name.
-    pub name: String,
+    pub name: SinkName,
     /// Current exporter health state.
     pub state: ExporterHealthState,
     /// Optional last exporter error summary.
@@ -145,6 +146,24 @@ pub trait ObservabilityHealthProvider:
     fn telemetry_health(&self) -> TelemetryHealthReport;
 }
 
+impl<T> telemetry_health_provider_sealed::Sealed for Arc<T>
+where
+    T: ObservabilityHealthProvider + ?Sized,
+{
+    fn token(&self) -> telemetry_health_provider_sealed::Token {
+        (**self).token()
+    }
+}
+
+impl<T> ObservabilityHealthProvider for Arc<T>
+where
+    T: ObservabilityHealthProvider + ?Sized,
+{
+    fn telemetry_health(&self) -> TelemetryHealthReport {
+        (**self).telemetry_health()
+    }
+}
+
 /// Aggregate routing/runtime health report.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ObservabilityHealthReport {
@@ -162,4 +181,76 @@ pub struct ObservabilityHealthReport {
     pub telemetry: Option<TelemetryHealthReport>,
     /// Optional last routing error summary.
     pub last_error: Option<DiagnosticSummary>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{Map, json};
+
+    use crate::{
+        Diagnostic, ErrorCode, ExporterHealth, ExporterHealthState, LoggingHealthState,
+        QueryHealthState, Remediation, Timestamp,
+    };
+
+    fn diagnostic() -> Diagnostic {
+        Diagnostic {
+            timestamp: Timestamp::UNIX_EPOCH,
+            code: ErrorCode::new_static("SC_TEST_DIAGNOSTIC"),
+            message: "diagnostic invalid".to_string(),
+            cause: Some("invalid example".to_string()),
+            remediation: Remediation::recoverable(
+                "fix the input",
+                ["rerun the command", "review the docs"],
+            ),
+            docs: Some("https://example.test/docs".to_string()),
+            details: Map::from_iter([("key".to_string(), json!("value"))]),
+        }
+    }
+
+    #[test]
+    fn health_reports_round_trip_through_serde() {
+        let sink = SinkHealth {
+            name: SinkName::new("jsonl").expect("valid sink name"),
+            state: SinkHealthState::Healthy,
+            last_error: Some(DiagnosticSummary::from(&diagnostic())),
+        };
+        let logging = LoggingHealthReport {
+            state: LoggingHealthState::Healthy,
+            dropped_events_total: 0,
+            flush_errors_total: 0,
+            active_log_path: std::path::PathBuf::from("logs/service.log.jsonl"),
+            sink_statuses: vec![sink],
+            query: Some(QueryHealthReport {
+                state: QueryHealthState::Healthy,
+                last_error: None,
+            }),
+            last_error: None,
+        };
+        let telemetry = TelemetryHealthReport {
+            state: TelemetryHealthState::Healthy,
+            dropped_exports_total: 1,
+            malformed_spans_total: 0,
+            exporter_statuses: vec![ExporterHealth {
+                name: SinkName::new("otlp").expect("valid sink name"),
+                state: ExporterHealthState::Degraded,
+                last_error: Some(DiagnosticSummary::from(&diagnostic())),
+            }],
+            last_error: Some(DiagnosticSummary::from(&diagnostic())),
+        };
+        let report = ObservabilityHealthReport {
+            state: ObservationHealthState::Degraded,
+            dropped_observations_total: 2,
+            subscriber_failures_total: 3,
+            projection_failures_total: 4,
+            logging: Some(logging),
+            telemetry: Some(telemetry),
+            last_error: Some(DiagnosticSummary::from(&diagnostic())),
+        };
+
+        let encoded = serde_json::to_string(&report).expect("serialize observability health");
+        let decoded: ObservabilityHealthReport =
+            serde_json::from_str(&encoded).expect("deserialize observability health");
+        assert_eq!(decoded, report);
+    }
 }

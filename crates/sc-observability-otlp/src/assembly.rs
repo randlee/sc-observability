@@ -4,6 +4,14 @@
 //! `CompleteSpan`, reports orphaned or inconsistent lifecycle transitions as
 //! explicit errors, and maintains incomplete-span accounting for runtime
 //! shutdown handling.
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "span-assembly failure behavior is documented at the telemetry facade level, and repeating it here would add low-signal boilerplate"
+)]
+#![expect(
+    clippy::must_use_candidate,
+    reason = "small constructor/accessor methods are intentionally kept free of repetitive must_use decoration"
+)]
 
 use std::collections::HashMap;
 
@@ -23,6 +31,10 @@ pub struct CompleteSpan {
 }
 
 /// Stateful span assembler used by telemetry export.
+#[expect(
+    missing_debug_implementations,
+    reason = "the assembler is an internal state machine with no stable public debug contract beyond its functional behavior"
+)]
 pub struct SpanAssembler {
     started: HashMap<String, SpanRecord<SpanStarted>>,
     events: HashMap<String, Vec<SpanEvent>>,
@@ -116,5 +128,9 @@ impl Default for SpanAssembler {
 }
 
 pub(crate) fn span_key(trace_id: &str, span_id: &str) -> String {
-    format!("{trace_id}:{span_id}")
+    let mut key = String::with_capacity(trace_id.len() + span_id.len() + 1);
+    key.push_str(trace_id);
+    key.push(':');
+    key.push_str(span_id);
+    key
 }

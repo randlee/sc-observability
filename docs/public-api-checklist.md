@@ -36,7 +36,9 @@ Note:
 - [x] `ServiceName`
 - [x] `TargetCategory`
 - [x] `ActionName`
+- [x] `CorrelationId`
 - [x] `MetricName`
+- [x] `MetricUnit`
 - [x] `RecoverableSteps`
 - [x] `Remediation`
 - [x] `Diagnostic`
@@ -49,6 +51,9 @@ Note:
 - [x] `ProcessIdentity`
 - [x] `ProcessIdentityPolicy`
 - [x] `ProcessIdentityResolver`
+- [x] `SchemaVersion`
+- [x] `SinkName`
+- [x] `StateName`
 - [x] `TraceId`
 - [x] `SpanId`
 - [x] `TraceContext`
@@ -185,15 +190,15 @@ Internal-only:
 - [x] `ResourceAttributes`
 - [x] `SpanAssembler`
 - [x] `CompleteSpan`
-- [x] `LogExporter`
-- [x] `TraceExporter`
-- [x] `MetricExporter`
 - [x] `TelemetryProjectors<T>`
 
 Internal-only:
 
 - [x] `SpanEmitter`
 - [x] `MetricEmitter`
+- [x] `LogExporter`
+- [x] `TraceExporter`
+- [x] `MetricExporter`
 
 ### Finalized Public Rules
 

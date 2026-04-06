@@ -19,8 +19,8 @@ The standalone workspace now owns these crates:
 
 1. Replace ATM workspace path dependencies with dependencies sourced from this
    repo or crates.io once the standalone release is published.
-2. Keep logging-only consumers on `sc-observability` plus
-   `sc-observability-types`.
+2. Keep logging-only consumers on `sc-observability` only. Shared logging
+   types are re-exported from that crate.
 3. Add `sc-observe` only for typed observation routing and projector-based
    fan-out.
 4. Add `sc-observability-otlp` only when OTLP export is required.
@@ -49,10 +49,30 @@ Use these repo artifacts as the implementation baseline:
 
 For consumers that only need structured logging:
 
-1. Depend on `sc-observability-types` and `sc-observability`.
+1. Depend on `sc-observability` only for standard logging consumers.
 2. Construct `LoggerConfig::default_for(service_name, log_root)`.
-3. Register additional sinks only if required.
-4. Do not pull in `sc-observe` or `sc-observability-otlp`.
+3. Add `sc-observability-types` directly only when implementing custom sinks
+   or extending the shared types layer directly.
+4. Register additional sinks only if required.
+5. Do not pull in `sc-observe` or `sc-observability-otlp`.
+
+## Default Log Path Change
+
+`LOG-008` now uses a flatter built-in file sink path.
+
+- Before: `<log_root>/<service_name>/logs/<service_name>.log.jsonl`
+- After: `<log_root>/logs/<service_name>.log.jsonl`
+
+Example for `schook`:
+
+- Before: `<log_root>/schook/logs/schook.log.jsonl`
+- After: `<log_root>/logs/schook.log.jsonl`
+
+If your consumer hardcodes or configures the previous path, update file tailing,
+rotation scripts, log shipping configuration, tests, and health assertions to
+the new `<log_root>/logs/<service_name>.log.jsonl` layout. Prefer using
+`Logger::health().active_log_path` where possible instead of hardcoding the
+resolved file path.
 
 ## Observation Routing Consumers
 

@@ -56,10 +56,10 @@ if observe_runtime_deps != {"sc-observability-types", "sc-observability"}:
         f"{sorted(observe_runtime_deps)}"
     )
 
-if observe_test_deps:
+if observe_test_deps - {"serde_json"}:
     raise SystemExit(
         "sc-observe test dependency set drifted from allowed baseline: "
-        f"{sorted(observe_test_deps)}"
+        f"{sorted(observe_test_deps - {'serde_json'})}"
     )
 
 required_otlp = {
