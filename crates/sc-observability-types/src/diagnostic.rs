@@ -14,6 +14,7 @@ pub struct RecoverableSteps {
 
 impl RecoverableSteps {
     /// Creates a recoverable step list containing exactly one first action.
+    #[must_use]
     pub fn first(step: impl Into<String>) -> Self {
         Self {
             steps: vec![step.into()],
@@ -21,6 +22,7 @@ impl RecoverableSteps {
     }
 
     /// Creates a recoverable step list from a full ordered set of actions.
+    #[must_use]
     pub fn all(steps: impl IntoIterator<Item = impl Into<String>>) -> Self {
         Self {
             steps: steps.into_iter().map(Into::into).collect(),
@@ -28,11 +30,13 @@ impl RecoverableSteps {
     }
 
     /// Returns the first recommended recovery step, if present.
+    #[must_use]
     pub fn first_step(&self) -> Option<&str> {
         self.steps.first().map(String::as_str)
     }
 
     /// Returns all ordered recovery steps.
+    #[must_use]
     pub fn steps(&self) -> &[String] {
         &self.steps
     }
@@ -56,6 +60,7 @@ pub enum Remediation {
 
 impl Remediation {
     /// Builds a recoverable remediation with one required first step and any remaining ordered steps.
+    #[must_use]
     pub fn recoverable(
         first: impl Into<String>,
         rest: impl IntoIterator<Item = impl Into<String>>,
@@ -68,6 +73,7 @@ impl Remediation {
     }
 
     /// Builds a non-recoverable remediation with the required justification.
+    #[must_use]
     pub fn not_recoverable(justification: impl Into<String>) -> Self {
         Self::NotRecoverable {
             justification: justification.into(),
@@ -144,6 +150,7 @@ impl PartialEq for ErrorContext {
 
 impl ErrorContext {
     /// Creates a new error context with the required code, message, and remediation.
+    #[must_use]
     pub fn new(code: ErrorCode, message: impl Into<String>, remediation: Remediation) -> Self {
         Self {
             diagnostic: Diagnostic {
@@ -161,30 +168,35 @@ impl ErrorContext {
     }
 
     /// Adds a human-readable cause string to the error context.
+    #[must_use]
     pub fn cause(mut self, cause: impl Into<String>) -> Self {
         self.diagnostic.cause = Some(cause.into());
         self
     }
 
     /// Adds a documentation reference string to the error context.
+    #[must_use]
     pub fn docs(mut self, docs: impl Into<String>) -> Self {
         self.diagnostic.docs = Some(docs.into());
         self
     }
 
     /// Adds one structured detail field to the error context.
+    #[must_use]
     pub fn detail(mut self, key: impl Into<String>, value: Value) -> Self {
         self.diagnostic.details.insert(key.into(), value);
         self
     }
 
     /// Captures the real source error for display and error chaining.
+    #[must_use]
     pub fn source(mut self, source: Box<dyn std::error::Error + Send + Sync + 'static>) -> Self {
         self.source = Some(Arc::from(source));
         self
     }
 
     /// Returns the structured diagnostic carried by this error context.
+    #[must_use]
     pub fn diagnostic(&self) -> &Diagnostic {
         &self.diagnostic
     }

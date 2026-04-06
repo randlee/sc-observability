@@ -1,3 +1,12 @@
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "builder error behavior is documented at the facade level, and repeating it on each constructor would add low-signal boilerplate"
+)]
+#![expect(
+    clippy::must_use_candidate,
+    reason = "builder methods are used immediately in fluent construction, so extra must_use decoration is intentionally omitted here"
+)]
+
 use std::sync::{Arc, atomic::AtomicBool};
 
 use sc_observability_types::InitError;
@@ -8,6 +17,10 @@ use crate::{
 };
 
 /// Construction-time logger builder that owns sink registration.
+#[expect(
+    missing_debug_implementations,
+    reason = "the builder stores registration trait objects whose debug representation is not part of the public API"
+)]
 pub struct LoggerBuilder {
     config: LoggerConfig,
     sinks: Vec<SinkRegistration>,

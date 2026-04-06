@@ -14,6 +14,7 @@ pub struct DurationMs(u64);
 
 impl DurationMs {
     /// Returns the raw millisecond count.
+    #[must_use]
     pub const fn as_u64(self) -> u64 {
         self.0
     }
@@ -46,16 +47,19 @@ impl Timestamp {
     pub const UNIX_EPOCH: Self = Self(OffsetDateTime::UNIX_EPOCH);
 
     /// Returns the current UTC timestamp.
+    #[must_use]
     pub fn now_utc() -> Self {
         Self(OffsetDateTime::now_utc())
     }
 
     /// Normalizes an arbitrary offset date-time into the canonical UTC timestamp.
+    #[must_use]
     pub fn from_offset_date_time(value: OffsetDateTime) -> Self {
         Self(value.to_offset(UtcOffset::UTC))
     }
 
     /// Returns the normalized inner UTC date-time value.
+    #[must_use]
     pub fn into_inner(self) -> OffsetDateTime {
         self.0
     }
@@ -139,16 +143,19 @@ pub struct ErrorCode(Cow<'static, str>);
 
 impl ErrorCode {
     /// Creates an error code from a `'static` string without allocating.
+    #[must_use]
     pub const fn new_static(code: &'static str) -> Self {
         Self(Cow::Borrowed(code))
     }
 
     /// Creates an error code from owned or borrowed string data by taking ownership.
+    #[must_use]
     pub fn new_owned(code: impl Into<String>) -> Self {
         Self(Cow::Owned(code.into()))
     }
 
     /// Returns the string representation of the error code.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         self.0.as_ref()
     }

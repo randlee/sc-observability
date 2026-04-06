@@ -8,6 +8,7 @@ use sc_observability_types::{
     SpanStarted, SubscriberRegistration, TargetCategory, Timestamp, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
+use serde_json::Map;
 
 #[derive(Debug, Clone)]
 struct AgentEvent {
@@ -63,10 +64,10 @@ impl sc_observability_types::LogProjector<AgentEvent> for RecordingLogProjector 
                 cause: None,
                 remediation: Remediation::recoverable("retry", ["inspect log output"]),
                 docs: None,
-                details: Default::default(),
+                details: Map::default(),
             }),
             state_transition: None,
-            fields: Default::default(),
+            fields: Map::default(),
         }])
     }
 }
@@ -86,7 +87,7 @@ impl SpanProjector<AgentEvent> for RecordingSpanProjector {
             observation.service.clone(),
             ActionName::new("span.started").expect("valid action"),
             trace_context(),
-            Default::default(),
+            Map::default(),
         ))])
     }
 }
@@ -109,7 +110,7 @@ impl sc_observability_types::MetricProjector<AgentEvent> for RecordingMetricProj
             kind: MetricKind::Counter,
             value: 1.0,
             unit: Some(MetricUnit::new("1").expect("valid metric unit")),
-            attributes: Default::default(),
+            attributes: Map::default(),
         }])
     }
 }

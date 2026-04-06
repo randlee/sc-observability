@@ -47,6 +47,11 @@ impl std::fmt::Debug for ProcessIdentityPolicy {
 /// Open resolver contract for caller-defined process identity lookup.
 pub trait ProcessIdentityResolver: Send + Sync {
     /// Resolves the process identity to attach to emitted records.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentityError`] when the resolver cannot produce a valid
+    /// process identity.
     fn resolve(&self) -> Result<ProcessIdentity, IdentityError>;
 }
 

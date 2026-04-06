@@ -3,6 +3,18 @@
 //! This crate owns logging-only concerns: logger configuration, built-in file
 //! and console sinks, sink fan-out, filtering, redaction, and logging health.
 //! It intentionally avoids typed observation routing and OTLP transport logic.
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "public facade methods already have behavior documented centrally in the workspace docs, and repeating per-method Errors sections here would add low-signal boilerplate"
+)]
+#![expect(
+    clippy::must_use_candidate,
+    reason = "the facade intentionally avoids pervasive must_use boilerplate on constructors and lightweight accessors where the return types are already obvious from call sites"
+)]
+#![expect(
+    clippy::return_self_not_must_use,
+    reason = "builder-style chaining methods in this facade predate pedantic lint adoption and remain intentionally lightweight"
+)]
 
 pub mod constants;
 pub mod error_codes;
@@ -122,6 +134,10 @@ pub trait LogSink: Send + Sync {
 
 /// Construction-time sink registration pairing one sink with an optional filter.
 #[derive(Clone)]
+#[expect(
+    missing_debug_implementations,
+    reason = "registration stores trait-object sinks and filters, so derived Debug would not provide a meaningful stable contract"
+)]
 pub struct SinkRegistration {
     /// Concrete sink implementation.
     pub(crate) sink: Arc<dyn LogSink>,
@@ -150,6 +166,10 @@ impl SinkRegistration {
 /// unavailable health through the ordinary `LoggingHealthReport` path without
 /// sabotaging the filesystem or reaching into crate-private internals.
 #[derive(Clone, Default)]
+#[expect(
+    missing_debug_implementations,
+    reason = "fault injector state is a small validation-only mutex wrapper without a useful stable Debug contract"
+)]
 pub struct RetainedSinkFaultInjector {
     forced_state: Arc<Mutex<Option<SinkHealthState>>>,
 }
@@ -162,6 +182,10 @@ impl RetainedSinkFaultInjector {
     }
 
     /// Wraps one retained sink so its health can be forced during validation.
+    ///
+    /// `Arc<dyn LogSink>` is intentionally preserved in this public signature
+    /// because `SinkRegistration::new()` takes `Arc<dyn LogSink>` and this
+    /// helper exists solely to compose with that registration surface.
     pub fn wrap(&self, sink: Arc<dyn LogSink>) -> Arc<dyn LogSink> {
         Arc::new(FaultInjectingSink {
             inner: sink,
@@ -181,6 +205,10 @@ impl RetainedSinkFaultInjector {
 
     /// Clears any forced sink fault and returns the wrapped sink to normal
     /// health reporting.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the retained-sink fault-state mutex has been poisoned.
     pub fn clear(&self) {
         *self
             .forced_state
@@ -238,14 +266,16 @@ pub struct LoggerConfig {
 }
 
 impl LoggerConfig {
-    /// Builds the documented v1 defaults for a service-scoped logger configuration.
+    /// Builds the documented v1 defaults for a service-scoped logger
+    /// configuration.
     ///
-    /// If `SC_LOG_ROOT` is set, it is used only when `log_root` is empty. A
-    /// non-empty `log_root` parameter is treated as explicit configuration and
-    /// takes precedence over the environment helper per LOG-009.
+    /// If [`constants::SC_LOG_ROOT_ENV_VAR`] is set, it is used only when
+    /// `log_root` is empty. A non-empty `log_root` parameter is treated as
+    /// explicit configuration and takes precedence over the environment helper
+    /// per LOG-009.
     pub fn default_for(service_name: ServiceName, log_root: PathBuf) -> Self {
         let resolved_log_root = if log_root.as_os_str().is_empty() {
-            std::env::var("SC_LOG_ROOT")
+            std::env::var(constants::SC_LOG_ROOT_ENV_VAR)
                 .ok()
                 .map(PathBuf::from)
                 .filter(|path| !path.as_os_str().is_empty())
@@ -296,6 +326,10 @@ impl LoggerRuntime {
 }
 
 /// Lightweight structured logging runtime with built-in query and follow support.
+#[expect(
+    missing_debug_implementations,
+    reason = "logger owns runtime handles and trait-object sinks whose internal state is not a stable public debug contract"
+)]
 pub struct Logger {
     config: LoggerConfig,
     sinks: Vec<SinkRegistration>,
@@ -522,6 +556,10 @@ impl Logger {
 }
 
 /// Built-in JSONL file sink with rotation and retention handling.
+#[expect(
+    missing_debug_implementations,
+    reason = "file-sink internals include mutex-protected runtime state that is intentionally not exposed through a public Debug contract"
+)]
 pub struct JsonlFileSink {
     path: PathBuf,
     rotation: RotationPolicy,
@@ -533,6 +571,11 @@ pub struct JsonlFileSink {
 
 impl JsonlFileSink {
     /// Creates a JSONL file sink at the given active log path.
+    ///
+    /// # Panics
+    ///
+    /// Panics only if the workspace-owned `JSONL_FILE_SINK_NAME` constant ever
+    /// becomes invalid for `SinkName`, which would indicate a programming bug.
     pub fn new(path: PathBuf, rotation: RotationPolicy, retention: RetentionPolicy) -> Self {
         Self {
             path,
@@ -552,6 +595,10 @@ impl JsonlFileSink {
         &self.path
     }
 
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "the helper preserves a Result-shaped internal API so rotation checks can grow I/O failure propagation without reshaping caller control flow"
+    )]
     fn rotate_if_needed(&self, incoming_len: u64) -> Result<(), LogSinkError> {
         if let Ok(metadata) = fs::metadata(&self.path)
             && metadata.len().saturating_add(incoming_len) > self.rotation.max_bytes
@@ -578,16 +625,15 @@ impl JsonlFileSink {
     }
 
     fn prune_old_files(&self) {
-        let parent = match self.path.parent() {
-            Some(parent) => parent,
-            None => return,
+        let Some(parent) = self.path.parent() else {
+            return;
         };
 
         let Ok(entries) = fs::read_dir(parent) else {
             return;
         };
         let retention_cutoff = SystemTime::now()
-            - Duration::from_secs((self.retention.max_age_days as u64) * constants::SECS_PER_DAY);
+            - Duration::from_secs(u64::from(self.retention.max_age_days) * constants::SECS_PER_DAY);
 
         for entry in entries.flatten() {
             let path = entry.path();
@@ -655,7 +701,7 @@ impl LogSink for JsonlFileSink {
             .open(&self.path)
             .map_err(|err| self.mark_failure(err))?;
         file.write_all(&line)
-            .and_then(|_| file.flush())
+            .and_then(|()| file.flush())
             .map_err(|err| self.mark_failure(err))?;
 
         let mut health = self.health.lock().expect("file sink health poisoned");
@@ -699,6 +745,10 @@ impl ConsoleWriter for StderrConsoleWriter {
 
 /// Built-in sink that renders log events to a configured output stream
 /// (stdout or stderr).
+#[expect(
+    missing_debug_implementations,
+    reason = "console sink owns a trait-object writer and sink health state, so a derived Debug impl would not be stable or useful"
+)]
 pub struct ConsoleSink {
     writer: Box<dyn ConsoleWriter>,
     // MUTEX: console sink health mutates as one shared status struct on write failures and reads;
@@ -958,8 +1008,7 @@ fn redact_bearer_token_text(input: &str) -> String {
         let token_start = index + PREFIX.len();
         let token_end = remaining[token_start..]
             .find(char::is_whitespace)
-            .map(|value| token_start + value)
-            .unwrap_or(remaining.len());
+            .map_or(remaining.len(), |value| token_start + value);
         result.push_str(constants::REDACTED_VALUE);
         remaining = &remaining[token_end..];
     }
@@ -975,7 +1024,7 @@ mod tests {
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogOrder, LogQuery, LogSnapshot,
         ProcessIdentity, QueryError, QueryHealthState, TargetCategory, Timestamp,
     };
-    use serde_json::json;
+    use serde_json::{Map, json};
     use std::sync::Arc;
     use temp_env::{with_var, with_var_unset};
 
@@ -1124,8 +1173,8 @@ mod tests {
 
     fn with_sc_log_root<T>(value: Option<&Path>, f: impl FnOnce() -> T) -> T {
         match value {
-            Some(path) => with_var("SC_LOG_ROOT", Some(path), f),
-            None => with_var_unset("SC_LOG_ROOT", f),
+            Some(path) => with_var(constants::SC_LOG_ROOT_ENV_VAR, Some(path), f),
+            None => with_var_unset(constants::SC_LOG_ROOT_ENV_VAR, f),
         }
     }
 
@@ -1150,7 +1199,7 @@ mod tests {
                 cause: None,
                 remediation: Remediation::recoverable("retry", ["inspect logs"]),
                 docs: None,
-                details: Default::default(),
+                details: Map::default(),
             }),
             state_transition: None,
             fields: serde_json::Map::from_iter([

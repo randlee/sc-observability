@@ -15,6 +15,7 @@ pub struct ValueValidationError {
 
 impl ValueValidationError {
     /// Creates a validation error using the default shared validation code.
+    #[must_use]
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             code: error_codes::VALUE_VALIDATION_FAILED,
@@ -23,6 +24,7 @@ impl ValueValidationError {
     }
 
     /// Creates a validation error with an explicit stable error code.
+    #[must_use]
     pub fn with_code(code: ErrorCode, message: impl Into<String>) -> Self {
         Self {
             code,
@@ -31,6 +33,7 @@ impl ValueValidationError {
     }
 
     /// Returns the stable error code associated with the validation failure.
+    #[must_use]
     pub fn code(&self) -> &ErrorCode {
         &self.code
     }
@@ -44,6 +47,11 @@ macro_rules! validated_name_type {
 
         impl $name {
             /// Creates a validated value from caller-provided string data.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ValueValidationError`] when the supplied string does
+            /// not satisfy the documented validation rules for this type.
             pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
                 let value = value.into();
                 $validator(&value)?;
@@ -51,6 +59,7 @@ macro_rules! validated_name_type {
             }
 
             /// Returns the underlying validated string value.
+            #[must_use]
             pub fn as_str(&self) -> &str {
                 &self.0
             }

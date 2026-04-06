@@ -57,6 +57,7 @@ where
     /// assert_eq!(observation.service.as_str(), "demo");
     /// assert_eq!(observation.version.as_str(), "v1");
     /// ```
+    #[must_use]
     pub fn new(service: ServiceName, payload: T) -> Self {
         Self {
             version: OBSERVATION_SCHEMA_VERSION.clone(),

@@ -30,6 +30,7 @@ pub struct LogFieldMatch {
 
 impl LogFieldMatch {
     /// Creates an exact-value field match.
+    #[must_use]
     pub fn equals(field: impl Into<String>, value: Value) -> Self {
         Self {
             field: field.into(),
@@ -67,6 +68,11 @@ pub struct LogQuery {
 
 impl LogQuery {
     /// Validates the frozen shared query semantics before runtime execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`QueryError::InvalidQuery`] when the query violates the shared
+    /// contract for limit or timestamp-range semantics.
     pub fn validate(&self) -> Result<(), QueryError> {
         if self.limit == Some(0) {
             return Err(QueryError::invalid_query(
@@ -125,6 +131,7 @@ pub enum QueryError {
 
 impl QueryError {
     /// Returns the stable machine-readable error code for this variant.
+    #[must_use]
     pub fn code(&self) -> ErrorCode {
         match self {
             Self::InvalidQuery(_) => error_codes::SC_LOG_QUERY_INVALID_QUERY,
@@ -136,6 +143,7 @@ impl QueryError {
     }
 
     /// Returns the attached diagnostic for the error.
+    #[must_use]
     pub fn diagnostic(&self) -> &Diagnostic {
         match self {
             Self::InvalidQuery(context)
@@ -147,6 +155,7 @@ impl QueryError {
     }
 
     /// Builds an invalid-query error using the stable shared code.
+    #[must_use]
     pub fn invalid_query(message: impl Into<String>) -> Self {
         Self::InvalidQuery(Box::new(ErrorContext::new(
             error_codes::SC_LOG_QUERY_INVALID_QUERY,

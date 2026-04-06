@@ -135,6 +135,10 @@ The remaining pre-publish logging-surface follow-ups stay in
 
 - the default active JSONL path becomes
   `<log_root>/logs/<service>.log.jsonl`
+  - approved simplification note: the older nested layout
+    `<log_root>/<service>/logs/<service>.log.jsonl` was dropped so operators
+    manage one stable `logs/` subtree per configured root instead of
+    duplicating the service segment in both the directory tree and filename
 - `ConsoleSink` keeps a small public writer-selection surface:
   `ConsoleSink::stdout()` and `ConsoleSink::stderr()` are public, while
   arbitrary writer injection remains non-public
@@ -318,7 +322,7 @@ Owns:
 - `OtlpProtocol`
 - `SpanAssembler`
 - `CompleteSpan`
-- `LogExporter`, `TraceExporter`, `MetricExporter`
+- internal OTLP exporter contracts used by the runtime implementation
 - OTLP batching, retry, timeout, flush, and shutdown
 - `TelemetryHealthReport`, `ExporterHealth`, and `ExporterHealthState` defined
   in `sc-observability-types`, re-exported by `sc-observability-otlp`

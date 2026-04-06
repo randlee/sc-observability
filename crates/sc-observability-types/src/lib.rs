@@ -34,6 +34,7 @@ pub mod telemetry_health_provider_sealed {
     pub(crate) const TOKEN: Token = Token(());
 
     #[doc(hidden)]
+    #[must_use]
     pub fn workspace_token() -> Token {
         TOKEN
     }

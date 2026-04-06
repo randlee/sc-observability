@@ -118,9 +118,9 @@ The public OTLP integration surface is frozen as:
 - `ObservabilityHealthProvider` is frozen as:
   `pub trait ObservabilityHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync { fn telemetry_health(&self) -> TelemetryHealthReport; }`
 - `ObservabilityBuilder` exposes
-  `with_observability_health_provider(Arc<dyn ObservabilityHealthProvider>)` so
-  `ObservabilityHealthReport.telemetry` can be populated without adding an OTLP
-  dependency to `sc-observe`
+  `with_observability_health_provider(impl ObservabilityHealthProvider + Send + Sync + 'static)`
+  so `ObservabilityHealthReport.telemetry` can be populated without adding an
+  OTLP dependency to `sc-observe`
 
 #### UTC timestamp enforcement
 

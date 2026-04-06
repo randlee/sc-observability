@@ -3,6 +3,18 @@
 //! This module defines the caller-facing telemetry config surface used to build
 //! a `Telemetry` runtime, including transport options, per-signal batch
 //! settings, and the eager validation rules enforced at initialization time.
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "configuration-builder error behavior is documented at the telemetry facade level, and repeating it here would add low-signal boilerplate"
+)]
+#![expect(
+    clippy::must_use_candidate,
+    reason = "builder and accessor methods intentionally avoid repetitive must_use decoration across the config surface"
+)]
+#![expect(
+    clippy::return_self_not_must_use,
+    reason = "builder-style chaining is explicit from the signatures and intentionally lightweight"
+)]
 
 use std::fmt;
 use std::path::PathBuf;
@@ -238,6 +250,10 @@ pub struct TelemetryConfig {
 }
 
 /// Builder for documented v1 telemetry defaults.
+#[expect(
+    missing_debug_implementations,
+    reason = "the builder stores partially configured runtime values, and a public Debug surface would not add meaningful API value"
+)]
 pub struct TelemetryConfigBuilder {
     service_name: ServiceName,
     resource: ResourceAttributes,
@@ -463,5 +479,113 @@ mod tests {
             .build();
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_config_rejects_zero_timeout() {
+        let service_name = ServiceName::new("demo").expect("service");
+        let config = TelemetryConfig {
+            service_name,
+            resource: ResourceAttributes::default(),
+            transport: OtelConfig {
+                timeout_ms: 0_u64.into(),
+                ..OtelConfig::default()
+            },
+            logs: None,
+            traces: None,
+            metrics: None,
+        };
+
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn validate_config_rejects_backoff_inversion() {
+        let service_name = ServiceName::new("demo").expect("service");
+        let config = TelemetryConfig {
+            service_name,
+            resource: ResourceAttributes::default(),
+            transport: OtelConfig {
+                initial_backoff_ms: 2000_u64.into(),
+                max_backoff_ms: 1000_u64.into(),
+                ..OtelConfig::default()
+            },
+            logs: None,
+            traces: None,
+            metrics: None,
+        };
+
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn validate_config_rejects_enabled_transport_without_signals() {
+        let service_name = ServiceName::new("demo").expect("service");
+        let config = TelemetryConfig {
+            service_name,
+            resource: ResourceAttributes::default(),
+            transport: OtelConfig {
+                enabled: true,
+                endpoint: Some(
+                    OtlpEndpoint::new("https://otel.example.internal").expect("valid endpoint"),
+                ),
+                ..OtelConfig::default()
+            },
+            logs: None,
+            traces: None,
+            metrics: None,
+        };
+
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn validate_config_rejects_zero_batch_or_interval() {
+        let service_name = ServiceName::new("demo").expect("service");
+        let base_transport = OtelConfig {
+            enabled: true,
+            endpoint: Some(
+                OtlpEndpoint::new("https://otel.example.internal").expect("valid endpoint"),
+            ),
+            ..OtelConfig::default()
+        };
+
+        let zero_logs = TelemetryConfig {
+            service_name: service_name.clone(),
+            resource: ResourceAttributes::default(),
+            transport: base_transport.clone(),
+            logs: Some(LogsConfig { batch_size: 0 }),
+            traces: None,
+            metrics: None,
+        };
+        assert!(validate_config(&zero_logs).is_err());
+
+        let zero_metrics = TelemetryConfig {
+            service_name,
+            resource: ResourceAttributes::default(),
+            transport: base_transport,
+            logs: None,
+            traces: None,
+            metrics: Some(MetricsConfig {
+                batch_size: 1,
+                export_interval_ms: 0_u64.into(),
+            }),
+        };
+        assert!(validate_config(&zero_metrics).is_err());
+    }
+
+    #[test]
+    fn telemetry_config_builder_with_resource_preserves_attributes() {
+        let service_name = ServiceName::new("demo").expect("service");
+        let resource = ResourceAttributes {
+            attributes: Map::from_iter([("service.version".to_string(), Value::from("1.0.0"))]),
+        };
+
+        let config = TelemetryConfigBuilder::new(service_name)
+            .with_resource(resource.clone())
+            .build()
+            .expect("valid telemetry config");
+
+        assert_eq!(config.resource, resource);
     }
 }

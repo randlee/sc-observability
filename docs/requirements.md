@@ -234,8 +234,8 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
 - OTLP-007 Calling `emit_log()`, `emit_span()`, or `emit_metric()` after `shutdown()` shall return `TelemetryError::Shutdown`.
 - OTLP-008 `SpanAssembler` shall buffer `SpanSignal::Started`, attach `SpanSignal::Event`, and emit `CompleteSpan` only on `SpanSignal::Ended`.
 - OTLP-009 In-flight started spans without a matching end shall be dropped at flush/shutdown and counted as dropped exports.
-- OTLP-010 `TraceExporter` shall export `CompleteSpan`, not raw `SpanSignal`.
-- OTLP-011 `LogExporter`, `TraceExporter`, and `MetricExporter` shall remain open extension points and object-safe for `Arc<dyn ...>`.
+- OTLP-010 the internal trace-export path shall export `CompleteSpan`, not raw `SpanSignal`.
+- OTLP-011 crate-local `LogExporter`, `TraceExporter`, and `MetricExporter` contracts may remain object-safe for `Arc<dyn ...>`, but they are implementation details rather than public extension points.
 - OTLP-012 Exporter failures after validation shall be fail-open and shall update health and dropped-export counters.
 - OTLP-013 Telemetry health shall expose `TelemetryHealthReport`,
   `ExporterHealth`, and typed `ExporterHealthState` (defined in

@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -145,6 +146,24 @@ pub trait ObservabilityHealthProvider:
     fn telemetry_health(&self) -> TelemetryHealthReport;
 }
 
+impl<T> telemetry_health_provider_sealed::Sealed for Arc<T>
+where
+    T: ObservabilityHealthProvider + ?Sized,
+{
+    fn token(&self) -> telemetry_health_provider_sealed::Token {
+        (**self).token()
+    }
+}
+
+impl<T> ObservabilityHealthProvider for Arc<T>
+where
+    T: ObservabilityHealthProvider + ?Sized,
+{
+    fn telemetry_health(&self) -> TelemetryHealthReport {
+        (**self).telemetry_health()
+    }
+}
+
 /// Aggregate routing/runtime health report.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ObservabilityHealthReport {
@@ -200,7 +219,7 @@ mod tests {
             state: LoggingHealthState::Healthy,
             dropped_events_total: 0,
             flush_errors_total: 0,
-            active_log_path: std::path::PathBuf::from("/var/log/logs/service.log.jsonl"),
+            active_log_path: std::path::PathBuf::from("logs/service.log.jsonl"),
             sink_statuses: vec![sink],
             query: Some(QueryHealthReport {
                 state: QueryHealthState::Healthy,

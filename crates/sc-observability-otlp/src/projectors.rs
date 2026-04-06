@@ -4,6 +4,14 @@
 //! `Observable` payload type and forwards projected logs, spans, and metrics
 //! into a shared `Telemetry` runtime without changing downstream registration
 //! paths.
+#![expect(
+    clippy::must_use_candidate,
+    reason = "projection-helper builders are intentionally kept lightweight and explicit without repetitive must_use decoration"
+)]
+#![expect(
+    clippy::return_self_not_must_use,
+    reason = "builder-style chaining is explicit from the signatures and intentionally lightweight"
+)]
 
 use std::sync::Arc;
 
@@ -15,6 +23,10 @@ use sc_observability_types::{
 };
 
 /// Public helper for attaching telemetry export to ordinary observation projection registration.
+#[expect(
+    missing_debug_implementations,
+    reason = "the helper stores trait-object projectors and filters whose internal state is not part of the public debug contract"
+)]
 pub struct TelemetryProjectors<T>
 where
     T: Observable,

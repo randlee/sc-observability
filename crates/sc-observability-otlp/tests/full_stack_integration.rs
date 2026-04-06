@@ -12,6 +12,7 @@ use sc_observability_types::{
     Timestamp, ToolName, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
+use serde_json::Map;
 
 #[derive(Debug, Clone)]
 struct AgentPayload {
@@ -54,7 +55,7 @@ impl SpanProjector<AgentPayload> for StaticSpanProjector {
             observation.service.clone(),
             ActionName::new("agent.run").expect("valid action"),
             trace.clone(),
-            Default::default(),
+            Map::default(),
         );
         let ended = started
             .clone()
@@ -65,7 +66,7 @@ impl SpanProjector<AgentPayload> for StaticSpanProjector {
                 timestamp: Timestamp::UNIX_EPOCH,
                 trace: trace.clone(),
                 name: ActionName::new("tool.call").expect("valid event name"),
-                attributes: Default::default(),
+                attributes: Map::default(),
                 diagnostic: None,
             }),
             SpanSignal::Ended(ended),
@@ -85,7 +86,7 @@ impl sc_observability_types::MetricProjector<AgentPayload> for StaticMetricProje
             kind: MetricKind::Counter,
             value: 1.0,
             unit: Some(MetricUnit::new("1").expect("valid metric unit")),
-            attributes: Default::default(),
+            attributes: Map::default(),
         }])
     }
 }
@@ -142,7 +143,7 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
             cause: None,
             remediation: Remediation::recoverable("retry", ["inspect telemetry"]),
             docs: None,
-            details: Default::default(),
+            details: Map::default(),
         }),
         state_transition: Some(StateTransition {
             entity_kind: TargetCategory::new("agent").expect("valid target"),
@@ -152,7 +153,7 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
             reason: None,
             trigger: None,
         }),
-        fields: Default::default(),
+        fields: Map::default(),
     }
 }
 

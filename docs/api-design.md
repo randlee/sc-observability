@@ -1814,15 +1814,15 @@ impl SpanAssembler {
     pub fn flush_incomplete(&mut self) -> usize;
 }
 
-pub trait LogExporter: Send + Sync {
+pub(crate) trait LogExporter: Send + Sync {
     fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError>;
 }
 
-pub trait TraceExporter: Send + Sync {
+pub(crate) trait TraceExporter: Send + Sync {
     fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError>;
 }
 
-pub trait MetricExporter: Send + Sync {
+pub(crate) trait MetricExporter: Send + Sync {
     fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError>;
 }
 ```
@@ -1835,8 +1835,9 @@ Rules:
 - `SpanAssembler` emits `CompleteSpan` only on `SpanSignal::Ended`
 - in-flight started spans without a matching end are dropped at flush/shutdown
   and counted in telemetry dropped-export accounting
-- `LogExporter`, `TraceExporter`, and `MetricExporter` are intentionally open
-- exporter traits must remain object-safe for `Arc<dyn ...>` usage
+- `LogExporter`, `TraceExporter`, and `MetricExporter` are crate-local runtime
+  contracts
+- exporter traits remain object-safe for crate-local `Arc<dyn ...>` usage
 
 ### 12.5 Constants And Error Registry Modules
 

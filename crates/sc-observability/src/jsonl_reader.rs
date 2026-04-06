@@ -1,3 +1,12 @@
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "reader error behavior is documented at the public facade level, and repeating it here would add low-signal boilerplate"
+)]
+#![expect(
+    clippy::must_use_candidate,
+    reason = "lightweight constructors are intentionally kept free of repetitive must_use decoration"
+)]
+
 use std::path::PathBuf;
 use std::sync::Arc;
 

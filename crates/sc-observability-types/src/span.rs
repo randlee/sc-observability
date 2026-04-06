@@ -62,6 +62,7 @@ impl SpanRecord<SpanStarted> {
     ///
     /// assert_eq!(record.name().as_str(), "demo.run");
     /// ```
+    #[must_use]
     pub fn new(
         timestamp: Timestamp,
         service: ServiceName,
@@ -83,12 +84,14 @@ impl SpanRecord<SpanStarted> {
     }
 
     /// Attaches a diagnostic to the started span before completion.
+    #[must_use]
     pub fn with_diagnostic(mut self, diagnostic: Diagnostic) -> Self {
         self.diagnostic = Some(diagnostic);
         self
     }
 
     /// Consumes the started span and returns the only valid completed span form.
+    #[must_use]
     pub fn end(self, status: SpanStatus, duration: DurationMs) -> SpanRecord<SpanEnded> {
         SpanRecord {
             timestamp: self.timestamp,
@@ -106,36 +109,43 @@ impl SpanRecord<SpanStarted> {
 
 impl<S> SpanRecord<S> {
     /// Returns the timestamp recorded for the span lifecycle event.
+    #[must_use]
     pub fn timestamp(&self) -> Timestamp {
         self.timestamp
     }
 
     /// Returns the service that emitted the span.
+    #[must_use]
     pub fn service(&self) -> &ServiceName {
         &self.service
     }
 
     /// Returns the stable action/name associated with the span.
+    #[must_use]
     pub fn name(&self) -> &ActionName {
         &self.name
     }
 
     /// Returns the trace context for the span.
+    #[must_use]
     pub fn trace(&self) -> &TraceContext {
         &self.trace
     }
 
     /// Returns the current typestate-derived span status.
+    #[must_use]
     pub fn status(&self) -> SpanStatus {
         self.status
     }
 
     /// Returns the optional diagnostic attached to the span.
+    #[must_use]
     pub fn diagnostic(&self) -> Option<&Diagnostic> {
         self.diagnostic.as_ref()
     }
 
     /// Returns immutable span attributes.
+    #[must_use]
     pub fn attributes(&self) -> &Map<String, Value> {
         &self.attributes
     }
@@ -148,6 +158,7 @@ impl SpanRecord<SpanEnded> {
     /// `Some(duration)`. Deserializing malformed external input can still
     /// produce a completed span without a duration, so the accessor remains
     /// fallible by returning `None`.
+    #[must_use]
     pub fn duration_ms(&self) -> Option<DurationMs> {
         self.duration_ms
     }

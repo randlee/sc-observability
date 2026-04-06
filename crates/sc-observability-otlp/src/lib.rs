@@ -4,6 +4,14 @@
 //! and the lifecycle/runtime behavior for OTLP-bound signals. It attaches to
 //! routing through ordinary projector registration and keeps OpenTelemetry
 //! transport concerns out of the lower crates.
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "telemetry-facade error behavior is documented centrally in workspace docs, and repeating it on every wrapper method adds low-signal boilerplate"
+)]
+#![expect(
+    clippy::needless_pass_by_value,
+    reason = "export failures are owned diagnostic values in the telemetry runtime and are intentionally moved into failure-recording helpers"
+)]
 
 mod assembly;
 mod config;
@@ -39,24 +47,28 @@ pub use config::{
 pub use projectors::TelemetryProjectors;
 
 /// Exporter contract for projected log records.
-pub trait LogExporter: Send + Sync {
+pub(crate) trait LogExporter: Send + Sync {
     /// Exports one batch of log events.
     fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError>;
 }
 
 /// Exporter contract for completed spans.
-pub trait TraceExporter: Send + Sync {
+pub(crate) trait TraceExporter: Send + Sync {
     /// Exports one batch of completed spans.
     fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError>;
 }
 
 /// Exporter contract for projected metrics.
-pub trait MetricExporter: Send + Sync {
+pub(crate) trait MetricExporter: Send + Sync {
     /// Exports one batch of metric records.
     fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError>;
 }
 
 /// OTLP-backed telemetry runtime.
+#[expect(
+    missing_debug_implementations,
+    reason = "telemetry owns exporter trait objects and runtime state that are intentionally not exposed through a stable Debug contract"
+)]
 pub struct Telemetry {
     config: TelemetryConfig,
     shutdown: AtomicBool,
@@ -201,7 +213,7 @@ impl Telemetry {
     ///
     /// An `Ended` signal without a prior `Started` signal is counted in
     /// `malformed_spans_total` and returned as a structured export failure. No
-    /// malformed or incomplete span is ever forwarded to the OTel backend.
+    /// malformed or incomplete span is ever forwarded to the `OTel` backend.
     ///
     /// # Panics
     ///
@@ -269,6 +281,10 @@ impl Telemetry {
         Ok(())
     }
 
+    #[expect(
+        clippy::unnecessary_wraps,
+        reason = "the helper preserves a Result-shaped internal API so flush behavior can grow direct error propagation without reshaping public callers"
+    )]
     fn flush_outcome(&self) -> Result<FlushOutcome, FlushError> {
         let (log_batch, span_batch, metric_batch) = {
             let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
@@ -296,7 +312,7 @@ impl Telemetry {
                 Ok(()) => self.record_export_success(ExporterKind::Logs),
                 Err(err) => {
                     had_export_failure = true;
-                    self.record_export_failure(ExporterKind::Logs, log_batch.len() as u64, err)
+                    self.record_export_failure(ExporterKind::Logs, log_batch.len() as u64, err);
                 }
             }
         }
@@ -306,7 +322,7 @@ impl Telemetry {
                 Ok(()) => self.record_export_success(ExporterKind::Traces),
                 Err(err) => {
                     had_export_failure = true;
-                    self.record_export_failure(ExporterKind::Traces, span_batch.len() as u64, err)
+                    self.record_export_failure(ExporterKind::Traces, span_batch.len() as u64, err);
                 }
             }
         }
@@ -320,7 +336,7 @@ impl Telemetry {
                         ExporterKind::Metrics,
                         metric_batch.len() as u64,
                         err,
-                    )
+                    );
                 }
             }
         }

@@ -11,3 +11,9 @@ description = "Observation routing runtime layered on sc-observability."
 [dependencies]
 sc-observability-types.workspace = true
 sc-observability.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

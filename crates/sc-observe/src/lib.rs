@@ -3,6 +3,26 @@
 //! This crate owns construction-time subscriber/projector registration,
 //! per-type routing, and top-level observability health aggregation while
 //! remaining independent of OTLP transport details.
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "public routing-facade error behavior is documented centrally in workspace docs, and repeating boilerplate on every wrapper method adds low signal"
+)]
+#![expect(
+    clippy::must_use_candidate,
+    reason = "builder and accessor methods intentionally avoid pervasive must_use boilerplate across the facade"
+)]
+#![expect(
+    clippy::return_self_not_must_use,
+    reason = "builder-style chaining is explicit from the signatures and intentionally lightweight"
+)]
+#![expect(
+    clippy::struct_field_names,
+    reason = "the health-provider field uses the full domain term for clarity across builder/runtime structs"
+)]
+#![expect(
+    clippy::needless_pass_by_value,
+    reason = "Observation is the producer-facing owned emission contract, so emit intentionally takes ownership"
+)]
 
 pub mod constants;
 pub mod error_codes;
@@ -113,6 +133,10 @@ impl ObservabilityConfig {
 }
 
 /// Builder for construction-time subscriber and projector registration.
+#[expect(
+    missing_debug_implementations,
+    reason = "the builder stores type-erased routing closures and health providers whose internals are not part of the public debug contract"
+)]
 pub struct ObservabilityBuilder {
     config: ObservabilityConfig,
     subscribers: Vec<ErasedSubscriberRegistration>,
@@ -121,6 +145,10 @@ pub struct ObservabilityBuilder {
 }
 
 /// Producer-facing routing runtime for typed observations.
+#[expect(
+    missing_debug_implementations,
+    reason = "the runtime owns atomic state, mutexes, and type-erased routes that do not have a useful stable Debug representation"
+)]
 pub struct Observability {
     logger: Logger,
     shutdown: AtomicBool,
@@ -307,7 +335,7 @@ impl Observability {
         let telemetry = self
             .observability_health_provider
             .as_ref()
-            .map(|provider| provider.telemetry_health());
+            .map(sc_observability_types::ObservabilityHealthProvider::telemetry_health);
         let subscriber_failures = self
             .runtime
             .subscriber_failures_total
@@ -365,12 +393,13 @@ impl Observability {
 }
 
 impl ObservabilityBuilder {
-    /// Attaches a generic telemetry health provider without introducing an OTLP crate dependency.
+    /// Attaches a generic telemetry health provider without introducing an
+    /// OTLP crate dependency.
     pub fn with_observability_health_provider(
         mut self,
-        provider: Arc<dyn ObservabilityHealthProvider>,
+        provider: impl ObservabilityHealthProvider + 'static,
     ) -> Self {
-        self.observability_health_provider = Some(provider);
+        self.observability_health_provider = Some(Arc::new(provider));
         self
     }
 
@@ -500,7 +529,7 @@ mod sealed_emitters {
     pub trait Sealed {}
 }
 
-/// ObservationEmitter<T> is intentionally per-type -- callers hold one handle
+/// `ObservationEmitter<T>` is intentionally per-type -- callers hold one handle
 /// per observation type. A single type-erased emitter for heterogeneous events
 /// is not supported by design.
 #[expect(
@@ -538,6 +567,7 @@ mod tests {
         SubscriberError, TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp,
         TraceContext, TraceId,
     };
+    use serde_json::Map;
 
     #[derive(Debug, Clone)]
     struct AgentEvent {
@@ -610,7 +640,7 @@ mod tests {
                 observation.service.clone(),
                 ActionName::new("span.started").expect("valid action"),
                 trace_context(),
-                Default::default(),
+                Map::default(),
             ))])
         }
     }
@@ -632,7 +662,7 @@ mod tests {
                 kind: MetricKind::Counter,
                 value: 1.0,
                 unit: Some(MetricUnit::new("1").expect("valid metric unit")),
-                attributes: Default::default(),
+                attributes: Map::default(),
             }])
         }
     }
@@ -745,10 +775,10 @@ mod tests {
                 cause: None,
                 remediation: Remediation::recoverable("retry", ["inspect log output"]),
                 docs: None,
-                details: Default::default(),
+                details: Map::default(),
             }),
             state_transition: None,
-            fields: Default::default(),
+            fields: Map::default(),
         }
     }
 
