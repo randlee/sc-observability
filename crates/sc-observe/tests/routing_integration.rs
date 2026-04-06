@@ -2,10 +2,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, Observation,
-    ObservationSubscriber, OutcomeLabel, ProcessIdentity, ProjectionRegistration, Remediation,
-    SchemaVersion, ServiceName, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
-    SubscriberRegistration, TargetCategory, Timestamp, TraceContext, TraceId,
+    ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricUnit,
+    Observation, ObservationSubscriber, OutcomeLabel, ProcessIdentity, ProjectionRegistration,
+    Remediation, SchemaVersion, ServiceName, SpanId, SpanProjector, SpanRecord, SpanSignal,
+    SpanStarted, SubscriberRegistration, TargetCategory, Timestamp, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 
@@ -108,7 +108,7 @@ impl sc_observability_types::MetricProjector<AgentEvent> for RecordingMetricProj
             name: MetricName::new("obs.events_total").expect("valid metric"),
             kind: MetricKind::Counter,
             value: 1.0,
-            unit: Some("1".to_string()),
+            unit: Some(MetricUnit::new("1").expect("valid metric unit")),
             attributes: Default::default(),
         }])
     }
@@ -155,26 +155,23 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
     let root = temp_path("fanout");
     let config = ObservabilityConfig::default_for(tool_name(), root.clone()).expect("config");
     let runtime = Observability::builder(config)
-        .register_subscriber(SubscriberRegistration {
-            subscriber: Arc::new(RecordingSubscriber {
-                id: "subscriber",
-                calls: subscriber_calls.clone(),
-            }),
-            filter: None,
-        })
-        .register_projection(ProjectionRegistration {
-            log_projector: Some(Arc::new(RecordingLogProjector {
-                calls: log_calls.clone(),
-                id: "log",
-            })),
-            span_projector: Some(Arc::new(RecordingSpanProjector {
-                count: span_count.clone(),
-            })),
-            metric_projector: Some(Arc::new(RecordingMetricProjector {
-                count: metric_count.clone(),
-            })),
-            filter: None,
-        })
+        .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+            id: "subscriber",
+            calls: subscriber_calls.clone(),
+        })))
+        .register_projection(
+            ProjectionRegistration::new()
+                .with_log_projector(Arc::new(RecordingLogProjector {
+                    calls: log_calls.clone(),
+                    id: "log",
+                }))
+                .with_span_projector(Arc::new(RecordingSpanProjector {
+                    count: span_count.clone(),
+                }))
+                .with_metric_projector(Arc::new(RecordingMetricProjector {
+                    count: metric_count.clone(),
+                })),
+        )
         .build()
         .expect("runtime");
 

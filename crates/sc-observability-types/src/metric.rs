@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::{MetricName, ServiceName, Timestamp};
+use crate::{MetricName, MetricUnit, ServiceName, Timestamp};
 
 /// Supported metric aggregation shapes.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -27,8 +27,8 @@ pub struct MetricRecord {
     pub kind: MetricKind,
     /// Numeric metric value.
     pub value: f64,
-    /// Optional UCUM unit string, for example `ms`, `By`, or `1`.
-    pub unit: Option<String>,
+    /// Optional validated UCUM-style unit string, for example `ms`, `By`, or `1`.
+    pub unit: Option<MetricUnit>,
     /// Structured metric attributes.
     pub attributes: Map<String, Value>,
 }
@@ -53,7 +53,7 @@ mod tests {
             name: metric_name(),
             kind: MetricKind::Counter,
             value: 4.0,
-            unit: Some("1".to_string()),
+            unit: Some(MetricUnit::new("1").expect("valid metric unit")),
             attributes: Map::from_iter([("state".to_string(), json!("running"))]),
         };
 

@@ -6,10 +6,10 @@ use sc_observability_otlp::{
 };
 use sc_observability_types::{
     ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-    MetricRecord, Observation, ObservationFilter, OutcomeLabel, ProcessIdentity, ProjectionError,
-    Remediation, SchemaVersion, ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord,
-    SpanSignal, SpanStarted, StateTransition, TargetCategory, TelemetryHealthState, Timestamp,
-    ToolName, TraceContext, TraceId,
+    MetricRecord, MetricUnit, Observation, ObservationFilter, OutcomeLabel, ProcessIdentity,
+    ProjectionError, Remediation, SchemaVersion, ServiceName, SpanEvent, SpanId, SpanProjector,
+    SpanRecord, SpanSignal, SpanStarted, StateTransition, TargetCategory, TelemetryHealthState,
+    Timestamp, ToolName, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 
@@ -84,7 +84,7 @@ impl sc_observability_types::MetricProjector<AgentPayload> for StaticMetricProje
             name: MetricName::new("agent.events_total").expect("valid metric"),
             kind: MetricKind::Counter,
             value: 1.0,
-            unit: Some("1".to_string()),
+            unit: Some(MetricUnit::new("1").expect("valid metric unit")),
             attributes: Default::default(),
         }])
     }

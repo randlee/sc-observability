@@ -4,6 +4,18 @@ use crate::{
     LogEvent, MetricRecord, Observable, Observation, ProjectionError, SpanSignal, SubscriberError,
 };
 
+type SubscriberRegistrationParts<T> = (
+    Arc<dyn ObservationSubscriber<T>>,
+    Option<Arc<dyn ObservationFilter<T>>>,
+);
+
+type ProjectionRegistrationParts<T> = (
+    Option<Arc<dyn LogProjector<T>>>,
+    Option<Arc<dyn SpanProjector<T>>>,
+    Option<Arc<dyn MetricProjector<T>>>,
+    Option<Arc<dyn ObservationFilter<T>>>,
+);
+
 /// Open subscriber contract for typed observations.
 pub trait ObservationSubscriber<T>: Send + Sync
 where
@@ -62,9 +74,33 @@ where
     T: Observable,
 {
     /// Registered subscriber implementation.
-    pub subscriber: Arc<dyn ObservationSubscriber<T>>,
+    subscriber: Arc<dyn ObservationSubscriber<T>>,
     /// Optional filter evaluated before subscriber execution.
-    pub filter: Option<Arc<dyn ObservationFilter<T>>>,
+    filter: Option<Arc<dyn ObservationFilter<T>>>,
+}
+
+impl<T> SubscriberRegistration<T>
+where
+    T: Observable,
+{
+    /// Creates a subscriber registration with no filter.
+    pub fn new(subscriber: Arc<dyn ObservationSubscriber<T>>) -> Self {
+        Self {
+            subscriber,
+            filter: None,
+        }
+    }
+
+    /// Attaches a filter evaluated before subscriber execution.
+    pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self {
+        self.filter = Some(filter);
+        self
+    }
+
+    /// Splits the registration into its subscriber and optional filter.
+    pub fn into_parts(self) -> SubscriberRegistrationParts<T> {
+        (self.subscriber, self.filter)
+    }
 }
 
 /// Construction-time registration for log/span/metric projection of a payload.
@@ -74,11 +110,69 @@ where
     T: Observable,
 {
     /// Optional log projector.
-    pub log_projector: Option<Arc<dyn LogProjector<T>>>,
+    log_projector: Option<Arc<dyn LogProjector<T>>>,
     /// Optional span projector.
-    pub span_projector: Option<Arc<dyn SpanProjector<T>>>,
+    span_projector: Option<Arc<dyn SpanProjector<T>>>,
     /// Optional metric projector.
-    pub metric_projector: Option<Arc<dyn MetricProjector<T>>>,
+    metric_projector: Option<Arc<dyn MetricProjector<T>>>,
     /// Optional filter evaluated before projection.
-    pub filter: Option<Arc<dyn ObservationFilter<T>>>,
+    filter: Option<Arc<dyn ObservationFilter<T>>>,
+}
+
+impl<T> ProjectionRegistration<T>
+where
+    T: Observable,
+{
+    /// Creates an empty projection registration ready for projector attachment.
+    pub fn new() -> Self {
+        Self {
+            log_projector: None,
+            span_projector: None,
+            metric_projector: None,
+            filter: None,
+        }
+    }
+
+    /// Attaches a log projector.
+    pub fn with_log_projector(mut self, projector: Arc<dyn LogProjector<T>>) -> Self {
+        self.log_projector = Some(projector);
+        self
+    }
+
+    /// Attaches a span projector.
+    pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
+        self.span_projector = Some(projector);
+        self
+    }
+
+    /// Attaches a metric projector.
+    pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
+        self.metric_projector = Some(projector);
+        self
+    }
+
+    /// Attaches a filter evaluated before projection.
+    pub fn with_filter(mut self, filter: Arc<dyn ObservationFilter<T>>) -> Self {
+        self.filter = Some(filter);
+        self
+    }
+
+    /// Splits the registration into its projector components and optional filter.
+    pub fn into_parts(self) -> ProjectionRegistrationParts<T> {
+        (
+            self.log_projector,
+            self.span_projector,
+            self.metric_projector,
+            self.filter,
+        )
+    }
+}
+
+impl<T> Default for ProjectionRegistration<T>
+where
+    T: Observable,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }

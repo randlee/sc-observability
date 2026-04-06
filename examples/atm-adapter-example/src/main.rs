@@ -15,10 +15,11 @@ use sc_observability_otlp::{
 };
 use sc_observability_types::{
     ActionName, CorrelationId, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-    MetricRecord, LoggingHealthReport, Observation, ObservabilityHealthReport, OutcomeLabel,
-    ProcessIdentity, ProjectionError, ProjectionRegistration, Remediation, SchemaVersion,
-    ServiceName, SpanEvent, SpanId, SpanRecord, SpanSignal, SpanStarted, SpanStatus, StateName,
-    StateTransition, TargetCategory, TelemetryHealthReport, TraceContext, TraceId,
+    MetricRecord, MetricUnit, LoggingHealthReport, Observation, ObservabilityHealthReport,
+    OutcomeLabel, ProcessIdentity, ProjectionError, ProjectionRegistration, Remediation,
+    SchemaVersion, ServiceName, SpanEvent, SpanId, SpanRecord, SpanSignal, SpanStarted,
+    SpanStatus, StateName, StateTransition, TargetCategory, TelemetryHealthReport, TraceContext,
+    TraceId,
     OBSERVATION_ENVELOPE_VERSION,
 };
 use sc_observe::{Observability, ObservabilityConfig};
@@ -87,7 +88,21 @@ static ATM_EVENTS_TOTAL: LazyLock<MetricName> =
 static ATM_TOOL_USE_DURATION_MS: LazyLock<MetricName> =
     LazyLock::new(|| MetricName::new("atm.tool_use_duration_ms").expect("valid metric"));
 static OBSERVATION_VERSION: LazyLock<SchemaVersion> =
-    LazyLock::new(|| SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("valid schema version"));
+    LazyLock::new(|| {
+        SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("valid schema version")
+    });
+static SUBAGENT_ENTITY_TARGET: LazyLock<TargetCategory> =
+    LazyLock::new(|| TargetCategory::new("subagent").expect("valid target category"));
+static SUBAGENT_IDLE_STATE: LazyLock<StateName> =
+    LazyLock::new(|| StateName::new("idle").expect("valid state"));
+static SUBAGENT_RUNNING_STATE: LazyLock<StateName> =
+    LazyLock::new(|| StateName::new("running").expect("valid state"));
+static SUBAGENT_COMPLETED_STATE: LazyLock<StateName> =
+    LazyLock::new(|| StateName::new("completed").expect("valid state"));
+static METRIC_UNIT_COUNT: LazyLock<MetricUnit> =
+    LazyLock::new(|| MetricUnit::new("1").expect("valid metric unit"));
+static METRIC_UNIT_MILLISECONDS: LazyLock<MetricUnit> =
+    LazyLock::new(|| MetricUnit::new("ms").expect("valid metric unit"));
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mode = parse_mode();
@@ -132,21 +147,21 @@ fn build_observability(
     let telemetry = Arc::new(Telemetry::new(telemetry_config)?);
 
     let runtime = Observability::builder(observability_config)
-        .register_projection(ProjectionRegistration {
-            log_projector: Some(Arc::new(AttachedLogProjector {
-                telemetry: telemetry.clone(),
-                inner: Arc::new(AtmLogProjector),
-            })),
-            span_projector: Some(Arc::new(AttachedSpanProjector {
-                telemetry: telemetry.clone(),
-                inner: Arc::new(AtmSpanProjector::default()),
-            })),
-            metric_projector: Some(Arc::new(AttachedMetricProjector {
-                telemetry: telemetry.clone(),
-                inner: Arc::new(AtmMetricProjector),
-            })),
-            filter: None,
-        })
+        .register_projection(
+            ProjectionRegistration::new()
+                .with_log_projector(Arc::new(AttachedLogProjector {
+                    telemetry: telemetry.clone(),
+                    inner: Arc::new(AtmLogProjector),
+                }))
+                .with_span_projector(Arc::new(AttachedSpanProjector {
+                    telemetry: telemetry.clone(),
+                    inner: Arc::new(AtmSpanProjector::default()),
+                }))
+                .with_metric_projector(Arc::new(AttachedMetricProjector {
+                    telemetry: telemetry.clone(),
+                    inner: Arc::new(AtmMetricProjector),
+                })),
+        )
         .build()?;
 
     emit_example_sequence(&runtime, service, mode)?;
@@ -593,7 +608,7 @@ impl sc_observability_types::MetricProjector<AgentInfoEvent> for AtmMetricProjec
             name: ATM_EVENTS_TOTAL.clone(),
             kind: MetricKind::Counter,
             value: 1.0,
-            unit: Some("1".to_string()),
+            unit: Some(METRIC_UNIT_COUNT.clone()),
             attributes: common_fields(&observation.payload),
         });
 
@@ -604,7 +619,7 @@ impl sc_observability_types::MetricProjector<AgentInfoEvent> for AtmMetricProjec
                 name: ATM_TOOL_USE_DURATION_MS.clone(),
                 kind: MetricKind::Histogram,
                 value: duration_ms.unwrap_or_default() as f64,
-                unit: Some("ms".to_string()),
+                unit: Some(METRIC_UNIT_MILLISECONDS.clone()),
                 attributes: common_fields(&observation.payload),
             });
         }
@@ -645,18 +660,18 @@ fn outcome(
 fn state_transition(event: &HookEventKind) -> Option<StateTransition> {
     match event {
         HookEventKind::SubagentStart { .. } => Some(StateTransition {
-            entity_kind: TargetCategory::new("subagent").expect("valid target category"),
+            entity_kind: SUBAGENT_ENTITY_TARGET.clone(),
             entity_id: Some("subagent-7".to_string()),
-            from_state: StateName::new("idle").expect("valid state"),
-            to_state: StateName::new("running").expect("valid state"),
+            from_state: SUBAGENT_IDLE_STATE.clone(),
+            to_state: SUBAGENT_RUNNING_STATE.clone(),
             reason: None,
             trigger: Some(SUBAGENT_START_ACTION.clone()),
         }),
         HookEventKind::SubagentEnd { .. } => Some(StateTransition {
-            entity_kind: TargetCategory::new("subagent").expect("valid target category"),
+            entity_kind: SUBAGENT_ENTITY_TARGET.clone(),
             entity_id: Some("subagent-7".to_string()),
-            from_state: StateName::new("running").expect("valid state"),
-            to_state: StateName::new("completed").expect("valid state"),
+            from_state: SUBAGENT_RUNNING_STATE.clone(),
+            to_state: SUBAGENT_COMPLETED_STATE.clone(),
             reason: None,
             trigger: Some(SUBAGENT_END_ACTION.clone()),
         }),

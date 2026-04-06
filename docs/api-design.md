@@ -882,7 +882,7 @@ Design direction:
 
 ```rust
 pub struct LogEvent {
-    pub version: String,
+    pub version: SchemaVersion,
     pub timestamp: Timestamp,
     pub level: Level,
     pub service: ServiceName,
@@ -891,9 +891,9 @@ pub struct LogEvent {
     pub message: Option<String>,
     pub identity: ProcessIdentity,
     pub trace: Option<TraceContext>,
-    pub request_id: Option<String>,
-    pub correlation_id: Option<String>,
-    pub outcome: Option<String>,
+    pub request_id: Option<CorrelationId>,
+    pub correlation_id: Option<CorrelationId>,
+    pub outcome: Option<OutcomeLabel>,
     pub diagnostic: Option<Diagnostic>,
     pub state_transition: Option<StateTransition>,
     pub fields: serde_json::Map<String, serde_json::Value>,
@@ -1053,7 +1053,7 @@ pub struct MetricRecord {
     pub kind: MetricKind,
     pub value: f64,
     /// Optional UCUM unit string, for example `ms`, `By`, or `1`.
-    pub unit: Option<String>,
+    pub unit: Option<MetricUnit>,
     pub attributes: serde_json::Map<String, serde_json::Value>,
 }
 ```
@@ -1283,18 +1283,19 @@ pub struct SubscriberRegistration<T>
 where
     T: Observable,
 {
-    pub subscriber: std::sync::Arc<dyn ObservationSubscriber<T>>,
-    pub filter: Option<std::sync::Arc<dyn ObservationFilter<T>>>,
+    pub fn new(subscriber: std::sync::Arc<dyn ObservationSubscriber<T>>) -> Self;
+    pub fn with_filter(self, filter: std::sync::Arc<dyn ObservationFilter<T>>) -> Self;
 }
 
 pub struct ProjectionRegistration<T>
 where
     T: Observable,
 {
-    pub log_projector: Option<std::sync::Arc<dyn LogProjector<T>>>,
-    pub span_projector: Option<std::sync::Arc<dyn SpanProjector<T>>>,
-    pub metric_projector: Option<std::sync::Arc<dyn MetricProjector<T>>>,
-    pub filter: Option<std::sync::Arc<dyn ObservationFilter<T>>>,
+    pub fn new() -> Self;
+    pub fn with_log_projector(self, projector: std::sync::Arc<dyn LogProjector<T>>) -> Self;
+    pub fn with_span_projector(self, projector: std::sync::Arc<dyn SpanProjector<T>>) -> Self;
+    pub fn with_metric_projector(self, projector: std::sync::Arc<dyn MetricProjector<T>>) -> Self;
+    pub fn with_filter(self, filter: std::sync::Arc<dyn ObservationFilter<T>>) -> Self;
 }
 ```
 

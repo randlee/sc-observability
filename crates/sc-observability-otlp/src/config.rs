@@ -4,6 +4,7 @@
 //! a `Telemetry` runtime, including transport options, per-signal batch
 //! settings, and the eager validation rules enforced at initialization time.
 
+use std::fmt;
 use std::path::PathBuf;
 
 use crate::{constants, error_codes};
@@ -50,6 +51,26 @@ impl OtlpEndpoint {
     }
 }
 
+impl fmt::Display for OtlpEndpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl AsRef<str> for OtlpEndpoint {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl TryFrom<String> for OtlpEndpoint {
+    type Error = InitError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
 /// Validated authorization header value for OTLP transport.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthHeader(String);
@@ -70,6 +91,26 @@ impl AuthHeader {
     /// Returns the validated header as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl fmt::Display for AuthHeader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl AsRef<str> for AuthHeader {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl TryFrom<String> for AuthHeader {
+    type Error = InitError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
     }
 }
 
@@ -375,4 +416,52 @@ fn invalid_transport_value(message: &str, remediation: &str) -> InitError {
         message,
         Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sc_observability_types::ServiceName;
+
+    #[test]
+    fn otlp_endpoint_accepts_valid_http_and_https_values() {
+        let https = OtlpEndpoint::new("https://otel.example.internal").expect("valid https");
+        let http = OtlpEndpoint::try_from("http://localhost:4318".to_string()).expect("valid http");
+
+        assert_eq!(https.as_ref(), "https://otel.example.internal");
+        assert_eq!(https.to_string(), "https://otel.example.internal");
+        assert_eq!(http.as_str(), "http://localhost:4318");
+    }
+
+    #[test]
+    fn otlp_endpoint_rejects_empty_or_scheme_less_values() {
+        assert!(OtlpEndpoint::new("").is_err());
+        assert!(OtlpEndpoint::new("otel.example.internal").is_err());
+    }
+
+    #[test]
+    fn auth_header_rejects_empty_values() {
+        assert!(AuthHeader::new("").is_err());
+        assert!(AuthHeader::new("   ").is_err());
+    }
+
+    #[test]
+    fn auth_header_accepts_non_empty_values() {
+        let header = AuthHeader::try_from("Bearer abc123".to_string()).expect("valid header");
+        assert_eq!(header.as_ref(), "Bearer abc123");
+        assert_eq!(header.to_string(), "Bearer abc123");
+    }
+
+    #[test]
+    fn telemetry_config_builder_build_validates_transport() {
+        let result = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(OtelConfig {
+                enabled: true,
+                endpoint: None,
+                ..OtelConfig::default()
+            })
+            .build();
+
+        assert!(result.is_err());
+    }
 }

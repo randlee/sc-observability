@@ -86,4 +86,12 @@ mod tests {
             "ProcessIdentityPolicy::Resolver(<dyn ProcessIdentityResolver>)"
         );
     }
+
+    #[test]
+    fn process_identity_policy_auto_debug_is_descriptive() {
+        assert_eq!(
+            format!("{:?}", ProcessIdentityPolicy::Auto),
+            "ProcessIdentityPolicy::Auto"
+        );
+    }
 }

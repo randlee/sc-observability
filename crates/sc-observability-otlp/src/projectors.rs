@@ -67,27 +67,37 @@ where
 
     /// Converts the wrapped helper into ordinary sc-observe projection registration.
     pub fn into_registration(self) -> ProjectionRegistration<T> {
-        ProjectionRegistration {
-            log_projector: self.log_projector.map(|inner| {
-                Arc::new(AttachedLogProjector {
-                    telemetry: self.telemetry.clone(),
-                    inner,
-                }) as Arc<dyn LogProjector<T>>
-            }),
-            span_projector: self.span_projector.map(|inner| {
-                Arc::new(AttachedSpanProjector {
-                    telemetry: self.telemetry.clone(),
-                    inner,
-                }) as Arc<dyn SpanProjector<T>>
-            }),
-            metric_projector: self.metric_projector.map(|inner| {
-                Arc::new(AttachedMetricProjector {
-                    telemetry: self.telemetry,
-                    inner,
-                }) as Arc<dyn MetricProjector<T>>
-            }),
-            filter: self.filter,
+        let mut registration = ProjectionRegistration::new();
+
+        if let Some(inner) = self.log_projector {
+            registration = registration.with_log_projector(Arc::new(AttachedLogProjector {
+                telemetry: self.telemetry.clone(),
+                inner,
+            })
+                as Arc<dyn LogProjector<T>>);
         }
+
+        if let Some(inner) = self.span_projector {
+            registration = registration.with_span_projector(Arc::new(AttachedSpanProjector {
+                telemetry: self.telemetry.clone(),
+                inner,
+            })
+                as Arc<dyn SpanProjector<T>>);
+        }
+
+        if let Some(inner) = self.metric_projector {
+            registration = registration.with_metric_projector(Arc::new(AttachedMetricProjector {
+                telemetry: self.telemetry,
+                inner,
+            })
+                as Arc<dyn MetricProjector<T>>);
+        }
+
+        if let Some(filter) = self.filter {
+            registration = registration.with_filter(filter);
+        }
+
+        registration
     }
 }
 

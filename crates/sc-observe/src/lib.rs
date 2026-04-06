@@ -46,6 +46,22 @@ pub struct ObservabilityConfig {
 
 impl ObservabilityConfig {
     /// Builds the documented v1 defaults from a tool name and log root.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    /// use sc_observability_types::ToolName;
+    /// use sc_observe::ObservabilityConfig;
+    ///
+    /// let config = ObservabilityConfig::default_for(
+    ///     ToolName::new("demo-tool").expect("valid tool"),
+    ///     PathBuf::from("logs"),
+    /// )
+    /// .expect("valid config");
+    ///
+    /// assert_eq!(config.tool_name.as_str(), "demo-tool");
+    /// ```
     pub fn default_for(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitError> {
         let env_prefix = EnvPrefix::new(
             tool_name
@@ -160,6 +176,22 @@ impl Observability {
     }
 
     /// Starts a construction-time builder for subscribers and projections.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    /// use sc_observability_types::ToolName;
+    /// use sc_observe::{Observability, ObservabilityConfig};
+    ///
+    /// let config = ObservabilityConfig::default_for(
+    ///     ToolName::new("demo-tool").expect("valid tool"),
+    ///     PathBuf::from("logs"),
+    /// )
+    /// .expect("valid config");
+    ///
+    /// let _builder = Observability::builder(config);
+    /// ```
     pub fn builder(config: ObservabilityConfig) -> ObservabilityBuilder {
         ObservabilityBuilder {
             config,
@@ -352,8 +384,7 @@ impl ObservabilityBuilder {
     where
         T: Observable,
     {
-        let subscriber = registration.subscriber;
-        let filter = registration.filter;
+        let (subscriber, filter) = registration.into_parts();
         self.subscribers.push(ErasedSubscriberRegistration {
             type_id: TypeId::of::<T>(),
             dispatch: Arc::new(move |observation_any| {
@@ -385,10 +416,7 @@ impl ObservabilityBuilder {
     where
         T: Observable,
     {
-        let filter = registration.filter;
-        let log_projector = registration.log_projector;
-        let span_projector = registration.span_projector;
-        let metric_projector = registration.metric_projector;
+        let (log_projector, span_projector, metric_projector, filter) = registration.into_parts();
 
         self.projections.push(ErasedProjectionRegistration {
             type_id: TypeId::of::<T>(),
@@ -505,10 +533,10 @@ mod tests {
     };
     use sc_observability_types::{
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
-        MetricRecord, ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError,
-        SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError,
-        TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext,
-        TraceId,
+        MetricRecord, MetricUnit, ObservationFilter, ObservationSubscriber, ProcessIdentity,
+        ProjectionError, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
+        SubscriberError, TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp,
+        TraceContext, TraceId,
     };
 
     #[derive(Debug, Clone)]
@@ -603,7 +631,7 @@ mod tests {
                 name: MetricName::new("obs.events_total").expect("valid metric"),
                 kind: MetricKind::Counter,
                 value: 1.0,
-                unit: Some("1".to_string()),
+                unit: Some(MetricUnit::new("1").expect("valid metric unit")),
                 attributes: Default::default(),
             }])
         }
@@ -630,7 +658,7 @@ mod tests {
 
     impl sc_observability_types::telemetry_health_provider_sealed::Sealed for FakeTelemetryProvider {
         fn token(&self) -> sc_observability_types::telemetry_health_provider_sealed::Token {
-            sc_observability_types::telemetry_health_provider_sealed::TOKEN
+            sc_observability_types::telemetry_health_provider_sealed::workspace_token()
         }
     }
 
@@ -730,20 +758,14 @@ mod tests {
         let root = temp_path("order");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
-                    id: "first",
-                    calls: calls.clone(),
-                }),
-                filter: None,
-            })
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
-                    id: "second",
-                    calls: calls.clone(),
-                }),
-                filter: None,
-            })
+            .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+                id: "first",
+                calls: calls.clone(),
+            })))
+            .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+                id: "second",
+                calls: calls.clone(),
+            })))
             .build()
             .expect("runtime");
 
@@ -761,13 +783,13 @@ mod tests {
         let root = temp_path("filter");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
+            .register_subscriber(
+                SubscriberRegistration::new(Arc::new(RecordingSubscriber {
                     id: "allowed",
                     calls: calls.clone(),
-                }),
-                filter: Some(Arc::new(AllowFlagFilter)),
-            })
+                }))
+                .with_filter(Arc::new(AllowFlagFilter)),
+            )
             .build()
             .expect("runtime");
 
@@ -783,17 +805,11 @@ mod tests {
         let root = temp_path("subscriber-failure");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(FailingSubscriber),
-                filter: None,
-            })
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
-                    id: "still-runs",
-                    calls: calls.clone(),
-                }),
-                filter: None,
-            })
+            .register_subscriber(SubscriberRegistration::new(Arc::new(FailingSubscriber)))
+            .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+                id: "still-runs",
+                calls: calls.clone(),
+            })))
             .build()
             .expect("runtime");
 
@@ -813,25 +829,22 @@ mod tests {
         let root = temp_path("projector-failure");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_projection(ProjectionRegistration {
-                log_projector: Some(Arc::new(FailingProjector)),
-                span_projector: Some(Arc::new(RecordingSpanProjector {
-                    count: span_count.clone(),
-                })),
-                metric_projector: Some(Arc::new(RecordingMetricProjector {
-                    count: metric_count.clone(),
-                })),
-                filter: None,
-            })
-            .register_projection(ProjectionRegistration {
-                log_projector: Some(Arc::new(RecordingLogProjector {
+            .register_projection(
+                ProjectionRegistration::new()
+                    .with_log_projector(Arc::new(FailingProjector))
+                    .with_span_projector(Arc::new(RecordingSpanProjector {
+                        count: span_count.clone(),
+                    }))
+                    .with_metric_projector(Arc::new(RecordingMetricProjector {
+                        count: metric_count.clone(),
+                    })),
+            )
+            .register_projection(ProjectionRegistration::new().with_log_projector(Arc::new(
+                RecordingLogProjector {
                     calls: log_calls.clone(),
                     id: "log",
-                })),
-                span_projector: None,
-                metric_projector: None,
-                filter: None,
-            })
+                },
+            )))
             .build()
             .expect("runtime");
 
@@ -849,13 +862,13 @@ mod tests {
         let root = temp_path("routing-failure");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
+            .register_subscriber(
+                SubscriberRegistration::new(Arc::new(RecordingSubscriber {
                     id: "filtered",
                     calls: Arc::new(Mutex::new(Vec::new())),
-                }),
-                filter: Some(Arc::new(AllowFlagFilter)),
-            })
+                }))
+                .with_filter(Arc::new(AllowFlagFilter)),
+            )
             .build()
             .expect("runtime");
 
@@ -870,12 +883,9 @@ mod tests {
         let root = temp_path("projector-routing-failure");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_projection(ProjectionRegistration {
-                log_projector: Some(Arc::new(FailingProjector)),
-                span_projector: None,
-                metric_projector: None,
-                filter: None,
-            })
+            .register_projection(
+                ProjectionRegistration::new().with_log_projector(Arc::new(FailingProjector)),
+            )
             .build()
             .expect("runtime");
 
@@ -892,13 +902,10 @@ mod tests {
         let root = temp_path("shutdown");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
-                    id: "shutdown",
-                    calls: Arc::new(Mutex::new(Vec::new())),
-                }),
-                filter: None,
-            })
+            .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+                id: "shutdown",
+                calls: Arc::new(Mutex::new(Vec::new())),
+            })))
             .build()
             .expect("runtime");
 
@@ -915,12 +922,9 @@ mod tests {
         let root = temp_path("health");
         let config = ObservabilityConfig::default_for(tool_name(), root.clone()).expect("config");
         let runtime = Observability::builder(config)
-            .register_projection(ProjectionRegistration {
-                log_projector: Some(Arc::new(FailingProjector)),
-                span_projector: None,
-                metric_projector: None,
-                filter: None,
-            })
+            .register_projection(
+                ProjectionRegistration::new().with_log_projector(Arc::new(FailingProjector)),
+            )
             .build()
             .expect("runtime");
 
@@ -939,13 +943,10 @@ mod tests {
         let root = temp_path("telemetry-health");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
-                    id: "telemetry-health",
-                    calls: Arc::new(Mutex::new(Vec::new())),
-                }),
-                filter: None,
-            })
+            .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+                id: "telemetry-health",
+                calls: Arc::new(Mutex::new(Vec::new())),
+            })))
             .with_observability_health_provider(Arc::new(FakeTelemetryProvider {
                 state: TelemetryHealthState::Degraded,
             }))
@@ -1010,13 +1011,10 @@ mod tests {
         let ok_config =
             ObservabilityConfig::default_for(tool_name(), ok_root.clone()).expect("config");
         let ok_runtime = Observability::builder(ok_config)
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
-                    id: "flush-ok",
-                    calls: Arc::new(Mutex::new(Vec::new())),
-                }),
-                filter: None,
-            })
+            .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+                id: "flush-ok",
+                calls: Arc::new(Mutex::new(Vec::new())),
+            })))
             .build()
             .expect("runtime");
         assert!(ok_runtime.flush().is_ok());

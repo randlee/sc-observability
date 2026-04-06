@@ -131,6 +131,22 @@ pub(crate) fn validate_metric_name(value: &str) -> Result<(), ValueValidationErr
     }
 }
 
+pub(crate) fn validate_metric_unit(value: &str) -> Result<(), ValueValidationError> {
+    if value.is_empty() {
+        return Err(ValueValidationError::new("metric unit must not be empty"));
+    }
+    if value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-' | '/' | '%'))
+    {
+        Ok(())
+    } else {
+        Err(ValueValidationError::new(
+            "metric unit must match [A-Za-z0-9._\\-/%]+",
+        ))
+    }
+}
+
 validated_name_type!(
     ToolName,
     "Validated tool identity used for top-level configuration.",
@@ -160,6 +176,11 @@ validated_name_type!(
     MetricName,
     "Validated metric identity using [A-Za-z0-9._\\-/]+.",
     validate_metric_name
+);
+validated_name_type!(
+    MetricUnit,
+    "Validated metric unit using [A-Za-z0-9._\\-/%]+.",
+    validate_metric_unit
 );
 validated_name_type!(
     StateName,
@@ -236,6 +257,10 @@ mod tests {
             "obs/events_total"
         );
         assert_eq!(
+            MetricUnit::new("ms").expect("valid metric unit").as_str(),
+            "ms"
+        );
+        assert_eq!(
             StateName::new("running")
                 .expect("valid state name")
                 .as_ref(),
@@ -274,6 +299,7 @@ mod tests {
         assert!(TargetCategory::new("category/invalid").is_err());
         assert!(ActionName::new("action invalid").is_err());
         assert!(MetricName::new("metric name").is_err());
+        assert!(MetricUnit::new("metric unit").is_err());
         assert!(StateName::new("state invalid").is_err());
         assert!(CorrelationId::new("corr invalid").is_err());
         assert!(OutcomeLabel::new("outcome invalid").is_err());

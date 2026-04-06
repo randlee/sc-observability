@@ -199,10 +199,29 @@ mod tests {
     }
 
     #[test]
+    fn timestamp_into_inner_and_from_timestamp_preserve_utc_value() {
+        let timestamp = Timestamp::from(
+            OffsetDateTime::UNIX_EPOCH.to_offset(UtcOffset::from_hms(-7, 0, 0).expect("offset")),
+        );
+
+        let inner = timestamp.into_inner();
+        let round_trip = OffsetDateTime::from(timestamp);
+
+        assert_eq!(inner.offset(), UtcOffset::UTC);
+        assert_eq!(round_trip, inner);
+    }
+
+    #[test]
     fn error_code_displays_as_plain_code() {
         assert_eq!(
             ErrorCode::new_static("SC_TEST_ERROR_CODE").to_string(),
             "SC_TEST_ERROR_CODE"
         );
+    }
+
+    #[test]
+    fn error_code_new_owned_preserves_owned_value() {
+        let code = ErrorCode::new_owned("SC_OWNED_CODE");
+        assert_eq!(code.as_str(), "SC_OWNED_CODE");
     }
 }

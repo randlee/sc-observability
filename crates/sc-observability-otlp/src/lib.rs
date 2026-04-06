@@ -13,12 +13,12 @@ pub mod constants;
 pub mod error_codes;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use config::validate_config;
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, ErrorContext, ExportError, FlushError, InitError, LogEvent,
-    MetricRecord, ObservabilityHealthProvider, Remediation, ShutdownError, SpanSignal,
+    MetricRecord, ObservabilityHealthProvider, Remediation, ShutdownError, SinkName, SpanSignal,
     telemetry_health_provider_sealed,
 };
 #[doc(inline)]
@@ -119,6 +119,13 @@ impl Default for ExporterRuntime {
         }
     }
 }
+
+static LOGS_EXPORTER_NAME: LazyLock<SinkName> =
+    LazyLock::new(|| SinkName::new("logs").expect("logs exporter name is valid"));
+static TRACES_EXPORTER_NAME: LazyLock<SinkName> =
+    LazyLock::new(|| SinkName::new("traces").expect("traces exporter name is valid"));
+static METRICS_EXPORTER_NAME: LazyLock<SinkName> =
+    LazyLock::new(|| SinkName::new("metrics").expect("metrics exporter name is valid"));
 
 struct NoopLogExporter;
 struct NoopTraceExporter;
@@ -370,20 +377,17 @@ impl Telemetry {
         let runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         let exporter_statuses = vec![
             ExporterHealth {
-                name: sc_observability_types::SinkName::new("logs")
-                    .expect("logs exporter name is valid"),
+                name: LOGS_EXPORTER_NAME.clone(),
                 state: runtime.log_status.state,
                 last_error: runtime.log_status.last_error.clone(),
             },
             ExporterHealth {
-                name: sc_observability_types::SinkName::new("traces")
-                    .expect("traces exporter name is valid"),
+                name: TRACES_EXPORTER_NAME.clone(),
                 state: runtime.trace_status.state,
                 last_error: runtime.trace_status.last_error.clone(),
             },
             ExporterHealth {
-                name: sc_observability_types::SinkName::new("metrics")
-                    .expect("metrics exporter name is valid"),
+                name: METRICS_EXPORTER_NAME.clone(),
                 state: runtime.metric_status.state,
                 last_error: runtime.metric_status.last_error.clone(),
             },
@@ -440,7 +444,7 @@ impl Telemetry {
 
 impl telemetry_health_provider_sealed::Sealed for Telemetry {
     fn token(&self) -> telemetry_health_provider_sealed::Token {
-        telemetry_health_provider_sealed::TOKEN
+        telemetry_health_provider_sealed::workspace_token()
     }
 }
 impl ObservabilityHealthProvider for Telemetry {
@@ -950,7 +954,7 @@ mod tests {
             name: MetricName::new("agent.events_total").expect("valid metric"),
             kind: MetricKind::Counter,
             value: 1.0,
-            unit: Some("1".to_string()),
+            unit: Some(sc_observability_types::MetricUnit::new("1").expect("valid metric unit")),
             attributes: Map::new(),
         };
 

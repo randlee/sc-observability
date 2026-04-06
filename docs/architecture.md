@@ -70,6 +70,8 @@ Owns:
 - `Timestamp`, `DurationMs`
 - `TraceContext`, `TraceId`, `SpanId`
 - `SpanRecord<S>`, `SpanSignal`, `MetricRecord`, `LogEvent`
+- typed stable labels such as `CorrelationId`, `OutcomeLabel`, `SinkName`, and
+  `MetricUnit`
 - `ObservabilityHealthProvider`
 - `LogQuery`, `LogOrder`, `LogFieldMatch`
 - `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
@@ -83,6 +85,11 @@ Must not own:
 - routing runtime behavior
 - OTLP exporters or OpenTelemetry dependencies
 - application-specific observation payloads
+
+Malformed deserialized `SpanRecord<SpanEnded>` values are tolerated at
+read/interop boundaries only. Producer-facing APIs still require a valid
+ended span, while `duration_ms()` returns `None` for malformed
+deserialize-only records instead of panicking.
 
 Important boundary:
 
@@ -175,8 +182,8 @@ pub struct LogQuery {
     pub levels: Vec<Level>,
     pub target: Option<TargetCategory>,
     pub action: Option<ActionName>,
-    pub request_id: Option<String>,
-    pub correlation_id: Option<String>,
+    pub request_id: Option<CorrelationId>,
+    pub correlation_id: Option<CorrelationId>,
     pub since: Option<Timestamp>,
     pub until: Option<Timestamp>,
     pub field_matches: Vec<LogFieldMatch>,
