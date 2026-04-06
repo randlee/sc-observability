@@ -973,7 +973,7 @@ impl<S> SpanRecord<S> {
 }
 
 impl SpanRecord<SpanEnded> {
-    pub fn duration_ms(&self) -> DurationMs;
+    pub fn duration_ms(&self) -> Option<DurationMs>;
 }
 ```
 
@@ -983,8 +983,9 @@ Rules:
 - `SpanRecord<SpanEnded>` has no public constructor and is only reachable via
   `SpanRecord<SpanStarted>::end(...)`
 - `SpanRecord<SpanStarted>` has no public duration accessor
-- `SpanRecord<SpanEnded>` must carry a final duration and exposes it only via
-  `duration_ms()`
+- `SpanRecord<SpanEnded>` exposes final duration only via `duration_ms()`,
+  which returns `None` only for malformed deserialized data that bypassed the
+  producer-facing typestate API
 - producer APIs should expose only valid transitions per state
 - runtime started/ended state is derived from the typestate parameter `S`
   during serialization and export rather than stored as a public

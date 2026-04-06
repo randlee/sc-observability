@@ -1,3 +1,4 @@
+use std::backtrace::Backtrace;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -124,9 +125,11 @@ impl From<&Diagnostic> for DiagnosticSummary {
 }
 
 /// Builder-style context wrapper used by public crate error types.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorContext {
     diagnostic: Diagnostic,
+    #[serde(skip, default = "capture_backtrace")]
+    backtrace: Backtrace,
     #[serde(skip)]
     source: Option<Arc<dyn std::error::Error + Send + Sync + 'static>>,
 }
@@ -152,6 +155,7 @@ impl ErrorContext {
                 docs: None,
                 details: Map::new(),
             },
+            backtrace: capture_backtrace(),
             source: None,
         }
     }
@@ -184,6 +188,11 @@ impl ErrorContext {
     pub fn diagnostic(&self) -> &Diagnostic {
         &self.diagnostic
     }
+
+    /// Returns the captured construction backtrace.
+    pub fn backtrace(&self) -> &Backtrace {
+        &self.backtrace
+    }
 }
 
 impl std::fmt::Display for ErrorContext {
@@ -191,6 +200,9 @@ impl std::fmt::Display for ErrorContext {
         write!(f, "{}", self.diagnostic.message)?;
         if let Some(cause) = &self.diagnostic.cause {
             write!(f, ": {cause}")?;
+        }
+        if let Some(source) = std::error::Error::source(self) {
+            write!(f, "; caused by: {source}")?;
         }
         Ok(())
     }
@@ -202,6 +214,10 @@ impl std::error::Error for ErrorContext {
             .as_deref()
             .map(|source| source as &(dyn std::error::Error + 'static))
     }
+}
+
+fn capture_backtrace() -> Backtrace {
+    Backtrace::capture()
 }
 
 #[cfg(test)]
@@ -257,6 +273,22 @@ mod tests {
     }
 
     #[test]
+    fn error_context_display_includes_source_chain_when_present() {
+        let error = ErrorContext::new(
+            error_codes::DIAGNOSTIC_INVALID,
+            "operation failed",
+            Remediation::not_recoverable("investigate"),
+        )
+        .cause("missing field")
+        .source(Box::new(std::io::Error::other("disk full")));
+
+        assert_eq!(
+            error.to_string(),
+            "operation failed: missing field; caused by: disk full"
+        );
+    }
+
+    #[test]
     fn error_context_builder_sets_docs_details_and_source() {
         let error = ErrorContext::new(
             error_codes::DIAGNOSTIC_INVALID,
@@ -282,6 +314,10 @@ mod tests {
                 .as_deref(),
             Some("disk full")
         );
+        assert!(!matches!(
+            error.backtrace().status(),
+            std::backtrace::BacktraceStatus::Unsupported
+        ));
     }
 
     #[test]

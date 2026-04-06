@@ -3,9 +3,9 @@ use std::sync::{Arc, Mutex};
 
 use sc_observability_types::{
     ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, Observation,
-    ObservationSubscriber, ProcessIdentity, ProjectionRegistration, Remediation, ServiceName,
-    SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberRegistration,
-    TargetCategory, Timestamp, TraceContext, TraceId,
+    ObservationSubscriber, OutcomeLabel, ProcessIdentity, ProjectionRegistration, Remediation,
+    SchemaVersion, ServiceName, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
+    SubscriberRegistration, TargetCategory, Timestamp, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 
@@ -41,7 +41,10 @@ impl sc_observability_types::LogProjector<AgentEvent> for RecordingLogProjector 
     ) -> Result<Vec<LogEvent>, sc_observability_types::ProjectionError> {
         self.calls.lock().expect("calls poisoned").push(self.id);
         Ok(vec![LogEvent {
-            version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+            version: SchemaVersion::new(
+                sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+            )
+            .expect("valid schema version"),
             timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service: observation.service.clone(),
@@ -52,7 +55,7 @@ impl sc_observability_types::LogProjector<AgentEvent> for RecordingLogProjector 
             trace: Some(trace_context()),
             request_id: None,
             correlation_id: None,
-            outcome: Some("ok".to_string()),
+            outcome: Some(OutcomeLabel::new("ok").expect("valid outcome label")),
             diagnostic: Some(Diagnostic {
                 timestamp: Timestamp::UNIX_EPOCH,
                 code: ErrorCode::new_static("SC_TEST"),

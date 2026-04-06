@@ -61,6 +61,20 @@ macro_rules! validated_name_type {
                 f.write_str(&self.0)
             }
         }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                self.as_str()
+            }
+        }
+
+        impl TryFrom<String> for $name {
+            type Error = ValueValidationError;
+
+            fn try_from(value: String) -> Result<Self, Self::Error> {
+                Self::new(value)
+            }
+        }
     };
 }
 
@@ -147,6 +161,31 @@ validated_name_type!(
     "Validated metric identity using [A-Za-z0-9._\\-/]+.",
     validate_metric_name
 );
+validated_name_type!(
+    StateName,
+    "Validated stable state name for state-transition payloads.",
+    validate_identifier
+);
+validated_name_type!(
+    CorrelationId,
+    "Validated request/correlation identifier used for cross-record joins.",
+    validate_identifier
+);
+validated_name_type!(
+    OutcomeLabel,
+    "Validated stable outcome label for event results.",
+    validate_identifier
+);
+validated_name_type!(
+    SinkName,
+    "Validated stable name for a logging sink or telemetry exporter.",
+    validate_identifier
+);
+validated_name_type!(
+    SchemaVersion,
+    "Validated schema version label for shared envelopes and log records.",
+    validate_identifier
+);
 
 #[cfg(test)]
 mod tests {
@@ -196,6 +235,34 @@ mod tests {
                 .as_str(),
             "obs/events_total"
         );
+        assert_eq!(
+            StateName::new("running")
+                .expect("valid state name")
+                .as_ref(),
+            "running"
+        );
+        assert_eq!(
+            CorrelationId::try_from("req-1".to_string())
+                .expect("valid correlation id")
+                .to_string(),
+            "req-1"
+        );
+        assert_eq!(
+            OutcomeLabel::new("success")
+                .expect("valid outcome label")
+                .as_str(),
+            "success"
+        );
+        assert_eq!(
+            SinkName::new("jsonl").expect("valid sink name").as_str(),
+            "jsonl"
+        );
+        assert_eq!(
+            SchemaVersion::new("v1")
+                .expect("valid schema version")
+                .as_str(),
+            "v1"
+        );
     }
 
     #[test]
@@ -207,5 +274,10 @@ mod tests {
         assert!(TargetCategory::new("category/invalid").is_err());
         assert!(ActionName::new("action invalid").is_err());
         assert!(MetricName::new("metric name").is_err());
+        assert!(StateName::new("state invalid").is_err());
+        assert!(CorrelationId::new("corr invalid").is_err());
+        assert!(OutcomeLabel::new("outcome invalid").is_err());
+        assert!(SinkName::new("sink invalid").is_err());
+        assert!(SchemaVersion::new("schema invalid").is_err());
     }
 }

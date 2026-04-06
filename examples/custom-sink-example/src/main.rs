@@ -3,11 +3,12 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use sc_observability::{
-    LogFilter, LogSink, Logger, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
+    LogFilter, LogSink, LoggerBuilder, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent, LogSinkError,
-    ProcessIdentity, Remediation, ServiceName, TargetCategory, Timestamp,
+    ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent, LogSinkError, OutcomeLabel,
+    ProcessIdentity, Remediation, SchemaVersion, ServiceName, SinkName, TargetCategory, Timestamp,
+    OBSERVATION_ENVELOPE_VERSION,
 };
 use serde_json::json;
 
@@ -19,7 +20,7 @@ impl AuditSink {
     fn new() -> Self {
         Self {
             health: Mutex::new(SinkHealth {
-                name: "audit-stderr".to_string(),
+                name: SinkName::new("audit-stderr").expect("valid sink name"),
                 state: SinkHealthState::Healthy,
                 last_error: None,
             }),
@@ -86,7 +87,7 @@ impl LogFilter for AuditOnly {
 
 fn build_event(service: ServiceName, target: &str, action: &str, message: &str) -> LogEvent {
     LogEvent {
-        version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+        version: SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("valid schema version"),
         timestamp: Timestamp::now_utc(),
         level: Level::Info,
         service,
@@ -97,7 +98,7 @@ fn build_event(service: ServiceName, target: &str, action: &str, message: &str) 
         trace: None,
         request_id: None,
         correlation_id: None,
-        outcome: Some("ok".to_string()),
+        outcome: Some(OutcomeLabel::new("ok").expect("valid outcome label")),
         diagnostic: Some(Diagnostic {
             timestamp: Timestamp::now_utc(),
             code: ErrorCode::new_static("SC_CUSTOM_SINK_EXAMPLE"),
@@ -115,11 +116,13 @@ fn build_event(service: ServiceName, target: &str, action: &str, message: &str) 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = ServiceName::new("custom-sink-example")?;
     let root = std::env::temp_dir().join("sc-observability-custom-sink-example");
-    let mut logger = Logger::new(LoggerConfig::default_for(service.clone(), PathBuf::from(root)))?;
+    let mut builder =
+        LoggerBuilder::new(LoggerConfig::default_for(service.clone(), PathBuf::from(root)))?;
 
-    logger.register_sink(
+    builder.register_sink(
         SinkRegistration::new(Arc::new(AuditSink::new())).with_filter(Arc::new(AuditOnly)),
     );
+    let logger = builder.build();
 
     logger.emit(build_event(
         service.clone(),

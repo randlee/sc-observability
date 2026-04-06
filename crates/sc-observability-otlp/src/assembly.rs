@@ -116,5 +116,9 @@ impl Default for SpanAssembler {
 }
 
 pub(crate) fn span_key(trace_id: &str, span_id: &str) -> String {
-    format!("{trace_id}:{span_id}")
+    let mut key = String::with_capacity(trace_id.len() + span_id.len() + 1);
+    key.push_str(trace_id);
+    key.push(':');
+    key.push_str(span_id);
+    key
 }

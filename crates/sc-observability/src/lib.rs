@@ -27,7 +27,7 @@ pub use jsonl_reader::JsonlLogReader;
 use sc_observability_types::{
     Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, FlushError, InitError, Level,
     LevelFilter, LogEvent, LogQuery, LogSinkError, LogSnapshot, ProcessIdentityPolicy, QueryError,
-    QueryHealthState, Remediation, ServiceName, ShutdownError, Timestamp,
+    QueryHealthState, Remediation, ServiceName, ShutdownError, SinkName, Timestamp,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -82,7 +82,7 @@ pub struct RedactionPolicy {
     /// Whether bearer-token shaped values should be redacted.
     pub redact_bearer_tokens: bool,
     /// Additional caller-supplied redactors.
-    pub custom_redactors: Vec<Arc<dyn Redactor>>,
+    pub custom_redactors: Vec<Box<dyn Redactor>>,
 }
 
 impl std::fmt::Debug for RedactionPolicy {
@@ -119,9 +119,9 @@ pub trait LogSink: Send + Sync {
 #[derive(Clone)]
 pub struct SinkRegistration {
     /// Concrete sink implementation.
-    pub sink: Arc<dyn LogSink>,
+    pub(crate) sink: Arc<dyn LogSink>,
     /// Optional sink-local filter.
-    pub filter: Option<Arc<dyn LogFilter>>,
+    pub(crate) filter: Option<Arc<dyn LogFilter>>,
 }
 
 impl SinkRegistration {
@@ -290,6 +290,65 @@ impl LoggerRuntime {
     }
 }
 
+/// Construction-time logger builder that owns sink registration.
+pub struct LoggerBuilder {
+    config: LoggerConfig,
+    sinks: Vec<SinkRegistration>,
+}
+
+impl LoggerBuilder {
+    /// Creates a builder with the configured built-in sinks.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    /// use sc_observability::{LoggerBuilder, LoggerConfig};
+    /// use sc_observability_types::ServiceName;
+    ///
+    /// let builder = LoggerBuilder::new(LoggerConfig::default_for(
+    ///     ServiceName::new("demo").expect("valid service"),
+    ///     PathBuf::from("logs"),
+    /// ))
+    /// .expect("valid logger config");
+    ///
+    /// let _logger = builder.build();
+    /// ```
+    pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
+        let active_log_path = default_log_path(&config.log_root, &config.service_name);
+        let mut sinks = Vec::new();
+
+        if config.enable_file_sink {
+            let sink = JsonlFileSink::new(active_log_path, config.rotation, config.retention);
+            sinks.push(SinkRegistration::new(Arc::new(sink)));
+        }
+
+        if config.enable_console_sink {
+            sinks.push(SinkRegistration::new(Arc::new(ConsoleSink::stdout())));
+        }
+
+        Ok(Self { config, sinks })
+    }
+
+    /// Registers one additional sink before the logger runtime is built.
+    pub fn register_sink(&mut self, registration: SinkRegistration) -> &mut Self {
+        self.sinks.push(registration);
+        self
+    }
+
+    /// Finalizes construction and returns the logger runtime.
+    pub fn build(self) -> Logger {
+        let active_log_path = default_log_path(&self.config.log_root, &self.config.service_name);
+        let query_available = active_log_path.exists() || self.config.enable_file_sink;
+        Logger {
+            config: self.config,
+            sinks: self.sinks,
+            shutdown: Arc::new(AtomicBool::new(false)),
+            runtime: LoggerRuntime::new(query_available),
+        }
+    }
+}
+
 /// Lightweight structured logging runtime with built-in query and follow support.
 pub struct Logger {
     config: LoggerConfig,
@@ -299,33 +358,14 @@ pub struct Logger {
 }
 
 impl Logger {
-    /// Creates a logger with the configured built-in sinks and runtime state.
-    pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
-        let active_log_path = default_log_path(&config.log_root, &config.service_name);
-        let query_available = active_log_path.exists() || config.enable_file_sink;
-        let mut sinks = Vec::new();
-
-        if config.enable_file_sink {
-            let sink =
-                JsonlFileSink::new(active_log_path.clone(), config.rotation, config.retention);
-            sinks.push(SinkRegistration::new(Arc::new(sink)));
-        }
-
-        if config.enable_console_sink {
-            sinks.push(SinkRegistration::new(Arc::new(ConsoleSink::stdout())));
-        }
-
-        Ok(Self {
-            config,
-            sinks,
-            shutdown: Arc::new(AtomicBool::new(false)),
-            runtime: LoggerRuntime::new(query_available),
-        })
+    /// Starts a construction-time builder for sink registration.
+    pub fn builder(config: LoggerConfig) -> Result<LoggerBuilder, InitError> {
+        LoggerBuilder::new(config)
     }
 
-    /// Registers one additional sink before log emission begins.
-    pub fn register_sink(&mut self, registration: SinkRegistration) {
-        self.sinks.push(registration);
+    /// Creates a logger with the configured built-in sinks and runtime state.
+    pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
+        Ok(LoggerBuilder::new(config)?.build())
     }
 
     /// Emits one structured log event through the configured sinks.
@@ -359,6 +399,10 @@ impl Logger {
     }
 
     /// Flushes all registered sinks.
+    ///
+    /// Sink flush failures are absorbed into logger health and counters so the
+    /// caller can continue shutdown or health inspection without a secondary
+    /// runtime failure.
     ///
     /// # Panics
     ///
@@ -549,7 +593,8 @@ impl JsonlFileSink {
             rotation,
             retention,
             health: Mutex::new(SinkHealth {
-                name: constants::JSONL_FILE_SINK_NAME.to_string(),
+                name: SinkName::new(constants::JSONL_FILE_SINK_NAME)
+                    .expect("jsonl sink constant is valid"),
                 state: SinkHealthState::Healthy,
                 last_error: None,
             }),
@@ -730,7 +775,8 @@ impl ConsoleSink {
         Self {
             writer,
             health: Mutex::new(SinkHealth {
-                name: constants::CONSOLE_SINK_NAME.to_string(),
+                name: SinkName::new(constants::CONSOLE_SINK_NAME)
+                    .expect("console sink constant is valid"),
                 state: SinkHealthState::Healthy,
                 last_error: None,
             }),
@@ -860,7 +906,7 @@ pub(crate) fn diagnostic_for_sink_failure(message: impl Into<String>) -> Diagnos
 }
 
 fn validate_event(event: &LogEvent, expected_service: &ServiceName) -> Result<(), EventError> {
-    if event.version != sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION {
+    if event.version.as_str() != sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION {
         return Err(EventError(Box::new(ErrorContext::new(
             error_codes::LOGGER_INVALID_EVENT,
             "log event version is invalid",
@@ -928,7 +974,7 @@ fn aggregate_logging_health_state(sink_statuses: &[SinkHealth]) -> LoggingHealth
 fn fault_injection_error_context(state: SinkHealthState) -> ErrorContext {
     let forced_state = match state {
         SinkHealthState::Healthy => "healthy",
-        SinkHealthState::DegradedDropping => "degraded",
+        SinkHealthState::DegradedDropping => "degraded_dropping",
         SinkHealthState::Unavailable => "unavailable",
     };
     ErrorContext::new(
@@ -1024,7 +1070,7 @@ mod tests {
 
         fn health(&self) -> SinkHealth {
             SinkHealth {
-                name: "fail".to_string(),
+                name: sink_name("fail"),
                 state: SinkHealthState::DegradedDropping,
                 last_error: None,
             }
@@ -1048,7 +1094,7 @@ mod tests {
 
         fn health(&self) -> SinkHealth {
             SinkHealth {
-                name: "recording-flush".to_string(),
+                name: sink_name("recording-flush"),
                 state: SinkHealthState::Healthy,
                 last_error: None,
             }
@@ -1057,6 +1103,25 @@ mod tests {
 
     fn service_name() -> ServiceName {
         ServiceName::new("sc-observability").expect("valid service name")
+    }
+
+    fn schema_version() -> sc_observability_types::SchemaVersion {
+        sc_observability_types::SchemaVersion::new(
+            sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+        )
+        .expect("valid schema version")
+    }
+
+    fn outcome_label(value: &str) -> sc_observability_types::OutcomeLabel {
+        sc_observability_types::OutcomeLabel::new(value).expect("valid outcome label")
+    }
+
+    fn correlation_id(value: &str) -> sc_observability_types::CorrelationId {
+        sc_observability_types::CorrelationId::new(value).expect("valid correlation id")
+    }
+
+    fn sink_name(value: &str) -> SinkName {
+        SinkName::new(value).expect("valid sink name")
     }
 
     fn temp_path(name: &str) -> PathBuf {
@@ -1120,7 +1185,7 @@ mod tests {
 
     fn log_event(service_name: ServiceName) -> LogEvent {
         LogEvent {
-            version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+            version: schema_version(),
             timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service: service_name,
@@ -1131,7 +1196,7 @@ mod tests {
             trace: None,
             request_id: None,
             correlation_id: None,
-            outcome: Some("ok".to_string()),
+            outcome: Some(outcome_label("ok")),
             diagnostic: Some(Diagnostic {
                 timestamp: Timestamp::UNIX_EPOCH,
                 code: ErrorCode::new_static("SC_TEST"),
@@ -1156,7 +1221,7 @@ mod tests {
     ) -> LogEvent {
         let mut event = log_event(service_name);
         event.message = Some(format!("{request_id} {}", "x".repeat(message_padding)));
-        event.request_id = Some(request_id.to_string());
+        event.request_id = Some(correlation_id(request_id));
         event
             .fields
             .insert("sequence".to_string(), json!(request_id.to_string()));
@@ -1174,7 +1239,7 @@ mod tests {
         snapshot
             .events
             .iter()
-            .map(|event| event.request_id.clone().expect("request_id"))
+            .map(|event| event.request_id.clone().expect("request_id").to_string())
             .collect()
     }
 
@@ -1275,14 +1340,15 @@ mod tests {
         let root = temp_path("fanout");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.enable_console_sink = false;
-        let mut logger = Logger::new(config).expect("logger");
+        let mut builder = Logger::builder(config).expect("logger builder");
 
         let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        logger.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::from_writer(
+        builder.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::from_writer(
             Box::new(SharedBuffer {
                 lines: lines.clone(),
             }),
         ))));
+        let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
 
@@ -1302,15 +1368,16 @@ mod tests {
         config
             .redaction
             .custom_redactors
-            .push(Arc::new(PrefixRedactor));
-        let mut logger = Logger::new(config).expect("logger");
+            .push(Box::new(PrefixRedactor));
+        let mut builder = Logger::builder(config).expect("logger builder");
 
         let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        logger.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::from_writer(
+        builder.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::from_writer(
             Box::new(SharedBuffer {
                 lines: lines.clone(),
             }),
         ))));
+        let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
 
@@ -1328,7 +1395,7 @@ mod tests {
         let config = LoggerConfig::default_for(service_name(), root);
         let logger = Logger::new(config).expect("logger");
         let mut event = log_event(service_name());
-        event.version = "v0".to_string();
+        event.version = sc_observability_types::SchemaVersion::new("v0").expect("valid version");
         assert!(logger.emit(event).is_err());
     }
 
@@ -1337,8 +1404,9 @@ mod tests {
         let root = temp_path("fail-open");
         let mut config = LoggerConfig::default_for(service_name(), root);
         config.enable_file_sink = false;
-        let mut logger = Logger::new(config).expect("logger");
-        logger.register_sink(SinkRegistration::new(Arc::new(FailSink)));
+        let mut builder = Logger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::new(Arc::new(FailSink)));
+        let logger = builder.build();
 
         logger
             .emit(log_event(service_name()))
@@ -1369,7 +1437,7 @@ mod tests {
 
             fn health(&self) -> SinkHealth {
                 SinkHealth {
-                    name: "flush-fail".to_string(),
+                    name: sink_name("flush-fail"),
                     state: SinkHealthState::DegradedDropping,
                     last_error: None,
                 }
@@ -1379,8 +1447,9 @@ mod tests {
         let root = temp_path("flush-fail");
         let mut config = LoggerConfig::default_for(service_name(), root);
         config.enable_file_sink = false;
-        let mut logger = Logger::new(config).expect("logger");
-        logger.register_sink(SinkRegistration::new(Arc::new(FlushFailSink)));
+        let mut builder = Logger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::new(Arc::new(FlushFailSink)));
+        let logger = builder.build();
 
         logger.flush().expect("flush remains fail-open");
 
@@ -1437,11 +1506,12 @@ mod tests {
         let root = temp_path("fault-degraded");
         let mut config = LoggerConfig::default_for(service_name(), root);
         config.enable_file_sink = false;
-        let mut logger = Logger::new(config).expect("logger");
+        let mut builder = Logger::builder(config).expect("logger builder");
         let injector = RetainedSinkFaultInjector::new();
-        logger.register_sink(SinkRegistration::new(
+        builder.register_sink(SinkRegistration::new(
             injector.wrap(Arc::new(RecordingFlushSink::default())),
         ));
+        let logger = builder.build();
 
         injector.force_degraded();
         logger
@@ -1464,11 +1534,12 @@ mod tests {
         let root = temp_path("fault-unavailable");
         let mut config = LoggerConfig::default_for(service_name(), root);
         config.enable_file_sink = false;
-        let mut logger = Logger::new(config).expect("logger");
+        let mut builder = Logger::builder(config).expect("logger builder");
         let injector = RetainedSinkFaultInjector::new();
-        logger.register_sink(SinkRegistration::new(
+        builder.register_sink(SinkRegistration::new(
             injector.wrap(Arc::new(RecordingFlushSink::default())),
         ));
+        let logger = builder.build();
 
         injector.force_unavailable();
         logger
@@ -1495,15 +1566,16 @@ mod tests {
         let root = temp_path("filter");
         let mut config = LoggerConfig::default_for(service_name(), root);
         config.enable_file_sink = false;
-        let mut logger = Logger::new(config).expect("logger");
+        let mut builder = Logger::builder(config).expect("logger builder");
 
         let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-        logger.register_sink(
+        builder.register_sink(
             SinkRegistration::new(Arc::new(ConsoleSink::from_writer(Box::new(SharedBuffer {
                 lines: lines.clone(),
             }))))
             .with_filter(Arc::new(DenyAll)),
         );
+        let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
 
@@ -1526,9 +1598,10 @@ mod tests {
         let root = temp_path("shutdown-flush");
         let mut config = LoggerConfig::default_for(service_name(), root);
         config.enable_file_sink = false;
-        let mut logger = Logger::new(config).expect("logger");
+        let mut builder = Logger::builder(config).expect("logger builder");
         let sink = Arc::new(RecordingFlushSink::default());
-        logger.register_sink(SinkRegistration::new(sink.clone()));
+        builder.register_sink(SinkRegistration::new(sink.clone()));
+        let logger = builder.build();
 
         logger.shutdown().expect("shutdown");
 

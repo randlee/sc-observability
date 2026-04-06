@@ -32,8 +32,8 @@ use serde_json::Value;
 pub use assembly::{CompleteSpan, SpanAssembler};
 #[doc(inline)]
 pub use config::{
-    LogsConfig, MetricsConfig, OtelConfig, OtlpProtocol, ResourceAttributes, TelemetryConfig,
-    TelemetryConfigBuilder, TracesConfig,
+    AuthHeader, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
+    ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
 };
 #[doc(inline)]
 pub use projectors::TelemetryProjectors;
@@ -192,9 +192,9 @@ impl Telemetry {
 
     /// Buffers one projected span signal for later export.
     ///
-    /// An `Ended` signal without a prior `Started` signal is absorbed and
-    /// counted in `malformed_spans_total`. No malformed or incomplete span is
-    /// ever forwarded to the OTel backend.
+    /// An `Ended` signal without a prior `Started` signal is counted in
+    /// `malformed_spans_total` and returned as a structured export failure. No
+    /// malformed or incomplete span is ever forwarded to the OTel backend.
     ///
     /// # Panics
     ///
@@ -224,7 +224,7 @@ impl Telemetry {
             let summary = DiagnosticSummary::from(context.diagnostic());
             runtime.last_error = Some(summary.clone());
             runtime.trace_status.last_error = Some(summary);
-            return Ok(());
+            return Err(TelemetryError::ExportFailure(Box::new(context)));
         }
         if let Some(complete) = runtime.span_assembler.push(span.clone()).map_err(|err| {
             TelemetryError::ExportFailure(Box::new(error_context_from_diagnostic(err.diagnostic())))
@@ -334,16 +334,11 @@ impl Telemetry {
         }
 
         let flush_outcome = self.flush_outcome().map_err(shutdown_flush_error)?;
-        let dropped = self
-            .runtime
-            .lock()
-            .expect("telemetry runtime poisoned")
-            .span_assembler
-            .flush_incomplete() as u64;
+        let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
+        let dropped = runtime.span_assembler.flush_incomplete() as u64;
         if dropped > 0 {
             self.dropped_exports_total
                 .fetch_add(dropped, Ordering::SeqCst);
-            let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
             let context = ErrorContext::new(
                 error_codes::TELEMETRY_INCOMPLETE_SPAN_DROPPED,
                 "dropped incomplete spans during shutdown",
@@ -360,13 +355,7 @@ impl Telemetry {
         }
 
         if flush_outcome.had_export_failure {
-            return Err(shutdown_export_failure(
-                self.runtime
-                    .lock()
-                    .expect("telemetry runtime poisoned")
-                    .last_error
-                    .clone(),
-            ));
+            return Err(shutdown_export_failure(runtime.last_error.clone()));
         }
 
         Ok(())
@@ -381,17 +370,20 @@ impl Telemetry {
         let runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         let exporter_statuses = vec![
             ExporterHealth {
-                name: "logs".to_string(),
+                name: sc_observability_types::SinkName::new("logs")
+                    .expect("logs exporter name is valid"),
                 state: runtime.log_status.state,
                 last_error: runtime.log_status.last_error.clone(),
             },
             ExporterHealth {
-                name: "traces".to_string(),
+                name: sc_observability_types::SinkName::new("traces")
+                    .expect("traces exporter name is valid"),
                 state: runtime.trace_status.state,
                 last_error: runtime.trace_status.last_error.clone(),
             },
             ExporterHealth {
-                name: "metrics".to_string(),
+                name: sc_observability_types::SinkName::new("metrics")
+                    .expect("metrics exporter name is valid"),
                 state: runtime.metric_status.state,
                 last_error: runtime.metric_status.last_error.clone(),
             },
@@ -446,8 +438,11 @@ impl Telemetry {
     }
 }
 
-impl telemetry_health_provider_sealed::Sealed for Telemetry {}
-
+impl telemetry_health_provider_sealed::Sealed for Telemetry {
+    fn token(&self) -> telemetry_health_provider_sealed::Token {
+        telemetry_health_provider_sealed::TOKEN
+    }
+}
 impl ObservabilityHealthProvider for Telemetry {
     fn telemetry_health(&self) -> TelemetryHealthReport {
         self.health()
@@ -633,6 +628,17 @@ mod tests {
         ServiceName::new("test-service").expect("valid service")
     }
 
+    fn schema_version() -> sc_observability_types::SchemaVersion {
+        sc_observability_types::SchemaVersion::new(
+            sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+        )
+        .expect("valid schema version")
+    }
+
+    fn outcome_label(value: &str) -> sc_observability_types::OutcomeLabel {
+        sc_observability_types::OutcomeLabel::new(value).expect("valid outcome label")
+    }
+
     fn telemetry_config() -> TelemetryConfig {
         TelemetryConfigBuilder::new(service_name())
             .enable_logs(LogsConfig::default())
@@ -640,10 +646,14 @@ mod tests {
             .enable_metrics(MetricsConfig::default())
             .with_transport(OtelConfig {
                 enabled: true,
-                endpoint: Some("https://otel.example.internal".to_string()),
+                endpoint: Some(
+                    OtlpEndpoint::new("https://otel.example.internal")
+                        .expect("valid OTLP endpoint"),
+                ),
                 ..OtelConfig::default()
             })
             .build()
+            .expect("valid telemetry config")
     }
 
     fn trace_context() -> TraceContext {
@@ -656,7 +666,7 @@ mod tests {
 
     fn log_event(service: ServiceName, message: &str) -> LogEvent {
         LogEvent {
-            version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+            version: schema_version(),
             timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service,
@@ -667,7 +677,7 @@ mod tests {
             trace: Some(trace_context()),
             request_id: None,
             correlation_id: None,
-            outcome: Some("ok".to_string()),
+            outcome: Some(outcome_label("ok")),
             diagnostic: Some(Diagnostic {
                 timestamp: Timestamp::UNIX_EPOCH,
                 code: ErrorCode::new_static("SC_TEST"),
@@ -678,10 +688,10 @@ mod tests {
                 details: Map::new(),
             }),
             state_transition: Some(StateTransition {
-                entity_kind: "agent".to_string(),
+                entity_kind: TargetCategory::new("agent").expect("valid target"),
                 entity_id: Some("agent-123".to_string()),
-                from_state: "idle".to_string(),
-                to_state: "running".to_string(),
+                from_state: sc_observability_types::StateName::new("idle").expect("valid state"),
+                to_state: sc_observability_types::StateName::new("running").expect("valid state"),
                 reason: None,
                 trigger: None,
             }),
@@ -692,7 +702,9 @@ mod tests {
     #[test]
     fn telemetry_config_builder_defaults() {
         // TelemetryConfig is constructed independently of ObservabilityConfig (OTLP-018).
-        let config = TelemetryConfigBuilder::new(service_name()).build();
+        let config = TelemetryConfigBuilder::new(service_name())
+            .build()
+            .expect("valid config");
 
         assert!(config.logs.is_none());
         assert!(config.traces.is_none());
@@ -703,7 +715,7 @@ mod tests {
 
     #[test]
     fn invalid_config_is_rejected_eagerly() {
-        let config = TelemetryConfigBuilder::new(service_name())
+        let result = TelemetryConfigBuilder::new(service_name())
             .with_transport(OtelConfig {
                 enabled: true,
                 endpoint: None,
@@ -711,7 +723,7 @@ mod tests {
             })
             .build();
 
-        assert!(Telemetry::new(config).is_err());
+        assert!(result.is_err());
     }
 
     #[test]
@@ -722,7 +734,8 @@ mod tests {
                 endpoint: None,
                 ..OtelConfig::default()
             })
-            .build();
+            .build()
+            .expect("valid config");
 
         assert!(Telemetry::new(config).is_ok());
     }
@@ -766,7 +779,7 @@ mod tests {
             .expect("complete span");
 
         assert_eq!(complete.events.len(), 1);
-        assert_eq!(complete.record.duration_ms(), DurationMs::from(42));
+        assert_eq!(complete.record.duration_ms(), Some(DurationMs::from(42)));
     }
 
     #[test]
@@ -825,7 +838,7 @@ mod tests {
     }
 
     #[test]
-    fn orphaned_ended_span_is_absorbed_and_counted() {
+    fn orphaned_ended_span_returns_export_failure_and_is_counted() {
         let trace = trace_context();
         let telemetry = Telemetry::new(telemetry_config()).expect("telemetry");
         let ended = SpanRecord::<SpanStarted>::new(
@@ -837,7 +850,10 @@ mod tests {
         )
         .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(5));
 
-        assert!(telemetry.emit_span(&SpanSignal::Ended(ended)).is_ok());
+        assert!(matches!(
+            telemetry.emit_span(&SpanSignal::Ended(ended)),
+            Err(TelemetryError::ExportFailure(_))
+        ));
         let health = telemetry.health();
         assert_eq!(health.malformed_spans_total, 1);
         assert_eq!(

@@ -27,8 +27,8 @@ Shared structured logging, routing, and OTLP observability crates.
 use std::path::PathBuf;
 
 use sc_observability::{
-    ActionName, Level, LogEvent, ProcessIdentity, ServiceName, TargetCategory, Timestamp,
-    Logger, LoggerConfig,
+    ActionName, Level, LogEvent, Logger, LoggerConfig, OutcomeLabel, ProcessIdentity,
+    SchemaVersion, ServiceName, TargetCategory, Timestamp, OBSERVATION_ENVELOPE_VERSION,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ))?;
 
     logger.emit(LogEvent {
-        version: "1".to_string(),
+        version: SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION)?,
         timestamp: Timestamp::now_utc(),
         level: Level::Info,
         service,
@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         trace: None,
         request_id: None,
         correlation_id: None,
-        outcome: Some("ok".to_string()),
+        outcome: Some(OutcomeLabel::new("ok")?),
         diagnostic: None,
         state_transition: None,
         fields: serde_json::Map::new(),
@@ -67,9 +67,9 @@ Default output goes to `<log_root>/logs/<service>.log.jsonl`.
 ## Fault Injection For Retained Sinks
 
 The `fault-injection` feature exposes a `RetainedSinkFaultInjector` for live
-validation. It wraps one retained sink and forces that sink to report degraded
-or unavailable health through the normal `LoggingHealthReport` path without
-filesystem sabotage.
+validation. It wraps one retained sink and forces that sink to report
+`SinkHealthState::DegradedDropping` or `SinkHealthState::Unavailable` through
+the normal `LoggingHealthReport` path without filesystem sabotage.
 
 Enable it only for validation runs:
 

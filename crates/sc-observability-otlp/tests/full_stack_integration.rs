@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
 use sc_observability_otlp::{
-    LogsConfig, MetricsConfig, OtelConfig, Telemetry, TelemetryConfigBuilder, TelemetryProjectors,
-    TracesConfig,
+    LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, Telemetry, TelemetryConfigBuilder,
+    TelemetryProjectors, TracesConfig,
 };
 use sc_observability_types::{
     ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-    MetricRecord, Observation, ObservationFilter, ProcessIdentity, ProjectionError, Remediation,
-    ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
-    StateTransition, TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext,
-    TraceId,
+    MetricRecord, Observation, ObservationFilter, OutcomeLabel, ProcessIdentity, ProjectionError,
+    Remediation, SchemaVersion, ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord,
+    SpanSignal, SpanStarted, StateTransition, TargetCategory, TelemetryHealthState, Timestamp,
+    ToolName, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 
@@ -97,10 +97,13 @@ fn telemetry_config() -> sc_observability_otlp::TelemetryConfig {
         .enable_metrics(MetricsConfig::default())
         .with_transport(OtelConfig {
             enabled: true,
-            endpoint: Some("https://otel.example.internal".to_string()),
+            endpoint: Some(
+                OtlpEndpoint::new("https://otel.example.internal").expect("valid endpoint"),
+            ),
             ..OtelConfig::default()
         })
         .build()
+        .expect("valid telemetry config")
 }
 
 fn service_name() -> ServiceName {
@@ -117,7 +120,10 @@ fn trace_context() -> TraceContext {
 
 fn log_event(service: ServiceName, message: &str) -> LogEvent {
     LogEvent {
-        version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+        version: SchemaVersion::new(
+            sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+        )
+        .expect("valid schema version"),
         timestamp: Timestamp::UNIX_EPOCH,
         level: Level::Info,
         service,
@@ -128,7 +134,7 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
         trace: Some(trace_context()),
         request_id: None,
         correlation_id: None,
-        outcome: Some("ok".to_string()),
+        outcome: Some(OutcomeLabel::new("ok").expect("valid outcome label")),
         diagnostic: Some(Diagnostic {
             timestamp: Timestamp::UNIX_EPOCH,
             code: ErrorCode::new_static("SC_TEST"),
@@ -139,10 +145,10 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
             details: Default::default(),
         }),
         state_transition: Some(StateTransition {
-            entity_kind: "agent".to_string(),
+            entity_kind: TargetCategory::new("agent").expect("valid target"),
             entity_id: Some("agent-123".to_string()),
-            from_state: "idle".to_string(),
-            to_state: "running".to_string(),
+            from_state: sc_observability_types::StateName::new("idle").expect("valid state"),
+            to_state: sc_observability_types::StateName::new("running").expect("valid state"),
             reason: None,
             trigger: None,
         }),

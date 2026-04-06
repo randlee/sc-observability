@@ -446,6 +446,16 @@ impl ObservabilityBuilder {
 
     /// Finalizes registration and constructs the routing runtime.
     pub fn build(self) -> Result<Observability, InitError> {
+        if self.subscribers.is_empty() && self.projections.is_empty() {
+            return Err(InitError(Box::new(ErrorContext::new(
+                error_codes::OBSERVABILITY_INIT_FAILED,
+                "at least one subscriber or projector route must be registered",
+                Remediation::recoverable(
+                    "register a subscriber or projector before building observability",
+                    ["add at least one route for the observation types you emit"],
+                ),
+            ))));
+        }
         let logger = Logger::new(self.config.logger_config()?)?;
         Ok(Observability {
             logger,
@@ -491,7 +501,7 @@ where
 mod tests {
     use super::*;
     use sc_observability::{
-        LogFilter, LogSink, Logger, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
+        LogFilter, LogSink, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
     };
     use sc_observability_types::{
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
@@ -618,7 +628,11 @@ mod tests {
         state: TelemetryHealthState,
     }
 
-    impl sc_observability_types::telemetry_health_provider_sealed::Sealed for FakeTelemetryProvider {}
+    impl sc_observability_types::telemetry_health_provider_sealed::Sealed for FakeTelemetryProvider {
+        fn token(&self) -> sc_observability_types::telemetry_health_provider_sealed::Token {
+            sc_observability_types::telemetry_health_provider_sealed::TOKEN
+        }
+    }
 
     impl ObservabilityHealthProvider for FakeTelemetryProvider {
         fn telemetry_health(&self) -> TelemetryHealthReport {
@@ -655,6 +669,21 @@ mod tests {
         }
     }
 
+    fn schema_version() -> sc_observability_types::SchemaVersion {
+        sc_observability_types::SchemaVersion::new(
+            sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+        )
+        .expect("valid schema version")
+    }
+
+    fn outcome_label(value: &str) -> sc_observability_types::OutcomeLabel {
+        sc_observability_types::OutcomeLabel::new(value).expect("valid outcome label")
+    }
+
+    fn sink_name(value: &str) -> sc_observability_types::SinkName {
+        sc_observability_types::SinkName::new(value).expect("valid sink name")
+    }
+
     fn observation(allow: bool) -> Observation<AgentEvent> {
         let mut observation = Observation::new(
             ServiceName::new("obs-app").expect("valid service"),
@@ -669,7 +698,7 @@ mod tests {
 
     fn log_event(service: ServiceName, message: &str) -> LogEvent {
         LogEvent {
-            version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+            version: schema_version(),
             timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service,
@@ -680,7 +709,7 @@ mod tests {
             trace: Some(trace_context()),
             request_id: None,
             correlation_id: None,
-            outcome: Some("ok".to_string()),
+            outcome: Some(outcome_label("ok")),
             diagnostic: Some(Diagnostic {
                 timestamp: Timestamp::UNIX_EPOCH,
                 code: ErrorCode::new_static("SC_TEST"),
@@ -862,7 +891,16 @@ mod tests {
     fn post_shutdown_emission_returns_shutdown_error() {
         let root = temp_path("shutdown");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
-        let runtime = Observability::builder(config).build().expect("runtime");
+        let runtime = Observability::builder(config)
+            .register_subscriber(SubscriberRegistration {
+                subscriber: Arc::new(RecordingSubscriber {
+                    id: "shutdown",
+                    calls: Arc::new(Mutex::new(Vec::new())),
+                }),
+                filter: None,
+            })
+            .build()
+            .expect("runtime");
 
         runtime.shutdown().expect("shutdown");
 
@@ -901,6 +939,13 @@ mod tests {
         let root = temp_path("telemetry-health");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
+            .register_subscriber(SubscriberRegistration {
+                subscriber: Arc::new(RecordingSubscriber {
+                    id: "telemetry-health",
+                    calls: Arc::new(Mutex::new(Vec::new())),
+                }),
+                filter: None,
+            })
             .with_observability_health_provider(Arc::new(FakeTelemetryProvider {
                 state: TelemetryHealthState::Degraded,
             }))
@@ -954,7 +999,7 @@ mod tests {
 
             fn health(&self) -> SinkHealth {
                 SinkHealth {
-                    name: "flush-fail".to_string(),
+                    name: sink_name("flush-fail"),
                     state: SinkHealthState::DegradedDropping,
                     last_error: None,
                 }
@@ -964,7 +1009,16 @@ mod tests {
         let ok_root = temp_path("flush-ok");
         let ok_config =
             ObservabilityConfig::default_for(tool_name(), ok_root.clone()).expect("config");
-        let ok_runtime = Observability::builder(ok_config).build().expect("runtime");
+        let ok_runtime = Observability::builder(ok_config)
+            .register_subscriber(SubscriberRegistration {
+                subscriber: Arc::new(RecordingSubscriber {
+                    id: "flush-ok",
+                    calls: Arc::new(Mutex::new(Vec::new())),
+                }),
+                filter: None,
+            })
+            .build()
+            .expect("runtime");
         assert!(ok_runtime.flush().is_ok());
 
         let fail_root = temp_path("flush-fail");
@@ -972,10 +1026,11 @@ mod tests {
             LoggerConfig::default_for(ServiceName::new("obs-app").expect("service"), fail_root);
         logger_config.enable_file_sink = false;
         logger_config.enable_console_sink = false;
-        let mut logger = Logger::new(logger_config).expect("logger");
-        logger.register_sink(
+        let mut builder = sc_observability::Logger::builder(logger_config).expect("logger builder");
+        builder.register_sink(
             SinkRegistration::new(Arc::new(FlushFailSink)).with_filter(Arc::new(PassthroughFilter)),
         );
+        let logger = builder.build();
 
         let runtime = Observability {
             logger,

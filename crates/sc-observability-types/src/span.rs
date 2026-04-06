@@ -40,6 +40,28 @@ pub struct SpanRecord<S> {
 
 impl SpanRecord<SpanStarted> {
     /// Creates a new started span record.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sc_observability_types::{
+    ///     ActionName, ServiceName, SpanId, SpanRecord, SpanStarted, Timestamp, TraceContext, TraceId,
+    /// };
+    ///
+    /// let record = SpanRecord::<SpanStarted>::new(
+    ///     Timestamp::UNIX_EPOCH,
+    ///     ServiceName::new("demo").expect("valid service"),
+    ///     ActionName::new("demo.run").expect("valid action"),
+    ///     TraceContext {
+    ///         trace_id: TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace"),
+    ///         span_id: SpanId::new("0123456789abcdef").expect("valid span"),
+    ///         parent_span_id: None,
+    ///     },
+    ///     Default::default(),
+    /// );
+    ///
+    /// assert_eq!(record.name().as_str(), "demo.run");
+    /// ```
     pub fn new(
         timestamp: Timestamp,
         service: ServiceName,
@@ -120,10 +142,14 @@ impl<S> SpanRecord<S> {
 }
 
 impl SpanRecord<SpanEnded> {
-    /// Returns the final duration, available only on completed spans.
-    pub fn duration_ms(&self) -> DurationMs {
+    /// Returns the final duration recorded for the completed span.
+    ///
+    /// When the record was created through `SpanRecord::end`, this returns
+    /// `Some(duration)`. Deserializing malformed external input can still
+    /// produce a completed span without a duration, so the accessor remains
+    /// fallible by returning `None`.
+    pub fn duration_ms(&self) -> Option<DurationMs> {
         self.duration_ms
-            .expect("SpanRecord<SpanEnded> always has duration_ms set by end()")
     }
 }
 
@@ -227,7 +253,7 @@ mod tests {
         let ended = span.end(SpanStatus::Error, DurationMs::from(88));
 
         assert_eq!(ended.status(), SpanStatus::Error);
-        assert_eq!(ended.duration_ms(), DurationMs::from(88));
+        assert_eq!(ended.duration_ms(), Some(DurationMs::from(88)));
         assert_eq!(ended.service().as_str(), "sc-observability");
     }
 

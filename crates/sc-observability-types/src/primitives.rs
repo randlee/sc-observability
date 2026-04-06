@@ -154,6 +154,12 @@ impl ErrorCode {
     }
 }
 
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,5 +180,29 @@ mod tests {
     #[test]
     fn duration_ms_displays_in_milliseconds() {
         assert_eq!(DurationMs::from(250).to_string(), "250ms");
+    }
+
+    #[test]
+    fn duration_ms_exposes_raw_millisecond_count() {
+        assert_eq!(DurationMs::from(250).as_u64(), 250);
+    }
+
+    #[test]
+    fn timestamp_arithmetic_preserves_utc_normalization() {
+        let start = Timestamp::UNIX_EPOCH;
+        let shifted = start + Duration::seconds(90);
+        let rewound = shifted - Duration::seconds(30);
+
+        assert_eq!(u64::from(DurationMs::from(250)), 250);
+        assert_eq!(shifted - start, Duration::seconds(90));
+        assert_eq!(rewound, start + Duration::seconds(60));
+    }
+
+    #[test]
+    fn error_code_displays_as_plain_code() {
+        assert_eq!(
+            ErrorCode::new_static("SC_TEST_ERROR_CODE").to_string(),
+            "SC_TEST_ERROR_CODE"
+        );
     }
 }

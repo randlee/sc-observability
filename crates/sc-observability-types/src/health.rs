@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{DiagnosticSummary, telemetry_health_provider_sealed};
+use crate::{DiagnosticSummary, SinkName, telemetry_health_provider_sealed};
 
 /// Top-level health state for the lightweight logging layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -30,7 +30,7 @@ pub enum SinkHealthState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SinkHealth {
     /// Stable sink name.
-    pub name: String,
+    pub name: SinkName,
     /// Current sink health state.
     pub state: SinkHealthState,
     /// Optional last sink error summary.
@@ -115,7 +115,7 @@ pub enum ExporterHealthState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ExporterHealth {
     /// Stable exporter name.
-    pub name: String,
+    pub name: SinkName,
     /// Current exporter health state.
     pub state: ExporterHealthState,
     /// Optional last exporter error summary.
@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn health_reports_round_trip_through_serde() {
         let sink = SinkHealth {
-            name: "jsonl".to_string(),
+            name: SinkName::new("jsonl").expect("valid sink name"),
             state: SinkHealthState::Healthy,
             last_error: Some(DiagnosticSummary::from(&diagnostic())),
         };
@@ -213,7 +213,7 @@ mod tests {
             dropped_exports_total: 1,
             malformed_spans_total: 0,
             exporter_statuses: vec![ExporterHealth {
-                name: "otlp".to_string(),
+                name: SinkName::new("otlp").expect("valid sink name"),
                 state: ExporterHealthState::Degraded,
                 last_error: Some(DiagnosticSummary::from(&diagnostic())),
             }],

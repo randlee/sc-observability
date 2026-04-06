@@ -161,7 +161,7 @@ This crate is the lightweight logging layer.
 
 - DOC-001 `README.md` shall be a real consumer entrypoint that includes a workspace crate summary, a "which crate do I need?" decision table, one minimal logging-only snippet, and "start here" links into deeper docs.
 - DOC-002 A root-level `CONSUMING.md` shall exist and cover logging-only setup, the default log root/path, `SC_LOG_ROOT` behavior, enable/disable controls for file and console sinks, custom sink registration, `Logger::health()` usage, and links to deeper docs.
-- DOC-003 A runnable `examples/custom-sink-example/` shall exist and demonstrate a public-only `LogSink` implementation, `SinkRegistration`, optional `LogFilter`, `logger.register_sink(...)`, and `logger.health()`.
+- DOC-003 A runnable `examples/custom-sink-example/` shall exist and demonstrate a public-only `LogSink` implementation, `LoggerBuilder`, `SinkRegistration`, optional `LogFilter`, builder-time sink registration, and `logger.health()`.
 - DOC-004 Default sink behavior, path layout, and environment override behavior shall be documented in a consumer-facing section, which may live in `CONSUMING.md`.
 
 ### 4.3 Pre-Publish Usability Issue Traceability

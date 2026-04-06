@@ -1,6 +1,8 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
-use crate::{ErrorCode, ValueValidationError, error_codes};
+use crate::{ActionName, ErrorCode, StateName, TargetCategory, ValueValidationError, error_codes};
 
 /// Validated 32-character lowercase hexadecimal trace identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -24,6 +26,12 @@ impl TraceId {
     }
 }
 
+impl fmt::Display for TraceId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 /// Validated 16-character lowercase hexadecimal span identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SpanId(String);
@@ -43,6 +51,12 @@ impl SpanId {
     /// Returns the underlying lowercase hexadecimal span identifier.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl fmt::Display for SpanId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
     }
 }
 
@@ -85,17 +99,17 @@ pub struct TraceContext {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StateTransition {
     /// Stable category describing what changed, such as `task` or `subagent`.
-    pub entity_kind: String,
+    pub entity_kind: TargetCategory,
     /// Optional caller-owned identifier for the entity that changed.
     pub entity_id: Option<String>,
     /// Previous stable state label.
-    pub from_state: String,
+    pub from_state: StateName,
     /// New stable state label.
-    pub to_state: String,
+    pub to_state: StateName,
     /// Optional human-readable explanation for why the transition occurred.
     pub reason: Option<String>,
     /// Optional action or event name that triggered the transition.
-    pub trigger: Option<String>,
+    pub trigger: Option<ActionName>,
 }
 
 #[cfg(test)]
@@ -105,6 +119,12 @@ mod tests {
     #[test]
     fn trace_and_span_ids_validate_w3c_shapes() {
         assert!(TraceId::new("0123456789abcdef0123456789abcdef").is_ok());
+        assert_eq!(
+            TraceId::new("0123456789abcdef0123456789abcdef")
+                .expect("valid trace id")
+                .to_string(),
+            "0123456789abcdef0123456789abcdef"
+        );
         let short_trace = TraceId::new("0123456789abcdef0123456789abcde")
             .expect_err("short trace id should fail");
         assert_eq!(short_trace.code(), &error_codes::TRACE_ID_INVALID);
@@ -113,6 +133,12 @@ mod tests {
         assert_eq!(uppercase_trace.code(), &error_codes::TRACE_ID_INVALID);
 
         assert!(SpanId::new("0123456789abcdef").is_ok());
+        assert_eq!(
+            SpanId::new("0123456789abcdef")
+                .expect("valid span id")
+                .to_string(),
+            "0123456789abcdef"
+        );
         let short_span = SpanId::new("0123456789abcde").expect_err("short span id should fail");
         assert_eq!(short_span.code(), &error_codes::SPAN_ID_INVALID);
         let uppercase_span =

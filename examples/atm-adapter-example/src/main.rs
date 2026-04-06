@@ -5,19 +5,21 @@ mod constants;
 use std::env;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use sc_observability::RotationPolicy;
 use sc_observability_otlp::{
-    LogsConfig, MetricsConfig, OtelConfig, OtlpProtocol, Telemetry, TelemetryConfig,
+    AuthHeader, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry,
+    TelemetryConfig,
     TelemetryConfigBuilder, TracesConfig,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
-    LoggingHealthReport, Observation, ObservabilityHealthReport, ProcessIdentity,
-    ProjectionError, ProjectionRegistration, Remediation, ServiceName, SpanEvent, SpanId,
-    SpanRecord, SpanSignal, SpanStarted, SpanStatus, StateTransition, TargetCategory,
-    TelemetryHealthReport, TraceContext, TraceId,
+    ActionName, CorrelationId, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName,
+    MetricRecord, LoggingHealthReport, Observation, ObservabilityHealthReport, OutcomeLabel,
+    ProcessIdentity, ProjectionError, ProjectionRegistration, Remediation, SchemaVersion,
+    ServiceName, SpanEvent, SpanId, SpanRecord, SpanSignal, SpanStarted, SpanStatus, StateName,
+    StateTransition, TargetCategory, TelemetryHealthReport, TraceContext, TraceId,
+    OBSERVATION_ENVELOPE_VERSION,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde::{Deserialize, Serialize};
@@ -69,6 +71,23 @@ enum RunMode {
     Normal,
     FailOpen,
 }
+
+static ATM_AGENT_TARGET: LazyLock<TargetCategory> =
+    LazyLock::new(|| TargetCategory::new("atm.agent").expect("valid target"));
+static SUBAGENT_START_ACTION: LazyLock<ActionName> =
+    LazyLock::new(|| ActionName::new("subagent.start").expect("valid action"));
+static SUBAGENT_END_ACTION: LazyLock<ActionName> =
+    LazyLock::new(|| ActionName::new("subagent.end").expect("valid action"));
+static SUBAGENT_RUN_ACTION: LazyLock<ActionName> =
+    LazyLock::new(|| ActionName::new("subagent.run").expect("valid action"));
+static TOOL_USE_ACTION: LazyLock<ActionName> =
+    LazyLock::new(|| ActionName::new("tool.use").expect("valid action"));
+static ATM_EVENTS_TOTAL: LazyLock<MetricName> =
+    LazyLock::new(|| MetricName::new("atm.events_total").expect("valid metric"));
+static ATM_TOOL_USE_DURATION_MS: LazyLock<MetricName> =
+    LazyLock::new(|| MetricName::new("atm.tool_use_duration_ms").expect("valid metric"));
+static OBSERVATION_VERSION: LazyLock<SchemaVersion> =
+    LazyLock::new(|| SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("valid schema version"));
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mode = parse_mode();
@@ -237,9 +256,15 @@ fn emit_example_sequence(
 fn telemetry_config_from_env(
     service: ServiceName,
 ) -> Result<TelemetryConfig, Box<dyn std::error::Error>> {
-    let endpoint = env::var("ATM_OTEL_ENDPOINT").ok();
+    let endpoint = env::var("ATM_OTEL_ENDPOINT")
+        .ok()
+        .map(OtlpEndpoint::new)
+        .transpose()?;
     let protocol = parse_protocol(env::var("ATM_OTEL_PROTOCOL").ok().as_deref())?;
-    let auth_header = env::var("ATM_OTEL_AUTH_HEADER").ok();
+    let auth_header = env::var("ATM_OTEL_AUTH_HEADER")
+        .ok()
+        .map(AuthHeader::new)
+        .transpose()?;
     let ca_file = env::var("ATM_OTEL_CA_FILE").ok().map(PathBuf::from);
     let insecure_skip_verify = parse_bool_env("ATM_OTEL_INSECURE_SKIP_VERIFY")?.unwrap_or(false);
     let debug_local_export = parse_bool_env("ATM_OTEL_DEBUG_LOCAL_EXPORT")?.unwrap_or(false);
@@ -269,7 +294,7 @@ fn telemetry_config_from_env(
             .into_iter()
             .collect(),
         })
-        .build())
+        .build()?)
 }
 
 fn parse_protocol(value: Option<&str>) -> Result<OtlpProtocol, Box<dyn std::error::Error>> {
@@ -397,6 +422,23 @@ fn telemetry_to_projection_error(
     }
 }
 
+fn validation_to_projection_error(
+    error: sc_observability_types::ValueValidationError,
+) -> ProjectionError {
+    ProjectionError(Box::new(
+        sc_observability_types::ErrorContext::new(
+            ErrorCode::new_static("SC_ATM_ADAPTER_EXAMPLE_INVALID_VALUE"),
+            "ATM adapter example generated an invalid shared observability value",
+            Remediation::recoverable(
+                "fix the adapter mapping so generated target/action/id labels use shared validated names",
+                ["regenerate the example observation with a valid mapping input"],
+            ),
+        )
+        .cause(error.to_string())
+        .source(Box::new(error)),
+    ))
+}
+
 fn parse_mode() -> RunMode {
     match env::args().nth(1).as_deref() {
         Some("fail-open") => RunMode::FailOpen,
@@ -423,18 +465,21 @@ impl sc_observability_types::LogProjector<AgentInfoEvent> for AtmLogProjector {
         observation: &Observation<AgentInfoEvent>,
     ) -> Result<Vec<LogEvent>, sc_observability_types::ProjectionError> {
         Ok(vec![LogEvent {
-            version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+            version: OBSERVATION_VERSION.clone(),
             timestamp: observation.timestamp,
             level: Level::Info,
             service: observation.service.clone(),
-            target: TargetCategory::new("atm.agent").expect("valid target"),
-            action: ActionName::new(action_name(&observation.payload.event)).expect("valid action"),
+            target: ATM_AGENT_TARGET.clone(),
+            action: action_name(&observation.payload.event),
             message: Some(log_message(&observation.payload.event)),
             identity: observation.identity.clone(),
             trace: observation.trace.clone(),
             request_id: None,
-            correlation_id: Some(observation.payload.context.session_id.clone()),
-            outcome: outcome(&observation.payload.event),
+            correlation_id: Some(
+                CorrelationId::new(observation.payload.context.session_id.clone())
+                    .map_err(validation_to_projection_error)?,
+            ),
+            outcome: outcome(&observation.payload.event)?,
             diagnostic: None,
             state_transition: state_transition(&observation.payload.event),
             fields: common_fields(&observation.payload),
@@ -465,7 +510,7 @@ impl sc_observability_types::SpanProjector<AgentInfoEvent> for AtmSpanProjector 
                 vec![SpanSignal::Started(SpanRecord::<SpanStarted>::new(
                     observation.timestamp,
                     observation.service.clone(),
-                    ActionName::new("subagent.run").expect("valid action"),
+                    SUBAGENT_RUN_ACTION.clone(),
                     trace.clone(),
                     common_fields(&observation.payload),
                 ))]
@@ -473,7 +518,7 @@ impl sc_observability_types::SpanProjector<AgentInfoEvent> for AtmSpanProjector 
             HookEventKind::ToolUse { tool, duration_ms, .. } => vec![SpanSignal::Event(SpanEvent {
                 timestamp: observation.timestamp,
                 trace: trace.clone(),
-                name: ActionName::new("tool.use").expect("valid action"),
+                name: TOOL_USE_ACTION.clone(),
                 attributes: Map::from_iter([
                     ("tool".to_string(), Value::from(tool.clone())),
                     (
@@ -508,7 +553,7 @@ impl sc_observability_types::SpanProjector<AgentInfoEvent> for AtmSpanProjector 
                     SpanRecord::<SpanStarted>::new(
                         start_timestamp,
                         observation.service.clone(),
-                        ActionName::new("subagent.run").expect("valid action"),
+                        SUBAGENT_RUN_ACTION.clone(),
                         trace.clone(),
                         common_fields(&observation.payload),
                     )
@@ -545,7 +590,7 @@ impl sc_observability_types::MetricProjector<AgentInfoEvent> for AtmMetricProjec
         metrics.push(MetricRecord {
             timestamp: observation.timestamp,
             service: observation.service.clone(),
-            name: MetricName::new("atm.events_total").expect("valid metric"),
+            name: ATM_EVENTS_TOTAL.clone(),
             kind: MetricKind::Counter,
             value: 1.0,
             unit: Some("1".to_string()),
@@ -556,7 +601,7 @@ impl sc_observability_types::MetricProjector<AgentInfoEvent> for AtmMetricProjec
             metrics.push(MetricRecord {
                 timestamp: observation.timestamp,
                 service: observation.service.clone(),
-                name: MetricName::new("atm.tool_use_duration_ms").expect("valid metric"),
+                name: ATM_TOOL_USE_DURATION_MS.clone(),
                 kind: MetricKind::Histogram,
                 value: duration_ms.unwrap_or_default() as f64,
                 unit: Some("ms".to_string()),
@@ -568,11 +613,11 @@ impl sc_observability_types::MetricProjector<AgentInfoEvent> for AtmMetricProjec
     }
 }
 
-fn action_name(event: &HookEventKind) -> &'static str {
+fn action_name(event: &HookEventKind) -> ActionName {
     match event {
-        HookEventKind::SubagentStart { .. } => "subagent.start",
-        HookEventKind::ToolUse { .. } => "tool.use",
-        HookEventKind::SubagentEnd { .. } => "subagent.end",
+        HookEventKind::SubagentStart { .. } => SUBAGENT_START_ACTION.clone(),
+        HookEventKind::ToolUse { .. } => TOOL_USE_ACTION.clone(),
+        HookEventKind::SubagentEnd { .. } => SUBAGENT_END_ACTION.clone(),
     }
 }
 
@@ -586,30 +631,34 @@ fn log_message(event: &HookEventKind) -> String {
     }
 }
 
-fn outcome(event: &HookEventKind) -> Option<String> {
+fn outcome(
+    event: &HookEventKind,
+) -> Result<Option<OutcomeLabel>, sc_observability_types::ProjectionError> {
     match event {
-        HookEventKind::SubagentEnd { outcome } => Some(outcome.clone()),
-        _ => None,
+        HookEventKind::SubagentEnd { outcome } => Ok(Some(
+            OutcomeLabel::new(outcome.clone()).map_err(validation_to_projection_error)?,
+        )),
+        _ => Ok(None),
     }
 }
 
 fn state_transition(event: &HookEventKind) -> Option<StateTransition> {
     match event {
         HookEventKind::SubagentStart { .. } => Some(StateTransition {
-            entity_kind: "subagent".to_string(),
+            entity_kind: TargetCategory::new("subagent").expect("valid target category"),
             entity_id: Some("subagent-7".to_string()),
-            from_state: "idle".to_string(),
-            to_state: "running".to_string(),
+            from_state: StateName::new("idle").expect("valid state"),
+            to_state: StateName::new("running").expect("valid state"),
             reason: None,
-            trigger: Some("subagent.start".to_string()),
+            trigger: Some(SUBAGENT_START_ACTION.clone()),
         }),
         HookEventKind::SubagentEnd { .. } => Some(StateTransition {
-            entity_kind: "subagent".to_string(),
+            entity_kind: TargetCategory::new("subagent").expect("valid target category"),
             entity_id: Some("subagent-7".to_string()),
-            from_state: "running".to_string(),
-            to_state: "completed".to_string(),
+            from_state: StateName::new("running").expect("valid state"),
+            to_state: StateName::new("completed").expect("valid state"),
             reason: None,
-            trigger: Some("subagent.end".to_string()),
+            trigger: Some(SUBAGENT_END_ACTION.clone()),
         }),
         HookEventKind::ToolUse { .. } => None,
     }
@@ -700,7 +749,7 @@ mod tests {
         match &end_signals[0] {
             SpanSignal::Ended(span) => {
                 assert_eq!(span.timestamp(), Timestamp::UNIX_EPOCH);
-                assert_eq!(span.duration_ms(), 250);
+                assert_eq!(span.duration_ms().map(u64::from), Some(250));
             }
             other => panic!("expected ended span, got {other:?}"),
         }

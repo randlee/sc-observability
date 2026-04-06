@@ -1,10 +1,17 @@
+use std::sync::LazyLock;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::{
-    ActionName, Diagnostic, Level, ProcessIdentity, ServiceName, StateTransition, TargetCategory,
-    Timestamp, TraceContext, constants,
+    ActionName, CorrelationId, Diagnostic, Level, OutcomeLabel, ProcessIdentity, SchemaVersion,
+    ServiceName, StateTransition, TargetCategory, Timestamp, TraceContext, constants,
 };
+
+static OBSERVATION_SCHEMA_VERSION: LazyLock<SchemaVersion> = LazyLock::new(|| {
+    SchemaVersion::new(constants::OBSERVATION_ENVELOPE_VERSION)
+        .expect("shared schema version constant is valid")
+});
 
 /// Marker trait for consumer-owned observation payloads.
 pub trait Observable: Send + Sync + 'static {}
@@ -18,7 +25,7 @@ where
     T: Observable,
 {
     /// Envelope schema version.
-    pub version: String,
+    pub version: SchemaVersion,
     /// UTC observation timestamp.
     pub timestamp: Timestamp,
     /// Service that emitted the observation.
@@ -36,9 +43,23 @@ where
     T: Observable,
 {
     /// Creates a new observation envelope using the current UTC timestamp.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sc_observability_types::{Observation, ServiceName};
+    ///
+    /// let observation = Observation::new(
+    ///     ServiceName::new("demo").expect("valid service"),
+    ///     "payload".to_string(),
+    /// );
+    ///
+    /// assert_eq!(observation.service.as_str(), "demo");
+    /// assert_eq!(observation.version.as_str(), "v1");
+    /// ```
     pub fn new(service: ServiceName, payload: T) -> Self {
         Self {
-            version: constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+            version: OBSERVATION_SCHEMA_VERSION.clone(),
             timestamp: Timestamp::now_utc(),
             service,
             identity: ProcessIdentity::default(),
@@ -52,7 +73,7 @@ where
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogEvent {
     /// Log schema version.
-    pub version: String,
+    pub version: SchemaVersion,
     /// UTC event timestamp.
     pub timestamp: Timestamp,
     /// Event severity.
@@ -70,11 +91,11 @@ pub struct LogEvent {
     /// Optional trace context for correlation.
     pub trace: Option<TraceContext>,
     /// Optional request identifier.
-    pub request_id: Option<String>,
+    pub request_id: Option<CorrelationId>,
     /// Optional correlation identifier.
-    pub correlation_id: Option<String>,
+    pub correlation_id: Option<CorrelationId>,
     /// Optional stable outcome label.
-    pub outcome: Option<String>,
+    pub outcome: Option<OutcomeLabel>,
     /// Optional structured diagnostic payload.
     pub diagnostic: Option<Diagnostic>,
     /// Optional state transition payload.
@@ -155,7 +176,7 @@ mod tests {
     #[test]
     fn log_event_round_trips_through_serde() {
         let event = LogEvent {
-            version: constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+            version: OBSERVATION_SCHEMA_VERSION.clone(),
             timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service: service_name(),
@@ -167,17 +188,17 @@ mod tests {
                 pid: Some(7),
             },
             trace: Some(trace_context()),
-            request_id: Some("req-1".to_string()),
-            correlation_id: Some("corr-1".to_string()),
-            outcome: Some("success".to_string()),
+            request_id: Some(CorrelationId::new("req-1").expect("valid request id")),
+            correlation_id: Some(CorrelationId::new("corr-1").expect("valid correlation id")),
+            outcome: Some(OutcomeLabel::new("success").expect("valid outcome label")),
             diagnostic: Some(diagnostic()),
             state_transition: Some(StateTransition {
-                entity_kind: "subagent".to_string(),
+                entity_kind: TargetCategory::new("subagent").expect("valid target category"),
                 entity_id: Some("agent-1".to_string()),
-                from_state: "started".to_string(),
-                to_state: "running".to_string(),
+                from_state: crate::StateName::new("started").expect("valid state"),
+                to_state: crate::StateName::new("running").expect("valid state"),
                 reason: Some("hook received".to_string()),
-                trigger: Some("subagent-start".to_string()),
+                trigger: Some(ActionName::new("subagent-start").expect("valid action")),
             }),
             fields: Map::from_iter([("attempt".to_string(), json!(1))]),
         };
@@ -197,7 +218,10 @@ mod tests {
             },
         );
 
-        assert_eq!(observation.version, constants::OBSERVATION_ENVELOPE_VERSION);
+        assert_eq!(
+            observation.version.as_str(),
+            constants::OBSERVATION_ENVELOPE_VERSION
+        );
         assert_eq!(observation.identity, ProcessIdentity::default());
         assert!(observation.trace.is_none());
     }

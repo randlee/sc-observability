@@ -71,16 +71,23 @@ let logger = Logger::new(LoggerConfig::default_for(
 
 ## 5. Registering A Custom Sink
 
-Consumers register custom sinks through `SinkRegistration`:
+Consumers register custom sinks through `LoggerBuilder` and
+`SinkRegistration`:
 
 ```rust
 use std::sync::Arc;
 
-use sc_observability::{LogSink, SinkRegistration};
+use sc_observability::{LogSink, LoggerBuilder, LoggerConfig, ServiceName, SinkRegistration};
 
-fn register_sink(logger: &mut sc_observability::Logger, sink: Arc<dyn LogSink>) {
-    logger.register_sink(SinkRegistration::new(sink));
+fn register_sink(builder: &mut LoggerBuilder, sink: Arc<dyn LogSink>) {
+    builder.register_sink(SinkRegistration::new(sink));
 }
+# let service = ServiceName::new("consumer-app")?;
+# let config = LoggerConfig::default_for(service, std::env::temp_dir());
+# let mut builder = LoggerBuilder::new(config)?;
+# register_sink(&mut builder, Arc::new(sc_observability::ConsoleSink::stderr()));
+# let _logger = builder.build();
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 Optional sink-local filtering stays on the registration:
@@ -88,15 +95,27 @@ Optional sink-local filtering stays on the registration:
 ```rust
 use std::sync::Arc;
 
-use sc_observability::{LogFilter, SinkRegistration};
+use sc_observability::{LogFilter, LoggerBuilder, LoggerConfig, ServiceName, SinkRegistration};
 
 fn register_filtered(
-    logger: &mut sc_observability::Logger,
+    builder: &mut LoggerBuilder,
     sink: Arc<dyn sc_observability::LogSink>,
     filter: Arc<dyn LogFilter>,
 ) {
-    logger.register_sink(SinkRegistration::new(sink).with_filter(filter));
+    builder.register_sink(SinkRegistration::new(sink).with_filter(filter));
 }
+# let service = ServiceName::new("consumer-app")?;
+# let config = LoggerConfig::default_for(service, std::env::temp_dir());
+# let mut builder = LoggerBuilder::new(config)?;
+# struct AcceptAll;
+# impl LogFilter for AcceptAll { fn accepts(&self, _event: &sc_observability::LogEvent) -> bool { true } }
+# register_filtered(
+#     &mut builder,
+#     Arc::new(sc_observability::ConsoleSink::stderr()),
+#     Arc::new(AcceptAll),
+# );
+# let _logger = builder.build();
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 See [`examples/custom-sink-example/`](./examples/custom-sink-example/) for a
@@ -133,8 +152,9 @@ for sink in &health.sink_statuses {
 ## 8. Fault Injection For Retained Sinks
 
 The optional `fault-injection` feature adds `RetainedSinkFaultInjector`, which
-forces one retained sink to report degraded or unavailable health through the
-same `LoggingHealthReport` transitions consumers see during normal operation.
+forces one retained sink to report `SinkHealthState::DegradedDropping` or
+`SinkHealthState::Unavailable` through the same `LoggingHealthReport`
+transitions consumers see during normal operation.
 
 Enable it only for validation runs:
 

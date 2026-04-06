@@ -27,9 +27,19 @@ mod sealed {
 
 #[doc(hidden)]
 pub mod telemetry_health_provider_sealed {
-    pub trait Sealed {}
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct Token(pub(crate) ());
+
+    #[doc(hidden)]
+    pub const TOKEN: Token = Token(());
+
+    pub trait Sealed {
+        fn token(&self) -> Token;
+    }
 }
 
+#[doc(inline)]
+pub use constants::DEFAULT_ENV_PREFIX_SEPARATOR;
 #[doc(inline)]
 pub use diagnostic::{
     Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, RecoverableSteps, Remediation,
@@ -69,5 +79,6 @@ pub use span::{SpanEnded, SpanEvent, SpanRecord, SpanSignal, SpanStarted, SpanSt
 pub use tracing::{SpanId, StateTransition, TraceContext, TraceId};
 #[doc(inline)]
 pub use validation::{
-    ActionName, EnvPrefix, MetricName, ServiceName, TargetCategory, ToolName, ValueValidationError,
+    ActionName, CorrelationId, EnvPrefix, MetricName, OutcomeLabel, SchemaVersion, ServiceName,
+    SinkName, StateName, TargetCategory, ToolName, ValueValidationError,
 };

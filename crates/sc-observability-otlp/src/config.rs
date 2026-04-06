@@ -21,17 +21,69 @@ pub enum OtlpProtocol {
     Grpc,
 }
 
+/// Validated OTLP endpoint URL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OtlpEndpoint(String);
+
+impl OtlpEndpoint {
+    /// Creates a validated OTLP endpoint using the documented HTTP(S) schemes.
+    pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
+        let value = value.into();
+        if value.trim().is_empty() {
+            return Err(invalid_transport_value(
+                "endpoint must not be empty",
+                "set an explicit http:// or https:// OTLP endpoint",
+            ));
+        }
+        if !(value.starts_with("http://") || value.starts_with("https://")) {
+            return Err(invalid_transport_value(
+                "endpoint must start with http:// or https://",
+                "set an OTLP endpoint with an explicit HTTP(S) scheme",
+            ));
+        }
+        Ok(Self(value))
+    }
+
+    /// Returns the validated endpoint as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Validated authorization header value for OTLP transport.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthHeader(String);
+
+impl AuthHeader {
+    /// Creates a validated non-empty authorization header value.
+    pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
+        let value = value.into();
+        if value.trim().is_empty() {
+            return Err(invalid_transport_value(
+                "auth header must not be empty",
+                "set a non-empty authorization header or omit it entirely",
+            ));
+        }
+        Ok(Self(value))
+    }
+
+    /// Returns the validated header as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Transport-level OTLP configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OtelConfig {
     /// Whether transport/export is enabled.
     pub enabled: bool,
     /// Optional OTLP endpoint URL.
-    pub endpoint: Option<String>,
+    pub endpoint: Option<OtlpEndpoint>,
     /// Transport protocol to use.
     pub protocol: OtlpProtocol,
     /// Optional authorization header value.
-    pub auth_header: Option<String>,
+    pub auth_header: Option<AuthHeader>,
     /// Optional CA bundle path for TLS validation.
     pub ca_file: Option<PathBuf>,
     /// Whether TLS certificate verification is skipped.
@@ -228,15 +280,32 @@ impl TelemetryConfigBuilder {
     }
 
     /// Finalizes the telemetry configuration.
-    pub fn build(self) -> TelemetryConfig {
-        TelemetryConfig {
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sc_observability_otlp::TelemetryConfigBuilder;
+    /// use sc_observability_types::ServiceName;
+    ///
+    /// let config = TelemetryConfigBuilder::new(
+    ///     ServiceName::new("demo").expect("valid service"),
+    /// )
+    /// .build()
+    /// .expect("valid telemetry config");
+    ///
+    /// assert_eq!(config.service_name.as_str(), "demo");
+    /// ```
+    pub fn build(self) -> Result<TelemetryConfig, InitError> {
+        let config = TelemetryConfig {
             service_name: self.service_name,
             resource: self.resource,
             transport: self.transport,
             logs: self.logs,
             traces: self.traces,
             metrics: self.metrics,
-        }
+        };
+        validate_config(&config)?;
+        Ok(config)
     }
 }
 
@@ -298,4 +367,12 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
         ))));
     }
     Ok(())
+}
+
+fn invalid_transport_value(message: &str, remediation: &str) -> InitError {
+    InitError(Box::new(ErrorContext::new(
+        error_codes::TELEMETRY_INVALID_CONFIG,
+        message,
+        Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
+    )))
 }
