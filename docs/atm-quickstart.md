@@ -32,7 +32,7 @@ runtime, the stack behaves as follows.
 | Log format | JSONL structured `LogEvent` records | Good default |
 | Built-in sink | File sink enabled | Good default for daemon-style logging |
 | Console sink | Disabled | Good default for daemon-style logging |
-| Log path | `<log_root>/<service_name>/logs/<service_name>.log.jsonl` | Good default if ATM supplies `log_root` |
+| Log path | `<log_root>/logs/<service_name>.log.jsonl` | Good default if ATM supplies `log_root` |
 | Redaction | Bearer-token redaction plus denylist-key redaction | Good default, may need ATM extensions |
 | Rotation | 64 MiB max file, 10 files | Acceptable initial default |
 | Retention | 7 days | Acceptable initial default |

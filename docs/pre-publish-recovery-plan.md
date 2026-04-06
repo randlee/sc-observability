@@ -118,9 +118,9 @@ The public OTLP integration surface is frozen as:
 - `ObservabilityHealthProvider` is frozen as:
   `pub trait ObservabilityHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync { fn telemetry_health(&self) -> TelemetryHealthReport; }`
 - `ObservabilityBuilder` exposes
-  `with_observability_health_provider(Arc<dyn ObservabilityHealthProvider>)` so
-  `ObservabilityHealthReport.telemetry` can be populated without adding an OTLP
-  dependency to `sc-observe`
+  `with_observability_health_provider(impl ObservabilityHealthProvider + Send + Sync + 'static)`
+  so `ObservabilityHealthReport.telemetry` can be populated without adding an
+  OTLP dependency to `sc-observe`
 
 #### UTC timestamp enforcement
 
@@ -352,6 +352,14 @@ Run the final production-readiness pass only after S0 through S3 are merged.
 Sprint 4 never executed, so this section must not claim blanket closure. The
 current branch instead records the closure evidence later accepted by rust-qa
 QA-1 on `develop@5d79695`, plus the two authorized post-publish deferrals.
+
+LOG-008 amendment note: the original nested file-sink layout
+`<log_root>/<service_name>/logs/<service_name>.log.jsonl` was intentionally
+amended to `<log_root>/logs/<service_name>.log.jsonl` before publish. The extra
+service-name path segment was dropped to keep one stable `logs/` subtree per
+configured root, remove duplicated service naming in the filesystem layout, and
+make operator-facing path discovery/documentation simpler without changing the
+service-specific file name.
 
 | Carry-over ID | Current status | Evidence / open mapping | Notes |
 | --- | --- | --- | --- |

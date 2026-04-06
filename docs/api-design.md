@@ -882,7 +882,7 @@ Design direction:
 
 ```rust
 pub struct LogEvent {
-    pub version: String,
+    pub version: SchemaVersion,
     pub timestamp: Timestamp,
     pub level: Level,
     pub service: ServiceName,
@@ -891,9 +891,9 @@ pub struct LogEvent {
     pub message: Option<String>,
     pub identity: ProcessIdentity,
     pub trace: Option<TraceContext>,
-    pub request_id: Option<String>,
-    pub correlation_id: Option<String>,
-    pub outcome: Option<String>,
+    pub request_id: Option<CorrelationId>,
+    pub correlation_id: Option<CorrelationId>,
+    pub outcome: Option<OutcomeLabel>,
     pub diagnostic: Option<Diagnostic>,
     pub state_transition: Option<StateTransition>,
     pub fields: serde_json::Map<String, serde_json::Value>,
@@ -973,7 +973,7 @@ impl<S> SpanRecord<S> {
 }
 
 impl SpanRecord<SpanEnded> {
-    pub fn duration_ms(&self) -> DurationMs;
+    pub fn duration_ms(&self) -> Option<DurationMs>;
 }
 ```
 
@@ -983,8 +983,9 @@ Rules:
 - `SpanRecord<SpanEnded>` has no public constructor and is only reachable via
   `SpanRecord<SpanStarted>::end(...)`
 - `SpanRecord<SpanStarted>` has no public duration accessor
-- `SpanRecord<SpanEnded>` must carry a final duration and exposes it only via
-  `duration_ms()`
+- `SpanRecord<SpanEnded>` exposes final duration only via `duration_ms()`,
+  which returns `None` only for malformed deserialized data that bypassed the
+  producer-facing typestate API
 - producer APIs should expose only valid transitions per state
 - runtime started/ended state is derived from the typestate parameter `S`
   during serialization and export rather than stored as a public
@@ -1052,7 +1053,7 @@ pub struct MetricRecord {
     pub kind: MetricKind,
     pub value: f64,
     /// Optional UCUM unit string, for example `ms`, `By`, or `1`.
-    pub unit: Option<String>,
+    pub unit: Option<MetricUnit>,
     pub attributes: serde_json::Map<String, serde_json::Value>,
 }
 ```
@@ -1282,18 +1283,19 @@ pub struct SubscriberRegistration<T>
 where
     T: Observable,
 {
-    pub subscriber: std::sync::Arc<dyn ObservationSubscriber<T>>,
-    pub filter: Option<std::sync::Arc<dyn ObservationFilter<T>>>,
+    pub fn new(subscriber: std::sync::Arc<dyn ObservationSubscriber<T>>) -> Self;
+    pub fn with_filter(self, filter: std::sync::Arc<dyn ObservationFilter<T>>) -> Self;
 }
 
 pub struct ProjectionRegistration<T>
 where
     T: Observable,
 {
-    pub log_projector: Option<std::sync::Arc<dyn LogProjector<T>>>,
-    pub span_projector: Option<std::sync::Arc<dyn SpanProjector<T>>>,
-    pub metric_projector: Option<std::sync::Arc<dyn MetricProjector<T>>>,
-    pub filter: Option<std::sync::Arc<dyn ObservationFilter<T>>>,
+    pub fn new() -> Self;
+    pub fn with_log_projector(self, projector: std::sync::Arc<dyn LogProjector<T>>) -> Self;
+    pub fn with_span_projector(self, projector: std::sync::Arc<dyn SpanProjector<T>>) -> Self;
+    pub fn with_metric_projector(self, projector: std::sync::Arc<dyn MetricProjector<T>>) -> Self;
+    pub fn with_filter(self, filter: std::sync::Arc<dyn ObservationFilter<T>>) -> Self;
 }
 ```
 
@@ -1395,7 +1397,7 @@ service identity is absent.
 The built-in file sink uses this default layout:
 
 ```text
-<log_root>/<service_name>/logs/<service_name>.log.jsonl
+<log_root>/logs/<service_name>.log.jsonl
 ```
 
 This is the prescribed default path for the built-in file sink.
@@ -1812,15 +1814,15 @@ impl SpanAssembler {
     pub fn flush_incomplete(&mut self) -> usize;
 }
 
-pub trait LogExporter: Send + Sync {
+pub(crate) trait LogExporter: Send + Sync {
     fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError>;
 }
 
-pub trait TraceExporter: Send + Sync {
+pub(crate) trait TraceExporter: Send + Sync {
     fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError>;
 }
 
-pub trait MetricExporter: Send + Sync {
+pub(crate) trait MetricExporter: Send + Sync {
     fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError>;
 }
 ```
@@ -1833,8 +1835,9 @@ Rules:
 - `SpanAssembler` emits `CompleteSpan` only on `SpanSignal::Ended`
 - in-flight started spans without a matching end are dropped at flush/shutdown
   and counted in telemetry dropped-export accounting
-- `LogExporter`, `TraceExporter`, and `MetricExporter` are intentionally open
-- exporter traits must remain object-safe for `Arc<dyn ...>` usage
+- `LogExporter`, `TraceExporter`, and `MetricExporter` are crate-local runtime
+  contracts
+- exporter traits remain object-safe for crate-local `Arc<dyn ...>` usage
 
 ### 12.5 Constants And Error Registry Modules
 

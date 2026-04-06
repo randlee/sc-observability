@@ -1,17 +1,18 @@
 use std::sync::Arc;
 
 use sc_observability_otlp::{
-    LogsConfig, MetricsConfig, OtelConfig, Telemetry, TelemetryConfigBuilder, TelemetryProjectors,
-    TracesConfig,
+    LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, Telemetry, TelemetryConfigBuilder,
+    TelemetryProjectors, TracesConfig,
 };
 use sc_observability_types::{
     ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-    MetricRecord, Observation, ObservationFilter, ProcessIdentity, ProjectionError, Remediation,
-    ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
-    StateTransition, TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext,
-    TraceId,
+    MetricRecord, MetricUnit, Observation, ObservationFilter, OutcomeLabel, ProcessIdentity,
+    ProjectionError, Remediation, SchemaVersion, ServiceName, SpanEvent, SpanId, SpanProjector,
+    SpanRecord, SpanSignal, SpanStarted, StateTransition, TargetCategory, TelemetryHealthState,
+    Timestamp, ToolName, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
+use serde_json::Map;
 
 #[derive(Debug, Clone)]
 struct AgentPayload {
@@ -54,7 +55,7 @@ impl SpanProjector<AgentPayload> for StaticSpanProjector {
             observation.service.clone(),
             ActionName::new("agent.run").expect("valid action"),
             trace.clone(),
-            Default::default(),
+            Map::default(),
         );
         let ended = started
             .clone()
@@ -65,7 +66,7 @@ impl SpanProjector<AgentPayload> for StaticSpanProjector {
                 timestamp: Timestamp::UNIX_EPOCH,
                 trace: trace.clone(),
                 name: ActionName::new("tool.call").expect("valid event name"),
-                attributes: Default::default(),
+                attributes: Map::default(),
                 diagnostic: None,
             }),
             SpanSignal::Ended(ended),
@@ -84,8 +85,8 @@ impl sc_observability_types::MetricProjector<AgentPayload> for StaticMetricProje
             name: MetricName::new("agent.events_total").expect("valid metric"),
             kind: MetricKind::Counter,
             value: 1.0,
-            unit: Some("1".to_string()),
-            attributes: Default::default(),
+            unit: Some(MetricUnit::new("1").expect("valid metric unit")),
+            attributes: Map::default(),
         }])
     }
 }
@@ -97,10 +98,13 @@ fn telemetry_config() -> sc_observability_otlp::TelemetryConfig {
         .enable_metrics(MetricsConfig::default())
         .with_transport(OtelConfig {
             enabled: true,
-            endpoint: Some("https://otel.example.internal".to_string()),
+            endpoint: Some(
+                OtlpEndpoint::new("https://otel.example.internal").expect("valid endpoint"),
+            ),
             ..OtelConfig::default()
         })
         .build()
+        .expect("valid telemetry config")
 }
 
 fn service_name() -> ServiceName {
@@ -117,7 +121,10 @@ fn trace_context() -> TraceContext {
 
 fn log_event(service: ServiceName, message: &str) -> LogEvent {
     LogEvent {
-        version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+        version: SchemaVersion::new(
+            sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+        )
+        .expect("valid schema version"),
         timestamp: Timestamp::UNIX_EPOCH,
         level: Level::Info,
         service,
@@ -128,7 +135,7 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
         trace: Some(trace_context()),
         request_id: None,
         correlation_id: None,
-        outcome: Some("ok".to_string()),
+        outcome: Some(OutcomeLabel::new("ok").expect("valid outcome label")),
         diagnostic: Some(Diagnostic {
             timestamp: Timestamp::UNIX_EPOCH,
             code: ErrorCode::new_static("SC_TEST"),
@@ -136,17 +143,17 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
             cause: None,
             remediation: Remediation::recoverable("retry", ["inspect telemetry"]),
             docs: None,
-            details: Default::default(),
+            details: Map::default(),
         }),
         state_transition: Some(StateTransition {
-            entity_kind: "agent".to_string(),
+            entity_kind: TargetCategory::new("agent").expect("valid target"),
             entity_id: Some("agent-123".to_string()),
-            from_state: "idle".to_string(),
-            to_state: "running".to_string(),
+            from_state: sc_observability_types::StateName::new("idle").expect("valid state"),
+            to_state: sc_observability_types::StateName::new("running").expect("valid state"),
             reason: None,
             trigger: None,
         }),
-        fields: Default::default(),
+        fields: Map::default(),
     }
 }
 
@@ -197,9 +204,11 @@ fn builder_registration_attaches_logs_spans_and_metrics() {
     telemetry.flush().expect("flush");
 
     let log_path = root
-        .join("test-service")
-        .join("logs")
-        .join("test-service.log.jsonl");
+        .join(sc_observability::constants::DEFAULT_LOG_DIR_NAME)
+        .join(format!(
+            "test-service{}",
+            sc_observability::constants::DEFAULT_LOG_FILE_SUFFIX
+        ));
     let contents = std::fs::read_to_string(log_path).expect("read projected log file");
     let health = telemetry.health();
     let runtime_health = runtime.health();

@@ -70,6 +70,8 @@ Owns:
 - `Timestamp`, `DurationMs`
 - `TraceContext`, `TraceId`, `SpanId`
 - `SpanRecord<S>`, `SpanSignal`, `MetricRecord`, `LogEvent`
+- typed stable labels such as `CorrelationId`, `OutcomeLabel`, `SinkName`, and
+  `MetricUnit`
 - `ObservabilityHealthProvider`
 - `LogQuery`, `LogOrder`, `LogFieldMatch`
 - `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
@@ -83,6 +85,11 @@ Must not own:
 - routing runtime behavior
 - OTLP exporters or OpenTelemetry dependencies
 - application-specific observation payloads
+
+Malformed deserialized `SpanRecord<SpanEnded>` values are tolerated at
+read/interop boundaries only. Producer-facing APIs still require a valid
+ended span, while `duration_ms()` returns `None` for malformed
+deserialize-only records instead of panicking.
 
 Important boundary:
 
@@ -120,7 +127,32 @@ Must not own:
 
 This crate must remain usable on its own by a basic CLI.
 
-### 3.2.1 Query And Follow Extension
+### 3.2.1 Pre-Publish Usability Follow-Ups
+
+The remaining pre-publish logging-surface follow-ups stay in
+`sc-observability` and do not move into `sc-observe` or
+`sc-observability-otlp`.
+
+- the default active JSONL path becomes
+  `<log_root>/logs/<service>.log.jsonl`
+  - approved simplification note: the older nested layout
+    `<log_root>/<service>/logs/<service>.log.jsonl` was dropped so operators
+    manage one stable `logs/` subtree per configured root instead of
+    duplicating the service segment in both the directory tree and filename
+- `ConsoleSink` keeps a small public writer-selection surface:
+  `ConsoleSink::stdout()` and `ConsoleSink::stderr()` are public, while
+  arbitrary writer injection remains non-public
+- retained-sink fault injection lives in the retained-sink layer, not in the
+  query/follow layer, and is exposed only through a deliberate validation-only
+  surface such as `#[cfg(test)]` or a `fault-injection` feature
+- consumer-facing onboarding artifacts (`README.md`, `CONSUMING.md`, and
+  `examples/custom-sink-example/`) document and validate the public logging
+  surface without relying on workspace-internal APIs
+- `examples/custom-sink-example/` must compile against the public API only so
+  it continuously proves that the shipped sink extension points are sufficient
+  for downstream consumers
+
+### 3.2.2 Query And Follow Extension
 
 The query/follow feature remains part of the logging layer. It does not move
 into `sc-observe`, does not depend on `sc-observability-otlp`, and does not
@@ -154,8 +186,8 @@ pub struct LogQuery {
     pub levels: Vec<Level>,
     pub target: Option<TargetCategory>,
     pub action: Option<ActionName>,
-    pub request_id: Option<String>,
-    pub correlation_id: Option<String>,
+    pub request_id: Option<CorrelationId>,
+    pub correlation_id: Option<CorrelationId>,
     pub since: Option<Timestamp>,
     pub until: Option<Timestamp>,
     pub field_matches: Vec<LogFieldMatch>,
@@ -290,7 +322,7 @@ Owns:
 - `OtlpProtocol`
 - `SpanAssembler`
 - `CompleteSpan`
-- `LogExporter`, `TraceExporter`, `MetricExporter`
+- internal OTLP exporter contracts used by the runtime implementation
 - OTLP batching, retry, timeout, flush, and shutdown
 - `TelemetryHealthReport`, `ExporterHealth`, and `ExporterHealthState` defined
   in `sc-observability-types`, re-exported by `sc-observability-otlp`
@@ -364,7 +396,7 @@ behavior into the shared crates.
 Historical query and follow behavior operate on one logical log stream made
 from:
 
-- the active path `<log_root>/<service>/logs/<service>.log.jsonl`
+- the active path `<log_root>/logs/<service>.log.jsonl`
 - rotated siblings using the existing `.N` suffix convention
 
 Historical query strategy:

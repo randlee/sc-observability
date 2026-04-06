@@ -3,7 +3,20 @@
 //! This module defines the caller-facing telemetry config surface used to build
 //! a `Telemetry` runtime, including transport options, per-signal batch
 //! settings, and the eager validation rules enforced at initialization time.
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "configuration-builder error behavior is documented at the telemetry facade level, and repeating it here would add low-signal boilerplate"
+)]
+#![expect(
+    clippy::must_use_candidate,
+    reason = "builder and accessor methods intentionally avoid repetitive must_use decoration across the config surface"
+)]
+#![expect(
+    clippy::return_self_not_must_use,
+    reason = "builder-style chaining is explicit from the signatures and intentionally lightweight"
+)]
 
+use std::fmt;
 use std::path::PathBuf;
 
 use crate::{constants, error_codes};
@@ -21,17 +34,109 @@ pub enum OtlpProtocol {
     Grpc,
 }
 
+/// Validated OTLP endpoint URL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OtlpEndpoint(String);
+
+impl OtlpEndpoint {
+    /// Creates a validated OTLP endpoint using the documented HTTP(S) schemes.
+    pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
+        let value = value.into();
+        if value.trim().is_empty() {
+            return Err(invalid_transport_value(
+                "endpoint must not be empty",
+                "set an explicit http:// or https:// OTLP endpoint",
+            ));
+        }
+        if !(value.starts_with("http://") || value.starts_with("https://")) {
+            return Err(invalid_transport_value(
+                "endpoint must start with http:// or https://",
+                "set an OTLP endpoint with an explicit HTTP(S) scheme",
+            ));
+        }
+        Ok(Self(value))
+    }
+
+    /// Returns the validated endpoint as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for OtlpEndpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl AsRef<str> for OtlpEndpoint {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl TryFrom<String> for OtlpEndpoint {
+    type Error = InitError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+/// Validated authorization header value for OTLP transport.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthHeader(String);
+
+impl AuthHeader {
+    /// Creates a validated non-empty authorization header value.
+    pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
+        let value = value.into();
+        if value.trim().is_empty() {
+            return Err(invalid_transport_value(
+                "auth header must not be empty",
+                "set a non-empty authorization header or omit it entirely",
+            ));
+        }
+        Ok(Self(value))
+    }
+
+    /// Returns the validated header as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for AuthHeader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl AsRef<str> for AuthHeader {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl TryFrom<String> for AuthHeader {
+    type Error = InitError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
 /// Transport-level OTLP configuration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OtelConfig {
     /// Whether transport/export is enabled.
     pub enabled: bool,
     /// Optional OTLP endpoint URL.
-    pub endpoint: Option<String>,
+    pub endpoint: Option<OtlpEndpoint>,
     /// Transport protocol to use.
     pub protocol: OtlpProtocol,
     /// Optional authorization header value.
-    pub auth_header: Option<String>,
+    pub auth_header: Option<AuthHeader>,
     /// Optional CA bundle path for TLS validation.
     pub ca_file: Option<PathBuf>,
     /// Whether TLS certificate verification is skipped.
@@ -145,6 +250,10 @@ pub struct TelemetryConfig {
 }
 
 /// Builder for documented v1 telemetry defaults.
+#[expect(
+    missing_debug_implementations,
+    reason = "the builder stores partially configured runtime values, and a public Debug surface would not add meaningful API value"
+)]
 pub struct TelemetryConfigBuilder {
     service_name: ServiceName,
     resource: ResourceAttributes,
@@ -228,15 +337,32 @@ impl TelemetryConfigBuilder {
     }
 
     /// Finalizes the telemetry configuration.
-    pub fn build(self) -> TelemetryConfig {
-        TelemetryConfig {
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sc_observability_otlp::TelemetryConfigBuilder;
+    /// use sc_observability_types::ServiceName;
+    ///
+    /// let config = TelemetryConfigBuilder::new(
+    ///     ServiceName::new("demo").expect("valid service"),
+    /// )
+    /// .build()
+    /// .expect("valid telemetry config");
+    ///
+    /// assert_eq!(config.service_name.as_str(), "demo");
+    /// ```
+    pub fn build(self) -> Result<TelemetryConfig, InitError> {
+        let config = TelemetryConfig {
             service_name: self.service_name,
             resource: self.resource,
             transport: self.transport,
             logs: self.logs,
             traces: self.traces,
             metrics: self.metrics,
-        }
+        };
+        validate_config(&config)?;
+        Ok(config)
     }
 }
 
@@ -298,4 +424,168 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
         ))));
     }
     Ok(())
+}
+
+fn invalid_transport_value(message: &str, remediation: &str) -> InitError {
+    InitError(Box::new(ErrorContext::new(
+        error_codes::TELEMETRY_INVALID_CONFIG,
+        message,
+        Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
+    )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sc_observability_types::ServiceName;
+
+    #[test]
+    fn otlp_endpoint_accepts_valid_http_and_https_values() {
+        let https = OtlpEndpoint::new("https://otel.example.internal").expect("valid https");
+        let http = OtlpEndpoint::try_from("http://localhost:4318".to_string()).expect("valid http");
+
+        assert_eq!(https.as_ref(), "https://otel.example.internal");
+        assert_eq!(https.to_string(), "https://otel.example.internal");
+        assert_eq!(http.as_str(), "http://localhost:4318");
+    }
+
+    #[test]
+    fn otlp_endpoint_rejects_empty_or_scheme_less_values() {
+        assert!(OtlpEndpoint::new("").is_err());
+        assert!(OtlpEndpoint::new("otel.example.internal").is_err());
+    }
+
+    #[test]
+    fn auth_header_rejects_empty_values() {
+        assert!(AuthHeader::new("").is_err());
+        assert!(AuthHeader::new("   ").is_err());
+    }
+
+    #[test]
+    fn auth_header_accepts_non_empty_values() {
+        let header = AuthHeader::try_from("Bearer abc123".to_string()).expect("valid header");
+        assert_eq!(header.as_ref(), "Bearer abc123");
+        assert_eq!(header.to_string(), "Bearer abc123");
+    }
+
+    #[test]
+    fn telemetry_config_builder_build_validates_transport() {
+        let result = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(OtelConfig {
+                enabled: true,
+                endpoint: None,
+                ..OtelConfig::default()
+            })
+            .build();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_config_rejects_zero_timeout() {
+        let service_name = ServiceName::new("demo").expect("service");
+        let config = TelemetryConfig {
+            service_name,
+            resource: ResourceAttributes::default(),
+            transport: OtelConfig {
+                timeout_ms: 0_u64.into(),
+                ..OtelConfig::default()
+            },
+            logs: None,
+            traces: None,
+            metrics: None,
+        };
+
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn validate_config_rejects_backoff_inversion() {
+        let service_name = ServiceName::new("demo").expect("service");
+        let config = TelemetryConfig {
+            service_name,
+            resource: ResourceAttributes::default(),
+            transport: OtelConfig {
+                initial_backoff_ms: 2000_u64.into(),
+                max_backoff_ms: 1000_u64.into(),
+                ..OtelConfig::default()
+            },
+            logs: None,
+            traces: None,
+            metrics: None,
+        };
+
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn validate_config_rejects_enabled_transport_without_signals() {
+        let service_name = ServiceName::new("demo").expect("service");
+        let config = TelemetryConfig {
+            service_name,
+            resource: ResourceAttributes::default(),
+            transport: OtelConfig {
+                enabled: true,
+                endpoint: Some(
+                    OtlpEndpoint::new("https://otel.example.internal").expect("valid endpoint"),
+                ),
+                ..OtelConfig::default()
+            },
+            logs: None,
+            traces: None,
+            metrics: None,
+        };
+
+        assert!(validate_config(&config).is_err());
+    }
+
+    #[test]
+    fn validate_config_rejects_zero_batch_or_interval() {
+        let service_name = ServiceName::new("demo").expect("service");
+        let base_transport = OtelConfig {
+            enabled: true,
+            endpoint: Some(
+                OtlpEndpoint::new("https://otel.example.internal").expect("valid endpoint"),
+            ),
+            ..OtelConfig::default()
+        };
+
+        let zero_logs = TelemetryConfig {
+            service_name: service_name.clone(),
+            resource: ResourceAttributes::default(),
+            transport: base_transport.clone(),
+            logs: Some(LogsConfig { batch_size: 0 }),
+            traces: None,
+            metrics: None,
+        };
+        assert!(validate_config(&zero_logs).is_err());
+
+        let zero_metrics = TelemetryConfig {
+            service_name,
+            resource: ResourceAttributes::default(),
+            transport: base_transport,
+            logs: None,
+            traces: None,
+            metrics: Some(MetricsConfig {
+                batch_size: 1,
+                export_interval_ms: 0_u64.into(),
+            }),
+        };
+        assert!(validate_config(&zero_metrics).is_err());
+    }
+
+    #[test]
+    fn telemetry_config_builder_with_resource_preserves_attributes() {
+        let service_name = ServiceName::new("demo").expect("service");
+        let resource = ResourceAttributes {
+            attributes: Map::from_iter([("service.version".to_string(), Value::from("1.0.0"))]),
+        };
+
+        let config = TelemetryConfigBuilder::new(service_name)
+            .with_resource(resource.clone())
+            .build()
+            .expect("valid telemetry config");
+
+        assert_eq!(config.resource, resource);
+    }
 }

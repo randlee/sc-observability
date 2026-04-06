@@ -8,9 +8,15 @@ repository.workspace = true
 homepage.workspace = true
 description = "Standalone facade crate for observability operations."
 
+[features]
+fault-injection = []
+
 [dependencies]
 serde_json.workspace = true
 sc-observability-types.workspace = true
 
 [dev-dependencies]
 temp-env = "0.3.6"
+
+[lints]
+workspace = true

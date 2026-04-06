@@ -4,7 +4,7 @@ use thiserror::Error;
 use crate::{Diagnostic, DiagnosticInfo, ErrorContext, sealed};
 
 /// Error returned when process identity resolution fails.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
 #[error("{0}")]
 pub struct IdentityError(#[source] pub Box<ErrorContext>);
 
@@ -19,7 +19,7 @@ impl DiagnosticInfo for IdentityError {
 macro_rules! error_wrapper {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
-        #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
+        #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
         #[error("{0}")]
         pub struct $name(#[source] pub Box<ErrorContext>);
 
@@ -67,7 +67,7 @@ error_wrapper!(
 );
 
 /// Routing/runtime error returned by `Observability::emit`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
 pub enum ObservationError {
     #[error("observation runtime is shut down")]
     /// The routing runtime has already been shut down.
@@ -81,7 +81,7 @@ pub enum ObservationError {
 }
 
 /// Telemetry emit error returned by `Telemetry` operations.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Error)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
 pub enum TelemetryError {
     #[error("telemetry runtime is shut down")]
     /// The telemetry runtime has already been shut down.
@@ -89,4 +89,29 @@ pub enum TelemetryError {
     #[error("{0}")]
     /// Export or span-assembly work failed for the requested telemetry operation.
     ExportFailure(#[source] Box<ErrorContext>),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Remediation, error_codes};
+
+    #[test]
+    fn wrapper_errors_expose_source_context() {
+        let wrapped = InitError(Box::new(
+            ErrorContext::new(
+                error_codes::DIAGNOSTIC_INVALID,
+                "operation failed",
+                Remediation::not_recoverable("investigate manually"),
+            )
+            .source(Box::new(std::io::Error::other("disk full"))),
+        ));
+
+        let source = std::error::Error::source(&wrapped).expect("context source");
+        assert_eq!(source.to_string(), "operation failed; caused by: disk full");
+        assert_eq!(
+            source.source().map(ToString::to_string).as_deref(),
+            Some("disk full")
+        );
+    }
 }

@@ -2,10 +2,11 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+use sc_observability::constants::{DEFAULT_LOG_DIR_NAME, DEFAULT_LOG_FILE_SUFFIX};
 use sc_observability::{Logger, LoggerConfig};
 use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, Level, LogEvent, ProcessIdentity, Remediation, ServiceName,
-    TargetCategory, Timestamp,
+    ActionName, Diagnostic, ErrorCode, Level, LogEvent, OutcomeLabel, ProcessIdentity, Remediation,
+    SchemaVersion, ServiceName, TargetCategory, Timestamp,
 };
 use serde_json::json;
 
@@ -28,7 +29,10 @@ fn service_name() -> ServiceName {
 
 fn event() -> LogEvent {
     LogEvent {
-        version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+        version: SchemaVersion::new(
+            sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+        )
+        .expect("valid schema version"),
         timestamp: Timestamp::UNIX_EPOCH,
         level: Level::Info,
         service: service_name(),
@@ -39,7 +43,7 @@ fn event() -> LogEvent {
         trace: None,
         request_id: None,
         correlation_id: None,
-        outcome: Some("ok".to_string()),
+        outcome: Some(OutcomeLabel::new("ok").expect("valid outcome label")),
         diagnostic: Some(Diagnostic {
             timestamp: Timestamp::UNIX_EPOCH,
             code: ErrorCode::new_static("SC_TEST"),
@@ -64,9 +68,8 @@ fn logging_only_consumer_can_emit_without_routing_or_otlp() {
     logger.flush().expect("flush");
 
     let path = root
-        .join("logging-only-app")
-        .join("logs")
-        .join("logging-only-app.log.jsonl");
+        .join(DEFAULT_LOG_DIR_NAME)
+        .join(format!("logging-only-app{DEFAULT_LOG_FILE_SUFFIX}"));
     let contents = fs::read_to_string(path).expect("read log output");
     assert!(contents.contains("\"action\":\"startup\""));
     assert!(contents.contains("\"message\":\"boot complete\""));

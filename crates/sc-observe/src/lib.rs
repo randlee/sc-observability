@@ -3,6 +3,26 @@
 //! This crate owns construction-time subscriber/projector registration,
 //! per-type routing, and top-level observability health aggregation while
 //! remaining independent of OTLP transport details.
+#![expect(
+    clippy::missing_errors_doc,
+    reason = "public routing-facade error behavior is documented centrally in workspace docs, and repeating boilerplate on every wrapper method adds low signal"
+)]
+#![expect(
+    clippy::must_use_candidate,
+    reason = "builder and accessor methods intentionally avoid pervasive must_use boilerplate across the facade"
+)]
+#![expect(
+    clippy::return_self_not_must_use,
+    reason = "builder-style chaining is explicit from the signatures and intentionally lightweight"
+)]
+#![expect(
+    clippy::struct_field_names,
+    reason = "the health-provider field uses the full domain term for clarity across builder/runtime structs"
+)]
+#![expect(
+    clippy::needless_pass_by_value,
+    reason = "Observation is the producer-facing owned emission contract, so emit intentionally takes ownership"
+)]
 
 pub mod constants;
 pub mod error_codes;
@@ -46,6 +66,22 @@ pub struct ObservabilityConfig {
 
 impl ObservabilityConfig {
     /// Builds the documented v1 defaults from a tool name and log root.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    /// use sc_observability_types::ToolName;
+    /// use sc_observe::ObservabilityConfig;
+    ///
+    /// let config = ObservabilityConfig::default_for(
+    ///     ToolName::new("demo-tool").expect("valid tool"),
+    ///     PathBuf::from("logs"),
+    /// )
+    /// .expect("valid config");
+    ///
+    /// assert_eq!(config.tool_name.as_str(), "demo-tool");
+    /// ```
     pub fn default_for(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitError> {
         let env_prefix = EnvPrefix::new(
             tool_name
@@ -97,6 +133,10 @@ impl ObservabilityConfig {
 }
 
 /// Builder for construction-time subscriber and projector registration.
+#[expect(
+    missing_debug_implementations,
+    reason = "the builder stores type-erased routing closures and health providers whose internals are not part of the public debug contract"
+)]
 pub struct ObservabilityBuilder {
     config: ObservabilityConfig,
     subscribers: Vec<ErasedSubscriberRegistration>,
@@ -105,6 +145,10 @@ pub struct ObservabilityBuilder {
 }
 
 /// Producer-facing routing runtime for typed observations.
+#[expect(
+    missing_debug_implementations,
+    reason = "the runtime owns atomic state, mutexes, and type-erased routes that do not have a useful stable Debug representation"
+)]
 pub struct Observability {
     logger: Logger,
     shutdown: AtomicBool,
@@ -160,6 +204,22 @@ impl Observability {
     }
 
     /// Starts a construction-time builder for subscribers and projections.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::path::PathBuf;
+    /// use sc_observability_types::ToolName;
+    /// use sc_observe::{Observability, ObservabilityConfig};
+    ///
+    /// let config = ObservabilityConfig::default_for(
+    ///     ToolName::new("demo-tool").expect("valid tool"),
+    ///     PathBuf::from("logs"),
+    /// )
+    /// .expect("valid config");
+    ///
+    /// let _builder = Observability::builder(config);
+    /// ```
     pub fn builder(config: ObservabilityConfig) -> ObservabilityBuilder {
         ObservabilityBuilder {
             config,
@@ -275,7 +335,7 @@ impl Observability {
         let telemetry = self
             .observability_health_provider
             .as_ref()
-            .map(|provider| provider.telemetry_health());
+            .map(sc_observability_types::ObservabilityHealthProvider::telemetry_health);
         let subscriber_failures = self
             .runtime
             .subscriber_failures_total
@@ -333,12 +393,17 @@ impl Observability {
 }
 
 impl ObservabilityBuilder {
-    /// Attaches a generic telemetry health provider without introducing an OTLP crate dependency.
+    /// Attaches a generic telemetry health provider without introducing an
+    /// OTLP crate dependency.
+    #[expect(
+        clippy::implied_bounds_in_impls,
+        reason = "the public API intentionally spells out Send + Sync per QA-BP-IMC-007"
+    )]
     pub fn with_observability_health_provider(
         mut self,
-        provider: Arc<dyn ObservabilityHealthProvider>,
+        provider: impl ObservabilityHealthProvider + Send + Sync + 'static,
     ) -> Self {
-        self.observability_health_provider = Some(provider);
+        self.observability_health_provider = Some(Arc::new(provider));
         self
     }
 
@@ -352,8 +417,7 @@ impl ObservabilityBuilder {
     where
         T: Observable,
     {
-        let subscriber = registration.subscriber;
-        let filter = registration.filter;
+        let (subscriber, filter) = registration.into_parts();
         self.subscribers.push(ErasedSubscriberRegistration {
             type_id: TypeId::of::<T>(),
             dispatch: Arc::new(move |observation_any| {
@@ -385,10 +449,7 @@ impl ObservabilityBuilder {
     where
         T: Observable,
     {
-        let filter = registration.filter;
-        let log_projector = registration.log_projector;
-        let span_projector = registration.span_projector;
-        let metric_projector = registration.metric_projector;
+        let (log_projector, span_projector, metric_projector, filter) = registration.into_parts();
 
         self.projections.push(ErasedProjectionRegistration {
             type_id: TypeId::of::<T>(),
@@ -446,6 +507,16 @@ impl ObservabilityBuilder {
 
     /// Finalizes registration and constructs the routing runtime.
     pub fn build(self) -> Result<Observability, InitError> {
+        if self.subscribers.is_empty() && self.projections.is_empty() {
+            return Err(InitError(Box::new(ErrorContext::new(
+                error_codes::OBSERVABILITY_INIT_FAILED,
+                "at least one subscriber or projector route must be registered",
+                Remediation::recoverable(
+                    "register a subscriber or projector before building observability",
+                    ["add at least one route for the observation types you emit"],
+                ),
+            ))));
+        }
         let logger = Logger::new(self.config.logger_config()?)?;
         Ok(Observability {
             logger,
@@ -462,7 +533,7 @@ mod sealed_emitters {
     pub trait Sealed {}
 }
 
-/// ObservationEmitter<T> is intentionally per-type -- callers hold one handle
+/// `ObservationEmitter<T>` is intentionally per-type -- callers hold one handle
 /// per observation type. A single type-erased emitter for heterogeneous events
 /// is not supported by design.
 #[expect(
@@ -491,15 +562,16 @@ where
 mod tests {
     use super::*;
     use sc_observability::{
-        LogFilter, LogSink, Logger, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
+        LogFilter, LogSink, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
     };
     use sc_observability_types::{
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
-        MetricRecord, ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError,
-        SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError,
-        TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext,
-        TraceId,
+        MetricRecord, MetricUnit, ObservationFilter, ObservationSubscriber, ProcessIdentity,
+        ProjectionError, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
+        SubscriberError, TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp,
+        TraceContext, TraceId,
     };
+    use serde_json::Map;
 
     #[derive(Debug, Clone)]
     struct AgentEvent {
@@ -572,7 +644,7 @@ mod tests {
                 observation.service.clone(),
                 ActionName::new("span.started").expect("valid action"),
                 trace_context(),
-                Default::default(),
+                Map::default(),
             ))])
         }
     }
@@ -593,8 +665,8 @@ mod tests {
                 name: MetricName::new("obs.events_total").expect("valid metric"),
                 kind: MetricKind::Counter,
                 value: 1.0,
-                unit: Some("1".to_string()),
-                attributes: Default::default(),
+                unit: Some(MetricUnit::new("1").expect("valid metric unit")),
+                attributes: Map::default(),
             }])
         }
     }
@@ -618,7 +690,11 @@ mod tests {
         state: TelemetryHealthState,
     }
 
-    impl sc_observability_types::telemetry_health_provider_sealed::Sealed for FakeTelemetryProvider {}
+    impl sc_observability_types::telemetry_health_provider_sealed::Sealed for FakeTelemetryProvider {
+        fn token(&self) -> sc_observability_types::telemetry_health_provider_sealed::Token {
+            sc_observability_types::telemetry_health_provider_sealed::workspace_token()
+        }
+    }
 
     impl ObservabilityHealthProvider for FakeTelemetryProvider {
         fn telemetry_health(&self) -> TelemetryHealthReport {
@@ -655,6 +731,21 @@ mod tests {
         }
     }
 
+    fn schema_version() -> sc_observability_types::SchemaVersion {
+        sc_observability_types::SchemaVersion::new(
+            sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION,
+        )
+        .expect("valid schema version")
+    }
+
+    fn outcome_label(value: &str) -> sc_observability_types::OutcomeLabel {
+        sc_observability_types::OutcomeLabel::new(value).expect("valid outcome label")
+    }
+
+    fn sink_name(value: &str) -> sc_observability_types::SinkName {
+        sc_observability_types::SinkName::new(value).expect("valid sink name")
+    }
+
     fn observation(allow: bool) -> Observation<AgentEvent> {
         let mut observation = Observation::new(
             ServiceName::new("obs-app").expect("valid service"),
@@ -669,7 +760,7 @@ mod tests {
 
     fn log_event(service: ServiceName, message: &str) -> LogEvent {
         LogEvent {
-            version: sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION.to_string(),
+            version: schema_version(),
             timestamp: Timestamp::UNIX_EPOCH,
             level: Level::Info,
             service,
@@ -680,7 +771,7 @@ mod tests {
             trace: Some(trace_context()),
             request_id: None,
             correlation_id: None,
-            outcome: Some("ok".to_string()),
+            outcome: Some(outcome_label("ok")),
             diagnostic: Some(Diagnostic {
                 timestamp: Timestamp::UNIX_EPOCH,
                 code: ErrorCode::new_static("SC_TEST"),
@@ -688,10 +779,10 @@ mod tests {
                 cause: None,
                 remediation: Remediation::recoverable("retry", ["inspect log output"]),
                 docs: None,
-                details: Default::default(),
+                details: Map::default(),
             }),
             state_transition: None,
-            fields: Default::default(),
+            fields: Map::default(),
         }
     }
 
@@ -701,20 +792,14 @@ mod tests {
         let root = temp_path("order");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
-                    id: "first",
-                    calls: calls.clone(),
-                }),
-                filter: None,
-            })
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
-                    id: "second",
-                    calls: calls.clone(),
-                }),
-                filter: None,
-            })
+            .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+                id: "first",
+                calls: calls.clone(),
+            })))
+            .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+                id: "second",
+                calls: calls.clone(),
+            })))
             .build()
             .expect("runtime");
 
@@ -732,13 +817,13 @@ mod tests {
         let root = temp_path("filter");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
+            .register_subscriber(
+                SubscriberRegistration::new(Arc::new(RecordingSubscriber {
                     id: "allowed",
                     calls: calls.clone(),
-                }),
-                filter: Some(Arc::new(AllowFlagFilter)),
-            })
+                }))
+                .with_filter(Arc::new(AllowFlagFilter)),
+            )
             .build()
             .expect("runtime");
 
@@ -754,17 +839,11 @@ mod tests {
         let root = temp_path("subscriber-failure");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(FailingSubscriber),
-                filter: None,
-            })
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
-                    id: "still-runs",
-                    calls: calls.clone(),
-                }),
-                filter: None,
-            })
+            .register_subscriber(SubscriberRegistration::new(Arc::new(FailingSubscriber)))
+            .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+                id: "still-runs",
+                calls: calls.clone(),
+            })))
             .build()
             .expect("runtime");
 
@@ -784,25 +863,22 @@ mod tests {
         let root = temp_path("projector-failure");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_projection(ProjectionRegistration {
-                log_projector: Some(Arc::new(FailingProjector)),
-                span_projector: Some(Arc::new(RecordingSpanProjector {
-                    count: span_count.clone(),
-                })),
-                metric_projector: Some(Arc::new(RecordingMetricProjector {
-                    count: metric_count.clone(),
-                })),
-                filter: None,
-            })
-            .register_projection(ProjectionRegistration {
-                log_projector: Some(Arc::new(RecordingLogProjector {
+            .register_projection(
+                ProjectionRegistration::new()
+                    .with_log_projector(Arc::new(FailingProjector))
+                    .with_span_projector(Arc::new(RecordingSpanProjector {
+                        count: span_count.clone(),
+                    }))
+                    .with_metric_projector(Arc::new(RecordingMetricProjector {
+                        count: metric_count.clone(),
+                    })),
+            )
+            .register_projection(ProjectionRegistration::new().with_log_projector(Arc::new(
+                RecordingLogProjector {
                     calls: log_calls.clone(),
                     id: "log",
-                })),
-                span_projector: None,
-                metric_projector: None,
-                filter: None,
-            })
+                },
+            )))
             .build()
             .expect("runtime");
 
@@ -820,13 +896,13 @@ mod tests {
         let root = temp_path("routing-failure");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_subscriber(SubscriberRegistration {
-                subscriber: Arc::new(RecordingSubscriber {
+            .register_subscriber(
+                SubscriberRegistration::new(Arc::new(RecordingSubscriber {
                     id: "filtered",
                     calls: Arc::new(Mutex::new(Vec::new())),
-                }),
-                filter: Some(Arc::new(AllowFlagFilter)),
-            })
+                }))
+                .with_filter(Arc::new(AllowFlagFilter)),
+            )
             .build()
             .expect("runtime");
 
@@ -841,12 +917,9 @@ mod tests {
         let root = temp_path("projector-routing-failure");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
-            .register_projection(ProjectionRegistration {
-                log_projector: Some(Arc::new(FailingProjector)),
-                span_projector: None,
-                metric_projector: None,
-                filter: None,
-            })
+            .register_projection(
+                ProjectionRegistration::new().with_log_projector(Arc::new(FailingProjector)),
+            )
             .build()
             .expect("runtime");
 
@@ -862,7 +935,13 @@ mod tests {
     fn post_shutdown_emission_returns_shutdown_error() {
         let root = temp_path("shutdown");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
-        let runtime = Observability::builder(config).build().expect("runtime");
+        let runtime = Observability::builder(config)
+            .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+                id: "shutdown",
+                calls: Arc::new(Mutex::new(Vec::new())),
+            })))
+            .build()
+            .expect("runtime");
 
         runtime.shutdown().expect("shutdown");
 
@@ -877,12 +956,9 @@ mod tests {
         let root = temp_path("health");
         let config = ObservabilityConfig::default_for(tool_name(), root.clone()).expect("config");
         let runtime = Observability::builder(config)
-            .register_projection(ProjectionRegistration {
-                log_projector: Some(Arc::new(FailingProjector)),
-                span_projector: None,
-                metric_projector: None,
-                filter: None,
-            })
+            .register_projection(
+                ProjectionRegistration::new().with_log_projector(Arc::new(FailingProjector)),
+            )
             .build()
             .expect("runtime");
 
@@ -901,6 +977,10 @@ mod tests {
         let root = temp_path("telemetry-health");
         let config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         let runtime = Observability::builder(config)
+            .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+                id: "telemetry-health",
+                calls: Arc::new(Mutex::new(Vec::new())),
+            })))
             .with_observability_health_provider(Arc::new(FakeTelemetryProvider {
                 state: TelemetryHealthState::Degraded,
             }))
@@ -954,7 +1034,7 @@ mod tests {
 
             fn health(&self) -> SinkHealth {
                 SinkHealth {
-                    name: "flush-fail".to_string(),
+                    name: sink_name("flush-fail"),
                     state: SinkHealthState::DegradedDropping,
                     last_error: None,
                 }
@@ -964,7 +1044,13 @@ mod tests {
         let ok_root = temp_path("flush-ok");
         let ok_config =
             ObservabilityConfig::default_for(tool_name(), ok_root.clone()).expect("config");
-        let ok_runtime = Observability::builder(ok_config).build().expect("runtime");
+        let ok_runtime = Observability::builder(ok_config)
+            .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+                id: "flush-ok",
+                calls: Arc::new(Mutex::new(Vec::new())),
+            })))
+            .build()
+            .expect("runtime");
         assert!(ok_runtime.flush().is_ok());
 
         let fail_root = temp_path("flush-fail");
@@ -972,10 +1058,11 @@ mod tests {
             LoggerConfig::default_for(ServiceName::new("obs-app").expect("service"), fail_root);
         logger_config.enable_file_sink = false;
         logger_config.enable_console_sink = false;
-        let mut logger = Logger::new(logger_config).expect("logger");
-        logger.register_sink(
+        let mut builder = sc_observability::Logger::builder(logger_config).expect("logger builder");
+        builder.register_sink(
             SinkRegistration::new(Arc::new(FlushFailSink)).with_filter(Arc::new(PassthroughFilter)),
         );
+        let logger = builder.build();
 
         let runtime = Observability {
             logger,
