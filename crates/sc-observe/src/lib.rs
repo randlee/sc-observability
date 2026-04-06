@@ -395,9 +395,13 @@ impl Observability {
 impl ObservabilityBuilder {
     /// Attaches a generic telemetry health provider without introducing an
     /// OTLP crate dependency.
+    #[expect(
+        clippy::implied_bounds_in_impls,
+        reason = "the public API intentionally spells out Send + Sync per QA-BP-IMC-007"
+    )]
     pub fn with_observability_health_provider(
         mut self,
-        provider: impl ObservabilityHealthProvider + 'static,
+        provider: impl ObservabilityHealthProvider + Send + Sync + 'static,
     ) -> Self {
         self.observability_health_provider = Some(Arc::new(provider));
         self

@@ -353,6 +353,14 @@ Sprint 4 never executed, so this section must not claim blanket closure. The
 current branch instead records the closure evidence later accepted by rust-qa
 QA-1 on `develop@5d79695`, plus the two authorized post-publish deferrals.
 
+LOG-008 amendment note: the original nested file-sink layout
+`<log_root>/<service_name>/logs/<service_name>.log.jsonl` was intentionally
+amended to `<log_root>/logs/<service_name>.log.jsonl` before publish. The extra
+service-name path segment was dropped to keep one stable `logs/` subtree per
+configured root, remove duplicated service naming in the filesystem layout, and
+make operator-facing path discovery/documentation simpler without changing the
+service-specific file name.
+
 | Carry-over ID | Current status | Evidence / open mapping | Notes |
 | --- | --- | --- | --- |
 | `QA-001` | CLOSED | rust-qa QA-1 accepted [`crates/sc-observability/Cargo.toml@5d79695:15-16`](../crates/sc-observability/Cargo.toml), [`crates/sc-observability/src/lib.rs@5d79695:840-930`](../crates/sc-observability/src/lib.rs) | test env mutation now uses `temp-env`; exercised by `logger_config_default_for_uses_sc_log_root_when_log_root_is_empty` and `logger_config_default_for_prefers_explicit_log_root_over_env` |
