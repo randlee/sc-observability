@@ -26,16 +26,15 @@ from `sc_observability`. That re-export set includes:
 
 Consumers only need to depend on `sc-observability` for that surface. Add
 `sc-observability-types` as a direct dependency only if you need the types
-crate independently, such as for trait implementations or for sharing the
-contract crate across package boundaries.
+crate independently, such as when implementing custom sinks or extending the
+shared types layer directly.
 
 Create a logger with the documented defaults:
 
 ```rust
 use std::path::PathBuf;
 
-use sc_observability::{Logger, LoggerConfig};
-use sc_observability_types::ServiceName;
+use sc_observability::{Logger, LoggerConfig, ServiceName};
 
 let service = ServiceName::new("my-service")?;
 let logger = Logger::new(LoggerConfig::default_for(

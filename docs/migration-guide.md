@@ -19,8 +19,8 @@ The standalone workspace now owns these crates:
 
 1. Replace ATM workspace path dependencies with dependencies sourced from this
    repo or crates.io once the standalone release is published.
-2. Keep logging-only consumers on `sc-observability` plus
-   `sc-observability-types`.
+2. Keep logging-only consumers on `sc-observability` only. Shared logging
+   types are re-exported from that crate.
 3. Add `sc-observe` only for typed observation routing and projector-based
    fan-out.
 4. Add `sc-observability-otlp` only when OTLP export is required.
@@ -49,10 +49,12 @@ Use these repo artifacts as the implementation baseline:
 
 For consumers that only need structured logging:
 
-1. Depend on `sc-observability-types` and `sc-observability`.
+1. Depend on `sc-observability` only for standard logging consumers.
 2. Construct `LoggerConfig::default_for(service_name, log_root)`.
-3. Register additional sinks only if required.
-4. Do not pull in `sc-observe` or `sc-observability-otlp`.
+3. Add `sc-observability-types` directly only when implementing custom sinks
+   or extending the shared types layer directly.
+4. Register additional sinks only if required.
+5. Do not pull in `sc-observe` or `sc-observability-otlp`.
 
 ## Default Log Path Change
 
