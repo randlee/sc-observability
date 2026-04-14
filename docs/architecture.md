@@ -140,12 +140,14 @@ Its architecture stays intentionally split:
 - `sc-compose` owns the adapter from that local layer into
   `sc-observability::Logger`
 - `sc-composer` does not depend directly on `sc-observability-types`
+- this contract is intentionally limited to simple logging-only integration;
+  `sc-observe` and `sc-observability-otlp` are out of scope for this sprint
 
 The consumer-facing split is:
 
 - `sc-observability-types` provides neutral contracts such as `LogEvent`,
-  diagnostics, identifiers, `LoggingHealthReport`, `SinkHealth`, and
-  `SinkHealthState`
+  diagnostics, identifiers, `LoggingHealthReport`, `SinkHealth`,
+  `SinkHealthState`, `QueryHealthReport`, and `QueryHealthState`
 - `sc-observability` provides the concrete logging runtime surface:
   `Logger`, `LoggerConfig`, `LoggerBuilder`, `LogSink`, `SinkRegistration`,
   `ConsoleSink`, `JsonlFileSink`, `Logger::health()`, and
@@ -157,26 +159,78 @@ For this integration path, `LogEvent.service` is the configured CLI service
 identity owned by `sc-compose`, while the remaining record fields are derived
 from the local observer event being adapted.
 
+Event sources for the adapter are:
+
+- CLI-owned command lifecycle hooks in `sc-compose`
+- the local `sc_composer::observer` callbacks emitted by composition work
+
+Command lifecycle events are emitted directly by `sc-compose` around command
+dispatch. They do not require additional callbacks from `sc-composer`.
+
+For contract purposes, the local `sc-composer` observer surface must remain
+object-safe and `dyn`-compatible, and must be sufficient for the CLI adapter to
+translate composition events into `LogEvent` records. The minimum approved
+shape is:
+
+```rust
+pub enum ObservationEvent {
+    ResolveAttempt { template: String },
+    ResolveOutcome { selected_path: Option<String>, success: bool },
+    IncludeExpandOutcome { include_path: String, success: bool },
+    ValidationOutcome { success: bool },
+    RenderOutcome { success: bool },
+}
+
+pub trait ObservationSink {
+    fn emit(&mut self, event: &ObservationEvent);
+}
+
+pub trait CompositionObserver {
+    fn sink(&mut self) -> &mut dyn ObservationSink;
+}
+
+pub fn compose_with_observer(
+    request: &ComposeRequest,
+    observer: &mut dyn CompositionObserver,
+) -> Result<ComposeResult, ComposeError>;
+```
+
+The exact downstream type names may evolve, but the observer contract must keep
+the same three properties:
+
+- a local `ObservationEvent`-style composition event enum
+- an object-safe sink/observer interface callable through `&mut dyn ...`
+- `compose_with_observer(...)` as the end-to-end injection surface
+
 Approved `sc-compose` wiring shape:
 
 1. `sc-compose` constructs `LoggerConfig` and `Logger` during CLI startup.
 2. Human-readable command execution may enable the built-in console sink in
    addition to the file sink.
 3. Commands that emit machine-readable `--json` output disable the built-in
-   console sink so stdout remains valid command output.
-4. `observability-health` reads `Logger::health()` and returns the resulting
-   `LoggingHealthReport`.
-5. CLI shutdown calls `Logger::shutdown()` so registered sinks flush before
+   console sink so stdout remains valid command output. This logging-only
+   policy is the same downstream requirement captured in `sc-compose`
+   requirements FR-11 and architecture §18.3 and must stay synchronized there.
+4. The planned downstream `sc-compose observability-health` subcommand defined
+   by the `sc-compose` normative docs is the CLI surface that reads
+   `Logger::health()` and returns the resulting `LoggingHealthReport`.
+5. If the CLI does not install a logger-backed adapter, `sc-composer`
+   continues to use its built-in no-op observer path and command behavior
+   remains functional with logging disabled.
+6. CLI shutdown calls `Logger::shutdown()` so registered sinks flush before
    exit.
 
 The adapter-owned event mapping is:
 
-| `sc-compose` local observer event | `LogEvent.target` | `LogEvent.action` | Other `LogEvent` fields |
-| --- | --- | --- | --- |
-| resolve attempt or outcome | `compose.resolve` | phase-specific action such as `attempt`, `resolved`, or `failed` | `outcome` reflects success/failure; `diagnostic` is attached for failures; resolver traces or selected paths live in `fields` |
-| include-expand outcome | `compose.include_expand` | phase-specific action such as `expanded` or `failed` | include stack and path details live in `fields`; failures attach `diagnostic` |
-| validation outcome | `compose.validate` | phase-specific action such as `completed` or `failed` | validation counts and policy decisions live in `fields`; failures attach `diagnostic` |
-| render outcome | `compose.render` | phase-specific action such as `completed` or `failed` | render metadata lives in `fields`; `outcome` and `diagnostic` reflect success/failure |
+| `sc-compose` event source | `LogEvent.target` | `LogEvent.action` | `LogEvent.message` | Other `LogEvent` fields |
+| --- | --- | --- | --- | --- |
+| command start | `compose.command` | `started` | human-readable summary such as `render started` | `fields` include command name and relevant mode flags |
+| command end, success | `compose.command` | `completed` | human-readable summary such as `render completed` | `fields` include command name, elapsed time, and output mode; `outcome` is success |
+| command end, failure | `compose.command` | `failed` | human-readable summary such as `render failed` | `fields` include command name, exit code, elapsed time, and output mode; `outcome` is failure; `diagnostic` is attached when available |
+| resolve attempt or outcome | `compose.resolve` | phase-specific action such as `attempt`, `resolved`, or `failed` | concise resolver summary sentence | `outcome` reflects success/failure; `diagnostic` is attached for failures; resolver traces or selected paths live in `fields` |
+| include-expand outcome | `compose.include_expand` | phase-specific action such as `expanded` or `failed` | concise include-expansion summary sentence | include stack and path details live in `fields`; failures attach `diagnostic` |
+| validation outcome | `compose.validate` | phase-specific action such as `completed` or `failed` | concise validation summary sentence | validation counts and policy decisions live in `fields`; failures attach `diagnostic` |
+| render outcome | `compose.render` | phase-specific action such as `completed` or `failed` | concise render summary sentence | render metadata lives in `fields`; `outcome` and `diagnostic` reflect success/failure |
 
 This mapping is intentionally adapter-owned so `sc-observability` preserves a
 generic logging contract and does not absorb `sc-compose`-specific event

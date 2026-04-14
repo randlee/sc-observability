@@ -111,12 +111,21 @@ that integrate against the shipped public API.
    Exit criteria:
    - `requirements.md` and `architecture.md` explicitly state the exact split
      between `sc-observability-types` and `sc-observability`
+   - the docs explicitly scope this work to simple logging-only integration and
+     explicitly defer OTel expansion
    - the docs state that `sc-composer` keeps a local observer layer and does
      not depend on `sc-observability-types`
+   - the docs define the minimum local observer interface shape, event source,
+     and `dyn`-compatible injection model required for the downstream adapter
    - the docs state that `sc-compose` constructs `Logger`, applies the
      file/console sink policy, uses `Logger::health()` for health reporting,
      and calls `Logger::shutdown()` on exit
+   - the docs explicitly define the no-op fallback path when no observer or
+     logger-backed adapter is installed
    - the docs define the adapter-owned mapping from `sc-compose` local observer
-     events to `LogEvent` fields
-   - `requirements.md`, `architecture.md`, and `project-plan.md` remain
-     mutually consistent before the branch is handed to QA
+     events to `LogEvent` fields, including command lifecycle events and
+     `message` guidance
+   - the docs identify the planned downstream `sc-compose observability-health`
+     CLI surface precisely enough for implementation and review
+   - `qm-comp` cross-document consistency review passes; all three docs are
+     confirmed mutually consistent before merge

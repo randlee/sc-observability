@@ -175,7 +175,7 @@ This crate is the lightweight logging layer.
 - DOC-003 A runnable `examples/custom-sink-example/` shall exist and demonstrate a public-only `LogSink` implementation, `LoggerBuilder`, `SinkRegistration`, optional `LogFilter`, builder-time sink registration, and `logger.health()`.
 - DOC-004 Default sink behavior, path layout, and environment override behavior shall be documented in a consumer-facing section, which may live in `CONSUMING.md`.
 - DOC-005 The normative docs shall include an explicit downstream
-  `sc-compose` integration contract that states the exact split between
+  `sc-compose` logging-only integration contract that states the exact split between
   `sc-observability-types` and `sc-observability`.
 - DOC-006 The `sc-compose` integration contract shall state that
   `sc-observability-types` provides shared `LogEvent`, health, diagnostics, and
@@ -190,6 +190,13 @@ This crate is the lightweight logging layer.
   `sc-compose` local observer events to `LogEvent` fields, including stable
   guidance for `target`, `action`, `outcome`, `diagnostic`, `message`, and
   structured `fields`.
+- DOC-009 The same contract shall explicitly define the local `sc-composer`
+  observer injection model or cross-reference the controlling `sc-compose`
+  normative section that defines it, including trait shape, callback/event
+  source, and `dyn`-compatible injection semantics.
+- DOC-010 OTel integration for `sc-compose` is out of scope for this
+  logging-only contract and is deferred to a future sprint if `sc-compose`
+  later adopts `sc-observe` or `sc-observability-otlp`.
 
 ### 4.3 Consumer Usability Issue Traceability
 
