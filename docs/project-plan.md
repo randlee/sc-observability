@@ -2,18 +2,18 @@
 
 ## Status
 
-This repo remains in extraction and pre-publish recovery mode.
+This repo is in post-1.0 maintenance and downstream-integration mode.
 
-The current controlling phase is the pre-publish recovery program in
-[`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md). No publish
-work should proceed from this repo until that plan is complete.
+The workspace crates are already published. The current planning focus is:
 
-The immediate goal is no longer "ship quickly". The immediate goal is:
+- keep code, docs, and release procedures aligned with the shipped surface
+- preserve the standalone crate boundaries defined by the normative docs
+- maintain consumer-facing usability and downstream integration contracts
+- stage new cross-repo work behind explicit review and QA
 
-- restore truth between docs, code, and release gates
-- close the missing query/follow API surface
-- ship a real OTLP attachment surface
-- remove remaining public design ambiguity before publish
+Historical recovery and pre-publish planning documents remain valuable
+reference material, but they are no longer the controlling phase for current
+work.
 
 ## Near-Term Work
 
@@ -23,25 +23,15 @@ The immediate goal is no longer "ship quickly". The immediate goal is:
    - [`architecture.md`](./architecture.md)
    - [`git-workflows.md`](./git-workflows.md)
    - [`publishing.md`](./publishing.md)
-3. Complete the pre-publish recovery sprints in strict order:
-   - Sprint 0 truth reset and design freeze
-     Exit criteria: [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) §5.4
-   - Sprint 1 shared contract hardening
-     Exit criteria: [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) §6.5
-   - Sprint 2 logging query/follow runtime
-     Exit criteria: [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) §7.6
-   - Sprint 3 routing and OTLP attachment closure
-     Exit criteria: [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) §8.6
-   - Sprint 4 hardening and final publish gate
-     Exit criteria: [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) §9.4
-4. Resume release-readiness work only after the final recovery review reports
-   zero blocking findings.
-5. Execute the post-Phase-2 pre-publish usability sprint before cutting the
-   1.0 release candidate so the shipped public logging surface is usable and
-   documented for downstream adopters.
-6. Maintain extraction inventory and boundary ADRs as modules move from ATM to
+3. Maintain the consumer-facing docs and examples that prove the shipped public
+   API remains usable for downstream adopters.
+4. Keep release and publishing docs aligned with the fact that the workspace
+   crates are already published and semver-governed.
+5. Maintain extraction inventory and boundary ADRs as modules move from ATM to
    the standalone repo.
-7. Keep ATM-specific adapter work outside the shared crates.
+6. Keep ATM-specific adapter work outside the shared crates.
+7. Maintain explicit downstream integration contracts for shipped consumers so
+   cross-repo reviews do not rely on inferred layering or stale assumptions.
 
 ## Rule
 
@@ -54,7 +44,8 @@ Any sprint plan added here must preserve the standalone boundary defined by:
 
 ## Implementation Planning Set
 
-The current implementation phase should use these planning documents together:
+Current maintenance and integration work should use these planning documents
+together:
 
 - `docs/pre-publish-recovery-plan.md`
 - `docs/implementation-plan.md`
@@ -63,25 +54,25 @@ The current implementation phase should use these planning documents together:
 - `docs/sprint-plan.md`
 - `docs/release-readiness-checklist.md`
 
-## Pre-Publish Recovery Phase
+## Historical Recovery Baseline
 
-The current phase is not a release cut. It is a recovery program that:
+The earlier recovery program remains the historical baseline for these planning
+principles:
 
-1. fixes correctness and best-practice gaps first
-2. ships the missing approved API surface
-3. closes incomplete design elements in dedicated sprints
-4. repeats the design-closure loop until no unresolved issue remains
+1. fix correctness and best-practice gaps first
+2. ship the missing approved API surface before higher-layer expansion
+3. close incomplete design elements in dedicated sprints
+4. repeat the design-closure loop until no unresolved issue remains
 
-The detailed sprint-by-sprint execution order is defined in
-[`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md).
+The detailed sprint-by-sprint execution record remains in
+[`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) for reference.
 
-## Post-Recovery Pre-Publish Usability Sprint
+## Consumer Usability Baseline
 
-This follow-up sprint is plan-approved work that executes after the current
-pre-publish recovery program closes and before the 1.0 release candidate is
-cut. It exists to address consumer-facing usability and validation gaps that
-are release-blocking but intentionally separate from the earlier runtime
-recovery sprints.
+This follow-up work defines the minimum consumer-facing usability baseline for
+the shipped public API. It remains relevant after the initial release because
+downstream adopters still depend on these entrypoints and examples staying
+accurate.
 
 1. Consumer onboarding sprint (`#20`)
    Exit criteria:
@@ -110,3 +101,31 @@ recovery sprints.
      retained-sink layer, not the query/follow layer
    - docs explain how downstream consumers exercise the same failure paths they
      rely on in production health checks
+
+## Downstream Integration Documentation
+
+The repo also needs stable downstream integration guidance for adjacent repos
+that integrate against the shipped public API.
+
+1. `sc-compose` logging-only integration contract
+   Exit criteria:
+   - `requirements.md` and `architecture.md` explicitly state the exact split
+     between `sc-observability-types` and `sc-observability`
+   - the docs explicitly scope this work to simple logging-only integration and
+     explicitly defer OTel expansion
+   - the docs state that `sc-composer` keeps a local observer layer and does
+     not depend on `sc-observability-types`
+   - the docs define the minimum local observer interface shape, event source,
+     and `dyn`-compatible injection model required for the downstream adapter
+   - the docs state that `sc-compose` constructs `Logger`, applies the
+     file/console sink policy, uses `Logger::health()` for health reporting,
+     and calls `Logger::shutdown()` on exit
+   - the docs explicitly define the no-op fallback path when no observer or
+     logger-backed adapter is installed
+   - the docs define the adapter-owned mapping from `sc-compose` local observer
+     events to `LogEvent` fields, including command lifecycle events and
+     `message` guidance
+   - the docs identify the planned downstream `sc-compose observability-health`
+     CLI surface precisely enough for implementation and review
+   - `qm-comp` cross-document consistency review passes; all three docs are
+     confirmed mutually consistent before merge
