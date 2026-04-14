@@ -82,6 +82,8 @@ Owns:
 Must not own:
 
 - sinks
+- concrete logging runtime behavior such as `Logger`, `LoggerBuilder`,
+  `LogSink`, `SinkRegistration`, or built-in sink implementations
 - routing runtime behavior
 - OTLP exporters or OpenTelemetry dependencies
 - application-specific observation payloads
@@ -103,7 +105,9 @@ Owns:
 
 - `Logger`
 - `LoggerConfig`
+- `LoggerBuilder`
 - `LogSink`
+- `SinkRegistration`
 - `JsonlFileSink`
 - `ConsoleSink`
 - redaction
@@ -127,9 +131,60 @@ Must not own:
 
 This crate must remain usable on its own by a basic CLI.
 
-### 3.2.1 Pre-Publish Usability Follow-Ups
+### 3.2.1 `sc-compose` Logging-Only Integration Contract
 
-The remaining pre-publish logging-surface follow-ups stay in
+`sc-compose` is the reference logging-only downstream consumer for this crate.
+Its architecture stays intentionally split:
+
+- `sc-composer` keeps its own local observer/event layer
+- `sc-compose` owns the adapter from that local layer into
+  `sc-observability::Logger`
+- `sc-composer` does not depend directly on `sc-observability-types`
+
+The consumer-facing split is:
+
+- `sc-observability-types` provides neutral contracts such as `LogEvent`,
+  diagnostics, identifiers, `LoggingHealthReport`, `SinkHealth`, and
+  `SinkHealthState`
+- `sc-observability` provides the concrete logging runtime surface:
+  `Logger`, `LoggerConfig`, `LoggerBuilder`, `LogSink`, `SinkRegistration`,
+  `ConsoleSink`, `JsonlFileSink`, `Logger::health()`, and
+  `Logger::shutdown()`
+- the adapter that translates `sc-composer` observer callbacks into `LogEvent`
+  records belongs to `sc-compose`, not to this workspace
+
+For this integration path, `LogEvent.service` is the configured CLI service
+identity owned by `sc-compose`, while the remaining record fields are derived
+from the local observer event being adapted.
+
+Approved `sc-compose` wiring shape:
+
+1. `sc-compose` constructs `LoggerConfig` and `Logger` during CLI startup.
+2. Human-readable command execution may enable the built-in console sink in
+   addition to the file sink.
+3. Commands that emit machine-readable `--json` output disable the built-in
+   console sink so stdout remains valid command output.
+4. `observability-health` reads `Logger::health()` and returns the resulting
+   `LoggingHealthReport`.
+5. CLI shutdown calls `Logger::shutdown()` so registered sinks flush before
+   exit.
+
+The adapter-owned event mapping is:
+
+| `sc-compose` local observer event | `LogEvent.target` | `LogEvent.action` | Other `LogEvent` fields |
+| --- | --- | --- | --- |
+| resolve attempt or outcome | `compose.resolve` | phase-specific action such as `attempt`, `resolved`, or `failed` | `outcome` reflects success/failure; `diagnostic` is attached for failures; resolver traces or selected paths live in `fields` |
+| include-expand outcome | `compose.include_expand` | phase-specific action such as `expanded` or `failed` | include stack and path details live in `fields`; failures attach `diagnostic` |
+| validation outcome | `compose.validate` | phase-specific action such as `completed` or `failed` | validation counts and policy decisions live in `fields`; failures attach `diagnostic` |
+| render outcome | `compose.render` | phase-specific action such as `completed` or `failed` | render metadata lives in `fields`; `outcome` and `diagnostic` reflect success/failure |
+
+This mapping is intentionally adapter-owned so `sc-observability` preserves a
+generic logging contract and does not absorb `sc-compose`-specific event
+taxonomies.
+
+### 3.2.2 Consumer Usability Follow-Ups
+
+The remaining consumer-facing logging-surface follow-ups stay in
 `sc-observability` and do not move into `sc-observe` or
 `sc-observability-otlp`.
 
@@ -152,7 +207,7 @@ The remaining pre-publish logging-surface follow-ups stay in
   it continuously proves that the shipped sink extension points are sufficient
   for downstream consumers
 
-### 3.2.2 Query And Follow Extension
+### 3.2.3 Query And Follow Extension
 
 The query/follow feature remains part of the logging layer. It does not move
 into `sc-observe`, does not depend on `sc-observability-otlp`, and does not
@@ -358,6 +413,16 @@ Use when a CLI or tool needs structured logging only.
 The query/follow API is part of this shape. An application may use `Logger`,
 `Logger::query`, `Logger::follow`, or `JsonlLogReader` without enabling
 `sc-observe` or `sc-observability-otlp`.
+
+For `sc-compose`, this shape is:
+
+```text
+sc-composer local observer layer -> sc-compose adapter -> sc-observability::Logger
+```
+
+The important boundary is that `sc-compose` depends on `sc-observability` for
+concrete logger behavior, while `sc-composer` remains independent from
+`sc-observability-types` and keeps its local observer API.
 
 ### 4.2 Logging + Routing
 
