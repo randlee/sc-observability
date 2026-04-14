@@ -208,12 +208,17 @@ Approved `sc-compose` wiring shape:
 2. Human-readable command execution may enable the built-in console sink in
    addition to the file sink.
 3. Commands that emit machine-readable `--json` output disable the built-in
-   console sink so stdout remains valid command output. This logging-only
-   policy is the same downstream requirement captured in `sc-compose`
-   requirements FR-11 and architecture §18.3 and must stay synchronized there.
-4. The planned downstream `sc-compose observability-health` subcommand defined
-   by the `sc-compose` normative docs is the CLI surface that reads
-   `Logger::health()` and returns the resulting `LoggingHealthReport`.
+   console sink so stdout remains valid command output.
+   NOTE: This is a new behavioral requirement for `sc-compose` not yet
+   captured in its normative docs. Propagating this requirement to
+   `sc-compose` `docs/requirements.md` and `docs/architecture.md` is a
+   prerequisite before S7 implementation is authorized.
+4. The planned downstream `sc-compose observability-health` subcommand is the
+   CLI surface that reads `Logger::health()` and returns the resulting
+   `LoggingHealthReport`.
+   NOTE: `observability-health` is a new subcommand not yet defined in
+   `sc-compose` normative docs. Adding this command to `sc-compose` docs is a
+   prerequisite before S7 implementation is authorized.
 5. If the CLI does not install a logger-backed adapter, `sc-composer`
    continues to use its built-in no-op observer path and command behavior
    remains functional with logging disabled.
