@@ -39,11 +39,6 @@ pub use follow::LogFollowSession;
 #[doc(inline)]
 pub use jsonl_reader::JsonlLogReader;
 #[doc(inline)]
-pub use sinks::{ConsoleSink, JsonlFileSink};
-#[cfg(feature = "fault-injection")]
-#[doc(inline)]
-pub use sinks::RetainedSinkFaultInjector;
-#[doc(inline)]
 pub use sc_observability_types::{
     ActionName, ErrorCode, EventError, Level, LogEvent, LogQuery, LogSnapshot, LoggingHealthReport,
     LoggingHealthState, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity, SchemaVersion,
@@ -51,6 +46,11 @@ pub use sc_observability_types::{
 };
 use sc_observability_types::{LevelFilter, LogSinkError, ProcessIdentityPolicy};
 use serde_json::Value;
+#[cfg(feature = "fault-injection")]
+#[doc(inline)]
+pub use sinks::RetainedSinkFaultInjector;
+#[doc(inline)]
+pub use sinks::{ConsoleSink, JsonlFileSink};
 
 pub(crate) use runtime::LoggerRuntime;
 

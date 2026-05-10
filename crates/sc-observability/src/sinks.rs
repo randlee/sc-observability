@@ -11,9 +11,7 @@ use sc_observability_types::{
 #[cfg(feature = "fault-injection")]
 use std::sync::Arc;
 
-use crate::{
-    LogSink, RetentionPolicy, RotationPolicy, constants, error_codes, rotated_log_path,
-};
+use crate::{LogSink, RetentionPolicy, RotationPolicy, constants, error_codes, rotated_log_path};
 
 #[expect(
     missing_debug_implementations,
