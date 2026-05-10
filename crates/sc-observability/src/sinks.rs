@@ -10,8 +10,6 @@ use sc_observability_types::{
 };
 #[cfg(feature = "fault-injection")]
 use std::sync::Arc;
-#[cfg(feature = "fault-injection")]
-use sc_observability_types::DiagnosticInfo;
 
 use crate::{
     LogSink, RetentionPolicy, RotationPolicy, constants, error_codes, rotated_log_path,
