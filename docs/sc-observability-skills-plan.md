@@ -7,9 +7,9 @@ published `sc-observability` skill package.
 
 The package will provide three Claude Code skills:
 
-1. `sc-observability-new-project`
-2. `sc-observability-existing-project`
-3. `sc-observability-review`
+1. `sc-observability-bootstrapping`
+2. `sc-observability-adopting`
+3. `sc-observability-reviewing`
 
 These skills are intended to help downstream Rust applications adopt the
 published `sc-observability` crates from crates.io with a consistent house
@@ -40,7 +40,7 @@ Accepted product decisions for this plan:
   - the marketplace package under `packages/sc-observability/skills/`
 - migration content is useful, but does not need to be a first-class skill in
   this phase
-- a review skill must exist in the same package
+- a reviewing skill must exist in the same package
 
 ## 3. Marketplace Rule
 
@@ -64,21 +64,21 @@ consumer-install pattern, not a technical dependency or inheritance mechanism.
 
 The repo-local skill copy will live under `.claude/skills/`:
 
-- `.claude/skills/sc-observability-new-project/SKILL.md`
-- `.claude/skills/sc-observability-new-project/references/standard-configuration.md`
-- `.claude/skills/sc-observability-new-project/references/console-and-log-root.md`
-- `.claude/skills/sc-observability-new-project/assets/observability.rs.j2`
-- `.claude/skills/sc-observability-existing-project/SKILL.md`
-- `.claude/skills/sc-observability-existing-project/references/standard-configuration.md`
-- `.claude/skills/sc-observability-existing-project/references/console-and-log-root.md`
-- `.claude/skills/sc-observability-existing-project/references/adoption-checklist.md`
-- `.claude/skills/sc-observability-existing-project/references/migrate-from-log.md`
-- `.claude/skills/sc-observability-existing-project/references/migrate-from-tracing.md`
-- `.claude/skills/sc-observability-existing-project/references/migrate-from-custom-jsonl.md`
-- `.claude/skills/sc-observability-review/SKILL.md`
-- `.claude/skills/sc-observability-review/references/review-checklist.md`
-- `.claude/skills/sc-observability-review/references/remediation-patterns.md`
-- `.claude/skills/sc-observability-review/references/app-type-guidance.md`
+- `.claude/skills/sc-observability-bootstrapping/SKILL.md`
+- `.claude/skills/sc-observability-bootstrapping/references/standard-configuration.md`
+- `.claude/skills/sc-observability-bootstrapping/references/console-and-log-root.md`
+- `.claude/skills/sc-observability-bootstrapping/assets/observability.rs.j2`
+- `.claude/skills/sc-observability-adopting/SKILL.md`
+- `.claude/skills/sc-observability-adopting/references/standard-configuration.md`
+- `.claude/skills/sc-observability-adopting/references/console-and-log-root.md`
+- `.claude/skills/sc-observability-adopting/references/adoption-checklist.md`
+- `.claude/skills/sc-observability-adopting/references/migrate-from-log.md`
+- `.claude/skills/sc-observability-adopting/references/migrate-from-tracing.md`
+- `.claude/skills/sc-observability-adopting/references/migrate-from-custom-jsonl.md`
+- `.claude/skills/sc-observability-reviewing/SKILL.md`
+- `.claude/skills/sc-observability-reviewing/references/review-checklist.md`
+- `.claude/skills/sc-observability-reviewing/references/remediation-patterns.md`
+- `.claude/skills/sc-observability-reviewing/references/app-type-guidance.md`
 
 ### 4.2 Marketplace Package
 
@@ -87,21 +87,21 @@ The marketplace package copy will live under `packages/sc-observability/`:
 - `packages/sc-observability/.claude-plugin/plugin.json`
 - `packages/sc-observability/README.md`
 - `packages/sc-observability/CHANGELOG.md`
-- `packages/sc-observability/skills/sc-observability-new-project/SKILL.md`
-- `packages/sc-observability/skills/sc-observability-new-project/references/standard-configuration.md`
-- `packages/sc-observability/skills/sc-observability-new-project/references/console-and-log-root.md`
-- `packages/sc-observability/skills/sc-observability-new-project/assets/observability.rs.j2`
-- `packages/sc-observability/skills/sc-observability-existing-project/SKILL.md`
-- `packages/sc-observability/skills/sc-observability-existing-project/references/standard-configuration.md`
-- `packages/sc-observability/skills/sc-observability-existing-project/references/console-and-log-root.md`
-- `packages/sc-observability/skills/sc-observability-existing-project/references/adoption-checklist.md`
-- `packages/sc-observability/skills/sc-observability-existing-project/references/migrate-from-log.md`
-- `packages/sc-observability/skills/sc-observability-existing-project/references/migrate-from-tracing.md`
-- `packages/sc-observability/skills/sc-observability-existing-project/references/migrate-from-custom-jsonl.md`
-- `packages/sc-observability/skills/sc-observability-review/SKILL.md`
-- `packages/sc-observability/skills/sc-observability-review/references/review-checklist.md`
-- `packages/sc-observability/skills/sc-observability-review/references/remediation-patterns.md`
-- `packages/sc-observability/skills/sc-observability-review/references/app-type-guidance.md`
+- `packages/sc-observability/skills/sc-observability-bootstrapping/SKILL.md`
+- `packages/sc-observability/skills/sc-observability-bootstrapping/references/standard-configuration.md`
+- `packages/sc-observability/skills/sc-observability-bootstrapping/references/console-and-log-root.md`
+- `packages/sc-observability/skills/sc-observability-bootstrapping/assets/observability.rs.j2`
+- `packages/sc-observability/skills/sc-observability-adopting/SKILL.md`
+- `packages/sc-observability/skills/sc-observability-adopting/references/standard-configuration.md`
+- `packages/sc-observability/skills/sc-observability-adopting/references/console-and-log-root.md`
+- `packages/sc-observability/skills/sc-observability-adopting/references/adoption-checklist.md`
+- `packages/sc-observability/skills/sc-observability-adopting/references/migrate-from-log.md`
+- `packages/sc-observability/skills/sc-observability-adopting/references/migrate-from-tracing.md`
+- `packages/sc-observability/skills/sc-observability-adopting/references/migrate-from-custom-jsonl.md`
+- `packages/sc-observability/skills/sc-observability-reviewing/SKILL.md`
+- `packages/sc-observability/skills/sc-observability-reviewing/references/review-checklist.md`
+- `packages/sc-observability/skills/sc-observability-reviewing/references/remediation-patterns.md`
+- `packages/sc-observability/skills/sc-observability-reviewing/references/app-type-guidance.md`
 
 ### 4.3 Marketplace Metadata
 
@@ -205,7 +205,7 @@ validated against the same Synaptic Canvas architecture guidance.
 
 ## 7. Skill Specifications
 
-### 7.1 `sc-observability-new-project`
+### 7.1 `sc-observability-bootstrapping`
 
 Purpose:
 - help a user set up a new Rust project or repo with `sc-observability` from
@@ -232,6 +232,12 @@ Required references:
 Required asset:
 - `assets/observability.rs.j2`
 
+Required SKILL.md description:
+- include at least two concrete trigger phrases
+- use phrases such as:
+  - "set up sc-observability in a new Rust project"
+  - "add structured logging to a new Rust app"
+
 Required template contents:
 - app-name-based default log root helper
 - home-directory expansion implemented with the recommended `dirs` crate
@@ -243,6 +249,12 @@ Required template contents:
 - explicit indication that the template is rendered through `sc-compose` style
   token substitution and is therefore a generated starter artifact, not a
   static copied file
+- exact token substitution syntax:
+  - Jinja2-style uppercase tokens
+  - `{{APP_NAME}}`
+  - `{{SERVICE_NAME}}`
+  - `{{ENABLE_STDOUT_CONSOLE}}`
+  - `{{ENABLE_STDERR_CONSOLE}}`
 
 Guideline evaluation step for this skill:
 1. review the finished skill against:
@@ -256,7 +268,7 @@ Guideline evaluation step for this skill:
 3. record any required reductions in scope or wording before the skill is
    declared done
 
-### 7.2 `sc-observability-existing-project`
+### 7.2 `sc-observability-adopting`
 
 Purpose:
 - help a user bring `sc-observability` into an existing Rust project without
@@ -265,7 +277,7 @@ Purpose:
 Primary workflow:
 1. inspect the current project shape
 2. decide whether logging-only adoption is enough
-3. apply the same standard configuration convention used by the new-project
+3. apply the same standard configuration convention used by the bootstrapping
    skill
 4. provide an adoption checklist:
    - dependency additions
@@ -284,6 +296,12 @@ Required references:
 - `references/migrate-from-log.md`
 - `references/migrate-from-tracing.md`
 - `references/migrate-from-custom-jsonl.md`
+
+Required SKILL.md description:
+- include at least two concrete trigger phrases
+- use phrases such as:
+  - "bring sc-observability into an existing Rust project"
+  - "adopt sc-observability in a codebase that already has logging"
 
 Scope rule:
 - the skill itself remains focused on adoption into an existing repo
@@ -304,7 +322,7 @@ Guideline evaluation step for this skill:
 3. trim or split content further if the skill body grows beyond a lean
    discovery-layer document
 
-### 7.3 `sc-observability-review`
+### 7.3 `sc-observability-reviewing`
 
 Purpose:
 - review a Rust project's observability setup against the `sc-observability`
@@ -338,6 +356,12 @@ Required references:
 - `references/remediation-patterns.md`
 - `references/app-type-guidance.md`
 
+Required SKILL.md description:
+- include at least two concrete trigger phrases
+- use phrases such as:
+  - "review this project for sc-observability best practices"
+  - "check whether our logging setup matches the sc-observability standard"
+
 Guideline evaluation step for this skill:
 1. review the finished skill against:
    `/Users/randlee/Documents/github/synaptic-canvas/docs/claude-code-skills-agents-guidelines.md`
@@ -346,7 +370,7 @@ Guideline evaluation step for this skill:
    - checklist details and remediation patterns live in references
    - the `SKILL.md` body stays compact and decision-oriented
    - the output guidance is specific enough to be actionable
-3. revise wording if the skill becomes a generic review skill instead of a
+3. revise wording if the skill becomes a generic reviewing skill instead of a
    focused `sc-observability` review surface
 
 ## 8. Reference Content Plan
@@ -358,6 +382,9 @@ This shared reference must define:
 - the house-style default `~/.<app>` log root
 - the recommended `dirs` crate dependency for home-directory resolution in
   generated starter code
+- explicit acknowledgement that `CONSUMING.md` uses `PathBuf::from("./observability")`
+  as its minimal example while `~/.<app>` is the skill-defined house style on
+  top of that baseline
 - resulting file layout
 - default sinks
 - light logging expectations and boundaries
@@ -392,7 +419,7 @@ This reference must define:
 
 ### 8.4 Migration References
 
-These references are support material for existing-project use cases:
+These references are support material for adopting use cases:
 
 - `migrate-from-log.md`
 - `migrate-from-tracing.md`
@@ -407,13 +434,13 @@ They should explain:
 
 ### 8.5 Review References
 
-These references must support the review skill:
+These references must support the reviewing skill:
 
 - `review-checklist.md`
 - `remediation-patterns.md`
 - `app-type-guidance.md`
 
-They should let the review skill distinguish between:
+They should let the reviewing skill distinguish between:
 
 - a missing baseline
 - a deliberate divergence
@@ -430,13 +457,25 @@ This file must:
 - point the package source to `./packages/sc-observability`
 - include the required package metadata fields described by the Synaptic Canvas
   marketplace guidance
+- enumerate the required plugin fields:
+  - `name`
+  - `source`
+  - `description`
+  - `version`
+  - `author`
+  - `license`
+  - `keywords`
+  - `category`
 
 ### 9.2 `packages/sc-observability/.claude-plugin/plugin.json`
 
 This file must:
 
 - define package name `sc-observability`
-- list the three skill artifacts
+- list the three skill artifacts:
+  - `./skills/sc-observability-bootstrapping/SKILL.md`
+  - `./skills/sc-observability-adopting/SKILL.md`
+  - `./skills/sc-observability-reviewing/SKILL.md`
 - omit commands and agents unless they are intentionally added later
 
 ### 9.3 Package README And Changelog
@@ -492,32 +531,31 @@ sync tooling, but this plan does not require such tooling up front.
 
 ## 11. Implementation Sequence
 
-1. Create this planning document.
-2. Create the minimal marketplace skeleton:
+1. Create the minimal marketplace skeleton:
    - `.claude-plugin/marketplace.json`
    - `packages/sc-observability/.claude-plugin/plugin.json`
    - `packages/sc-observability/README.md`
    - `packages/sc-observability/CHANGELOG.md`
    - `docs/registries/nuget/registry.json`
-3. Create the local skill directories.
-4. Create the marketplace package skill directories.
-5. Write shared reference content:
+2. Create the local skill directories.
+3. Create the marketplace package skill directories.
+4. Write shared reference content:
    - standard configuration
    - console/log-root guidance
    - explicit `dirs`-based home-directory resolution guidance
-6. Write `observability.rs.j2`.
-7. Write `sc-observability-new-project/SKILL.md`.
-8. Evaluate the new-project skill against the Synaptic Canvas skill guidelines
+5. Write `observability.rs.j2`.
+6. Write `sc-observability-bootstrapping/SKILL.md`.
+7. Evaluate the bootstrapping skill against the Synaptic Canvas skill guidelines
    and revise it.
-9. Write existing-project references and `SKILL.md`.
-10. Evaluate the existing-project skill against the Synaptic Canvas skill
+8. Write adopting references and `SKILL.md`.
+9. Evaluate the adopting skill against the Synaptic Canvas skill
     guidelines and revise it.
-11. Write review references and `SKILL.md`.
-12. Evaluate the review skill against the Synaptic Canvas skill guidelines and
+10. Write reviewing references and `SKILL.md`.
+11. Evaluate the reviewing skill against the Synaptic Canvas skill guidelines and
     revise it.
-13. Review both trees for local/package parity.
-14. Validate marketplace metadata for correct package and artifact counts.
-15. Review the full package for completeness and trim any bloated skill bodies.
+12. Review both trees for local/package parity.
+13. Validate marketplace metadata for correct package and artifact counts.
+14. Review the full package for completeness and trim any bloated skill bodies.
 
 ## 12. Plan Review Step
 
