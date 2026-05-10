@@ -2,7 +2,7 @@
   "name": "sc-observability",
   "owner": {
     "name": "randlee",
-    "email": "randlee@example.com"
+    "email": "randlee@randlee.com"
   },
   "metadata": {
     "description": "Marketplace package for downstream sc-observability setup and review skills.",
