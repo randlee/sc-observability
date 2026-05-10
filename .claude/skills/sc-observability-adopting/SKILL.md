@@ -48,3 +48,14 @@ wrapper around the repo's ATM-scoped migration docs.
 - `references/console-and-log-root.md`
 - `references/adoption-checklist.md`
 - migration references as needed
+
+## Guideline Evaluation
+
+Reviewed against
+`/Users/randlee/Documents/github/synaptic-canvas/docs/claude-code-skills-agents-guidelines.md`.
+
+- `SKILL.md` stays concise: confirmed
+- detailed material lives in `references/`: confirmed
+- starter code lives in `assets/`: confirmed
+- scope reductions made: migration-specific playbooks stay in `references/`
+  instead of expanding the core skill body

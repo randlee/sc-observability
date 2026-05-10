@@ -52,3 +52,13 @@ style token substitution using:
 - `{{SERVICE_NAME}}`
 - `{{ENABLE_STDOUT_CONSOLE}}`
 - `{{ENABLE_STDERR_CONSOLE}}`
+
+## Guideline Evaluation
+
+Reviewed against
+`/Users/randlee/Documents/github/synaptic-canvas/docs/claude-code-skills-agents-guidelines.md`.
+
+- `SKILL.md` stays concise: confirmed
+- detailed material lives in `references/`: confirmed
+- starter code lives in `assets/`: confirmed
+- scope reductions made: none

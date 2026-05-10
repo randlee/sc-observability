@@ -42,3 +42,14 @@ Keep findings concrete. Distinguish:
 - missing baseline
 - deliberate divergence
 - app-type-specific choice
+
+## Guideline Evaluation
+
+Reviewed against
+`/Users/randlee/Documents/github/synaptic-canvas/docs/claude-code-skills-agents-guidelines.md`.
+
+- `SKILL.md` stays concise: confirmed
+- detailed material lives in `references/`: confirmed
+- starter code lives in `assets/`: confirmed
+- scope reductions made: remediation examples stay in `references/` so the
+  review workflow stays short
