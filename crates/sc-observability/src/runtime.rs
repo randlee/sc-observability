@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, ErrorContext, EventError, FlushError, LoggingHealthReport,
-    LoggingHealthState, LogQuery, LogSnapshot, QueryError, QueryHealthState, Remediation,
+    DiagnosticInfo, DiagnosticSummary, ErrorContext, EventError, FlushError, LogQuery, LogSnapshot,
+    LoggingHealthReport, LoggingHealthState, QueryError, QueryHealthState, Remediation,
     ShutdownError, SinkHealth, SinkHealthState,
 };
 use serde_json::Value;
@@ -40,7 +40,9 @@ impl LoggerRuntime {
 
 impl Logger {
     /// Starts a construction-time builder for sink registration.
-    pub fn builder(config: crate::LoggerConfig) -> Result<LoggerBuilder, sc_observability_types::InitError> {
+    pub fn builder(
+        config: crate::LoggerConfig,
+    ) -> Result<LoggerBuilder, sc_observability_types::InitError> {
         LoggerBuilder::new(config)
     }
 
