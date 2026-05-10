@@ -1,0 +1,31 @@
+{
+  "name": "sc-observability",
+  "owner": {
+    "name": "randlee",
+    "email": "randlee@randlee.com"
+  },
+  "metadata": {
+    "description": "Marketplace package for downstream sc-observability setup and review skills.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "sc-observability",
+      "source": "./packages/sc-observability",
+      "description": "Skills for bootstrapping, adopting, and reviewing sc-observability usage.",
+      "version": "1.0.0",
+      "author": {
+        "name": "randlee"
+      },
+      "license": "MIT",
+      "keywords": [
+        "rust",
+        "observability",
+        "logging",
+        "claude-code",
+        "skills"
+      ],
+      "category": "tools"
+    }
+  ]
+}

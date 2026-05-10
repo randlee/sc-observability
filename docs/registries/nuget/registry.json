@@ -1,0 +1,61 @@
+{
+  "version": "2.0.0",
+  "generated": "2026-05-10T00:00:00Z",
+  "repo": "randlee/sc-observability",
+  "marketplace": {
+    "name": "sc-observability",
+    "version": "1.0.0",
+    "status": "beta",
+    "url": "https://github.com/randlee/sc-observability"
+  },
+  "metadata": {
+    "registryVersion": "2.0.0",
+    "schemaVersion": "1.0.0",
+    "totalPackages": 1,
+    "totalCommands": 0,
+    "totalSkills": 3,
+    "totalAgents": 0,
+    "totalScripts": 0,
+    "categories": {
+      "tools": [
+        "sc-observability"
+      ]
+    }
+  },
+  "packages": {
+    "sc-observability": {
+      "name": "sc-observability",
+      "version": "1.0.0",
+      "status": "beta",
+      "tier": 1,
+      "description": "Skills for downstream sc-observability bootstrapping, adopting, and reviewing.",
+      "github": "randlee/sc-observability",
+      "repo": "https://github.com/randlee/sc-observability",
+      "path": "packages/sc-observability",
+      "readme": "https://raw.githubusercontent.com/randlee/sc-observability/main/packages/sc-observability/README.md",
+      "license": "MIT",
+      "author": {
+        "name": "randlee"
+      },
+      "tags": [
+        "rust",
+        "observability",
+        "logging",
+        "skills"
+      ],
+      "artifacts": {
+        "commands": 0,
+        "skills": 3,
+        "agents": 0,
+        "scripts": 0,
+        "schemas": 0
+      },
+      "dependencies": [],
+      "changelog": "https://raw.githubusercontent.com/randlee/sc-observability/main/packages/sc-observability/CHANGELOG.md",
+      "lastUpdated": "2026-05-10",
+      "dependents": []
+    }
+  },
+  "versionCompatibility": {},
+  "publishers": {}
+}
