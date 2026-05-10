@@ -1,31 +1,16 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "sc-observability",
-  "owner": {
-    "name": "randlee",
-    "email": "randlee@randlee.com"
-  },
-  "metadata": {
-    "description": "Marketplace package for downstream sc-observability setup and review skills.",
-    "version": "1.0.0"
-  },
+  "description": "Skills for bootstrapping, adopting, and reviewing sc-observability in downstream Rust projects.",
+  "owner": { "name": "randlee", "email": "randlee@randlee.com" },
   "plugins": [
     {
       "name": "sc-observability",
-      "source": "./packages/sc-observability",
       "description": "Skills for bootstrapping, adopting, and reviewing sc-observability usage.",
-      "version": "1.0.0",
-      "author": {
-        "name": "randlee"
-      },
-      "license": "MIT",
-      "keywords": [
-        "rust",
-        "observability",
-        "logging",
-        "claude-code",
-        "skills"
-      ],
-      "category": "tools"
+      "author": { "name": "randlee" },
+      "category": "tools",
+      "source": "./packages/sc-observability",
+      "homepage": "https://github.com/randlee/sc-observability"
     }
   ]
 }
