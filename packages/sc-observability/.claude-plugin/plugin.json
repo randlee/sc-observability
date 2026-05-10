@@ -1,0 +1,20 @@
+{
+  "name": "sc-observability",
+  "description": "Skills for bootstrapping, adopting, and reviewing sc-observability in downstream Rust projects.",
+  "version": "1.0.0",
+  "author": {
+    "name": "randlee"
+  },
+  "license": "MIT",
+  "keywords": [
+    "rust",
+    "observability",
+    "logging",
+    "skills"
+  ],
+  "skills": [
+    "./skills/sc-observability-bootstrapping/SKILL.md",
+    "./skills/sc-observability-adopting/SKILL.md",
+    "./skills/sc-observability-reviewing/SKILL.md"
+  ]
+}
