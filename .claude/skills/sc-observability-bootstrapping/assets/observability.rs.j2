@@ -23,7 +23,7 @@ pub fn build_logger() -> Result<Logger, Box<dyn std::error::Error>> {
     let log_root = default_log_root()?;
     let mut config = LoggerConfig::default_for(service.clone(), log_root);
 
-    // Only one console token should render true. If both do, stderr wins.
+    // Only one console token should render true. If both render true, stdout takes effect because ENABLE_STDOUT_CONSOLE is evaluated first.
     if ENABLE_STDOUT_CONSOLE {
         config.enable_console_sink = true;
     } else if ENABLE_STDERR_CONSOLE {

@@ -56,6 +56,6 @@ Reviewed against
 
 - `SKILL.md` stays concise: confirmed
 - detailed material lives in `references/`: confirmed
-- starter code lives in `assets/`: confirmed
+- no template assets required for this skill: confirmed
 - scope reductions made: migration-specific playbooks stay in `references/`
   instead of expanding the core skill body

@@ -50,6 +50,6 @@ Reviewed against
 
 - `SKILL.md` stays concise: confirmed
 - detailed material lives in `references/`: confirmed
-- starter code lives in `assets/`: confirmed
+- no template assets required for this skill: confirmed
 - scope reductions made: remediation examples stay in `references/` so the
   review workflow stays short
