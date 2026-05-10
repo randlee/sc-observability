@@ -29,7 +29,6 @@ This plan is constrained by the following source material and decisions:
   - `CONSUMING.md`
   - `docs/architecture.md`
   - `docs/requirements.md`
-  - `docs/migration-guide.md`
   - `docs/atm-quickstart.md`
 
 Accepted product decisions for this plan:
@@ -128,6 +127,12 @@ The standard house style is:
 - default log root is `~/.<app>`
 - the built-in file sink therefore writes to:
   `~/.<app>/logs/<service>.log.jsonl`
+- the `~` expansion mechanism for generated starter code is:
+  - recommend the consumer add the `dirs` crate
+  - resolve the root with `dirs::home_dir().map(|p| p.join(format!(\".{app}\")))`
+  - if no home directory can be resolved, fall back to an explicit app-provided
+    path or return a configuration error rather than silently assuming a
+    platform-specific default
 
 This is intentionally layered on top of the crate contract documented in
 `CONSUMING.md`, which defines the final sink layout as:
@@ -136,12 +141,16 @@ This is intentionally layered on top of the crate contract documented in
 
 The skill content must make it explicit that the repo-wide convention is to set
 `log_root` to `~/.<app>` by default, not to change the sink naming contract.
+It must also make it explicit that this is a skill-defined house style for
+downstream consumers, not a built-in `sc-observability` crate default.
 
 ### 5.2 Default Logging Behavior
 
 The standard baseline for downstream apps is:
 
 - use `sc-observability` from crates.io as the initial default
+- add `sc-observability-types` as a direct dependency only when the consumer is
+  implementing custom sinks or extending the shared types layer directly
 - start with logging-only adoption before routing or OTLP unless the user asks
   for a heavier stack
 - default to a light logging posture:
@@ -225,11 +234,15 @@ Required asset:
 
 Required template contents:
 - app-name-based default log root helper
+- home-directory expansion implemented with the recommended `dirs` crate
 - standard `LoggerConfig::default_for(...)` setup
 - easy switch for enabling console logging
 - example startup/shutdown events for long-running apps
 - example success event for CLIs
 - `logger.health()` usage including active path inspection
+- explicit indication that the template is rendered through `sc-compose` style
+  token substitution and is therefore a generated starter artifact, not a
+  static copied file
 
 Guideline evaluation step for this skill:
 1. review the finished skill against:
@@ -276,6 +289,8 @@ Scope rule:
 - the skill itself remains focused on adoption into an existing repo
 - library-specific migration details live in references, not in the core
   `SKILL.md`
+- the migration reference files are new writes for this package and are not
+  derived from the repo's ATM-scoped `docs/migration-guide.md`
 
 Guideline evaluation step for this skill:
 1. review the finished skill against:
@@ -341,6 +356,8 @@ Guideline evaluation step for this skill:
 This shared reference must define:
 
 - the house-style default `~/.<app>` log root
+- the recommended `dirs` crate dependency for home-directory resolution in
+  generated starter code
 - resulting file layout
 - default sinks
 - light logging expectations and boundaries
@@ -444,9 +461,11 @@ This file must:
 - declare tier based on actual install assumptions
 
 Expected tier for this phase:
-- tier `0` if the package is self-contained guidance and templates only
-- tier `1` only if required token substitution is introduced
-- do not claim a lower tier than the package really needs
+- tier `1`
+  because `observability.rs.j2` is a rendered starter template intended for
+  `sc-compose`-style token substitution at use time
+- do not describe this package as tier `0` unless the template is later changed
+  to a static non-rendered example artifact
 
 ### 9.5 Forwarding Guidance
 
@@ -485,6 +504,7 @@ sync tooling, but this plan does not require such tooling up front.
 5. Write shared reference content:
    - standard configuration
    - console/log-root guidance
+   - explicit `dirs`-based home-directory resolution guidance
 6. Write `observability.rs.j2`.
 7. Write `sc-observability-new-project/SKILL.md`.
 8. Evaluate the new-project skill against the Synaptic Canvas skill guidelines
