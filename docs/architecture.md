@@ -141,7 +141,7 @@ Its architecture stays intentionally split:
   `sc-observability::Logger`
 - `sc-composer` does not depend directly on `sc-observability-types`
 - this contract is intentionally limited to simple logging-only integration;
-  `sc-observe` and `sc-observability-otlp` are out of scope for this sprint
+  `sc-observe` and `sc-observability-otlp` are out of scope
 
 The consumer-facing split is:
 
@@ -174,11 +174,11 @@ shape is:
 
 ```rust
 pub enum ObservationEvent {
-    ResolveAttempt { template: String },
-    ResolveOutcome { selected_path: Option<String>, success: bool },
-    IncludeExpandOutcome { include_path: String, success: bool },
-    ValidationOutcome { success: bool },
-    RenderOutcome { success: bool },
+    ResolveAttempt(ResolveAttemptEvent),
+    ResolveOutcome(ResolveOutcomeEvent),
+    IncludeExpandOutcome(IncludeOutcomeEvent),
+    ValidationOutcome(ValidationOutcomeEvent),
+    RenderOutcome(RenderOutcomeEvent),
 }
 
 pub trait ObservationSink {
@@ -186,7 +186,11 @@ pub trait ObservationSink {
 }
 
 pub trait CompositionObserver {
-    fn sink(&mut self) -> &mut dyn ObservationSink;
+    fn on_resolve_attempt(&mut self, event: &ResolveAttemptEvent) {}
+    fn on_resolve_outcome(&mut self, event: &ResolveOutcomeEvent) {}
+    fn on_include_outcome(&mut self, event: &IncludeOutcomeEvent) {}
+    fn on_validation_outcome(&mut self, event: &ValidationOutcomeEvent) {}
+    fn on_render_outcome(&mut self, event: &RenderOutcomeEvent) {}
 }
 
 pub fn compose_with_observer(
@@ -209,16 +213,8 @@ Approved `sc-compose` wiring shape:
    addition to the file sink.
 3. Commands that emit machine-readable `--json` output disable the built-in
    console sink so stdout remains valid command output.
-   NOTE: This is a new behavioral requirement for `sc-compose` not yet
-   captured in its normative docs. Propagating this requirement to
-   `sc-compose` `docs/requirements.md` and `docs/architecture.md` is a
-   prerequisite before S7 implementation is authorized.
-4. The planned downstream `sc-compose observability-health` subcommand is the
-   CLI surface that reads `Logger::health()` and returns the resulting
-   `LoggingHealthReport`.
-   NOTE: `observability-health` is a new subcommand not yet defined in
-   `sc-compose` normative docs. Adding this command to `sc-compose` docs is a
-   prerequisite before S7 implementation is authorized.
+4. The `sc-compose observability-health` subcommand reads `Logger::health()`
+   and returns the resulting `LoggingHealthReport`.
 5. If the CLI does not install a logger-backed adapter, `sc-composer`
    continues to use its built-in no-op observer path and command behavior
    remains functional with logging disabled.
