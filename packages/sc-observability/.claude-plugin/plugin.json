@@ -1,0 +1,8 @@
+{
+  "name": "sc-observability",
+  "description": "Skills for bootstrapping, adopting, and reviewing sc-observability in downstream Rust projects.",
+  "version": "1.0.0",
+  "author": {
+    "name": "randlee"
+  }
+}
