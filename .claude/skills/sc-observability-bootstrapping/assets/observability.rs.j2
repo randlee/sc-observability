@@ -1,0 +1,106 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use sc_observability::{
+    ActionName, ConsoleSink, Level, LogEvent, Logger, LoggerBuilder, LoggerConfig, OutcomeLabel,
+    ProcessIdentity, SchemaVersion, ServiceName, SinkRegistration, TargetCategory, Timestamp,
+    OBSERVATION_ENVELOPE_VERSION,
+};
+
+const APP_NAME: &str = "{{APP_NAME}}";
+const SERVICE_NAME: &str = "{{SERVICE_NAME}}";
+const ENABLE_STDOUT_CONSOLE: bool = {{ENABLE_STDOUT_CONSOLE}};
+const ENABLE_STDERR_CONSOLE: bool = {{ENABLE_STDERR_CONSOLE}};
+
+pub fn default_log_root() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    dirs::home_dir()
+        .map(|path| path.join(format!(".{APP_NAME}")))
+        .ok_or_else(|| "could not resolve home directory for default log root".into())
+}
+
+pub fn build_logger() -> Result<Logger, Box<dyn std::error::Error>> {
+    let service = ServiceName::new(SERVICE_NAME)?;
+    let log_root = default_log_root()?;
+    let mut config = LoggerConfig::default_for(service.clone(), log_root);
+
+    // Only one console token should render true. If both render true, stdout takes effect because ENABLE_STDOUT_CONSOLE is evaluated first.
+    if ENABLE_STDOUT_CONSOLE {
+        config.enable_console_sink = true;
+    } else if ENABLE_STDERR_CONSOLE {
+        config.enable_console_sink = false;
+        let mut builder = LoggerBuilder::new(config)?;
+        builder.register_sink(SinkRegistration::new(Arc::new(ConsoleSink::stderr())));
+        return Ok(builder.build());
+    }
+
+    Ok(Logger::new(config)?)
+}
+
+pub fn emit_service_started(logger: &Logger) -> Result<(), Box<dyn std::error::Error>> {
+    logger.emit(LogEvent {
+        version: SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION)?,
+        timestamp: Timestamp::now_utc(),
+        level: Level::Info,
+        service: ServiceName::new(SERVICE_NAME)?,
+        target: TargetCategory::new("app.lifecycle")?,
+        action: ActionName::new("service.started")?,
+        message: Some("service started".to_string()),
+        identity: ProcessIdentity::default(),
+        trace: None,
+        request_id: None,
+        correlation_id: None,
+        outcome: Some(OutcomeLabel::new("ok")?),
+        diagnostic: None,
+        state_transition: None,
+        fields: serde_json::Map::new(),
+    })?;
+    Ok(())
+}
+
+pub fn emit_service_stopping(logger: &Logger) -> Result<(), Box<dyn std::error::Error>> {
+    logger.emit(LogEvent {
+        version: SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION)?,
+        timestamp: Timestamp::now_utc(),
+        level: Level::Info,
+        service: ServiceName::new(SERVICE_NAME)?,
+        target: TargetCategory::new("app.lifecycle")?,
+        action: ActionName::new("service.stopping")?,
+        message: Some("service stopping".to_string()),
+        identity: ProcessIdentity::default(),
+        trace: None,
+        request_id: None,
+        correlation_id: None,
+        outcome: Some(OutcomeLabel::new("ok")?),
+        diagnostic: None,
+        state_transition: None,
+        fields: serde_json::Map::new(),
+    })?;
+    Ok(())
+}
+
+pub fn emit_cli_success(logger: &Logger, action_name: &str) -> Result<(), Box<dyn std::error::Error>> {
+    logger.emit(LogEvent {
+        version: SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION)?,
+        timestamp: Timestamp::now_utc(),
+        level: Level::Info,
+        service: ServiceName::new(SERVICE_NAME)?,
+        target: TargetCategory::new("app.cli")?,
+        action: ActionName::new(action_name)?,
+        message: Some("command completed successfully".to_string()),
+        identity: ProcessIdentity::default(),
+        trace: None,
+        request_id: None,
+        correlation_id: None,
+        outcome: Some(OutcomeLabel::new("ok")?),
+        diagnostic: None,
+        state_transition: None,
+        fields: serde_json::Map::new(),
+    })?;
+    Ok(())
+}
+
+pub fn print_health(logger: &Logger) {
+    let health = logger.health();
+    println!("logger state: {:?}", health.state);
+    println!("active log path: {}", health.active_log_path.display());
+}
