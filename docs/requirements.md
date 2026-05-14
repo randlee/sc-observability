@@ -100,6 +100,10 @@ This crate owns shared neutral contracts only.
 - TYP-036 `QueryError` shall map to stable error codes `SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`, `SC_LOG_QUERY_UNAVAILABLE`, and `SC_LOG_QUERY_SHUTDOWN`.
 - TYP-037 `sc-observability-types` shall own `QueryHealthReport` and `QueryHealthState` as the shared health contract for log query/follow availability.
 - TYP-038 `sc-observability-types` shall own `ObservabilityHealthProvider` as a sealed shared telemetry-health trait reserved for workspace-owned implementations.
+- TYP-039 `sc-observability-types` shall not expose concrete logging runtime
+  behavior such as `Logger`, `LoggerBuilder`, `LogSink`, `SinkRegistration`,
+  built-in sink implementations, or sink-configuration toggles. Downstream
+  consumers that need those behaviors shall depend on `sc-observability`.
 
 ## 4. `sc-observability` Requirements
 
@@ -156,6 +160,13 @@ This crate is the lightweight logging layer.
 - LOG-034 `ConsoleSink` shall expose public `stdout()` and `stderr()` convenience constructors. Arbitrary writer selection shall not be added to the public v1 surface.
 - LOG-035 `sc-observability` shall expose a public retained-sink fault-injection surface for live validation runs, gated behind `#[cfg(test)]` or a dedicated `fault-injection` feature, with at least `degraded` and `unavailable` states.
 - LOG-036 Retained-sink fault injection shall live in the retained-sink layer and exercise the same health-state transitions consumers observe in production, without filesystem sabotage or internal-only hooks.
+- LOG-037 `sc-observability` shall be the concrete downstream integration
+  surface for logging-only consumers that need logger construction, sink
+  toggles, custom sink registration, `Logger::health()`, or `Logger::shutdown()`.
+- LOG-038 Logging-only downstream consumers may keep their own local event or
+  observer abstractions and adapt them into `Logger`; `sc-observability` shall
+  not require those consumers to adopt `sc-observability-types` as their
+  application-facing observer API.
 
 ### 4.2 Consumer Documentation Requirements
 
@@ -163,8 +174,31 @@ This crate is the lightweight logging layer.
 - DOC-002 A root-level `CONSUMING.md` shall exist and cover logging-only setup, the default log root/path, `SC_LOG_ROOT` behavior, enable/disable controls for file and console sinks, custom sink registration, `Logger::health()` usage, and links to deeper docs.
 - DOC-003 A runnable `examples/custom-sink-example/` shall exist and demonstrate a public-only `LogSink` implementation, `LoggerBuilder`, `SinkRegistration`, optional `LogFilter`, builder-time sink registration, and `logger.health()`.
 - DOC-004 Default sink behavior, path layout, and environment override behavior shall be documented in a consumer-facing section, which may live in `CONSUMING.md`.
+- DOC-005 The normative docs shall include an explicit downstream
+  `sc-compose` logging-only integration contract that states the exact split between
+  `sc-observability-types` and `sc-observability`.
+- DOC-006 The `sc-compose` integration contract shall state that
+  `sc-observability-types` provides shared `LogEvent`, health, diagnostics, and
+  identifier contracts, while `sc-observability` provides `Logger`,
+  `LoggerConfig`, `LoggerBuilder`, `LogSink`, `SinkRegistration`, built-in
+  sinks, sink toggles, `Logger::health()`, and `Logger::shutdown()`.
+- DOC-007 The same contract shall document the approved logging-only wiring for
+  `sc-compose`: `sc-composer` keeps a local observer layer with no direct
+  dependency on `sc-observability-types`, and the CLI adapts that local layer
+  into `sc-observability::Logger`.
+- DOC-008 The same contract shall define the adapter-owned mapping from
+  `sc-compose` local observer events to `LogEvent` fields, including stable
+  guidance for `target`, `action`, `outcome`, `diagnostic`, `message`, and
+  structured `fields`.
+- DOC-009 The same contract shall explicitly define the local `sc-composer`
+  observer injection model or cross-reference the controlling `sc-compose`
+  normative section that defines it, including trait shape, callback/event
+  source, and `dyn`-compatible injection semantics.
+- DOC-010 OTel integration for `sc-compose` is out of scope for this
+  logging-only contract and is deferred to a future sprint if `sc-compose`
+  later adopts `sc-observe` or `sc-observability-otlp`.
 
-### 4.3 Pre-Publish Usability Issue Traceability
+### 4.3 Consumer Usability Issue Traceability
 
 | GitHub issue | Scope | Requirement IDs |
 | --- | --- | --- |
