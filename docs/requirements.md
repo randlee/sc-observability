@@ -133,11 +133,11 @@ This crate is the lightweight logging layer.
 - LOG-020 `LoggerConfig` shall define documented defaults for v1:
   - `level = Info`
   - `queue_capacity = 1024`
-  - `rotation_max_bytes = 64 MiB`
+  - `rotation_max_bytes = ByteCount::from_mib(64)`
   - `rotation_max_files = 10`
   - `retention_max_age = 7 days`
-  - `maintenance_cadence = 60 s`
-  - `maintenance_join_timeout = 5 s`
+  - `maintenance_cadence = MaintenanceCadence::new(60 s)`
+  - `maintenance_join_timeout = MaintenanceJoinTimeout::new(5 s)`
   - `maintenance_max_work_per_pass = None`
   - bearer-token redaction enabled
   - built-in file sink enabled
@@ -145,10 +145,9 @@ This crate is the lightweight logging layer.
 - LOG-021 Zero-configuration logging shall produce structured JSONL output using the built-in file sink and shall not require any OTLP or routing configuration.
 - LOG-022 The logging layer shall not expose or assume an HTTP health endpoint; health is available through in-process health objects only.
 - LOG-023 `Logger` lifecycle behavior shall be explicit:
-  - `emit()` after `shutdown()` returns `EventError`
-  - `flush()` after `shutdown()` is idempotent and returns `Ok(())`
-  - repeated `shutdown()` calls are idempotent and return `Ok(())`
-  - `query()` after `shutdown()` returns `QueryError::Shutdown`
+  - `Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`
+  - `emit()`, `query()`, and `follow()` are available only on `Logger<Running>`
+  - `Logger<Stopped>` remains usable for health inspection only
   - logger-created `LogFollowSession::poll()` after `shutdown()` returns `QueryError::Shutdown`
 - LOG-024 `sc-observability` shall own a crate-local sealed `LogEmitter` trait for producer injection when logging-only use is desired.
 - LOG-025 `Logger` shall expose a synchronous historical query API `query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>`.
@@ -156,7 +155,7 @@ This crate is the lightweight logging layer.
 - LOG-027 `LogFollowSession` shall expose synchronous polling and shall not require an async runtime, background task, or file watcher to deliver new records.
 - LOG-028 `sc-observability` shall provide `JsonlLogReader` as an independent JSONL file reader for historical query and follow operations without requiring a live `Logger`, `sc-observe`, or `sc-observability-otlp`.
 - LOG-029 Historical query and follow behavior shall operate over the active JSONL log and its rotation set using the documented `sc-observability` naming/layout rules.
-- LOG-030 Rotation handling for query/follow shall avoid duplicating or silently skipping committed log records when the active file is renamed or recreated on Unix-family platforms. On Windows, stable Rust does not expose a reliable file identity equivalent to `(dev, ino)`, so truncate/recreate detection remains best-effort and is not a release guarantee for v1.
+- LOG-030 Rotation handling for query/follow shall avoid duplicating or silently skipping committed log records when the active file is renamed or recreated on Unix-family platforms. On Windows, the implementation shall use stable filesystem identity metadata when available so append-vs-recreate detection does not degrade into length-based best-effort behavior.
 - LOG-031 `LoggingHealthReport` shall expose query/follow availability through an optional `QueryHealthReport`.
 - LOG-032 Query/follow APIs shall remain usable in logging-only deployments and shall not introduce ATM-specific types, daemon requirements, or `agent-team-mail-*` dependencies.
 - LOG-033 `JsonlLogReader` query/follow operations shall remain independent of `Logger` lifecycle and shall stay usable for offline inspection after a logger-owned runtime shuts down.
@@ -176,7 +175,8 @@ This crate is the lightweight logging layer.
 - LOG-040 The retained-log policy surface shall expose additive configuration
   for `rotation_max_bytes`, `rotation_max_files`, `retention_max_age`,
   `maintenance_cadence`, `maintenance_join_timeout`, and
-  `maintenance_max_work_per_pass`. `retention_max_age` supersedes the prior
+  `maintenance_max_work_per_pass`, using strong public newtypes for bytes and
+  maintenance timing fields. `retention_max_age` supersedes the prior
   `retention.max_age_days` field.
 - LOG-041 Retained-log maintenance shall run off the main emit path on a
   worker owned by `sc-observability` and shall not require an async runtime

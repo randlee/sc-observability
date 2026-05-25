@@ -23,6 +23,8 @@ pub const DEFAULT_LOG_QUEUE_CAPACITY: usize = 1024;
 pub const DEFAULT_ROTATION_MAX_BYTES: u64 = 64 * 1024 * 1024;
 /// Default number of rotated files retained beside the active log.
 pub const DEFAULT_ROTATION_MAX_FILES: u32 = 10;
+/// `usize` alias for logger-managed retained-log rotation counts.
+pub const DEFAULT_ROTATION_MAX_FILES_USIZE: usize = DEFAULT_ROTATION_MAX_FILES as usize;
 /// Default retention window for rotated logs in calendar days.
 pub const DEFAULT_RETENTION_MAX_AGE_DAYS: u32 = 7;
 /// Default retention window for retained logs.

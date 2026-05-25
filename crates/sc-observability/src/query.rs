@@ -17,9 +17,13 @@ pub(crate) struct FileIdentity {
     device: u64,
     #[cfg(unix)]
     inode: u64,
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    volume_serial_number: Option<u32>,
+    #[cfg(windows)]
+    file_index: Option<u64>,
+    #[cfg(not(any(unix, windows)))]
     len: u64,
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     modified_nanos: Option<u128>,
 }
 
@@ -460,7 +464,17 @@ fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
         }
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        FileIdentity {
+            volume_serial_number: metadata.volume_serial_number(),
+            file_index: metadata.file_index(),
+        }
+    }
+
+    #[cfg(not(any(unix, windows)))]
     {
         let modified_nanos = metadata
             .modified()
@@ -509,7 +523,15 @@ mod tests {
             }
         }
 
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            FileIdentity {
+                volume_serial_number: Some(1),
+                file_index: Some(seed),
+            }
+        }
+
+        #[cfg(not(any(unix, windows)))]
         {
             FileIdentity {
                 len: seed,
@@ -568,16 +590,16 @@ mod tests {
         let previous = vec![TrackedFile {
             path: PathBuf::from("active.log.jsonl"),
             identity: FileIdentity {
-                len: 256,
-                modified_nanos: Some(1),
+                volume_serial_number: Some(1),
+                file_index: Some(10),
             },
             offset: 256,
         }];
         let recreated = ResolvedLogFile {
             path: PathBuf::from("active.log.jsonl"),
             identity: FileIdentity {
-                len: 0,
-                modified_nanos: Some(2),
+                volume_serial_number: Some(1),
+                file_index: Some(11),
             },
             len: 64,
         };

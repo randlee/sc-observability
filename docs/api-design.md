@@ -1373,11 +1373,11 @@ Defaults:
 
 - `level = LevelFilter::Info`
 - `queue_capacity = 1024`
-- `retained_log_policy.rotation_max_bytes = 64 * 1024 * 1024`
+- `retained_log_policy.rotation_max_bytes = ByteCount::from_mib(64)`
 - `retained_log_policy.rotation_max_files = 10`
 - `retained_log_policy.retention_max_age = 7 days`
-- `retained_log_policy.maintenance_cadence = 60s`
-- `retained_log_policy.maintenance_join_timeout = 5s`
+- `retained_log_policy.maintenance_cadence = MaintenanceCadence::new(60s)`
+- `retained_log_policy.maintenance_join_timeout = MaintenanceJoinTimeout::new(5s)`
 - `redact_bearer_tokens = true`
 - `enable_file_sink = true`
 - `enable_console_sink = false`
@@ -1413,22 +1413,22 @@ execution environments, with explicit config taking precedence over env.
 
 ```rust
 pub struct RetainedLogPolicy {
-    pub rotation_max_bytes: u64,
-    pub rotation_max_files: u32,
+    pub rotation_max_bytes: ByteCount,
+    pub rotation_max_files: usize,
     pub retention_max_age: std::time::Duration,
-    pub maintenance_cadence: std::time::Duration,
-    pub maintenance_join_timeout: std::time::Duration,
+    pub maintenance_cadence: MaintenanceCadence,
+    pub maintenance_join_timeout: MaintenanceJoinTimeout,
     pub maintenance_max_work_per_pass: Option<usize>,
 }
 ```
 
 Defaults:
 
-- `rotation_max_bytes = 64 * 1024 * 1024`
+- `rotation_max_bytes = ByteCount::from_mib(64)`
 - `rotation_max_files = 10`
 - `retention_max_age = 7 days`
-- `maintenance_cadence = 60s`
-- `maintenance_join_timeout = 5s`
+- `maintenance_cadence = MaintenanceCadence::new(60s)`
+- `maintenance_join_timeout = MaintenanceJoinTimeout::new(5s)`
 
 ### 11.4 Legacy Direct-Sink Helpers
 
@@ -1464,13 +1464,16 @@ Rules:
 Design direction:
 
 ```rust
-pub struct Logger { /* opaque */ }
+pub struct Logger<State = Running> { /* opaque */ }
 
-impl Logger {
+impl Logger<Running> {
     pub fn new(config: LoggerConfig) -> Result<Self, InitError>;
     pub fn emit(&self, event: LogEvent) -> Result<(), EventError>;
     pub fn flush(&self) -> Result<(), FlushError>;
-    pub fn shutdown(&self) -> Result<(), ShutdownError>;
+    pub fn shutdown(self) -> Result<Logger<Stopped>, ShutdownError>;
+}
+
+impl<State> Logger<State> {
     pub fn health(&self) -> LoggingHealthReport;
 }
 ```
@@ -1478,9 +1481,8 @@ impl Logger {
 Lifecycle rules:
 
 - `emit()` validates and redacts before sink fan-out
-- `emit()` after `shutdown()` returns `EventError`
-- `flush()` after `shutdown()` is idempotent and returns `Ok(())`
-- repeated `shutdown()` calls are idempotent and return `Ok(())`
+- `Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`
+- post-shutdown `emit()`, `query()`, and `follow()` misuse becomes a compile-time error
 
 Crate-local producer injection trait:
 

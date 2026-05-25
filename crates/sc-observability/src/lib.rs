@@ -29,9 +29,11 @@ mod redact;
 mod runtime;
 mod sinks;
 
+use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 
 #[doc(inline)]
 pub use builder::LoggerBuilder;
@@ -65,16 +67,16 @@ pub(crate) use runtime::LoggerRuntime;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RotationPolicy {
     /// Maximum size of the active JSONL file before rotation.
-    pub max_bytes: u64,
+    pub max_bytes: ByteCount,
     /// Maximum number of rotated files to retain.
-    pub max_files: u32,
+    pub max_files: usize,
 }
 
 impl Default for RotationPolicy {
     fn default() -> Self {
         Self {
-            max_bytes: constants::DEFAULT_ROTATION_MAX_BYTES,
-            max_files: constants::DEFAULT_ROTATION_MAX_FILES,
+            max_bytes: ByteCount::from_bytes(constants::DEFAULT_ROTATION_MAX_BYTES),
+            max_files: constants::DEFAULT_ROTATION_MAX_FILES_USIZE,
         }
     }
 }
@@ -95,7 +97,10 @@ pub struct RetentionPolicy {
 }
 
 impl Default for RetentionPolicy {
-    #[allow(deprecated)]
+    #[expect(
+        deprecated,
+        reason = "legacy RetentionPolicy remains supported for direct JsonlFileSink construction"
+    )]
     fn default() -> Self {
         Self {
             max_age_days: constants::DEFAULT_RETENTION_MAX_AGE_DAYS,
@@ -103,40 +108,88 @@ impl Default for RetentionPolicy {
     }
 }
 
+/// Strongly typed byte count used by retained-log policy fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ByteCount(u64);
+
+impl ByteCount {
+    /// Creates a byte count from a raw byte value.
+    pub const fn from_bytes(bytes: u64) -> Self {
+        Self(bytes)
+    }
+
+    /// Creates a byte count from mebibytes.
+    pub const fn from_mib(mebibytes: u64) -> Self {
+        Self(mebibytes * 1024 * 1024)
+    }
+
+    /// Returns the raw byte value.
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
+}
+
+/// Strongly typed maintenance pass cadence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MaintenanceCadence(#[serde(with = "duration_millis_serde")] Duration);
+
+impl MaintenanceCadence {
+    /// Creates a cadence from one duration.
+    pub const fn new(duration: Duration) -> Self {
+        Self(duration)
+    }
+
+    /// Returns the wrapped duration.
+    pub const fn as_duration(self) -> Duration {
+        self.0
+    }
+}
+
+/// Strongly typed maintenance-worker join timeout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MaintenanceJoinTimeout(#[serde(with = "duration_millis_serde")] Duration);
+
+impl MaintenanceJoinTimeout {
+    /// Creates a join timeout from one duration.
+    pub const fn new(duration: Duration) -> Self {
+        Self(duration)
+    }
+
+    /// Returns the wrapped duration.
+    pub const fn as_duration(self) -> Duration {
+        self.0
+    }
+}
+
 /// Retained-log rotation, pruning, and maintenance policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetainedLogPolicy {
     /// Maximum size of the active JSONL file before rotation.
-    pub rotation_max_bytes: u64,
+    pub rotation_max_bytes: ByteCount,
     /// Maximum number of rotated files retained beside the active log.
     pub rotation_max_files: usize,
     /// Maximum age of retained rotated files.
     #[serde(with = "duration_millis_serde")]
-    pub retention_max_age: std::time::Duration,
+    pub retention_max_age: Duration,
     /// How often the background maintenance worker runs a pass.
-    #[serde(with = "duration_millis_serde")]
-    pub maintenance_cadence: std::time::Duration,
+    pub maintenance_cadence: MaintenanceCadence,
     /// How long shutdown waits for the maintenance worker to stop.
-    #[serde(with = "duration_millis_serde")]
-    pub maintenance_join_timeout: std::time::Duration,
+    pub maintenance_join_timeout: MaintenanceJoinTimeout,
     /// Optional cap on files processed during one maintenance pass.
     pub maintenance_max_work_per_pass: Option<usize>,
-    /// Test-only delay injected into worker passes to control assertion timing.
-    #[cfg(test)]
-    pub(crate) test_pass_delay: Option<std::time::Duration>,
 }
 
 impl Default for RetainedLogPolicy {
     fn default() -> Self {
         Self {
-            rotation_max_bytes: constants::DEFAULT_ROTATION_MAX_BYTES,
-            rotation_max_files: constants::DEFAULT_ROTATION_MAX_FILES as usize,
+            rotation_max_bytes: ByteCount::from_bytes(constants::DEFAULT_ROTATION_MAX_BYTES),
+            rotation_max_files: constants::DEFAULT_ROTATION_MAX_FILES_USIZE,
             retention_max_age: constants::DEFAULT_RETENTION_MAX_AGE,
-            maintenance_cadence: constants::DEFAULT_MAINTENANCE_CADENCE,
-            maintenance_join_timeout: constants::DEFAULT_MAINTENANCE_JOIN_TIMEOUT,
+            maintenance_cadence: MaintenanceCadence::new(constants::DEFAULT_MAINTENANCE_CADENCE),
+            maintenance_join_timeout: MaintenanceJoinTimeout::new(
+                constants::DEFAULT_MAINTENANCE_JOIN_TIMEOUT,
+            ),
             maintenance_max_work_per_pass: constants::DEFAULT_MAINTENANCE_MAX_WORK_PER_PASS,
-            #[cfg(test)]
-            test_pass_delay: None,
         }
     }
 }
@@ -260,6 +313,8 @@ pub struct LoggerConfig {
     pub enable_file_sink: bool,
     /// Whether the built-in console sink is enabled.
     pub enable_console_sink: bool,
+    #[cfg(test)]
+    maintenance_test_pass_delay: Option<Duration>,
 }
 
 impl LoggerConfig {
@@ -293,20 +348,31 @@ impl LoggerConfig {
             process_identity: ProcessIdentityPolicy::Auto,
             enable_file_sink: constants::DEFAULT_ENABLE_FILE_SINK,
             enable_console_sink: constants::DEFAULT_ENABLE_CONSOLE_SINK,
+            #[cfg(test)]
+            maintenance_test_pass_delay: None,
         }
     }
 }
+
+/// Running logger typestate.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Running;
+
+/// Stopped logger typestate.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Stopped;
 
 /// Lightweight structured logging runtime with built-in query and follow support.
 #[expect(
     missing_debug_implementations,
     reason = "logger owns runtime handles and trait-object sinks whose internal state is not a stable public debug contract"
 )]
-pub struct Logger {
+pub struct Logger<State = Running> {
     config: LoggerConfig,
     sinks: Vec<SinkRegistration>,
     shutdown: Arc<AtomicBool>,
     runtime: LoggerRuntime,
+    state: PhantomData<State>,
 }
 mod sealed_emitters {
     pub trait Sealed {}
@@ -320,9 +386,9 @@ pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
 }
 
-impl sealed_emitters::Sealed for Logger {}
+impl sealed_emitters::Sealed for Logger<Running> {}
 
-impl LogEmitter for Logger {
+impl LogEmitter for Logger<Running> {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError> {
         self.emit(event)
     }
@@ -607,6 +673,26 @@ mod tests {
         panic!("{message}");
     }
 
+    fn bytes(value: u64) -> ByteCount {
+        ByteCount::from_bytes(value)
+    }
+
+    fn cadence_ms(value: u64) -> MaintenanceCadence {
+        MaintenanceCadence::new(Duration::from_millis(value))
+    }
+
+    fn cadence_secs(value: u64) -> MaintenanceCadence {
+        MaintenanceCadence::new(Duration::from_secs(value))
+    }
+
+    fn join_ms(value: u64) -> MaintenanceJoinTimeout {
+        MaintenanceJoinTimeout::new(Duration::from_millis(value))
+    }
+
+    fn join_secs(value: u64) -> MaintenanceJoinTimeout {
+        MaintenanceJoinTimeout::new(Duration::from_secs(value))
+    }
+
     fn existing_log_paths(active_path: &Path, max_files: usize) -> Vec<PathBuf> {
         crate::query::query_active_and_rotated_paths(active_path, max_files)
             .into_iter()
@@ -622,7 +708,7 @@ mod tests {
         assert_eq!(config.queue_capacity, constants::DEFAULT_LOG_QUEUE_CAPACITY);
         assert_eq!(
             config.retained_log_policy.rotation_max_bytes,
-            constants::DEFAULT_ROTATION_MAX_BYTES
+            ByteCount::from_bytes(constants::DEFAULT_ROTATION_MAX_BYTES)
         );
         assert_eq!(
             config.retained_log_policy.rotation_max_files,
@@ -677,14 +763,12 @@ mod tests {
     #[test]
     fn retained_log_policy_round_trips_through_serde() {
         let policy = RetainedLogPolicy {
-            rotation_max_bytes: 1024,
+            rotation_max_bytes: bytes(1024),
             rotation_max_files: 7,
             retention_max_age: Duration::from_secs(42),
-            maintenance_cadence: Duration::from_secs(60),
-            maintenance_join_timeout: Duration::from_secs(5),
+            maintenance_cadence: cadence_secs(60),
+            maintenance_join_timeout: join_secs(5),
             maintenance_max_work_per_pass: Some(3),
-            #[cfg(test)]
-            test_pass_delay: None,
         };
 
         let encoded = serde_json::to_string(&policy).expect("serialize retained-log policy");
@@ -959,10 +1043,8 @@ mod tests {
         let root = temp_path("shutdown");
         let config = LoggerConfig::default_for(service_name(), root);
         let logger = Logger::new(config).expect("logger");
-        logger.shutdown().expect("shutdown");
-        assert!(logger.emit(log_event(service_name())).is_err());
-        assert!(logger.flush().is_ok());
-        assert!(logger.shutdown().is_ok());
+        let stopped = logger.shutdown().expect("shutdown");
+        assert_eq!(stopped.health().state, LoggingHealthState::Unavailable);
     }
 
     #[test]
@@ -975,7 +1057,7 @@ mod tests {
         builder.register_sink(SinkRegistration::new(sink.clone()));
         let logger = builder.build();
 
-        logger.shutdown().expect("shutdown");
+        let _stopped = logger.shutdown().expect("shutdown");
 
         assert_eq!(sink.flush_calls.load(Ordering::SeqCst), 1);
     }
@@ -984,10 +1066,10 @@ mod tests {
     fn maintenance_health_reflects_last_pass_and_last_error() {
         let root = temp_path("maintenance-health");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
-        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = 2;
         config.retained_log_policy.retention_max_age = Duration::from_secs(0);
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         let logger = Logger::new(config).expect("logger");
 
         logger
@@ -1051,9 +1133,9 @@ mod tests {
     fn maintenance_prunes_retained_files_by_max_files() {
         let root = temp_path("maintenance-prune-max-files");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
-        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = 2;
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in [
@@ -1083,10 +1165,10 @@ mod tests {
     fn maintenance_prunes_retained_files_by_age() {
         let root = temp_path("maintenance-prune-age");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
-        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = 4;
         config.retained_log_policy.retention_max_age = Duration::from_millis(10);
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in ["req-1", "req-2", "req-3", "req-4", "req-5"] {
@@ -1118,9 +1200,9 @@ mod tests {
     fn shutdown_joins_maintenance_worker_within_timeout() {
         let root = temp_path("shutdown-joins-maintenance");
         let mut config = LoggerConfig::default_for(service_name(), root);
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
-        config.retained_log_policy.maintenance_join_timeout = Duration::from_secs(1);
-        config.retained_log_policy.test_pass_delay = Some(Duration::from_millis(100));
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        config.retained_log_policy.maintenance_join_timeout = join_secs(1);
+        config.maintenance_test_pass_delay = Some(Duration::from_millis(100));
         let logger = Logger::new(config).expect("logger");
 
         logger.emit(log_event(service_name())).expect("emit");
@@ -1130,12 +1212,12 @@ mod tests {
         );
 
         let started = Instant::now();
-        logger.shutdown().expect("shutdown");
+        let stopped = logger.shutdown().expect("shutdown");
         crate::maintenance::clear_test_pass_delay();
 
         assert!(started.elapsed() < Duration::from_secs(1));
         assert_eq!(
-            logger
+            stopped
                 .health()
                 .maintenance
                 .expect("maintenance health")
@@ -1148,9 +1230,9 @@ mod tests {
     fn shutdown_records_join_timeout_without_blocking() {
         let root = temp_path("shutdown-maintenance-timeout");
         let mut config = LoggerConfig::default_for(service_name(), root);
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
-        config.retained_log_policy.maintenance_join_timeout = Duration::from_millis(20);
-        config.retained_log_policy.test_pass_delay = Some(Duration::from_millis(200));
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        config.retained_log_policy.maintenance_join_timeout = join_ms(20);
+        config.maintenance_test_pass_delay = Some(Duration::from_millis(200));
         let logger = Logger::new(config).expect("logger");
 
         logger.emit(log_event(service_name())).expect("emit");
@@ -1160,11 +1242,11 @@ mod tests {
         );
 
         let started = Instant::now();
-        logger.shutdown().expect("shutdown");
+        let stopped = logger.shutdown().expect("shutdown");
         crate::maintenance::clear_test_pass_delay();
 
         assert!(started.elapsed() < Duration::from_millis(150));
-        let maintenance = logger.health().maintenance.expect("maintenance health");
+        let maintenance = stopped.health().maintenance.expect("maintenance health");
         assert_eq!(maintenance.state, MaintenanceWorkerState::Degraded);
         assert!(maintenance.last_error.is_some());
     }
@@ -1173,8 +1255,8 @@ mod tests {
     fn emit_path_remains_available_during_maintenance_pass() {
         let root = temp_path("maintenance-nonblocking");
         let mut config = LoggerConfig::default_for(service_name(), root);
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
-        config.retained_log_policy.test_pass_delay = Some(Duration::from_millis(200));
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        config.maintenance_test_pass_delay = Some(Duration::from_millis(200));
         let logger = Logger::new(config).expect("logger");
 
         logger.emit(log_event(service_name())).expect("emit");
@@ -1196,9 +1278,9 @@ mod tests {
     fn historical_query_reads_active_and_rotated_files() {
         let root = temp_path("query-rotated");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
-        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = 4;
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(50);
+        config.retained_log_policy.maintenance_cadence = cadence_ms(50);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in ["req-1", "req-2", "req-3"] {
@@ -1266,9 +1348,9 @@ mod tests {
     fn historical_query_preserves_order_across_multiple_rotated_files() {
         let root = temp_path("query-multi-rotation-order");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
-        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = 6;
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(50);
+        config.retained_log_policy.maintenance_cadence = cadence_ms(50);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in ["req-1", "req-2", "req-3", "req-4", "req-5"] {
@@ -1312,9 +1394,9 @@ mod tests {
     fn logger_and_jsonl_reader_query_have_parity() {
         let root = temp_path("query-parity");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
-        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = 4;
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in ["req-a", "req-b", "req-c"] {
@@ -1345,9 +1427,9 @@ mod tests {
     fn follow_starts_at_tail_and_survives_multiple_rotations() {
         let root = temp_path("follow-rotation");
         let mut config = LoggerConfig::default_for(service_name(), root);
-        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = 6;
-        config.retained_log_policy.maintenance_cadence = Duration::from_secs(3600);
+        config.retained_log_policy.maintenance_cadence = cadence_secs(3600);
         let logger = Logger::new(config).expect("logger");
 
         logger
@@ -1393,9 +1475,9 @@ mod tests {
     fn rotation_triggers_when_active_file_exceeds_max_bytes() {
         let root = temp_path("rotation-threshold");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
-        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = 4;
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(50);
+        config.retained_log_policy.maintenance_cadence = cadence_ms(50);
         let logger = Logger::new(config).expect("logger");
 
         logger
@@ -1416,9 +1498,9 @@ mod tests {
     fn logger_and_jsonl_reader_follow_have_parity() {
         let root = temp_path("follow-parity");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
-        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = 6;
-        config.retained_log_policy.maintenance_cadence = Duration::from_secs(3600);
+        config.retained_log_policy.maintenance_cadence = cadence_secs(3600);
         let logger = Logger::new(config).expect("logger");
 
         logger
@@ -1470,33 +1552,25 @@ mod tests {
         assert_eq!(degraded_health.state, QueryHealthState::Degraded);
         assert!(degraded_health.last_error.is_some());
 
-        logger.shutdown().expect("shutdown");
-        let shutdown_error = logger
-            .query(&query_all(LogOrder::OldestFirst))
-            .expect_err("shutdown error");
-        assert!(matches!(shutdown_error, QueryError::Shutdown));
+        let stopped = logger.shutdown().expect("shutdown");
         assert_eq!(
-            logger.health().query.expect("query health").state,
+            stopped.health().query.expect("query health").state,
             QueryHealthState::Unavailable
         );
-        assert!(matches!(
-            logger.follow(query_all(LogOrder::OldestFirst)),
-            Err(QueryError::Shutdown)
-        ));
     }
 
     #[test]
-    fn logger_query_returns_shutdown_variant_after_shutdown() {
+    fn logger_health_reports_unavailable_after_shutdown() {
         let root = temp_path("query-shutdown-variant");
         let config = LoggerConfig::default_for(service_name(), root);
         let logger = Logger::new(config).expect("logger");
 
-        logger.shutdown().expect("shutdown");
+        let stopped = logger.shutdown().expect("shutdown");
 
-        let error = logger
-            .query(&query_all(LogOrder::OldestFirst))
-            .expect_err("shutdown error");
-        assert!(matches!(error, QueryError::Shutdown));
+        assert_eq!(
+            stopped.health().query.expect("query health").state,
+            QueryHealthState::Unavailable
+        );
     }
 
     #[test]
@@ -1510,7 +1584,7 @@ mod tests {
             .expect("follow");
         assert!(follow.poll().expect("initial poll").events.is_empty());
 
-        logger.shutdown().expect("shutdown");
+        let _stopped = logger.shutdown().expect("shutdown");
 
         assert!(matches!(follow.poll(), Err(QueryError::Shutdown)));
         assert_eq!(follow.health().state, QueryHealthState::Unavailable);
@@ -1571,9 +1645,9 @@ mod tests {
         );
     }
 
-    // On Windows, the non-Unix file-identity approach (len + modified_nanos) cannot
-    // distinguish appends from file recreation because every write changes `len`.
-    // Follow truncation/recreation semantics are tested on Unix and macOS.
+    // This test exercises the Unix-specific replacement helper above. Windows
+    // follow identity now uses filesystem identity metadata, but the distinct-
+    // inode recreation harness remains Unix-only.
     #[cfg_attr(windows, ignore)]
     #[test]
     fn follow_recovers_after_active_file_truncate_and_recreate() {

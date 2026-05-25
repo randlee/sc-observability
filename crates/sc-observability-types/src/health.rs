@@ -43,8 +43,12 @@ pub struct SinkHealth {
 pub struct LoggingHealthReport {
     /// Aggregate logging health state.
     pub state: LoggingHealthState,
+    // INVARIANT: this stays a plain u64 because it is a monotonic cross-process
+    // event counter serialized into health snapshots, not a domain-specific ID.
     /// Total dropped log events.
     pub dropped_events_total: u64,
+    // INVARIANT: this stays a plain u64 because it is a monotonic cross-process
+    // event counter serialized into health snapshots, not a domain-specific ID.
     /// Total flush failures.
     pub flush_errors_total: u64,
     /// Active JSONL log path used by the logger.
@@ -77,8 +81,12 @@ pub struct MaintenanceHealthReport {
     pub state: MaintenanceWorkerState,
     /// UTC timestamp of the last completed maintenance pass, if any.
     pub last_pass_at: Option<Timestamp>,
+    // INVARIANT: this stays a plain u64 because health snapshots expose these
+    // as aggregate monotonic counters rather than per-file identifiers.
     /// Total number of active-log rotations completed by the worker.
     pub rotated_files_total: u64,
+    // INVARIANT: this stays a plain u64 because health snapshots expose these
+    // as aggregate monotonic counters rather than per-file identifiers.
     /// Total number of retained files pruned by the worker.
     pub pruned_files_total: u64,
     /// Optional last maintenance error summary.

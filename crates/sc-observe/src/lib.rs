@@ -32,7 +32,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use sc_observability::{Logger, LoggerConfig, RetainedLogPolicy};
+use sc_observability::{Logger, LoggerConfig, RetainedLogPolicy, Running, Stopped};
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError,
     ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, Remediation,
@@ -150,7 +150,7 @@ pub struct ObservabilityBuilder {
     reason = "the runtime owns atomic state, mutexes, and type-erased routes that do not have a useful stable Debug representation"
 )]
 pub struct Observability {
-    logger: Logger,
+    logger: Mutex<Option<LoggerHandle>>,
     shutdown: AtomicBool,
     subscriber_registrations: Vec<ErasedSubscriberRegistration>,
     projection_registrations: Vec<ErasedProjectionRegistration>,
@@ -179,10 +179,15 @@ struct ErasedProjectionRegistration {
     dispatch: Arc<ProjectionDispatchFn>,
 }
 
+enum LoggerHandle {
+    Running(Logger<Running>),
+    Stopped(Logger<Stopped>),
+}
+
 type SubscriberDispatchFn =
     dyn Fn(&dyn Any) -> Result<DispatchMatch, SubscriberError> + Send + Sync + 'static;
 type ProjectionDispatchFn =
-    dyn Fn(&dyn Any, &Logger) -> ProjectionDispatchResult + Send + Sync + 'static;
+    dyn Fn(&dyn Any, &Logger<Running>) -> ProjectionDispatchResult + Send + Sync + 'static;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum DispatchMatch {
@@ -269,7 +274,14 @@ impl Observability {
             .iter()
             .filter(|entry| entry.type_id == type_id)
         {
-            let result = (registration.dispatch)(observation_any, &self.logger);
+            let logger = self.logger.lock().expect("observability logger poisoned");
+            let LoggerHandle::Running(logger) = logger
+                .as_ref()
+                .expect("observability logger should exist while runtime is alive")
+            else {
+                return Err(ObservationError::Shutdown);
+            };
+            let result = (registration.dispatch)(observation_any, logger);
             matched |= result.matched;
             if result.failure_count > 0 {
                 self.runtime
@@ -309,7 +321,14 @@ impl Observability {
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing its registered sinks.
     pub fn flush(&self) -> Result<(), FlushError> {
-        self.logger.flush()
+        let logger = self.logger.lock().expect("observability logger poisoned");
+        match logger
+            .as_ref()
+            .expect("observability logger should exist while runtime is alive")
+        {
+            LoggerHandle::Running(logger) => logger.flush(),
+            LoggerHandle::Stopped(_) => Ok(()),
+        }
     }
 
     /// Shuts down the routing runtime. Repeated calls are idempotent.
@@ -322,7 +341,15 @@ impl Observability {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
-        self.logger.shutdown()
+        let mut logger = self.logger.lock().expect("observability logger poisoned");
+        let handle = logger
+            .take()
+            .expect("observability logger should exist while runtime is alive");
+        *logger = Some(match handle {
+            LoggerHandle::Running(logger) => LoggerHandle::Stopped(logger.shutdown()?),
+            LoggerHandle::Stopped(logger) => LoggerHandle::Stopped(logger),
+        });
+        Ok(())
     }
 
     /// Returns the aggregate runtime health view.
@@ -331,7 +358,16 @@ impl Observability {
     ///
     /// Panics if the internal last-error mutex has been poisoned.
     pub fn health(&self) -> ObservabilityHealthReport {
-        let logging = self.logger.health();
+        let logging = {
+            let logger = self.logger.lock().expect("observability logger poisoned");
+            match logger
+                .as_ref()
+                .expect("observability logger should exist while runtime is alive")
+            {
+                LoggerHandle::Running(logger) => logger.health(),
+                LoggerHandle::Stopped(logger) => logger.health(),
+            }
+        };
         let telemetry = self
             .observability_health_provider
             .as_ref()
@@ -519,7 +555,7 @@ impl ObservabilityBuilder {
         }
         let logger = Logger::new(self.config.logger_config()?)?;
         Ok(Observability {
-            logger,
+            logger: Mutex::new(Some(LoggerHandle::Running(logger))),
             shutdown: AtomicBool::new(false),
             subscriber_registrations: self.subscribers,
             projection_registrations: self.projections,
@@ -1065,7 +1101,7 @@ mod tests {
         let logger = builder.build();
 
         let runtime = Observability {
-            logger,
+            logger: Mutex::new(Some(LoggerHandle::Running(logger))),
             shutdown: AtomicBool::new(false),
             subscriber_registrations: Vec::new(),
             projection_registrations: Vec::new(),

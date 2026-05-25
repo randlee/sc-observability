@@ -1,7 +1,8 @@
+use std::borrow::Cow;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::RwLock;
 use std::time::{Duration, SystemTime};
 
 use sc_observability_types::{
@@ -9,7 +10,7 @@ use sc_observability_types::{
     SinkHealth, SinkHealthState, SinkName, Timestamp,
 };
 #[cfg(feature = "fault-injection")]
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::{
     LogSink, RetainedLogPolicy, RetentionPolicy, RotationPolicy, constants, error_codes,
@@ -23,7 +24,7 @@ use crate::{
 /// Built-in JSONL file sink with rotation and retention handling.
 pub struct JsonlFileSink {
     path: PathBuf,
-    health: Mutex<SinkHealth>,
+    health: RwLock<SinkHealth>,
     legacy_policy: Option<LegacyRetentionPolicy>,
 }
 
@@ -56,7 +57,7 @@ impl JsonlFileSink {
     fn with_legacy_policy(path: PathBuf, legacy_policy: Option<LegacyRetentionPolicy>) -> Self {
         Self {
             path,
-            health: Mutex::new(SinkHealth {
+            health: RwLock::new(SinkHealth {
                 name: SinkName::new(constants::JSONL_FILE_SINK_NAME)
                     .expect("jsonl sink constant is valid"),
                 state: SinkHealthState::Healthy,
@@ -76,13 +77,17 @@ impl JsonlFileSink {
         policy: &RetainedLogPolicy,
     ) -> Result<crate::maintenance::MaintenancePassStats, LogSinkError> {
         let mut stats = crate::maintenance::MaintenancePassStats::default();
-        self.rotate_if_needed(policy.rotation_max_bytes, policy.rotation_max_files, 0)
-            .map(|did_rotate| {
-                if did_rotate {
-                    stats.rotated_files = 1;
-                }
-            })
-            .map_err(|error| self.mark_maintenance_failure(error))?;
+        self.rotate_if_needed(
+            policy.rotation_max_bytes.as_u64(),
+            policy.rotation_max_files,
+            0,
+        )
+        .map(|did_rotate| {
+            if did_rotate {
+                stats.rotated_files = 1;
+            }
+        })
+        .map_err(|error| self.mark_maintenance_failure(error))?;
         stats.pruned_files = self
             .prune_retained_files(
                 policy.rotation_max_files,
@@ -130,7 +135,10 @@ impl JsonlFileSink {
         rotated_log_path(&self.path, index)
     }
 
-    #[allow(deprecated)]
+    #[expect(
+        deprecated,
+        reason = "legacy RetentionPolicy remains supported for direct JsonlFileSink construction"
+    )]
     fn prune_old_files(&self, retention: RetentionPolicy) {
         let Some(parent) = self.path.parent() else {
             return;
@@ -251,7 +259,7 @@ impl JsonlFileSink {
     {
         let message = error.to_string();
         let diagnostic = diagnostic_for_sink_failure(message.clone());
-        let mut health = self.health.lock().expect("file sink health poisoned");
+        let mut health = self.health.write().expect("file sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
         health.last_error = Some(DiagnosticSummary::from(&diagnostic));
         LogSinkError(Box::new(
@@ -280,7 +288,7 @@ impl JsonlFileSink {
             docs: None,
             details: serde_json::Map::new(),
         };
-        let mut health = self.health.lock().expect("file sink health poisoned");
+        let mut health = self.health.write().expect("file sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
         health.last_error = Some(DiagnosticSummary::from(&diagnostic));
         LogSinkError(Box::new(
@@ -307,8 +315,8 @@ impl LogSink for JsonlFileSink {
         line.push(b'\n');
         if let Some(policy) = self.legacy_policy {
             self.rotate_if_needed(
-                policy.rotation.max_bytes,
-                policy.rotation.max_files as usize,
+                policy.rotation.max_bytes.as_u64(),
+                policy.rotation.max_files,
                 line.len() as u64,
             )?;
             self.prune_old_files(policy.retention);
@@ -323,14 +331,14 @@ impl LogSink for JsonlFileSink {
             .and_then(|()| file.flush())
             .map_err(|err| self.mark_failure(err))?;
 
-        let mut health = self.health.lock().expect("file sink health poisoned");
+        let mut health = self.health.write().expect("file sink health poisoned");
         health.state = SinkHealthState::Healthy;
         Ok(())
     }
 
     fn health(&self) -> SinkHealth {
         self.health
-            .lock()
+            .read()
             .expect("file sink health poisoned")
             .clone()
     }
@@ -383,7 +391,7 @@ impl ConsoleWriter for StderrConsoleWriter {
 /// (stdout or stderr).
 pub struct ConsoleSink {
     writer: Box<dyn ConsoleWriter>,
-    health: Mutex<SinkHealth>,
+    health: RwLock<SinkHealth>,
 }
 
 impl ConsoleSink {
@@ -400,7 +408,7 @@ impl ConsoleSink {
     pub(crate) fn from_writer(writer: Box<dyn ConsoleWriter>) -> Self {
         Self {
             writer,
-            health: Mutex::new(SinkHealth {
+            health: RwLock::new(SinkHealth {
                 name: SinkName::new(constants::CONSOLE_SINK_NAME)
                     .expect("console sink constant is valid"),
                 state: SinkHealthState::Healthy,
@@ -434,7 +442,7 @@ impl ConsoleSink {
     {
         let message = error.to_string();
         let diagnostic = diagnostic_for_sink_failure(message.clone());
-        let mut health = self.health.lock().expect("console sink health poisoned");
+        let mut health = self.health.write().expect("console sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
         health.last_error = Some(DiagnosticSummary::from(&diagnostic));
         LogSinkError(Box::new(
@@ -457,14 +465,14 @@ impl LogSink for ConsoleSink {
         self.writer
             .write_line(&line)
             .map_err(|err| self.mark_failure(err))?;
-        let mut health = self.health.lock().expect("console sink health poisoned");
+        let mut health = self.health.write().expect("console sink health poisoned");
         health.state = SinkHealthState::Healthy;
         Ok(())
     }
 
     fn health(&self) -> SinkHealth {
         self.health
-            .lock()
+            .read()
             .expect("console sink health poisoned")
             .clone()
     }
@@ -579,11 +587,11 @@ impl LogSink for FaultInjectingSink {
     }
 }
 
-pub(crate) fn diagnostic_for_sink_failure(message: impl Into<String>) -> Diagnostic {
+pub(crate) fn diagnostic_for_sink_failure(message: impl Into<Cow<'static, str>>) -> Diagnostic {
     Diagnostic {
         timestamp: Timestamp::now_utc(),
         code: error_codes::LOGGER_SINK_WRITE_FAILED,
-        message: message.into(),
+        message: message.into().into_owned(),
         cause: None,
         remediation: Remediation::not_recoverable(
             "sink failure handling is owned by the logger runtime",
@@ -687,6 +695,18 @@ mod tests {
         }
     }
 
+    fn bytes(value: u64) -> crate::ByteCount {
+        crate::ByteCount::from_bytes(value)
+    }
+
+    fn cadence_secs(value: u64) -> crate::MaintenanceCadence {
+        crate::MaintenanceCadence::new(Duration::from_secs(value))
+    }
+
+    fn join_secs(value: u64) -> crate::MaintenanceJoinTimeout {
+        crate::MaintenanceJoinTimeout::new(Duration::from_secs(value))
+    }
+
     #[test]
     fn maintenance_failure_uses_maintenance_error_code() {
         let root = temp_path("maintenance-error");
@@ -700,14 +720,12 @@ mod tests {
 
         let error = sink
             .perform_maintenance(&RetainedLogPolicy {
-                rotation_max_bytes: 1,
+                rotation_max_bytes: bytes(1),
                 rotation_max_files: 1,
                 retention_max_age: Duration::from_secs(3600),
-                maintenance_cadence: Duration::from_secs(60),
-                maintenance_join_timeout: Duration::from_secs(5),
+                maintenance_cadence: cadence_secs(60),
+                maintenance_join_timeout: join_secs(5),
                 maintenance_max_work_per_pass: None,
-                #[cfg(test)]
-                test_pass_delay: None,
             })
             .expect_err("maintenance failure");
 
@@ -732,14 +750,12 @@ mod tests {
 
         let stats = sink
             .perform_maintenance(&RetainedLogPolicy {
-                rotation_max_bytes: u64::MAX,
+                rotation_max_bytes: bytes(u64::MAX),
                 rotation_max_files: 1,
                 retention_max_age: Duration::from_secs(3600),
-                maintenance_cadence: Duration::from_secs(60),
-                maintenance_join_timeout: Duration::from_secs(5),
+                maintenance_cadence: cadence_secs(60),
+                maintenance_join_timeout: join_secs(5),
                 maintenance_max_work_per_pass: Some(2),
-                #[cfg(test)]
-                test_pass_delay: None,
             })
             .expect("maintenance pass");
 

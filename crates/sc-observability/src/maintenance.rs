@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, mpsc};
+use std::sync::{Arc, Condvar, Mutex, RwLock, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -22,8 +22,8 @@ pub(crate) struct MaintenancePassStats {
 pub(crate) struct MaintenanceRuntime {
     tracker: Arc<MaintenanceTracker>,
     signal: Arc<MaintenanceSignal>,
-    join_handle: Mutex<Option<JoinHandle<()>>>,
-    done_rx: Mutex<Option<mpsc::Receiver<()>>>,
+    join_handle: JoinHandle<()>,
+    done_rx: Mutex<mpsc::Receiver<()>>,
     join_timeout: Duration,
 }
 
@@ -33,15 +33,17 @@ impl MaintenanceRuntime {
     /// # Panics
     ///
     /// Panics if the worker thread cannot be spawned.
-    pub(crate) fn new(sink: Arc<JsonlFileSink>, policy: RetainedLogPolicy) -> Self {
+    pub(crate) fn new(
+        sink: Arc<JsonlFileSink>,
+        policy: RetainedLogPolicy,
+        #[cfg(test)] test_pass_delay: Option<Duration>,
+    ) -> Self {
         let tracker = Arc::new(MaintenanceTracker::new());
         let signal = Arc::new(MaintenanceSignal::default());
         let (done_tx, done_rx) = mpsc::channel();
 
         let worker_tracker = tracker.clone();
         let worker_signal = signal.clone();
-        #[cfg(test)]
-        let test_pass_delay = policy.test_pass_delay;
         let join_handle = thread::Builder::new()
             .name("sc-observability-retained-log".to_string())
             .spawn(move || {
@@ -60,9 +62,9 @@ impl MaintenanceRuntime {
         Self {
             tracker,
             signal,
-            join_handle: Mutex::new(Some(join_handle)),
-            done_rx: Mutex::new(Some(done_rx)),
-            join_timeout: policy.maintenance_join_timeout,
+            join_handle,
+            done_rx: Mutex::new(done_rx),
+            join_timeout: policy.maintenance_join_timeout.as_duration(),
         }
     }
 
@@ -83,25 +85,16 @@ impl MaintenanceRuntime {
     /// # Panics
     ///
     /// Panics if the worker coordination mutexes have been poisoned.
-    pub(crate) fn shutdown(&self) -> Option<DiagnosticSummary> {
+    pub(crate) fn shutdown(self) -> (Option<DiagnosticSummary>, MaintenanceHealthReport) {
         self.signal.request_stop();
 
-        let done = self
+        let summary = match self
             .done_rx
             .lock()
             .expect("maintenance done receiver poisoned")
-            .take();
-        let handle = self
-            .join_handle
-            .lock()
-            .expect("maintenance join handle poisoned")
-            .take();
-
-        let done_rx = done?;
-        let join_handle = handle?;
-
-        match done_rx.recv_timeout(self.join_timeout) {
-            Ok(()) => match join_handle.join() {
+            .recv_timeout(self.join_timeout)
+        {
+            Ok(()) => match self.join_handle.join() {
                 Ok(()) => None,
                 Err(_) => Some(self.tracker.record_worker_failure(
                     error_codes::LOGGER_MAINTENANCE_WORKER_FAILED,
@@ -116,7 +109,9 @@ impl MaintenanceRuntime {
                 error_codes::LOGGER_MAINTENANCE_WORKER_FAILED,
                 "retained-log maintenance worker completion channel disconnected",
             )),
-        }
+        };
+        let snapshot = self.tracker.snapshot();
+        (summary, snapshot)
     }
 }
 
@@ -158,9 +153,9 @@ impl MaintenanceSignal {
 
 #[derive(Debug)]
 struct MaintenanceTracker {
-    last_pass_at: Mutex<Option<Timestamp>>,
-    last_error: Mutex<Option<DiagnosticSummary>>,
-    state: Mutex<MaintenanceWorkerState>,
+    last_pass_at: RwLock<Option<Timestamp>>,
+    last_error: RwLock<Option<DiagnosticSummary>>,
+    state: RwLock<MaintenanceWorkerState>,
     rotated_files_total: AtomicU64,
     pruned_files_total: AtomicU64,
     join_timeout_recorded: AtomicBool,
@@ -169,9 +164,9 @@ struct MaintenanceTracker {
 impl MaintenanceTracker {
     fn new() -> Self {
         Self {
-            last_pass_at: Mutex::new(None),
-            last_error: Mutex::new(None),
-            state: Mutex::new(MaintenanceWorkerState::Running),
+            last_pass_at: RwLock::new(None),
+            last_error: RwLock::new(None),
+            state: RwLock::new(MaintenanceWorkerState::Running),
             rotated_files_total: AtomicU64::new(0),
             pruned_files_total: AtomicU64::new(0),
             join_timeout_recorded: AtomicBool::new(false),
@@ -180,21 +175,23 @@ impl MaintenanceTracker {
 
     fn snapshot(&self) -> MaintenanceHealthReport {
         MaintenanceHealthReport {
-            state: *self.state.lock().expect("maintenance state poisoned"),
+            state: *self.state.read().expect("maintenance state poisoned"),
             last_pass_at: *self
                 .last_pass_at
-                .lock()
+                .read()
                 .expect("maintenance last_pass_at poisoned"),
             rotated_files_total: self.rotated_files_total.load(Ordering::SeqCst),
             pruned_files_total: self.pruned_files_total.load(Ordering::SeqCst),
             last_error: self
                 .last_error
-                .lock()
+                .read()
                 .expect("maintenance last_error poisoned")
                 .clone(),
         }
     }
 
+    // Successful passes clear transient degraded state unless a join timeout was
+    // already recorded during shutdown, which remains the final worker state.
     fn record_pass(&self, stats: MaintenancePassStats) {
         self.rotated_files_total
             .fetch_add(stats.rotated_files, Ordering::SeqCst);
@@ -202,20 +199,20 @@ impl MaintenanceTracker {
             .fetch_add(stats.pruned_files, Ordering::SeqCst);
         *self
             .last_pass_at
-            .lock()
+            .write()
             .expect("maintenance last_pass_at poisoned") = Some(Timestamp::now_utc());
         if !self.join_timeout_recorded.load(Ordering::SeqCst) {
-            *self.state.lock().expect("maintenance state poisoned") =
+            *self.state.write().expect("maintenance state poisoned") =
                 MaintenanceWorkerState::Running;
         }
     }
 
     fn record_failure(&self, error: &ErrorContext) -> DiagnosticSummary {
         let summary = DiagnosticSummary::from(error.diagnostic());
-        *self.state.lock().expect("maintenance state poisoned") = MaintenanceWorkerState::Degraded;
+        *self.state.write().expect("maintenance state poisoned") = MaintenanceWorkerState::Degraded;
         *self
             .last_error
-            .lock()
+            .write()
             .expect("maintenance last_error poisoned") = Some(summary.clone());
         summary
     }
@@ -243,10 +240,10 @@ impl MaintenanceTracker {
             )
             .diagnostic(),
         );
-        *self.state.lock().expect("maintenance state poisoned") = MaintenanceWorkerState::Degraded;
+        *self.state.write().expect("maintenance state poisoned") = MaintenanceWorkerState::Degraded;
         *self
             .last_error
-            .lock()
+            .write()
             .expect("maintenance last_error poisoned") = Some(summary.clone());
         summary
     }
@@ -270,17 +267,17 @@ impl MaintenanceTracker {
             )
             .diagnostic(),
         );
-        *self.state.lock().expect("maintenance state poisoned") = MaintenanceWorkerState::Degraded;
+        *self.state.write().expect("maintenance state poisoned") = MaintenanceWorkerState::Degraded;
         *self
             .last_error
-            .lock()
+            .write()
             .expect("maintenance last_error poisoned") = Some(summary.clone());
         summary
     }
 
     fn mark_stopped(&self) {
         if !self.join_timeout_recorded.load(Ordering::SeqCst) {
-            *self.state.lock().expect("maintenance state poisoned") =
+            *self.state.write().expect("maintenance state poisoned") =
                 MaintenanceWorkerState::Stopped;
         }
     }
@@ -299,7 +296,7 @@ fn retained_log_worker(
     #[cfg(test)] test_pass_delay: Option<Duration>,
 ) {
     loop {
-        let should_stop = signal.wait_for_work(policy.maintenance_cadence);
+        let should_stop = signal.wait_for_work(policy.maintenance_cadence.as_duration());
         maybe_run_test_delay(
             #[cfg(test)]
             test_pass_delay,
@@ -324,13 +321,13 @@ fn retained_log_worker(
 static TEST_PASS_DELAY_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 #[cfg(test)]
-/// Clears the shared test-only delay activity flag after maintenance timing assertions.
+// Clears the shared test-only delay activity flag after maintenance timing assertions.
 pub(crate) fn clear_test_pass_delay() {
     TEST_PASS_DELAY_ACTIVE.store(false, Ordering::SeqCst);
 }
 
 #[cfg(test)]
-/// Returns whether any test-configured maintenance worker is currently inside its injected delay.
+// Returns whether any test-configured maintenance worker is currently inside its injected delay.
 pub(crate) fn test_pass_delay_active() -> bool {
     TEST_PASS_DELAY_ACTIVE.load(Ordering::SeqCst)
 }

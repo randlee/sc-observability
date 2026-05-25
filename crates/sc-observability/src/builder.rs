@@ -12,7 +12,7 @@ use std::sync::{Arc, atomic::AtomicBool};
 use sc_observability_types::InitError;
 
 use crate::{
-    ConsoleSink, JsonlFileSink, Logger, LoggerConfig, LoggerRuntime, SinkRegistration,
+    ConsoleSink, JsonlFileSink, Logger, LoggerConfig, LoggerRuntime, Running, SinkRegistration,
     default_log_path,
 };
 
@@ -74,7 +74,7 @@ impl LoggerBuilder {
     }
 
     /// Finalizes construction and returns the logger runtime.
-    pub fn build(self) -> Logger {
+    pub fn build(self) -> Logger<Running> {
         let Self {
             config,
             file_sink,
@@ -84,10 +84,17 @@ impl LoggerBuilder {
         let query_available = active_log_path.exists() || config.enable_file_sink;
         let retained_log_policy = config.retained_log_policy;
         Logger {
+            runtime: LoggerRuntime::new(
+                query_available,
+                file_sink,
+                retained_log_policy,
+                #[cfg(test)]
+                config.maintenance_test_pass_delay,
+            ),
             config,
             sinks,
             shutdown: Arc::new(AtomicBool::new(false)),
-            runtime: LoggerRuntime::new(query_available, file_sink, retained_log_policy),
+            state: std::marker::PhantomData,
         }
     }
 }

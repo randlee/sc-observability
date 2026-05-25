@@ -34,10 +34,10 @@ Create a logger with the documented defaults:
 ```rust
 use std::path::PathBuf;
 
-use sc_observability::{Logger, LoggerConfig, ServiceName};
+use sc_observability::{Logger, LoggerConfig, Running, ServiceName};
 
 let service = ServiceName::new("my-service")?;
-let logger = Logger::new(LoggerConfig::default_for(
+let logger: Logger<Running> = Logger::new(LoggerConfig::default_for(
     service,
     PathBuf::from("./observability"),
 ))?;
@@ -51,20 +51,29 @@ Customize retained-log rotation and maintenance through
 use std::path::PathBuf;
 use std::time::Duration;
 
-use sc_observability::{LoggerConfig, ServiceName};
+use sc_observability::{
+    ByteCount, LoggerConfig, MaintenanceCadence, MaintenanceJoinTimeout, ServiceName,
+};
 
 let mut config = LoggerConfig::default_for(
     ServiceName::new("my-service")?,
     PathBuf::from("./observability"),
 );
-config.retained_log_policy.rotation_max_bytes = 8 * 1024 * 1024;
+config.retained_log_policy.rotation_max_bytes = ByteCount::from_mib(8);
 config.retained_log_policy.rotation_max_files = 5;
 config.retained_log_policy.retention_max_age = Duration::from_secs(3 * 86_400);
-config.retained_log_policy.maintenance_cadence = Duration::from_secs(30);
-config.retained_log_policy.maintenance_join_timeout = Duration::from_secs(2);
+config.retained_log_policy.maintenance_cadence =
+    MaintenanceCadence::new(Duration::from_secs(30));
+config.retained_log_policy.maintenance_join_timeout =
+    MaintenanceJoinTimeout::new(Duration::from_secs(2));
 config.retained_log_policy.maintenance_max_work_per_pass = None; // default: unbounded work per pass
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+`Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`.
+That typestate transition makes post-shutdown `emit()`, `query()`, and
+`follow()` invalid by construction while still allowing health inspection on the
+stopped logger value.
 
 ## 2. Default Log Root And Path
 
