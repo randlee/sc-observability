@@ -47,6 +47,7 @@ pub use sc_observability_types::{
     SinkHealth, SinkHealthState, TargetCategory, Timestamp,
 };
 use sc_observability_types::{LevelFilter, LogSinkError, ProcessIdentityPolicy};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(feature = "fault-injection")]
 #[doc(inline)]
@@ -57,6 +58,10 @@ pub use sinks::{ConsoleSink, JsonlFileSink};
 pub(crate) use runtime::LoggerRuntime;
 
 /// Rotation limits for the built-in JSONL file sink.
+///
+/// This legacy low-level policy is used only by direct `JsonlFileSink::new()`
+/// construction. It does not configure the logger-owned background retained-log
+/// maintenance worker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RotationPolicy {
     /// Maximum size of the active JSONL file before rotation.
@@ -75,13 +80,22 @@ impl Default for RotationPolicy {
 }
 
 /// Retention limits for rotated JSONL files owned by the built-in file sink.
+///
+/// This legacy low-level policy is used only by direct `JsonlFileSink::new()`
+/// construction. It does not configure the logger-owned background retained-log
+/// maintenance worker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RetentionPolicy {
     /// Maximum age in days for rotated JSONL files.
+    #[deprecated(
+        since = "1.1.0",
+        note = "Use RetainedLogPolicy::retention_max_age for logger-managed retained-log maintenance."
+    )]
     pub max_age_days: u32,
 }
 
 impl Default for RetentionPolicy {
+    #[allow(deprecated)]
     fn default() -> Self {
         Self {
             max_age_days: constants::DEFAULT_RETENTION_MAX_AGE_DAYS,
@@ -90,20 +104,24 @@ impl Default for RetentionPolicy {
 }
 
 /// Retained-log rotation, pruning, and maintenance policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetainedLogPolicy {
     /// Maximum size of the active JSONL file before rotation.
     pub rotation_max_bytes: u64,
     /// Maximum number of rotated files retained beside the active log.
-    pub rotation_max_files: u32,
+    pub rotation_max_files: usize,
     /// Maximum age of retained rotated files.
+    #[serde(with = "duration_millis_serde")]
     pub retention_max_age: std::time::Duration,
     /// How often the background maintenance worker runs a pass.
+    #[serde(with = "duration_millis_serde")]
     pub maintenance_cadence: std::time::Duration,
     /// How long shutdown waits for the maintenance worker to stop.
+    #[serde(with = "duration_millis_serde")]
     pub maintenance_join_timeout: std::time::Duration,
     /// Optional cap on files processed during one maintenance pass.
     pub maintenance_max_work_per_pass: Option<usize>,
+    /// Test-only delay injected into worker passes to control assertion timing.
     #[cfg(test)]
     pub(crate) test_pass_delay: Option<std::time::Duration>,
 }
@@ -112,7 +130,7 @@ impl Default for RetainedLogPolicy {
     fn default() -> Self {
         Self {
             rotation_max_bytes: constants::DEFAULT_ROTATION_MAX_BYTES,
-            rotation_max_files: constants::DEFAULT_ROTATION_MAX_FILES,
+            rotation_max_files: constants::DEFAULT_ROTATION_MAX_FILES as usize,
             retention_max_age: constants::DEFAULT_RETENTION_MAX_AGE,
             maintenance_cadence: constants::DEFAULT_MAINTENANCE_CADENCE,
             maintenance_join_timeout: constants::DEFAULT_MAINTENANCE_JOIN_TIMEOUT,
@@ -120,6 +138,31 @@ impl Default for RetainedLogPolicy {
             #[cfg(test)]
             test_pass_delay: None,
         }
+    }
+}
+
+mod duration_millis_serde {
+    use std::time::Duration;
+
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(value: &Duration, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(
+            value
+                .as_millis()
+                .try_into()
+                .map_err(serde::ser::Error::custom)?,
+        )
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Duration::from_millis(u64::deserialize(deserializer)?))
     }
 }
 
@@ -299,7 +342,7 @@ pub(crate) fn default_log_path(log_root: &Path, service_name: &ServiceName) -> P
         .join(default_log_file_name(service_name))
 }
 
-pub(crate) fn rotated_log_path(active_path: &Path, index: u32) -> PathBuf {
+pub(crate) fn rotated_log_path(active_path: &Path, index: usize) -> PathBuf {
     let parent = active_path.parent().unwrap_or_else(|| Path::new("."));
     let file_name = active_path
         .file_name()
@@ -564,7 +607,7 @@ mod tests {
         panic!("{message}");
     }
 
-    fn existing_log_paths(active_path: &Path, max_files: u32) -> Vec<PathBuf> {
+    fn existing_log_paths(active_path: &Path, max_files: usize) -> Vec<PathBuf> {
         crate::query::query_active_and_rotated_paths(active_path, max_files)
             .into_iter()
             .filter(|path| path.exists())
@@ -583,7 +626,7 @@ mod tests {
         );
         assert_eq!(
             config.retained_log_policy.rotation_max_files,
-            constants::DEFAULT_ROTATION_MAX_FILES
+            constants::DEFAULT_ROTATION_MAX_FILES as usize
         );
         assert_eq!(
             config.retained_log_policy.retention_max_age,
@@ -629,6 +672,26 @@ mod tests {
         assert!(rendered.contains("LoggerConfig"));
         assert!(rendered.contains("RedactionPolicy"));
         assert!(rendered.contains("custom_redactors: 0"));
+    }
+
+    #[test]
+    fn retained_log_policy_round_trips_through_serde() {
+        let policy = RetainedLogPolicy {
+            rotation_max_bytes: 1024,
+            rotation_max_files: 7,
+            retention_max_age: Duration::from_secs(42),
+            maintenance_cadence: Duration::from_secs(60),
+            maintenance_join_timeout: Duration::from_secs(5),
+            maintenance_max_work_per_pass: Some(3),
+            #[cfg(test)]
+            test_pass_delay: None,
+        };
+
+        let encoded = serde_json::to_string(&policy).expect("serialize retained-log policy");
+        let decoded: RetainedLogPolicy =
+            serde_json::from_str(&encoded).expect("deserialize retained-log policy");
+
+        assert_eq!(decoded, policy);
     }
 
     #[test]
@@ -1161,9 +1224,18 @@ mod tests {
                 .any(|path| path.ends_with("sc-observability.log.jsonl"))
         );
 
-        let asc = logger
-            .query(&query_all(LogOrder::OldestFirst))
-            .expect("asc query");
+        let mut asc = None;
+        wait_for(
+            || match logger.query(&query_all(LogOrder::OldestFirst)) {
+                Ok(snapshot) if request_ids(&snapshot) == ["req-1", "req-2", "req-3"] => {
+                    asc = Some(snapshot);
+                    true
+                }
+                _ => false,
+            },
+            "expected oldest-first query to settle after asynchronous rotation",
+        );
+        let asc = asc.expect("captured oldest-first snapshot");
         assert_eq!(request_ids(&asc), ["req-1", "req-2", "req-3"]);
 
         wait_for(
@@ -1205,19 +1277,20 @@ mod tests {
                 .expect("emit");
         }
 
+        let mut oldest_first = None;
         wait_for(
-            || {
-                logger
-                    .query(&query_all(LogOrder::OldestFirst))
-                    .map(|snapshot| snapshot.events.len() == 5)
-                    .unwrap_or(false)
+            || match logger.query(&query_all(LogOrder::OldestFirst)) {
+                Ok(snapshot)
+                    if request_ids(&snapshot) == ["req-1", "req-2", "req-3", "req-4", "req-5"] =>
+                {
+                    oldest_first = Some(snapshot);
+                    true
+                }
+                _ => false,
             },
             "expected query view to settle across multiple retained files before asserting order",
         );
-
-        let oldest_first = logger
-            .query(&query_all(LogOrder::OldestFirst))
-            .expect("oldest-first query");
+        let oldest_first = oldest_first.expect("captured oldest-first snapshot");
         assert_eq!(
             request_ids(&oldest_first),
             ["req-1", "req-2", "req-3", "req-4", "req-5"]
@@ -1292,13 +1365,51 @@ mod tests {
                 .expect("emit fresh");
         }
 
-        let snapshot = follow.poll().expect("follow poll");
+        let mut snapshot = None;
+        wait_for(
+            || match follow.poll() {
+                Ok(polled)
+                    if request_ids(&polled)
+                        .iter()
+                        .any(|request_id| request_id.starts_with("fresh-")) =>
+                {
+                    snapshot = Some(polled);
+                    true
+                }
+                Ok(_) | Err(_) => false,
+            },
+            "expected follow poll to observe fresh events after asynchronous maintenance",
+        );
+        let snapshot = snapshot.expect("captured follow snapshot");
         let followed = request_ids(&snapshot);
         assert!(
             followed == vec!["fresh-1", "fresh-2", "fresh-3"]
                 || followed == vec!["backlog", "fresh-1", "fresh-2", "fresh-3"]
         );
         assert_eq!(follow.health().state, QueryHealthState::Healthy);
+    }
+
+    #[test]
+    fn rotation_triggers_when_active_file_exceeds_max_bytes() {
+        let root = temp_path("rotation-threshold");
+        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_files = 4;
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(50);
+        let logger = Logger::new(config).expect("logger");
+
+        logger
+            .emit(log_event_with_request(service_name(), "req-1", 260))
+            .expect("emit first");
+        logger
+            .emit(log_event_with_request(service_name(), "req-2", 260))
+            .expect("emit second");
+
+        let active_path = default_log_path(&root, &service_name());
+        wait_for(
+            || active_path.exists() && rotated_log_path(&active_path, 1).exists(),
+            "expected active log rotation to create a .1 retained file",
+        );
     }
 
     #[test]

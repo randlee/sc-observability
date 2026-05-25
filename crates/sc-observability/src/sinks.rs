@@ -30,6 +30,11 @@ pub struct JsonlFileSink {
 impl JsonlFileSink {
     /// Creates a JSONL file sink at the given active log path.
     ///
+    /// This constructor is the legacy low-level sink surface. It uses
+    /// `RotationPolicy` and `RetentionPolicy` directly and does not attach the
+    /// logger-owned background retained-log maintenance worker. New code should
+    /// prefer `LoggerConfig.retained_log_policy` and `Logger::new(...)`.
+    ///
     /// # Panics
     ///
     /// Panics only if the workspace-owned `JSONL_FILE_SINK_NAME` constant ever
@@ -76,19 +81,22 @@ impl JsonlFileSink {
                 if did_rotate {
                     stats.rotated_files = 1;
                 }
-            })?;
-        stats.pruned_files = self.prune_retained_files(
-            policy.rotation_max_files,
-            policy.retention_max_age,
-            policy.maintenance_max_work_per_pass,
-        )?;
+            })
+            .map_err(|error| self.mark_maintenance_failure(error))?;
+        stats.pruned_files = self
+            .prune_retained_files(
+                policy.rotation_max_files,
+                policy.retention_max_age,
+                policy.maintenance_max_work_per_pass,
+            )
+            .map_err(|error| self.mark_maintenance_failure(error))?;
         Ok(stats)
     }
 
     fn rotate_if_needed(
         &self,
         rotation_max_bytes: u64,
-        rotation_max_files: u32,
+        rotation_max_files: usize,
         incoming_len: u64,
     ) -> Result<bool, LogSinkError> {
         if let Ok(metadata) = fs::metadata(&self.path)
@@ -118,10 +126,11 @@ impl JsonlFileSink {
         Ok(false)
     }
 
-    pub(crate) fn rotated_path(&self, index: u32) -> PathBuf {
+    pub(crate) fn rotated_path(&self, index: usize) -> PathBuf {
         rotated_log_path(&self.path, index)
     }
 
+    #[allow(deprecated)]
     fn prune_old_files(&self, retention: RetentionPolicy) {
         let Some(parent) = self.path.parent() else {
             return;
@@ -160,7 +169,7 @@ impl JsonlFileSink {
 
     fn prune_retained_files(
         &self,
-        rotation_max_files: u32,
+        rotation_max_files: usize,
         retention_max_age: Duration,
         maintenance_max_work_per_pass: Option<usize>,
     ) -> Result<u64, LogSinkError> {
@@ -257,6 +266,35 @@ impl JsonlFileSink {
             .source(Box::new(error)),
         ))
     }
+
+    fn mark_maintenance_failure(&self, error: LogSinkError) -> LogSinkError {
+        let message = error.to_string();
+        let diagnostic = Diagnostic {
+            timestamp: Timestamp::now_utc(),
+            code: error_codes::LOGGER_MAINTENANCE_FAILED,
+            message: message.clone(),
+            cause: None,
+            remediation: Remediation::not_recoverable(
+                "retained-log maintenance failure handling is owned by the logger runtime",
+            ),
+            docs: None,
+            details: serde_json::Map::new(),
+        };
+        let mut health = self.health.lock().expect("file sink health poisoned");
+        health.state = SinkHealthState::DegradedDropping;
+        health.last_error = Some(DiagnosticSummary::from(&diagnostic));
+        LogSinkError(Box::new(
+            ErrorContext::new(
+                error_codes::LOGGER_MAINTENANCE_FAILED,
+                "retained-log maintenance failed",
+                Remediation::not_recoverable(
+                    "retained-log maintenance failure handling is owned by the logger runtime",
+                ),
+            )
+            .cause(message)
+            .source(Box::new(error)),
+        ))
+    }
 }
 
 impl LogSink for JsonlFileSink {
@@ -270,7 +308,7 @@ impl LogSink for JsonlFileSink {
         if let Some(policy) = self.legacy_policy {
             self.rotate_if_needed(
                 policy.rotation.max_bytes,
-                policy.rotation.max_files,
+                policy.rotation.max_files as usize,
                 line.len() as u64,
             )?;
             self.prune_old_files(policy.retention);
@@ -307,7 +345,7 @@ struct LegacyRetentionPolicy {
 #[derive(Debug, Clone)]
 struct RetainedFile {
     path: PathBuf,
-    index: u32,
+    index: usize,
     modified: Option<SystemTime>,
 }
 
@@ -592,9 +630,143 @@ fn ignore_not_found(error: std::io::Error) -> std::io::Result<()> {
     }
 }
 
-fn rotated_index_for_path(active_path: &Path, candidate: &Path) -> Option<u32> {
+fn rotated_index_for_path(active_path: &Path, candidate: &Path) -> Option<usize> {
     let active_name = active_path.file_name()?.to_str()?;
     let candidate_name = candidate.file_name()?.to_str()?;
     let suffix = candidate_name.strip_prefix(&format!("{active_name}."))?;
     suffix.parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sc_observability_types::DiagnosticInfo;
+    use sc_observability_types::{
+        ActionName, Level, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName,
+        TargetCategory, constants::OBSERVATION_ENVELOPE_VERSION,
+    };
+    use serde_json::json;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::Duration;
+
+    fn temp_path(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "sc-observability-sinks-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .expect("system time before unix epoch")
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&path);
+        path
+    }
+
+    fn service_name() -> ServiceName {
+        ServiceName::new("sc-observability").expect("valid service name")
+    }
+
+    fn log_event() -> LogEvent {
+        LogEvent {
+            version: SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("valid schema"),
+            timestamp: Timestamp::UNIX_EPOCH,
+            level: Level::Info,
+            service: service_name(),
+            target: TargetCategory::new("logger.core").expect("valid target"),
+            action: ActionName::new("emit").expect("valid action"),
+            message: Some("rotation test".to_string()),
+            identity: ProcessIdentity::default(),
+            trace: None,
+            request_id: None,
+            correlation_id: None,
+            outcome: Some(OutcomeLabel::new("ok").expect("valid outcome")),
+            diagnostic: None,
+            state_transition: None,
+            fields: serde_json::Map::from_iter([("attempt".to_string(), json!(1))]),
+        }
+    }
+
+    #[test]
+    fn maintenance_failure_uses_maintenance_error_code() {
+        let root = temp_path("maintenance-error");
+        let active_path = root.join("logs/service.log.jsonl");
+        let sink = JsonlFileSink::for_logger(active_path.clone());
+        fs::create_dir_all(active_path.parent().expect("parent")).expect("create parent");
+        fs::write(&active_path, "x".repeat(512)).expect("seed active file");
+        let blocking_path = active_path.with_file_name("service.log.jsonl.1");
+        fs::create_dir(&blocking_path).expect("create blocking rotated directory");
+        fs::write(blocking_path.join("keep"), "busy").expect("make blocking directory non-empty");
+
+        let error = sink
+            .perform_maintenance(&RetainedLogPolicy {
+                rotation_max_bytes: 1,
+                rotation_max_files: 1,
+                retention_max_age: Duration::from_secs(3600),
+                maintenance_cadence: Duration::from_secs(60),
+                maintenance_join_timeout: Duration::from_secs(5),
+                maintenance_max_work_per_pass: None,
+                #[cfg(test)]
+                test_pass_delay: None,
+            })
+            .expect_err("maintenance failure");
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_MAINTENANCE_FAILED
+        );
+        assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+    }
+
+    #[test]
+    fn maintenance_max_work_per_pass_limits_pruning() {
+        let root = temp_path("maintenance-budget");
+        let active_path = root.join("logs/service.log.jsonl");
+        let sink = JsonlFileSink::for_logger(active_path.clone());
+        fs::create_dir_all(active_path.parent().expect("parent")).expect("create parent");
+        fs::write(&active_path, "").expect("create active");
+        for index in 1..=4 {
+            fs::write(sink.rotated_path(index), format!("retained-{index}"))
+                .expect("create retained file");
+        }
+
+        let stats = sink
+            .perform_maintenance(&RetainedLogPolicy {
+                rotation_max_bytes: u64::MAX,
+                rotation_max_files: 1,
+                retention_max_age: Duration::from_secs(3600),
+                maintenance_cadence: Duration::from_secs(60),
+                maintenance_join_timeout: Duration::from_secs(5),
+                maintenance_max_work_per_pass: Some(2),
+                #[cfg(test)]
+                test_pass_delay: None,
+            })
+            .expect("maintenance pass");
+
+        assert_eq!(stats.pruned_files, 2);
+        assert!(sink.rotated_path(2).exists());
+        assert!(!sink.rotated_path(4).exists());
+        assert!(!sink.rotated_path(3).exists());
+    }
+
+    #[test]
+    fn legacy_write_failures_mark_sink_health() {
+        let root = temp_path("legacy-write-error");
+        let file_parent = root.join("logs");
+        fs::create_dir_all(&root).expect("create root");
+        fs::write(&file_parent, "not-a-directory").expect("block parent as file");
+        let sink = JsonlFileSink::new(
+            file_parent.join("service.log.jsonl"),
+            RotationPolicy::default(),
+            RetentionPolicy::default(),
+        );
+
+        let error = sink.write(&log_event()).expect_err("write failure");
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+    }
 }

@@ -72,6 +72,7 @@ name = "sc-observability"
 version = "1.1.0"
 dependencies = [
  "sc-observability-types",
+ "serde",
  "serde_json",
 ]
 

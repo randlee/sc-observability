@@ -283,7 +283,7 @@ fn resolve_visible_files(active_log_path: &Path) -> Result<Vec<ResolvedLogFile>,
             let Some(suffix) = file_name.strip_prefix(&format!("{active_name}.")) else {
                 continue;
             };
-            let Ok(index) = suffix.parse::<u32>() else {
+            let Ok(index) = suffix.parse::<usize>() else {
                 continue;
             };
             let metadata = entry
@@ -485,7 +485,7 @@ pub(crate) fn file_identity_for_path(path: &Path) -> FileIdentity {
 }
 
 #[cfg(test)]
-pub(crate) fn query_active_and_rotated_paths(active_path: &Path, max_files: u32) -> Vec<PathBuf> {
+pub(crate) fn query_active_and_rotated_paths(active_path: &Path, max_files: usize) -> Vec<PathBuf> {
     let mut paths = (1..=max_files)
         .rev()
         .map(|index| rotated_log_path(active_path, index))
@@ -497,6 +497,8 @@ pub(crate) fn query_active_and_rotated_paths(active_path: &Path, max_files: u32)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::io::Write as _;
 
     fn test_identity(seed: u64) -> FileIdentity {
         #[cfg(unix)]
@@ -675,5 +677,53 @@ mod tests {
                 reset_reason: Some(FollowOffsetResetReason::NewActiveFile),
             }
         );
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "sc-observability-query-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .expect("system time before unix epoch")
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&path);
+        path
+    }
+
+    #[test]
+    fn query_active_and_rotated_paths_keeps_active_when_max_files_is_zero() {
+        let active = PathBuf::from("logs/service.log.jsonl");
+
+        assert_eq!(query_active_and_rotated_paths(&active, 0), vec![active]);
+    }
+
+    #[test]
+    fn read_events_from_path_returns_empty_for_missing_file() {
+        let missing = temp_path("missing").join("missing.log.jsonl");
+
+        let (events, end_offset) = read_events_from_path(&missing, 0).expect("missing file");
+
+        assert!(events.is_empty());
+        assert_eq!(end_offset, 0);
+    }
+
+    #[test]
+    fn read_events_from_path_surfaces_decode_errors() {
+        let root = temp_path("decode");
+        fs::create_dir_all(&root).expect("create root");
+        let path = root.join("broken.log.jsonl");
+        let mut file = fs::File::create(&path).expect("create file");
+        writeln!(file, "{{not-json").expect("write malformed line");
+
+        let error = read_events_from_path(&path, 0).expect_err("decode error");
+
+        match error {
+            QueryError::Decode(context) => {
+                assert_eq!(context.diagnostic().code, error_codes::SC_LOG_QUERY_DECODE);
+            }
+            other => panic!("expected decode error, got {other:?}"),
+        }
     }
 }
