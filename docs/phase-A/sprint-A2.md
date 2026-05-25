@@ -49,17 +49,28 @@ deprecations land.
 - CI-visible public API diff gate for workspace crates
 - CI-visible semver compatibility gate for breaking changes against the release
   baseline
+- repo-owned script set under `scripts/ci/`:
+  - `validate_public_api_diff.sh`
+  - `validate_public_api_semver.sh`
+  - `validate_public_api_docs.sh`
 - repo-owned validation scripts that fail when public API changes are not
   reflected in the required documentation artifacts
 - documented approval artifact required for intentional public API changes
 
-## Required Work
+## Gate Shape
 
-- add automation that makes additive and breaking API diffs visible in CI
-- add automation that fails when required API-checklist or normative-doc
-  updates are missing
-- document the approval path for intentional API changes so the gate is not
-  reviewer-memory-only
+The sprint must lock the repo-visible gate shape tightly enough that QA can
+review it directly from the sprint doc:
+
+- one CI path that exposes additive public API diffs
+- one CI path that fails semver-breaking public API diffs against the release
+  baseline
+- one repo-owned validation path that fails when public API docs and checklist
+  updates are missing for an intentional API change
+
+## Paths To Delete
+
+- none
 
 ## Acceptance Criteria
 
@@ -69,6 +80,8 @@ deprecations land.
   artifacts
 - the repo documents how an intentional API change is approved and how the gate
   is satisfied
+- the sprint names the exact validation commands or scripts QA must run to see
+  the API-governance result
 
 ## Non-Closure
 
@@ -80,4 +93,6 @@ deprecations land.
 - `cargo test --workspace`
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - `bash scripts/ci/validate_docs_consistency.sh`
-- every new API-governance validation script added in this sprint
+- `bash scripts/ci/validate_public_api_diff.sh`
+- `bash scripts/ci/validate_public_api_semver.sh`
+- `bash scripts/ci/validate_public_api_docs.sh`

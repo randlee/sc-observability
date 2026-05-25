@@ -43,6 +43,9 @@ with one queue-backed writer runtime and the locked public logging API surface.
 - `crates/sc-observability/src/runtime.rs`
 - `crates/sc-observability/src/sinks.rs`
 - `crates/sc-observability/src/maintenance.rs`
+- `crates/sc-observability/src/query.rs`
+- `crates/sc-observability/src/follow.rs`
+- `crates/sc-observability/src/jsonl_reader.rs`
 - `crates/sc-observability-types/src/health.rs`
 - matching tests and consumer-facing rustdoc
 - `docs/phase-A/readiness.md`
@@ -56,23 +59,11 @@ with one queue-backed writer runtime and the locked public logging API surface.
 - `Logger::try_log(...)`
 - deprecated `Logger::emit(...)` routed through the approved compatibility path
 - extended `LoggingHealthReport` with queue and writer fields
+- query/follow and health updates required to preserve active-plus-rotated log
+  correctness under the writer-owned runtime
 - tests covering queue admission, queue-full behavior, batching, shutdown
   drain, retained-log maintenance under writer ownership, and deprecated
   `emit()` compatibility
-
-## Required Work
-
-- remove the dedicated maintenance-only concurrency model as the primary
-  logging runtime shape
-- ensure `log()` blocks until queue admission and never drops silently
-- ensure `try_log()` returns immediately and reports queue saturation
-- ensure queue-full drops and writer failures are counted and surfaced through
-  `logger.health()`
-- ensure `flush()` is the queue-drain and sink-flush barrier
-- ensure `shutdown()` stops new work, drains remaining queued work under the
-  approved contract, and preserves final health state
-- keep query/follow behavior correct against active and rotated files after the
-  runtime change
 
 ## Paths To Delete
 
@@ -93,6 +84,8 @@ with one queue-backed writer runtime and the locked public logging API surface.
 - deprecated `emit()` remains callable and clearly compatibility-scoped
 - retained-log rotation and pruning still work correctly under the writer-owned
   runtime
+- query/follow behavior remains correct against active and rotated log files
+  after the writer-runtime change
 
 ## Required Validation
 
@@ -101,3 +94,9 @@ with one queue-backed writer runtime and the locked public logging API surface.
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - `bash scripts/ci/validate_repo_boundaries.sh`
 - `bash scripts/ci/validate_docs_consistency.sh`
+
+## Non-Closure
+
+- `A.3` does not add an async runtime dependency
+- `A.3` does not redesign OTLP batching or span assembly
+- `A.3` does not make query/follow surface queued-but-unflushed records

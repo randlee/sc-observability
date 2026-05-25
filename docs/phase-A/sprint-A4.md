@@ -40,7 +40,7 @@ commands.
 
 - `README.md`
 - `CONSUMING.md`
-- relevant examples
+- `examples/custom-sink-example/`
 - `docs/phase-A/readiness.md`
 
 ## Deliverables
@@ -52,13 +52,9 @@ commands.
 - explicit operator guidance that dropped logs, writer degradation, or sustained
   queue pressure are serious `doctor` findings
 
-## Required Work
+## Paths To Delete
 
-- stop teaching `emit()` as the default logging API
-- teach `flush()` and shutdown semantics under queue-backed logging
-- document how downstream health or `doctor` commands should interpret queue
-  depth, high-water mark, drop counts, and writer state
-- keep the guidance logging-layer-only and free of ATM-specific wrapper code
+- none
 
 ## Acceptance Criteria
 
@@ -67,6 +63,8 @@ commands.
 - at least one consumer-facing example shows queue/writer health inspection
 - the docs tell operators that dropped logs and writer degradation are serious
   issues rather than hidden implementation detail
+- the consumer guidance remains logging-layer-only and does not require
+  ATM-specific wrapper code in this repo
 
 ## Non-Closure
 

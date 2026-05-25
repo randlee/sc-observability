@@ -57,30 +57,67 @@ before implementation begins.
 - explicit statement that retained-log maintenance runs on the same writer
   thread during idle or post-batch windows rather than on a dedicated
   maintenance-only thread
+- explicit statement that producers validate, redact, and queue log events,
+  while one writer thread owns batching, sink writes, rotation, pruning, and
+  flush
 - locked contract for:
   - `Logger::log(...)`
   - `Logger::try_log(...)`
   - deprecated `Logger::emit(...)`
   - `Logger::flush(...)`
   - `Logger::shutdown(...)`
+- explicit semantics for:
+  - `log()` blocks until queue admission, not durability
+  - `try_log()` is non-blocking and returns explicit queue-full failure
+  - `emit()` remains compatibility-only and is deprecated in favor of
+    `log()` / `try_log()`
 - locked queue and writer health fields for `LoggingHealthReport`
 - locked public config surface for queue capacity and batching controls
 - explicit public-API governance requirement stating that API changes must be
   documented and machine-checked
-
-## Required Work
-
-- define that producers validate, redact, and queue log events
-- define that one writer thread owns sink writes, batching, rotation, pruning,
-  and flush
-- define that `log()` blocks until queue admission, not durability
-- define that `try_log()` is non-blocking and returns explicit queue-full
-  failure
-- define the compatibility behavior and deprecation guidance for `emit()`
-- define the queue depth, capacity, high-water-mark, drop, and writer-state
-  health requirements needed by downstream `doctor` commands
 - update `docs/performance-pass.md` so it no longer conflicts with the approved
   redesign
+
+## Locked Contract Samples
+
+The sprint must freeze the logger-facing method shape and health additions with
+explicit signatures or equivalent prose-tight code samples:
+
+```rust
+impl Logger<Running> {
+    pub fn log(&self, event: LogEvent) -> Result<(), /* locked in A.1 */>;
+    pub fn try_log(&self, event: LogEvent) -> Result<(), /* locked in A.1 */>;
+
+    #[deprecated(
+        since = "1.2.0",
+        note = "Use log() for blocking queue admission or try_log() for non-blocking logging."
+    )]
+    pub fn emit(&self, event: LogEvent) -> Result<(), EventError>;
+
+    pub fn flush(&self) -> Result<(), FlushError>;
+}
+```
+
+```rust
+pub struct LoggingHealthReport {
+    pub queue_depth: u64,
+    pub queue_capacity: u64,
+    pub queue_high_water_mark: u64,
+    pub queue_full_drops_total: u64,
+    pub writer_state: WriterState,
+    pub last_writer_error: Option<DiagnosticSummary>,
+}
+
+pub enum WriterState {
+    Running,
+    Degraded,
+    Stopped,
+}
+```
+
+## Paths To Delete
+
+- none
 
 ## Acceptance Criteria
 
@@ -90,6 +127,9 @@ before implementation begins.
   target runtime model
 - the docs explicitly distinguish queue admission from write durability
 - the docs explicitly define queue-full behavior and health reporting
+- the docs freeze explicit method signatures or equivalent contract samples for
+  `log()`, `try_log()`, deprecated `emit()`, and the queue/writer health
+  additions
 - the docs explicitly record that future public API changes require both docs
   updates and automated API-gate approval
 
