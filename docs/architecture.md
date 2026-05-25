@@ -75,7 +75,7 @@ Owns:
 - `ObservabilityHealthProvider`
 - `LogQuery`, `LogOrder`, `LogFieldMatch`
 - `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
-- `MaintenanceHealthReport`, `MaintenanceWorkerState`
+- `MaintenanceHealthReport`, `MaintenanceWorkerState`, `WriterState`
 - health report contracts
 - shared open traits such as `Observable`, `DiagnosticInfo`,
   subscribers, filters, and projectors
@@ -115,8 +115,8 @@ Owns:
 - redaction
 - rotation
 - `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`,
-  `SinkHealth`, and `SinkHealthState` defined in `sc-observability-types`,
-  re-exported by `sc-observability`
+  `WriterState`, `SinkHealth`, and `SinkHealthState` defined in
+  `sc-observability-types`, re-exported by `sc-observability`
 
 Runtime role:
 
@@ -674,8 +674,8 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, and `MaintenanceWorkerState`, and logging query/follow value and error contracts |
-| `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport` and `MaintenanceWorkerState` |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts |
+| `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
 

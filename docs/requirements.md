@@ -104,6 +104,8 @@ This crate owns shared neutral contracts only.
   behavior such as `Logger`, `LoggerBuilder`, `LogSink`, `SinkRegistration`,
   built-in sink implementations, or sink-configuration toggles. Downstream
   consumers that need those behaviors shall depend on `sc-observability`.
+- TYP-040 `sc-observability-types` shall own `WriterState` as the shared
+  logging-runtime writer-health enum used by `LoggingHealthReport`.
 
 ## 4. `sc-observability` Requirements
 

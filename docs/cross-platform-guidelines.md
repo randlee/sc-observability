@@ -39,3 +39,8 @@
    and explicit teardown.
 3. Tests must not rely on OS-specific default paths when explicit paths can be
    injected.
+4. Logging-runtime changes that affect rotation, follow, or retained-log
+   maintenance must prove parity on macOS, Linux, and Windows before merge.
+5. Writer-thread queueing and batching must not change the documented
+   query/follow visibility contract: queued-but-unflushed records are not
+   required to appear in file-backed query/follow results.

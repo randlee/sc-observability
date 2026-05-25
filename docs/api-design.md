@@ -136,7 +136,8 @@ Owns:
 - diagnostic types
 - log, span, and metric data contracts
 - observation routing traits and helper types
-- health-report contracts
+- health-report contracts, including `LoggingHealthReport`,
+  `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`
 - generic config/value types shared across surfaces
 
 Must not own:
@@ -1666,6 +1667,8 @@ pub enum WriterState {
 
 Health rules:
 
+- `WriterState` is part of the shared health-contract surface owned by
+  `sc-observability-types` and re-exported by `sc-observability`
 - `queue_depth` is the current admitted-but-not-yet-written record count
 - `queue_capacity` is the configured bounded queue size
 - `queue_high_water_mark` records the highest observed queue depth since

@@ -64,12 +64,18 @@ Note:
 - [x] `SpanStarted`
 - [x] `SpanEnded`
 - [x] `DurationMs`
+- [x] `ByteCount`
+- [x] `FileCount`
+- [x] `RetentionMaxAge`
+- [x] `MaintenanceCadence`
+- [x] `MaintenanceJoinTimeout`
 - [x] `SpanRecord<S>`
 - [x] `SpanEvent`
 - [x] `SpanSignal`
 - [x] `MetricKind`
 - [x] `MetricRecord`
 - [x] `LoggingHealthState`
+- [~] `WriterState` (phase-A planned logging-runtime addition)
 - [x] `SinkHealthState`
 - [x] `SinkHealth`
 - [x] `LoggingHealthReport`
@@ -143,6 +149,28 @@ Note:
 Internal-only:
 
 - [x] `LogEmitter`
+
+### Phase A Planned Public Additions
+
+- [~] `Logger<Running>`
+- [~] `Logger<Stopped>`
+- [~] `Logger::log(&self, LogEvent) -> Result<(), LogError>`
+- [~] `Logger::try_log(&self, LogEvent) -> Result<(), TryLogError>`
+- [~] deprecated `Logger::emit(&self, LogEvent) -> Result<(), EventError>`
+- [~] `LogError`
+- [~] `TryLogError`
+- [~] `LoggingHealthReport.queue_depth`
+- [~] `LoggingHealthReport.queue_capacity`
+- [~] `LoggingHealthReport.queue_high_water_mark`
+- [~] `LoggingHealthReport.queue_full_drops_total`
+- [~] `LoggingHealthReport.writer_state`
+- [~] `LoggingHealthReport.last_writer_error`
+
+Phase-A rule:
+
+- these additions are design-locked by `docs/phase-A/sprint-A1.md` and become
+  `[x]` only after `A.3` lands and `A.2` public-API governance gates accept
+  the resulting public surface
 
 ### Finalized Public Rules
 
