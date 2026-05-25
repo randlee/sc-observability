@@ -32,19 +32,21 @@ work.
 6. Keep ATM-specific adapter work outside the shared crates.
 7. Maintain explicit downstream integration contracts for shipped consumers so
    cross-repo reviews do not rely on inferred layering or stale assumptions.
-8. Stage additive `v1.1.0` logging-layer maintenance work through explicit
-   docs-first review before implementation begins.
+8. Keep completed sprint records archived without leaving root `docs/`
+   cluttered.
+9. Stage the post-`v1.1.0` logging-runtime thread optimization work through a
+   dedicated phase-A sprint plan before implementation begins.
 
 ## Issue #70 / v1.1.0
 
-Retained-log rotation, pruning, and maintenance is the current additive
-`v1.1.0` work item for `sc-observability`.
+Retained-log rotation, pruning, and maintenance was the additive `v1.1.0`
+logging-layer work item for `sc-observability`.
 
-Controlling sprint plan:
+Historical sprint plan:
 
-- [`sprint-plan-retained-log-maintenance.md`](./sprint-plan-retained-log-maintenance.md)
+- [`archive/sprints/sprint-plan-retained-log-maintenance.md`](./archive/sprints/sprint-plan-retained-log-maintenance.md)
 
-Planned sequence:
+Historical sequence:
 
 1. S1 docs sprint:
    - update `requirements.md`, `architecture.md`, and `project-plan.md`
@@ -53,7 +55,7 @@ Planned sequence:
    - complete quality review before any code lands
    Exit criteria:
    - field names and defaults match
-     `sprint-plan-retained-log-maintenance.md`
+     `archive/sprints/sprint-plan-retained-log-maintenance.md`
    - normative docs lock `RetainedLogPolicy` as a struct nested in
      `LoggerConfig`
    - `LoggingHealthReport` and retained-log worker-state ownership are defined
@@ -66,6 +68,36 @@ Planned sequence:
 3. S3 consumer-doc sprint:
    - update `README.md` and/or `CONSUMING.md` with a retained-log policy
      configuration example once the implementation ships
+
+## Thread Optimization / v1.2.0 Phase A
+
+The next logging-runtime workstream after retained-log maintenance is the
+phase-A thread optimization effort for `sc-observability`.
+
+Controlling phase folder:
+
+- [`phase-A/readiness.md`](./phase-A/readiness.md)
+- [`phase-A/sprint-A1.md`](./phase-A/sprint-A1.md)
+- [`phase-A/sprint-A2.md`](./phase-A/sprint-A2.md)
+- [`phase-A/sprint-A3.md`](./phase-A/sprint-A3.md)
+- [`phase-A/sprint-A4.md`](./phase-A/sprint-A4.md)
+
+Planned sequence:
+
+1. `A.1` architecture-and-API lock sprint:
+   - lock the writer-thread architecture, queue semantics, health surface,
+     `log()` / `try_log()` / deprecated `emit()` contract, and public-API
+     governance requirements in the normative docs
+2. `A.2` public-API governance sprint:
+   - add CI-visible semver/public-API gates so future API changes cannot land
+     silently
+3. `A.3` runtime-and-API implementation sprint:
+   - replace the dedicated maintenance-only worker model with a queue-backed
+     writer runtime and implement the approved public logging API additions
+4. `A.4` consumer rollout sprint:
+   - update consumer docs and examples so new adopters use `log()` /
+     `try_log()` and can surface queue/writer degradation in app health or
+     `doctor` output
 
 ## Rule
 
@@ -85,7 +117,7 @@ together:
 - `docs/implementation-plan.md`
 - `docs/public-api-checklist.md`
 - `docs/test-strategy.md`
-- `docs/sprint-plan.md`
+- `docs/archive/sprints/sprint-plan.md`
 - `docs/release-readiness-checklist.md`
 
 ## Historical Recovery Baseline
