@@ -115,7 +115,7 @@ jobs:
           for crate in "${crates[@]}"; do
             url="https://crates.io/api/v1/crates/${crate}"
             response_path="${RUNNER_TEMP}/${crate}.json"
-            status="$(curl --silent --show-error --location --output "$response_path" --write-out '%{http_code}' "$url")"
+            status="$(curl --silent --show-error --location --header "User-Agent: sc-observability-publisher/1.0" --output "$response_path" --write-out '%{http_code}' "$url")"
             case "$status" in
               200)
                 present+=("$crate")
