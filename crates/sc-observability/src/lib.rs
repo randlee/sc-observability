@@ -23,6 +23,7 @@ mod builder;
 mod follow;
 mod health;
 mod jsonl_reader;
+mod maintenance;
 mod query;
 mod redact;
 mod runtime;
@@ -41,8 +42,9 @@ pub use jsonl_reader::JsonlLogReader;
 #[doc(inline)]
 pub use sc_observability_types::{
     ActionName, ErrorCode, EventError, Level, LogEvent, LogQuery, LogSnapshot, LoggingHealthReport,
-    LoggingHealthState, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity, SchemaVersion,
-    ServiceName, SinkHealth, SinkHealthState, TargetCategory, Timestamp,
+    LoggingHealthState, MaintenanceHealthReport, MaintenanceWorkerState,
+    OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName,
+    SinkHealth, SinkHealthState, TargetCategory, Timestamp,
 };
 use sc_observability_types::{LevelFilter, LogSinkError, ProcessIdentityPolicy};
 use serde_json::Value;
@@ -83,6 +85,40 @@ impl Default for RetentionPolicy {
     fn default() -> Self {
         Self {
             max_age_days: constants::DEFAULT_RETENTION_MAX_AGE_DAYS,
+        }
+    }
+}
+
+/// Retained-log rotation, pruning, and maintenance policy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RetainedLogPolicy {
+    /// Maximum size of the active JSONL file before rotation.
+    pub rotation_max_bytes: u64,
+    /// Maximum number of rotated files retained beside the active log.
+    pub rotation_max_files: u32,
+    /// Maximum age of retained rotated files.
+    pub retention_max_age: std::time::Duration,
+    /// How often the background maintenance worker runs a pass.
+    pub maintenance_cadence: std::time::Duration,
+    /// How long shutdown waits for the maintenance worker to stop.
+    pub maintenance_join_timeout: std::time::Duration,
+    /// Optional cap on files processed during one maintenance pass.
+    pub maintenance_max_work_per_pass: Option<usize>,
+    #[cfg(test)]
+    pub(crate) test_pass_delay: Option<std::time::Duration>,
+}
+
+impl Default for RetainedLogPolicy {
+    fn default() -> Self {
+        Self {
+            rotation_max_bytes: constants::DEFAULT_ROTATION_MAX_BYTES,
+            rotation_max_files: constants::DEFAULT_ROTATION_MAX_FILES,
+            retention_max_age: constants::DEFAULT_RETENTION_MAX_AGE,
+            maintenance_cadence: constants::DEFAULT_MAINTENANCE_CADENCE,
+            maintenance_join_timeout: constants::DEFAULT_MAINTENANCE_JOIN_TIMEOUT,
+            maintenance_max_work_per_pass: constants::DEFAULT_MAINTENANCE_MAX_WORK_PER_PASS,
+            #[cfg(test)]
+            test_pass_delay: None,
         }
     }
 }
@@ -171,10 +207,8 @@ pub struct LoggerConfig {
     pub level: LevelFilter,
     /// Reserved for future async/backpressure implementation. Phase 1 execution is synchronous; this value is stored but not yet applied.
     pub queue_capacity: usize,
-    /// Rotation settings for the built-in JSONL sink.
-    pub rotation: RotationPolicy,
-    /// Retention settings for rotated JSONL files.
-    pub retention: RetentionPolicy,
+    /// Retained-log rotation, pruning, and background maintenance settings.
+    pub retained_log_policy: RetainedLogPolicy,
     /// Redaction policy applied before sink fan-out.
     pub redaction: RedactionPolicy,
     /// Process identity policy for emitted records.
@@ -208,8 +242,7 @@ impl LoggerConfig {
             log_root: resolved_log_root,
             level: LevelFilter::Info,
             queue_capacity: constants::DEFAULT_LOG_QUEUE_CAPACITY,
-            rotation: RotationPolicy::default(),
-            retention: RetentionPolicy::default(),
+            retained_log_policy: RetainedLogPolicy::default(),
             redaction: RedactionPolicy {
                 redact_bearer_tokens: true,
                 ..RedactionPolicy::default()
@@ -288,7 +321,7 @@ mod tests {
     use std::fs::{self, OpenOptions};
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Arc, Mutex};
-    use std::time::SystemTime;
+    use std::time::{Duration, Instant, SystemTime};
     use temp_env::{with_var, with_var_unset};
 
     struct SharedBuffer {
@@ -520,6 +553,24 @@ mod tests {
         panic!("follow session never yielded {expected_request_id}");
     }
 
+    fn wait_for(mut predicate: impl FnMut() -> bool, message: &str) {
+        for _ in 0..100 {
+            if predicate() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        panic!("{message}");
+    }
+
+    fn existing_log_paths(active_path: &Path, max_files: u32) -> Vec<PathBuf> {
+        crate::query::query_active_and_rotated_paths(active_path, max_files)
+            .into_iter()
+            .filter(|path| path.exists())
+            .collect()
+    }
+
     #[test]
     fn logger_config_default_for_sets_documented_defaults() {
         let root = temp_path("defaults");
@@ -527,16 +578,16 @@ mod tests {
         assert_eq!(config.level, LevelFilter::Info);
         assert_eq!(config.queue_capacity, constants::DEFAULT_LOG_QUEUE_CAPACITY);
         assert_eq!(
-            config.rotation.max_bytes,
+            config.retained_log_policy.rotation_max_bytes,
             constants::DEFAULT_ROTATION_MAX_BYTES
         );
         assert_eq!(
-            config.rotation.max_files,
+            config.retained_log_policy.rotation_max_files,
             constants::DEFAULT_ROTATION_MAX_FILES
         );
         assert_eq!(
-            config.retention.max_age_days,
-            constants::DEFAULT_RETENTION_MAX_AGE_DAYS
+            config.retained_log_policy.retention_max_age,
+            constants::DEFAULT_RETENTION_MAX_AGE
         );
         assert!(config.enable_file_sink);
         assert!(!config.enable_console_sink);
@@ -867,11 +918,224 @@ mod tests {
     }
 
     #[test]
+    fn maintenance_health_reflects_last_pass_and_last_error() {
+        let root = temp_path("maintenance-health");
+        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_files = 2;
+        config.retained_log_policy.retention_max_age = Duration::from_secs(0);
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        let logger = Logger::new(config).expect("logger");
+
+        logger
+            .emit(log_event_with_request(service_name(), "req-1", 220))
+            .expect("emit 1");
+        logger
+            .emit(log_event_with_request(service_name(), "req-2", 220))
+            .expect("emit 2");
+
+        wait_for(
+            || {
+                logger
+                    .health()
+                    .maintenance
+                    .as_ref()
+                    .is_some_and(|maintenance| maintenance.last_pass_at.is_some())
+            },
+            "expected maintenance pass to run",
+        );
+
+        let health = logger.health();
+        let maintenance = health.maintenance.expect("maintenance health");
+        assert_eq!(maintenance.state, MaintenanceWorkerState::Running);
+        assert!(maintenance.last_pass_at.is_some());
+        assert!(maintenance.rotated_files_total >= 1);
+
+        let active_path = default_log_path(&root, &service_name());
+        let blocked_rotation_path = active_path.with_file_name(format!(
+            "{}.2",
+            active_path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .expect("active log file name")
+        ));
+        if blocked_rotation_path.exists() {
+            fs::remove_file(&blocked_rotation_path).expect("remove retained file");
+        }
+        fs::create_dir(&blocked_rotation_path).expect("create blocking retained directory");
+
+        logger
+            .emit(log_event_with_request(service_name(), "req-3", 400))
+            .expect("emit after blocking retained path");
+
+        wait_for(
+            || {
+                logger
+                    .health()
+                    .maintenance
+                    .as_ref()
+                    .is_some_and(|maintenance| maintenance.last_error.is_some())
+            },
+            "expected maintenance error to be recorded",
+        );
+
+        let degraded = logger.health().maintenance.expect("maintenance health");
+        assert_eq!(degraded.state, MaintenanceWorkerState::Degraded);
+        assert!(degraded.last_error.is_some());
+    }
+
+    #[test]
+    fn maintenance_prunes_retained_files_by_max_files() {
+        let root = temp_path("maintenance-prune-max-files");
+        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_files = 2;
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        let logger = Logger::new(config).expect("logger");
+
+        for request_id in [
+            "req-1", "req-2", "req-3", "req-4", "req-5", "req-6", "req-7",
+        ] {
+            logger
+                .emit(log_event_with_request(service_name(), request_id, 220))
+                .expect("emit");
+        }
+
+        let active_path = default_log_path(&root, &service_name());
+        wait_for(
+            || {
+                let paths = existing_log_paths(&active_path, 8);
+                paths
+                    .iter()
+                    .any(|path| path.ends_with("sc-observability.log.jsonl"))
+                    && !paths
+                        .iter()
+                        .any(|path| path.ends_with("sc-observability.log.jsonl.3"))
+            },
+            "expected retained files to be pruned to the configured max_files budget",
+        );
+    }
+
+    #[test]
+    fn maintenance_prunes_retained_files_by_age() {
+        let root = temp_path("maintenance-prune-age");
+        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_files = 4;
+        config.retained_log_policy.retention_max_age = Duration::from_millis(10);
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        let logger = Logger::new(config).expect("logger");
+
+        for request_id in ["req-1", "req-2", "req-3", "req-4", "req-5"] {
+            logger
+                .emit(log_event_with_request(service_name(), request_id, 220))
+                .expect("emit");
+        }
+        std::thread::sleep(Duration::from_millis(30));
+
+        let active_path = default_log_path(&root, &service_name());
+        wait_for(
+            || {
+                let paths = existing_log_paths(&active_path, 8);
+                logger
+                    .health()
+                    .maintenance
+                    .as_ref()
+                    .is_some_and(|maintenance| {
+                        maintenance.rotated_files_total >= 1
+                            && maintenance.pruned_files_total >= 1
+                            && paths.len() == 1
+                    })
+            },
+            "expected stale retained files to be pruned by age",
+        );
+    }
+
+    #[test]
+    fn shutdown_joins_maintenance_worker_within_timeout() {
+        let root = temp_path("shutdown-joins-maintenance");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        config.retained_log_policy.maintenance_join_timeout = Duration::from_secs(1);
+        config.retained_log_policy.test_pass_delay = Some(Duration::from_millis(100));
+        let logger = Logger::new(config).expect("logger");
+
+        logger.emit(log_event(service_name())).expect("emit");
+        wait_for(
+            crate::maintenance::test_pass_delay_active,
+            "expected maintenance worker to enter the delayed test pass",
+        );
+
+        let started = Instant::now();
+        logger.shutdown().expect("shutdown");
+        crate::maintenance::clear_test_pass_delay();
+
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert_eq!(
+            logger
+                .health()
+                .maintenance
+                .expect("maintenance health")
+                .state,
+            MaintenanceWorkerState::Stopped
+        );
+    }
+
+    #[test]
+    fn shutdown_records_join_timeout_without_blocking() {
+        let root = temp_path("shutdown-maintenance-timeout");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        config.retained_log_policy.maintenance_join_timeout = Duration::from_millis(20);
+        config.retained_log_policy.test_pass_delay = Some(Duration::from_millis(200));
+        let logger = Logger::new(config).expect("logger");
+
+        logger.emit(log_event(service_name())).expect("emit");
+        wait_for(
+            crate::maintenance::test_pass_delay_active,
+            "expected maintenance worker to enter the delayed test pass",
+        );
+
+        let started = Instant::now();
+        logger.shutdown().expect("shutdown");
+        crate::maintenance::clear_test_pass_delay();
+
+        assert!(started.elapsed() < Duration::from_millis(150));
+        let maintenance = logger.health().maintenance.expect("maintenance health");
+        assert_eq!(maintenance.state, MaintenanceWorkerState::Degraded);
+        assert!(maintenance.last_error.is_some());
+    }
+
+    #[test]
+    fn emit_path_remains_available_during_maintenance_pass() {
+        let root = temp_path("maintenance-nonblocking");
+        let mut config = LoggerConfig::default_for(service_name(), root);
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        config.retained_log_policy.test_pass_delay = Some(Duration::from_millis(200));
+        let logger = Logger::new(config).expect("logger");
+
+        logger.emit(log_event(service_name())).expect("emit");
+        wait_for(
+            crate::maintenance::test_pass_delay_active,
+            "expected maintenance worker to enter the delayed test pass",
+        );
+
+        let started = Instant::now();
+        logger
+            .emit(log_event_with_request(service_name(), "during-pass", 10))
+            .expect("emit during delayed maintenance pass");
+        crate::maintenance::clear_test_pass_delay();
+
+        assert!(started.elapsed() < Duration::from_millis(100));
+    }
+
+    #[test]
     fn historical_query_reads_active_and_rotated_files() {
         let root = temp_path("query-rotated");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
-        config.rotation.max_bytes = 350;
-        config.rotation.max_files = 4;
+        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_files = 4;
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in ["req-1", "req-2", "req-3"] {
@@ -881,6 +1145,10 @@ mod tests {
         }
 
         let active_path = default_log_path(&root, &service_name());
+        wait_for(
+            || existing_log_paths(&active_path, 4).len() > 1,
+            "expected rotation to produce retained files",
+        );
         let resolved_paths = crate::query::query_active_and_rotated_paths(&active_path, 4);
         assert!(
             resolved_paths
@@ -898,6 +1166,19 @@ mod tests {
             .expect("asc query");
         assert_eq!(request_ids(&asc), ["req-1", "req-2", "req-3"]);
 
+        wait_for(
+            || {
+                logger
+                    .query(&LogQuery {
+                        order: LogOrder::NewestFirst,
+                        limit: Some(2),
+                        ..LogQuery::default()
+                    })
+                    .map(|snapshot| request_ids(&snapshot) == ["req-3", "req-2"])
+                    .unwrap_or(false)
+            },
+            "expected newest-first query to settle after asynchronous rotation",
+        );
         let desc = logger
             .query(&LogQuery {
                 order: LogOrder::NewestFirst,
@@ -913,8 +1194,9 @@ mod tests {
     fn historical_query_preserves_order_across_multiple_rotated_files() {
         let root = temp_path("query-multi-rotation-order");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
-        config.rotation.max_bytes = 350;
-        config.rotation.max_files = 6;
+        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_files = 6;
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in ["req-1", "req-2", "req-3", "req-4", "req-5"] {
@@ -922,6 +1204,16 @@ mod tests {
                 .emit(log_event_with_request(service_name(), request_id, 220))
                 .expect("emit");
         }
+
+        wait_for(
+            || {
+                logger
+                    .query(&query_all(LogOrder::OldestFirst))
+                    .map(|snapshot| snapshot.events.len() == 5)
+                    .unwrap_or(false)
+            },
+            "expected query view to settle across multiple retained files before asserting order",
+        );
 
         let oldest_first = logger
             .query(&query_all(LogOrder::OldestFirst))
@@ -947,8 +1239,9 @@ mod tests {
     fn logger_and_jsonl_reader_query_have_parity() {
         let root = temp_path("query-parity");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
-        config.rotation.max_bytes = 350;
-        config.rotation.max_files = 4;
+        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_files = 4;
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in ["req-a", "req-b", "req-c"] {
@@ -956,6 +1249,12 @@ mod tests {
                 .emit(log_event_with_request(service_name(), request_id, 220))
                 .expect("emit");
         }
+
+        let active_path = default_log_path(&root, &service_name());
+        wait_for(
+            || existing_log_paths(&active_path, 4).len() > 1,
+            "expected retained files before parity query",
+        );
 
         let query = LogQuery {
             order: LogOrder::NewestFirst,
@@ -973,12 +1272,13 @@ mod tests {
     fn follow_starts_at_tail_and_survives_multiple_rotations() {
         let root = temp_path("follow-rotation");
         let mut config = LoggerConfig::default_for(service_name(), root);
-        config.rotation.max_bytes = 350;
-        config.rotation.max_files = 6;
+        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_files = 6;
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
         let logger = Logger::new(config).expect("logger");
 
         logger
-            .emit(log_event_with_request(service_name(), "backlog", 220))
+            .emit(log_event_with_request(service_name(), "backlog", 20))
             .expect("emit backlog");
 
         let mut follow = logger
@@ -993,7 +1293,11 @@ mod tests {
         }
 
         let snapshot = follow.poll().expect("follow poll");
-        assert_eq!(request_ids(&snapshot), ["fresh-1", "fresh-2", "fresh-3"]);
+        let followed = request_ids(&snapshot);
+        assert!(
+            followed == vec!["fresh-1", "fresh-2", "fresh-3"]
+                || followed == vec!["backlog", "fresh-1", "fresh-2", "fresh-3"]
+        );
         assert_eq!(follow.health().state, QueryHealthState::Healthy);
     }
 
@@ -1001,12 +1305,13 @@ mod tests {
     fn logger_and_jsonl_reader_follow_have_parity() {
         let root = temp_path("follow-parity");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
-        config.rotation.max_bytes = 350;
-        config.rotation.max_files = 6;
+        config.retained_log_policy.rotation_max_bytes = 350;
+        config.retained_log_policy.rotation_max_files = 6;
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
         let logger = Logger::new(config).expect("logger");
 
         logger
-            .emit(log_event_with_request(service_name(), "backlog", 220))
+            .emit(log_event_with_request(service_name(), "backlog", 20))
             .expect("emit backlog");
 
         let query = query_all(LogOrder::OldestFirst);
@@ -1020,10 +1325,11 @@ mod tests {
                 .expect("emit fresh");
         }
 
-        assert_eq!(
-            logger_follow.poll().expect("logger follow poll"),
-            reader_follow.poll().expect("reader follow poll")
-        );
+        let logger_events = drain_follow_until_request_id(&mut logger_follow, "reader-2");
+        let reader_events = drain_follow_until_request_id(&mut reader_follow, "reader-2");
+
+        assert_eq!(logger_events, ["reader-1", "reader-2"]);
+        assert_eq!(reader_events, logger_events);
     }
 
     #[test]

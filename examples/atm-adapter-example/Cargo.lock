@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "atm-adapter-example"
-version = "0.0.0"
+version = "1.0.0"
 dependencies = [
  "sc-observability",
  "sc-observability-otlp",
@@ -69,7 +69,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "sc-observability-types",
  "serde_json",
@@ -77,18 +77,17 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-otlp"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "sc-observability",
  "sc-observability-types",
- "sc-observe",
  "serde_json",
  "thiserror",
 ]
 
 [[package]]
 name = "sc-observability-types"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -98,7 +97,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observe"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "sc-observability",
  "sc-observability-types",

@@ -11,7 +11,10 @@ use sc_observability_types::{
 #[cfg(feature = "fault-injection")]
 use std::sync::Arc;
 
-use crate::{LogSink, RetentionPolicy, RotationPolicy, constants, error_codes, rotated_log_path};
+use crate::{
+    LogSink, RetainedLogPolicy, RetentionPolicy, RotationPolicy, constants, error_codes,
+    rotated_log_path,
+};
 
 #[expect(
     missing_debug_implementations,
@@ -20,9 +23,8 @@ use crate::{LogSink, RetentionPolicy, RotationPolicy, constants, error_codes, ro
 /// Built-in JSONL file sink with rotation and retention handling.
 pub struct JsonlFileSink {
     path: PathBuf,
-    rotation: RotationPolicy,
-    retention: RetentionPolicy,
     health: Mutex<SinkHealth>,
+    legacy_policy: Option<LegacyRetentionPolicy>,
 }
 
 impl JsonlFileSink {
@@ -33,16 +35,29 @@ impl JsonlFileSink {
     /// Panics only if the workspace-owned `JSONL_FILE_SINK_NAME` constant ever
     /// becomes invalid for `SinkName`, which would indicate a programming bug.
     pub fn new(path: PathBuf, rotation: RotationPolicy, retention: RetentionPolicy) -> Self {
+        Self::with_legacy_policy(
+            path,
+            Some(LegacyRetentionPolicy {
+                rotation,
+                retention,
+            }),
+        )
+    }
+
+    pub(crate) fn for_logger(path: PathBuf) -> Self {
+        Self::with_legacy_policy(path, None)
+    }
+
+    fn with_legacy_policy(path: PathBuf, legacy_policy: Option<LegacyRetentionPolicy>) -> Self {
         Self {
             path,
-            rotation,
-            retention,
             health: Mutex::new(SinkHealth {
                 name: SinkName::new(constants::JSONL_FILE_SINK_NAME)
                     .expect("jsonl sink constant is valid"),
                 state: SinkHealthState::Healthy,
                 last_error: None,
             }),
+            legacy_policy,
         }
     }
 
@@ -51,32 +66,63 @@ impl JsonlFileSink {
         &self.path
     }
 
-    #[expect(
-        clippy::unnecessary_wraps,
-        reason = "the helper preserves a Result-shaped internal API so rotation checks can grow I/O failure propagation without reshaping caller control flow"
-    )]
-    fn rotate_if_needed(&self, incoming_len: u64) -> Result<(), LogSinkError> {
+    pub(crate) fn perform_maintenance(
+        &self,
+        policy: &RetainedLogPolicy,
+    ) -> Result<crate::maintenance::MaintenancePassStats, LogSinkError> {
+        let mut stats = crate::maintenance::MaintenancePassStats::default();
+        self.rotate_if_needed(policy.rotation_max_bytes, policy.rotation_max_files, 0)
+            .map(|did_rotate| {
+                if did_rotate {
+                    stats.rotated_files = 1;
+                }
+            })?;
+        stats.pruned_files = self.prune_retained_files(
+            policy.rotation_max_files,
+            policy.retention_max_age,
+            policy.maintenance_max_work_per_pass,
+        )?;
+        Ok(stats)
+    }
+
+    fn rotate_if_needed(
+        &self,
+        rotation_max_bytes: u64,
+        rotation_max_files: u32,
+        incoming_len: u64,
+    ) -> Result<bool, LogSinkError> {
         if let Ok(metadata) = fs::metadata(&self.path)
-            && metadata.len().saturating_add(incoming_len) > self.rotation.max_bytes
+            && metadata.len().saturating_add(incoming_len) > rotation_max_bytes
         {
-            for idx in (1..self.rotation.max_files).rev() {
+            for idx in (1..rotation_max_files).rev() {
                 let src = self.rotated_path(idx);
                 let dest = self.rotated_path(idx + 1);
-                let _ = rename_if_present(&src, &dest);
+                rename_if_present(&src, &dest).map_err(|err| self.mark_failure(err))?;
             }
-            let rotated = self.rotated_path(1);
-            let _ = rename_if_present(&self.path, &rotated);
+            if rotation_max_files == 0 {
+                fs::remove_file(&self.path)
+                    .or_else(ignore_not_found)
+                    .map_err(|err| self.mark_failure(err))?;
+            } else {
+                let rotated = self.rotated_path(1);
+                rename_if_present(&self.path, &rotated).map_err(|err| self.mark_failure(err))?;
+            }
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.path)
+                .map_err(|err| self.mark_failure(err))?;
+            return Ok(true);
         }
 
-        self.prune_old_files();
-        Ok(())
+        Ok(false)
     }
 
     pub(crate) fn rotated_path(&self, index: u32) -> PathBuf {
         rotated_log_path(&self.path, index)
     }
 
-    fn prune_old_files(&self) {
+    fn prune_old_files(&self, retention: RetentionPolicy) {
         let Some(parent) = self.path.parent() else {
             return;
         };
@@ -85,7 +131,7 @@ impl JsonlFileSink {
             return;
         };
         let retention_cutoff = SystemTime::now()
-            - Duration::from_secs(u64::from(self.retention.max_age_days) * constants::SECS_PER_DAY);
+            - Duration::from_secs(u64::from(retention.max_age_days) * constants::SECS_PER_DAY);
 
         for entry in entries.flatten() {
             let path = entry.path();
@@ -110,6 +156,84 @@ impl JsonlFileSink {
                 let _ = fs::remove_file(path);
             }
         }
+    }
+
+    fn prune_retained_files(
+        &self,
+        rotation_max_files: u32,
+        retention_max_age: Duration,
+        maintenance_max_work_per_pass: Option<usize>,
+    ) -> Result<u64, LogSinkError> {
+        let Some(parent) = self.path.parent() else {
+            return Ok(0);
+        };
+        let Ok(entries) = fs::read_dir(parent) else {
+            return Ok(0);
+        };
+
+        let mut retained_files = Vec::new();
+        for entry in entries {
+            let entry = entry.map_err(|err| self.mark_failure(err))?;
+            let path = entry.path();
+            let Some(index) = rotated_index_for_path(&self.path, &path) else {
+                continue;
+            };
+            let modified = entry
+                .metadata()
+                .ok()
+                .and_then(|metadata| metadata.modified().ok());
+            retained_files.push(RetainedFile {
+                path,
+                index,
+                modified,
+            });
+        }
+
+        let mut pruned_total = 0_u64;
+        let mut remaining_budget = maintenance_max_work_per_pass.unwrap_or(usize::MAX);
+
+        retained_files.sort_by(|left, right| right.index.cmp(&left.index));
+        for retained in retained_files
+            .iter()
+            .filter(|retained| retained.index > rotation_max_files)
+        {
+            if remaining_budget == 0 {
+                return Ok(pruned_total);
+            }
+            fs::remove_file(&retained.path)
+                .or_else(ignore_not_found)
+                .map_err(|err| self.mark_failure(err))?;
+            pruned_total += 1;
+            remaining_budget -= 1;
+        }
+
+        if retention_max_age.is_zero() {
+            return Ok(pruned_total);
+        }
+
+        let retention_cutoff = SystemTime::now() - retention_max_age;
+        retained_files.sort_by_key(|retained| retained.modified.unwrap_or(SystemTime::UNIX_EPOCH));
+        for retained in retained_files
+            .iter()
+            .filter(|retained| retained.index <= rotation_max_files)
+        {
+            if remaining_budget == 0 {
+                break;
+            }
+            let Some(modified) = retained.modified else {
+                continue;
+            };
+            if modified >= retention_cutoff {
+                continue;
+            }
+            fs::remove_file(&retained.path)
+                .or_else(ignore_not_found)
+                .map_err(|err| self.mark_failure(err))?;
+            pruned_total += 1;
+            remaining_budget -= 1;
+        }
+
+        Ok(pruned_total)
     }
 
     fn mark_failure<E>(&self, error: E) -> LogSinkError
@@ -143,7 +267,14 @@ impl LogSink for JsonlFileSink {
 
         let mut line = serde_json::to_vec(event).map_err(|err| self.mark_failure(err))?;
         line.push(b'\n');
-        self.rotate_if_needed(line.len() as u64)?;
+        if let Some(policy) = self.legacy_policy {
+            self.rotate_if_needed(
+                policy.rotation.max_bytes,
+                policy.rotation.max_files,
+                line.len() as u64,
+            )?;
+            self.prune_old_files(policy.retention);
+        }
 
         let mut file = OpenOptions::new()
             .create(true)
@@ -165,6 +296,19 @@ impl LogSink for JsonlFileSink {
             .expect("file sink health poisoned")
             .clone()
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LegacyRetentionPolicy {
+    rotation: RotationPolicy,
+    retention: RetentionPolicy,
+}
+
+#[derive(Debug, Clone)]
+struct RetainedFile {
+    path: PathBuf,
+    index: u32,
+    modified: Option<SystemTime>,
 }
 
 pub(crate) trait ConsoleWriter: Send + Sync {
@@ -438,4 +582,19 @@ fn rename_if_present(src: &Path, dest: &Path) -> std::io::Result<()> {
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err),
     }
+}
+
+fn ignore_not_found(error: std::io::Error) -> std::io::Result<()> {
+    if error.kind() == std::io::ErrorKind::NotFound {
+        Ok(())
+    } else {
+        Err(error)
+    }
+}
+
+fn rotated_index_for_path(active_path: &Path, candidate: &Path) -> Option<u32> {
+    let active_name = active_path.file_name()?.to_str()?;
+    let candidate_name = candidate.file_name()?.to_str()?;
+    let suffix = candidate_name.strip_prefix(&format!("{active_name}."))?;
+    suffix.parse().ok()
 }

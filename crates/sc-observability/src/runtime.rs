@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, ErrorContext, EventError, FlushError, LogQuery, LogSnapshot,
-    LoggingHealthReport, LoggingHealthState, QueryError, QueryHealthState, Remediation,
-    ShutdownError, SinkHealth, SinkHealthState,
+    LoggingHealthReport, LoggingHealthState, MaintenanceHealthReport, MaintenanceWorkerState,
+    QueryError, QueryHealthState, Remediation, ShutdownError, SinkHealth, SinkHealthState,
 };
 use serde_json::Value;
 
@@ -13,18 +13,27 @@ use crate::builder::LoggerBuilder;
 use crate::follow::LogFollowSession;
 use crate::health::QueryHealthTracker;
 use crate::jsonl_reader::JsonlLogReader;
+use crate::maintenance::MaintenanceRuntime;
 use crate::redact::{redact_bearer_token_text, redact_string_value};
-use crate::{LogEvent, LogSinkError, Logger, ServiceName, default_log_path, error_codes};
+use crate::sinks::JsonlFileSink;
+use crate::{
+    LogEvent, LogSinkError, Logger, RetainedLogPolicy, ServiceName, default_log_path, error_codes,
+};
 
 pub(crate) struct LoggerRuntime {
     pub(crate) dropped_events_total: AtomicU64,
     pub(crate) flush_errors_total: AtomicU64,
     pub(crate) last_error: Mutex<Option<DiagnosticSummary>>,
     pub(crate) query_health: Arc<QueryHealthTracker>,
+    pub(crate) maintenance: Option<MaintenanceRuntime>,
 }
 
 impl LoggerRuntime {
-    pub(crate) fn new(query_available: bool) -> Self {
+    pub(crate) fn new(
+        query_available: bool,
+        file_sink: Option<Arc<JsonlFileSink>>,
+        retained_log_policy: RetainedLogPolicy,
+    ) -> Self {
         Self {
             dropped_events_total: AtomicU64::new(0),
             flush_errors_total: AtomicU64::new(0),
@@ -34,6 +43,7 @@ impl LoggerRuntime {
             } else {
                 QueryHealthState::Unavailable
             })),
+            maintenance: file_sink.map(|sink| MaintenanceRuntime::new(sink, retained_log_policy)),
         }
     }
 }
@@ -76,6 +86,10 @@ impl Logger {
             if let Err(err) = registration.sink.write(&redacted) {
                 self.record_sink_failure(&err);
             }
+        }
+
+        if let Some(maintenance) = &self.runtime.maintenance {
+            maintenance.notify_activity();
         }
 
         Ok(())
@@ -144,6 +158,15 @@ impl Logger {
         }
 
         self.flush_registered_sinks();
+        if let Some(maintenance) = &self.runtime.maintenance
+            && let Some(summary) = maintenance.shutdown()
+        {
+            *self
+                .runtime
+                .last_error
+                .lock()
+                .expect("logger last_error poisoned") = Some(summary);
+        }
         self.runtime.query_health.mark_unavailable(None);
         Ok(())
     }
@@ -156,13 +179,19 @@ impl Logger {
     pub fn health(&self) -> LoggingHealthReport {
         let sink_statuses: Vec<SinkHealth> =
             self.sinks.iter().map(|entry| entry.sink.health()).collect();
+        let maintenance = self
+            .runtime
+            .maintenance
+            .as_ref()
+            .map(MaintenanceRuntime::snapshot);
         LoggingHealthReport {
-            state: aggregate_logging_health_state(&sink_statuses),
+            state: aggregate_logging_health_state(&sink_statuses, maintenance.as_ref()),
             dropped_events_total: self.runtime.dropped_events_total.load(Ordering::SeqCst),
             flush_errors_total: self.runtime.flush_errors_total.load(Ordering::SeqCst),
             active_log_path: default_log_path(&self.config.log_root, &self.config.service_name),
             sink_statuses,
             query: Some(self.runtime.query_health.snapshot()),
+            maintenance,
             last_error: self
                 .runtime
                 .last_error
@@ -258,15 +287,19 @@ impl Logger {
     }
 }
 
-fn aggregate_logging_health_state(sink_statuses: &[SinkHealth]) -> LoggingHealthState {
+fn aggregate_logging_health_state(
+    sink_statuses: &[SinkHealth],
+    maintenance: Option<&MaintenanceHealthReport>,
+) -> LoggingHealthState {
     if sink_statuses
         .iter()
         .any(|sink| sink.state == SinkHealthState::Unavailable)
     {
         LoggingHealthState::Unavailable
-    } else if sink_statuses
-        .iter()
-        .any(|sink| sink.state != SinkHealthState::Healthy)
+    } else if maintenance.is_some_and(|report| report.state == MaintenanceWorkerState::Degraded)
+        || sink_statuses
+            .iter()
+            .any(|sink| sink.state != SinkHealthState::Healthy)
     {
         LoggingHealthState::DegradedDropping
     } else {

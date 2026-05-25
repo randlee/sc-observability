@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{DiagnosticSummary, SinkName, telemetry_health_provider_sealed};
+use crate::{DiagnosticSummary, SinkName, Timestamp, telemetry_health_provider_sealed};
 
 /// Top-level health state for the lightweight logging layer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,7 +53,35 @@ pub struct LoggingHealthReport {
     pub sink_statuses: Vec<SinkHealth>,
     /// Optional query/follow health snapshot.
     pub query: Option<QueryHealthReport>,
+    /// Optional retained-log maintenance health snapshot.
+    pub maintenance: Option<MaintenanceHealthReport>,
     /// Optional last logging error summary.
+    pub last_error: Option<DiagnosticSummary>,
+}
+
+/// Runtime state for the retained-log maintenance worker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MaintenanceWorkerState {
+    /// The worker is active and accepting periodic or signal-driven passes.
+    Running,
+    /// The worker is active but its last pass or shutdown path degraded.
+    Degraded,
+    /// The worker has stopped cleanly.
+    Stopped,
+}
+
+/// Health summary for retained-log maintenance.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MaintenanceHealthReport {
+    /// Current background-worker state.
+    pub state: MaintenanceWorkerState,
+    /// UTC timestamp of the last completed maintenance pass, if any.
+    pub last_pass_at: Option<Timestamp>,
+    /// Total number of active-log rotations completed by the worker.
+    pub rotated_files_total: u64,
+    /// Total number of retained files pruned by the worker.
+    pub pruned_files_total: u64,
+    /// Optional last maintenance error summary.
     pub last_error: Option<DiagnosticSummary>,
 }
 
@@ -224,6 +252,13 @@ mod tests {
             query: Some(QueryHealthReport {
                 state: QueryHealthState::Healthy,
                 last_error: None,
+            }),
+            maintenance: Some(MaintenanceHealthReport {
+                state: MaintenanceWorkerState::Running,
+                last_pass_at: Some(Timestamp::UNIX_EPOCH),
+                rotated_files_total: 1,
+                pruned_files_total: 2,
+                last_error: Some(DiagnosticSummary::from(&diagnostic())),
             }),
             last_error: None,
         };

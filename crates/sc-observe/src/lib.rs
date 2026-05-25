@@ -32,7 +32,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use sc_observability::{Logger, LoggerConfig, RotationPolicy};
+use sc_observability::{Logger, LoggerConfig, RetainedLogPolicy};
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError,
     ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, Remediation,
@@ -60,8 +60,8 @@ pub struct ObservabilityConfig {
     pub env_prefix: EnvPrefix,
     /// Reserved for future async/backpressure implementation. Phase 1 execution is synchronous; this value is stored but not yet applied.
     pub queue_capacity: usize,
-    /// Rotation settings forwarded to the built-in logging layer.
-    pub rotation: RotationPolicy,
+    /// Retained-log policy forwarded to the built-in logging layer.
+    pub retained_log_policy: RetainedLogPolicy,
 }
 
 impl ObservabilityConfig {
@@ -105,7 +105,7 @@ impl ObservabilityConfig {
             log_root,
             env_prefix,
             queue_capacity: constants::DEFAULT_OBSERVATION_QUEUE_CAPACITY,
-            rotation: RotationPolicy::default(),
+            retained_log_policy: RetainedLogPolicy::default(),
         })
     }
 
@@ -127,7 +127,7 @@ impl ObservabilityConfig {
     fn logger_config(&self) -> Result<LoggerConfig, InitError> {
         let mut config = LoggerConfig::default_for(self.service_name()?, self.log_root.clone());
         config.queue_capacity = self.queue_capacity;
-        config.rotation = self.rotation;
+        config.retained_log_policy = self.retained_log_policy;
         Ok(config)
     }
 }

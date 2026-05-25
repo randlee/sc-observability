@@ -44,6 +44,27 @@ let logger = Logger::new(LoggerConfig::default_for(
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+Customize retained-log rotation and maintenance through
+`LoggerConfig.retained_log_policy`:
+
+```rust
+use std::path::PathBuf;
+use std::time::Duration;
+
+use sc_observability::{LoggerConfig, ServiceName};
+
+let mut config = LoggerConfig::default_for(
+    ServiceName::new("my-service")?,
+    PathBuf::from("./observability"),
+);
+config.retained_log_policy.rotation_max_bytes = 8 * 1024 * 1024;
+config.retained_log_policy.rotation_max_files = 5;
+config.retained_log_policy.retention_max_age = Duration::from_secs(3 * 86_400);
+config.retained_log_policy.maintenance_cadence = Duration::from_secs(30);
+config.retained_log_policy.maintenance_join_timeout = Duration::from_secs(2);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 ## 2. Default Log Root And Path
 
 - The built-in file sink writes to `<log_root>/logs/<service>.log.jsonl`.
@@ -129,6 +150,7 @@ runnable public-only example.
 - active log path
 - per-sink status
 - query/follow availability
+- retained-log maintenance status
 - last observed logging error summary
 
 Typical usage:

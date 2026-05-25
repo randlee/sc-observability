@@ -374,7 +374,13 @@ fn read_events_from_path(
     path: &Path,
     start_offset: u64,
 ) -> Result<(Vec<LogEvent>, u64), QueryError> {
-    let file = File::open(path).map_err(|err| io_error(path, "open", err))?;
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Ok((Vec::new(), 0));
+        }
+        Err(err) => return Err(io_error(path, "open", err)),
+    };
     let file_len = file
         .metadata()
         .map_err(|err| io_error(path, "read log file metadata", err))?

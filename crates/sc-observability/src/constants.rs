@@ -1,5 +1,7 @@
 //! Crate-local constants for `sc-observability`.
 
+use std::time::Duration;
+
 /// Environment variable that overrides the default log root when explicit
 /// configuration leaves `LoggerConfig.log_root` empty.
 pub const SC_LOG_ROOT_ENV_VAR: &str = "SC_LOG_ROOT";
@@ -23,6 +25,15 @@ pub const DEFAULT_ROTATION_MAX_BYTES: u64 = 64 * 1024 * 1024;
 pub const DEFAULT_ROTATION_MAX_FILES: u32 = 10;
 /// Default retention window for rotated logs in calendar days.
 pub const DEFAULT_RETENTION_MAX_AGE_DAYS: u32 = 7;
+/// Default retention window for retained logs.
+pub const DEFAULT_RETENTION_MAX_AGE: Duration =
+    Duration::from_secs(DEFAULT_RETENTION_MAX_AGE_DAYS as u64 * SECS_PER_DAY);
+/// Default cadence for retained-log maintenance passes.
+pub const DEFAULT_MAINTENANCE_CADENCE: Duration = Duration::from_secs(60);
+/// Default bounded join timeout used during logger shutdown.
+pub const DEFAULT_MAINTENANCE_JOIN_TIMEOUT: Duration = Duration::from_secs(5);
+/// Default work limit per maintenance pass.
+pub const DEFAULT_MAINTENANCE_MAX_WORK_PER_PASS: Option<usize> = None;
 /// Default enablement for the built-in JSONL file sink.
 pub const DEFAULT_ENABLE_FILE_SINK: bool = true;
 /// Default enablement for the built-in console sink.
