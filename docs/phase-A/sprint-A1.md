@@ -85,6 +85,8 @@ explicit signatures or equivalent prose-tight code samples:
 
 ```rust
 impl Logger<Running> {
+    // The concrete error types for log() and try_log() are finalized in A.1
+    // and must be named in api-design.md before A.1 closes.
     pub fn log(&self, event: LogEvent) -> Result<(), /* locked in A.1 */>;
     pub fn try_log(&self, event: LogEvent) -> Result<(), /* locked in A.1 */>;
 
@@ -95,17 +97,26 @@ impl Logger<Running> {
     pub fn emit(&self, event: LogEvent) -> Result<(), EventError>;
 
     pub fn flush(&self) -> Result<(), FlushError>;
+    pub fn shutdown(self) -> Logger<Stopped>;
 }
 ```
 
 ```rust
 pub struct LoggingHealthReport {
+    pub state: LoggingHealthState,
+    pub dropped_events_total: u64,
+    pub flush_errors_total: u64,
+    pub active_log_path: PathBuf,
+    pub sink_statuses: Vec<SinkHealth>,
     pub queue_depth: u64,
     pub queue_capacity: u64,
     pub queue_high_water_mark: u64,
     pub queue_full_drops_total: u64,
     pub writer_state: WriterState,
     pub last_writer_error: Option<DiagnosticSummary>,
+    pub query: Option<QueryHealthReport>,
+    pub maintenance: Option<MaintenanceHealthReport>,
+    pub last_error: Option<DiagnosticSummary>,
 }
 
 pub enum WriterState {

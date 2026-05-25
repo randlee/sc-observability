@@ -72,7 +72,9 @@ commands.
 
 ## Required Validation
 
+- `cargo fmt --check --all`
 - `cargo test --workspace`
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - `bash scripts/ci/validate_docs_consistency.sh`
 - reviewer-confirmed snippet audit showing new consumer guidance prefers
   `log()` / `try_log()`
