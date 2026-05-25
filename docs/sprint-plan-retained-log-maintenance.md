@@ -24,7 +24,7 @@ lifecycle, prune join timeout, and maintenance scheduling. None of this is ATM-s
 
 ### D1 — Configurable Retained-Log Policy Surface
 
-Add a `RetainedLogPolicy` struct (or extend `LoggerConfig`) exposing:
+Add a `RetainedLogPolicy` struct nested in `LoggerConfig` exposing:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -46,8 +46,8 @@ Policy must be serialisable/deserialisable and have reasonable documented defaul
 
 ### D3 — Health and Error Reporting
 
-Maintenance health exposed through `LoggingHealthReport` (extend existing) or a new
-`MaintenanceHealthReport` field:
+Maintenance health exposed through `LoggingHealthReport` extended with an
+optional `MaintenanceHealthReport` field:
 
 - Last maintenance pass timestamp
 - Files rotated total / pruned total
@@ -86,7 +86,7 @@ example showing an application integrator the expected setup.
 
 - `crates/sc-observability/src/lib.rs` (or new submodule `maintenance.rs`)
 - `crates/sc-observability/src/sinks.rs` — rotation helpers if needed
-- `crates/sc-observability-types/src/lib.rs` — new health types if `MaintenanceHealthReport` lands here
+- `crates/sc-observability-types/src/lib.rs` — `MaintenanceHealthReport` and `MaintenanceWorkerState`
 - `docs/public-api-checklist.md` — mark new public items
 - `CONSUMING.md` / `README.md`
 

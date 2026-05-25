@@ -75,6 +75,7 @@ Owns:
 - `ObservabilityHealthProvider`
 - `LogQuery`, `LogOrder`, `LogFieldMatch`
 - `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
+- `MaintenanceHealthReport`, `MaintenanceWorkerState`
 - health report contracts
 - shared open traits such as `Observable`, `DiagnosticInfo`,
   subscribers, filters, and projectors
@@ -105,6 +106,7 @@ Owns:
 
 - `Logger`
 - `LoggerConfig`
+- retained-log maintenance policy and background worker (see §3.2.1)
 - `LoggerBuilder`
 - `LogSink`
 - `SinkRegistration`
@@ -112,8 +114,9 @@ Owns:
 - `ConsoleSink`
 - redaction
 - rotation
-- `LoggingHealthReport`, `SinkHealth`, and `SinkHealthState` defined in
-  `sc-observability-types`, re-exported by `sc-observability`
+- `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`,
+  `SinkHealth`, and `SinkHealthState` defined in `sc-observability-types`,
+  re-exported by `sc-observability`
 
 Runtime role:
 
@@ -138,11 +141,10 @@ downstream application wrappers.
 
 Owns:
 
-- retained-log policy configuration such as `RetainedLogPolicy` or additive
-  `LoggerConfig` fields
-- rotation thresholds for the active JSONL sink
-- pruning by retained-file count and retained-file age
-- maintenance cadence and per-pass work budgeting
+- `RetainedLogPolicy` struct nested in `LoggerConfig`
+- `rotation_max_bytes`, `rotation_max_files`, and `retention_max_age`
+- `maintenance_cadence`, `maintenance_join_timeout`, and
+  `maintenance_max_work_per_pass`
 - background maintenance worker lifecycle
 - maintenance health reporting and bounded shutdown join behavior
 
@@ -164,6 +166,8 @@ Health and shutdown contract:
 - retained-log maintenance health belongs on the logging health surface
 - health must capture the last maintenance pass timestamp, rotated/pruned
   totals, last maintenance error, and worker state
+- `MaintenanceWorkerState` is owned by `sc-observability-types` with variants
+  `Running`, `Degraded`, and `Stopped`
 - maintenance failures are fail-open and do not stop logging
 - `Logger::shutdown()` joins the maintenance worker within the configured join
   timeout
@@ -196,7 +200,8 @@ Its architecture stays intentionally split:
 The consumer-facing split is:
 
 - `sc-observability-types` provides neutral contracts such as `LogEvent`,
-  diagnostics, identifiers, `LoggingHealthReport`, `SinkHealth`,
+  diagnostics, identifiers, `LoggingHealthReport`,
+  `MaintenanceHealthReport`, `MaintenanceWorkerState`, `SinkHealth`,
   `SinkHealthState`, `QueryHealthReport`, and `QueryHealthState`
 - `sc-observability` provides the concrete logging runtime surface:
   `Logger`, `LoggerConfig`, `LoggerBuilder`, `LogSink`, `SinkRegistration`,
@@ -322,9 +327,11 @@ Type ownership is split as follows:
 
 - `sc-observability-types` owns `LogQuery`, `LogOrder`,
   `LogFieldMatch`, `LogSnapshot`, `QueryError`,
-  `QueryHealthState`, `QueryHealthReport`, and `ObservabilityHealthProvider`
+  `QueryHealthState`, `QueryHealthReport`, `MaintenanceHealthReport`,
+  `MaintenanceWorkerState`, and `ObservabilityHealthProvider`
 - `sc-observability-types` extends `LoggingHealthReport` with
-  `query: Option<QueryHealthReport>`
+  `query: Option<QueryHealthReport>` and
+  `maintenance: Option<MaintenanceHealthReport>`
 - `sc-observability` owns `Logger::query`, `Logger::follow`,
   `LogFollowSession`, and `JsonlLogReader`
 
@@ -379,6 +386,20 @@ pub struct QueryHealthReport {
     pub last_error: Option<DiagnosticSummary>,
 }
 
+pub enum MaintenanceWorkerState {
+    Running,
+    Degraded,
+    Stopped,
+}
+
+pub struct MaintenanceHealthReport {
+    pub state: MaintenanceWorkerState,
+    pub last_pass_at: Option<Timestamp>,
+    pub rotated_files_total: u64,
+    pub pruned_files_total: u64,
+    pub last_error: Option<DiagnosticSummary>,
+}
+
 pub struct LoggingHealthReport {
     pub state: LoggingHealthState,
     pub dropped_events_total: u64,
@@ -386,6 +407,7 @@ pub struct LoggingHealthReport {
     pub active_log_path: std::path::PathBuf,
     pub sink_statuses: Vec<SinkHealth>,
     pub query: Option<QueryHealthReport>,
+    pub maintenance: Option<MaintenanceHealthReport>,
     pub last_error: Option<DiagnosticSummary>,
 }
 

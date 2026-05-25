@@ -133,9 +133,12 @@ This crate is the lightweight logging layer.
 - LOG-020 `LoggerConfig` shall define documented defaults for v1:
   - `level = Info`
   - `queue_capacity = 1024`
-  - `rotation.max_bytes = 64 MiB`
-  - `rotation.max_files = 10`
-  - `retention.max_age_days = 7`
+  - `rotation_max_bytes = 64 MiB`
+  - `rotation_max_files = 10`
+  - `retention_max_age = 7 days`
+  - `maintenance_cadence = 60 s`
+  - `maintenance_join_timeout = 5 s`
+  - `maintenance_max_work_per_pass = None`
   - bearer-token redaction enabled
   - built-in file sink enabled
   - built-in console sink disabled
@@ -173,7 +176,8 @@ This crate is the lightweight logging layer.
 - LOG-040 The retained-log policy surface shall expose additive configuration
   for `rotation_max_bytes`, `rotation_max_files`, `retention_max_age`,
   `maintenance_cadence`, `maintenance_join_timeout`, and
-  `maintenance_max_work_per_pass`.
+  `maintenance_max_work_per_pass`. `retention_max_age` supersedes the prior
+  `retention.max_age_days` field.
 - LOG-041 Retained-log maintenance shall run off the main emit path on a
   worker owned by `sc-observability` and shall not require an async runtime
   dependency.
@@ -186,7 +190,8 @@ This crate is the lightweight logging layer.
   configuration.
 - LOG-044 Logging health shall expose retained-log maintenance status including
   the last maintenance pass timestamp, rotated/pruned totals, last maintenance
-  error, and worker state.
+  error, and worker state. The normative worker states are `Running`,
+  `Degraded`, and `Stopped`.
 - LOG-045 Retained-log maintenance failures shall be fail-open, shall not crash
   the logger, and shall not block or interfere with the emit path.
 - LOG-046 `Logger::shutdown()` shall remain bounded while retained-log

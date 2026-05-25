@@ -40,6 +40,10 @@ work.
 Retained-log rotation, pruning, and maintenance is the current additive
 `v1.1.0` work item for `sc-observability`.
 
+Controlling sprint plan:
+
+- [`sprint-plan-retained-log-maintenance.md`](./sprint-plan-retained-log-maintenance.md)
+
 Planned sequence:
 
 1. S1 docs sprint:
@@ -47,6 +51,14 @@ Planned sequence:
    - define the retained-log policy surface, maintenance ownership, health
      reporting, and bounded shutdown contract
    - complete quality review before any code lands
+   Exit criteria:
+   - field names and defaults match
+     `sprint-plan-retained-log-maintenance.md`
+   - normative docs lock `RetainedLogPolicy` as a struct nested in
+     `LoggerConfig`
+   - `LoggingHealthReport` and retained-log worker-state ownership are defined
+     consistently across docs
+   - no implementation code lands before docs review passes
 2. S2 implementation sprint:
    - add the retained-log policy/config surface to `sc-observability`
    - move generic rotation/pruning maintenance into the logging layer
