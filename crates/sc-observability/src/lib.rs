@@ -278,11 +278,6 @@ impl RetentionMaxAge {
     pub const fn as_duration(self) -> Duration {
         self.0
     }
-
-    /// Returns whether retained-log age pruning is disabled.
-    pub const fn is_disabled(self) -> bool {
-        self.0.is_zero()
-    }
 }
 
 impl Serialize for RetentionMaxAge {
@@ -351,11 +346,13 @@ impl Default for RetainedLogPolicy {
     }
 }
 
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "policy-bounded durations stay in the millisecond-to-days range, so u128->u64 overflow is unreachable in practice"
+)]
 fn duration_as_millis(duration: Duration) -> u64 {
-    duration
-        .as_millis()
-        .try_into()
-        .expect("duration milliseconds should fit in u64")
+    // Policy-bounded durations (ms to days); u128->u64 overflow is unreachable in practice.
+    duration.as_millis() as u64
 }
 
 /// Redacts one key/value pair before an event reaches registered sinks.

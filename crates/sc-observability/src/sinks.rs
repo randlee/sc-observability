@@ -224,10 +224,6 @@ impl JsonlFileSink {
             remaining_budget -= 1;
         }
 
-        if retention_max_age.is_disabled() {
-            return Ok(pruned_total);
-        }
-
         let retention_cutoff = SystemTime::now() - retention_max_age.as_duration();
         retained_files.sort_by_key(|retained| retained.modified.unwrap_or(SystemTime::UNIX_EPOCH));
         for retained in retained_files
