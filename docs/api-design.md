@@ -1374,8 +1374,8 @@ Defaults:
 - `level = LevelFilter::Info`
 - `queue_capacity = 1024`
 - `retained_log_policy.rotation_max_bytes = ByteCount::from_mib(64)`
-- `retained_log_policy.rotation_max_files = 10`
-- `retained_log_policy.retention_max_age = 7 days`
+- `retained_log_policy.rotation_max_files = FileCount::from_usize(10)`
+- `retained_log_policy.retention_max_age = RetentionMaxAge::from_days(7)`
 - `retained_log_policy.maintenance_cadence = MaintenanceCadence::new(60s)`
 - `retained_log_policy.maintenance_join_timeout = MaintenanceJoinTimeout::new(5s)`
 - `redact_bearer_tokens = true`
@@ -1414,8 +1414,8 @@ execution environments, with explicit config taking precedence over env.
 ```rust
 pub struct RetainedLogPolicy {
     pub rotation_max_bytes: ByteCount,
-    pub rotation_max_files: usize,
-    pub retention_max_age: std::time::Duration,
+    pub rotation_max_files: FileCount,
+    pub retention_max_age: RetentionMaxAge,
     pub maintenance_cadence: MaintenanceCadence,
     pub maintenance_join_timeout: MaintenanceJoinTimeout,
     pub maintenance_max_work_per_pass: Option<usize>,
@@ -1425,8 +1425,8 @@ pub struct RetainedLogPolicy {
 Defaults:
 
 - `rotation_max_bytes = ByteCount::from_mib(64)`
-- `rotation_max_files = 10`
-- `retention_max_age = 7 days`
+- `rotation_max_files = FileCount::from_usize(10)`
+- `retention_max_age = RetentionMaxAge::from_days(7)`
 - `maintenance_cadence = MaintenanceCadence::new(60s)`
 - `maintenance_join_timeout = MaintenanceJoinTimeout::new(5s)`
 

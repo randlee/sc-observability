@@ -4,8 +4,8 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use sc_observability_types::{
-    DiagnosticSummary, ErrorContext, MaintenanceHealthReport, MaintenanceWorkerState, Remediation,
-    Timestamp,
+    DiagnosticSummary, ErrorContext, FileCount, MaintenanceHealthReport, MaintenanceWorkerState,
+    Remediation, Timestamp,
 };
 
 use crate::sinks::JsonlFileSink;
@@ -23,6 +23,7 @@ pub(crate) struct MaintenanceRuntime {
     tracker: Arc<MaintenanceTracker>,
     signal: Arc<MaintenanceSignal>,
     join_handle: JoinHandle<()>,
+    // Mutex required: Receiver<()> is not Sync; shutdown() receives from the owning thread.
     done_rx: Mutex<mpsc::Receiver<()>>,
     join_timeout: Duration,
 }
@@ -180,8 +181,14 @@ impl MaintenanceTracker {
                 .last_pass_at
                 .read()
                 .expect("maintenance last_pass_at poisoned"),
-            rotated_files_total: self.rotated_files_total.load(Ordering::SeqCst),
-            pruned_files_total: self.pruned_files_total.load(Ordering::SeqCst),
+            rotated_files_total: FileCount::try_from_u64(
+                self.rotated_files_total.load(Ordering::SeqCst),
+            )
+            .expect("maintenance rotated-files count should fit usize"),
+            pruned_files_total: FileCount::try_from_u64(
+                self.pruned_files_total.load(Ordering::SeqCst),
+            )
+            .expect("maintenance pruned-files count should fit usize"),
             last_error: self
                 .last_error
                 .read()
@@ -190,8 +197,8 @@ impl MaintenanceTracker {
         }
     }
 
-    // Successful passes clear transient degraded state unless a join timeout was
-    // already recorded during shutdown, which remains the final worker state.
+    /// Successful passes clear transient degraded state unless a join timeout
+    /// was already recorded during shutdown, which remains the final worker state.
     fn record_pass(&self, stats: MaintenancePassStats) {
         self.rotated_files_total
             .fetch_add(stats.rotated_files, Ordering::SeqCst);

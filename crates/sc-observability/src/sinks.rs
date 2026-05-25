@@ -79,7 +79,7 @@ impl JsonlFileSink {
         let mut stats = crate::maintenance::MaintenancePassStats::default();
         self.rotate_if_needed(
             policy.rotation_max_bytes.as_u64(),
-            policy.rotation_max_files,
+            policy.rotation_max_files.as_usize(),
             0,
         )
         .map(|did_rotate| {
@@ -90,8 +90,8 @@ impl JsonlFileSink {
         .map_err(|error| self.mark_maintenance_failure(error))?;
         stats.pruned_files = self
             .prune_retained_files(
-                policy.rotation_max_files,
-                policy.retention_max_age,
+                policy.rotation_max_files.as_usize(),
+                policy.retention_max_age.as_duration(),
                 policy.maintenance_max_work_per_pass,
             )
             .map_err(|error| self.mark_maintenance_failure(error))?;
@@ -316,7 +316,7 @@ impl LogSink for JsonlFileSink {
         if let Some(policy) = self.legacy_policy {
             self.rotate_if_needed(
                 policy.rotation.max_bytes.as_u64(),
-                policy.rotation.max_files,
+                policy.rotation.max_files.as_usize(),
                 line.len() as u64,
             )?;
             self.prune_old_files(policy.retention);
@@ -648,6 +648,7 @@ fn rotated_index_for_path(active_path: &Path, candidate: &Path) -> Option<usize>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{FileCount, RetentionMaxAge};
     use sc_observability_types::DiagnosticInfo;
     use sc_observability_types::{
         ActionName, Level, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName,
@@ -699,6 +700,14 @@ mod tests {
         crate::ByteCount::from_bytes(value)
     }
 
+    fn file_count(value: usize) -> FileCount {
+        FileCount::from_usize(value)
+    }
+
+    fn retention_secs(value: u64) -> RetentionMaxAge {
+        RetentionMaxAge::from_duration(Duration::from_secs(value))
+    }
+
     fn cadence_secs(value: u64) -> crate::MaintenanceCadence {
         crate::MaintenanceCadence::new(Duration::from_secs(value))
     }
@@ -721,8 +730,8 @@ mod tests {
         let error = sink
             .perform_maintenance(&RetainedLogPolicy {
                 rotation_max_bytes: bytes(1),
-                rotation_max_files: 1,
-                retention_max_age: Duration::from_secs(3600),
+                rotation_max_files: file_count(1),
+                retention_max_age: retention_secs(3600),
                 maintenance_cadence: cadence_secs(60),
                 maintenance_join_timeout: join_secs(5),
                 maintenance_max_work_per_pass: None,
@@ -751,8 +760,8 @@ mod tests {
         let stats = sink
             .perform_maintenance(&RetainedLogPolicy {
                 rotation_max_bytes: bytes(u64::MAX),
-                rotation_max_files: 1,
-                retention_max_age: Duration::from_secs(3600),
+                rotation_max_files: file_count(1),
+                retention_max_age: retention_secs(3600),
                 maintenance_cadence: cadence_secs(60),
                 maintenance_join_timeout: join_secs(5),
                 maintenance_max_work_per_pass: Some(2),

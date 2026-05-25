@@ -43,8 +43,8 @@ pub use follow::LogFollowSession;
 pub use jsonl_reader::JsonlLogReader;
 #[doc(inline)]
 pub use sc_observability_types::{
-    ActionName, ErrorCode, EventError, Level, LogEvent, LogQuery, LogSnapshot, LoggingHealthReport,
-    LoggingHealthState, MaintenanceHealthReport, MaintenanceWorkerState,
+    ActionName, ErrorCode, EventError, FileCount, Level, LogEvent, LogQuery, LogSnapshot,
+    LoggingHealthReport, LoggingHealthState, MaintenanceHealthReport, MaintenanceWorkerState,
     OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName,
     SinkHealth, SinkHealthState, TargetCategory, Timestamp,
 };
@@ -69,14 +69,14 @@ pub struct RotationPolicy {
     /// Maximum size of the active JSONL file before rotation.
     pub max_bytes: ByteCount,
     /// Maximum number of rotated files to retain.
-    pub max_files: usize,
+    pub max_files: FileCount,
 }
 
 impl Default for RotationPolicy {
     fn default() -> Self {
         Self {
             max_bytes: ByteCount::from_bytes(constants::DEFAULT_ROTATION_MAX_BYTES),
-            max_files: constants::DEFAULT_ROTATION_MAX_FILES_USIZE,
+            max_files: FileCount::from_usize(constants::DEFAULT_ROTATION_MAX_FILES_USIZE),
         }
     }
 }
@@ -110,6 +110,7 @@ impl Default for RetentionPolicy {
 
 /// Strongly typed byte count used by retained-log policy fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ByteCount(u64);
 
 impl ByteCount {
@@ -126,6 +127,12 @@ impl ByteCount {
     /// Returns the raw byte value.
     pub const fn as_u64(self) -> u64 {
         self.0
+    }
+}
+
+impl std::fmt::Display for ByteCount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} bytes", self.0)
     }
 }
 
@@ -161,16 +168,41 @@ impl MaintenanceJoinTimeout {
     }
 }
 
+/// Strongly typed retained-log max age.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RetentionMaxAge(#[serde(with = "duration_millis_serde")] Duration);
+
+impl RetentionMaxAge {
+    /// Creates one retention max age from calendar days.
+    pub const fn from_days(days: u64) -> Self {
+        Self(Duration::from_secs(days * constants::SECS_PER_DAY))
+    }
+
+    /// Creates one retention max age from an arbitrary duration.
+    pub const fn from_duration(duration: Duration) -> Self {
+        Self(duration)
+    }
+
+    /// Returns the wrapped duration.
+    pub const fn as_duration(self) -> Duration {
+        self.0
+    }
+
+    /// Returns whether the wrapped duration is zero.
+    pub const fn is_zero(self) -> bool {
+        self.0.is_zero()
+    }
+}
+
 /// Retained-log rotation, pruning, and maintenance policy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetainedLogPolicy {
     /// Maximum size of the active JSONL file before rotation.
     pub rotation_max_bytes: ByteCount,
     /// Maximum number of rotated files retained beside the active log.
-    pub rotation_max_files: usize,
+    pub rotation_max_files: FileCount,
     /// Maximum age of retained rotated files.
-    #[serde(with = "duration_millis_serde")]
-    pub retention_max_age: Duration,
+    pub retention_max_age: RetentionMaxAge,
     /// How often the background maintenance worker runs a pass.
     pub maintenance_cadence: MaintenanceCadence,
     /// How long shutdown waits for the maintenance worker to stop.
@@ -183,8 +215,8 @@ impl Default for RetainedLogPolicy {
     fn default() -> Self {
         Self {
             rotation_max_bytes: ByteCount::from_bytes(constants::DEFAULT_ROTATION_MAX_BYTES),
-            rotation_max_files: constants::DEFAULT_ROTATION_MAX_FILES_USIZE,
-            retention_max_age: constants::DEFAULT_RETENTION_MAX_AGE,
+            rotation_max_files: FileCount::from_usize(constants::DEFAULT_ROTATION_MAX_FILES_USIZE),
+            retention_max_age: RetentionMaxAge::from_duration(constants::DEFAULT_RETENTION_MAX_AGE),
             maintenance_cadence: MaintenanceCadence::new(constants::DEFAULT_MAINTENANCE_CADENCE),
             maintenance_join_timeout: MaintenanceJoinTimeout::new(
                 constants::DEFAULT_MAINTENANCE_JOIN_TIMEOUT,
@@ -677,6 +709,18 @@ mod tests {
         ByteCount::from_bytes(value)
     }
 
+    fn file_count(value: usize) -> FileCount {
+        FileCount::from_usize(value)
+    }
+
+    fn retention_secs(value: u64) -> RetentionMaxAge {
+        RetentionMaxAge::from_duration(Duration::from_secs(value))
+    }
+
+    fn retention_ms(value: u64) -> RetentionMaxAge {
+        RetentionMaxAge::from_duration(Duration::from_millis(value))
+    }
+
     fn cadence_ms(value: u64) -> MaintenanceCadence {
         MaintenanceCadence::new(Duration::from_millis(value))
     }
@@ -712,11 +756,11 @@ mod tests {
         );
         assert_eq!(
             config.retained_log_policy.rotation_max_files,
-            constants::DEFAULT_ROTATION_MAX_FILES as usize
+            FileCount::from_usize(constants::DEFAULT_ROTATION_MAX_FILES_USIZE)
         );
         assert_eq!(
             config.retained_log_policy.retention_max_age,
-            constants::DEFAULT_RETENTION_MAX_AGE
+            RetentionMaxAge::from_duration(constants::DEFAULT_RETENTION_MAX_AGE)
         );
         assert!(config.enable_file_sink);
         assert!(!config.enable_console_sink);
@@ -764,8 +808,8 @@ mod tests {
     fn retained_log_policy_round_trips_through_serde() {
         let policy = RetainedLogPolicy {
             rotation_max_bytes: bytes(1024),
-            rotation_max_files: 7,
-            retention_max_age: Duration::from_secs(42),
+            rotation_max_files: file_count(7),
+            retention_max_age: retention_secs(42),
             maintenance_cadence: cadence_secs(60),
             maintenance_join_timeout: join_secs(5),
             maintenance_max_work_per_pass: Some(3),
@@ -1067,8 +1111,8 @@ mod tests {
         let root = temp_path("maintenance-health");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
-        config.retained_log_policy.rotation_max_files = 2;
-        config.retained_log_policy.retention_max_age = Duration::from_secs(0);
+        config.retained_log_policy.rotation_max_files = file_count(2);
+        config.retained_log_policy.retention_max_age = retention_secs(0);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         let logger = Logger::new(config).expect("logger");
 
@@ -1094,7 +1138,7 @@ mod tests {
         let maintenance = health.maintenance.expect("maintenance health");
         assert_eq!(maintenance.state, MaintenanceWorkerState::Running);
         assert!(maintenance.last_pass_at.is_some());
-        assert!(maintenance.rotated_files_total >= 1);
+        assert!(maintenance.rotated_files_total >= file_count(1));
 
         let active_path = default_log_path(&root, &service_name());
         let blocked_rotation_path = active_path.with_file_name(format!(
@@ -1134,7 +1178,7 @@ mod tests {
         let root = temp_path("maintenance-prune-max-files");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
-        config.retained_log_policy.rotation_max_files = 2;
+        config.retained_log_policy.rotation_max_files = file_count(2);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         let logger = Logger::new(config).expect("logger");
 
@@ -1166,8 +1210,8 @@ mod tests {
         let root = temp_path("maintenance-prune-age");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
-        config.retained_log_policy.rotation_max_files = 4;
-        config.retained_log_policy.retention_max_age = Duration::from_millis(10);
+        config.retained_log_policy.rotation_max_files = file_count(4);
+        config.retained_log_policy.retention_max_age = retention_ms(10);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         let logger = Logger::new(config).expect("logger");
 
@@ -1187,8 +1231,8 @@ mod tests {
                     .maintenance
                     .as_ref()
                     .is_some_and(|maintenance| {
-                        maintenance.rotated_files_total >= 1
-                            && maintenance.pruned_files_total >= 1
+                        maintenance.rotated_files_total >= file_count(1)
+                            && maintenance.pruned_files_total >= file_count(1)
                             && paths.len() == 1
                     })
             },
@@ -1279,7 +1323,7 @@ mod tests {
         let root = temp_path("query-rotated");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
-        config.retained_log_policy.rotation_max_files = 4;
+        config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.maintenance_cadence = cadence_ms(50);
         let logger = Logger::new(config).expect("logger");
 
@@ -1349,7 +1393,7 @@ mod tests {
         let root = temp_path("query-multi-rotation-order");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
-        config.retained_log_policy.rotation_max_files = 6;
+        config.retained_log_policy.rotation_max_files = file_count(6);
         config.retained_log_policy.maintenance_cadence = cadence_ms(50);
         let logger = Logger::new(config).expect("logger");
 
@@ -1395,7 +1439,7 @@ mod tests {
         let root = temp_path("query-parity");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
-        config.retained_log_policy.rotation_max_files = 4;
+        config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         let logger = Logger::new(config).expect("logger");
 
@@ -1428,7 +1472,7 @@ mod tests {
         let root = temp_path("follow-rotation");
         let mut config = LoggerConfig::default_for(service_name(), root);
         config.retained_log_policy.rotation_max_bytes = bytes(350);
-        config.retained_log_policy.rotation_max_files = 6;
+        config.retained_log_policy.rotation_max_files = file_count(6);
         config.retained_log_policy.maintenance_cadence = cadence_secs(3600);
         let logger = Logger::new(config).expect("logger");
 
@@ -1476,7 +1520,7 @@ mod tests {
         let root = temp_path("rotation-threshold");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
-        config.retained_log_policy.rotation_max_files = 4;
+        config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.maintenance_cadence = cadence_ms(50);
         let logger = Logger::new(config).expect("logger");
 
@@ -1499,7 +1543,7 @@ mod tests {
         let root = temp_path("follow-parity");
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
-        config.retained_log_policy.rotation_max_files = 6;
+        config.retained_log_policy.rotation_max_files = file_count(6);
         config.retained_log_policy.maintenance_cadence = cadence_secs(3600);
         let logger = Logger::new(config).expect("logger");
 

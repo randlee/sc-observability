@@ -1,3 +1,4 @@
+use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -36,6 +37,51 @@ pub struct SinkHealth {
     pub state: SinkHealthState,
     /// Optional last sink error summary.
     pub last_error: Option<DiagnosticSummary>,
+}
+
+/// Strongly typed file-count value exposed through public health and config APIs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct FileCount(pub usize);
+
+impl FileCount {
+    /// Creates one file count from a usize.
+    #[must_use]
+    pub const fn from_usize(value: usize) -> Self {
+        Self(value)
+    }
+
+    /// Creates one file count from a u64, failing if it does not fit the platform usize.
+    ///
+    /// # Errors
+    ///
+    /// Returns the integer-conversion error when `value` exceeds the current
+    /// platform `usize` range.
+    pub fn try_from_u64(value: u64) -> Result<Self, std::num::TryFromIntError> {
+        Ok(Self(usize::try_from(value)?))
+    }
+
+    /// Returns the wrapped count as usize.
+    #[must_use]
+    pub const fn as_usize(self) -> usize {
+        self.0
+    }
+
+    /// Returns the wrapped count as u64.
+    ///
+    /// # Panics
+    ///
+    /// Panics only on hypothetical targets where `usize` is wider than `u64`.
+    #[must_use]
+    pub fn as_u64(self) -> u64 {
+        u64::try_from(self.0).expect("usize file count should fit in u64")
+    }
+}
+
+impl fmt::Display for FileCount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 /// Aggregate logging health report.
@@ -81,14 +127,10 @@ pub struct MaintenanceHealthReport {
     pub state: MaintenanceWorkerState,
     /// UTC timestamp of the last completed maintenance pass, if any.
     pub last_pass_at: Option<Timestamp>,
-    // INVARIANT: this stays a plain u64 because health snapshots expose these
-    // as aggregate monotonic counters rather than per-file identifiers.
     /// Total number of active-log rotations completed by the worker.
-    pub rotated_files_total: u64,
-    // INVARIANT: this stays a plain u64 because health snapshots expose these
-    // as aggregate monotonic counters rather than per-file identifiers.
+    pub rotated_files_total: FileCount,
     /// Total number of retained files pruned by the worker.
-    pub pruned_files_total: u64,
+    pub pruned_files_total: FileCount,
     /// Optional last maintenance error summary.
     pub last_error: Option<DiagnosticSummary>,
 }
@@ -264,8 +306,8 @@ mod tests {
             maintenance: Some(MaintenanceHealthReport {
                 state: MaintenanceWorkerState::Running,
                 last_pass_at: Some(Timestamp::UNIX_EPOCH),
-                rotated_files_total: 1,
-                pruned_files_total: 2,
+                rotated_files_total: FileCount::from_usize(1),
+                pruned_files_total: FileCount::from_usize(2),
                 last_error: Some(DiagnosticSummary::from(&diagnostic())),
             }),
             last_error: None,

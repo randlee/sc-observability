@@ -16,6 +16,9 @@ serde.workspace = true
 serde_json.workspace = true
 sc-observability-types.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
 [dev-dependencies]
 temp-env = "0.3.6"
 

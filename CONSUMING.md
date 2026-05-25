@@ -52,7 +52,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use sc_observability::{
-    ByteCount, LoggerConfig, MaintenanceCadence, MaintenanceJoinTimeout, ServiceName,
+    ByteCount, FileCount, LoggerConfig, MaintenanceCadence, MaintenanceJoinTimeout,
+    RetentionMaxAge, ServiceName,
 };
 
 let mut config = LoggerConfig::default_for(
@@ -60,8 +61,9 @@ let mut config = LoggerConfig::default_for(
     PathBuf::from("./observability"),
 );
 config.retained_log_policy.rotation_max_bytes = ByteCount::from_mib(8);
-config.retained_log_policy.rotation_max_files = 5;
-config.retained_log_policy.retention_max_age = Duration::from_secs(3 * 86_400);
+config.retained_log_policy.rotation_max_files = FileCount::from_usize(5);
+config.retained_log_policy.retention_max_age =
+    RetentionMaxAge::from_duration(Duration::from_secs(3 * 86_400));
 config.retained_log_policy.maintenance_cadence =
     MaintenanceCadence::new(Duration::from_secs(30));
 config.retained_log_policy.maintenance_join_timeout =

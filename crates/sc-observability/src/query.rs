@@ -1,5 +1,7 @@
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 
 use sc_observability_types::{
@@ -297,7 +299,8 @@ fn resolve_visible_files(active_log_path: &Path) -> Result<Vec<ResolvedLogFile>,
                 index,
                 ResolvedLogFile {
                     path,
-                    identity: file_identity(&metadata),
+                    identity: file_identity_for_path_with_metadata(&entry.path(), &metadata)
+                        .map_err(|err| io_error(active_log_path, "read file identity", err))?,
                     len: metadata.len(),
                 },
             ));
@@ -310,7 +313,8 @@ fn resolve_visible_files(active_log_path: &Path) -> Result<Vec<ResolvedLogFile>,
     if let Ok(metadata) = fs::metadata(active_log_path) {
         resolved.push(ResolvedLogFile {
             path: active_log_path.to_path_buf(),
-            identity: file_identity(&metadata),
+            identity: file_identity_for_path_with_metadata(active_log_path, &metadata)
+                .map_err(|err| io_error(active_log_path, "read file identity", err))?,
             len: metadata.len(),
         });
     }
@@ -453,49 +457,75 @@ fn event_matches_query(event: &LogEvent, query: &LogQuery) -> bool {
         })
 }
 
+#[cfg(unix)]
 fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
+    use std::os::unix::fs::MetadataExt;
 
-        FileIdentity {
-            device: metadata.dev(),
-            inode: metadata.ino(),
-        }
+    FileIdentity {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
+    let modified_nanos = metadata
+        .modified()
+        .ok()
+        .and_then(|modified| {
+            modified
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .ok()
+        })
+        .map(|duration| duration.as_nanos());
+    FileIdentity {
+        len: metadata.len(),
+        modified_nanos,
+    }
+}
+
+#[cfg(windows)]
+fn file_identity_for_path_with_metadata(
+    path: &Path,
+    _metadata: &fs::Metadata,
+) -> std::io::Result<FileIdentity> {
+    use std::io;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+    };
+
+    let file = File::open(path)?;
+    let handle = file.as_raw_handle() as isize;
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: `handle` comes from a live `std::fs::File`, and `info` points to
+    // writable stack storage for the OS to fill synchronously.
+    let ok = unsafe { GetFileInformationByHandle(handle, &mut info) };
+    if ok == 0 {
+        return Err(io::Error::last_os_error());
     }
 
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::MetadataExt;
+    Ok(FileIdentity {
+        volume_serial_number: Some(info.dwVolumeSerialNumber),
+        file_index: Some(((u64::from(info.nFileIndexHigh)) << 32) | u64::from(info.nFileIndexLow)),
+    })
+}
 
-        FileIdentity {
-            volume_serial_number: metadata.volume_serial_number(),
-            file_index: metadata.file_index(),
-        }
-    }
-
-    #[cfg(not(any(unix, windows)))]
-    {
-        let modified_nanos = metadata
-            .modified()
-            .ok()
-            .and_then(|modified| {
-                modified
-                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                    .ok()
-            })
-            .map(|duration| duration.as_nanos());
-        FileIdentity {
-            len: metadata.len(),
-            modified_nanos,
-        }
-    }
+#[cfg(not(windows))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the shared helper signature matches the Windows implementation, which can fail on GetFileInformationByHandle"
+)]
+fn file_identity_for_path_with_metadata(
+    _path: &Path,
+    metadata: &fs::Metadata,
+) -> std::io::Result<FileIdentity> {
+    Ok(file_identity(metadata))
 }
 
 #[cfg(test)]
 pub(crate) fn file_identity_for_path(path: &Path) -> FileIdentity {
     let metadata = fs::metadata(path).expect("metadata");
-    file_identity(&metadata)
+    file_identity_for_path_with_metadata(path, &metadata).expect("file identity")
 }
 
 #[cfg(test)]

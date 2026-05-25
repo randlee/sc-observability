@@ -134,8 +134,8 @@ This crate is the lightweight logging layer.
   - `level = Info`
   - `queue_capacity = 1024`
   - `rotation_max_bytes = ByteCount::from_mib(64)`
-  - `rotation_max_files = 10`
-  - `retention_max_age = 7 days`
+  - `rotation_max_files = FileCount::from_usize(10)`
+  - `retention_max_age = RetentionMaxAge::from_days(7)`
   - `maintenance_cadence = MaintenanceCadence::new(60 s)`
   - `maintenance_join_timeout = MaintenanceJoinTimeout::new(5 s)`
   - `maintenance_max_work_per_pass = None`

@@ -29,8 +29,8 @@ Add a `RetainedLogPolicy` struct nested in `LoggerConfig` exposing:
 | Field | Type | Description |
 |-------|------|-------------|
 | `rotation_max_bytes` | `ByteCount` | Rotate active log when it exceeds this size |
-| `rotation_max_files` | `usize` | Maximum number of rotated files to retain |
-| `retention_max_age` | `Duration` | Delete rotated files older than this |
+| `rotation_max_files` | `FileCount` | Maximum number of rotated files to retain |
+| `retention_max_age` | `RetentionMaxAge` | Delete rotated files older than this |
 | `maintenance_cadence` | `MaintenanceCadence` | How often the background worker runs a maintenance pass |
 | `maintenance_join_timeout` | `MaintenanceJoinTimeout` | Bounded shutdown join timeout for the maintenance worker |
 | `maintenance_max_work_per_pass` | `Option<usize>` | Optional cap on files processed per maintenance pass |
@@ -109,7 +109,7 @@ example showing an application integrator the expected setup.
 - ATM-specific CLI/daemon wiring
 - ATM-specific policy defaults hardcoded into `sc-observability`
 - Async runtime dependency
-- Windows-specific file-locking behaviour beyond existing best-effort platform parity
+- Windows-specific file-locking behaviour beyond stable `GetFileInformationByHandle` parity
 
 ## 7. Non-Regression
 
