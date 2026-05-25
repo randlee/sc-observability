@@ -32,6 +32,28 @@ work.
 6. Keep ATM-specific adapter work outside the shared crates.
 7. Maintain explicit downstream integration contracts for shipped consumers so
    cross-repo reviews do not rely on inferred layering or stale assumptions.
+8. Stage additive `v1.1.0` logging-layer maintenance work through explicit
+   docs-first review before implementation begins.
+
+## Issue #70 / v1.1.0
+
+Retained-log rotation, pruning, and maintenance is the current additive
+`v1.1.0` work item for `sc-observability`.
+
+Planned sequence:
+
+1. S1 docs sprint:
+   - update `requirements.md`, `architecture.md`, and `project-plan.md`
+   - define the retained-log policy surface, maintenance ownership, health
+     reporting, and bounded shutdown contract
+   - complete quality review before any code lands
+2. S2 implementation sprint:
+   - add the retained-log policy/config surface to `sc-observability`
+   - move generic rotation/pruning maintenance into the logging layer
+   - add health, shutdown, and integration tests
+3. S3 consumer-doc sprint:
+   - update `README.md` and/or `CONSUMING.md` with a retained-log policy
+     configuration example once the implementation ships
 
 ## Rule
 

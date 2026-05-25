@@ -131,7 +131,57 @@ Must not own:
 
 This crate must remain usable on its own by a basic CLI.
 
-### 3.2.1 `sc-compose` Logging-Only Integration Contract
+### 3.2.1 Retained-Log Maintenance
+
+Retained-log lifecycle management belongs to `sc-observability`, not to
+downstream application wrappers.
+
+Owns:
+
+- retained-log policy configuration such as `RetainedLogPolicy` or additive
+  `LoggerConfig` fields
+- rotation thresholds for the active JSONL sink
+- pruning by retained-file count and retained-file age
+- maintenance cadence and per-pass work budgeting
+- background maintenance worker lifecycle
+- maintenance health reporting and bounded shutdown join behavior
+
+Approved architecture shape:
+
+- the logging layer owns one background maintenance worker or equivalent
+  thread-based execution lane
+- the worker runs periodic maintenance passes on the configured cadence
+- maintenance stays off the emit path and must not require an async runtime
+- the worker is created, supervised, and joined entirely by
+  `sc-observability`; downstream apps do not manage it directly
+- a maintenance pass may rotate the active file, prune excess retained files,
+  prune stale retained files, and update maintenance health state
+- bounded per-pass work exists so a single maintenance sweep cannot grow
+  without limit
+
+Health and shutdown contract:
+
+- retained-log maintenance health belongs on the logging health surface
+- health must capture the last maintenance pass timestamp, rotated/pruned
+  totals, last maintenance error, and worker state
+- maintenance failures are fail-open and do not stop logging
+- `Logger::shutdown()` joins the maintenance worker within the configured join
+  timeout
+- if the join timeout is exceeded, shutdown records the timeout or degraded
+  state and returns without unbounded waiting
+
+Layering rules:
+
+- `sc-observability` owns the maintenance runtime and the concrete retained-log
+  policy surface
+- `sc-observability-types` may own shared health-report types only if those
+  types must cross crate boundaries
+- `sc-observe` and `sc-observability-otlp` consume the resulting logging
+  behavior but do not own retained-log maintenance
+- ATM-specific wrappers may choose policy values, but they do not own the
+  generic maintenance machinery
+
+### 3.2.2 `sc-compose` Logging-Only Integration Contract
 
 `sc-compose` is the reference logging-only downstream consumer for this crate.
 Its architecture stays intentionally split:
@@ -237,7 +287,7 @@ This mapping is intentionally adapter-owned so `sc-observability` preserves a
 generic logging contract and does not absorb `sc-compose`-specific event
 taxonomies.
 
-### 3.2.2 Consumer Usability Follow-Ups
+### 3.2.3 Consumer Usability Follow-Ups
 
 The remaining consumer-facing logging-surface follow-ups stay in
 `sc-observability` and do not move into `sc-observe` or
@@ -262,7 +312,7 @@ The remaining consumer-facing logging-surface follow-ups stay in
   it continuously proves that the shipped sink extension points are sufficient
   for downstream consumers
 
-### 3.2.3 Query And Follow Extension
+### 3.2.4 Query And Follow Extension
 
 The query/follow feature remains part of the logging layer. It does not move
 into `sc-observe`, does not depend on `sc-observability-otlp`, and does not

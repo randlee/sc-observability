@@ -167,6 +167,32 @@ This crate is the lightweight logging layer.
   observer abstractions and adapt them into `Logger`; `sc-observability` shall
   not require those consumers to adopt `sc-observability-types` as their
   application-facing observer API.
+- LOG-039 `sc-observability` shall own retained-log lifecycle management as an
+  additive logging-layer capability rather than leaving rotation-pruning
+  maintenance to downstream applications.
+- LOG-040 The retained-log policy surface shall expose additive configuration
+  for `rotation_max_bytes`, `rotation_max_files`, `retention_max_age`,
+  `maintenance_cadence`, `maintenance_join_timeout`, and
+  `maintenance_max_work_per_pass`.
+- LOG-041 Retained-log maintenance shall run off the main emit path on a
+  worker owned by `sc-observability` and shall not require an async runtime
+  dependency.
+- LOG-042 Downstream applications shall configure retained-log policy through
+  `sc-observability` config only and shall not need to spawn, join, or manage
+  a separate prune or rotation worker.
+- LOG-043 The public retained-log policy surface shall have documented
+  defaults, and any public config type added for that surface shall support the
+  same serialization conventions already used by the surrounding logging
+  configuration.
+- LOG-044 Logging health shall expose retained-log maintenance status including
+  the last maintenance pass timestamp, rotated/pruned totals, last maintenance
+  error, and worker state.
+- LOG-045 Retained-log maintenance failures shall be fail-open, shall not crash
+  the logger, and shall not block or interfere with the emit path.
+- LOG-046 `Logger::shutdown()` shall remain bounded while retained-log
+  maintenance is enabled: it shall join the maintenance worker within the
+  configured timeout or record timeout/degraded state in health or error
+  reporting before returning.
 
 ### 4.2 Consumer Documentation Requirements
 
@@ -206,6 +232,7 @@ This crate is the lightweight logging layer.
 | #21 | default file sink path simplification | LOG-008 |
 | #55 | public console writer parity | LOG-034 |
 | #57 | public retained-sink fault injection | LOG-035, LOG-036 |
+| #70 | retained-log rotation, pruning, and maintenance | LOG-039, LOG-040, LOG-041, LOG-042, LOG-043, LOG-044, LOG-045, LOG-046 |
 
 ### 4.4 Query/Follow Issue Traceability
 
