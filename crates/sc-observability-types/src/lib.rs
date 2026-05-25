@@ -61,10 +61,10 @@ pub use errors::{
 pub use events::{LogEvent, Observable, Observation};
 #[doc(inline)]
 pub use health::{
-    ExporterHealth, ExporterHealthState, LoggingHealthReport, LoggingHealthState,
-    ObservabilityHealthProvider, ObservabilityHealthReport, ObservationHealthState,
-    QueryHealthReport, QueryHealthState, SinkHealth, SinkHealthState, TelemetryHealthReport,
-    TelemetryHealthState,
+    ExporterHealth, ExporterHealthState, FileCount, LoggingHealthReport, LoggingHealthState,
+    MaintenanceHealthReport, MaintenanceWorkerState, ObservabilityHealthProvider,
+    ObservabilityHealthReport, ObservationHealthState, QueryHealthReport, QueryHealthState,
+    SinkHealth, SinkHealthState, TelemetryHealthReport, TelemetryHealthState,
 };
 #[doc(inline)]
 pub use level::{Level, LevelFilter};

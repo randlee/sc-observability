@@ -1,5 +1,7 @@
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 
 use sc_observability_types::{
@@ -17,9 +19,13 @@ pub(crate) struct FileIdentity {
     device: u64,
     #[cfg(unix)]
     inode: u64,
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    volume_serial_number: Option<u32>,
+    #[cfg(windows)]
+    file_index: Option<u64>,
+    #[cfg(not(any(unix, windows)))]
     len: u64,
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     modified_nanos: Option<u128>,
 }
 
@@ -283,7 +289,7 @@ fn resolve_visible_files(active_log_path: &Path) -> Result<Vec<ResolvedLogFile>,
             let Some(suffix) = file_name.strip_prefix(&format!("{active_name}.")) else {
                 continue;
             };
-            let Ok(index) = suffix.parse::<u32>() else {
+            let Ok(index) = suffix.parse::<usize>() else {
                 continue;
             };
             let metadata = entry
@@ -293,7 +299,8 @@ fn resolve_visible_files(active_log_path: &Path) -> Result<Vec<ResolvedLogFile>,
                 index,
                 ResolvedLogFile {
                     path,
-                    identity: file_identity(&metadata),
+                    identity: file_identity_for_path_with_metadata(&entry.path(), &metadata)
+                        .map_err(|err| io_error(active_log_path, "read file identity", err))?,
                     len: metadata.len(),
                 },
             ));
@@ -306,7 +313,8 @@ fn resolve_visible_files(active_log_path: &Path) -> Result<Vec<ResolvedLogFile>,
     if let Ok(metadata) = fs::metadata(active_log_path) {
         resolved.push(ResolvedLogFile {
             path: active_log_path.to_path_buf(),
-            identity: file_identity(&metadata),
+            identity: file_identity_for_path_with_metadata(active_log_path, &metadata)
+                .map_err(|err| io_error(active_log_path, "read file identity", err))?,
             len: metadata.len(),
         });
     }
@@ -374,7 +382,13 @@ fn read_events_from_path(
     path: &Path,
     start_offset: u64,
 ) -> Result<(Vec<LogEvent>, u64), QueryError> {
-    let file = File::open(path).map_err(|err| io_error(path, "open", err))?;
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Ok((Vec::new(), 0));
+        }
+        Err(err) => return Err(io_error(path, "open", err)),
+    };
     let file_len = file
         .metadata()
         .map_err(|err| io_error(path, "read log file metadata", err))?
@@ -443,43 +457,83 @@ fn event_matches_query(event: &LogEvent, query: &LogQuery) -> bool {
         })
 }
 
+#[cfg(unix)]
 fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
+    use std::os::unix::fs::MetadataExt;
 
-        FileIdentity {
-            device: metadata.dev(),
-            inode: metadata.ino(),
-        }
+    FileIdentity {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
+    let modified_nanos = metadata
+        .modified()
+        .ok()
+        .and_then(|modified| {
+            modified
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .ok()
+        })
+        .map(|duration| duration.as_nanos());
+    FileIdentity {
+        len: metadata.len(),
+        modified_nanos,
+    }
+}
+
+#[cfg(windows)]
+fn file_identity_for_path_with_metadata(
+    path: &Path,
+    _metadata: &fs::Metadata,
+) -> std::io::Result<FileIdentity> {
+    use std::io;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+    };
+
+    let file = File::open(path)?;
+    let handle = file.as_raw_handle() as *mut std::ffi::c_void;
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: `handle` comes from a live `std::fs::File`, and `info` points to
+    // writable stack storage for the OS to fill synchronously.
+    let ok = unsafe { GetFileInformationByHandle(handle, &mut info) };
+    if ok == 0 {
+        return Err(io::Error::other(format!(
+            "GetFileInformationByHandle failed for `{}`: {}",
+            path.display(),
+            io::Error::last_os_error()
+        )));
     }
 
-    #[cfg(not(unix))]
-    {
-        let modified_nanos = metadata
-            .modified()
-            .ok()
-            .and_then(|modified| {
-                modified
-                    .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                    .ok()
-            })
-            .map(|duration| duration.as_nanos());
-        FileIdentity {
-            len: metadata.len(),
-            modified_nanos,
-        }
-    }
+    Ok(FileIdentity {
+        volume_serial_number: Some(info.dwVolumeSerialNumber),
+        file_index: Some(((u64::from(info.nFileIndexHigh)) << 32) | u64::from(info.nFileIndexLow)),
+    })
+}
+
+#[cfg(not(windows))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the shared helper signature matches the Windows implementation, which can fail on GetFileInformationByHandle"
+)]
+fn file_identity_for_path_with_metadata(
+    _path: &Path,
+    metadata: &fs::Metadata,
+) -> std::io::Result<FileIdentity> {
+    Ok(file_identity(metadata))
 }
 
 #[cfg(test)]
 pub(crate) fn file_identity_for_path(path: &Path) -> FileIdentity {
     let metadata = fs::metadata(path).expect("metadata");
-    file_identity(&metadata)
+    file_identity_for_path_with_metadata(path, &metadata).expect("file identity")
 }
 
 #[cfg(test)]
-pub(crate) fn query_active_and_rotated_paths(active_path: &Path, max_files: u32) -> Vec<PathBuf> {
+pub(crate) fn query_active_and_rotated_paths(active_path: &Path, max_files: usize) -> Vec<PathBuf> {
     let mut paths = (1..=max_files)
         .rev()
         .map(|index| rotated_log_path(active_path, index))
@@ -491,6 +545,8 @@ pub(crate) fn query_active_and_rotated_paths(active_path: &Path, max_files: u32)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::io::Write as _;
 
     fn test_identity(seed: u64) -> FileIdentity {
         #[cfg(unix)]
@@ -501,7 +557,15 @@ mod tests {
             }
         }
 
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            FileIdentity {
+                volume_serial_number: Some(1),
+                file_index: Some(seed),
+            }
+        }
+
+        #[cfg(not(any(unix, windows)))]
         {
             FileIdentity {
                 len: seed,
@@ -560,16 +624,16 @@ mod tests {
         let previous = vec![TrackedFile {
             path: PathBuf::from("active.log.jsonl"),
             identity: FileIdentity {
-                len: 256,
-                modified_nanos: Some(1),
+                volume_serial_number: Some(1),
+                file_index: Some(10),
             },
             offset: 256,
         }];
         let recreated = ResolvedLogFile {
             path: PathBuf::from("active.log.jsonl"),
             identity: FileIdentity {
-                len: 0,
-                modified_nanos: Some(2),
+                volume_serial_number: Some(1),
+                file_index: Some(11),
             },
             len: 64,
         };
@@ -669,5 +733,53 @@ mod tests {
                 reset_reason: Some(FollowOffsetResetReason::NewActiveFile),
             }
         );
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "sc-observability-query-{name}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .expect("system time before unix epoch")
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&path);
+        path
+    }
+
+    #[test]
+    fn query_active_and_rotated_paths_keeps_active_when_max_files_is_zero() {
+        let active = PathBuf::from("logs/service.log.jsonl");
+
+        assert_eq!(query_active_and_rotated_paths(&active, 0), vec![active]);
+    }
+
+    #[test]
+    fn read_events_from_path_returns_empty_for_missing_file() {
+        let missing = temp_path("missing").join("missing.log.jsonl");
+
+        let (events, end_offset) = read_events_from_path(&missing, 0).expect("missing file");
+
+        assert!(events.is_empty());
+        assert_eq!(end_offset, 0);
+    }
+
+    #[test]
+    fn read_events_from_path_surfaces_decode_errors() {
+        let root = temp_path("decode");
+        fs::create_dir_all(&root).expect("create root");
+        let path = root.join("broken.log.jsonl");
+        let mut file = fs::File::create(&path).expect("create file");
+        writeln!(file, "{{not-json").expect("write malformed line");
+
+        let error = read_events_from_path(&path, 0).expect_err("decode error");
+
+        match error {
+            QueryError::Decode(context) => {
+                assert_eq!(context.diagnostic().code, error_codes::SC_LOG_QUERY_DECODE);
+            }
+            other => panic!("expected decode error, got {other:?}"),
+        }
     }
 }

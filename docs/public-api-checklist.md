@@ -122,8 +122,11 @@ Note:
 
 - [x] `error_codes`
 - [x] `LoggerConfig`
+- [x] `RetainedLogPolicy`
 - [x] `RotationPolicy`
 - [x] `RetentionPolicy`
+- [x] `MaintenanceHealthReport`
+- [x] `MaintenanceWorkerState`
 - [x] `RedactionPolicy`
 - [x] `Redactor`
 - [x] `Logger`

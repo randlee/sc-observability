@@ -115,16 +115,18 @@ dependencies = [
 
 [[package]]
 name = "sc-observability"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "sc-observability-types",
+ "serde",
  "serde_json",
  "temp-env",
+ "windows-sys",
 ]
 
 [[package]]
 name = "sc-observability-otlp"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "sc-observability",
  "sc-observability-types",
@@ -135,7 +137,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-types"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -145,7 +147,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observe"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "sc-observability",
  "sc-observability-types",
@@ -289,6 +291,15 @@ name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[package]]
+name = "windows-sys"
+version = "0.61.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
+dependencies = [
+ "windows-link",
+]
 
 [[package]]
 name = "zmij"

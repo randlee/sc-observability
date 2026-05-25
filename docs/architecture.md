@@ -75,6 +75,7 @@ Owns:
 - `ObservabilityHealthProvider`
 - `LogQuery`, `LogOrder`, `LogFieldMatch`
 - `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
+- `MaintenanceHealthReport`, `MaintenanceWorkerState`
 - health report contracts
 - shared open traits such as `Observable`, `DiagnosticInfo`,
   subscribers, filters, and projectors
@@ -105,6 +106,7 @@ Owns:
 
 - `Logger`
 - `LoggerConfig`
+- retained-log maintenance policy and background worker (see §3.2.1)
 - `LoggerBuilder`
 - `LogSink`
 - `SinkRegistration`
@@ -112,8 +114,9 @@ Owns:
 - `ConsoleSink`
 - redaction
 - rotation
-- `LoggingHealthReport`, `SinkHealth`, and `SinkHealthState` defined in
-  `sc-observability-types`, re-exported by `sc-observability`
+- `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`,
+  `SinkHealth`, and `SinkHealthState` defined in `sc-observability-types`,
+  re-exported by `sc-observability`
 
 Runtime role:
 
@@ -131,7 +134,58 @@ Must not own:
 
 This crate must remain usable on its own by a basic CLI.
 
-### 3.2.1 `sc-compose` Logging-Only Integration Contract
+### 3.2.1 Retained-Log Maintenance
+
+Retained-log lifecycle management belongs to `sc-observability`, not to
+downstream application wrappers.
+
+Owns:
+
+- `RetainedLogPolicy` struct nested in `LoggerConfig`
+- `rotation_max_bytes`, `rotation_max_files`, and `retention_max_age`
+- `maintenance_cadence`, `maintenance_join_timeout`, and
+  `maintenance_max_work_per_pass`
+- background maintenance worker lifecycle
+- maintenance health reporting and bounded shutdown join behavior
+
+Approved architecture shape:
+
+- the logging layer owns one background maintenance worker or equivalent
+  thread-based execution lane
+- the worker runs periodic maintenance passes on the configured cadence
+- maintenance stays off the emit path and must not require an async runtime
+- the worker is created, supervised, and joined entirely by
+  `sc-observability`; downstream apps do not manage it directly
+- a maintenance pass may rotate the active file, prune excess retained files,
+  prune stale retained files, and update maintenance health state
+- bounded per-pass work exists so a single maintenance sweep cannot grow
+  without limit
+
+Health and shutdown contract:
+
+- retained-log maintenance health belongs on the logging health surface
+- health must capture the last maintenance pass timestamp, rotated/pruned
+  totals, last maintenance error, and worker state
+- `MaintenanceWorkerState` is owned by `sc-observability-types` with variants
+  `Running`, `Degraded`, and `Stopped`
+- maintenance failures are fail-open and do not stop logging
+- `Logger::shutdown()` joins the maintenance worker within the configured join
+  timeout
+- if the join timeout is exceeded, shutdown records the timeout or degraded
+  state and returns without unbounded waiting
+
+Layering rules:
+
+- `sc-observability` owns the maintenance runtime and the concrete retained-log
+  policy surface
+- `sc-observability-types` may own shared health-report types only if those
+  types must cross crate boundaries
+- `sc-observe` and `sc-observability-otlp` consume the resulting logging
+  behavior but do not own retained-log maintenance
+- ATM-specific wrappers may choose policy values, but they do not own the
+  generic maintenance machinery
+
+### 3.2.2 `sc-compose` Logging-Only Integration Contract
 
 `sc-compose` is the reference logging-only downstream consumer for this crate.
 Its architecture stays intentionally split:
@@ -146,7 +200,8 @@ Its architecture stays intentionally split:
 The consumer-facing split is:
 
 - `sc-observability-types` provides neutral contracts such as `LogEvent`,
-  diagnostics, identifiers, `LoggingHealthReport`, `SinkHealth`,
+  diagnostics, identifiers, `LoggingHealthReport`,
+  `MaintenanceHealthReport`, `MaintenanceWorkerState`, `SinkHealth`,
   `SinkHealthState`, `QueryHealthReport`, and `QueryHealthState`
 - `sc-observability` provides the concrete logging runtime surface:
   `Logger`, `LoggerConfig`, `LoggerBuilder`, `LogSink`, `SinkRegistration`,
@@ -237,7 +292,7 @@ This mapping is intentionally adapter-owned so `sc-observability` preserves a
 generic logging contract and does not absorb `sc-compose`-specific event
 taxonomies.
 
-### 3.2.2 Consumer Usability Follow-Ups
+### 3.2.3 Consumer Usability Follow-Ups
 
 The remaining consumer-facing logging-surface follow-ups stay in
 `sc-observability` and do not move into `sc-observe` or
@@ -262,7 +317,7 @@ The remaining consumer-facing logging-surface follow-ups stay in
   it continuously proves that the shipped sink extension points are sufficient
   for downstream consumers
 
-### 3.2.3 Query And Follow Extension
+### 3.2.4 Query And Follow Extension
 
 The query/follow feature remains part of the logging layer. It does not move
 into `sc-observe`, does not depend on `sc-observability-otlp`, and does not
@@ -272,9 +327,11 @@ Type ownership is split as follows:
 
 - `sc-observability-types` owns `LogQuery`, `LogOrder`,
   `LogFieldMatch`, `LogSnapshot`, `QueryError`,
-  `QueryHealthState`, `QueryHealthReport`, and `ObservabilityHealthProvider`
+  `QueryHealthState`, `QueryHealthReport`, `MaintenanceHealthReport`,
+  `MaintenanceWorkerState`, and `ObservabilityHealthProvider`
 - `sc-observability-types` extends `LoggingHealthReport` with
-  `query: Option<QueryHealthReport>`
+  `query: Option<QueryHealthReport>` and
+  `maintenance: Option<MaintenanceHealthReport>`
 - `sc-observability` owns `Logger::query`, `Logger::follow`,
   `LogFollowSession`, and `JsonlLogReader`
 
@@ -329,6 +386,20 @@ pub struct QueryHealthReport {
     pub last_error: Option<DiagnosticSummary>,
 }
 
+pub enum MaintenanceWorkerState {
+    Running,
+    Degraded,
+    Stopped,
+}
+
+pub struct MaintenanceHealthReport {
+    pub state: MaintenanceWorkerState,
+    pub last_pass_at: Option<Timestamp>,
+    pub rotated_files_total: FileCount,
+    pub pruned_files_total: FileCount,
+    pub last_error: Option<DiagnosticSummary>,
+}
+
 pub struct LoggingHealthReport {
     pub state: LoggingHealthState,
     pub dropped_events_total: u64,
@@ -336,6 +407,7 @@ pub struct LoggingHealthReport {
     pub active_log_path: std::path::PathBuf,
     pub sink_statuses: Vec<SinkHealth>,
     pub query: Option<QueryHealthReport>,
+    pub maintenance: Option<MaintenanceHealthReport>,
     pub last_error: Option<DiagnosticSummary>,
 }
 
@@ -541,11 +613,11 @@ Follow strategy:
 - `poll()` reads appended records since the last successful poll
 - if the active file shrinks or its file identity changes, the session treats
   that as rotation/truncation, reopens the new active file, and resumes from
-  offset `0` on Unix-family platforms
-- Windows uses a best-effort `(len, modified_nanos)` fallback because stable
-  Rust does not expose a standard-library file identity equivalent to Unix
-  `(dev, ino)`, so truncate/recreate detection there is explicitly
-  non-promissory for v1
+  offset `0`
+- Unix-family platforms use `(dev, ino)` metadata, and Windows uses stable
+  Win32 handle metadata via `GetFileInformationByHandle`
+- non-Unix, non-Windows targets still rely on `(len, modified_nanos)` as the
+  documented fallback identity
 - the follow path remains poll-based and caller-driven; no async watch service
   is introduced
 
@@ -596,8 +668,8 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions, and logging query/follow value and error contracts |
-| `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, redaction, rotation, `Logger`, `JsonlLogReader`, follow session runtime, and logging health re-exports |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, and `MaintenanceWorkerState`, and logging query/follow value and error contracts |
+| `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, logger-owned maintenance worker, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport` and `MaintenanceWorkerState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
 

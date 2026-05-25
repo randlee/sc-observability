@@ -16,12 +16,10 @@
 
 1. Query/follow file identity is strong on Unix-family platforms through
    `(dev, ino)` metadata.
-2. Windows currently falls back to `(len, modified_nanos)` because stable Rust
-   does not expose a reliable replacement for Unix file identity in the
-   standard library.
-3. As a result, Windows truncate/recreate detection for `Logger::follow()` and
-   `JsonlLogReader::follow()` is best-effort only in v1 and must not be
-   documented as a parity guarantee with Unix/macOS behavior.
+2. Windows query/follow file identity uses stable Win32 handle metadata via
+   `GetFileInformationByHandle`, not nightly-only Rust metadata extensions.
+3. Non-Unix, non-Windows targets still fall back to `(len, modified_nanos)`
+   because stable Rust does not expose a stronger portable file identity there.
 
 ## Toolchain Baseline
 
