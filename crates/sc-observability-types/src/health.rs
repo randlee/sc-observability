@@ -46,6 +46,9 @@ pub struct FileCount(usize);
 
 impl FileCount {
     /// Creates one file count from a usize.
+    ///
+    /// A value of `0` is valid and means "retain no rotated files" for the
+    /// retained-log policy surface.
     #[must_use]
     pub const fn from_usize(value: usize) -> Self {
         Self(value)
@@ -68,13 +71,9 @@ impl FileCount {
     }
 
     /// Returns the wrapped count as u64.
-    ///
-    /// # Panics
-    ///
-    /// Panics only on hypothetical targets where `usize` is wider than `u64`.
     #[must_use]
     pub fn as_u64(self) -> u64 {
-        u64::try_from(self.0).expect("usize file count should fit in u64")
+        self.0 as u64
     }
 }
 

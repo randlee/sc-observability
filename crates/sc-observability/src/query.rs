@@ -501,7 +501,11 @@ fn file_identity_for_path_with_metadata(
     // writable stack storage for the OS to fill synchronously.
     let ok = unsafe { GetFileInformationByHandle(handle, &mut info) };
     if ok == 0 {
-        return Err(io::Error::last_os_error());
+        return Err(io::Error::other(format!(
+            "GetFileInformationByHandle failed for `{}`: {}",
+            path.display(),
+            io::Error::last_os_error()
+        )));
     }
 
     Ok(FileIdentity {

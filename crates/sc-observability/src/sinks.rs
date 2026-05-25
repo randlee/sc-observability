@@ -13,8 +13,8 @@ use sc_observability_types::{
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    LogSink, RetainedLogPolicy, RetentionPolicy, RotationPolicy, constants, error_codes,
-    rotated_log_path,
+    LogSink, RetainedLogPolicy, RetentionMaxAge, RetentionPolicy, RotationPolicy, constants,
+    error_codes, rotated_log_path,
 };
 
 #[expect(
@@ -91,7 +91,7 @@ impl JsonlFileSink {
         stats.pruned_files = self
             .prune_retained_files(
                 policy.rotation_max_files.as_usize(),
-                policy.retention_max_age.as_duration(),
+                policy.retention_max_age,
                 policy.maintenance_max_work_per_pass,
             )
             .map_err(|error| self.mark_maintenance_failure(error))?;
@@ -178,7 +178,7 @@ impl JsonlFileSink {
     fn prune_retained_files(
         &self,
         rotation_max_files: usize,
-        retention_max_age: Duration,
+        retention_max_age: RetentionMaxAge,
         maintenance_max_work_per_pass: Option<usize>,
     ) -> Result<u64, LogSinkError> {
         let Some(parent) = self.path.parent() else {
@@ -224,11 +224,11 @@ impl JsonlFileSink {
             remaining_budget -= 1;
         }
 
-        if retention_max_age.is_zero() {
+        if retention_max_age.is_disabled() {
             return Ok(pruned_total);
         }
 
-        let retention_cutoff = SystemTime::now() - retention_max_age;
+        let retention_cutoff = SystemTime::now() - retention_max_age.as_duration();
         retained_files.sort_by_key(|retained| retained.modified.unwrap_or(SystemTime::UNIX_EPOCH));
         for retained in retained_files
             .iter()

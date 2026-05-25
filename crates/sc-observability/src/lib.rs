@@ -142,7 +142,12 @@ pub struct MaintenanceCadence(Duration);
 
 impl MaintenanceCadence {
     /// Creates a cadence from one duration.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `duration` is zero.
     pub const fn new(duration: Duration) -> Self {
+        assert!(!duration.is_zero(), "MaintenanceCadence must be non-zero");
         Self(duration)
     }
 
@@ -166,7 +171,11 @@ impl<'de> Deserialize<'de> for MaintenanceCadence {
     where
         D: Deserializer<'de>,
     {
-        let millis = u64::deserialize(deserializer)?;
+        let millis = u64::deserialize(deserializer).map_err(|error| {
+            serde::de::Error::custom(format!(
+                "MaintenanceCadence expects a u64 millisecond count: {error}"
+            ))
+        })?;
         if millis == 0 {
             return Err(serde::de::Error::custom(
                 "MaintenanceCadence must be non-zero",
@@ -188,7 +197,15 @@ pub struct MaintenanceJoinTimeout(Duration);
 
 impl MaintenanceJoinTimeout {
     /// Creates a join timeout from one duration.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `duration` is zero.
     pub const fn new(duration: Duration) -> Self {
+        assert!(
+            !duration.is_zero(),
+            "MaintenanceJoinTimeout must be non-zero"
+        );
         Self(duration)
     }
 
@@ -212,7 +229,11 @@ impl<'de> Deserialize<'de> for MaintenanceJoinTimeout {
     where
         D: Deserializer<'de>,
     {
-        let millis = u64::deserialize(deserializer)?;
+        let millis = u64::deserialize(deserializer).map_err(|error| {
+            serde::de::Error::custom(format!(
+                "MaintenanceJoinTimeout expects a u64 millisecond count: {error}"
+            ))
+        })?;
         if millis == 0 {
             return Err(serde::de::Error::custom(
                 "MaintenanceJoinTimeout must be non-zero",
@@ -234,12 +255,22 @@ pub struct RetentionMaxAge(Duration);
 
 impl RetentionMaxAge {
     /// Creates one retention max age from calendar days.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `days` is zero.
     pub const fn from_days(days: u64) -> Self {
+        assert!(days != 0, "RetentionMaxAge must be non-zero");
         Self(Duration::from_secs(days * constants::SECS_PER_DAY))
     }
 
     /// Creates one retention max age from an arbitrary duration.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `duration` is zero.
     pub const fn from_duration(duration: Duration) -> Self {
+        assert!(!duration.is_zero(), "RetentionMaxAge must be non-zero");
         Self(duration)
     }
 
@@ -248,8 +279,8 @@ impl RetentionMaxAge {
         self.0
     }
 
-    /// Returns whether the wrapped duration is zero.
-    pub const fn is_zero(self) -> bool {
+    /// Returns whether retained-log age pruning is disabled.
+    pub const fn is_disabled(self) -> bool {
         self.0.is_zero()
     }
 }
@@ -268,7 +299,11 @@ impl<'de> Deserialize<'de> for RetentionMaxAge {
     where
         D: Deserializer<'de>,
     {
-        let millis = u64::deserialize(deserializer)?;
+        let millis = u64::deserialize(deserializer).map_err(|error| {
+            serde::de::Error::custom(format!(
+                "RetentionMaxAge expects a u64 millisecond count: {error}"
+            ))
+        })?;
         if millis == 0 {
             return Err(serde::de::Error::custom("RetentionMaxAge must be non-zero"));
         }
@@ -931,6 +966,55 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "MaintenanceCadence must be non-zero")]
+    fn maintenance_cadence_new_rejects_zero() {
+        let _ = MaintenanceCadence::new(Duration::ZERO);
+    }
+
+    #[test]
+    #[should_panic(expected = "MaintenanceJoinTimeout must be non-zero")]
+    fn maintenance_join_timeout_new_rejects_zero() {
+        let _ = MaintenanceJoinTimeout::new(Duration::ZERO);
+    }
+
+    #[test]
+    #[should_panic(expected = "RetentionMaxAge must be non-zero")]
+    fn retention_max_age_from_duration_rejects_zero() {
+        let _ = RetentionMaxAge::from_duration(Duration::ZERO);
+    }
+
+    #[test]
+    fn maintenance_cadence_deserialize_reports_type_context() {
+        let error = serde_json::from_str::<MaintenanceCadence>("\"bad\"").expect_err("type error");
+        assert!(
+            error
+                .to_string()
+                .contains("MaintenanceCadence expects a u64 millisecond count")
+        );
+    }
+
+    #[test]
+    fn maintenance_join_timeout_deserialize_reports_type_context() {
+        let error =
+            serde_json::from_str::<MaintenanceJoinTimeout>("\"bad\"").expect_err("type error");
+        assert!(
+            error
+                .to_string()
+                .contains("MaintenanceJoinTimeout expects a u64 millisecond count")
+        );
+    }
+
+    #[test]
+    fn retention_max_age_deserialize_reports_type_context() {
+        let error = serde_json::from_str::<RetentionMaxAge>("\"bad\"").expect_err("type error");
+        assert!(
+            error
+                .to_string()
+                .contains("RetentionMaxAge expects a u64 millisecond count")
+        );
+    }
+
+    #[test]
     fn file_only_logging_writes_jsonl_to_default_path() {
         let root = temp_path("file-only");
         let config = LoggerConfig::default_for(service_name(), root.clone());
@@ -1220,7 +1304,7 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(2);
-        config.retained_log_policy.retention_max_age = retention_secs(0);
+        config.retained_log_policy.retention_max_age = retention_secs(60);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         let logger = Logger::new(config).expect("logger");
 
