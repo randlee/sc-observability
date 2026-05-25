@@ -133,19 +133,21 @@ This crate is the lightweight logging layer.
 - LOG-020 `LoggerConfig` shall define documented defaults for v1:
   - `level = Info`
   - `queue_capacity = 1024`
-  - `rotation.max_bytes = 64 MiB`
-  - `rotation.max_files = 10`
-  - `retention.max_age_days = 7`
+  - `rotation_max_bytes = ByteCount::from_mib(64)`
+  - `rotation_max_files = FileCount::from_usize(10)`
+  - `retention_max_age = RetentionMaxAge::from_days(7)`
+  - `maintenance_cadence = MaintenanceCadence::new(60 s)`
+  - `maintenance_join_timeout = MaintenanceJoinTimeout::new(5 s)`
+  - `maintenance_max_work_per_pass = None`
   - bearer-token redaction enabled
   - built-in file sink enabled
   - built-in console sink disabled
 - LOG-021 Zero-configuration logging shall produce structured JSONL output using the built-in file sink and shall not require any OTLP or routing configuration.
 - LOG-022 The logging layer shall not expose or assume an HTTP health endpoint; health is available through in-process health objects only.
 - LOG-023 `Logger` lifecycle behavior shall be explicit:
-  - `emit()` after `shutdown()` returns `EventError`
-  - `flush()` after `shutdown()` is idempotent and returns `Ok(())`
-  - repeated `shutdown()` calls are idempotent and return `Ok(())`
-  - `query()` after `shutdown()` returns `QueryError::Shutdown`
+  - `Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`
+  - `emit()`, `query()`, and `follow()` are available only on `Logger<Running>`
+  - `Logger<Stopped>` remains usable for health inspection only
   - logger-created `LogFollowSession::poll()` after `shutdown()` returns `QueryError::Shutdown`
 - LOG-024 `sc-observability` shall own a crate-local sealed `LogEmitter` trait for producer injection when logging-only use is desired.
 - LOG-025 `Logger` shall expose a synchronous historical query API `query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>`.
@@ -153,7 +155,7 @@ This crate is the lightweight logging layer.
 - LOG-027 `LogFollowSession` shall expose synchronous polling and shall not require an async runtime, background task, or file watcher to deliver new records.
 - LOG-028 `sc-observability` shall provide `JsonlLogReader` as an independent JSONL file reader for historical query and follow operations without requiring a live `Logger`, `sc-observe`, or `sc-observability-otlp`.
 - LOG-029 Historical query and follow behavior shall operate over the active JSONL log and its rotation set using the documented `sc-observability` naming/layout rules.
-- LOG-030 Rotation handling for query/follow shall avoid duplicating or silently skipping committed log records when the active file is renamed or recreated on Unix-family platforms. On Windows, stable Rust does not expose a reliable file identity equivalent to `(dev, ino)`, so truncate/recreate detection remains best-effort and is not a release guarantee for v1.
+- LOG-030 Rotation handling for query/follow shall avoid duplicating or silently skipping committed log records when the active file is renamed or recreated on Unix-family platforms. On Windows, the implementation shall use stable filesystem identity metadata when available so append-vs-recreate detection does not degrade into length-based best-effort behavior.
 - LOG-031 `LoggingHealthReport` shall expose query/follow availability through an optional `QueryHealthReport`.
 - LOG-032 Query/follow APIs shall remain usable in logging-only deployments and shall not introduce ATM-specific types, daemon requirements, or `agent-team-mail-*` dependencies.
 - LOG-033 `JsonlLogReader` query/follow operations shall remain independent of `Logger` lifecycle and shall stay usable for offline inspection after a logger-owned runtime shuts down.
@@ -167,6 +169,35 @@ This crate is the lightweight logging layer.
   observer abstractions and adapt them into `Logger`; `sc-observability` shall
   not require those consumers to adopt `sc-observability-types` as their
   application-facing observer API.
+- LOG-039 `sc-observability` shall own retained-log lifecycle management as an
+  additive logging-layer capability rather than leaving rotation-pruning
+  maintenance to downstream applications.
+- LOG-040 The retained-log policy surface shall expose additive configuration
+  for `rotation_max_bytes`, `rotation_max_files`, `retention_max_age`,
+  `maintenance_cadence`, `maintenance_join_timeout`, and
+  `maintenance_max_work_per_pass`, using strong public newtypes for bytes and
+  maintenance timing fields. `retention_max_age` supersedes the prior
+  `retention.max_age_days` field.
+- LOG-041 Retained-log maintenance shall run off the main emit path on a
+  worker owned by `sc-observability` and shall not require an async runtime
+  dependency.
+- LOG-042 Downstream applications shall configure retained-log policy through
+  `sc-observability` config only and shall not need to spawn, join, or manage
+  a separate prune or rotation worker.
+- LOG-043 The public retained-log policy surface shall have documented
+  defaults, and any public config type added for that surface shall support the
+  same serialization conventions already used by the surrounding logging
+  configuration.
+- LOG-044 Logging health shall expose retained-log maintenance status including
+  the last maintenance pass timestamp, rotated/pruned totals, last maintenance
+  error, and worker state. The normative worker states are `Running`,
+  `Degraded`, and `Stopped`.
+- LOG-045 Retained-log maintenance failures shall be fail-open, shall not crash
+  the logger, and shall not block or interfere with the emit path.
+- LOG-046 `Logger::shutdown()` shall remain bounded while retained-log
+  maintenance is enabled: it shall join the maintenance worker within the
+  configured timeout or record timeout/degraded state in health or error
+  reporting before returning.
 
 ### 4.2 Consumer Documentation Requirements
 
@@ -206,6 +237,7 @@ This crate is the lightweight logging layer.
 | #21 | default file sink path simplification | LOG-008 |
 | #55 | public console writer parity | LOG-034 |
 | #57 | public retained-sink fault injection | LOG-035, LOG-036 |
+| #70 | retained-log rotation, pruning, and maintenance | LOG-039, LOG-040, LOG-041, LOG-042, LOG-043, LOG-044, LOG-045, LOG-046 |
 
 ### 4.4 Query/Follow Issue Traceability
 

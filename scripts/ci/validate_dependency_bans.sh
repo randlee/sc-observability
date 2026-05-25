@@ -14,6 +14,15 @@ def section_deps(path: Path, section: str):
     data = load_toml(path)
     return set(data.get(section, {}).keys())
 
+def target_section_deps(path: Path, section: str):
+    data = load_toml(path)
+    target_tables = data.get("target", {})
+    return {
+        target_name: set(target_data.get(section, {}).keys())
+        for target_name, target_data in target_tables.items()
+        if section in target_data
+    }
+
 workspace = load_toml(root / "Cargo.toml")
 members = set(workspace["workspace"]["members"])
 required_members = {
@@ -33,16 +42,25 @@ for path in root.rglob("Cargo.toml"):
         raise SystemExit(f"ATM dependency reference found in {path}")
 
 obs_runtime_deps = section_deps(root / "crates/sc-observability/Cargo.toml", "dependencies")
+obs_target_runtime_deps = target_section_deps(
+    root / "crates/sc-observability/Cargo.toml",
+    "dependencies",
+)
 obs_test_deps = section_deps(root / "crates/sc-observability/Cargo.toml", "dev-dependencies")
 observe_runtime_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dependencies")
 observe_test_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dev-dependencies")
 otlp_runtime_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dependencies")
 otlp_test_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dev-dependencies")
 
-if obs_runtime_deps != {"serde_json", "sc-observability-types"}:
+if obs_runtime_deps != {"serde", "serde_json", "sc-observability-types"}:
     raise SystemExit(
         "sc-observability runtime dependency set drifted from allowed baseline: "
         f"{sorted(obs_runtime_deps)}"
+    )
+if obs_target_runtime_deps != {"cfg(windows)": {"windows-sys"}}:
+    raise SystemExit(
+        "sc-observability target-specific runtime dependency set drifted from allowed baseline: "
+        f"{obs_target_runtime_deps}"
     )
 if obs_test_deps - {"temp-env"}:
     raise SystemExit(

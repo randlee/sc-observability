@@ -16,6 +16,15 @@ pub const LOGGER_INIT_FAILED: ErrorCode =
 /// Stable error code for flush failures.
 pub const LOGGER_FLUSH_FAILED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_FLUSH_FAILED");
+/// Stable error code for retained-log maintenance failures.
+pub const LOGGER_MAINTENANCE_FAILED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_MAINTENANCE_FAILED");
+/// Stable error code for maintenance-worker shutdown join timeouts.
+pub const LOGGER_MAINTENANCE_JOIN_TIMEOUT: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_MAINTENANCE_JOIN_TIMEOUT");
+/// Stable error code for maintenance-worker thread failures.
+pub const LOGGER_MAINTENANCE_WORKER_FAILED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_MAINTENANCE_WORKER_FAILED");
 /// Stable error code for deliberate retained-sink fault injection.
 #[cfg(feature = "fault-injection")]
 pub const LOGGER_SINK_FAULT_INJECTED: ErrorCode =
@@ -28,6 +37,9 @@ pub const ALL: &[ErrorCode] = &[
     LOGGER_SINK_WRITE_FAILED,
     LOGGER_INIT_FAILED,
     LOGGER_FLUSH_FAILED,
+    LOGGER_MAINTENANCE_FAILED,
+    LOGGER_MAINTENANCE_JOIN_TIMEOUT,
+    LOGGER_MAINTENANCE_WORKER_FAILED,
     #[cfg(feature = "fault-injection")]
     LOGGER_SINK_FAULT_INJECTED,
 ];

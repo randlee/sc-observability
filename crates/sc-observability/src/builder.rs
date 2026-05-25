@@ -12,7 +12,7 @@ use std::sync::{Arc, atomic::AtomicBool};
 use sc_observability_types::InitError;
 
 use crate::{
-    ConsoleSink, JsonlFileSink, Logger, LoggerConfig, LoggerRuntime, SinkRegistration,
+    ConsoleSink, JsonlFileSink, Logger, LoggerConfig, LoggerRuntime, Running, SinkRegistration,
     default_log_path,
 };
 
@@ -23,6 +23,7 @@ use crate::{
 )]
 pub struct LoggerBuilder {
     config: LoggerConfig,
+    file_sink: Option<Arc<JsonlFileSink>>,
     sinks: Vec<SinkRegistration>,
 }
 
@@ -47,17 +48,23 @@ impl LoggerBuilder {
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let mut sinks = Vec::new();
+        let mut file_sink = None;
 
         if config.enable_file_sink {
-            let sink = JsonlFileSink::new(active_log_path, config.rotation, config.retention);
-            sinks.push(SinkRegistration::new(Arc::new(sink)));
+            let sink = Arc::new(JsonlFileSink::for_logger(active_log_path));
+            sinks.push(SinkRegistration::new(sink.clone()));
+            file_sink = Some(sink);
         }
 
         if config.enable_console_sink {
             sinks.push(SinkRegistration::new(Arc::new(ConsoleSink::stdout())));
         }
 
-        Ok(Self { config, sinks })
+        Ok(Self {
+            config,
+            file_sink,
+            sinks,
+        })
     }
 
     /// Registers one additional sink before the logger runtime is built.
@@ -67,14 +74,27 @@ impl LoggerBuilder {
     }
 
     /// Finalizes construction and returns the logger runtime.
-    pub fn build(self) -> Logger {
-        let active_log_path = default_log_path(&self.config.log_root, &self.config.service_name);
-        let query_available = active_log_path.exists() || self.config.enable_file_sink;
+    pub fn build(self) -> Logger<Running> {
+        let Self {
+            config,
+            file_sink,
+            sinks,
+        } = self;
+        let active_log_path = default_log_path(&config.log_root, &config.service_name);
+        let query_available = active_log_path.exists() || config.enable_file_sink;
+        let retained_log_policy = config.retained_log_policy;
         Logger {
-            config: self.config,
-            sinks: self.sinks,
+            runtime: LoggerRuntime::new(
+                query_available,
+                file_sink,
+                retained_log_policy,
+                #[cfg(test)]
+                config.maintenance_test_pass_delay,
+            ),
+            config,
+            sinks,
             shutdown: Arc::new(AtomicBool::new(false)),
-            runtime: LoggerRuntime::new(query_available),
+            state: std::marker::PhantomData,
         }
     }
 }

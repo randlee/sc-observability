@@ -34,15 +34,48 @@ Create a logger with the documented defaults:
 ```rust
 use std::path::PathBuf;
 
-use sc_observability::{Logger, LoggerConfig, ServiceName};
+use sc_observability::{Logger, LoggerConfig, Running, ServiceName};
 
 let service = ServiceName::new("my-service")?;
-let logger = Logger::new(LoggerConfig::default_for(
+let logger: Logger<Running> = Logger::new(LoggerConfig::default_for(
     service,
     PathBuf::from("./observability"),
 ))?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+Customize retained-log rotation and maintenance through
+`LoggerConfig.retained_log_policy`:
+
+```rust
+use std::path::PathBuf;
+use std::time::Duration;
+
+use sc_observability::{
+    ByteCount, FileCount, LoggerConfig, MaintenanceCadence, MaintenanceJoinTimeout,
+    RetentionMaxAge, ServiceName,
+};
+
+let mut config = LoggerConfig::default_for(
+    ServiceName::new("my-service")?,
+    PathBuf::from("./observability"),
+);
+config.retained_log_policy.rotation_max_bytes = ByteCount::from_mib(8);
+config.retained_log_policy.rotation_max_files = FileCount::from_usize(5);
+config.retained_log_policy.retention_max_age =
+    RetentionMaxAge::from_duration(Duration::from_secs(3 * 86_400));
+config.retained_log_policy.maintenance_cadence =
+    MaintenanceCadence::new(Duration::from_secs(30));
+config.retained_log_policy.maintenance_join_timeout =
+    MaintenanceJoinTimeout::new(Duration::from_secs(2));
+config.retained_log_policy.maintenance_max_work_per_pass = None; // default: unbounded work per pass
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`.
+That typestate transition makes post-shutdown `emit()`, `query()`, and
+`follow()` invalid by construction while still allowing health inspection on the
+stopped logger value.
 
 ## 2. Default Log Root And Path
 
@@ -129,6 +162,7 @@ runnable public-only example.
 - active log path
 - per-sink status
 - query/follow availability
+- retained-log maintenance status
 - last observed logging error summary
 
 Typical usage:

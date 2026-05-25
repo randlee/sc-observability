@@ -329,7 +329,7 @@ pub struct ObservabilityConfig {
     pub log_root: std::path::PathBuf,
     pub env_prefix: EnvPrefix,
     pub queue_capacity: usize,
-    pub rotation: RotationPolicy,
+    pub retained_log_policy: RetainedLogPolicy,
 }
 ```
 
@@ -339,15 +339,18 @@ Field semantics:
 - `log_root` — absolute path to the root logging directory; the caller is responsible for providing this; no runtime-home discovery is performed
 - `env_prefix` — prefix for environment variable overrides (e.g. `"OTEL"` for standard OTel names, or a tool-specific prefix); must not be ATM-specific in generic deployments
 - `queue_capacity` — capacity of the internal async event queue; controls backpressure before dropping
-- `rotation` — log rotation policy applied to the built-in file sink
+- `retained_log_policy` — retained-log rotation, pruning, and maintenance
+  policy applied to the built-in file sink
 
 Defaults:
 
 - `env_prefix` defaults to the uppercase `tool_name` value with `-` and `.`
   normalized to `_`
 - `queue_capacity` defaults to `1024`
-- `rotation.max_bytes` defaults to `64 * 1024 * 1024`
-- `rotation.max_files` defaults to `10`
+- `retained_log_policy.rotation_max_bytes` defaults to `64 * 1024 * 1024`
+- `retained_log_policy.rotation_max_files` defaults to `10`
+- `retained_log_policy.retention_max_age` defaults to `7 days`
+- `retained_log_policy.maintenance_cadence` defaults to `60s`
 
 Recommended constructor shape:
 
@@ -366,8 +369,8 @@ Composition rules inside `sc-observe`:
 - `LoggerConfig.service_name = ServiceName::new(ObservabilityConfig.tool_name.as_str())?`
 - `LoggerConfig.log_root = ObservabilityConfig.log_root`
 - `LoggerConfig.queue_capacity = ObservabilityConfig.queue_capacity`
-- `LoggerConfig.rotation = ObservabilityConfig.rotation`
-- `LoggerConfig.level`, `retention`, `redaction`, and `process_identity` use
+- `LoggerConfig.retained_log_policy = ObservabilityConfig.retained_log_policy`
+- `LoggerConfig.level`, `redaction`, and `process_identity` use
   documented `sc-observe` defaults unless those knobs are exposed separately in
   a future expansion of `ObservabilityConfig`
 - `sc-observe` does not derive or own `TelemetryConfig`
@@ -1358,8 +1361,7 @@ pub struct LoggerConfig {
     pub log_root: std::path::PathBuf,
     pub level: LevelFilter,
     pub queue_capacity: usize,
-    pub rotation: RotationPolicy,
-    pub retention: RetentionPolicy,
+    pub retained_log_policy: RetainedLogPolicy,
     pub redaction: RedactionPolicy,
     pub process_identity: ProcessIdentityPolicy,
     pub enable_file_sink: bool,
@@ -1371,9 +1373,11 @@ Defaults:
 
 - `level = LevelFilter::Info`
 - `queue_capacity = 1024`
-- `rotation.max_bytes = 64 * 1024 * 1024`
-- `rotation.max_files = 10`
-- `retention.max_age_days = 7`
+- `retained_log_policy.rotation_max_bytes = ByteCount::from_mib(64)`
+- `retained_log_policy.rotation_max_files = FileCount::from_usize(10)`
+- `retained_log_policy.retention_max_age = RetentionMaxAge::from_days(7)`
+- `retained_log_policy.maintenance_cadence = MaintenanceCadence::new(60s)`
+- `retained_log_policy.maintenance_join_timeout = MaintenanceJoinTimeout::new(5s)`
 - `redact_bearer_tokens = true`
 - `enable_file_sink = true`
 - `enable_console_sink = false`
@@ -1405,31 +1409,32 @@ This is the prescribed default path for the built-in file sink.
 The log root must be redirectable by environment helper for tests and controlled
 execution environments, with explicit config taking precedence over env.
 
-### 11.3 `RotationPolicy`
+### 11.3 `RetainedLogPolicy`
 
 ```rust
-pub struct RotationPolicy {
-    pub max_bytes: u64,
-    pub max_files: u32,
+pub struct RetainedLogPolicy {
+    pub rotation_max_bytes: ByteCount,
+    pub rotation_max_files: FileCount,
+    pub retention_max_age: RetentionMaxAge,
+    pub maintenance_cadence: MaintenanceCadence,
+    pub maintenance_join_timeout: MaintenanceJoinTimeout,
+    pub maintenance_max_work_per_pass: Option<usize>,
 }
 ```
 
 Defaults:
 
-- `max_bytes = 64 * 1024 * 1024`
-- `max_files = 10`
+- `rotation_max_bytes = ByteCount::from_mib(64)`
+- `rotation_max_files = FileCount::from_usize(10)`
+- `retention_max_age = RetentionMaxAge::from_days(7)`
+- `maintenance_cadence = MaintenanceCadence::new(60s)`
+- `maintenance_join_timeout = MaintenanceJoinTimeout::new(5s)`
 
-### 11.4 `RetentionPolicy`
+### 11.4 Legacy Direct-Sink Helpers
 
-```rust
-pub struct RetentionPolicy {
-    pub max_age_days: u32,
-}
-```
-
-Default:
-
-- `max_age_days = 7`
+`RotationPolicy` and `RetentionPolicy` remain available for direct
+`JsonlFileSink` construction, but logger-managed retained-log configuration
+flows through `RetainedLogPolicy`.
 
 ### 11.5 `RedactionPolicy`
 
@@ -1459,13 +1464,16 @@ Rules:
 Design direction:
 
 ```rust
-pub struct Logger { /* opaque */ }
+pub struct Logger<State = Running> { /* opaque */ }
 
-impl Logger {
+impl Logger<Running> {
     pub fn new(config: LoggerConfig) -> Result<Self, InitError>;
     pub fn emit(&self, event: LogEvent) -> Result<(), EventError>;
     pub fn flush(&self) -> Result<(), FlushError>;
-    pub fn shutdown(&self) -> Result<(), ShutdownError>;
+    pub fn shutdown(self) -> Result<Logger<Stopped>, ShutdownError>;
+}
+
+impl<State> Logger<State> {
     pub fn health(&self) -> LoggingHealthReport;
 }
 ```
@@ -1473,9 +1481,8 @@ impl Logger {
 Lifecycle rules:
 
 - `emit()` validates and redacts before sink fan-out
-- `emit()` after `shutdown()` returns `EventError`
-- `flush()` after `shutdown()` is idempotent and returns `Ok(())`
-- repeated `shutdown()` calls are idempotent and return `Ok(())`
+- `Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`
+- post-shutdown `emit()`, `query()`, and `follow()` misuse becomes a compile-time error
 
 Crate-local producer injection trait:
 

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex};
 
-use sc_observability::RotationPolicy;
+use sc_observability::RetainedLogPolicy;
 use sc_observability_otlp::{
     AuthHeader, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry,
     TelemetryConfig,
@@ -140,7 +140,7 @@ fn build_observability(
         log_root,
         env_prefix: sc_observability_types::EnvPrefix::new("ATM").expect("valid prefix"),
         queue_capacity: 1024,
-        rotation: RotationPolicy::default(),
+        retained_log_policy: RetainedLogPolicy::default(),
     };
 
     let telemetry_config = telemetry_config_from_env(service.clone())?;
