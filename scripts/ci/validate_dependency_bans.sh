@@ -39,7 +39,7 @@ observe_test_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dev-dep
 otlp_runtime_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dependencies")
 otlp_test_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dev-dependencies")
 
-if obs_runtime_deps != {"serde_json", "sc-observability-types"}:
+if obs_runtime_deps != {"serde", "serde_json", "sc-observability-types"}:
     raise SystemExit(
         "sc-observability runtime dependency set drifted from allowed baseline: "
         f"{sorted(obs_runtime_deps)}"
