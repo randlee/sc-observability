@@ -166,7 +166,13 @@ impl<'de> Deserialize<'de> for MaintenanceCadence {
     where
         D: Deserializer<'de>,
     {
-        Ok(Self(Duration::from_millis(u64::deserialize(deserializer)?)))
+        let millis = u64::deserialize(deserializer)?;
+        if millis == 0 {
+            return Err(serde::de::Error::custom(
+                "MaintenanceCadence must be non-zero",
+            ));
+        }
+        Ok(Self(Duration::from_millis(millis)))
     }
 }
 
@@ -206,7 +212,13 @@ impl<'de> Deserialize<'de> for MaintenanceJoinTimeout {
     where
         D: Deserializer<'de>,
     {
-        Ok(Self(Duration::from_millis(u64::deserialize(deserializer)?)))
+        let millis = u64::deserialize(deserializer)?;
+        if millis == 0 {
+            return Err(serde::de::Error::custom(
+                "MaintenanceJoinTimeout must be non-zero",
+            ));
+        }
+        Ok(Self(Duration::from_millis(millis)))
     }
 }
 
@@ -256,7 +268,11 @@ impl<'de> Deserialize<'de> for RetentionMaxAge {
     where
         D: Deserializer<'de>,
     {
-        Ok(Self(Duration::from_millis(u64::deserialize(deserializer)?)))
+        let millis = u64::deserialize(deserializer)?;
+        if millis == 0 {
+            return Err(serde::de::Error::custom("RetentionMaxAge must be non-zero"));
+        }
+        Ok(Self(Duration::from_millis(millis)))
     }
 }
 
@@ -879,6 +895,39 @@ mod tests {
             serde_json::from_str(&encoded).expect("deserialize retained-log policy");
 
         assert_eq!(decoded, policy);
+    }
+
+    #[test]
+    fn maintenance_cadence_deserialize_rejects_zero() {
+        let error =
+            serde_json::from_str::<MaintenanceCadence>("0").expect_err("zero cadence rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("MaintenanceCadence must be non-zero")
+        );
+    }
+
+    #[test]
+    fn maintenance_join_timeout_deserialize_rejects_zero() {
+        let error = serde_json::from_str::<MaintenanceJoinTimeout>("0")
+            .expect_err("zero join timeout rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("MaintenanceJoinTimeout must be non-zero")
+        );
+    }
+
+    #[test]
+    fn retention_max_age_deserialize_rejects_zero() {
+        let error =
+            serde_json::from_str::<RetentionMaxAge>("0").expect_err("zero max age rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("RetentionMaxAge must be non-zero")
+        );
     }
 
     #[test]
