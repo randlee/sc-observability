@@ -178,7 +178,7 @@ impl<'de> Deserialize<'de> for MaintenanceCadence {
         })?;
         if millis == 0 {
             return Err(serde::de::Error::custom(
-                "MaintenanceCadence must be non-zero",
+                "MaintenanceCadence must be a non-zero u64 millisecond count",
             ));
         }
         Ok(Self(Duration::from_millis(millis)))
@@ -236,7 +236,7 @@ impl<'de> Deserialize<'de> for MaintenanceJoinTimeout {
         })?;
         if millis == 0 {
             return Err(serde::de::Error::custom(
-                "MaintenanceJoinTimeout must be non-zero",
+                "MaintenanceJoinTimeout must be a non-zero u64 millisecond count",
             ));
         }
         Ok(Self(Duration::from_millis(millis)))
@@ -305,7 +305,9 @@ impl<'de> Deserialize<'de> for RetentionMaxAge {
             ))
         })?;
         if millis == 0 {
-            return Err(serde::de::Error::custom("RetentionMaxAge must be non-zero"));
+            return Err(serde::de::Error::custom(
+                "RetentionMaxAge must be a non-zero u64 millisecond count",
+            ));
         }
         Ok(Self(Duration::from_millis(millis)))
     }
@@ -939,7 +941,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("MaintenanceCadence must be non-zero")
+                .contains("MaintenanceCadence must be a non-zero u64 millisecond count")
         );
     }
 
@@ -950,7 +952,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("MaintenanceJoinTimeout must be non-zero")
+                .contains("MaintenanceJoinTimeout must be a non-zero u64 millisecond count")
         );
     }
 
@@ -961,7 +963,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("RetentionMaxAge must be non-zero")
+                .contains("RetentionMaxAge must be a non-zero u64 millisecond count")
         );
     }
 
