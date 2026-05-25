@@ -44,11 +44,13 @@ before implementation begins.
 
 - `docs/requirements.md`
 - `docs/architecture.md`
+- `docs/architecture.md` §3.2.1 and §7 (`ADR-010`)
 - `docs/api-design.md`
 - `docs/project-plan.md`
 - `docs/public-api-checklist.md`
 - `docs/performance-pass.md`
 - `docs/phase-A/readiness.md`
+- `scripts/ci/validate_writer_thread_lock.sh`
 
 ## Deliverables
 
@@ -57,9 +59,16 @@ before implementation begins.
 - explicit statement that retained-log maintenance runs on the same writer
   thread during idle or post-batch windows rather than on a dedicated
   maintenance-only thread
+- explicit updates to:
+  - `LOG-041`
+  - `LOG-046`
+  - `docs/architecture.md` §3.2.1
+  so the normative docs no longer describe a separate maintenance worker model
 - explicit statement that producers validate, redact, and queue log events,
   while one writer thread owns batching, sink writes, rotation, pruning, and
   flush
+- ADR-010 in `docs/architecture.md` recording the writer-thread concurrency
+  decision, rationale, rejected alternatives, and shutdown/drop consequences
 - locked contract for:
   - `Logger::log(...)`
   - `Logger::try_log(...)`
@@ -71,12 +80,21 @@ before implementation begins.
   - `try_log()` is non-blocking and returns explicit queue-full failure
   - `emit()` remains compatibility-only and is deprecated in favor of
     `log()` / `try_log()`
+- explicit shutdown drain contract stating:
+  - `shutdown()` drains already-queued events before stopping the writer thread
+  - the drain is bounded by the writer-thread shutdown timeout surface that
+    supersedes the separate maintenance-worker join model
+  - queued-but-unwritten events remaining after that bound are recorded through
+    degraded health and dropped-event accounting
 - locked queue and writer health fields for `LoggingHealthReport`
 - locked public config surface for queue capacity and batching controls
 - explicit public-API governance requirement stating that API changes must be
   documented and machine-checked
 - update `docs/performance-pass.md` so it no longer conflicts with the approved
   redesign
+- dedicated validation gate `scripts/ci/validate_writer_thread_lock.sh` that
+  checks the writer-thread architecture markers in `requirements.md`,
+  `architecture.md`, and `api-design.md`
 
 ## Locked Contract Samples
 
@@ -85,10 +103,8 @@ explicit signatures or equivalent prose-tight code samples:
 
 ```rust
 impl Logger<Running> {
-    // The concrete error types for log() and try_log() are finalized in A.1
-    // and must be named in api-design.md before A.1 closes.
-    pub fn log(&self, event: LogEvent) -> Result<(), /* locked in A.1 */>;
-    pub fn try_log(&self, event: LogEvent) -> Result<(), /* locked in A.1 */>;
+    pub fn log(&self, event: LogEvent) -> Result<(), LogError>;
+    pub fn try_log(&self, event: LogEvent) -> Result<(), TryLogError>;
 
     #[deprecated(
         since = "1.2.0",
@@ -98,6 +114,21 @@ impl Logger<Running> {
 
     pub fn flush(&self) -> Result<(), FlushError>;
     pub fn shutdown(self) -> Logger<Stopped>;
+}
+```
+
+```rust
+pub enum LogError {
+    InvalidEvent(EventError),
+    WriterDegraded,
+    ShutdownTimedOut,
+}
+
+pub enum TryLogError {
+    InvalidEvent(EventError),
+    QueueFull,
+    WriterDegraded,
+    ShutdownTimedOut,
 }
 ```
 
@@ -141,16 +172,22 @@ pub enum WriterState {
 - the docs freeze explicit method signatures or equivalent contract samples for
   `log()`, `try_log()`, deprecated `emit()`, and the queue/writer health
   additions
+- the docs explicitly update `LOG-041`, `LOG-046`, and architecture §3.2.1 so
+  the maintenance-worker model is replaced coherently by the writer-thread
+  shutdown-drain model
+- `docs/architecture.md` contains ADR-010 covering the writer-thread decision,
+  rationale, rejected dedicated-worker alternative, and drop/shutdown
+  consequences
 - the docs explicitly record that future public API changes require both docs
   updates and automated API-gate approval
 
 ## Non-Closure
 
 - `A.1` does not implement runtime code
-- `A.1` does not add CI scripts; it only locks the requirement for them
 
 ## Required Validation
 
 - `bash scripts/ci/validate_docs_consistency.sh`
+- `bash scripts/ci/validate_writer_thread_lock.sh`
 - reviewer-confirmed cross-doc signature and semantics check against this
   sprint doc

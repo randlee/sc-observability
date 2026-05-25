@@ -41,6 +41,7 @@ deprecations land.
 - `scripts/ci/`
 - CI workflow files
 - `docs/public-api-checklist.md`
+- `docs/api-approvals/`
 - contributor/review docs that define API-change approval workflow
 - `docs/phase-A/readiness.md`
 
@@ -55,7 +56,10 @@ deprecations land.
   - `validate_public_api_docs.sh`
 - repo-owned validation scripts that fail when public API changes are not
   reflected in the required documentation artifacts
-- documented approval artifact required for intentional public API changes
+- documented approval artifact required for intentional public API changes:
+  - one file per intentional API change under `docs/api-approvals/`
+  - file name format: `<change-id>.md`
+  - required headings: `## Scope`, `## Approval`, `## Affected Artifacts`
 
 ## Gate Shape
 
@@ -67,6 +71,8 @@ review it directly from the sprint doc:
   baseline
 - one repo-owned validation path that fails when public API docs and checklist
   updates are missing for an intentional API change
+- one machine-checkable approval artifact format under `docs/api-approvals/`
+  that `validate_public_api_docs.sh` can verify directly
 
 ## Paths To Delete
 
@@ -82,6 +88,8 @@ review it directly from the sprint doc:
   is satisfied
 - the sprint names the exact validation commands or scripts QA must run to see
   the API-governance result
+- the approval artifact location and format are concrete enough for
+  `validate_public_api_docs.sh` to fail when the artifact is missing
 
 ## Non-Closure
 
