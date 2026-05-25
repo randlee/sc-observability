@@ -124,7 +124,9 @@ This crate is the lightweight logging layer.
 - LOG-011 `RedactionPolicy` shall support built-in denylist and bearer-token redaction.
 - LOG-012 `RedactionPolicy` shall support consumer-provided `Redactor` implementations.
 - LOG-013 Sink filtering shall be sink-local policy, not producer burden.
-- LOG-014 Invalid log events shall fail fast with `EventError`.
+- LOG-014 Invalid log events shall fail fast, surfacing as
+  `LogError::InvalidEvent(EventError)` from `log()` and
+  `TryLogError::InvalidEvent(EventError)` from `try_log()`.
 - LOG-015 Sink failures after validation shall be fail-open and shall not block the caller’s core flow.
 - LOG-016 Logging health shall expose `LoggingHealthReport`,
   `LoggingHealthState`, `SinkHealth`, and typed `SinkHealthState` (defined in

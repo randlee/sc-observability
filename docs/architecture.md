@@ -454,16 +454,16 @@ pub struct JsonlLogReader {
     /* opaque */
 }
 
-`flush_errors_total` remains part of `LoggingHealthReport` in the writer-thread
-model so flush-failure accounting stays visible even after queue and writer
-health fields are added.
-
 impl JsonlLogReader {
     pub fn new(active_log_path: std::path::PathBuf) -> Self;
     pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>;
     pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>;
 }
 ```
+
+`flush_errors_total` remains part of `LoggingHealthReport` in the writer-thread
+model so flush-failure accounting stays visible even after queue and writer
+health fields are added.
 
 `QueryError` is backed by the stable error-code constants
 `SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`,

@@ -53,14 +53,22 @@ with one queue-backed writer runtime and the locked public logging API surface.
 ## Deliverables
 
 - bounded queue between producer calls and writer-owned sink I/O
+  Requirements: `LOG-016`, `LOG-041`, `LOG-046`
 - one writer thread that owns batching, sink writes, retained-log rotation,
   retained-log pruning, flush, and shutdown drain coordination
+  Requirements: `LOG-041`, `LOG-046`
 - `Logger::log(...)`
+  Requirements: `LOG-014`, `LOG-023`, `LOG-047`
 - `Logger::try_log(...)`
+  Requirements: `LOG-014`, `LOG-023`, `LOG-048`
 - deprecated `Logger::emit(...)` routed through the approved compatibility path
+  Requirements: `LOG-023`
 - extended `LoggingHealthReport` with queue and writer fields
+  Requirements: `LOG-016`
 - query/follow and health updates required to preserve active-plus-rotated log
   correctness under the writer-owned runtime
+  Requirements: `LOG-016`, `LOG-025`, `LOG-026`, `LOG-029`, `LOG-030`,
+  `LOG-031`
 - tests covering queue admission, queue-full behavior, batching, shutdown
   drain, retained-log maintenance under writer ownership, and deprecated
   `emit()` compatibility

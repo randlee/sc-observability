@@ -46,11 +46,16 @@ commands.
 ## Deliverables
 
 - consumer docs explaining `log()` versus `try_log()`
+  Requirements: `DOC-001`, `DOC-002`
 - migration guidance away from `emit()`
+  Requirements: `DOC-002`
 - docs explaining queue admission versus durability
+  Requirements: `DOC-002`, `LOG-016`
 - docs and examples showing queue/writer health inspection
+  Requirements: `DOC-003`, `DOC-004`, `LOG-016`
 - explicit operator guidance that dropped logs, writer degradation, or sustained
   queue pressure are serious `doctor` findings
+  Requirements: `DOC-002`, `DOC-004`, `LOG-016`
 
 ## Paths To Delete
 

@@ -79,6 +79,9 @@ review it directly from the sprint doc:
 - one explicit rule that an empty `docs/api-approvals/` directory is a PASS
   when `README.md` is present and no intentional API change artifact is
   otherwise required
+- `validate_public_api_docs.sh` shall fail when any file under
+  `docs/api-approvals/` other than `README.md` is missing one or more required
+  headings
 
 ## Paths To Delete
 
@@ -96,6 +99,9 @@ review it directly from the sprint doc:
   the API-governance result
 - the approval artifact location and format are concrete enough for
   `validate_public_api_docs.sh` to fail when the artifact is missing
+- `NFR-010` and `NFR-011` compliance is demonstrated by the CI scripts
+  delivered in `A.2`: `validate_docs_consistency.sh` satisfies `NFR-010` and
+  the version-literal check satisfies `NFR-011`
 
 ## Non-Closure
 

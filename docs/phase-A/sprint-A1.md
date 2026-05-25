@@ -27,9 +27,12 @@ before implementation begins.
 ## Hard Dependencies
 
 - `docs/project-plan.md`
-- `docs/requirements.md`
-- `docs/architecture.md`
-- `docs/api-design.md`
+- `docs/requirements.md` from the `plan/phase-a` branch state, not the
+  `develop` baseline
+- `docs/architecture.md` from the `plan/phase-a` branch state, not the
+  `develop` baseline
+- `docs/api-design.md` from the `plan/phase-a` branch state, not the
+  `develop` baseline
 - `docs/public-api-checklist.md`
 - `docs/performance-pass.md` as ancillary historical context only; it is not a
   normative contract source for the phase-A API lock
@@ -44,6 +47,7 @@ before implementation begins.
 ## Exact Targets
 
 - `docs/requirements.md`
+- `docs/requirements.md` `LOG-014`
 - `docs/architecture.md`
 - `docs/architecture.md` §3.2 owns list
 - `docs/architecture.md` §3.2.1 and §7 (`ADR-010`)
@@ -199,8 +203,8 @@ pub enum WriterState {
 - the docs freeze explicit method signatures or equivalent contract samples for
   `log()`, `try_log()`, deprecated `emit()`, and the queue/writer health
   additions
-- `Logger::shutdown()` has the same return type in `requirements.md`,
-  `api-design.md`, and this sprint doc
+- `Logger::shutdown()` returns `Logger<Stopped>` with no `Result` wrapper and
+  is identical in `requirements.md`, `api-design.md`, and this sprint doc
 - `requirements.md` contains `LOG-047` and `LOG-048`, and this sprint cites
   them as the authoritative error-contract requirements for `LogError` and
   `TryLogError`
