@@ -31,7 +31,8 @@ before implementation begins.
 - `docs/architecture.md`
 - `docs/api-design.md`
 - `docs/public-api-checklist.md`
-- `docs/performance-pass.md`
+- `docs/performance-pass.md` as ancillary historical context only; it is not a
+  normative contract source for the phase-A API lock
 
 ## Prerequisites
 
@@ -44,7 +45,9 @@ before implementation begins.
 
 - `docs/requirements.md`
 - `docs/architecture.md`
+- `docs/architecture.md` §3.2 owns list
 - `docs/architecture.md` §3.2.1 and §7 (`ADR-010`)
+- `docs/architecture.md` §3.2.4
 - `docs/api-design.md`
 - `docs/project-plan.md`
 - `docs/public-api-checklist.md`
@@ -60,15 +63,24 @@ before implementation begins.
   thread during idle or post-batch windows rather than on a dedicated
   maintenance-only thread
 - explicit updates to:
+  - `LOG-023`
   - `LOG-041`
   - `LOG-046`
+  - `LOG-047`
+  - `LOG-048`
   - `docs/architecture.md` §3.2.1
   so the normative docs no longer describe a separate maintenance worker model
+- explicit lock text for the validator-sensitive requirements:
+  - `LOG-041 Retained-log maintenance shall run on the writer thread during idle or post-batch windows, stay off the producer hot path, and shall not require an async runtime dependency.`
+  - `LOG-046 \`Logger::shutdown()\` shall drain queued events, stop the writer thread within the configured bounded shutdown timeout, and record timeout/degraded state in health or error reporting before returning when the drain does not finish cleanly.`
 - explicit statement that producers validate, redact, and queue log events,
   while one writer thread owns batching, sink writes, rotation, pruning, and
   flush
 - ADR-010 in `docs/architecture.md` recording the writer-thread concurrency
   decision, rationale, rejected alternatives, and shutdown/drop consequences
+- explicit statement that `WriterState` is defined in
+  `sc-observability-types` per `TYP-030` / `TYP-040` and re-exported by
+  `sc-observability`
 - locked contract for:
   - `Logger::log(...)`
   - `Logger::try_log(...)`
@@ -80,6 +92,10 @@ before implementation begins.
   - `try_log()` is non-blocking and returns explicit queue-full failure
   - `emit()` remains compatibility-only and is deprecated in favor of
     `log()` / `try_log()`
+- explicit statement that `Logger<Running>` methods include `log()`,
+  `try_log()`, `flush()`, and deprecated `emit()`
+- explicit statement that `flush_errors_total` remains part of
+  `LoggingHealthReport` and is not removed by the writer-thread redesign
 - explicit shutdown drain contract stating:
   - `shutdown()` drains already-queued events before stopping the writer thread
   - the drain is bounded by the writer-thread shutdown timeout surface that
@@ -87,9 +103,20 @@ before implementation begins.
   - queued-but-unwritten events remaining after that bound are recorded through
     degraded health and dropped-event accounting
 - locked queue and writer health fields for `LoggingHealthReport`
+- locked logging error-code registry additions in `api-design.md` §11.9:
+  - `LOGGER_QUEUE_FULL`
+  - `LOGGER_WRITER_DEGRADED`
+  - `LOGGER_SHUTDOWN_TIMED_OUT`
 - locked public config surface for queue capacity and batching controls
 - explicit public-API governance requirement stating that API changes must be
   documented and machine-checked
+- explicit phase-A semver intent that the planned deprecation annotation uses
+  `since = "1.2.0"` and is locked against the `project-plan.md` phase-A
+  version designation, with final enforcement handled by the `A.2`
+  governance gate
+- explicit `project-plan.md` phase-A section for `v1.2.0` containing the
+  sprint sequence `A.1` through `A.4` and exit criteria consistent with
+  `docs/phase-A/readiness.md`
 - update `docs/performance-pass.md` so it no longer conflicts with the approved
   redesign
 - dedicated validation gate `scripts/ci/validate_writer_thread_lock.sh` that
@@ -172,14 +199,27 @@ pub enum WriterState {
 - the docs freeze explicit method signatures or equivalent contract samples for
   `log()`, `try_log()`, deprecated `emit()`, and the queue/writer health
   additions
+- `Logger::shutdown()` has the same return type in `requirements.md`,
+  `api-design.md`, and this sprint doc
+- `requirements.md` contains `LOG-047` and `LOG-048`, and this sprint cites
+  them as the authoritative error-contract requirements for `LogError` and
+  `TryLogError`
 - the docs explicitly update `LOG-041`, `LOG-046`, and architecture §3.2.1 so
   the maintenance-worker model is replaced coherently by the writer-thread
   shutdown-drain model
+- the docs explicitly retain `flush_errors_total` consistently, and that
+  disposition is reflected in both `api-design.md` and `architecture.md`
+  §3.2.4
 - `docs/architecture.md` contains ADR-010 covering the writer-thread decision,
   rationale, rejected dedicated-worker alternative, and drop/shutdown
   consequences
 - the docs explicitly record that future public API changes require both docs
   updates and automated API-gate approval
+- `project-plan.md` contains the `v1.2.0` phase-A section, sprint sequence,
+  and exit criteria consistent with `docs/phase-A/readiness.md`
+- `NFR-010` and `NFR-011` compliance is explicitly verified for the normative
+  doc updates, including the `1.2.0` version literal used by the planned
+  deprecation annotation
 
 ## Non-Closure
 

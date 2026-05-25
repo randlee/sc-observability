@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ ! -f docs/requirements.md ]]; then
+    echo "ERROR: run from repo root" >&2
+    exit 1
+fi
+
 python3 - <<'PY'
 from pathlib import Path
 
@@ -12,6 +17,8 @@ api_design = (root / "docs/api-design.md").read_text(encoding="utf-8")
 requirements_checks = [
     "LOG-041 Retained-log maintenance shall run on the writer thread during idle or post-batch windows",
     "LOG-046 `Logger::shutdown()` shall drain queued events, stop the writer thread within the configured bounded shutdown timeout",
+    "LOG-047 `LogError` shall be the blocking queue-admission error surface for",
+    "LOG-048 `TryLogError` shall be the non-blocking queue-admission error surface",
 ]
 for needle in requirements_checks:
     if needle not in requirements:
@@ -29,6 +36,7 @@ for needle in architecture_checks:
 api_checks = [
     "pub fn log(&self, event: LogEvent) -> Result<(), LogError>;",
     "pub fn try_log(&self, event: LogEvent) -> Result<(), TryLogError>;",
+    "pub flush_errors_total: u64,",
     "pub queue_high_water_mark: u64,",
     "pub queue_full_drops_total: u64,",
     "pub writer_state: WriterState,",

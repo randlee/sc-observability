@@ -151,8 +151,8 @@ This crate is the lightweight logging layer.
 - LOG-022 The logging layer shall not expose or assume an HTTP health endpoint; health is available through in-process health objects only.
 - LOG-023 `Logger` lifecycle behavior shall be explicit:
   - `Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`
-  - `log()`, `try_log()`, deprecated `emit()`, `query()`, and `follow()` are
-    available only on `Logger<Running>`
+  - `log()`, `try_log()`, `flush()`, deprecated `emit()`, `query()`, and
+    `follow()` are available only on `Logger<Running>`
   - `log()` blocks until queue admission and does not guarantee durability
   - `try_log()` is non-blocking and returns explicit queue-full failure
   - `Logger<Stopped>` remains usable for health inspection only
@@ -201,6 +201,13 @@ This crate is the lightweight logging layer.
 - LOG-045 Retained-log maintenance failures shall be fail-open, shall not crash
   the logger, and shall not block or interfere with the emit path.
 - LOG-046 `Logger::shutdown()` shall drain queued events, stop the writer thread within the configured bounded shutdown timeout, and record timeout/degraded state in health or error reporting before returning when the drain does not finish cleanly.
+- LOG-047 `LogError` shall be the blocking queue-admission error surface for
+  `Logger::log(...)` and shall include `WriterDegraded` and
+  `ShutdownTimedOut` variants in addition to invalid-event rejection.
+- LOG-048 `TryLogError` shall be the non-blocking queue-admission error surface
+  for `Logger::try_log(...)` and shall include `QueueFull`,
+  `WriterDegraded`, and `ShutdownTimedOut` variants in addition to
+  invalid-event rejection.
 
 ### 4.2 Consumer Documentation Requirements
 

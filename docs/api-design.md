@@ -1477,7 +1477,7 @@ impl Logger<Running> {
     )]
     pub fn emit(&self, event: LogEvent) -> Result<(), EventError>;
     pub fn flush(&self) -> Result<(), FlushError>;
-    pub fn shutdown(self) -> Result<Logger<Stopped>, ShutdownError>;
+    pub fn shutdown(self) -> Logger<Stopped>;
 }
 
 impl<State> Logger<State> {
@@ -1604,6 +1604,9 @@ Rules:
   - `DEFAULT_ENABLE_CONSOLE_SINK`
 - `src/error_codes.rs`
   - `LOGGER_INVALID_EVENT`
+  - `LOGGER_QUEUE_FULL`
+  - `LOGGER_WRITER_DEGRADED`
+  - `LOGGER_SHUTDOWN_TIMED_OUT`
   - `LOGGER_SHUTDOWN`
   - `LOGGER_SINK_WRITE_FAILED`
   - `LOGGER_INIT_FAILED`

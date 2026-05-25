@@ -60,6 +60,9 @@ deprecations land.
   - one file per intentional API change under `docs/api-approvals/`
   - file name format: `<change-id>.md`
   - required headings: `## Scope`, `## Approval`, `## Affected Artifacts`
+  - empty `docs/api-approvals/` is an allowed steady-state until the first
+    intentional API change lands; `docs/api-approvals/README.md` is the
+    required sentinel that documents this rule
 
 ## Gate Shape
 
@@ -73,6 +76,9 @@ review it directly from the sprint doc:
   updates are missing for an intentional API change
 - one machine-checkable approval artifact format under `docs/api-approvals/`
   that `validate_public_api_docs.sh` can verify directly
+- one explicit rule that an empty `docs/api-approvals/` directory is a PASS
+  when `README.md` is present and no intentional API change artifact is
+  otherwise required
 
 ## Paths To Delete
 

@@ -68,8 +68,7 @@ with one queue-backed writer runtime and the locked public logging API surface.
 ## Paths To Delete
 
 - dedicated-worker coordination types in
-  `crates/sc-observability/src/maintenance.rs` if superseded by the final
-  writer-owned runtime
+  `crates/sc-observability/src/maintenance.rs`
 - any caller-thread maintenance signaling paths that exist only to wake the
   removed dedicated worker
 
@@ -86,6 +85,9 @@ with one queue-backed writer runtime and the locked public logging API surface.
   runtime
 - query/follow behavior remains correct against active and rotated log files
   after the writer-runtime change
+- `crates/sc-observability/src/maintenance.rs` no longer carries the removed
+  dedicated-worker coordination scaffolding once the writer-owned runtime is
+  in place
 
 ## Required Validation
 

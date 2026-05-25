@@ -99,6 +99,15 @@ Planned sequence:
      `try_log()` and can surface queue/writer degradation in app health or
      `doctor` output
 
+Phase A exit criteria:
+
+- `A.1` through `A.4` each record an accepted commit and verdict in
+  `docs/phase-A/readiness.md`
+- the final accepted runtime uses one writer-owned queue-backed logging model
+  rather than a maintenance-only background worker
+- public API changes are documented and CI-visible
+- consumer docs teach `log()` / `try_log()` as the preferred logging APIs
+
 ## Rule
 
 Any sprint plan added here must preserve the standalone boundary defined by:

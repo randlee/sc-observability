@@ -334,9 +334,12 @@ Type ownership is split as follows:
 - `sc-observability-types` owns `LogQuery`, `LogOrder`,
   `LogFieldMatch`, `LogSnapshot`, `QueryError`,
   `QueryHealthState`, `QueryHealthReport`, `MaintenanceHealthReport`,
-  `MaintenanceWorkerState`, and `ObservabilityHealthProvider`
+  `MaintenanceWorkerState`, `WriterState`, and
+  `ObservabilityHealthProvider`
 - `sc-observability-types` extends `LoggingHealthReport` with
-  `query: Option<QueryHealthReport>` and
+  `flush_errors_total`, `queue_depth`, `queue_capacity`,
+  `queue_high_water_mark`, `queue_full_drops_total`, `writer_state`,
+  `last_writer_error`, `query: Option<QueryHealthReport>`, and
   `maintenance: Option<MaintenanceHealthReport>`
 - `sc-observability` owns `Logger::query`, `Logger::follow`,
   `LogFollowSession`, and `JsonlLogReader`
@@ -412,16 +415,28 @@ pub struct LoggingHealthReport {
     pub flush_errors_total: u64,
     pub active_log_path: std::path::PathBuf,
     pub sink_statuses: Vec<SinkHealth>,
+    pub queue_depth: u64,
+    pub queue_capacity: u64,
+    pub queue_high_water_mark: u64,
+    pub queue_full_drops_total: u64,
+    pub writer_state: WriterState,
+    pub last_writer_error: Option<DiagnosticSummary>,
     pub query: Option<QueryHealthReport>,
     pub maintenance: Option<MaintenanceHealthReport>,
     pub last_error: Option<DiagnosticSummary>,
+}
+
+pub enum WriterState {
+    Running,
+    Degraded,
+    Stopped,
 }
 
 pub trait ObservabilityHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync {
     fn telemetry_health(&self) -> TelemetryHealthReport;
 }
 
-impl Logger {
+impl Logger<Running> {
     pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>;
     pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>;
 }
@@ -438,6 +453,10 @@ impl LogFollowSession {
 pub struct JsonlLogReader {
     /* opaque */
 }
+
+`flush_errors_total` remains part of `LoggingHealthReport` in the writer-thread
+model so flush-failure accounting stays visible even after queue and writer
+health fields are added.
 
 impl JsonlLogReader {
     pub fn new(active_log_path: std::path::PathBuf) -> Self;
