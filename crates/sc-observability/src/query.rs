@@ -495,7 +495,7 @@ fn file_identity_for_path_with_metadata(
     };
 
     let file = File::open(path)?;
-    let handle = file.as_raw_handle() as isize;
+    let handle = file.as_raw_handle() as *mut std::ffi::c_void;
     let mut info = BY_HANDLE_FILE_INFORMATION::default();
     // SAFETY: `handle` comes from a live `std::fs::File`, and `info` points to
     // writable stack storage for the OS to fill synchronously.

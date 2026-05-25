@@ -49,7 +49,7 @@ pub use sc_observability_types::{
     SinkHealth, SinkHealthState, TargetCategory, Timestamp,
 };
 use sc_observability_types::{LevelFilter, LogSinkError, ProcessIdentityPolicy};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 #[cfg(feature = "fault-injection")]
 #[doc(inline)]
@@ -137,8 +137,8 @@ impl std::fmt::Display for ByteCount {
 }
 
 /// Strongly typed maintenance pass cadence.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MaintenanceCadence(#[serde(with = "duration_millis_serde")] Duration);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MaintenanceCadence(Duration);
 
 impl MaintenanceCadence {
     /// Creates a cadence from one duration.
@@ -152,9 +152,33 @@ impl MaintenanceCadence {
     }
 }
 
+impl Serialize for MaintenanceCadence {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(duration_as_millis(self.0))
+    }
+}
+
+impl<'de> Deserialize<'de> for MaintenanceCadence {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Self(Duration::from_millis(u64::deserialize(deserializer)?)))
+    }
+}
+
+impl std::fmt::Display for MaintenanceCadence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}ms", duration_as_millis(self.0))
+    }
+}
+
 /// Strongly typed maintenance-worker join timeout.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MaintenanceJoinTimeout(#[serde(with = "duration_millis_serde")] Duration);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MaintenanceJoinTimeout(Duration);
 
 impl MaintenanceJoinTimeout {
     /// Creates a join timeout from one duration.
@@ -168,9 +192,33 @@ impl MaintenanceJoinTimeout {
     }
 }
 
+impl Serialize for MaintenanceJoinTimeout {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(duration_as_millis(self.0))
+    }
+}
+
+impl<'de> Deserialize<'de> for MaintenanceJoinTimeout {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Self(Duration::from_millis(u64::deserialize(deserializer)?)))
+    }
+}
+
+impl std::fmt::Display for MaintenanceJoinTimeout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}ms", duration_as_millis(self.0))
+    }
+}
+
 /// Strongly typed retained-log max age.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RetentionMaxAge(#[serde(with = "duration_millis_serde")] Duration);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RetentionMaxAge(Duration);
 
 impl RetentionMaxAge {
     /// Creates one retention max age from calendar days.
@@ -191,6 +239,30 @@ impl RetentionMaxAge {
     /// Returns whether the wrapped duration is zero.
     pub const fn is_zero(self) -> bool {
         self.0.is_zero()
+    }
+}
+
+impl Serialize for RetentionMaxAge {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u64(duration_as_millis(self.0))
+    }
+}
+
+impl<'de> Deserialize<'de> for RetentionMaxAge {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Self(Duration::from_millis(u64::deserialize(deserializer)?)))
+    }
+}
+
+impl std::fmt::Display for RetentionMaxAge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}ms", duration_as_millis(self.0))
     }
 }
 
@@ -226,29 +298,11 @@ impl Default for RetainedLogPolicy {
     }
 }
 
-mod duration_millis_serde {
-    use std::time::Duration;
-
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S>(value: &Duration, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_u64(
-            value
-                .as_millis()
-                .try_into()
-                .map_err(serde::ser::Error::custom)?,
-        )
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Duration, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Ok(Duration::from_millis(u64::deserialize(deserializer)?))
-    }
+fn duration_as_millis(duration: Duration) -> u64 {
+    duration
+        .as_millis()
+        .try_into()
+        .expect("duration milliseconds should fit in u64")
 }
 
 /// Redacts one key/value pair before an event reaches registered sinks.
@@ -816,6 +870,11 @@ mod tests {
         };
 
         let encoded = serde_json::to_string(&policy).expect("serialize retained-log policy");
+        let value: serde_json::Value =
+            serde_json::from_str(&encoded).expect("decode retained-log policy json");
+        assert!(value["retention_max_age"].is_u64());
+        assert!(value["maintenance_cadence"].is_u64());
+        assert!(value["maintenance_join_timeout"].is_u64());
         let decoded: RetainedLogPolicy =
             serde_json::from_str(&encoded).expect("deserialize retained-log policy");
 

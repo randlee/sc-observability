@@ -42,7 +42,7 @@ pub struct SinkHealth {
 /// Strongly typed file-count value exposed through public health and config APIs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct FileCount(pub usize);
+pub struct FileCount(usize);
 
 impl FileCount {
     /// Creates one file count from a usize.
