@@ -126,7 +126,10 @@ This crate is the lightweight logging layer.
 - LOG-015 Sink failures after validation shall be fail-open and shall not block the caller’s core flow.
 - LOG-016 Logging health shall expose `LoggingHealthReport`,
   `LoggingHealthState`, `SinkHealth`, and typed `SinkHealthState` (defined in
-  `sc-observability-types` and re-exported by `sc-observability`).
+  `sc-observability-types` and re-exported by `sc-observability`). For the
+  writer-thread runtime, `LoggingHealthReport` shall also expose `queue_depth`,
+  `queue_capacity`, `queue_high_water_mark`, `queue_full_drops_total`,
+  `WriterState`, and `last_writer_error`.
 - LOG-017 `sc-observability` shall not own typed observation routing.
 - LOG-018 `sc-observability` shall not own OTLP transport or any OpenTelemetry dependency.
 - LOG-019 `sc-observability` shall not own ATM-specific metadata rules, path conventions, or compatibility behavior.
@@ -146,7 +149,10 @@ This crate is the lightweight logging layer.
 - LOG-022 The logging layer shall not expose or assume an HTTP health endpoint; health is available through in-process health objects only.
 - LOG-023 `Logger` lifecycle behavior shall be explicit:
   - `Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`
-  - `emit()`, `query()`, and `follow()` are available only on `Logger<Running>`
+  - `log()`, `try_log()`, deprecated `emit()`, `query()`, and `follow()` are
+    available only on `Logger<Running>`
+  - `log()` blocks until queue admission and does not guarantee durability
+  - `try_log()` is non-blocking and returns explicit queue-full failure
   - `Logger<Stopped>` remains usable for health inspection only
   - logger-created `LogFollowSession::poll()` after `shutdown()` returns `QueryError::Shutdown`
 - LOG-024 `sc-observability` shall own a crate-local sealed `LogEmitter` trait for producer injection when logging-only use is desired.
@@ -178,9 +184,7 @@ This crate is the lightweight logging layer.
   `maintenance_max_work_per_pass`, using strong public newtypes for bytes and
   maintenance timing fields. `retention_max_age` supersedes the prior
   `retention.max_age_days` field.
-- LOG-041 Retained-log maintenance shall run off the main emit path on a
-  worker owned by `sc-observability` and shall not require an async runtime
-  dependency.
+- LOG-041 Retained-log maintenance shall run on the writer thread during idle or post-batch windows, stay off the producer hot path, and shall not require an async runtime dependency.
 - LOG-042 Downstream applications shall configure retained-log policy through
   `sc-observability` config only and shall not need to spawn, join, or manage
   a separate prune or rotation worker.
@@ -194,10 +198,7 @@ This crate is the lightweight logging layer.
   `Degraded`, and `Stopped`.
 - LOG-045 Retained-log maintenance failures shall be fail-open, shall not crash
   the logger, and shall not block or interfere with the emit path.
-- LOG-046 `Logger::shutdown()` shall remain bounded while retained-log
-  maintenance is enabled: it shall join the maintenance worker within the
-  configured timeout or record timeout/degraded state in health or error
-  reporting before returning.
+- LOG-046 `Logger::shutdown()` shall drain queued events, stop the writer thread within the configured bounded shutdown timeout, and record timeout/degraded state in health or error reporting before returning when the drain does not finish cleanly.
 
 ### 4.2 Consumer Documentation Requirements
 
