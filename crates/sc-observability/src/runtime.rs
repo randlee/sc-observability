@@ -88,10 +88,6 @@ impl Logger {
             }
         }
 
-        if let Some(maintenance) = &self.runtime.maintenance {
-            maintenance.notify_activity();
-        }
-
         Ok(())
     }
 

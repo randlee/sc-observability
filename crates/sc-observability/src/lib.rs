@@ -1135,7 +1135,7 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.retained_log_policy.rotation_max_bytes = 350;
         config.retained_log_policy.rotation_max_files = 4;
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(50);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in ["req-1", "req-2", "req-3"] {
@@ -1196,7 +1196,7 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.retained_log_policy.rotation_max_bytes = 350;
         config.retained_log_policy.rotation_max_files = 6;
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        config.retained_log_policy.maintenance_cadence = Duration::from_millis(50);
         let logger = Logger::new(config).expect("logger");
 
         for request_id in ["req-1", "req-2", "req-3", "req-4", "req-5"] {
@@ -1274,7 +1274,7 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root);
         config.retained_log_policy.rotation_max_bytes = 350;
         config.retained_log_policy.rotation_max_files = 6;
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        config.retained_log_policy.maintenance_cadence = Duration::from_secs(3600);
         let logger = Logger::new(config).expect("logger");
 
         logger
@@ -1307,7 +1307,7 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.clone());
         config.retained_log_policy.rotation_max_bytes = 350;
         config.retained_log_policy.rotation_max_files = 6;
-        config.retained_log_policy.maintenance_cadence = Duration::from_millis(5);
+        config.retained_log_policy.maintenance_cadence = Duration::from_secs(3600);
         let logger = Logger::new(config).expect("logger");
 
         logger

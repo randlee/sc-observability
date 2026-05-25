@@ -11,12 +11,14 @@ use sc_observability_types::{
 use crate::sinks::JsonlFileSink;
 use crate::{RetainedLogPolicy, error_codes};
 
+/// Per-pass retained-log maintenance counters recorded by the worker.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct MaintenancePassStats {
     pub(crate) rotated_files: u64,
     pub(crate) pruned_files: u64,
 }
 
+/// Background retained-log maintenance runtime owned by one `Logger`.
 pub(crate) struct MaintenanceRuntime {
     tracker: Arc<MaintenanceTracker>,
     signal: Arc<MaintenanceSignal>,
@@ -26,6 +28,11 @@ pub(crate) struct MaintenanceRuntime {
 }
 
 impl MaintenanceRuntime {
+    /// Spawns the retained-log maintenance worker for one file sink.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the worker thread cannot be spawned.
     pub(crate) fn new(sink: Arc<JsonlFileSink>, policy: RetainedLogPolicy) -> Self {
         let tracker = Arc::new(MaintenanceTracker::new());
         let signal = Arc::new(MaintenanceSignal::default());
@@ -59,14 +66,23 @@ impl MaintenanceRuntime {
         }
     }
 
-    pub(crate) fn notify_activity(&self) {
-        self.signal.request_pass();
-    }
-
+    /// Returns the current retained-log maintenance health snapshot.
+    ///
+    /// # Panics
+    ///
+    /// Panics if internal maintenance state has been poisoned.
     pub(crate) fn snapshot(&self) -> MaintenanceHealthReport {
         self.tracker.snapshot()
     }
 
+    /// Requests worker shutdown and waits up to the configured join timeout.
+    ///
+    /// Returns a diagnostic summary when shutdown degrades because the worker
+    /// panicked, timed out, or disconnected before the join completed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the worker coordination mutexes have been poisoned.
     pub(crate) fn shutdown(&self) -> Option<DiagnosticSummary> {
         self.signal.request_stop();
 
@@ -117,12 +133,6 @@ struct SignalState {
 }
 
 impl MaintenanceSignal {
-    fn request_pass(&self) {
-        let mut state = self.state.lock().expect("maintenance signal poisoned");
-        state.pass_requested = true;
-        self.condvar.notify_one();
-    }
-
     fn request_stop(&self) {
         let mut state = self.state.lock().expect("maintenance signal poisoned");
         state.stop_requested = true;
@@ -314,11 +324,13 @@ fn retained_log_worker(
 static TEST_PASS_DELAY_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 #[cfg(test)]
+/// Clears the shared test-only delay activity flag after maintenance timing assertions.
 pub(crate) fn clear_test_pass_delay() {
     TEST_PASS_DELAY_ACTIVE.store(false, Ordering::SeqCst);
 }
 
 #[cfg(test)]
+/// Returns whether any test-configured maintenance worker is currently inside its injected delay.
 pub(crate) fn test_pass_delay_active() -> bool {
     TEST_PASS_DELAY_ACTIVE.load(Ordering::SeqCst)
 }
