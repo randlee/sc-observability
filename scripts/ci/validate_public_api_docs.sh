@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "$(dirname "$0")/public_api_common.sh"
+
+ensure_repo_root
+
+approvals_dir="docs/api-approvals"
+readme_path="${approvals_dir}/README.md"
+
+if [[ ! -d "$approvals_dir" ]]; then
+    echo "missing ${approvals_dir}" >&2
+    exit 1
+fi
+
+if [[ ! -f "$readme_path" ]]; then
+    echo "missing ${readme_path}" >&2
+    exit 1
+fi
+
+python3 - <<'PY'
+from pathlib import Path
+
+approvals_dir = Path("docs/api-approvals")
+required_headings = ["## Scope", "## Approval", "## Affected Artifacts"]
+
+for path in sorted(approvals_dir.glob("*.md")):
+    if path.name == "README.md":
+        continue
+    text = path.read_text(encoding="utf-8")
+    missing = [heading for heading in required_headings if heading not in text]
+    if missing:
+        raise SystemExit(
+            f"{path} missing required heading(s): {', '.join(missing)}"
+        )
+PY
+
+cache_dir="$(public_api_cache_dir)"
+status_path="$cache_dir/public-api-diff.status"
+head_rev="$(git rev-parse HEAD)"
+
+if [[ ! -f "$status_path" ]] || ! grep -q "^PUBLIC_API_DIFF_HEAD=${head_rev}$" "$status_path"; then
+    bash scripts/ci/validate_public_api_diff.sh >/dev/null
+fi
+
+source "$status_path"
+
+approval_files=()
+while IFS= read -r path; do
+    approval_files+=("$path")
+done < <(find "$approvals_dir" -maxdepth 1 -type f -name '*.md' ! -name 'README.md' | sort)
+
+if [[ "${PUBLIC_API_DIFF_FOUND}" == "0" ]]; then
+    echo "public API docs validation passed (no API diff detected)"
+    exit 0
+fi
+
+if [[ ${#approval_files[@]} -eq 0 ]]; then
+    echo "public API diff detected but no approval artifact exists under ${approvals_dir}" >&2
+    exit 1
+fi
+
+base_ref="${PUBLIC_API_DIFF_BASE_REF}"
+changed_files="$(git diff --name-only "$(git merge-base HEAD "$base_ref")"..HEAD)"
+
+python3 - <<'PY' "$changed_files" "${approval_files[@]}"
+import sys
+
+changed = {line.strip() for line in sys.argv[1].splitlines() if line.strip()}
+approval_files = sys.argv[2:]
+
+required_checklist = "docs/public-api-checklist.md"
+normative_docs = {
+    "docs/requirements.md",
+    "docs/architecture.md",
+    "docs/api-design.md",
+}
+
+if required_checklist not in changed:
+    raise SystemExit(
+        "public API diff detected but docs/public-api-checklist.md was not updated"
+    )
+
+if not (normative_docs & changed):
+    raise SystemExit(
+        "public API diff detected but no normative API doc update was recorded in "
+        "docs/requirements.md, docs/architecture.md, or docs/api-design.md"
+    )
+
+if not any(path in changed for path in approval_files):
+    raise SystemExit(
+        "public API diff detected but no approval artifact change was recorded under docs/api-approvals/"
+    )
+PY
+
+echo "public API docs validation passed"
