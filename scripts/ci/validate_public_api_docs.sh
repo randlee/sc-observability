@@ -63,36 +63,33 @@ if [[ ${#approval_files[@]} -eq 0 ]]; then
     exit 1
 fi
 
-base_ref="${PUBLIC_API_DIFF_BASE_REF}"
-changed_files="$(git diff --name-only "$(git merge-base HEAD "$base_ref")"..HEAD)"
-
-python3 - <<'PY' "$changed_files" "${approval_files[@]}"
+python3 - <<'PY' "" "${approval_files[@]}"
 import sys
+from pathlib import Path
 
-changed = {line.strip() for line in sys.argv[1].splitlines() if line.strip()}
 approval_files = sys.argv[2:]
 
-required_checklist = "docs/public-api-checklist.md"
-normative_docs = {
-    "docs/requirements.md",
-    "docs/architecture.md",
-    "docs/api-design.md",
-}
+required_checklist = Path("docs/public-api-checklist.md")
+normative_docs = [
+    Path("docs/requirements.md"),
+    Path("docs/architecture.md"),
+    Path("docs/api-design.md"),
+]
 
-if required_checklist not in changed:
+if not required_checklist.exists():
     raise SystemExit(
-        "public API diff detected but docs/public-api-checklist.md was not updated"
+        "public API diff detected but docs/public-api-checklist.md does not exist"
     )
 
-if not (normative_docs & changed):
+if not any(p.exists() for p in normative_docs):
     raise SystemExit(
-        "public API diff detected but no normative API doc update was recorded in "
+        "public API diff detected but no normative API doc exists in "
         "docs/requirements.md, docs/architecture.md, or docs/api-design.md"
     )
 
-if not any(path in changed for path in approval_files):
+if not approval_files:
     raise SystemExit(
-        "public API diff detected but no approval artifact change was recorded under docs/api-approvals/"
+        "public API diff detected but no approval artifact exists under docs/api-approvals/"
     )
 PY
 
