@@ -9,7 +9,7 @@
 
 use std::sync::{Arc, atomic::AtomicBool};
 
-use sc_observability_types::InitError;
+use sc_observability_types::{ErrorContext, InitError, Remediation};
 
 use crate::{
     ConsoleSink, JsonlFileSink, Logger, LoggerConfig, LoggerRuntime, Running, SinkRegistration,
@@ -46,6 +46,16 @@ impl LoggerBuilder {
     /// let _logger = builder.build();
     /// ```
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
+        if config.queue_capacity == 0 {
+            return Err(InitError(Box::new(ErrorContext::new(
+                crate::error_codes::LOGGER_INIT_FAILED,
+                "logger queue capacity must be greater than zero",
+                Remediation::recoverable(
+                    "set LoggerConfig.queue_capacity to a positive value before constructing the logger",
+                    ["increase queue_capacity to at least 1"],
+                ),
+            ))));
+        }
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let mut sinks = Vec::new();
         let mut file_sink = None;
@@ -86,10 +96,14 @@ impl LoggerBuilder {
         Logger {
             runtime: LoggerRuntime::new(
                 query_available,
+                sinks.clone(),
                 file_sink,
                 retained_log_policy,
+                config.queue_capacity,
                 #[cfg(test)]
                 config.maintenance_test_pass_delay,
+                #[cfg(test)]
+                config.maintenance_test_pass_signal.clone(),
             ),
             config,
             sinks,

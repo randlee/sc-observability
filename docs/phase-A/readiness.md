@@ -36,7 +36,7 @@ Sprint planning status convention:
 | --- | --- | --- | --- | --- |
 | A.1 | `PENDING` | `PENDING` | `implemented` | branch `feature/thread-optimization-a1-architecture-lock` closes the architecture/API lock deliverables; awaiting QA verdict and accepted commit |
 | A.2 | `PENDING` | `PENDING` | `implemented` | branch `feature/thread-optimization-a2-api-governance` closes the public-API governance gates and approval workflow deliverables; awaiting QA verdict and accepted commit |
-| A.3 | `PENDING` | `PENDING` | `planned` | implement bounded queue, writer thread, batching, compatibility deprecation path, and health/runtime updates |
+| A.3 | `PENDING` | `PENDING` | `implemented` | branch `feature/thread-optimization-a3-writer-runtime` closes the writer runtime, queue-backed logging API, compatibility emit path, and queue/writer health deliverables; awaiting QA verdict and accepted commit |
 | A.4 | `PENDING` | `PENDING` | `planned` | publish consumer rollout and operational guidance for queue-backed logging and doctor-facing health checks |
 
 ## Phase-A Compliance Note

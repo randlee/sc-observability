@@ -100,12 +100,35 @@ pub struct LoggingHealthReport {
     pub active_log_path: PathBuf,
     /// Per-sink health snapshots.
     pub sink_statuses: Vec<SinkHealth>,
+    /// Current admitted-but-not-yet-written log count.
+    pub queue_depth: u64,
+    /// Configured bounded queue capacity.
+    pub queue_capacity: u64,
+    /// Highest observed queue depth since startup.
+    pub queue_high_water_mark: u64,
+    /// Total explicit queue-full drops from non-blocking logging calls.
+    pub queue_full_drops_total: u64,
+    /// Background writer-thread state.
+    pub writer_state: WriterState,
+    /// Optional last writer-thread error summary.
+    pub last_writer_error: Option<DiagnosticSummary>,
     /// Optional query/follow health snapshot.
     pub query: Option<QueryHealthReport>,
     /// Optional retained-log maintenance health snapshot.
     pub maintenance: Option<MaintenanceHealthReport>,
     /// Optional last logging error summary.
     pub last_error: Option<DiagnosticSummary>,
+}
+
+/// Runtime state for the queue-backed writer thread.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WriterState {
+    /// The writer thread is active and accepting queue work.
+    Running,
+    /// The writer thread is active but has degraded during write, flush, or shutdown work.
+    Degraded,
+    /// The writer thread has stopped cleanly.
+    Stopped,
 }
 
 /// Runtime state for the retained-log maintenance worker.
@@ -298,6 +321,12 @@ mod tests {
             flush_errors_total: 0,
             active_log_path: std::path::PathBuf::from("logs/service.log.jsonl"),
             sink_statuses: vec![sink],
+            queue_depth: 0,
+            queue_capacity: 1024,
+            queue_high_water_mark: 16,
+            queue_full_drops_total: 2,
+            writer_state: WriterState::Running,
+            last_writer_error: Some(DiagnosticSummary::from(&diagnostic())),
             query: Some(QueryHealthReport {
                 state: QueryHealthState::Healthy,
                 last_error: None,

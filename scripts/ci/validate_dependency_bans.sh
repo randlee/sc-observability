@@ -52,7 +52,7 @@ observe_test_deps = section_deps(root / "crates/sc-observe/Cargo.toml", "dev-dep
 otlp_runtime_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dependencies")
 otlp_test_deps = section_deps(root / "crates/sc-observability-otlp/Cargo.toml", "dev-dependencies")
 
-if obs_runtime_deps != {"serde", "serde_json", "sc-observability-types"}:
+if obs_runtime_deps != {"serde", "serde_json", "sc-observability-types", "thiserror"}:
     raise SystemExit(
         "sc-observability runtime dependency set drifted from allowed baseline: "
         f"{sorted(obs_runtime_deps)}"
@@ -62,10 +62,10 @@ if obs_target_runtime_deps != {"cfg(windows)": {"windows-sys"}}:
         "sc-observability target-specific runtime dependency set drifted from allowed baseline: "
         f"{obs_target_runtime_deps}"
     )
-if obs_test_deps - {"temp-env"}:
+if obs_test_deps - {"temp-env", "tempfile"}:
     raise SystemExit(
         "sc-observability test dependency set drifted from allowed baseline: "
-        f"{sorted(obs_test_deps - {'temp-env'})}"
+        f"{sorted(obs_test_deps - {'temp-env', 'tempfile'})}"
     )
 
 if observe_runtime_deps != {"sc-observability-types", "sc-observability"}:

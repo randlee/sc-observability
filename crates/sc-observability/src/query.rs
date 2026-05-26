@@ -547,6 +547,8 @@ mod tests {
     use super::*;
     use std::fs;
     use std::io::Write as _;
+    use std::ops::Deref;
+    use std::path::Path;
 
     fn test_identity(seed: u64) -> FileIdentity {
         #[cfg(unix)]
@@ -735,17 +737,29 @@ mod tests {
         );
     }
 
-    fn temp_path(name: &str) -> PathBuf {
-        let path = std::env::temp_dir().join(format!(
-            "sc-observability-query-{name}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .expect("system time before unix epoch")
-                .as_nanos()
-        ));
-        let _ = fs::remove_dir_all(&path);
-        path
+    struct TestRoot(tempfile::TempDir);
+
+    impl TestRoot {
+        fn path_buf(&self) -> PathBuf {
+            self.0.path().to_path_buf()
+        }
+    }
+
+    impl Deref for TestRoot {
+        type Target = Path;
+
+        fn deref(&self) -> &Self::Target {
+            self.0.path()
+        }
+    }
+
+    fn temp_root(name: &str) -> TestRoot {
+        TestRoot(
+            tempfile::Builder::new()
+                .prefix(&format!("sc-observability-query-{name}-"))
+                .tempdir()
+                .expect("create temporary test root"),
+        )
     }
 
     #[test]
@@ -757,7 +771,7 @@ mod tests {
 
     #[test]
     fn read_events_from_path_returns_empty_for_missing_file() {
-        let missing = temp_path("missing").join("missing.log.jsonl");
+        let missing = temp_root("missing").join("missing.log.jsonl");
 
         let (events, end_offset) = read_events_from_path(&missing, 0).expect("missing file");
 
@@ -767,8 +781,8 @@ mod tests {
 
     #[test]
     fn read_events_from_path_surfaces_decode_errors() {
-        let root = temp_path("decode");
-        fs::create_dir_all(&root).expect("create root");
+        let root = temp_root("decode");
+        fs::create_dir_all(root.path_buf()).expect("create root");
         let path = root.join("broken.log.jsonl");
         let mut file = fs::File::create(&path).expect("create file");
         writeln!(file, "{{not-json").expect("write malformed line");

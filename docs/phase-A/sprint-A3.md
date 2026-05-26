@@ -1,10 +1,10 @@
 ---
 id: A.3
 title: Writer Runtime And Logging API Implementation
-status: planned
+status: implemented
 branch: feature/thread-optimization-a3-writer-runtime
-worktree: ../sc-observability-worktrees/feature/thread-optimization
-target: develop
+worktree: ../sc-observability-worktrees/feature/thread-optimization-a3-writer-runtime
+target: integrate/phase-a
 ---
 
 # Sprint A.3 — Writer Runtime And Logging API Implementation
@@ -13,9 +13,9 @@ target: develop
 plan_type: sprint_plan
 phase: A
 sprint: A.3
-worktree: ../sc-observability-worktrees/feature/thread-optimization
+worktree: ../sc-observability-worktrees/feature/thread-optimization-a3-writer-runtime
 branch: feature/thread-optimization-a3-writer-runtime
-status: planned
+status: implemented
 estimated_scope: large
 ```
 

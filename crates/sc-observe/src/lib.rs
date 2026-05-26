@@ -32,7 +32,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use sc_observability::{Logger, LoggerConfig, RetainedLogPolicy, Running, Stopped};
+use sc_observability::{LogError, Logger, LoggerConfig, RetainedLogPolicy, Running, Stopped};
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError,
     ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, Remediation,
@@ -202,6 +202,15 @@ struct ProjectionDispatchResult {
     last_error: Option<DiagnosticSummary>,
 }
 
+fn log_error_summary(error: &LogError) -> DiagnosticSummary {
+    match error {
+        LogError::InvalidEvent(error) => DiagnosticSummary::from(error.diagnostic()),
+        LogError::WriterDegraded(error) | LogError::ShutdownTimedOut(error) => {
+            DiagnosticSummary::from(error.diagnostic())
+        }
+    }
+}
+
 impl Observability {
     /// Builds a runtime using the documented default logger integration.
     pub fn new(config: ObservabilityConfig) -> Result<Self, InitError> {
@@ -346,7 +355,7 @@ impl Observability {
             .take()
             .expect("observability logger should exist while runtime is alive");
         *logger = Some(match handle {
-            LoggerHandle::Running(logger) => LoggerHandle::Stopped(logger.shutdown()?),
+            LoggerHandle::Running(logger) => LoggerHandle::Stopped(logger.shutdown()),
             LoggerHandle::Stopped(logger) => LoggerHandle::Stopped(logger),
         });
         Ok(())
@@ -512,9 +521,12 @@ impl ObservabilityBuilder {
                         Ok(events) => {
                             result.matched = true;
                             for event in events {
-                                if let Err(err) = logger.emit(event) {
-                                    record_failure(DiagnosticSummary::from(err.diagnostic()));
+                                if let Err(err) = logger.log(event) {
+                                    record_failure(log_error_summary(&err));
                                 }
+                            }
+                            if let Err(err) = logger.flush() {
+                                record_failure(DiagnosticSummary::from(err.diagnostic()));
                             }
                         }
                         Err(err) => record_failure(DiagnosticSummary::from(err.diagnostic())),
@@ -1109,7 +1121,7 @@ mod tests {
             runtime: RuntimeState::default(),
         };
 
-        assert!(runtime.flush().is_ok());
+        assert!(runtime.flush().is_err());
         let logging = runtime.health().logging.expect("logging health");
         assert_eq!(logging.flush_errors_total, 1);
         assert!(logging.last_error.is_some());
