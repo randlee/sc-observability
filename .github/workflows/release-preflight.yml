@@ -98,6 +98,10 @@ jobs:
         if: always()
         run: python3 scripts/ci/validate_public_api_semver.py
 
+      - name: Install nightly toolchain for cargo-public-api
+        if: always()
+        run: rustup toolchain install nightly
+
       - name: Validate public API documentation approvals
         if: always()
         run: bash scripts/ci/validate_public_api_docs.sh
