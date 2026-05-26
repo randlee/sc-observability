@@ -116,3 +116,4 @@ review it directly from the sprint doc:
 - `bash scripts/ci/validate_public_api_diff.sh`
 - `bash scripts/ci/validate_public_api_semver.sh`
 - `bash scripts/ci/validate_public_api_docs.sh`
+- `python3 scripts/ci/validate_version_literals.py`

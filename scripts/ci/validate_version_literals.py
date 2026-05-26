@@ -65,15 +65,12 @@ for path in iter_repo_files():
 
 violations = []
 for version, hits in sorted(occurrences.items()):
-    files = {path for path, _, _ in hits}
-    if len(files) <= 1:
-        continue
     if version == workspace_version:
         continue
     rendered_hits = ", ".join(f"{path}:{line_no}" for path, line_no, _ in hits)
     violations.append(
-        f"duplicated tracked version {version!r} appears in multiple files "
-        f"but does not match workspace.package.version {workspace_version!r}: {rendered_hits}"
+        f"version literal {version!r} does not match "
+        f"workspace.package.version {workspace_version!r}: {rendered_hits}"
     )
 
 if violations:

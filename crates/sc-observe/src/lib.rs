@@ -1121,7 +1121,7 @@ mod tests {
             runtime: RuntimeState::default(),
         };
 
-        assert!(runtime.flush().is_ok());
+        assert!(runtime.flush().is_err());
         let logging = runtime.health().logging.expect("logging health");
         assert_eq!(logging.flush_errors_total, 1);
         assert!(logging.last_error.is_some());

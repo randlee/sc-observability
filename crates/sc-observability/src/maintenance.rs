@@ -1,3 +1,5 @@
+#[cfg(test)]
+use std::sync::Condvar;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::thread::{self, JoinHandle};
@@ -45,6 +47,13 @@ pub(crate) struct WriterRuntime {
 }
 
 impl WriterRuntime {
+    #[cfg_attr(
+        test,
+        expect(
+            clippy::too_many_arguments,
+            reason = "writer runtime construction bundles sink ownership, queue state, health trackers, and test-only harness hooks at one runtime boundary"
+        )
+    )]
     pub(crate) fn new(
         sinks: Vec<SinkRegistration>,
         file_sink: Option<Arc<JsonlFileSink>>,
@@ -53,6 +62,7 @@ impl WriterRuntime {
         dropped_events_total: Arc<AtomicU64>,
         last_error: Arc<Mutex<Option<DiagnosticSummary>>>,
         #[cfg(test)] test_pass_delay: Option<Duration>,
+        #[cfg(test)] test_pass_signal: Option<Arc<TestPassDelaySignal>>,
     ) -> Self {
         let writer_tracker = Arc::new(WriterTracker::new(queue_capacity));
         let maintenance_tracker = file_sink
@@ -78,6 +88,8 @@ impl WriterRuntime {
                     last_error,
                     #[cfg(test)]
                     test_pass_delay,
+                    #[cfg(test)]
+                    test_pass_signal,
                 );
             })
             .expect("writer thread should spawn");
@@ -92,10 +104,10 @@ impl WriterRuntime {
         }
     }
 
-    pub(crate) fn enqueue_blocking(&self, event: LogEvent) -> Result<(), ()> {
+    pub(crate) fn enqueue_blocking(&self, event: LogEvent) -> Result<(), TryEnqueueError> {
         self.sender
             .send(WriterCommand::Log(event))
-            .map_err(|_| ())?;
+            .map_err(|_| TryEnqueueError::Disconnected)?;
         self.writer_tracker.record_enqueue();
         Ok(())
     }
@@ -234,6 +246,11 @@ fn snapshot_from_trackers(
     }
 }
 
+/// Best-effort queue/writer snapshot source for `LoggingHealthReport`.
+///
+/// Reads may observe transient inconsistency across concurrently mutating
+/// counters because queue depth, state, and last-error fields are updated by the
+/// writer thread without a single global snapshot lock.
 pub(crate) struct WriterTracker {
     queue_depth: AtomicU64,
     queue_capacity: u64,
@@ -354,6 +371,11 @@ impl WriterTracker {
     }
 }
 
+/// Best-effort maintenance snapshot source for `LoggingHealthReport`.
+///
+/// Reads may observe transient inconsistency across concurrently mutating
+/// timestamps, counters, and degraded-state transitions because maintenance
+/// updates occur on the writer thread without a single global snapshot lock.
 pub(crate) struct MaintenanceTracker {
     pass_active: AtomicBool,
     last_pass_at: RwLock<Option<Timestamp>>,
@@ -464,6 +486,7 @@ fn writer_worker(
     dropped_events_total: Arc<AtomicU64>,
     last_error: Arc<Mutex<Option<DiagnosticSummary>>>,
     #[cfg(test)] test_pass_delay: Option<Duration>,
+    #[cfg(test)] test_pass_signal: Option<Arc<TestPassDelaySignal>>,
 ) {
     let mut batch = Vec::with_capacity(constants::DEFAULT_LOG_BATCH_SIZE);
     let mut pending_flush = Vec::new();
@@ -514,6 +537,8 @@ fn writer_worker(
                                 &mut next_maintenance_at,
                                 #[cfg(test)]
                                 test_pass_delay,
+                                #[cfg(test)]
+                                test_pass_signal.as_ref(),
                             );
                             writer_tracker.mark_stopped();
                             if let Some(tracker) = maintenance_tracker.as_ref() {
@@ -564,6 +589,8 @@ fn writer_worker(
                     &mut next_maintenance_at,
                     #[cfg(test)]
                     test_pass_delay,
+                    #[cfg(test)]
+                    test_pass_signal.as_ref(),
                 );
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -588,6 +615,8 @@ fn writer_worker(
                     &mut next_maintenance_at,
                     #[cfg(test)]
                     test_pass_delay,
+                    #[cfg(test)]
+                    test_pass_signal.as_ref(),
                 );
                 writer_tracker.mark_stopped();
                 if let Some(tracker) = maintenance_tracker.as_ref() {
@@ -705,6 +734,7 @@ fn run_maintenance_if_due(
     policy: &RetainedLogPolicy,
     next_maintenance_at: &mut Instant,
     #[cfg(test)] test_pass_delay: Option<Duration>,
+    #[cfg(test)] test_pass_signal: Option<&Arc<TestPassDelaySignal>>,
 ) {
     let Some(file_sink) = file_sink else {
         return;
@@ -719,6 +749,8 @@ fn run_maintenance_if_due(
         maybe_run_test_delay(
             #[cfg(test)]
             test_pass_delay,
+            #[cfg(test)]
+            test_pass_signal,
         );
         match file_sink.perform_maintenance(policy) {
             Ok(stats) => tracker.record_pass(stats),
@@ -729,6 +761,8 @@ fn run_maintenance_if_due(
         maybe_run_test_delay(
             #[cfg(test)]
             test_pass_delay,
+            #[cfg(test)]
+            test_pass_signal,
         );
     }
 
@@ -736,28 +770,41 @@ fn run_maintenance_if_due(
 }
 
 #[cfg(test)]
-static TEST_PASS_DELAY_ACTIVE: AtomicBool = AtomicBool::new(false);
-
-#[cfg(test)]
-pub(crate) fn clear_test_pass_delay() {
-    TEST_PASS_DELAY_ACTIVE.store(false, Ordering::SeqCst);
+#[derive(Debug, Default)]
+pub(crate) struct TestPassDelaySignal {
+    active: Mutex<bool>,
+    changed: Condvar,
 }
 
 #[cfg(test)]
-pub(crate) fn test_pass_delay_active() -> bool {
-    TEST_PASS_DELAY_ACTIVE.load(Ordering::SeqCst)
+impl TestPassDelaySignal {
+    fn set_active(&self, active: bool) {
+        *self.active.lock().expect("test signal poisoned") = active;
+        self.changed.notify_all();
+    }
+
+    pub(crate) fn is_active(&self) -> bool {
+        *self.active.lock().expect("test signal poisoned")
+    }
 }
 
 #[cfg(not(test))]
 fn maybe_run_test_delay() {}
 
 #[cfg(test)]
-fn maybe_run_test_delay(test_pass_delay: Option<Duration>) {
+fn maybe_run_test_delay(
+    test_pass_delay: Option<Duration>,
+    test_pass_signal: Option<&Arc<TestPassDelaySignal>>,
+) {
     let Some(delay) = test_pass_delay else {
         return;
     };
 
-    TEST_PASS_DELAY_ACTIVE.store(true, Ordering::SeqCst);
+    if let Some(signal) = test_pass_signal {
+        signal.set_active(true);
+    }
     thread::sleep(delay);
-    TEST_PASS_DELAY_ACTIVE.store(false, Ordering::SeqCst);
+    if let Some(signal) = test_pass_signal {
+        signal.set_active(false);
+    }
 }
