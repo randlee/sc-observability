@@ -342,7 +342,7 @@ impl Default for RetainedLogPolicy {
             retention_max_age: RetentionMaxAge::from_duration(constants::DEFAULT_RETENTION_MAX_AGE),
             maintenance_cadence: MaintenanceCadence::new(constants::DEFAULT_MAINTENANCE_CADENCE),
             writer_shutdown_timeout: WriterShutdownTimeout::new(
-                constants::DEFAULT_MAINTENANCE_JOIN_TIMEOUT,
+                constants::DEFAULT_WRITER_SHUTDOWN_TIMEOUT,
             ),
             maintenance_max_work_per_pass: constants::DEFAULT_MAINTENANCE_MAX_WORK_PER_PASS,
         }
