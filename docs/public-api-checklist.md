@@ -258,3 +258,29 @@ At each crate freeze gate:
 - any newly introduced public type or trait must be added here first
 - the API docs, requirements, and implementation must all agree on names and
   signatures for that crate
+
+## 7. Approval Workflow
+
+Intentional public API changes must satisfy all of the following before they
+land:
+
+- `scripts/ci/validate_public_api_diff.sh` must expose the additive public API
+  diff against the latest published baseline for each workspace crate
+- `scripts/ci/validate_public_api_semver.sh` must pass against the current
+  release baseline
+- `scripts/ci/validate_public_api_docs.sh` must pass
+- `docs/public-api-checklist.md` must be updated in the same branch
+- at least one normative API doc must be updated in the same branch:
+  - `docs/requirements.md`
+  - `docs/architecture.md`
+  - `docs/api-design.md`
+- one approval artifact per intentional API change must exist under
+  `docs/api-approvals/` using the required headings:
+  - `## Scope`
+  - `## Approval`
+  - `## Affected Artifacts`
+
+Steady-state rule:
+
+- when no public API diff exists, `docs/api-approvals/README.md` may be the
+  only file under `docs/api-approvals/`
