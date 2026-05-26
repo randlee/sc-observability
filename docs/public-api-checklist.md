@@ -75,7 +75,7 @@ Note:
 - [x] `MetricKind`
 - [x] `MetricRecord`
 - [x] `LoggingHealthState`
-- [~] `WriterState` (phase-A planned logging-runtime addition)
+- [x] `WriterState`
 - [x] `SinkHealthState`
 - [x] `SinkHealth`
 - [x] `LoggingHealthReport`
@@ -112,6 +112,8 @@ Note:
 - [x] `ExportError`
 - [x] `ObservationError`
 - [x] `TelemetryError`
+- [x] `MaintenanceHealthReport` (owned by `sc-observability-types`, re-exported by `sc-observability`)
+- [x] `MaintenanceWorkerState` (owned by `sc-observability-types`, re-exported by `sc-observability`)
 
 ### Finalized Public Rules
 

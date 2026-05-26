@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""Validate tracked version literals with intentionally narrow scope.
+
+This check enforces version consistency for Cargo package tables and
+RELEASE-NOTES markdown files only. Other documentation is not scanned by this
+script and is governed separately by review/docs processes.
+"""
+
 import re
 import tomllib
 from collections import defaultdict
@@ -69,8 +76,8 @@ for version, hits in sorted(occurrences.items()):
         continue
     rendered_hits = ", ".join(f"{path}:{line_no}" for path, line_no, _ in hits)
     violations.append(
-        f"duplicated tracked version {version!r} appears in multiple files "
-        f"but does not match workspace.package.version {workspace_version!r}: {rendered_hits}"
+        f"version literal {version!r} does not match workspace.package.version "
+        f"{workspace_version!r}: {rendered_hits}"
     )
 
 if violations:
