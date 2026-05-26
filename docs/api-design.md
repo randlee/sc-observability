@@ -1493,6 +1493,10 @@ Lifecycle rules:
   `TryLogError::QueueFull` rather than blocking when the queue is saturated
 - deprecated `emit()` remains available as a compatibility path while new
   consumers migrate to `log()` and `try_log()`
+- deprecated `emit()` remains fail-open and performs a best-effort flush when
+  the writer is not inside an active retained-log maintenance pass so existing
+  logger-only consumers keep synchronous visibility expectations where
+  practical without regressing queue admission during maintenance work
 - `Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`
 - `Logger::shutdown()` drains already-queued events before joining the writer
   thread; that drain remains bounded by the configured shutdown timeout

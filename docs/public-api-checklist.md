@@ -75,7 +75,7 @@ Note:
 - [x] `MetricKind`
 - [x] `MetricRecord`
 - [x] `LoggingHealthState`
-- [~] `WriterState` (phase-A planned logging-runtime addition)
+- [x] `WriterState`
 - [x] `SinkHealthState`
 - [x] `SinkHealth`
 - [x] `LoggingHealthReport`
@@ -152,19 +152,19 @@ Internal-only:
 
 ### Phase A Planned Public Additions
 
-- [~] `Logger<Running>`
-- [~] `Logger<Stopped>`
-- [~] `Logger::log(&self, LogEvent) -> Result<(), LogError>`
-- [~] `Logger::try_log(&self, LogEvent) -> Result<(), TryLogError>`
-- [~] deprecated `Logger::emit(&self, LogEvent) -> Result<(), EventError>`
-- [~] `LogError`
-- [~] `TryLogError`
-- [~] `LoggingHealthReport.queue_depth`
-- [~] `LoggingHealthReport.queue_capacity`
-- [~] `LoggingHealthReport.queue_high_water_mark`
-- [~] `LoggingHealthReport.queue_full_drops_total`
-- [~] `LoggingHealthReport.writer_state`
-- [~] `LoggingHealthReport.last_writer_error`
+- [x] `Logger<Running>`
+- [x] `Logger<Stopped>`
+- [x] `Logger::log(&self, LogEvent) -> Result<(), LogError>`
+- [x] `Logger::try_log(&self, LogEvent) -> Result<(), TryLogError>`
+- [x] deprecated `Logger::emit(&self, LogEvent) -> Result<(), EventError>`
+- [x] `LogError`
+- [x] `TryLogError`
+- [x] `LoggingHealthReport.queue_depth`
+- [x] `LoggingHealthReport.queue_capacity`
+- [x] `LoggingHealthReport.queue_high_water_mark`
+- [x] `LoggingHealthReport.queue_full_drops_total`
+- [x] `LoggingHealthReport.writer_state`
+- [x] `LoggingHealthReport.last_writer_error`
 
 Phase-A rule:
 

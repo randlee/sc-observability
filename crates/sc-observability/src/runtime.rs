@@ -7,7 +7,7 @@ use std::time::Duration;
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, ErrorContext, EventError, FlushError, LogQuery, LogSnapshot,
     LoggingHealthReport, LoggingHealthState, MaintenanceHealthReport, MaintenanceWorkerState,
-    QueryError, QueryHealthState, Remediation, ShutdownError, SinkHealth, SinkHealthState,
+    QueryError, QueryHealthState, Remediation, SinkHealth, SinkHealthState, WriterState,
 };
 use serde_json::Value;
 
@@ -15,48 +15,57 @@ use crate::builder::LoggerBuilder;
 use crate::follow::LogFollowSession;
 use crate::health::QueryHealthTracker;
 use crate::jsonl_reader::JsonlLogReader;
-use crate::maintenance::MaintenanceRuntime;
+use crate::maintenance::{TryEnqueueError, WriterHealthSnapshot, WriterRuntime};
 use crate::redact::{redact_bearer_token_text, redact_string_value};
 use crate::sinks::JsonlFileSink;
 use crate::{
-    LogEvent, LogSinkError, Logger, RetainedLogPolicy, Running, ServiceName, Stopped,
-    default_log_path, error_codes,
+    LogError, LogEvent, Logger, RetainedLogPolicy, Running, ServiceName, Stopped, TryLogError,
+    default_log_path, error_codes, shutdown_timed_out_error_context, writer_degraded_error_context,
 };
 
 pub(crate) struct LoggerRuntime {
-    pub(crate) dropped_events_total: AtomicU64,
-    pub(crate) flush_errors_total: AtomicU64,
-    pub(crate) last_error: Mutex<Option<DiagnosticSummary>>,
+    pub(crate) dropped_events_total: Arc<AtomicU64>,
+    pub(crate) flush_errors_total: Arc<AtomicU64>,
+    pub(crate) last_error: Arc<Mutex<Option<DiagnosticSummary>>>,
     pub(crate) query_health: Arc<QueryHealthTracker>,
-    pub(crate) maintenance: Option<MaintenanceRuntime>,
-    pub(crate) maintenance_snapshot: Option<MaintenanceHealthReport>,
+    pub(crate) writer: Option<WriterRuntime>,
+    pub(crate) writer_snapshot: Mutex<Option<WriterHealthSnapshot>>,
 }
 
 impl LoggerRuntime {
     pub(crate) fn new(
         query_available: bool,
+        sinks: Vec<crate::SinkRegistration>,
         file_sink: Option<Arc<JsonlFileSink>>,
         retained_log_policy: RetainedLogPolicy,
+        queue_capacity: usize,
         #[cfg(test)] test_pass_delay: Option<Duration>,
     ) -> Self {
+        let dropped_events_total = Arc::new(AtomicU64::new(0));
+        let flush_errors_total = Arc::new(AtomicU64::new(0));
+        let last_error = Arc::new(Mutex::new(None));
+        let query_health = Arc::new(QueryHealthTracker::new(if query_available {
+            QueryHealthState::Healthy
+        } else {
+            QueryHealthState::Unavailable
+        }));
+
         Self {
-            dropped_events_total: AtomicU64::new(0),
-            flush_errors_total: AtomicU64::new(0),
-            last_error: Mutex::new(None),
-            query_health: Arc::new(QueryHealthTracker::new(if query_available {
-                QueryHealthState::Healthy
-            } else {
-                QueryHealthState::Unavailable
-            })),
-            maintenance: file_sink.map(|sink| {
-                MaintenanceRuntime::new(
-                    sink,
-                    retained_log_policy,
-                    #[cfg(test)]
-                    test_pass_delay,
-                )
-            }),
-            maintenance_snapshot: None,
+            dropped_events_total: dropped_events_total.clone(),
+            flush_errors_total,
+            last_error: last_error.clone(),
+            query_health,
+            writer: Some(WriterRuntime::new(
+                sinks,
+                file_sink,
+                retained_log_policy,
+                queue_capacity,
+                dropped_events_total,
+                last_error,
+                #[cfg(test)]
+                test_pass_delay,
+            )),
+            writer_snapshot: Mutex::new(None),
         }
     }
 }
@@ -74,29 +83,85 @@ impl Logger<Running> {
         Ok(LoggerBuilder::new(config)?.build())
     }
 
-    /// Emits one structured log event through the configured sinks.
-    pub fn emit(&self, event: LogEvent) -> Result<(), EventError> {
-        validate_event(&event, &self.config.service_name)?;
-        let redacted = self.redact_event(event);
+    /// Validates, redacts, and admits one structured log event into the writer queue.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the running logger has lost its writer runtime unexpectedly.
+    pub fn log(&self, event: LogEvent) -> Result<(), LogError> {
+        let event = self.prepare_event(event).map_err(LogError::InvalidEvent)?;
+        let Some(event) = event else {
+            return Ok(());
+        };
 
-        for registration in &self.sinks {
-            if registration
-                .filter
-                .as_ref()
-                .is_some_and(|filter| !filter.accepts(&redacted))
-            {
-                continue;
-            }
+        let writer = self
+            .runtime
+            .writer
+            .as_ref()
+            .expect("running logger must retain its writer runtime");
+        writer
+            .enqueue_blocking(event)
+            .map_err(|()| self.log_runtime_error())
+    }
 
-            if let Err(err) = registration.sink.write(&redacted) {
-                self.record_sink_failure(&err);
+    /// Attempts non-blocking queue admission for one structured log event.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the running logger has lost its writer runtime unexpectedly.
+    pub fn try_log(&self, event: LogEvent) -> Result<(), TryLogError> {
+        let event = self
+            .prepare_event(event)
+            .map_err(TryLogError::InvalidEvent)?;
+        let Some(event) = event else {
+            return Ok(());
+        };
+
+        let writer = self
+            .runtime
+            .writer
+            .as_ref()
+            .expect("running logger must retain its writer runtime");
+        match writer.enqueue_nonblocking(event) {
+            Ok(()) => Ok(()),
+            Err(TryEnqueueError::Full) => {
+                let summary = writer.record_queue_full_drop();
+                self.record_last_error(summary);
+                Err(TryLogError::QueueFull(Box::new(ErrorContext::new(
+                    error_codes::LOGGER_QUEUE_FULL,
+                    "writer queue is full",
+                    Remediation::recoverable(
+                        "reduce logging pressure or increase queue capacity",
+                        [
+                            "inspect logger.health().queue_depth",
+                            "inspect logger.health().queue_high_water_mark",
+                        ],
+                    ),
+                ))))
             }
+            Err(TryEnqueueError::Disconnected) => Err(self.try_log_runtime_error()),
         }
+    }
 
+    /// Emits one structured log event through the compatibility path.
+    #[deprecated(
+        since = "1.2.0",
+        note = "Use log() for blocking queue admission or try_log() for non-blocking logging."
+    )]
+    pub fn emit(&self, event: LogEvent) -> Result<(), EventError> {
+        self.log(event).map_err(event_error_from_log_error)?;
+        if !self
+            .runtime
+            .writer
+            .as_ref()
+            .is_some_and(WriterRuntime::maintenance_active)
+        {
+            let _ = self.flush();
+        }
         Ok(())
     }
 
-    /// Flushes all registered sinks.
+    /// Flushes all registered sinks through the writer-owned runtime.
     ///
     /// Sink flush failures are absorbed into logger health and counters so the
     /// caller can continue shutdown or health inspection without a secondary
@@ -104,19 +169,24 @@ impl Logger<Running> {
     ///
     /// # Panics
     ///
-    /// Panics if an internal sink-health mutex has been poisoned while one of
-    /// the built-in sink implementations is updating its flush state.
+    /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn flush(&self) -> Result<(), FlushError> {
-        self.flush_registered_sinks();
+        let writer = self
+            .runtime
+            .writer
+            .as_ref()
+            .expect("running logger must retain its writer runtime");
+        if let Err(error) = writer.flush() {
+            self.runtime
+                .flush_errors_total
+                .fetch_add(1, Ordering::SeqCst);
+            self.record_last_error(DiagnosticSummary::from(error.diagnostic()));
+            return Ok(());
+        }
         Ok(())
     }
 
     /// Queries the current JSONL log set synchronously using the shared query contract.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the internal query-health mutex has been poisoned while the
-    /// runtime records the result of this query.
     pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError> {
         let reader = self.query_reader()?;
         let result = reader.query(query);
@@ -125,11 +195,6 @@ impl Logger<Running> {
     }
 
     /// Starts a tail-style follow session from the current end of the visible log set.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the internal query-health mutex has been poisoned while the
-    /// runtime records the result of this follow-start operation.
     pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError> {
         let active_log_path = self.ensure_query_available()?;
         let result = LogFollowSession::with_health(
@@ -142,43 +207,41 @@ impl Logger<Running> {
         result
     }
 
-    /// Shuts the logger down and makes logger-owned query/follow unavailable.
+    /// Drains queued events, stops the writer thread, and returns a stopped logger typestate.
     ///
     /// # Panics
     ///
-    /// Panics if an internal sink-health mutex or the internal query-health
-    /// mutex has been poisoned while shutdown is flushing sinks and marking
-    /// query/follow unavailable.
-    pub fn shutdown(mut self) -> Result<Logger<Stopped>, ShutdownError> {
+    /// Panics if the internal writer-snapshot mutex has been poisoned while
+    /// recording final runtime state.
+    pub fn shutdown(mut self) -> Logger<Stopped> {
         self.shutdown.store(true, Ordering::SeqCst);
-        self.flush_registered_sinks();
-        if let Some(maintenance) = self.runtime.maintenance.take() {
-            let (summary, snapshot) = maintenance.shutdown();
-            self.runtime.maintenance_snapshot = Some(snapshot);
-            if let Some(summary) = summary {
-                *self
-                    .runtime
-                    .last_error
-                    .lock()
-                    .expect("logger last_error poisoned") = Some(summary);
+        if let Some(writer) = self.runtime.writer.take() {
+            let snapshot = writer.shutdown();
+            if let Some(summary) = snapshot.last_writer_error.clone() {
+                self.record_last_error(summary);
             }
+            *self
+                .runtime
+                .writer_snapshot
+                .lock()
+                .expect("writer snapshot poisoned") = Some(snapshot);
         }
         self.runtime.query_health.mark_unavailable(None);
-        Ok(Logger {
+        Logger {
             config: self.config,
             sinks: self.sinks,
             shutdown: self.shutdown,
             runtime: self.runtime,
             state: std::marker::PhantomData,
-        })
+        }
     }
 
-    fn flush_registered_sinks(&self) {
-        for registration in &self.sinks {
-            if let Err(err) = registration.sink.flush() {
-                self.record_flush_failure(&err);
-            }
+    fn prepare_event(&self, event: LogEvent) -> Result<Option<LogEvent>, EventError> {
+        validate_event(&event, &self.config.service_name)?;
+        if !level_enabled(self.config.level, event.level) {
+            return Ok(None);
         }
+        Ok(Some(self.redact_event(event)))
     }
 
     fn redact_event(&self, mut event: LogEvent) -> LogEvent {
@@ -209,30 +272,6 @@ impl Logger<Running> {
         event
     }
 
-    fn record_sink_failure(&self, error: &LogSinkError) {
-        self.runtime
-            .dropped_events_total
-            .fetch_add(1, Ordering::SeqCst);
-        *self
-            .runtime
-            .last_error
-            .lock()
-            .expect("logger last_error poisoned") =
-            Some(DiagnosticSummary::from(error.diagnostic()));
-    }
-
-    fn record_flush_failure(&self, error: &LogSinkError) {
-        self.runtime
-            .flush_errors_total
-            .fetch_add(1, Ordering::SeqCst);
-        *self
-            .runtime
-            .last_error
-            .lock()
-            .expect("logger last_error poisoned") =
-            Some(DiagnosticSummary::from(error.diagnostic()));
-    }
-
     fn query_reader(&self) -> Result<JsonlLogReader, QueryError> {
         self.ensure_query_available().map(JsonlLogReader::new)
     }
@@ -251,6 +290,42 @@ impl Logger<Running> {
             &self.config.service_name,
         ))
     }
+
+    fn log_runtime_error(&self) -> LogError {
+        match self.runtime_snapshot().last_writer_error {
+            Some(summary)
+                if summary.code.as_ref() == Some(&error_codes::LOGGER_SHUTDOWN_TIMED_OUT) =>
+            {
+                LogError::ShutdownTimedOut(Box::new(shutdown_timed_out_error_context(
+                    &summary.message,
+                )))
+            }
+            Some(summary) => {
+                LogError::WriterDegraded(Box::new(writer_degraded_error_context(&summary.message)))
+            }
+            None => LogError::WriterDegraded(Box::new(writer_degraded_error_context(
+                "writer thread is not accepting new log work",
+            ))),
+        }
+    }
+
+    fn try_log_runtime_error(&self) -> TryLogError {
+        match self.runtime_snapshot().last_writer_error {
+            Some(summary)
+                if summary.code.as_ref() == Some(&error_codes::LOGGER_SHUTDOWN_TIMED_OUT) =>
+            {
+                TryLogError::ShutdownTimedOut(Box::new(shutdown_timed_out_error_context(
+                    &summary.message,
+                )))
+            }
+            Some(summary) => TryLogError::WriterDegraded(Box::new(writer_degraded_error_context(
+                &summary.message,
+            ))),
+            None => TryLogError::WriterDegraded(Box::new(writer_degraded_error_context(
+                "writer thread is not accepting new log work",
+            ))),
+        }
+    }
 }
 
 impl<State> Logger<State> {
@@ -258,29 +333,39 @@ impl<State> Logger<State> {
     ///
     /// # Panics
     ///
-    /// Panics if the internal last-error mutex has been poisoned.
+    /// Panics if the internal writer-snapshot or last-error mutex has been
+    /// poisoned while aggregating runtime health.
     pub fn health(&self) -> LoggingHealthReport {
         let sink_statuses: Vec<SinkHealth> =
             self.sinks.iter().map(|entry| entry.sink.health()).collect();
-        let maintenance = self
-            .runtime
-            .maintenance
-            .as_ref()
-            .map(MaintenanceRuntime::snapshot)
-            .or_else(|| self.runtime.maintenance_snapshot.clone());
+        let writer_snapshot = self.runtime_snapshot();
         let state = if self.shutdown.load(Ordering::SeqCst) {
             LoggingHealthState::Unavailable
         } else {
-            aggregate_logging_health_state(&sink_statuses, maintenance.as_ref())
+            aggregate_logging_health_state(
+                &sink_statuses,
+                writer_snapshot.writer_state,
+                writer_snapshot.maintenance.as_ref(),
+                self.runtime.dropped_events_total.load(Ordering::SeqCst),
+                self.runtime.flush_errors_total.load(Ordering::SeqCst),
+                writer_snapshot.queue_full_drops_total,
+            )
         };
+
         LoggingHealthReport {
             state,
             dropped_events_total: self.runtime.dropped_events_total.load(Ordering::SeqCst),
             flush_errors_total: self.runtime.flush_errors_total.load(Ordering::SeqCst),
             active_log_path: default_log_path(&self.config.log_root, &self.config.service_name),
             sink_statuses,
+            queue_depth: writer_snapshot.queue_depth,
+            queue_capacity: writer_snapshot.queue_capacity,
+            queue_high_water_mark: writer_snapshot.queue_high_water_mark,
+            queue_full_drops_total: writer_snapshot.queue_full_drops_total,
+            writer_state: writer_snapshot.writer_state,
+            last_writer_error: writer_snapshot.last_writer_error,
             query: Some(self.runtime.query_health.snapshot()),
-            maintenance,
+            maintenance: writer_snapshot.maintenance,
             last_error: self
                 .runtime
                 .last_error
@@ -289,25 +374,94 @@ impl<State> Logger<State> {
                 .clone(),
         }
     }
+
+    fn record_last_error(&self, summary: DiagnosticSummary) {
+        *self
+            .runtime
+            .last_error
+            .lock()
+            .expect("logger last_error poisoned") = Some(summary);
+    }
+
+    fn runtime_snapshot(&self) -> WriterHealthSnapshot {
+        if let Some(writer) = self.runtime.writer.as_ref() {
+            writer.snapshot()
+        } else {
+            self.runtime
+                .writer_snapshot
+                .lock()
+                .expect("writer snapshot poisoned")
+                .clone()
+                .unwrap_or(WriterHealthSnapshot {
+                    queue_depth: 0,
+                    queue_capacity: self.config.queue_capacity as u64,
+                    queue_high_water_mark: 0,
+                    queue_full_drops_total: 0,
+                    writer_state: WriterState::Stopped,
+                    last_writer_error: None,
+                    maintenance: None,
+                })
+        }
+    }
 }
 
 fn aggregate_logging_health_state(
     sink_statuses: &[SinkHealth],
+    writer_state: WriterState,
     maintenance: Option<&MaintenanceHealthReport>,
+    dropped_events_total: u64,
+    flush_errors_total: u64,
+    queue_full_drops_total: u64,
 ) -> LoggingHealthState {
-    if sink_statuses
-        .iter()
-        .any(|sink| sink.state == SinkHealthState::Unavailable)
+    if writer_state == WriterState::Stopped
+        || sink_statuses
+            .iter()
+            .any(|sink| sink.state == SinkHealthState::Unavailable)
     {
         LoggingHealthState::Unavailable
-    } else if maintenance.is_some_and(|report| report.state == MaintenanceWorkerState::Degraded)
+    } else if writer_state == WriterState::Degraded
+        || maintenance.is_some_and(|report| report.state == MaintenanceWorkerState::Degraded)
         || sink_statuses
             .iter()
             .any(|sink| sink.state != SinkHealthState::Healthy)
+        || dropped_events_total != 0
+        || flush_errors_total != 0
+        || queue_full_drops_total != 0
     {
         LoggingHealthState::DegradedDropping
     } else {
         LoggingHealthState::Healthy
+    }
+}
+
+fn event_error_from_log_error(error: LogError) -> EventError {
+    match error {
+        LogError::InvalidEvent(error) => error,
+        LogError::WriterDegraded(error) => EventError(Box::new(writer_degraded_error_context(
+            &error.diagnostic().message,
+        ))),
+        LogError::ShutdownTimedOut(error) => EventError(Box::new(
+            shutdown_timed_out_error_context(&error.diagnostic().message),
+        )),
+    }
+}
+
+fn level_enabled(
+    filter: sc_observability_types::LevelFilter,
+    level: sc_observability_types::Level,
+) -> bool {
+    use sc_observability_types::{Level, LevelFilter};
+
+    match filter {
+        LevelFilter::Trace => true,
+        LevelFilter::Debug => matches!(
+            level,
+            Level::Debug | Level::Info | Level::Warn | Level::Error
+        ),
+        LevelFilter::Info => matches!(level, Level::Info | Level::Warn | Level::Error),
+        LevelFilter::Warn => matches!(level, Level::Warn | Level::Error),
+        LevelFilter::Error => matches!(level, Level::Error),
+        LevelFilter::Off => false,
     }
 }
 

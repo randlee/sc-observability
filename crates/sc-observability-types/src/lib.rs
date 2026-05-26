@@ -64,7 +64,7 @@ pub use health::{
     ExporterHealth, ExporterHealthState, FileCount, LoggingHealthReport, LoggingHealthState,
     MaintenanceHealthReport, MaintenanceWorkerState, ObservabilityHealthProvider,
     ObservabilityHealthReport, ObservationHealthState, QueryHealthReport, QueryHealthState,
-    SinkHealth, SinkHealthState, TelemetryHealthReport, TelemetryHealthState,
+    SinkHealth, SinkHealthState, TelemetryHealthReport, TelemetryHealthState, WriterState,
 };
 #[doc(inline)]
 pub use level::{Level, LevelFilter};
