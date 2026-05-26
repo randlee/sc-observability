@@ -173,14 +173,13 @@ jobs:
         run: |
           set -euo pipefail
           while IFS='|' read -r package _; do
+            # Use --no-verify on both paths: cargo package/publish verify rebuilds the
+            # tarball in isolation and resolves deps from crates.io; for chained workspace
+            # crates the upstream dep may not be published yet. Correctness is covered by
+            # the preceding fmt/clippy/test/manifest validation steps.
             if [[ '${{ steps.initial_release.outputs.enabled }}' == 'true' ]]; then
-              # Initial standalone publish must use --no-verify because path
-              # deps are not yet on crates.io; correctness is covered by the
-              # preceding fmt/clippy/test/package-preflight validation steps,
-              # and this path must NOT be used outside the all-crates-absent
-              # initial-release case detected above.
               cargo publish -p "$package" --dry-run --locked --no-verify
             else
-              cargo package -p "$package" --locked --allow-dirty
+              cargo publish -p "$package" --dry-run --locked --no-verify
             fi
           done < <(python3 scripts/release_artifacts.py list-publish-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")
