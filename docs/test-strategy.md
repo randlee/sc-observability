@@ -56,6 +56,24 @@ Required tests:
 - fail-open sink failure accounting
 - post-shutdown lifecycle behavior
 
+Phase-A additions for the queue-backed writer runtime:
+
+- `Logger::log(...)` queue-admission behavior
+- `Logger::try_log(...)` non-blocking queue-full behavior
+- deprecated `emit()` compatibility behavior while `log()` / `try_log()` are
+  preferred
+- queue depth, queue capacity, queue high-water mark, and queue-full drop
+  accounting on `LoggingHealthReport`
+- writer-state and last-writer-error health behavior
+- batching behavior under burst load
+- bounded shutdown drain behavior
+- retained-log maintenance execution on the writer thread during idle or
+  post-batch windows
+- query/follow parity against active and rotated files after the writer-runtime
+  change
+- platform-specific regression coverage for macOS, Linux, and Windows around
+  file identity, rotation, truncate/recreate, and follow continuity
+
 ### 3.3 `sc-observe`
 
 Required tests:
@@ -113,6 +131,15 @@ Minimum CI gates per sprint:
 The following can be added once behavior exists:
 
 - focused integration-test job
+
+Phase-A validation additions once the phase starts landing:
+
+- `bash scripts/ci/validate_writer_thread_lock.sh` for the A.1 normative-doc
+  lock
+- `bash scripts/ci/validate_public_api_diff.sh` for additive public API diffs
+- `bash scripts/ci/validate_public_api_semver.sh` for semver-breaking API diffs
+- `bash scripts/ci/validate_public_api_docs.sh` for machine-checkable API
+  approval/documentation coverage
 
 ## 6. Exit Criteria
 

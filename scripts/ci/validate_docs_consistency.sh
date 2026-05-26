@@ -8,7 +8,9 @@ root = Path(".")
 requirements = (root / "docs/requirements.md").read_text(encoding="utf-8")
 architecture = (root / "docs/architecture.md").read_text(encoding="utf-8")
 api_design = (root / "docs/api-design.md").read_text(encoding="utf-8")
-phase_plan = (root / "docs/phase-1-sprint-assignment.md").read_text(encoding="utf-8")
+phase_plan = (root / "docs/archive/sprints/phase-1-sprint-assignment.md").read_text(
+    encoding="utf-8"
+)
 
 expected_stack = "sc-observability-types\n  <- sc-observability\n    <- sc-observe\n      <- sc-observability-otlp"
 if expected_stack not in requirements:
@@ -50,7 +52,9 @@ phase_checks = [
 ]
 for needle in phase_checks:
     if needle not in phase_plan:
-        raise SystemExit(f"phase-1-sprint-assignment.md missing consistency marker: {needle!r}")
+        raise SystemExit(
+            f"archive/sprints/phase-1-sprint-assignment.md missing consistency marker: {needle!r}"
+        )
 
 print("docs consistency validation passed")
 PY

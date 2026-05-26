@@ -1,8 +1,9 @@
 {
   "releaseVersion": "1.1.0",
   "releaseTag": "v1.1.0",
-  "releaseCommit": "",
+  "releaseCommit": "621f0d1456b7b9a4057390e34c4f9c1443d382d1",
   "generatedAt": "2026-04-06T00:00:00.000000+00:00",
+  "publishedAt": "2026-05-25T19:57:46Z",
   "items": [
     {
       "artifact": "sc-observability-types",
@@ -11,6 +12,7 @@
       "publishTarget": "crates.io",
       "publish": true,
       "required": true,
+      "publishedAt": "2026-05-25T19:57:46Z",
       "verifyCommands": [
         "cargo search sc-observability-types --limit 1 | grep -F 'sc-observability-types = \"1.1.0\"'"
       ]
@@ -22,6 +24,7 @@
       "publishTarget": "crates.io",
       "publish": true,
       "required": true,
+      "publishedAt": "2026-05-25T19:57:46Z",
       "verifyCommands": [
         "cargo search sc-observability --limit 1 | grep -F 'sc-observability = \"1.1.0\"'"
       ]
@@ -33,6 +36,7 @@
       "publishTarget": "crates.io",
       "publish": true,
       "required": true,
+      "publishedAt": "2026-05-25T19:57:46Z",
       "verifyCommands": [
         "cargo search sc-observe --limit 1 | grep -F 'sc-observe = \"1.1.0\"'"
       ]
@@ -44,6 +48,7 @@
       "publishTarget": "crates.io",
       "publish": true,
       "required": true,
+      "publishedAt": "2026-05-25T19:57:46Z",
       "verifyCommands": [
         "cargo search sc-observability-otlp --limit 1 | grep -F 'sc-observability-otlp = \"1.1.0\"'"
       ]

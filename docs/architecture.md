@@ -75,7 +75,7 @@ Owns:
 - `ObservabilityHealthProvider`
 - `LogQuery`, `LogOrder`, `LogFieldMatch`
 - `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
-- `MaintenanceHealthReport`, `MaintenanceWorkerState`
+- `MaintenanceHealthReport`, `MaintenanceWorkerState`, `WriterState`
 - health report contracts
 - shared open traits such as `Observable`, `DiagnosticInfo`,
   subscribers, filters, and projectors
@@ -106,7 +106,7 @@ Owns:
 
 - `Logger`
 - `LoggerConfig`
-- retained-log maintenance policy and background worker (see §3.2.1)
+- retained-log maintenance policy and queue-backed writer runtime (see §3.2.1)
 - `LoggerBuilder`
 - `LogSink`
 - `SinkRegistration`
@@ -115,8 +115,8 @@ Owns:
 - redaction
 - rotation
 - `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`,
-  `SinkHealth`, and `SinkHealthState` defined in `sc-observability-types`,
-  re-exported by `sc-observability`
+  `WriterState`, `SinkHealth`, and `SinkHealthState` defined in
+  `sc-observability-types`, re-exported by `sc-observability`
 
 Runtime role:
 
@@ -145,19 +145,22 @@ Owns:
 - `rotation_max_bytes`, `rotation_max_files`, and `retention_max_age`
 - `maintenance_cadence`, `maintenance_join_timeout`, and
   `maintenance_max_work_per_pass`
-- background maintenance worker lifecycle
-- maintenance health reporting and bounded shutdown join behavior
+- writer-thread-owned maintenance lifecycle
+- maintenance health reporting and bounded writer-thread shutdown-drain behavior
 
 Approved architecture shape:
 
-- the logging layer owns one background maintenance worker or equivalent
-  thread-based execution lane
-- the worker runs periodic maintenance passes on the configured cadence
-- maintenance stays off the emit path and must not require an async runtime
-- the worker is created, supervised, and joined entirely by
+- the logging layer owns one queue-backed writer thread that admits validated
+  log events from producer calls and owns batching, sink writes, rotation,
+  pruning, flush, and shutdown drain
+- maintenance runs on the writer thread during idle or post-batch windows
+- producer calls validate, redact, and enqueue events; they do not perform
+  built-in file-sink writes directly
+- the writer thread is created, supervised, and joined entirely by
   `sc-observability`; downstream apps do not manage it directly
-- a maintenance pass may rotate the active file, prune excess retained files,
-  prune stale retained files, and update maintenance health state
+- a writer-thread maintenance pass may rotate the active file, prune excess
+  retained files, prune stale retained files, and update maintenance health
+  state
 - bounded per-pass work exists so a single maintenance sweep cannot grow
   without limit
 
@@ -168,16 +171,19 @@ Health and shutdown contract:
   totals, last maintenance error, and worker state
 - `MaintenanceWorkerState` is owned by `sc-observability-types` with variants
   `Running`, `Degraded`, and `Stopped`
+- `LoggingHealthReport` also carries queue depth, queue capacity,
+  queue high-water mark, queue-full drop totals, writer state, and last writer
+  error so downstream health/doctor commands can diagnose saturation
 - maintenance failures are fail-open and do not stop logging
-- `Logger::shutdown()` joins the maintenance worker within the configured join
-  timeout
-- if the join timeout is exceeded, shutdown records the timeout or degraded
-  state and returns without unbounded waiting
+- `Logger::shutdown()` drains queued events and joins the writer thread within
+  the configured bounded shutdown timeout
+- if the drain or join timeout is exceeded, shutdown records timeout or
+  degraded state and returns without unbounded waiting
 
 Layering rules:
 
-- `sc-observability` owns the maintenance runtime and the concrete retained-log
-  policy surface
+- `sc-observability` owns the queue-backed writer runtime and the concrete
+  retained-log policy surface
 - `sc-observability-types` may own shared health-report types only if those
   types must cross crate boundaries
 - `sc-observe` and `sc-observability-otlp` consume the resulting logging
@@ -328,9 +334,12 @@ Type ownership is split as follows:
 - `sc-observability-types` owns `LogQuery`, `LogOrder`,
   `LogFieldMatch`, `LogSnapshot`, `QueryError`,
   `QueryHealthState`, `QueryHealthReport`, `MaintenanceHealthReport`,
-  `MaintenanceWorkerState`, and `ObservabilityHealthProvider`
+  `MaintenanceWorkerState`, `WriterState`, and
+  `ObservabilityHealthProvider`
 - `sc-observability-types` extends `LoggingHealthReport` with
-  `query: Option<QueryHealthReport>` and
+  `flush_errors_total`, `queue_depth`, `queue_capacity`,
+  `queue_high_water_mark`, `queue_full_drops_total`, `writer_state`,
+  `last_writer_error`, `query: Option<QueryHealthReport>`, and
   `maintenance: Option<MaintenanceHealthReport>`
 - `sc-observability` owns `Logger::query`, `Logger::follow`,
   `LogFollowSession`, and `JsonlLogReader`
@@ -406,16 +415,28 @@ pub struct LoggingHealthReport {
     pub flush_errors_total: u64,
     pub active_log_path: std::path::PathBuf,
     pub sink_statuses: Vec<SinkHealth>,
+    pub queue_depth: u64,
+    pub queue_capacity: u64,
+    pub queue_high_water_mark: u64,
+    pub queue_full_drops_total: u64,
+    pub writer_state: WriterState,
+    pub last_writer_error: Option<DiagnosticSummary>,
     pub query: Option<QueryHealthReport>,
     pub maintenance: Option<MaintenanceHealthReport>,
     pub last_error: Option<DiagnosticSummary>,
+}
+
+pub enum WriterState {
+    Running,
+    Degraded,
+    Stopped,
 }
 
 pub trait ObservabilityHealthProvider: telemetry_health_provider_sealed::Sealed + Send + Sync {
     fn telemetry_health(&self) -> TelemetryHealthReport;
 }
 
-impl Logger {
+impl Logger<Running> {
     pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, QueryError>;
     pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>;
 }
@@ -439,6 +460,10 @@ impl JsonlLogReader {
     pub fn follow(&self, query: LogQuery) -> Result<LogFollowSession, QueryError>;
 }
 ```
+
+`flush_errors_total` remains part of `LoggingHealthReport` in the writer-thread
+model so flush-failure accounting stays visible even after queue and writer
+health fields are added.
 
 `QueryError` is backed by the stable error-code constants
 `SC_LOG_QUERY_INVALID_QUERY`, `SC_LOG_QUERY_IO`, `SC_LOG_QUERY_DECODE`,
@@ -668,8 +693,8 @@ Important boundary:
 
 | Crate | Depends On | Must Not Depend On | Public Surface Summary |
 | --- | --- | --- | --- |
-| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, and `MaintenanceWorkerState`, and logging query/follow value and error contracts |
-| `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, logger-owned maintenance worker, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport` and `MaintenanceWorkerState` |
+| `sc-observability-types` | shared support crates only | `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | shared contracts, typed identifiers, UTC timestamps, typed durations, diagnostics, shared traits including `ObservabilityHealthProvider`, health type definitions including `LoggingHealthReport`, `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`, and logging query/follow value and error contracts |
+| `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
 
@@ -789,8 +814,45 @@ Consequences:
   successful compilation of the unpublished ATM proving artifact.
 - **Consequences**:
   - layer violations are caught before merge
-  - ATM-specific behavior remains in the ATM-owned adapter boundary
-  - the proving artifact remains executable evidence, not dead documentation
+- ATM-specific behavior remains in the ATM-owned adapter boundary
+- the proving artifact remains executable evidence, not dead documentation
+
+### ADR-010: Queue-Backed Writer Thread Owns Logging And Maintenance
+
+- **Status**: Accepted
+- **Context**: The prior retained-log model used producer-thread sink writes
+  plus a dedicated maintenance-only background worker. That split kept
+  low-priority maintenance off the emit path, but it left the main file I/O,
+  sink mutation, and rotation coordination on producer threads while still
+  paying the complexity cost of a separate thread.
+- **Decision**: Replace the dedicated maintenance-only worker model with a
+  single queue-backed writer thread. Producer calls validate, redact, and
+  enqueue records. The writer thread owns batching, sink writes, retained-log
+  rotation, retained-log pruning, flush, and bounded shutdown drain behavior.
+  Maintenance runs on the same writer thread during idle or post-batch
+  windows.
+- **Rationale**:
+  - removes built-in file-sink locks and rotation coordination from the
+    producer hot path
+  - gives one execution owner for file writes, maintenance, and shutdown
+    sequencing
+  - makes queue depth, queue saturation, and writer degradation measurable
+    through one health surface
+  - keeps the crate free of async-runtime dependencies while still moving file
+    I/O off producer threads
+- **Rejected Alternative**: rejected alternative of retaining a dedicated maintenance-only worker alongside the new writer thread. That option would keep two background execution lanes for one sink system, increase shutdown coordination complexity, and preserve split ownership over rotation/pruning versus writes.
+- **Consequences**:
+  - `log()` succeeds on queue admission, not durability; `flush()` remains the
+    barrier for committed writes
+  - `try_log()` may return explicit queue-full failure under saturation rather
+    than silently dropping records
+  - queue-full drops, writer degradation, and last-writer-error reporting are
+    part of `LoggingHealthReport`
+  - `Logger::shutdown()` now drains queued events and joins the writer thread
+    within a bounded timeout rather than joining a separate maintenance worker
+  - `MaintenanceWorkerState` remains the retained-log maintenance health
+    vocabulary, but its semantics describe writer-owned maintenance execution
+    rather than an independently joinable background thread
 
 ## 8. API-Design Consistency
 

@@ -10,7 +10,7 @@
 - [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md)
 - [`public-api-checklist.md`](./public-api-checklist.md)
 - [`test-strategy.md`](./test-strategy.md)
-- [`sprint-plan.md`](./sprint-plan.md)
+- [`archive/sprints/sprint-plan.md`](./archive/sprints/sprint-plan.md)
 
 ## 1. Purpose
 

@@ -6,7 +6,7 @@
 - [`requirements.md`](./requirements.md)
 - [`architecture.md`](./architecture.md)
 - [`implementation-plan.md`](./implementation-plan.md)
-- [`sprint-plan.md`](./sprint-plan.md)
+- [`archive/sprints/sprint-plan.md`](./archive/sprints/sprint-plan.md)
 - [`public-api-checklist.md`](./public-api-checklist.md)
 - [`release-readiness-checklist.md`](./release-readiness-checklist.md)
 
