@@ -280,7 +280,11 @@ if health.writer_state != WriterState::Running {
 }
 
 if let Some(error) = &health.last_writer_error {
-    eprintln!("last writer error: {} {}", error.code, error.message);
+    eprintln!(
+        "last writer error: {} {}",
+        error.code.as_ref().map(|code| code.as_str()).unwrap_or("<no-code>"),
+        error.message
+    );
 }
 
 for sink in &health.sink_statuses {

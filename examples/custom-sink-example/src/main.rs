@@ -3,14 +3,46 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use sc_observability::{
-    LogFilter, LogSink, LoggerBuilder, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
-};
-use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent, LogSinkError, OutcomeLabel,
-    ProcessIdentity, Remediation, SchemaVersion, ServiceName, SinkName, TargetCategory, Timestamp,
+    ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, Level, LogEvent,
+    LogFilter, LogSink, LogSinkError, LoggerBuilder, LoggerConfig, OutcomeLabel,
+    ProcessIdentity, Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState,
+    SinkName, SinkRegistration, TargetCategory, Timestamp, WriterState,
     OBSERVATION_ENVELOPE_VERSION,
 };
 use serde_json::json;
+
+const TARGET_AUDIT: &str = "app.audit";
+const TARGET_CORE: &str = "app.core";
+const TARGET_HEALTH: &str = "app.health";
+const ACTION_STARTUP: &str = "startup";
+const ACTION_HEARTBEAT: &str = "heartbeat";
+const ACTION_LOGGER_HEALTH: &str = "logger-health";
+const ACTION_SINK_HEALTH: &str = "sink-health";
+const ACTION_WRITER_WARNING: &str = "writer-warning";
+const DIAGNOSTIC_CODE: &str = "SC_CUSTOM_SINK_EXAMPLE";
+const DIAGNOSTIC_CAUSE: &str = "example startup event emitted for custom sink demonstration";
+const MESSAGE_AUDIT_ACCEPTED: &str = "accepted by the custom sink";
+const MESSAGE_FILE_ONLY: &str = "written only to the built-in file sink";
+const MESSAGE_LOGGER_HEALTH: &str = "logger health snapshot";
+const MESSAGE_QUEUE_FULL: &str = "non-blocking log admission failed";
+const MESSAGE_QUEUE_DROPS: &str = "non-blocking log events were dropped";
+const MESSAGE_WRITER_STATE: &str = "writer runtime is not healthy";
+const MESSAGE_WRITER_ERROR: &str = "writer runtime reported an error";
+const MESSAGE_SINK_HEALTH: &str = "sink health snapshot";
+const OUTCOME_OK: &str = "ok";
+const FIELD_COMPONENT: &str = "component";
+const FIELD_ERROR: &str = "error";
+const FIELD_EXAMPLE: &str = "example";
+const FIELD_QUEUE_CAPACITY: &str = "queue_capacity";
+const FIELD_QUEUE_DEPTH: &str = "queue_depth";
+const FIELD_QUEUE_FULL_DROPS: &str = "queue_full_drops_total";
+const FIELD_QUEUE_HIGH_WATER: &str = "queue_high_water_mark";
+const FIELD_SINK_NAME: &str = "sink_name";
+const FIELD_SINK_STATE: &str = "sink_state";
+const FIELD_STATE: &str = "state";
+const FIELD_WRITER_ERROR_CODE: &str = "writer_error_code";
+const FIELD_WRITER_ERROR_MESSAGE: &str = "writer_error_message";
+const FIELD_WRITER_STATE: &str = "writer_state";
 
 struct AuditSink {
     health: Mutex<SinkHealth>,
@@ -44,9 +76,7 @@ impl AuditSink {
 
         let mut health = self.health.lock().expect("custom sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
-        health.last_error = Some(sc_observability_types::DiagnosticSummary::from(
-            context.diagnostic(),
-        ));
+        health.last_error = Some(DiagnosticSummary::from(context.diagnostic()));
         LogSinkError(Box::new(context))
     }
 }
@@ -81,7 +111,7 @@ struct AuditOnly;
 
 impl LogFilter for AuditOnly {
     fn accepts(&self, event: &LogEvent) -> bool {
-        event.target.as_str() == "app.audit"
+        event.target.as_str() == TARGET_AUDIT
     }
 }
 
@@ -98,19 +128,33 @@ fn build_event(service: ServiceName, target: &str, action: &str, message: &str) 
         trace: None,
         request_id: None,
         correlation_id: None,
-        outcome: Some(OutcomeLabel::new("ok").expect("valid outcome label")),
+        outcome: Some(OutcomeLabel::new(OUTCOME_OK).expect("valid outcome label")),
         diagnostic: Some(Diagnostic {
             timestamp: Timestamp::now_utc(),
-            code: ErrorCode::new_static("SC_CUSTOM_SINK_EXAMPLE"),
+            code: ErrorCode::new_static(DIAGNOSTIC_CODE),
             message: "custom sink example event".to_string(),
-            cause: None,
+            cause: Some(DIAGNOSTIC_CAUSE.to_string()),
             remediation: Remediation::recoverable("retry", ["inspect stderr output"]),
             docs: None,
-            details: serde_json::Map::from_iter([("example".to_string(), json!(true))]),
+            details: serde_json::Map::from_iter([(FIELD_EXAMPLE.to_string(), json!(true))]),
         }),
         state_transition: None,
-        fields: serde_json::Map::from_iter([("component".to_string(), json!("example"))]),
+        fields: serde_json::Map::from_iter([(FIELD_COMPONENT.to_string(), json!("example"))]),
     }
+}
+
+fn build_health_event(
+    service: ServiceName,
+    level: Level,
+    action: &str,
+    message: &str,
+    fields: serde_json::Map<String, serde_json::Value>,
+) -> LogEvent {
+    let mut event = build_event(service, TARGET_HEALTH, action, message);
+    event.level = level;
+    event.diagnostic = None;
+    event.fields = fields;
+    event
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -126,34 +170,116 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     logger.log(build_event(
         service.clone(),
-        "app.audit",
-        "startup",
-        "accepted by the custom sink",
+        TARGET_AUDIT,
+        ACTION_STARTUP,
+        MESSAGE_AUDIT_ACCEPTED,
     ))?;
     if let Err(err) = logger.try_log(build_event(
-        service,
-        "app.core",
-        "heartbeat",
-        "written only to the built-in file sink",
+        service.clone(),
+        TARGET_CORE,
+        ACTION_HEARTBEAT,
+        MESSAGE_FILE_ONLY,
     )) {
-        eprintln!("non-blocking log admission failed: {err}");
+        logger.log(build_health_event(
+            service.clone(),
+            Level::Warn,
+            ACTION_WRITER_WARNING,
+            MESSAGE_QUEUE_FULL,
+            serde_json::Map::from_iter([(FIELD_ERROR.to_string(), json!(err.to_string()))]),
+        ))?;
     }
     logger.flush()?;
 
     let health = logger.health();
-    println!("logging state: {:?}", health.state);
-    println!("active log path: {}", health.active_log_path.display());
-    println!(
-        "queue depth: {} / {} (high-water {})",
-        health.queue_depth, health.queue_capacity, health.queue_high_water_mark
-    );
-    println!("queue-full drops: {}", health.queue_full_drops_total);
-    println!("writer state: {:?}", health.writer_state);
-    if let Some(error) = &health.last_writer_error {
-        println!("last writer error: {} {}", error.code, error.message);
+    logger.log(build_health_event(
+        service.clone(),
+        Level::Info,
+        ACTION_LOGGER_HEALTH,
+        MESSAGE_LOGGER_HEALTH,
+        serde_json::Map::from_iter([
+            (
+                "active_log_path".to_string(),
+                json!(health.active_log_path.display().to_string()),
+            ),
+            (FIELD_QUEUE_DEPTH.to_string(), json!(health.queue_depth)),
+            (FIELD_QUEUE_CAPACITY.to_string(), json!(health.queue_capacity)),
+            (
+                FIELD_QUEUE_HIGH_WATER.to_string(),
+                json!(health.queue_high_water_mark),
+            ),
+            (
+                FIELD_QUEUE_FULL_DROPS.to_string(),
+                json!(health.queue_full_drops_total),
+            ),
+            (FIELD_STATE.to_string(), json!(format!("{:?}", health.state))),
+            (
+                FIELD_WRITER_STATE.to_string(),
+                json!(format!("{:?}", health.writer_state)),
+            ),
+        ]),
+    ))?;
+
+    if health.queue_full_drops_total != 0 {
+        logger.log(build_health_event(
+            service.clone(),
+            Level::Warn,
+            ACTION_WRITER_WARNING,
+            MESSAGE_QUEUE_DROPS,
+            serde_json::Map::from_iter([(
+                FIELD_QUEUE_FULL_DROPS.to_string(),
+                json!(health.queue_full_drops_total),
+            )]),
+        ))?;
     }
+
+    if health.writer_state != WriterState::Running {
+        logger.log(build_health_event(
+            service.clone(),
+            Level::Warn,
+            ACTION_WRITER_WARNING,
+            MESSAGE_WRITER_STATE,
+            serde_json::Map::from_iter([(
+                FIELD_WRITER_STATE.to_string(),
+                json!(format!("{:?}", health.writer_state)),
+            )]),
+        ))?;
+    }
+
+    if let Some(error) = &health.last_writer_error {
+        logger.log(build_health_event(
+            service.clone(),
+            Level::Warn,
+            ACTION_WRITER_WARNING,
+            MESSAGE_WRITER_ERROR,
+            serde_json::Map::from_iter([
+                (
+                    FIELD_WRITER_ERROR_CODE.to_string(),
+                    json!(error.code.as_ref().map(|code| code.as_str()).unwrap_or("<no-code>")),
+                ),
+                (
+                    FIELD_WRITER_ERROR_MESSAGE.to_string(),
+                    json!(error.message.clone()),
+                ),
+            ]),
+        ))?;
+    }
+
     for sink in &health.sink_statuses {
-        println!("sink {} => {:?}", sink.name, sink.state);
+        let level = if sink.state == SinkHealthState::Healthy {
+            Level::Info
+        } else {
+            Level::Warn
+        };
+        logger.log(build_health_event(
+            service.clone(),
+            level,
+            ACTION_SINK_HEALTH,
+            MESSAGE_SINK_HEALTH,
+            serde_json::Map::from_iter([
+                (FIELD_SINK_NAME.to_string(), json!(sink.name.as_str())),
+                (FIELD_SINK_STATE.to_string(), json!(format!("{:?}", sink.state))),
+            ]),
+        ))?;
     }
 
     Ok(())

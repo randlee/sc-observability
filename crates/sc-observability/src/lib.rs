@@ -43,14 +43,13 @@ pub use follow::LogFollowSession;
 pub use jsonl_reader::JsonlLogReader;
 #[doc(inline)]
 pub use sc_observability_types::{
-    ActionName, ErrorCode, EventError, FileCount, Level, LogEvent, LogQuery, LogSnapshot,
-    LoggingHealthReport, LoggingHealthState, MaintenanceHealthReport, MaintenanceWorkerState,
-    OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName,
-    SinkHealth, SinkHealthState, TargetCategory, Timestamp, WriterState,
+    ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, EventError, FileCount,
+    Level, LogEvent, LogQuery, LogSinkError, LogSnapshot, LoggingHealthReport, LoggingHealthState,
+    MaintenanceHealthReport, MaintenanceWorkerState, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel,
+    ProcessIdentity, Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState,
+    SinkName, TargetCategory, Timestamp, WriterState,
 };
-use sc_observability_types::{
-    ErrorContext, LevelFilter, LogSinkError, ProcessIdentityPolicy, Remediation,
-};
+use sc_observability_types::{LevelFilter, ProcessIdentityPolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 #[cfg(feature = "fault-injection")]
