@@ -29,8 +29,14 @@ metadata = json.loads(
 )
 
 for package in metadata["packages"]:
+    publish = package.get("publish", None)
+    if publish is False or publish == []:
+        continue
     targets = package.get("targets", [])
-    if not any("lib" in target.get("kind", []) for target in targets):
+    if not any(
+        "lib" in target.get("kind", []) or "proc-macro" in target.get("kind", [])
+        for target in targets
+    ):
         continue
     print(f'{package["name"]}\t{package["manifest_path"]}')
 PY

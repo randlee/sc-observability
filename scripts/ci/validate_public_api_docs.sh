@@ -37,10 +37,13 @@ PY
 
 cache_dir="$(public_api_cache_dir)"
 status_path="$cache_dir/public-api-diff.status"
-head_rev="$(git rev-parse HEAD)"
+set +e
+bash scripts/ci/validate_public_api_diff.sh >/dev/null
+diff_status=$?
+set -e
 
-if [[ ! -f "$status_path" ]] || ! grep -q "^PUBLIC_API_DIFF_HEAD=${head_rev}$" "$status_path"; then
-    bash scripts/ci/validate_public_api_diff.sh >/dev/null
+if [[ $diff_status -ne 0 && $diff_status -ne 1 ]]; then
+    exit $diff_status
 fi
 
 source "$status_path"

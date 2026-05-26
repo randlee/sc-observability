@@ -65,9 +65,6 @@ for path in iter_repo_files():
 
 violations = []
 for version, hits in sorted(occurrences.items()):
-    files = {path for path, _, _ in hits}
-    if len(files) <= 1:
-        continue
     if version == workspace_version:
         continue
     rendered_hits = ", ".join(f"{path}:{line_no}" for path, line_no, _ in hits)
