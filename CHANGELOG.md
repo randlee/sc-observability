@@ -11,6 +11,9 @@ This release line will become `v1.2.0` when `integrate/phase-a` merges to `devel
 
 ## [1.2.0] - 2026-05-26
 
+This release includes approved public API changes relative to `1.1.0`; review
+the migration notes below before upgrading.
+
 Public API reference for this release:
 - `sc-observability-types`: <https://docs.rs/sc-observability-types/1.2.0/sc_observability_types/>
 - `sc-observability`: <https://docs.rs/sc-observability/1.2.0/sc_observability/>
