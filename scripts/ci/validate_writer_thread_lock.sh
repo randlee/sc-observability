@@ -28,6 +28,7 @@ architecture_checks = [
     "maintenance runs on the writer thread during idle or post-batch windows",
     "### ADR-010: Queue-Backed Writer Thread Owns Logging And Maintenance",
     "rejected alternative of retaining a dedicated maintenance-only worker",
+    "WriterState",
 ]
 for needle in architecture_checks:
     if needle not in architecture:
@@ -40,6 +41,9 @@ api_checks = [
     "pub queue_high_water_mark: u64,",
     "pub queue_full_drops_total: u64,",
     "pub writer_state: WriterState,",
+    "LOGGER_QUEUE_FULL",
+    "LOGGER_WRITER_DEGRADED",
+    "LOGGER_SHUTDOWN_TIMED_OUT",
 ]
 for needle in api_checks:
     if needle not in api_design:

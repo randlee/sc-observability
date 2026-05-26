@@ -24,6 +24,14 @@ estimated_scope: medium
 Lock the normative writer-thread architecture and the public logging contract
 before implementation begins.
 
+Execution note:
+
+- the original planning draft referenced `develop` as the eventual downstream
+  integration target
+- the authoritative execution target for phase-A feature branches is
+  `integrate/phase-a`, which is the correct target recorded in this sprint
+  frontmatter
+
 ## Hard Dependencies
 
 - `docs/project-plan.md`
