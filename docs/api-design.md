@@ -1615,6 +1615,12 @@ Rules:
   - `LOGGER_SINK_WRITE_FAILED`
   - `LOGGER_INIT_FAILED`
   - `LOGGER_FLUSH_FAILED`
+
+Writer-thread batching is intentionally internal-only in phase A. The locked
+public configuration surface ends at `LoggerConfig.queue_capacity`; batch size
+and batch-delay tuning remain implementation-owned constants rather than
+consumer-configurable API.
+
 ### 11.10 Logging Failure Model
 
 Rules:
