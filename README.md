@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         PathBuf::from("./observability"),
     ))?;
 
-    logger.emit(LogEvent {
+    logger.log(LogEvent {
         version: SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION)?,
         timestamp: Timestamp::now_utc(),
         level: Level::Info,
@@ -56,13 +56,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fields: serde_json::Map::new(),
     })?;
 
+    logger.flush()?;
+
     let health = logger.health();
     println!("active log path: {}", health.active_log_path.display());
+    println!("writer state: {:?}", health.writer_state);
+    println!(
+        "queue depth: {} / {}",
+        health.queue_depth, health.queue_capacity
+    );
     Ok(())
 }
 ```
 
 Default output goes to `<log_root>/logs/<service>.log.jsonl`.
+
+Use `log()` for the default blocking queue-admission path, `try_log()` for the
+non-blocking best-effort path, and `flush()` when the caller needs a durability
+barrier after successful queue admission. `emit()` remains available only as a
+deprecated compatibility path.
 
 ## Fault Injection For Retained Sinks
 

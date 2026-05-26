@@ -136,7 +136,8 @@ Owns:
 - diagnostic types
 - log, span, and metric data contracts
 - observation routing traits and helper types
-- health-report contracts
+- health-report contracts, including `LoggingHealthReport`,
+  `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState`
 - generic config/value types shared across surfaces
 
 Must not own:
@@ -1377,7 +1378,7 @@ Defaults:
 - `retained_log_policy.rotation_max_files = FileCount::from_usize(10)`
 - `retained_log_policy.retention_max_age = RetentionMaxAge::from_days(7)`
 - `retained_log_policy.maintenance_cadence = MaintenanceCadence::new(60s)`
-- `retained_log_policy.maintenance_join_timeout = MaintenanceJoinTimeout::new(5s)`
+- `retained_log_policy.writer_shutdown_timeout = WriterShutdownTimeout::new(5s)`
 - `redact_bearer_tokens = true`
 - `enable_file_sink = true`
 - `enable_console_sink = false`
@@ -1417,7 +1418,7 @@ pub struct RetainedLogPolicy {
     pub rotation_max_files: FileCount,
     pub retention_max_age: RetentionMaxAge,
     pub maintenance_cadence: MaintenanceCadence,
-    pub maintenance_join_timeout: MaintenanceJoinTimeout,
+    pub writer_shutdown_timeout: WriterShutdownTimeout,
     pub maintenance_max_work_per_pass: Option<usize>,
 }
 ```
@@ -1428,7 +1429,7 @@ Defaults:
 - `rotation_max_files = FileCount::from_usize(10)`
 - `retention_max_age = RetentionMaxAge::from_days(7)`
 - `maintenance_cadence = MaintenanceCadence::new(60s)`
-- `maintenance_join_timeout = MaintenanceJoinTimeout::new(5s)`
+- `writer_shutdown_timeout = WriterShutdownTimeout::new(5s)`
 
 ### 11.4 Legacy Direct-Sink Helpers
 
@@ -1468,9 +1469,15 @@ pub struct Logger<State = Running> { /* opaque */ }
 
 impl Logger<Running> {
     pub fn new(config: LoggerConfig) -> Result<Self, InitError>;
+    pub fn log(&self, event: LogEvent) -> Result<(), LogError>;
+    pub fn try_log(&self, event: LogEvent) -> Result<(), TryLogError>;
+    #[deprecated(
+        since = "1.2.0",
+        note = "Use log() for blocking queue admission or try_log() for non-blocking logging."
+    )]
     pub fn emit(&self, event: LogEvent) -> Result<(), EventError>;
     pub fn flush(&self) -> Result<(), FlushError>;
-    pub fn shutdown(self) -> Result<Logger<Stopped>, ShutdownError>;
+    pub fn shutdown(self) -> Logger<Stopped>;
 }
 
 impl<State> Logger<State> {
@@ -1480,9 +1487,40 @@ impl<State> Logger<State> {
 
 Lifecycle rules:
 
-- `emit()` validates and redacts before sink fan-out
+- `log()` validates and redacts before queue admission, blocks until the event
+  is accepted by the writer runtime, and does not guarantee write durability
+- `try_log()` validates and redacts before queue admission and returns
+  `TryLogError::QueueFull` rather than blocking when the queue is saturated
+- deprecated `emit()` remains available as a compatibility path while new
+  consumers migrate to `log()` and `try_log()`
+- deprecated `emit()` remains fail-open and performs a best-effort flush when
+  the writer is not inside an active retained-log maintenance pass so existing
+  logger-only consumers keep synchronous visibility expectations where
+  practical without regressing queue admission during maintenance work
 - `Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`
+- `Logger::shutdown()` drains already-queued events and does not return until
+  the writer thread has definitively joined
+- the configured shutdown timeout is a degradation threshold recorded in
+  health/error reporting; if it is exceeded, shutdown still waits for writer
+  completion before returning `Logger<Stopped>`
 - post-shutdown `emit()`, `query()`, and `follow()` misuse becomes a compile-time error
+
+Logger error inventory:
+
+```rust
+pub enum LogError {
+    InvalidEvent(EventError),
+    WriterDegraded(#[source] Box<ErrorContext>),
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
+}
+
+pub enum TryLogError {
+    InvalidEvent(EventError),
+    QueueFull(#[source] Box<ErrorContext>),
+    WriterDegraded(#[source] Box<ErrorContext>),
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
+}
+```
 
 Crate-local producer injection trait:
 
@@ -1573,10 +1611,19 @@ Rules:
   - `DEFAULT_ENABLE_CONSOLE_SINK`
 - `src/error_codes.rs`
   - `LOGGER_INVALID_EVENT`
+  - `LOGGER_QUEUE_FULL`
+  - `LOGGER_WRITER_DEGRADED`
+  - `LOGGER_SHUTDOWN_TIMED_OUT`
   - `LOGGER_SHUTDOWN`
   - `LOGGER_SINK_WRITE_FAILED`
   - `LOGGER_INIT_FAILED`
   - `LOGGER_FLUSH_FAILED`
+
+Writer-thread batching is intentionally internal-only in phase A. The locked
+public configuration surface ends at `LoggerConfig.queue_capacity`; batch size
+and batch-delay tuning remain implementation-owned constants rather than
+consumer-configurable API.
+
 ### 11.10 Logging Failure Model
 
 Rules:
@@ -1613,11 +1660,39 @@ pub struct SinkHealth {
 pub struct LoggingHealthReport {
     pub state: LoggingHealthState,
     pub dropped_events_total: u64,
+    pub flush_errors_total: u64,
     pub active_log_path: std::path::PathBuf,
     pub sink_statuses: Vec<SinkHealth>,
+    pub queue_depth: u64,
+    pub queue_capacity: u64,
+    pub queue_high_water_mark: u64,
+    pub queue_full_drops_total: u64,
+    pub writer_state: WriterState,
+    pub last_writer_error: Option<DiagnosticSummary>,
+    pub query: Option<QueryHealthReport>,
+    pub maintenance: Option<MaintenanceHealthReport>,
     pub last_error: Option<DiagnosticSummary>,
 }
+
+pub enum WriterState {
+    Running,
+    Degraded,
+    Stopped,
+}
 ```
+
+Health rules:
+
+- `WriterState` is part of the shared health-contract surface owned by
+  `sc-observability-types` and re-exported by `sc-observability`
+- `queue_depth` is the current admitted-but-not-yet-written record count
+- `queue_capacity` is the configured bounded queue size
+- `queue_high_water_mark` records the highest observed queue depth since
+  startup
+- `queue_full_drops_total` records explicit queue-full drops from
+  non-blocking logging calls
+- `writer_state` and `last_writer_error` expose background runtime degradation
+  without forcing consumers to infer writer health from sink-local failures
 
 ## 12. Telemetry Surface (`sc-observability-otlp`)
 

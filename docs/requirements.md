@@ -104,6 +104,8 @@ This crate owns shared neutral contracts only.
   behavior such as `Logger`, `LoggerBuilder`, `LogSink`, `SinkRegistration`,
   built-in sink implementations, or sink-configuration toggles. Downstream
   consumers that need those behaviors shall depend on `sc-observability`.
+- TYP-040 `sc-observability-types` shall own `WriterState` as the shared
+  logging-runtime writer-health enum used by `LoggingHealthReport`.
 
 ## 4. `sc-observability` Requirements
 
@@ -122,11 +124,16 @@ This crate is the lightweight logging layer.
 - LOG-011 `RedactionPolicy` shall support built-in denylist and bearer-token redaction.
 - LOG-012 `RedactionPolicy` shall support consumer-provided `Redactor` implementations.
 - LOG-013 Sink filtering shall be sink-local policy, not producer burden.
-- LOG-014 Invalid log events shall fail fast with `EventError`.
+- LOG-014 Invalid log events shall fail fast, surfacing as
+  `LogError::InvalidEvent(EventError)` from `log()` and
+  `TryLogError::InvalidEvent(EventError)` from `try_log()`.
 - LOG-015 Sink failures after validation shall be fail-open and shall not block the caller’s core flow.
 - LOG-016 Logging health shall expose `LoggingHealthReport`,
   `LoggingHealthState`, `SinkHealth`, and typed `SinkHealthState` (defined in
-  `sc-observability-types` and re-exported by `sc-observability`).
+  `sc-observability-types` and re-exported by `sc-observability`). For the
+  writer-thread runtime, `LoggingHealthReport` shall also expose `queue_depth`,
+  `queue_capacity`, `queue_high_water_mark`, `queue_full_drops_total`,
+  `WriterState`, and `last_writer_error`.
 - LOG-017 `sc-observability` shall not own typed observation routing.
 - LOG-018 `sc-observability` shall not own OTLP transport or any OpenTelemetry dependency.
 - LOG-019 `sc-observability` shall not own ATM-specific metadata rules, path conventions, or compatibility behavior.
@@ -137,7 +144,7 @@ This crate is the lightweight logging layer.
   - `rotation_max_files = FileCount::from_usize(10)`
   - `retention_max_age = RetentionMaxAge::from_days(7)`
   - `maintenance_cadence = MaintenanceCadence::new(60 s)`
-  - `maintenance_join_timeout = MaintenanceJoinTimeout::new(5 s)`
+  - `writer_shutdown_timeout = WriterShutdownTimeout::new(5 s)`
   - `maintenance_max_work_per_pass = None`
   - bearer-token redaction enabled
   - built-in file sink enabled
@@ -146,7 +153,15 @@ This crate is the lightweight logging layer.
 - LOG-022 The logging layer shall not expose or assume an HTTP health endpoint; health is available through in-process health objects only.
 - LOG-023 `Logger` lifecycle behavior shall be explicit:
   - `Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`
-  - `emit()`, `query()`, and `follow()` are available only on `Logger<Running>`
+  - `Logger::shutdown()` waits for definitive writer-thread completion before
+    returning `Logger<Stopped>`
+  - `log()`, `try_log()`, `flush()`, deprecated `emit()`, `query()`, and
+    `follow()` are available only on `Logger<Running>`
+  - `log()` blocks until queue admission and does not guarantee durability
+  - `try_log()` is non-blocking and returns explicit queue-full failure
+  - exceeding `writer_shutdown_timeout` records degraded shutdown health but
+    does not permit the writer thread to continue detached after
+    `Logger::shutdown()` returns
   - `Logger<Stopped>` remains usable for health inspection only
   - logger-created `LogFollowSession::poll()` after `shutdown()` returns `QueryError::Shutdown`
 - LOG-024 `sc-observability` shall own a crate-local sealed `LogEmitter` trait for producer injection when logging-only use is desired.
@@ -174,13 +189,11 @@ This crate is the lightweight logging layer.
   maintenance to downstream applications.
 - LOG-040 The retained-log policy surface shall expose additive configuration
   for `rotation_max_bytes`, `rotation_max_files`, `retention_max_age`,
-  `maintenance_cadence`, `maintenance_join_timeout`, and
+  `maintenance_cadence`, `writer_shutdown_timeout`, and
   `maintenance_max_work_per_pass`, using strong public newtypes for bytes and
   maintenance timing fields. `retention_max_age` supersedes the prior
   `retention.max_age_days` field.
-- LOG-041 Retained-log maintenance shall run off the main emit path on a
-  worker owned by `sc-observability` and shall not require an async runtime
-  dependency.
+- LOG-041 Retained-log maintenance shall run on the writer thread during idle or post-batch windows, stay off the producer hot path, and shall not require an async runtime dependency.
 - LOG-042 Downstream applications shall configure retained-log policy through
   `sc-observability` config only and shall not need to spawn, join, or manage
   a separate prune or rotation worker.
@@ -194,10 +207,17 @@ This crate is the lightweight logging layer.
   `Degraded`, and `Stopped`.
 - LOG-045 Retained-log maintenance failures shall be fail-open, shall not crash
   the logger, and shall not block or interfere with the emit path.
-- LOG-046 `Logger::shutdown()` shall remain bounded while retained-log
-  maintenance is enabled: it shall join the maintenance worker within the
-  configured timeout or record timeout/degraded state in health or error
-  reporting before returning.
+- LOG-046 `Logger::shutdown()` shall drain queued events, record timeout/degraded
+  state in health or error reporting when shutdown exceeds the configured
+  timeout threshold, and return `Logger<Stopped>` only after the writer thread
+  has definitively stopped.
+- LOG-047 `LogError` shall be the blocking queue-admission error surface for
+  `Logger::log(...)` and shall include `WriterDegraded` and
+  `ShutdownTimedOut` variants in addition to invalid-event rejection.
+- LOG-048 `TryLogError` shall be the non-blocking queue-admission error surface
+  for `Logger::try_log(...)` and shall include `QueueFull`,
+  `WriterDegraded`, and `ShutdownTimedOut` variants in addition to
+  invalid-event rejection.
 
 ### 4.2 Consumer Documentation Requirements
 
@@ -348,7 +368,14 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
 - NFR-008 Each crate section in this document shall remain readable in isolation without requiring upward-layer concepts to understand lower-layer behavior.
 - NFR-009 The workspace shall enforce layering and repo-boundary rules in CI, including dependency bans against `agent-team-mail-*` and banned crate edges that violate the approved stack.
 - NFR-010 The workspace shall enforce basic docs consistency checks in CI so the approved crate layering does not drift out of sync across requirements, architecture, and API design documents.
-- NFR-011 The workspace shall enforce version-literal consistency in CI: if a plain-text release version appears in more than one maintained file, every occurrence shall match `workspace.package.version`.
+- NFR-011 The workspace shall enforce version-literal consistency in CI for the
+  maintained files covered by the validation script: Cargo package tables,
+  internal workspace dependency version pins that reference local crate paths,
+  and `RELEASE-NOTES*.md` documents. Within that tracked scope, every release
+  version literal shall match `workspace.package.version`.
+- NFR-012 Public API surface changes to `sc-observability` shall be
+  accompanied by updates to the normative docs and shall pass the CI public-API
+  governance checks introduced in sprint A.2 before merge.
 
 ## 8. Source Organization Requirements
 

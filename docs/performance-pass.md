@@ -1,5 +1,9 @@
 # Performance Pass
 
+## Status
+
+Historical baseline plus phase-A follow-on note.
+
 ## Scope
 
 Sprint 6 review of hot-path allocations and fan-out behavior in:
@@ -10,13 +14,24 @@ Sprint 6 review of hot-path allocations and fan-out behavior in:
 
 ## Findings
 
-### Logging fan-out
+### Logging fan-out baseline
 
-- `Logger::emit(...)` validates once, redacts once, and then fan-outs the same
-  redacted event to sinks.
-- Sink fan-out does not clone the event per sink in the logger itself.
-- Significant additional allocation was not found in the logging hot path
+- Before phase A, `Logger::emit(...)` validated once, redacted once, and then
+  fanned out the same redacted event to sinks on the caller thread.
+- Sink fan-out did not clone the event per sink in the logger itself.
+- Significant additional allocation was not found in that pre-phase-A hot path
   beyond JSON serialization and sink-specific write behavior.
+
+### Phase-A follow-on
+
+- Phase A supersedes the caller-thread sink-write baseline with a queue-backed
+  writer-thread model.
+- The approved follow-on optimization is structural rather than
+  micro-allocational: producer calls validate, redact, and enqueue, while one
+  writer thread owns batching, sink writes, rotation, pruning, flush, and
+  shutdown drain completion with timeout-threshold degradation reporting.
+- This document is not a veto on that redesign; it is the historical
+  measurement note that motivated the phase-A architectural follow-on.
 
 ### Observation routing
 
@@ -37,8 +52,11 @@ Sprint 6 review of hot-path allocations and fan-out behavior in:
 
 ## Outcome
 
-- No significant hot-path allocation issue was found that blocks release.
-- No mandatory pre-release performance refactor is required.
+- No significant pre-phase-A hot-path allocation issue was found that blocked
+  the `v1.1.0` release.
+- Phase A intentionally takes a larger runtime-architecture step for lock and
+  producer-path decoupling reasons, not because this baseline found a release
+  blocker.
 - The main deferred optimization opportunity is replacing the current span-key
   string assembly with a dedicated structured key type if future profiling
   shows it to be material.

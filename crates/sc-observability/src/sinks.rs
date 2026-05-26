@@ -652,20 +652,33 @@ mod tests {
     };
     use serde_json::json;
     use std::fs;
-    use std::path::PathBuf;
+    use std::ops::Deref;
+    use std::path::{Path, PathBuf};
     use std::time::Duration;
 
-    fn temp_path(name: &str) -> PathBuf {
-        let path = std::env::temp_dir().join(format!(
-            "sc-observability-sinks-{name}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .expect("system time before unix epoch")
-                .as_nanos()
-        ));
-        let _ = fs::remove_dir_all(&path);
-        path
+    struct TestRoot(tempfile::TempDir);
+
+    impl TestRoot {
+        fn path_buf(&self) -> PathBuf {
+            self.0.path().to_path_buf()
+        }
+    }
+
+    impl Deref for TestRoot {
+        type Target = Path;
+
+        fn deref(&self) -> &Self::Target {
+            self.0.path()
+        }
+    }
+
+    fn temp_root(name: &str) -> TestRoot {
+        TestRoot(
+            tempfile::Builder::new()
+                .prefix(&format!("sc-observability-sinks-{name}-"))
+                .tempdir()
+                .expect("create temporary test root"),
+        )
     }
 
     fn service_name() -> ServiceName {
@@ -708,13 +721,13 @@ mod tests {
         crate::MaintenanceCadence::new(Duration::from_secs(value))
     }
 
-    fn join_secs(value: u64) -> crate::MaintenanceJoinTimeout {
-        crate::MaintenanceJoinTimeout::new(Duration::from_secs(value))
+    fn join_secs(value: u64) -> crate::WriterShutdownTimeout {
+        crate::WriterShutdownTimeout::new(Duration::from_secs(value))
     }
 
     #[test]
     fn maintenance_failure_uses_maintenance_error_code() {
-        let root = temp_path("maintenance-error");
+        let root = temp_root("maintenance-error");
         let active_path = root.join("logs/service.log.jsonl");
         let sink = JsonlFileSink::for_logger(active_path.clone());
         fs::create_dir_all(active_path.parent().expect("parent")).expect("create parent");
@@ -729,7 +742,7 @@ mod tests {
                 rotation_max_files: file_count(1),
                 retention_max_age: retention_secs(3600),
                 maintenance_cadence: cadence_secs(60),
-                maintenance_join_timeout: join_secs(5),
+                writer_shutdown_timeout: join_secs(5),
                 maintenance_max_work_per_pass: None,
             })
             .expect_err("maintenance failure");
@@ -743,7 +756,7 @@ mod tests {
 
     #[test]
     fn maintenance_max_work_per_pass_limits_pruning() {
-        let root = temp_path("maintenance-budget");
+        let root = temp_root("maintenance-budget");
         let active_path = root.join("logs/service.log.jsonl");
         let sink = JsonlFileSink::for_logger(active_path.clone());
         fs::create_dir_all(active_path.parent().expect("parent")).expect("create parent");
@@ -759,7 +772,7 @@ mod tests {
                 rotation_max_files: file_count(1),
                 retention_max_age: retention_secs(3600),
                 maintenance_cadence: cadence_secs(60),
-                maintenance_join_timeout: join_secs(5),
+                writer_shutdown_timeout: join_secs(5),
                 maintenance_max_work_per_pass: Some(2),
             })
             .expect("maintenance pass");
@@ -772,9 +785,9 @@ mod tests {
 
     #[test]
     fn legacy_write_failures_mark_sink_health() {
-        let root = temp_path("legacy-write-error");
+        let root = temp_root("legacy-write-error");
         let file_parent = root.join("logs");
-        fs::create_dir_all(&root).expect("create root");
+        fs::create_dir_all(root.path_buf()).expect("create root");
         fs::write(&file_parent, "not-a-directory").expect("block parent as file");
         let sink = JsonlFileSink::new(
             file_parent.join("service.log.jsonl"),

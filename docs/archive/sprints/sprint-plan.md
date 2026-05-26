@@ -29,7 +29,7 @@ Scope:
   enforcement
 
 Done means:
-- [`pre-publish-recovery-plan.md`](./pre-publish-recovery-plan.md) is the
+- [`pre-publish-recovery-plan.md`](../../pre-publish-recovery-plan.md) is the
   controlling plan
 - release-readiness claims match reality
 - no open naming or behavior ambiguity remains for the missing public APIs

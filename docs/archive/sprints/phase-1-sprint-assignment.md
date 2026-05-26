@@ -35,7 +35,7 @@ These should land before Sprint 1 starts:
 
 2. Checklist cosmetic cleanup from QA-9:
 - add `[~]` markers to `SpanEmitter` and `MetricEmitter` in
-  [`public-api-checklist.md`](./public-api-checklist.md) §5 internal-only list
+  [`public-api-checklist.md`](../../public-api-checklist.md) §5 internal-only list
 
 3. Confirm Sprint 1 CI gates are actually implemented, not just documented:
 - docs consistency checks
@@ -174,7 +174,7 @@ Build:
 
 Exit criteria:
 - all public API checklist items marked `[x]`
-- publishing gates from [`publishing.md`](./publishing.md) are satisfied
+- publishing gates from [`publishing.md`](../../publishing.md) are satisfied
 - Cargo versions are set for release
 - release readiness checklist is complete
 - migration guidance exists for ATM consumers

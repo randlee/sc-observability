@@ -74,6 +74,7 @@ dependencies = [
  "sc-observability-types",
  "serde",
  "serde_json",
+ "thiserror",
  "windows-sys",
 ]
 
