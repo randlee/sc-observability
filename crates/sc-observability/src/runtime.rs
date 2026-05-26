@@ -210,7 +210,12 @@ impl Logger<Running> {
         result
     }
 
-    /// Drains queued events, stops the writer thread, and returns a stopped logger typestate.
+    /// Drains queued events, waits for the writer thread to finish, and returns
+    /// a stopped logger typestate.
+    ///
+    /// If shutdown exceeds the configured timeout threshold, the runtime records
+    /// degraded health before continuing to wait for definitive writer-thread
+    /// completion.
     ///
     /// # Panics
     ///

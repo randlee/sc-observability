@@ -51,7 +51,7 @@ Historical sequence:
 1. S1 docs sprint:
    - update `requirements.md`, `architecture.md`, and `project-plan.md`
    - define the retained-log policy surface, maintenance ownership, health
-     reporting, and bounded shutdown contract
+     reporting, and definitive shutdown contract
    - complete quality review before any code lands
    Exit criteria:
    - field names and defaults match

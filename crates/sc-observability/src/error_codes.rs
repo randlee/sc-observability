@@ -16,7 +16,7 @@ pub const LOGGER_QUEUE_FULL: ErrorCode =
 /// Stable error code for writer-thread degradation.
 pub const LOGGER_WRITER_DEGRADED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED");
-/// Stable error code for bounded shutdown drain timeout.
+/// Stable error code for shutdown exceeding the configured timeout threshold.
 pub const LOGGER_SHUTDOWN_TIMED_OUT: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT");
 /// Stable error code for logger initialization failures.

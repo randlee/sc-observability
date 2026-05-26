@@ -327,7 +327,8 @@ pub struct RetainedLogPolicy {
     pub retention_max_age: RetentionMaxAge,
     /// How often the background maintenance worker runs a pass.
     pub maintenance_cadence: MaintenanceCadence,
-    /// How long shutdown waits for the maintenance worker to stop.
+    /// The shutdown-duration threshold used to flag degraded shutdown health
+    /// before the logger continues waiting for writer-thread completion.
     pub maintenance_join_timeout: MaintenanceJoinTimeout,
     /// Optional cap on files processed during one maintenance pass.
     pub maintenance_max_work_per_pass: Option<usize>,
@@ -539,7 +540,7 @@ pub enum LogError {
     /// The writer thread is degraded and cannot accept more work reliably.
     WriterDegraded(#[source] Box<ErrorContext>),
     #[error("{0}")]
-    /// The logger recorded a bounded shutdown timeout while draining the writer thread.
+    /// The logger exceeded the shutdown timeout threshold while draining the writer thread.
     ShutdownTimedOut(#[source] Box<ErrorContext>),
 }
 
@@ -556,7 +557,7 @@ pub enum TryLogError {
     /// The writer thread is degraded and cannot accept more work reliably.
     WriterDegraded(#[source] Box<ErrorContext>),
     #[error("{0}")]
-    /// The logger recorded a bounded shutdown timeout while draining the writer thread.
+    /// The logger exceeded the shutdown timeout threshold while draining the writer thread.
     ShutdownTimedOut(#[source] Box<ErrorContext>),
 }
 
@@ -1567,7 +1568,7 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_records_join_timeout_without_blocking() {
+    fn shutdown_records_join_timeout_but_waits_for_join() {
         let root = temp_path("shutdown-maintenance-timeout");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
@@ -1583,11 +1584,17 @@ mod tests {
             "expected maintenance worker to enter the delayed test pass",
         );
 
+        let started = Instant::now();
         let stopped = logger.shutdown();
 
+        assert!(
+            started.elapsed() >= Duration::from_millis(450),
+            "shutdown should wait for delayed writer completion even after recording the timeout threshold"
+        );
         let maintenance = stopped.health().maintenance.expect("maintenance health");
-        assert_eq!(maintenance.state, MaintenanceWorkerState::Degraded);
+        assert_eq!(maintenance.state, MaintenanceWorkerState::Stopped);
         assert!(maintenance.last_error.is_some());
+        assert_eq!(stopped.health().writer_state, WriterState::Degraded);
     }
 
     #[test]

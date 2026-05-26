@@ -105,21 +105,28 @@ impl WriterRuntime {
     }
 
     pub(crate) fn enqueue_blocking(&self, event: LogEvent) -> Result<(), TryEnqueueError> {
-        self.sender
-            .send(WriterCommand::Log(event))
-            .map_err(|_| TryEnqueueError::Disconnected)?;
         self.writer_tracker.record_enqueue();
+        self.sender.send(WriterCommand::Log(event)).map_err(|_| {
+            self.writer_tracker.record_write_completion(1);
+            TryEnqueueError::Disconnected
+        })?;
         Ok(())
     }
 
     pub(crate) fn enqueue_nonblocking(&self, event: LogEvent) -> Result<(), TryEnqueueError> {
+        self.writer_tracker.record_enqueue();
         self.sender
             .try_send(WriterCommand::Log(event))
             .map_err(|error| match error {
-                mpsc::TrySendError::Full(_) => TryEnqueueError::Full,
-                mpsc::TrySendError::Disconnected(_) => TryEnqueueError::Disconnected,
+                mpsc::TrySendError::Full(_) => {
+                    self.writer_tracker.record_write_completion(1);
+                    TryEnqueueError::Full
+                }
+                mpsc::TrySendError::Disconnected(_) => {
+                    self.writer_tracker.record_write_completion(1);
+                    TryEnqueueError::Disconnected
+                }
             })?;
-        self.writer_tracker.record_enqueue();
         Ok(())
     }
 
@@ -159,29 +166,16 @@ impl WriterRuntime {
     pub(crate) fn shutdown(self) -> WriterHealthSnapshot {
         drop(self.sender);
 
+        let mut timed_out = false;
         match self
             .done_rx
             .lock()
             .expect("writer done receiver poisoned")
             .recv_timeout(self.join_timeout)
         {
-            Ok(()) => {
-                if self.join_handle.join().is_err() {
-                    self.writer_tracker
-                        .record_writer_failure(&ErrorContext::new(
-                            error_codes::LOGGER_WRITER_DEGRADED,
-                            "writer thread panicked during shutdown",
-                            Remediation::recoverable(
-                                "restart the logger runtime",
-                                [
-                                    "inspect writer-thread panic context",
-                                    "recreate the logger instance",
-                                ],
-                            ),
-                        ));
-                }
-            }
+            Ok(()) => {}
             Err(mpsc::RecvTimeoutError::Timeout) => {
+                timed_out = true;
                 self.writer_tracker
                     .record_shutdown_timeout(self.join_timeout);
                 if let Some(tracker) = self.maintenance_tracker.as_ref() {
@@ -215,6 +209,25 @@ impl WriterRuntime {
                         ),
                     ));
             }
+        }
+
+        if self.join_handle.join().is_err() {
+            self.writer_tracker
+                .record_writer_failure(&ErrorContext::new(
+                    error_codes::LOGGER_WRITER_DEGRADED,
+                    if timed_out {
+                        "writer thread panicked after exceeding the shutdown timeout"
+                    } else {
+                        "writer thread panicked during shutdown"
+                    },
+                    Remediation::recoverable(
+                        "restart the logger runtime",
+                        [
+                            "inspect writer-thread panic context",
+                            "recreate the logger instance",
+                        ],
+                    ),
+                ));
         }
 
         snapshot_from_trackers(&self.writer_tracker, self.maintenance_tracker.as_ref())

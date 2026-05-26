@@ -153,10 +153,15 @@ This crate is the lightweight logging layer.
 - LOG-022 The logging layer shall not expose or assume an HTTP health endpoint; health is available through in-process health objects only.
 - LOG-023 `Logger` lifecycle behavior shall be explicit:
   - `Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`
+  - `Logger::shutdown()` waits for definitive writer-thread completion before
+    returning `Logger<Stopped>`
   - `log()`, `try_log()`, `flush()`, deprecated `emit()`, `query()`, and
     `follow()` are available only on `Logger<Running>`
   - `log()` blocks until queue admission and does not guarantee durability
   - `try_log()` is non-blocking and returns explicit queue-full failure
+  - exceeding `maintenance_join_timeout` records degraded shutdown health but
+    does not permit the writer thread to continue detached after
+    `Logger::shutdown()` returns
   - `Logger<Stopped>` remains usable for health inspection only
   - logger-created `LogFollowSession::poll()` after `shutdown()` returns `QueryError::Shutdown`
 - LOG-024 `sc-observability` shall own a crate-local sealed `LogEmitter` trait for producer injection when logging-only use is desired.
@@ -202,7 +207,10 @@ This crate is the lightweight logging layer.
   `Degraded`, and `Stopped`.
 - LOG-045 Retained-log maintenance failures shall be fail-open, shall not crash
   the logger, and shall not block or interfere with the emit path.
-- LOG-046 `Logger::shutdown()` shall drain queued events, stop the writer thread within the configured bounded shutdown timeout, and record timeout/degraded state in health or error reporting before returning when the drain does not finish cleanly.
+- LOG-046 `Logger::shutdown()` shall drain queued events, record timeout/degraded
+  state in health or error reporting when shutdown exceeds the configured
+  timeout threshold, and return `Logger<Stopped>` only after the writer thread
+  has definitively stopped.
 - LOG-047 `LogError` shall be the blocking queue-admission error surface for
   `Logger::log(...)` and shall include `WriterDegraded` and
   `ShutdownTimedOut` variants in addition to invalid-event rejection.

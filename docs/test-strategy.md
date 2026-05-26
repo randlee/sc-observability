@@ -66,7 +66,8 @@ Phase-A additions for the queue-backed writer runtime:
   accounting on `LoggingHealthReport`
 - writer-state and last-writer-error health behavior
 - batching behavior under burst load
-- bounded shutdown drain behavior
+- shutdown-drain completion behavior, including timeout-threshold degradation
+  without detached writer continuation
 - retained-log maintenance execution on the writer thread during idle or
   post-batch windows
 - query/follow parity against active and rotated files after the writer-runtime

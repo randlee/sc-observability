@@ -29,7 +29,7 @@ Sprint 6 review of hot-path allocations and fan-out behavior in:
 - The approved follow-on optimization is structural rather than
   micro-allocational: producer calls validate, redact, and enqueue, while one
   writer thread owns batching, sink writes, rotation, pruning, flush, and
-  bounded shutdown drain.
+  shutdown drain completion with timeout-threshold degradation reporting.
 - This document is not a veto on that redesign; it is the historical
   measurement note that motivated the phase-A architectural follow-on.
 

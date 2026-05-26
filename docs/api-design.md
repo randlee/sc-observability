@@ -1498,8 +1498,11 @@ Lifecycle rules:
   logger-only consumers keep synchronous visibility expectations where
   practical without regressing queue admission during maintenance work
 - `Logger::shutdown()` consumes `Logger<Running>` and returns `Logger<Stopped>`
-- `Logger::shutdown()` drains already-queued events before joining the writer
-  thread; that drain remains bounded by the configured shutdown timeout
+- `Logger::shutdown()` drains already-queued events and does not return until
+  the writer thread has definitively joined
+- the configured shutdown timeout is a degradation threshold recorded in
+  health/error reporting; if it is exceeded, shutdown still waits for writer
+  completion before returning `Logger<Stopped>`
 - post-shutdown `emit()`, `query()`, and `follow()` misuse becomes a compile-time error
 
 Logger error inventory:

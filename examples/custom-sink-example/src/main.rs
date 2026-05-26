@@ -282,5 +282,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))?;
     }
 
+    logger.flush()?;
+    let _stopped = logger.shutdown();
+
     Ok(())
 }

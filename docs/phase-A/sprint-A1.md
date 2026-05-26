@@ -84,7 +84,7 @@ Execution note:
   so the normative docs no longer describe a separate maintenance worker model
 - explicit lock text for the validator-sensitive requirements:
   - `LOG-041 Retained-log maintenance shall run on the writer thread during idle or post-batch windows, stay off the producer hot path, and shall not require an async runtime dependency.`
-  - `LOG-046 \`Logger::shutdown()\` shall drain queued events, stop the writer thread within the configured bounded shutdown timeout, and record timeout/degraded state in health or error reporting before returning when the drain does not finish cleanly.`
+  - `LOG-046 \`Logger::shutdown()\` shall drain queued events, record timeout/degraded state in health or error reporting when shutdown exceeds the configured timeout threshold, and return \`Logger<Stopped>\` only after the writer thread has definitively stopped.`
 - explicit statement that producers validate, redact, and queue log events,
   while one writer thread owns batching, sink writes, rotation, pruning, and
   flush
