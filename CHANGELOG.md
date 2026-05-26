@@ -11,6 +11,12 @@ This release line will become `v1.2.0` when `integrate/phase-a` merges to `devel
 
 ## [1.2.0] - 2026-05-26
 
+Public API reference for this release:
+- `sc-observability-types`: <https://docs.rs/sc-observability-types/1.2.0/sc_observability_types/>
+- `sc-observability`: <https://docs.rs/sc-observability/1.2.0/sc_observability/>
+- `sc-observe`: <https://docs.rs/sc-observe/1.2.0/sc_observe/>
+- `sc-observability-otlp`: <https://docs.rs/sc-observability-otlp/1.2.0/sc_observability_otlp/>
+
 ### Added
 
 - `Logger::log(event)` as the new blocking queue-admission logging API.

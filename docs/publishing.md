@@ -47,3 +47,17 @@ Before the ATM workspace switches to crates.io dependencies from this repo:
 - Release notes template: `release/RELEASE-NOTES-TEMPLATE.md`
 - Release exit checklist:
   [docs/release-readiness-checklist.md](./release-readiness-checklist.md)
+
+## Public API Visibility
+
+- CI publishes the generated public API governance reports from
+  `target/public-api/` as a GitHub Actions artifact named
+  `public-api-governance-<github.run_id>-<github.sha>`.
+- Release notes should include versioned docs.rs links for every published crate
+  so consumers can inspect the exact shipped API surface:
+  - `sc-observability-types`
+  - `sc-observability`
+  - `sc-observe`
+  - `sc-observability-otlp`
+- The changelog entry for each release should include the same versioned docs.rs
+  links so the release record points directly at the published API docs.

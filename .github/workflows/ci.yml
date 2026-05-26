@@ -108,13 +108,30 @@ jobs:
         run: rustup toolchain install nightly
 
       - name: Validate public API diff visibility
+        id: public_api_diff
+        continue-on-error: true
         run: bash scripts/ci/validate_public_api_diff.sh
 
       - name: Validate public API semver compatibility
+        if: always()
         run: python3 scripts/ci/validate_public_api_semver.py
 
       - name: Validate public API documentation approvals
+        if: always()
         run: bash scripts/ci/validate_public_api_docs.sh
+
+      - name: Upload public API governance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-api-governance-${{ github.run_id }}-${{ github.sha }}
+          path: target/public-api/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce public API diff visibility signal
+        if: always() && steps.public_api_diff.outcome == 'failure'
+        run: exit 1
 
   manifest-validation:
     name: manifest-validation (ubuntu)
