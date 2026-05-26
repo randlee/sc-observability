@@ -1,6 +1,6 @@
 use std::fs;
-use std::path::PathBuf;
-use std::time::SystemTime;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
 
 use sc_observability::constants::{DEFAULT_LOG_DIR_NAME, DEFAULT_LOG_FILE_SUFFIX};
 use sc_observability::{Logger, LoggerConfig};
@@ -10,17 +10,29 @@ use sc_observability_types::{
 };
 use serde_json::json;
 
-fn temp_path(name: &str) -> PathBuf {
-    let path = std::env::temp_dir().join(format!(
-        "sc-observability-integration-{name}-{}-{}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("system time before unix epoch")
-            .as_nanos()
-    ));
-    let _ = fs::remove_dir_all(&path);
-    path
+struct TestRoot(tempfile::TempDir);
+
+impl TestRoot {
+    fn path_buf(&self) -> PathBuf {
+        self.0.path().to_path_buf()
+    }
+}
+
+impl Deref for TestRoot {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.path()
+    }
+}
+
+fn temp_root(name: &str) -> TestRoot {
+    TestRoot(
+        tempfile::Builder::new()
+            .prefix(&format!("sc-observability-integration-{name}-"))
+            .tempdir()
+            .expect("create temporary test root"),
+    )
 }
 
 fn service_name() -> ServiceName {
@@ -64,9 +76,9 @@ fn event() -> LogEvent {
     reason = "integration coverage intentionally exercises the deprecated emit() compatibility path"
 )]
 fn logging_only_consumer_can_emit_without_routing_or_otlp() {
-    let root = temp_path("logging-only");
+    let root = temp_root("logging-only");
     let logger =
-        Logger::new(LoggerConfig::default_for(service_name(), root.clone())).expect("logger");
+        Logger::new(LoggerConfig::default_for(service_name(), root.path_buf())).expect("logger");
 
     logger.emit(event()).expect("emit");
     logger.flush().expect("flush");
