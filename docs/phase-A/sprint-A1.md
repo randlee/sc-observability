@@ -1,10 +1,10 @@
 ---
 id: A.1
 title: Architecture And API Lock
-status: planned
+status: implemented
 branch: feature/thread-optimization-a1-architecture-lock
-worktree: ../sc-observability-worktrees/feature/thread-optimization
-target: develop
+worktree: ../sc-observability-worktrees/feature/thread-optimization-a1-architecture-lock
+target: integrate/phase-a
 ---
 
 # Sprint A.1 — Architecture And API Lock
@@ -13,9 +13,9 @@ target: develop
 plan_type: sprint_plan
 phase: A
 sprint: A.1
-worktree: ../sc-observability-worktrees/feature/thread-optimization
+worktree: ../sc-observability-worktrees/feature/thread-optimization-a1-architecture-lock
 branch: feature/thread-optimization-a1-architecture-lock
-status: planned
+status: implemented
 estimated_scope: medium
 ```
 
@@ -23,6 +23,14 @@ estimated_scope: medium
 
 Lock the normative writer-thread architecture and the public logging contract
 before implementation begins.
+
+Execution note:
+
+- the original planning draft referenced `develop` as the eventual downstream
+  integration target
+- the authoritative execution target for phase-A feature branches is
+  `integrate/phase-a`, which is the correct target recorded in this sprint
+  frontmatter
 
 ## Hard Dependencies
 
