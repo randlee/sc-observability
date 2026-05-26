@@ -124,23 +124,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let logger = builder.build();
 
-    logger.emit(build_event(
+    logger.log(build_event(
         service.clone(),
         "app.audit",
         "startup",
         "accepted by the custom sink",
     ))?;
-    logger.emit(build_event(
+    if let Err(err) = logger.try_log(build_event(
         service,
         "app.core",
         "heartbeat",
         "written only to the built-in file sink",
-    ))?;
+    )) {
+        eprintln!("non-blocking log admission failed: {err}");
+    }
     logger.flush()?;
 
     let health = logger.health();
     println!("logging state: {:?}", health.state);
     println!("active log path: {}", health.active_log_path.display());
+    println!(
+        "queue depth: {} / {} (high-water {})",
+        health.queue_depth, health.queue_capacity, health.queue_high_water_mark
+    );
+    println!("queue-full drops: {}", health.queue_full_drops_total);
+    println!("writer state: {:?}", health.writer_state);
+    if let Some(error) = &health.last_writer_error {
+        println!("last writer error: {} {}", error.code, error.message);
+    }
     for sink in &health.sink_statuses {
         println!("sink {} => {:?}", sink.name, sink.state);
     }

@@ -46,9 +46,11 @@ pub use sc_observability_types::{
     ActionName, ErrorCode, EventError, FileCount, Level, LogEvent, LogQuery, LogSnapshot,
     LoggingHealthReport, LoggingHealthState, MaintenanceHealthReport, MaintenanceWorkerState,
     OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName,
-    SinkHealth, SinkHealthState, TargetCategory, Timestamp,
+    SinkHealth, SinkHealthState, TargetCategory, Timestamp, WriterState,
 };
-use sc_observability_types::{LevelFilter, LogSinkError, ProcessIdentityPolicy};
+use sc_observability_types::{
+    ErrorContext, LevelFilter, LogSinkError, ProcessIdentityPolicy, Remediation,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 #[cfg(feature = "fault-injection")]
@@ -56,6 +58,7 @@ use serde_json::Value;
 pub use sinks::RetainedSinkFaultInjector;
 #[doc(inline)]
 pub use sinks::{ConsoleSink, JsonlFileSink};
+use thiserror::Error;
 
 pub(crate) use runtime::LoggerRuntime;
 
@@ -437,7 +440,7 @@ pub struct LoggerConfig {
     pub log_root: PathBuf,
     /// Minimum severity level emitted by the logger.
     pub level: LevelFilter,
-    /// Reserved for future async/backpressure implementation. Phase 1 execution is synchronous; this value is stored but not yet applied.
+    /// Bounded writer-thread queue capacity for admitted log records.
     pub queue_capacity: usize,
     /// Retained-log rotation, pruning, and background maintenance settings.
     pub retained_log_policy: RetainedLogPolicy,
@@ -510,6 +513,65 @@ pub struct Logger<State = Running> {
     runtime: LoggerRuntime,
     state: PhantomData<State>,
 }
+
+/// Blocking queue-admission error surface for `Logger::log(...)`.
+#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
+pub enum LogError {
+    #[error(transparent)]
+    /// The event failed validation before queue admission.
+    InvalidEvent(EventError),
+    #[error("{0}")]
+    /// The writer thread is degraded and cannot accept more work reliably.
+    WriterDegraded(#[source] Box<ErrorContext>),
+    #[error("{0}")]
+    /// The logger recorded a bounded shutdown timeout while draining the writer thread.
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
+}
+
+/// Non-blocking queue-admission error surface for `Logger::try_log(...)`.
+#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
+pub enum TryLogError {
+    #[error(transparent)]
+    /// The event failed validation before queue admission.
+    InvalidEvent(EventError),
+    #[error("{0}")]
+    /// The bounded queue is full and the record was not admitted.
+    QueueFull(#[source] Box<ErrorContext>),
+    #[error("{0}")]
+    /// The writer thread is degraded and cannot accept more work reliably.
+    WriterDegraded(#[source] Box<ErrorContext>),
+    #[error("{0}")]
+    /// The logger recorded a bounded shutdown timeout while draining the writer thread.
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
+}
+
+fn writer_degraded_error_context(message: &str) -> ErrorContext {
+    ErrorContext::new(
+        error_codes::LOGGER_WRITER_DEGRADED,
+        message,
+        Remediation::recoverable(
+            "inspect logger writer-thread health",
+            [
+                "inspect logger.health().writer_state",
+                "inspect logger.health().last_writer_error",
+            ],
+        ),
+    )
+}
+
+fn shutdown_timed_out_error_context(message: &str) -> ErrorContext {
+    ErrorContext::new(
+        error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
+        message,
+        Remediation::recoverable(
+            "wait for the writer thread to recover or recreate the logger",
+            [
+                "inspect logger.health().last_writer_error",
+                "review writer-thread shutdown timing",
+            ],
+        ),
+    )
+}
 mod sealed_emitters {
     pub trait Sealed {}
 }
@@ -526,7 +588,15 @@ impl sealed_emitters::Sealed for Logger<Running> {}
 
 impl LogEmitter for Logger<Running> {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError> {
-        self.emit(event)
+        self.log(event).map_err(|error| match error {
+            LogError::InvalidEvent(error) => error,
+            LogError::WriterDegraded(error) => {
+                EventError(Box::new(writer_degraded_error_context(&error.to_string())))
+            }
+            LogError::ShutdownTimedOut(error) => EventError(Box::new(
+                shutdown_timed_out_error_context(&error.to_string()),
+            )),
+        })
     }
 }
 
@@ -554,6 +624,10 @@ pub(crate) fn rotated_log_path(active_path: &Path, index: usize) -> PathBuf {
 }
 
 #[cfg(test)]
+#[expect(
+    deprecated,
+    reason = "compatibility coverage intentionally exercises Logger::emit() during the deprecation window"
+)]
 mod tests {
     use super::*;
     use crate::sinks::ConsoleWriter;
@@ -1278,7 +1352,7 @@ mod tests {
         let root = temp_path("shutdown");
         let config = LoggerConfig::default_for(service_name(), root);
         let logger = Logger::new(config).expect("logger");
-        let stopped = logger.shutdown().expect("shutdown");
+        let stopped = logger.shutdown();
         assert_eq!(stopped.health().state, LoggingHealthState::Unavailable);
     }
 
@@ -1292,7 +1366,7 @@ mod tests {
         builder.register_sink(SinkRegistration::new(sink.clone()));
         let logger = builder.build();
 
-        let _stopped = logger.shutdown().expect("shutdown");
+        let _stopped = logger.shutdown();
 
         assert_eq!(sink.flush_calls.load(Ordering::SeqCst), 1);
     }
@@ -1447,7 +1521,7 @@ mod tests {
         );
 
         let started = Instant::now();
-        let stopped = logger.shutdown().expect("shutdown");
+        let stopped = logger.shutdown();
         crate::maintenance::clear_test_pass_delay();
 
         assert!(started.elapsed() < Duration::from_secs(1));
@@ -1477,7 +1551,7 @@ mod tests {
         );
 
         let started = Instant::now();
-        let stopped = logger.shutdown().expect("shutdown");
+        let stopped = logger.shutdown();
         crate::maintenance::clear_test_pass_delay();
 
         assert!(started.elapsed() < Duration::from_millis(150));
@@ -1787,7 +1861,7 @@ mod tests {
         assert_eq!(degraded_health.state, QueryHealthState::Degraded);
         assert!(degraded_health.last_error.is_some());
 
-        let stopped = logger.shutdown().expect("shutdown");
+        let stopped = logger.shutdown();
         assert_eq!(
             stopped.health().query.expect("query health").state,
             QueryHealthState::Unavailable
@@ -1800,7 +1874,7 @@ mod tests {
         let config = LoggerConfig::default_for(service_name(), root);
         let logger = Logger::new(config).expect("logger");
 
-        let stopped = logger.shutdown().expect("shutdown");
+        let stopped = logger.shutdown();
 
         assert_eq!(
             stopped.health().query.expect("query health").state,
@@ -1819,7 +1893,7 @@ mod tests {
             .expect("follow");
         assert!(follow.poll().expect("initial poll").events.is_empty());
 
-        let _stopped = logger.shutdown().expect("shutdown");
+        let _stopped = logger.shutdown();
 
         assert!(matches!(follow.poll(), Err(QueryError::Shutdown)));
         assert_eq!(follow.health().state, QueryHealthState::Unavailable);

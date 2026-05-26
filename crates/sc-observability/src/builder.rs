@@ -86,8 +86,10 @@ impl LoggerBuilder {
         Logger {
             runtime: LoggerRuntime::new(
                 query_available,
+                sinks.clone(),
                 file_sink,
                 retained_log_policy,
+                config.queue_capacity,
                 #[cfg(test)]
                 config.maintenance_test_pass_delay,
             ),

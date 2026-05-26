@@ -59,6 +59,10 @@ fn event() -> LogEvent {
 }
 
 #[test]
+#[expect(
+    deprecated,
+    reason = "integration coverage intentionally exercises the deprecated emit() compatibility path"
+)]
 fn logging_only_consumer_can_emit_without_routing_or_otlp() {
     let root = temp_path("logging-only");
     let logger =

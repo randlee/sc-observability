@@ -19,6 +19,12 @@ pub(crate) const SECS_PER_DAY: u64 = 86_400;
 /// Default synchronous queue-capacity placeholder retained for the v1 config
 /// surface.
 pub const DEFAULT_LOG_QUEUE_CAPACITY: usize = 1024;
+/// Internal maximum number of records one writer-thread batch drains before it
+/// flushes or rechecks maintenance work.
+pub(crate) const DEFAULT_LOG_BATCH_SIZE: usize = 64;
+/// Internal maximum time the writer thread waits to coalesce a partial batch
+/// before writing it.
+pub(crate) const DEFAULT_WRITER_BATCH_TIMEOUT: Duration = Duration::from_millis(5);
 /// Default maximum active-log size before rotation.
 pub const DEFAULT_ROTATION_MAX_BYTES: u64 = 64 * 1024 * 1024;
 /// Default number of rotated files retained beside the active log.
