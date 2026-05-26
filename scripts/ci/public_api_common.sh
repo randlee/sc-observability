@@ -43,6 +43,9 @@ PY
 }
 
 detect_api_base_ref() {
+    local head_rev
+    head_rev="$(git rev-parse HEAD)"
+
     if [[ -n "${SC_OBSERVABILITY_API_BASE_REF:-}" ]]; then
         echo "${SC_OBSERVABILITY_API_BASE_REF}"
         return 0
@@ -54,8 +57,11 @@ detect_api_base_ref() {
     fi
 
     local candidate
-    for candidate in origin/integrate/phase-a origin/develop origin/main; do
+    for candidate in origin/develop origin/main origin/integrate/phase-a; do
         if git rev-parse --verify "$candidate" >/dev/null 2>&1; then
+            if [[ "$(git rev-parse "$candidate")" == "$head_rev" ]]; then
+                continue
+            fi
             echo "$candidate"
             return 0
         fi

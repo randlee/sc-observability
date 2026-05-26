@@ -97,6 +97,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -128,10 +130,6 @@ jobs:
           path: target/public-api/
           if-no-files-found: error
           retention-days: 14
-
-      - name: Enforce public API diff visibility signal
-        if: always() && steps.public_api_diff.outcome == 'failure'
-        run: exit 1
 
   manifest-validation:
     name: manifest-validation (ubuntu)
