@@ -369,8 +369,9 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
 - NFR-009 The workspace shall enforce layering and repo-boundary rules in CI, including dependency bans against `agent-team-mail-*` and banned crate edges that violate the approved stack.
 - NFR-010 The workspace shall enforce basic docs consistency checks in CI so the approved crate layering does not drift out of sync across requirements, architecture, and API design documents.
 - NFR-011 The workspace shall enforce version-literal consistency in CI for the
-  maintained files covered by the validation script: Cargo package tables and
-  `RELEASE-NOTES*.md` documents. Within that tracked scope, every release
+  maintained files covered by the validation script: Cargo package tables,
+  internal workspace dependency version pins that reference local crate paths,
+  and `RELEASE-NOTES*.md` documents. Within that tracked scope, every release
   version literal shall match `workspace.package.version`.
 - NFR-012 Public API surface changes to `sc-observability` shall be
   accompanied by updates to the normative docs and shall pass the CI public-API

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Validate tracked version literals with intentionally narrow scope.
 
-This check enforces version consistency for Cargo package tables and
-RELEASE-NOTES markdown files only. Other documentation is not scanned by this
-script and is governed separately by review/docs processes.
+This check enforces version consistency for:
+- Cargo package tables
+- internal workspace dependency version pins that point at local paths
+- RELEASE-NOTES markdown files
+
+Other documentation is not scanned by this script and is governed separately by
+review/docs processes.
 """
 
 import re
@@ -17,6 +21,9 @@ workspace = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))
 workspace_version = workspace["workspace"]["package"]["version"]
 
 version_pattern = re.compile(r'^\s*version\s*=\s*"(\d+\.\d+\.\d+)"\s*$')
+workspace_dep_version_pattern = re.compile(
+    r'^\s*([A-Za-z0-9_.-]+)\s*=\s*\{(?=.*\bversion\s*=\s*"(\d+\.\d+\.\d+)")(?=.*\bpath\s*=\s*"([^"]+)").*\}\s*$'
+)
 markdown_version_pattern = re.compile(r"(?<!\d)(\d+\.\d+\.\d+)(?!\d)")
 release_notes_globs = ("**/RELEASE-NOTES*.md",)
 skip_dirs = {".git", "target", ".claude", ".prompts"}
@@ -40,12 +47,25 @@ def collect_toml_package_versions(path: Path) -> None:
         if stripped.startswith("[") and stripped.endswith("]"):
             current_table = stripped[1:-1].strip()
             continue
-        if current_table not in {"package", "workspace.package"}:
-            continue
-        match = version_pattern.match(line)
-        if match:
-            occurrences[match.group(1)].append(
-                (path.relative_to(root).as_posix(), line_no, stripped)
+        if current_table in {"package", "workspace.package"}:
+            match = version_pattern.match(line)
+            if match:
+                occurrences[match.group(1)].append(
+                    (path.relative_to(root).as_posix(), line_no, stripped)
+                )
+        elif current_table == "workspace.dependencies":
+            match = workspace_dep_version_pattern.match(line)
+            if not match:
+                continue
+            dependency_name, version, dependency_path = match.groups()
+            if not dependency_path.startswith("crates/"):
+                continue
+            occurrences[version].append(
+                (
+                    path.relative_to(root).as_posix(),
+                    line_no,
+                    f"{dependency_name} version={version} path={dependency_path}",
+                )
             )
 
 
