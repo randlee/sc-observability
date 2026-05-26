@@ -89,6 +89,28 @@ jobs:
       - name: Validate version literals
         run: python3 scripts/ci/validate_version_literals.py
 
+      - name: Validate public API diff visibility
+        id: public_api_diff
+        continue-on-error: true
+        run: bash scripts/ci/validate_public_api_diff.sh
+
+      - name: Validate public API semver compatibility
+        if: always()
+        run: python3 scripts/ci/validate_public_api_semver.py
+
+      - name: Validate public API documentation approvals
+        if: always()
+        run: bash scripts/ci/validate_public_api_docs.sh
+
+      - name: Upload public API governance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-preflight-public-api-${{ github.run_id }}-${{ github.sha }}
+          path: target/public-api/
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Validate repo boundaries
         run: bash scripts/ci/validate_repo_boundaries.sh
 

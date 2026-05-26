@@ -1,10 +1,10 @@
 ---
 id: A.2
 title: Public API Governance Automation
-status: planned
+status: implemented
 branch: feature/thread-optimization-a2-api-governance
-worktree: ../sc-observability-worktrees/feature/thread-optimization
-target: develop
+worktree: ../sc-observability-worktrees/feature/thread-optimization-a2-api-governance
+target: integrate/phase-a
 ---
 
 # Sprint A.2 — Public API Governance Automation
@@ -13,9 +13,9 @@ target: develop
 plan_type: sprint_plan
 phase: A
 sprint: A.2
-worktree: ../sc-observability-worktrees/feature/thread-optimization
+worktree: ../sc-observability-worktrees/feature/thread-optimization-a2-api-governance
 branch: feature/thread-optimization-a2-api-governance
-status: planned
+status: implemented
 estimated_scope: medium
 ```
 
@@ -52,7 +52,7 @@ deprecations land.
   baseline
 - repo-owned script set under `scripts/ci/`:
   - `validate_public_api_diff.sh`
-  - `validate_public_api_semver.sh`
+  - `validate_public_api_semver.py`
   - `validate_public_api_docs.sh`
 - repo-owned validation scripts that fail when public API changes are not
   reflected in the required documentation artifacts
@@ -114,5 +114,6 @@ review it directly from the sprint doc:
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - `bash scripts/ci/validate_docs_consistency.sh`
 - `bash scripts/ci/validate_public_api_diff.sh`
-- `bash scripts/ci/validate_public_api_semver.sh`
+- `python3 scripts/ci/validate_public_api_semver.py`
 - `bash scripts/ci/validate_public_api_docs.sh`
+- `python3 scripts/ci/validate_version_literals.py`

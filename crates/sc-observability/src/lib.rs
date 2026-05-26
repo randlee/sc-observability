@@ -43,12 +43,13 @@ pub use follow::LogFollowSession;
 pub use jsonl_reader::JsonlLogReader;
 #[doc(inline)]
 pub use sc_observability_types::{
-    ActionName, ErrorCode, EventError, FileCount, Level, LogEvent, LogQuery, LogSnapshot,
-    LoggingHealthReport, LoggingHealthState, MaintenanceHealthReport, MaintenanceWorkerState,
-    OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName,
-    SinkHealth, SinkHealthState, TargetCategory, Timestamp,
+    ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, EventError, FileCount,
+    Level, LogEvent, LogQuery, LogSinkError, LogSnapshot, LoggingHealthReport, LoggingHealthState,
+    MaintenanceHealthReport, MaintenanceWorkerState, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel,
+    ProcessIdentity, Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState,
+    SinkName, TargetCategory, Timestamp, WriterState,
 };
-use sc_observability_types::{LevelFilter, LogSinkError, ProcessIdentityPolicy};
+use sc_observability_types::{LevelFilter, ProcessIdentityPolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 #[cfg(feature = "fault-injection")]
@@ -56,6 +57,7 @@ use serde_json::Value;
 pub use sinks::RetainedSinkFaultInjector;
 #[doc(inline)]
 pub use sinks::{ConsoleSink, JsonlFileSink};
+use thiserror::Error;
 
 pub(crate) use runtime::LoggerRuntime;
 
@@ -193,9 +195,9 @@ impl std::fmt::Display for MaintenanceCadence {
 
 /// Strongly typed maintenance-worker join timeout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MaintenanceJoinTimeout(Duration);
+pub struct WriterShutdownTimeout(Duration);
 
-impl MaintenanceJoinTimeout {
+impl WriterShutdownTimeout {
     /// Creates a join timeout from one duration.
     ///
     /// # Panics
@@ -204,7 +206,7 @@ impl MaintenanceJoinTimeout {
     pub const fn new(duration: Duration) -> Self {
         assert!(
             !duration.is_zero(),
-            "MaintenanceJoinTimeout must be non-zero"
+            "WriterShutdownTimeout must be non-zero"
         );
         Self(duration)
     }
@@ -215,7 +217,7 @@ impl MaintenanceJoinTimeout {
     }
 }
 
-impl Serialize for MaintenanceJoinTimeout {
+impl Serialize for WriterShutdownTimeout {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -224,26 +226,26 @@ impl Serialize for MaintenanceJoinTimeout {
     }
 }
 
-impl<'de> Deserialize<'de> for MaintenanceJoinTimeout {
+impl<'de> Deserialize<'de> for WriterShutdownTimeout {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         let millis = u64::deserialize(deserializer).map_err(|error| {
             serde::de::Error::custom(format!(
-                "MaintenanceJoinTimeout expects a u64 millisecond count: {error}"
+                "WriterShutdownTimeout expects a u64 millisecond count: {error}"
             ))
         })?;
         if millis == 0 {
             return Err(serde::de::Error::custom(
-                "MaintenanceJoinTimeout must be a non-zero u64 millisecond count",
+                "WriterShutdownTimeout must be a non-zero u64 millisecond count",
             ));
         }
         Ok(Self(Duration::from_millis(millis)))
     }
 }
 
-impl std::fmt::Display for MaintenanceJoinTimeout {
+impl std::fmt::Display for WriterShutdownTimeout {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}ms", duration_as_millis(self.0))
     }
@@ -325,8 +327,9 @@ pub struct RetainedLogPolicy {
     pub retention_max_age: RetentionMaxAge,
     /// How often the background maintenance worker runs a pass.
     pub maintenance_cadence: MaintenanceCadence,
-    /// How long shutdown waits for the maintenance worker to stop.
-    pub maintenance_join_timeout: MaintenanceJoinTimeout,
+    /// The shutdown-duration threshold used to flag degraded shutdown health
+    /// before the logger continues waiting for writer-thread completion.
+    pub writer_shutdown_timeout: WriterShutdownTimeout,
     /// Optional cap on files processed during one maintenance pass.
     pub maintenance_max_work_per_pass: Option<usize>,
 }
@@ -338,8 +341,8 @@ impl Default for RetainedLogPolicy {
             rotation_max_files: FileCount::from_usize(constants::DEFAULT_ROTATION_MAX_FILES_USIZE),
             retention_max_age: RetentionMaxAge::from_duration(constants::DEFAULT_RETENTION_MAX_AGE),
             maintenance_cadence: MaintenanceCadence::new(constants::DEFAULT_MAINTENANCE_CADENCE),
-            maintenance_join_timeout: MaintenanceJoinTimeout::new(
-                constants::DEFAULT_MAINTENANCE_JOIN_TIMEOUT,
+            writer_shutdown_timeout: WriterShutdownTimeout::new(
+                constants::DEFAULT_WRITER_SHUTDOWN_TIMEOUT,
             ),
             maintenance_max_work_per_pass: constants::DEFAULT_MAINTENANCE_MAX_WORK_PER_PASS,
         }
@@ -356,6 +359,10 @@ fn duration_as_millis(duration: Duration) -> u64 {
 }
 
 /// Redacts one key/value pair before an event reaches registered sinks.
+///
+/// This trait is intentionally open for downstream implementations. Adding
+/// required methods or tightening object-safety guarantees is therefore a
+/// semver-significant public API change.
 pub trait Redactor: Send + Sync {
     /// Redacts one event field in place.
     fn redact(&self, key: &str, value: &mut Value);
@@ -383,12 +390,20 @@ impl std::fmt::Debug for RedactionPolicy {
 }
 
 /// Filters events before they are written to one registered sink.
+///
+/// This trait is intentionally open for downstream implementations. Adding
+/// required methods or tightening object-safety guarantees is therefore a
+/// semver-significant public API change.
 pub trait LogFilter: Send + Sync {
     /// Returns whether the sink should receive the event.
     fn accepts(&self, event: &LogEvent) -> bool;
 }
 
 /// One concrete event sink used by the logger runtime.
+///
+/// This trait is intentionally open for downstream implementations. Adding
+/// required methods or tightening object-safety guarantees is therefore a
+/// semver-significant public API change.
 pub trait LogSink: Send + Sync {
     /// Writes one event to the sink.
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
@@ -437,7 +452,7 @@ pub struct LoggerConfig {
     pub log_root: PathBuf,
     /// Minimum severity level emitted by the logger.
     pub level: LevelFilter,
-    /// Reserved for future async/backpressure implementation. Phase 1 execution is synchronous; this value is stored but not yet applied.
+    /// Bounded writer-thread queue capacity for admitted log records.
     pub queue_capacity: usize,
     /// Retained-log rotation, pruning, and background maintenance settings.
     pub retained_log_policy: RetainedLogPolicy,
@@ -451,6 +466,8 @@ pub struct LoggerConfig {
     pub enable_console_sink: bool,
     #[cfg(test)]
     maintenance_test_pass_delay: Option<Duration>,
+    #[cfg(test)]
+    maintenance_test_pass_signal: Option<Arc<crate::maintenance::TestPassDelaySignal>>,
 }
 
 impl LoggerConfig {
@@ -486,6 +503,8 @@ impl LoggerConfig {
             enable_console_sink: constants::DEFAULT_ENABLE_CONSOLE_SINK,
             #[cfg(test)]
             maintenance_test_pass_delay: None,
+            #[cfg(test)]
+            maintenance_test_pass_signal: None,
         }
     }
 }
@@ -510,6 +529,65 @@ pub struct Logger<State = Running> {
     runtime: LoggerRuntime,
     state: PhantomData<State>,
 }
+
+/// Blocking queue-admission error surface for `Logger::log(...)`.
+#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
+pub enum LogError {
+    #[error(transparent)]
+    /// The event failed validation before queue admission.
+    InvalidEvent(EventError),
+    #[error("{0}")]
+    /// The writer thread is degraded and cannot accept more work reliably.
+    WriterDegraded(#[source] Box<ErrorContext>),
+    #[error("{0}")]
+    /// The logger exceeded the shutdown timeout threshold while draining the writer thread.
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
+}
+
+/// Non-blocking queue-admission error surface for `Logger::try_log(...)`.
+#[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
+pub enum TryLogError {
+    #[error(transparent)]
+    /// The event failed validation before queue admission.
+    InvalidEvent(EventError),
+    #[error("{0}")]
+    /// The bounded queue is full and the record was not admitted.
+    QueueFull(#[source] Box<ErrorContext>),
+    #[error("{0}")]
+    /// The writer thread is degraded and cannot accept more work reliably.
+    WriterDegraded(#[source] Box<ErrorContext>),
+    #[error("{0}")]
+    /// The logger exceeded the shutdown timeout threshold while draining the writer thread.
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
+}
+
+fn writer_degraded_error_context(message: &str) -> ErrorContext {
+    ErrorContext::new(
+        error_codes::LOGGER_WRITER_DEGRADED,
+        message,
+        Remediation::recoverable(
+            "inspect logger writer-thread health",
+            [
+                "inspect logger.health().writer_state",
+                "inspect logger.health().last_writer_error",
+            ],
+        ),
+    )
+}
+
+fn shutdown_timed_out_error_context(message: &str) -> ErrorContext {
+    ErrorContext::new(
+        error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
+        message,
+        Remediation::recoverable(
+            "wait for the writer thread to recover or recreate the logger",
+            [
+                "inspect logger.health().last_writer_error",
+                "review writer-thread shutdown timing",
+            ],
+        ),
+    )
+}
 mod sealed_emitters {
     pub trait Sealed {}
 }
@@ -526,7 +604,15 @@ impl sealed_emitters::Sealed for Logger<Running> {}
 
 impl LogEmitter for Logger<Running> {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError> {
-        self.emit(event)
+        self.log(event).map_err(|error| match error {
+            LogError::InvalidEvent(error) => error,
+            LogError::WriterDegraded(error) => {
+                EventError(Box::new(writer_degraded_error_context(&error.to_string())))
+            }
+            LogError::ShutdownTimedOut(error) => EventError(Box::new(
+                shutdown_timed_out_error_context(&error.to_string()),
+            )),
+        })
     }
 }
 
@@ -554,19 +640,24 @@ pub(crate) fn rotated_log_path(active_path: &Path, index: usize) -> PathBuf {
 }
 
 #[cfg(test)]
+#[expect(
+    deprecated,
+    reason = "compatibility coverage intentionally exercises Logger::emit() during the deprecation window"
+)]
 mod tests {
     use super::*;
     use crate::sinks::ConsoleWriter;
     use sc_observability_types::{
-        ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent, LogOrder, LogQuery,
-        LogSnapshot, ProcessIdentity, QueryError, QueryHealthState, Remediation, SinkName,
-        TargetCategory, Timestamp,
+        ActionName, Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, Level, LogEvent, LogOrder,
+        LogQuery, LogSnapshot, ProcessIdentity, QueryError, QueryHealthState, Remediation,
+        SinkName, TargetCategory, Timestamp,
     };
     use serde_json::{Map, json};
     use std::fs::{self, OpenOptions};
+    use std::ops::Deref;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Arc, Mutex};
-    use std::time::{Duration, Instant, SystemTime};
+    use std::time::{Duration, Instant};
     use temp_env::{with_var, with_var_unset};
 
     struct SharedBuffer {
@@ -660,17 +751,29 @@ mod tests {
         SinkName::new(value).expect("valid sink name")
     }
 
-    fn temp_path(name: &str) -> PathBuf {
-        let path = std::env::temp_dir().join(format!(
-            "sc-observability-{name}-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect("system time before unix epoch")
-                .as_nanos()
-        ));
-        let _ = fs::remove_dir_all(&path);
-        path
+    struct TestRoot(tempfile::TempDir);
+
+    impl TestRoot {
+        fn path_buf(&self) -> PathBuf {
+            self.0.path().to_path_buf()
+        }
+    }
+
+    impl Deref for TestRoot {
+        type Target = Path;
+
+        fn deref(&self) -> &Self::Target {
+            self.0.path()
+        }
+    }
+
+    fn temp_path(name: &str) -> TestRoot {
+        TestRoot(
+            tempfile::Builder::new()
+                .prefix(&format!("sc-observability-{name}-"))
+                .tempdir()
+                .expect("create temporary test root"),
+        )
     }
 
     #[cfg(unix)]
@@ -793,6 +896,7 @@ mod tests {
             {
                 return drained;
             }
+            std::thread::sleep(Duration::from_millis(10));
         }
 
         panic!("follow session never yielded {expected_request_id}");
@@ -833,12 +937,12 @@ mod tests {
         MaintenanceCadence::new(Duration::from_secs(value))
     }
 
-    fn join_ms(value: u64) -> MaintenanceJoinTimeout {
-        MaintenanceJoinTimeout::new(Duration::from_millis(value))
+    fn join_ms(value: u64) -> WriterShutdownTimeout {
+        WriterShutdownTimeout::new(Duration::from_millis(value))
     }
 
-    fn join_secs(value: u64) -> MaintenanceJoinTimeout {
-        MaintenanceJoinTimeout::new(Duration::from_secs(value))
+    fn join_secs(value: u64) -> WriterShutdownTimeout {
+        WriterShutdownTimeout::new(Duration::from_secs(value))
     }
 
     fn existing_log_paths(active_path: &Path, max_files: usize) -> Vec<PathBuf> {
@@ -851,7 +955,7 @@ mod tests {
     #[test]
     fn logger_config_default_for_sets_documented_defaults() {
         let root = temp_path("defaults");
-        let config = LoggerConfig::default_for(service_name(), root.clone());
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         assert_eq!(config.level, LevelFilter::Info);
         assert_eq!(config.queue_capacity, constants::DEFAULT_LOG_QUEUE_CAPACITY);
         assert_eq!(
@@ -881,7 +985,7 @@ mod tests {
 
         with_sc_log_root(Some(&env_root), || {
             let config = LoggerConfig::default_for(service_name(), PathBuf::new());
-            assert_eq!(config.log_root, env_root);
+            assert_eq!(config.log_root, env_root.path_buf());
         });
     }
 
@@ -891,15 +995,15 @@ mod tests {
         let explicit_root = temp_path("explicit-root");
 
         with_sc_log_root(Some(&env_root), || {
-            let config = LoggerConfig::default_for(service_name(), explicit_root.clone());
-            assert_eq!(config.log_root, explicit_root);
+            let config = LoggerConfig::default_for(service_name(), explicit_root.path_buf());
+            assert_eq!(config.log_root, explicit_root.path_buf());
         });
     }
 
     #[test]
     fn logger_config_debug_renders_redaction_summary() {
         let root = temp_path("debug");
-        let config = LoggerConfig::default_for(service_name(), root);
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
 
         let rendered = format!("{config:?}");
 
@@ -915,7 +1019,7 @@ mod tests {
             rotation_max_files: file_count(7),
             retention_max_age: retention_secs(42),
             maintenance_cadence: cadence_secs(60),
-            maintenance_join_timeout: join_secs(5),
+            writer_shutdown_timeout: join_secs(5),
             maintenance_max_work_per_pass: Some(3),
         };
 
@@ -924,7 +1028,7 @@ mod tests {
             serde_json::from_str(&encoded).expect("decode retained-log policy json");
         assert!(value["retention_max_age"].is_u64());
         assert!(value["maintenance_cadence"].is_u64());
-        assert!(value["maintenance_join_timeout"].is_u64());
+        assert!(value["writer_shutdown_timeout"].is_u64());
         let decoded: RetainedLogPolicy =
             serde_json::from_str(&encoded).expect("deserialize retained-log policy");
 
@@ -943,13 +1047,13 @@ mod tests {
     }
 
     #[test]
-    fn maintenance_join_timeout_deserialize_rejects_zero() {
-        let error = serde_json::from_str::<MaintenanceJoinTimeout>("0")
+    fn writer_shutdown_timeout_deserialize_rejects_zero() {
+        let error = serde_json::from_str::<WriterShutdownTimeout>("0")
             .expect_err("zero join timeout rejected");
         assert!(
             error
                 .to_string()
-                .contains("MaintenanceJoinTimeout must be a non-zero u64 millisecond count")
+                .contains("WriterShutdownTimeout must be a non-zero u64 millisecond count")
         );
     }
 
@@ -971,9 +1075,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "MaintenanceJoinTimeout must be non-zero")]
-    fn maintenance_join_timeout_new_rejects_zero() {
-        let _ = MaintenanceJoinTimeout::new(Duration::ZERO);
+    #[should_panic(expected = "WriterShutdownTimeout must be non-zero")]
+    fn writer_shutdown_timeout_new_rejects_zero() {
+        let _ = WriterShutdownTimeout::new(Duration::ZERO);
     }
 
     #[test]
@@ -993,13 +1097,13 @@ mod tests {
     }
 
     #[test]
-    fn maintenance_join_timeout_deserialize_reports_type_context() {
+    fn writer_shutdown_timeout_deserialize_reports_type_context() {
         let error =
-            serde_json::from_str::<MaintenanceJoinTimeout>("\"bad\"").expect_err("type error");
+            serde_json::from_str::<WriterShutdownTimeout>("\"bad\"").expect_err("type error");
         assert!(
             error
                 .to_string()
-                .contains("MaintenanceJoinTimeout expects a u64 millisecond count")
+                .contains("WriterShutdownTimeout expects a u64 millisecond count")
         );
     }
 
@@ -1016,9 +1120,10 @@ mod tests {
     #[test]
     fn file_only_logging_writes_jsonl_to_default_path() {
         let root = temp_path("file-only");
-        let config = LoggerConfig::default_for(service_name(), root.clone());
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
         logger.emit(log_event(service_name())).expect("emit");
+        logger.flush().expect("flush");
 
         let path = default_log_path(&root, &service_name());
         let contents = fs::read_to_string(&path).expect("read log file");
@@ -1029,7 +1134,7 @@ mod tests {
     #[test]
     fn file_and_console_fan_out_both_receive_event() {
         let root = temp_path("fanout");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_console_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
 
@@ -1042,6 +1147,7 @@ mod tests {
         let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
+        logger.flush().expect("flush");
 
         let path = default_log_path(&root, &service_name());
         assert!(path.exists());
@@ -1053,7 +1159,7 @@ mod tests {
     #[test]
     fn redaction_runs_before_sink_fan_out() {
         let root = temp_path("redaction");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_console_sink = false;
         config.redaction.denylist_keys.push("token".to_string());
         config
@@ -1071,6 +1177,7 @@ mod tests {
         let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
+        logger.flush().expect("flush");
 
         let file_path = default_log_path(&root, &service_name());
         let file_contents = fs::read_to_string(file_path).expect("read file");
@@ -1083,7 +1190,7 @@ mod tests {
     #[test]
     fn invalid_event_returns_event_error() {
         let root = temp_path("invalid");
-        let config = LoggerConfig::default_for(service_name(), root);
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
         let mut event = log_event(service_name());
         event.version = sc_observability_types::SchemaVersion::new("v0").expect("valid version");
@@ -1093,7 +1200,7 @@ mod tests {
     #[test]
     fn sink_failures_are_fail_open_and_counted_in_health() {
         let root = temp_path("fail-open");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         builder.register_sink(SinkRegistration::new(Arc::new(FailSink)));
@@ -1110,7 +1217,7 @@ mod tests {
     }
 
     #[test]
-    fn flush_failures_are_fail_open_and_counted_in_health() {
+    fn flush_failures_propagate_and_are_counted_in_health() {
         struct FlushFailSink;
 
         impl LogSink for FlushFailSink {
@@ -1136,13 +1243,14 @@ mod tests {
         }
 
         let root = temp_path("flush-fail");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         builder.register_sink(SinkRegistration::new(Arc::new(FlushFailSink)));
         let logger = builder.build();
 
-        logger.flush().expect("flush remains fail-open");
+        let error = logger.flush().expect_err("flush error should propagate");
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_FLUSH_FAILED);
 
         let health = logger.health();
         assert_eq!(health.dropped_events_total, 0);
@@ -1195,7 +1303,7 @@ mod tests {
     #[test]
     fn retained_sink_fault_injector_forces_degraded_logging_health() {
         let root = temp_path("fault-degraded");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         let injector = RetainedSinkFaultInjector::new();
@@ -1223,7 +1331,7 @@ mod tests {
     #[test]
     fn retained_sink_fault_injector_forces_unavailable_logging_health() {
         let root = temp_path("fault-unavailable");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         let injector = RetainedSinkFaultInjector::new();
@@ -1255,7 +1363,7 @@ mod tests {
         }
 
         let root = temp_path("filter");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
 
@@ -1276,23 +1384,23 @@ mod tests {
     #[test]
     fn shutdown_blocks_future_emits() {
         let root = temp_path("shutdown");
-        let config = LoggerConfig::default_for(service_name(), root);
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
-        let stopped = logger.shutdown().expect("shutdown");
+        let stopped = logger.shutdown();
         assert_eq!(stopped.health().state, LoggingHealthState::Unavailable);
     }
 
     #[test]
     fn shutdown_flushes_registered_sinks_before_marking_shutdown() {
         let root = temp_path("shutdown-flush");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         let sink = Arc::new(RecordingFlushSink::default());
         builder.register_sink(SinkRegistration::new(sink.clone()));
         let logger = builder.build();
 
-        let _stopped = logger.shutdown().expect("shutdown");
+        let _stopped = logger.shutdown();
 
         assert_eq!(sink.flush_calls.load(Ordering::SeqCst), 1);
     }
@@ -1300,7 +1408,7 @@ mod tests {
     #[test]
     fn maintenance_health_reflects_last_pass_and_last_error() {
         let root = temp_path("maintenance-health");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(2);
         config.retained_log_policy.retention_max_age = retention_secs(60);
@@ -1367,7 +1475,7 @@ mod tests {
     #[test]
     fn maintenance_prunes_retained_files_by_max_files() {
         let root = temp_path("maintenance-prune-max-files");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(2);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
@@ -1399,33 +1507,32 @@ mod tests {
     #[test]
     fn maintenance_prunes_retained_files_by_age() {
         let root = temp_path("maintenance-prune-age");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.retention_max_age = retention_ms(10);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        let retention_age = config.retained_log_policy.retention_max_age.as_duration();
         let logger = Logger::new(config).expect("logger");
+        let started = Instant::now();
 
         for request_id in ["req-1", "req-2", "req-3", "req-4", "req-5"] {
             logger
                 .emit(log_event_with_request(service_name(), request_id, 220))
                 .expect("emit");
         }
-        std::thread::sleep(Duration::from_millis(30));
 
         let active_path = default_log_path(&root, &service_name());
         wait_for(
             || {
                 let paths = existing_log_paths(&active_path, 8);
-                logger
-                    .health()
-                    .maintenance
-                    .as_ref()
-                    .is_some_and(|maintenance| {
-                        maintenance.rotated_files_total >= file_count(1)
-                            && maintenance.pruned_files_total >= file_count(1)
-                            && paths.len() == 1
-                    })
+                let health = logger.health();
+                health.maintenance.as_ref().is_some_and(|maintenance| {
+                    started.elapsed() >= retention_age
+                        && maintenance.rotated_files_total >= file_count(1)
+                        && maintenance.pruned_files_total >= file_count(1)
+                        && paths.len() == 1
+                })
             },
             "expected stale retained files to be pruned by age",
         );
@@ -1434,23 +1541,22 @@ mod tests {
     #[test]
     fn shutdown_joins_maintenance_worker_within_timeout() {
         let root = temp_path("shutdown-joins-maintenance");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.retained_log_policy.maintenance_join_timeout = join_secs(1);
+        config.retained_log_policy.writer_shutdown_timeout = join_secs(1);
         config.maintenance_test_pass_delay = Some(Duration::from_millis(100));
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        config.maintenance_test_pass_signal = Some(signal.clone());
         let logger = Logger::new(config).expect("logger");
 
         logger.emit(log_event(service_name())).expect("emit");
         wait_for(
-            crate::maintenance::test_pass_delay_active,
+            || signal.is_active(),
             "expected maintenance worker to enter the delayed test pass",
         );
 
-        let started = Instant::now();
-        let stopped = logger.shutdown().expect("shutdown");
-        crate::maintenance::clear_test_pass_delay();
+        let stopped = logger.shutdown();
 
-        assert!(started.elapsed() < Duration::from_secs(1));
         assert_eq!(
             stopped
                 .health()
@@ -1462,57 +1568,104 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_records_join_timeout_without_blocking() {
+    fn shutdown_records_join_timeout_but_waits_for_join() {
         let root = temp_path("shutdown-maintenance-timeout");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.retained_log_policy.maintenance_join_timeout = join_ms(20);
-        config.maintenance_test_pass_delay = Some(Duration::from_millis(200));
+        config.retained_log_policy.writer_shutdown_timeout = join_ms(10);
+        config.maintenance_test_pass_delay = Some(Duration::from_millis(500));
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        config.maintenance_test_pass_signal = Some(signal.clone());
         let logger = Logger::new(config).expect("logger");
 
         logger.emit(log_event(service_name())).expect("emit");
         wait_for(
-            crate::maintenance::test_pass_delay_active,
+            || signal.is_active(),
             "expected maintenance worker to enter the delayed test pass",
         );
 
         let started = Instant::now();
-        let stopped = logger.shutdown().expect("shutdown");
-        crate::maintenance::clear_test_pass_delay();
+        let stopped = logger.shutdown();
 
-        assert!(started.elapsed() < Duration::from_millis(150));
+        assert!(
+            started.elapsed() >= Duration::from_millis(450),
+            "shutdown should wait for delayed writer completion even after recording the timeout threshold"
+        );
         let maintenance = stopped.health().maintenance.expect("maintenance health");
-        assert_eq!(maintenance.state, MaintenanceWorkerState::Degraded);
+        assert_eq!(maintenance.state, MaintenanceWorkerState::Stopped);
         assert!(maintenance.last_error.is_some());
+        assert_eq!(stopped.health().writer_state, WriterState::Degraded);
+    }
+
+    #[test]
+    fn try_log_reports_queue_full_on_saturated_queue() {
+        let root = temp_path("try-log-queue-full");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.queue_capacity = 1;
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        config.maintenance_test_pass_delay = Some(Duration::from_millis(500));
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        config.maintenance_test_pass_signal = Some(signal.clone());
+        let logger = Logger::new(config).expect("logger");
+
+        logger.log(log_event(service_name())).expect("initial log");
+        wait_for(
+            || signal.is_active(),
+            "expected maintenance worker to enter the delayed test pass",
+        );
+
+        logger
+            .try_log(log_event_with_request(service_name(), "queued", 10))
+            .expect("first queued event should fit");
+        let result = logger.try_log(log_event_with_request(service_name(), "full", 10));
+
+        assert!(matches!(result, Err(TryLogError::QueueFull(_))));
+    }
+
+    #[test]
+    fn logger_builder_rejects_zero_queue_capacity() {
+        let root = temp_path("zero-queue-capacity");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.queue_capacity = 0;
+
+        let Err(error) = Logger::builder(config) else {
+            panic!("zero queue capacity should fail");
+        };
+
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_INIT_FAILED);
+        assert!(
+            error
+                .diagnostic()
+                .message
+                .contains("queue capacity must be greater than zero")
+        );
     }
 
     #[test]
     fn emit_path_remains_available_during_maintenance_pass() {
         let root = temp_path("maintenance-nonblocking");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         config.maintenance_test_pass_delay = Some(Duration::from_millis(200));
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        config.maintenance_test_pass_signal = Some(signal.clone());
         let logger = Logger::new(config).expect("logger");
 
         logger.emit(log_event(service_name())).expect("emit");
         wait_for(
-            crate::maintenance::test_pass_delay_active,
+            || signal.is_active(),
             "expected maintenance worker to enter the delayed test pass",
         );
 
-        let started = Instant::now();
         logger
             .emit(log_event_with_request(service_name(), "during-pass", 10))
             .expect("emit during delayed maintenance pass");
-        crate::maintenance::clear_test_pass_delay();
-
-        assert!(started.elapsed() < Duration::from_millis(100));
     }
 
     #[test]
     fn historical_query_reads_active_and_rotated_files() {
         let root = temp_path("query-rotated");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.maintenance_cadence = cadence_ms(50);
@@ -1582,7 +1735,7 @@ mod tests {
     #[test]
     fn historical_query_preserves_order_across_multiple_rotated_files() {
         let root = temp_path("query-multi-rotation-order");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(6);
         config.retained_log_policy.maintenance_cadence = cadence_ms(50);
@@ -1628,7 +1781,7 @@ mod tests {
     #[test]
     fn logger_and_jsonl_reader_query_have_parity() {
         let root = temp_path("query-parity");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
@@ -1661,7 +1814,7 @@ mod tests {
     #[test]
     fn follow_starts_at_tail_and_survives_multiple_rotations() {
         let root = temp_path("follow-rotation");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(6);
         config.retained_log_policy.maintenance_cadence = cadence_secs(3600);
@@ -1709,7 +1862,7 @@ mod tests {
     #[test]
     fn rotation_triggers_when_active_file_exceeds_max_bytes() {
         let root = temp_path("rotation-threshold");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.maintenance_cadence = cadence_ms(50);
@@ -1732,7 +1885,7 @@ mod tests {
     #[test]
     fn logger_and_jsonl_reader_follow_have_parity() {
         let root = temp_path("follow-parity");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(6);
         config.retained_log_policy.maintenance_cadence = cadence_secs(3600);
@@ -1765,7 +1918,7 @@ mod tests {
         use std::io::Write as _;
 
         let root = temp_path("query-health");
-        let config = LoggerConfig::default_for(service_name(), root.clone());
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
 
         logger
@@ -1787,7 +1940,7 @@ mod tests {
         assert_eq!(degraded_health.state, QueryHealthState::Degraded);
         assert!(degraded_health.last_error.is_some());
 
-        let stopped = logger.shutdown().expect("shutdown");
+        let stopped = logger.shutdown();
         assert_eq!(
             stopped.health().query.expect("query health").state,
             QueryHealthState::Unavailable
@@ -1797,10 +1950,10 @@ mod tests {
     #[test]
     fn logger_health_reports_unavailable_after_shutdown() {
         let root = temp_path("query-shutdown-variant");
-        let config = LoggerConfig::default_for(service_name(), root);
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
 
-        let stopped = logger.shutdown().expect("shutdown");
+        let stopped = logger.shutdown();
 
         assert_eq!(
             stopped.health().query.expect("query health").state,
@@ -1811,7 +1964,7 @@ mod tests {
     #[test]
     fn logger_follow_session_becomes_unavailable_after_shutdown() {
         let root = temp_path("follow-shutdown");
-        let config = LoggerConfig::default_for(service_name(), root);
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
 
         let mut follow = logger
@@ -1819,7 +1972,7 @@ mod tests {
             .expect("follow");
         assert!(follow.poll().expect("initial poll").events.is_empty());
 
-        let _stopped = logger.shutdown().expect("shutdown");
+        let _stopped = logger.shutdown();
 
         assert!(matches!(follow.poll(), Err(QueryError::Shutdown)));
         assert_eq!(follow.health().state, QueryHealthState::Unavailable);
@@ -1828,7 +1981,7 @@ mod tests {
     #[test]
     fn logger_query_and_follow_reject_invalid_queries() {
         let root = temp_path("invalid-query");
-        let config = LoggerConfig::default_for(service_name(), root);
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
 
         let invalid_limit = LogQuery {
@@ -1862,7 +2015,7 @@ mod tests {
     #[test]
     fn query_and_follow_are_unavailable_without_file_sink() {
         let root = temp_path("query-unavailable");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let logger = Logger::new(config).expect("logger");
 
@@ -1887,7 +2040,7 @@ mod tests {
     #[test]
     fn follow_recovers_after_active_file_truncate_and_recreate() {
         let root = temp_path("follow-truncate-recreate");
-        let config = LoggerConfig::default_for(service_name(), root.clone());
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
 
         logger

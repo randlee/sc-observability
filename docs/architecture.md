@@ -143,7 +143,7 @@ Owns:
 
 - `RetainedLogPolicy` struct nested in `LoggerConfig`
 - `rotation_max_bytes`, `rotation_max_files`, and `retention_max_age`
-- `maintenance_cadence`, `maintenance_join_timeout`, and
+- `maintenance_cadence`, `writer_shutdown_timeout`, and
   `maintenance_max_work_per_pass`
 - writer-thread-owned maintenance lifecycle
 - maintenance health reporting and bounded writer-thread shutdown-drain behavior
@@ -175,10 +175,10 @@ Health and shutdown contract:
   queue high-water mark, queue-full drop totals, writer state, and last writer
   error so downstream health/doctor commands can diagnose saturation
 - maintenance failures are fail-open and do not stop logging
-- `Logger::shutdown()` drains queued events and joins the writer thread within
-  the configured bounded shutdown timeout
-- if the drain or join timeout is exceeded, shutdown records timeout or
-  degraded state and returns without unbounded waiting
+- `Logger::shutdown()` drains queued events and does not return until the
+  writer thread has definitively joined
+- if the shutdown timeout threshold is exceeded, shutdown records degraded
+  state and then continues waiting for definitive writer completion
 
 Layering rules:
 
@@ -828,7 +828,7 @@ Consequences:
 - **Decision**: Replace the dedicated maintenance-only worker model with a
   single queue-backed writer thread. Producer calls validate, redact, and
   enqueue records. The writer thread owns batching, sink writes, retained-log
-  rotation, retained-log pruning, flush, and bounded shutdown drain behavior.
+  rotation, retained-log pruning, flush, and shutdown drain behavior.
   Maintenance runs on the same writer thread during idle or post-batch
   windows.
 - **Rationale**:
@@ -842,12 +842,12 @@ Consequences:
     I/O off producer threads
 - **Rejected Alternative**: rejected alternative of retaining a dedicated maintenance-only worker alongside the new writer thread. That option would keep two background execution lanes for one sink system, increase shutdown coordination complexity, and preserve split ownership over rotation/pruning versus writes.
 - **Consequences**:
-  - `log()` succeeds on queue admission, not durability; `flush()` remains the
-    barrier for committed writes
-  - `try_log()` may return explicit queue-full failure under saturation rather
-    than silently dropping records
-  - queue-full drops, writer degradation, and last-writer-error reporting are
-    part of `LoggingHealthReport`
+- `log()` succeeds on queue admission, not durability; `flush()` remains the
+  barrier for committed writes
+- `try_log()` may return explicit queue-full failure under saturation rather
+  than silently dropping records
+- queue-full drops, writer degradation, and last-writer-error reporting are
+  part of `LoggingHealthReport`
   - `Logger::shutdown()` now drains queued events and joins the writer thread
     within a bounded timeout rather than joining a separate maintenance worker
   - `MaintenanceWorkerState` remains the retained-log maintenance health

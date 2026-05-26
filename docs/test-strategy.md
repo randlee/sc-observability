@@ -66,7 +66,8 @@ Phase-A additions for the queue-backed writer runtime:
   accounting on `LoggingHealthReport`
 - writer-state and last-writer-error health behavior
 - batching behavior under burst load
-- bounded shutdown drain behavior
+- shutdown-drain completion behavior, including timeout-threshold degradation
+  without detached writer continuation
 - retained-log maintenance execution on the writer thread during idle or
   post-batch windows
 - query/follow parity against active and rotated files after the writer-runtime
@@ -137,7 +138,7 @@ Phase-A validation additions once the phase starts landing:
 - `bash scripts/ci/validate_writer_thread_lock.sh` for the A.1 normative-doc
   lock
 - `bash scripts/ci/validate_public_api_diff.sh` for additive public API diffs
-- `bash scripts/ci/validate_public_api_semver.sh` for semver-breaking API diffs
+- `python3 scripts/ci/validate_public_api_semver.py` for semver-breaking API diffs
 - `bash scripts/ci/validate_public_api_docs.sh` for machine-checkable API
   approval/documentation coverage
 

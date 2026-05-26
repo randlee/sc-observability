@@ -68,14 +68,14 @@ Note:
 - [x] `FileCount`
 - [x] `RetentionMaxAge`
 - [x] `MaintenanceCadence`
-- [x] `MaintenanceJoinTimeout`
+- [x] `WriterShutdownTimeout`
 - [x] `SpanRecord<S>`
 - [x] `SpanEvent`
 - [x] `SpanSignal`
 - [x] `MetricKind`
 - [x] `MetricRecord`
 - [x] `LoggingHealthState`
-- [~] `WriterState` (phase-A planned logging-runtime addition)
+- [x] `WriterState`
 - [x] `SinkHealthState`
 - [x] `SinkHealth`
 - [x] `LoggingHealthReport`
@@ -112,6 +112,8 @@ Note:
 - [x] `ExportError`
 - [x] `ObservationError`
 - [x] `TelemetryError`
+- [x] `MaintenanceHealthReport` (owned by `sc-observability-types`, re-exported by `sc-observability`)
+- [x] `MaintenanceWorkerState` (owned by `sc-observability-types`, re-exported by `sc-observability`)
 
 ### Finalized Public Rules
 
@@ -152,19 +154,19 @@ Internal-only:
 
 ### Phase A Planned Public Additions
 
-- [~] `Logger<Running>`
-- [~] `Logger<Stopped>`
-- [~] `Logger::log(&self, LogEvent) -> Result<(), LogError>`
-- [~] `Logger::try_log(&self, LogEvent) -> Result<(), TryLogError>`
-- [~] deprecated `Logger::emit(&self, LogEvent) -> Result<(), EventError>`
-- [~] `LogError`
-- [~] `TryLogError`
-- [~] `LoggingHealthReport.queue_depth`
-- [~] `LoggingHealthReport.queue_capacity`
-- [~] `LoggingHealthReport.queue_high_water_mark`
-- [~] `LoggingHealthReport.queue_full_drops_total`
-- [~] `LoggingHealthReport.writer_state`
-- [~] `LoggingHealthReport.last_writer_error`
+- [x] `Logger<Running>`
+- [x] `Logger<Stopped>`
+- [x] `Logger::log(&self, LogEvent) -> Result<(), LogError>`
+- [x] `Logger::try_log(&self, LogEvent) -> Result<(), TryLogError>`
+- [x] deprecated `Logger::emit(&self, LogEvent) -> Result<(), EventError>`
+- [x] `LogError`
+- [x] `TryLogError`
+- [x] `LoggingHealthReport.queue_depth`
+- [x] `LoggingHealthReport.queue_capacity`
+- [x] `LoggingHealthReport.queue_high_water_mark`
+- [x] `LoggingHealthReport.queue_full_drops_total`
+- [x] `LoggingHealthReport.writer_state`
+- [x] `LoggingHealthReport.last_writer_error`
 
 Phase-A rule:
 
@@ -258,3 +260,29 @@ At each crate freeze gate:
 - any newly introduced public type or trait must be added here first
 - the API docs, requirements, and implementation must all agree on names and
   signatures for that crate
+
+## 7. Approval Workflow
+
+Intentional public API changes must satisfy all of the following before they
+land:
+
+- `scripts/ci/validate_public_api_diff.sh` must expose the additive public API
+  diff against the latest published baseline for each workspace crate
+- `scripts/ci/validate_public_api_semver.py` must pass against the current
+  release baseline
+- `scripts/ci/validate_public_api_docs.sh` must pass
+- `docs/public-api-checklist.md` must be updated in the same branch
+- at least one normative API doc must be updated in the same branch:
+  - `docs/requirements.md`
+  - `docs/architecture.md`
+  - `docs/api-design.md`
+- one approval artifact per intentional API change must exist under
+  `docs/api-approvals/` using the required headings:
+  - `## Scope`
+  - `## Approval`
+  - `## Affected Artifacts`
+
+Steady-state rule:
+
+- when no public API diff exists, `docs/api-approvals/README.md` may be the
+  only file under `docs/api-approvals/`

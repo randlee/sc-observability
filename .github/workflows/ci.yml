@@ -91,6 +91,46 @@ jobs:
       - name: Validate version literals
         run: python3 scripts/ci/validate_version_literals.py
 
+  public-api-governance:
+    name: public-api-governance (ubuntu)
+    needs: [clippy, docs-consistency, version-literals]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+          components: rustfmt, clippy
+
+      - name: Install nightly toolchain for cargo-public-api
+        run: rustup toolchain install nightly
+
+      - name: Validate public API diff visibility
+        id: public_api_diff
+        continue-on-error: true
+        run: bash scripts/ci/validate_public_api_diff.sh
+
+      - name: Validate public API semver compatibility
+        if: always()
+        run: python3 scripts/ci/validate_public_api_semver.py
+
+      - name: Validate public API documentation approvals
+        if: always()
+        run: bash scripts/ci/validate_public_api_docs.sh
+
+      - name: Upload public API governance reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-api-governance-${{ github.run_id }}-${{ github.sha }}
+          path: target/public-api/
+          if-no-files-found: error
+          retention-days: 14
+
   manifest-validation:
     name: manifest-validation (ubuntu)
     needs: [clippy, docs-consistency, dependency-bans, version-literals]

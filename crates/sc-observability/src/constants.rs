@@ -19,6 +19,12 @@ pub(crate) const SECS_PER_DAY: u64 = 86_400;
 /// Default synchronous queue-capacity placeholder retained for the v1 config
 /// surface.
 pub const DEFAULT_LOG_QUEUE_CAPACITY: usize = 1024;
+/// Internal maximum number of records one writer-thread batch drains before it
+/// flushes or rechecks maintenance work.
+pub(crate) const DEFAULT_LOG_BATCH_SIZE: usize = 64;
+/// Internal maximum time the writer thread waits to coalesce a partial batch
+/// before writing it.
+pub(crate) const DEFAULT_WRITER_BATCH_TIMEOUT: Duration = Duration::from_millis(5);
 /// Default maximum active-log size before rotation.
 pub const DEFAULT_ROTATION_MAX_BYTES: u64 = 64 * 1024 * 1024;
 /// Default number of rotated files retained beside the active log.
@@ -32,8 +38,8 @@ pub const DEFAULT_RETENTION_MAX_AGE: Duration =
     Duration::from_secs(DEFAULT_RETENTION_MAX_AGE_DAYS as u64 * SECS_PER_DAY);
 /// Default cadence for retained-log maintenance passes.
 pub const DEFAULT_MAINTENANCE_CADENCE: Duration = Duration::from_secs(60);
-/// Default bounded join timeout used during logger shutdown.
-pub const DEFAULT_MAINTENANCE_JOIN_TIMEOUT: Duration = Duration::from_secs(5);
+/// Default writer-thread shutdown timeout used during logger shutdown.
+pub const DEFAULT_WRITER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 /// Default work limit per maintenance pass.
 pub const DEFAULT_MAINTENANCE_MAX_WORK_PER_PASS: Option<usize> = None;
 /// Default enablement for the built-in JSONL file sink.

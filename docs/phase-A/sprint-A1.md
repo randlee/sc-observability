@@ -1,10 +1,10 @@
 ---
 id: A.1
 title: Architecture And API Lock
-status: planned
+status: implemented
 branch: feature/thread-optimization-a1-architecture-lock
-worktree: ../sc-observability-worktrees/feature/thread-optimization
-target: develop
+worktree: ../sc-observability-worktrees/feature/thread-optimization-a1-architecture-lock
+target: integrate/phase-a
 ---
 
 # Sprint A.1 — Architecture And API Lock
@@ -13,9 +13,9 @@ target: develop
 plan_type: sprint_plan
 phase: A
 sprint: A.1
-worktree: ../sc-observability-worktrees/feature/thread-optimization
+worktree: ../sc-observability-worktrees/feature/thread-optimization-a1-architecture-lock
 branch: feature/thread-optimization-a1-architecture-lock
-status: planned
+status: implemented
 estimated_scope: medium
 ```
 
@@ -23,6 +23,14 @@ estimated_scope: medium
 
 Lock the normative writer-thread architecture and the public logging contract
 before implementation begins.
+
+Execution note:
+
+- the original planning draft referenced `develop` as the eventual downstream
+  integration target
+- the authoritative execution target for phase-A feature branches is
+  `integrate/phase-a`, which is the correct target recorded in this sprint
+  frontmatter
 
 ## Hard Dependencies
 
@@ -76,7 +84,7 @@ before implementation begins.
   so the normative docs no longer describe a separate maintenance worker model
 - explicit lock text for the validator-sensitive requirements:
   - `LOG-041 Retained-log maintenance shall run on the writer thread during idle or post-batch windows, stay off the producer hot path, and shall not require an async runtime dependency.`
-  - `LOG-046 \`Logger::shutdown()\` shall drain queued events, stop the writer thread within the configured bounded shutdown timeout, and record timeout/degraded state in health or error reporting before returning when the drain does not finish cleanly.`
+  - `LOG-046 \`Logger::shutdown()\` shall drain queued events, record timeout/degraded state in health or error reporting when shutdown exceeds the configured timeout threshold, and return \`Logger<Stopped>\` only after the writer thread has definitively stopped.`
 - explicit statement that producers validate, redact, and queue log events,
   while one writer thread owns batching, sink writes, rotation, pruning, and
   flush
@@ -151,15 +159,15 @@ impl Logger<Running> {
 ```rust
 pub enum LogError {
     InvalidEvent(EventError),
-    WriterDegraded,
-    ShutdownTimedOut,
+    WriterDegraded(#[source] Box<ErrorContext>),
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
 }
 
 pub enum TryLogError {
     InvalidEvent(EventError),
-    QueueFull,
-    WriterDegraded,
-    ShutdownTimedOut,
+    QueueFull(#[source] Box<ErrorContext>),
+    WriterDegraded(#[source] Box<ErrorContext>),
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
 }
 ```
 

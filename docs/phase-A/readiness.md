@@ -34,10 +34,24 @@ Sprint planning status convention:
 
 | Sprint | Accepted Commit | Verdict | Current Status | Notes |
 | --- | --- | --- | --- | --- |
-| A.1 | `PENDING` | `PENDING` | `planned` | lock writer-thread architecture, queue semantics, `log()` / `try_log()` / deprecated `emit()` contract, and required queue/writer health fields |
-| A.2 | `PENDING` | `PENDING` | `planned` | add semver/public-API governance gates before runtime API changes land |
-| A.3 | `PENDING` | `PENDING` | `planned` | implement bounded queue, writer thread, batching, compatibility deprecation path, and health/runtime updates |
-| A.4 | `PENDING` | `PENDING` | `planned` | publish consumer rollout and operational guidance for queue-backed logging and doctor-facing health checks |
+| A.1 | `58e5065` | `ACCEPTED` | `accepted` | merged from `feature/thread-optimization-a1-architecture-lock`; architecture/API lock accepted on integrate |
+| A.2 | `4e81a00` | `ACCEPTED` | `accepted` | merged from `feature/thread-optimization-a2-api-governance` via PR `#77`; governance automation accepted on integrate |
+| A.3 | `192be19` | `ACCEPTED` | `accepted` | merged from `feature/thread-optimization-a3-writer-runtime` via PR `#78`; writer runtime and queue-backed API accepted on integrate |
+| A.4 | `4d007c7` | `ACCEPTED` | `accepted` | merged from `feature/thread-optimization-a4-consumer-rollout` via PR `#79`; consumer rollout and migration guidance accepted on integrate |
+
+## Phase-A Compliance Note
+
+- `NFR-010` compliance for phase-A planning is verified by keeping the
+  normative thread-optimization lock text aligned across
+  `docs/requirements.md`, `docs/architecture.md`, and `docs/api-design.md`,
+  with `bash scripts/ci/validate_docs_consistency.sh` and
+  `bash scripts/ci/validate_writer_thread_lock.sh` as the active CI checks.
+- `NFR-011` compliance for version literals is enforced going forward by
+  `python3 scripts/ci/validate_version_literals.py`.
+- The `since = "1.2.0"` literal in `docs/api-design.md` §11.6 is the locked
+  phase-A target release marker and has been intentionally verified against the
+  `project-plan.md` phase-A version designation; before release, the workspace
+  version must be advanced to match and the version-literal CI gate must pass.
 
 ## Phase Exit Condition
 

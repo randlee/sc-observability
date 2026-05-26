@@ -1,10 +1,10 @@
 ---
 id: A.4
 title: Consumer Rollout And Operational Guidance
-status: planned
+status: implemented
 branch: feature/thread-optimization-a4-consumer-rollout
-worktree: ../sc-observability-worktrees/feature/thread-optimization
-target: develop
+worktree: ../sc-observability-worktrees/feature/thread-optimization-a4-consumer-rollout
+target: integrate/phase-a
 ---
 
 # Sprint A.4 — Consumer Rollout And Operational Guidance
@@ -13,9 +13,9 @@ target: develop
 plan_type: sprint_plan
 phase: A
 sprint: A.4
-worktree: ../sc-observability-worktrees/feature/thread-optimization
+worktree: ../sc-observability-worktrees/feature/thread-optimization-a4-consumer-rollout
 branch: feature/thread-optimization-a4-consumer-rollout
-status: planned
+status: implemented
 estimated_scope: medium
 ```
 

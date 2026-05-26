@@ -10,6 +10,15 @@ pub const LOGGER_SHUTDOWN: ErrorCode = ErrorCode::new_static("SC_OBSERVABILITY_L
 /// Stable error code for sink write failures.
 pub const LOGGER_SINK_WRITE_FAILED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_SINK_WRITE_FAILED");
+/// Stable error code for non-blocking queue admission failure.
+pub const LOGGER_QUEUE_FULL: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_QUEUE_FULL");
+/// Stable error code for writer-thread degradation.
+pub const LOGGER_WRITER_DEGRADED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED");
+/// Stable error code for shutdown exceeding the configured timeout threshold.
+pub const LOGGER_SHUTDOWN_TIMED_OUT: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT");
 /// Stable error code for logger initialization failures.
 pub const LOGGER_INIT_FAILED: ErrorCode =
     ErrorCode::new_static("SC_OBSERVABILITY_LOGGER_INIT_FAILED");
@@ -35,6 +44,9 @@ pub const ALL: &[ErrorCode] = &[
     LOGGER_INVALID_EVENT,
     LOGGER_SHUTDOWN,
     LOGGER_SINK_WRITE_FAILED,
+    LOGGER_QUEUE_FULL,
+    LOGGER_WRITER_DEGRADED,
+    LOGGER_SHUTDOWN_TIMED_OUT,
     LOGGER_INIT_FAILED,
     LOGGER_FLUSH_FAILED,
     LOGGER_MAINTENANCE_FAILED,
