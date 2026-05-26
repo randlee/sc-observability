@@ -1378,7 +1378,7 @@ Defaults:
 - `retained_log_policy.rotation_max_files = FileCount::from_usize(10)`
 - `retained_log_policy.retention_max_age = RetentionMaxAge::from_days(7)`
 - `retained_log_policy.maintenance_cadence = MaintenanceCadence::new(60s)`
-- `retained_log_policy.maintenance_join_timeout = MaintenanceJoinTimeout::new(5s)`
+- `retained_log_policy.writer_shutdown_timeout = WriterShutdownTimeout::new(5s)`
 - `redact_bearer_tokens = true`
 - `enable_file_sink = true`
 - `enable_console_sink = false`
@@ -1418,7 +1418,7 @@ pub struct RetainedLogPolicy {
     pub rotation_max_files: FileCount,
     pub retention_max_age: RetentionMaxAge,
     pub maintenance_cadence: MaintenanceCadence,
-    pub maintenance_join_timeout: MaintenanceJoinTimeout,
+    pub writer_shutdown_timeout: WriterShutdownTimeout,
     pub maintenance_max_work_per_pass: Option<usize>,
 }
 ```
@@ -1429,7 +1429,7 @@ Defaults:
 - `rotation_max_files = FileCount::from_usize(10)`
 - `retention_max_age = RetentionMaxAge::from_days(7)`
 - `maintenance_cadence = MaintenanceCadence::new(60s)`
-- `maintenance_join_timeout = MaintenanceJoinTimeout::new(5s)`
+- `writer_shutdown_timeout = WriterShutdownTimeout::new(5s)`
 
 ### 11.4 Legacy Direct-Sink Helpers
 
@@ -1510,15 +1510,15 @@ Logger error inventory:
 ```rust
 pub enum LogError {
     InvalidEvent(EventError),
-    WriterDegraded,
-    ShutdownTimedOut,
+    WriterDegraded(#[source] Box<ErrorContext>),
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
 }
 
 pub enum TryLogError {
     InvalidEvent(EventError),
-    QueueFull,
-    WriterDegraded,
-    ShutdownTimedOut,
+    QueueFull(#[source] Box<ErrorContext>),
+    WriterDegraded(#[source] Box<ErrorContext>),
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
 }
 ```
 

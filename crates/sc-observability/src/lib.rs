@@ -195,9 +195,9 @@ impl std::fmt::Display for MaintenanceCadence {
 
 /// Strongly typed maintenance-worker join timeout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MaintenanceJoinTimeout(Duration);
+pub struct WriterShutdownTimeout(Duration);
 
-impl MaintenanceJoinTimeout {
+impl WriterShutdownTimeout {
     /// Creates a join timeout from one duration.
     ///
     /// # Panics
@@ -206,7 +206,7 @@ impl MaintenanceJoinTimeout {
     pub const fn new(duration: Duration) -> Self {
         assert!(
             !duration.is_zero(),
-            "MaintenanceJoinTimeout must be non-zero"
+            "WriterShutdownTimeout must be non-zero"
         );
         Self(duration)
     }
@@ -217,7 +217,7 @@ impl MaintenanceJoinTimeout {
     }
 }
 
-impl Serialize for MaintenanceJoinTimeout {
+impl Serialize for WriterShutdownTimeout {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -226,26 +226,26 @@ impl Serialize for MaintenanceJoinTimeout {
     }
 }
 
-impl<'de> Deserialize<'de> for MaintenanceJoinTimeout {
+impl<'de> Deserialize<'de> for WriterShutdownTimeout {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         let millis = u64::deserialize(deserializer).map_err(|error| {
             serde::de::Error::custom(format!(
-                "MaintenanceJoinTimeout expects a u64 millisecond count: {error}"
+                "WriterShutdownTimeout expects a u64 millisecond count: {error}"
             ))
         })?;
         if millis == 0 {
             return Err(serde::de::Error::custom(
-                "MaintenanceJoinTimeout must be a non-zero u64 millisecond count",
+                "WriterShutdownTimeout must be a non-zero u64 millisecond count",
             ));
         }
         Ok(Self(Duration::from_millis(millis)))
     }
 }
 
-impl std::fmt::Display for MaintenanceJoinTimeout {
+impl std::fmt::Display for WriterShutdownTimeout {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}ms", duration_as_millis(self.0))
     }
@@ -329,7 +329,7 @@ pub struct RetainedLogPolicy {
     pub maintenance_cadence: MaintenanceCadence,
     /// The shutdown-duration threshold used to flag degraded shutdown health
     /// before the logger continues waiting for writer-thread completion.
-    pub maintenance_join_timeout: MaintenanceJoinTimeout,
+    pub writer_shutdown_timeout: WriterShutdownTimeout,
     /// Optional cap on files processed during one maintenance pass.
     pub maintenance_max_work_per_pass: Option<usize>,
 }
@@ -341,7 +341,7 @@ impl Default for RetainedLogPolicy {
             rotation_max_files: FileCount::from_usize(constants::DEFAULT_ROTATION_MAX_FILES_USIZE),
             retention_max_age: RetentionMaxAge::from_duration(constants::DEFAULT_RETENTION_MAX_AGE),
             maintenance_cadence: MaintenanceCadence::new(constants::DEFAULT_MAINTENANCE_CADENCE),
-            maintenance_join_timeout: MaintenanceJoinTimeout::new(
+            writer_shutdown_timeout: WriterShutdownTimeout::new(
                 constants::DEFAULT_MAINTENANCE_JOIN_TIMEOUT,
             ),
             maintenance_max_work_per_pass: constants::DEFAULT_MAINTENANCE_MAX_WORK_PER_PASS,
@@ -937,12 +937,12 @@ mod tests {
         MaintenanceCadence::new(Duration::from_secs(value))
     }
 
-    fn join_ms(value: u64) -> MaintenanceJoinTimeout {
-        MaintenanceJoinTimeout::new(Duration::from_millis(value))
+    fn join_ms(value: u64) -> WriterShutdownTimeout {
+        WriterShutdownTimeout::new(Duration::from_millis(value))
     }
 
-    fn join_secs(value: u64) -> MaintenanceJoinTimeout {
-        MaintenanceJoinTimeout::new(Duration::from_secs(value))
+    fn join_secs(value: u64) -> WriterShutdownTimeout {
+        WriterShutdownTimeout::new(Duration::from_secs(value))
     }
 
     fn existing_log_paths(active_path: &Path, max_files: usize) -> Vec<PathBuf> {
@@ -1019,7 +1019,7 @@ mod tests {
             rotation_max_files: file_count(7),
             retention_max_age: retention_secs(42),
             maintenance_cadence: cadence_secs(60),
-            maintenance_join_timeout: join_secs(5),
+            writer_shutdown_timeout: join_secs(5),
             maintenance_max_work_per_pass: Some(3),
         };
 
@@ -1028,7 +1028,7 @@ mod tests {
             serde_json::from_str(&encoded).expect("decode retained-log policy json");
         assert!(value["retention_max_age"].is_u64());
         assert!(value["maintenance_cadence"].is_u64());
-        assert!(value["maintenance_join_timeout"].is_u64());
+        assert!(value["writer_shutdown_timeout"].is_u64());
         let decoded: RetainedLogPolicy =
             serde_json::from_str(&encoded).expect("deserialize retained-log policy");
 
@@ -1047,13 +1047,13 @@ mod tests {
     }
 
     #[test]
-    fn maintenance_join_timeout_deserialize_rejects_zero() {
-        let error = serde_json::from_str::<MaintenanceJoinTimeout>("0")
+    fn writer_shutdown_timeout_deserialize_rejects_zero() {
+        let error = serde_json::from_str::<WriterShutdownTimeout>("0")
             .expect_err("zero join timeout rejected");
         assert!(
             error
                 .to_string()
-                .contains("MaintenanceJoinTimeout must be a non-zero u64 millisecond count")
+                .contains("WriterShutdownTimeout must be a non-zero u64 millisecond count")
         );
     }
 
@@ -1075,9 +1075,9 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "MaintenanceJoinTimeout must be non-zero")]
-    fn maintenance_join_timeout_new_rejects_zero() {
-        let _ = MaintenanceJoinTimeout::new(Duration::ZERO);
+    #[should_panic(expected = "WriterShutdownTimeout must be non-zero")]
+    fn writer_shutdown_timeout_new_rejects_zero() {
+        let _ = WriterShutdownTimeout::new(Duration::ZERO);
     }
 
     #[test]
@@ -1097,13 +1097,13 @@ mod tests {
     }
 
     #[test]
-    fn maintenance_join_timeout_deserialize_reports_type_context() {
+    fn writer_shutdown_timeout_deserialize_reports_type_context() {
         let error =
-            serde_json::from_str::<MaintenanceJoinTimeout>("\"bad\"").expect_err("type error");
+            serde_json::from_str::<WriterShutdownTimeout>("\"bad\"").expect_err("type error");
         assert!(
             error
                 .to_string()
-                .contains("MaintenanceJoinTimeout expects a u64 millisecond count")
+                .contains("WriterShutdownTimeout expects a u64 millisecond count")
         );
     }
 
@@ -1543,7 +1543,7 @@ mod tests {
         let root = temp_path("shutdown-joins-maintenance");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.retained_log_policy.maintenance_join_timeout = join_secs(1);
+        config.retained_log_policy.writer_shutdown_timeout = join_secs(1);
         config.maintenance_test_pass_delay = Some(Duration::from_millis(100));
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
         config.maintenance_test_pass_signal = Some(signal.clone());
@@ -1572,7 +1572,7 @@ mod tests {
         let root = temp_path("shutdown-maintenance-timeout");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.retained_log_policy.maintenance_join_timeout = join_ms(10);
+        config.retained_log_policy.writer_shutdown_timeout = join_ms(10);
         config.maintenance_test_pass_delay = Some(Duration::from_millis(500));
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
         config.maintenance_test_pass_signal = Some(signal.clone());

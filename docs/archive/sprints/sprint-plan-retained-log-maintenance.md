@@ -32,7 +32,7 @@ Add a `RetainedLogPolicy` struct nested in `LoggerConfig` exposing:
 | `rotation_max_files` | `FileCount` | Maximum number of rotated files to retain |
 | `retention_max_age` | `RetentionMaxAge` | Delete rotated files older than this |
 | `maintenance_cadence` | `MaintenanceCadence` | How often the background worker runs a maintenance pass |
-| `maintenance_join_timeout` | `MaintenanceJoinTimeout` | Bounded shutdown join timeout for the maintenance worker |
+| `writer_shutdown_timeout` | `WriterShutdownTimeout` | Bounded shutdown join timeout for the maintenance worker |
 | `maintenance_max_work_per_pass` | `Option<usize>` | Optional cap on files processed per maintenance pass |
 
 Policy must be serialisable/deserialisable and have reasonable documented defaults.
@@ -58,7 +58,7 @@ Maintenance failures must not crash the logger or interfere with the emit path.
 
 ### D4 — Shutdown Contract
 
-- `Logger<Running>::shutdown()` consumes the running logger, returns `Logger<Stopped>`, and joins the maintenance worker within `maintenance_join_timeout`
+- `Logger<Running>::shutdown()` consumes the running logger, returns `Logger<Stopped>`, and joins the maintenance worker within `writer_shutdown_timeout`
 - If join times out, worker is abandoned and the timeout is recorded in health/error state
 - Shutdown behaviour is documented in Rustdoc on the public API
 

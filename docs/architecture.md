@@ -143,7 +143,7 @@ Owns:
 
 - `RetainedLogPolicy` struct nested in `LoggerConfig`
 - `rotation_max_bytes`, `rotation_max_files`, and `retention_max_age`
-- `maintenance_cadence`, `maintenance_join_timeout`, and
+- `maintenance_cadence`, `writer_shutdown_timeout`, and
   `maintenance_max_work_per_pass`
 - writer-thread-owned maintenance lifecycle
 - maintenance health reporting and bounded writer-thread shutdown-drain behavior

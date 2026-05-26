@@ -52,7 +52,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use sc_observability::{
-    ByteCount, FileCount, LoggerConfig, MaintenanceCadence, MaintenanceJoinTimeout,
+    ByteCount, FileCount, LoggerConfig, MaintenanceCadence, WriterShutdownTimeout,
     RetentionMaxAge, ServiceName,
 };
 
@@ -66,8 +66,8 @@ config.retained_log_policy.retention_max_age =
     RetentionMaxAge::from_duration(Duration::from_secs(3 * 86_400));
 config.retained_log_policy.maintenance_cadence =
     MaintenanceCadence::new(Duration::from_secs(30));
-config.retained_log_policy.maintenance_join_timeout =
-    MaintenanceJoinTimeout::new(Duration::from_secs(2));
+config.retained_log_policy.writer_shutdown_timeout =
+    WriterShutdownTimeout::new(Duration::from_secs(2));
 config.retained_log_policy.maintenance_max_work_per_pass = None; // default: unbounded work per pass
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
@@ -86,6 +86,19 @@ Use the queue-backed APIs directly in new code:
   wait until queued events have been written and sinks flushed
 - `Logger::emit()` remains available only as a deprecated compatibility path;
   prefer `log()` or `try_log()` in new code and examples
+
+### Queue Admission And Durability
+
+- `log()` returning `Ok(())` means the record was accepted into the bounded
+  writer queue.
+- `try_log()` returning `Ok(())` means the same queue-admission success, but
+  without waiting for queue space.
+- neither API guarantees the entry is already committed to the file sink or
+  console sink when the method returns.
+- call `flush()` when the caller must wait for all admitted entries to be
+  written through the configured sinks.
+- call `shutdown()` during process teardown to drain remaining queued entries
+  and wait for definitive writer-thread completion before exit.
 
 Blocking queue admission:
 
@@ -153,6 +166,78 @@ match logger.try_log(event) {
     }
     Err(err) => return Err(Box::new(err)),
 }
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+### Migrating From `emit()`
+
+`Logger::emit()` was the older compatibility path for logger-only consumers. It
+performed validation, attempted synchronous visibility where practical, and
+returned `Result<(), EventError>`.
+
+New code should migrate to the queue-backed APIs instead:
+
+- replace `emit()` with `log()` when the caller should block until queue
+  admission succeeds
+- replace `emit()` with `try_log()` when the caller prefers immediate
+  queue-full failure over blocking
+- add `flush()` or `shutdown()` at the lifecycle boundary where durability is
+  required, because `log()` and `try_log()` only guarantee queue admission
+
+Before:
+
+```rust
+# use sc_observability::{ActionName, Level, LogEvent, Logger, LoggerConfig, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName, TargetCategory, Timestamp, OBSERVATION_ENVELOPE_VERSION};
+# use std::path::PathBuf;
+# let service = ServiceName::new("my-service")?;
+# let logger = Logger::new(LoggerConfig::default_for(service.clone(), PathBuf::from("./observability")))?;
+# let event = LogEvent {
+#     version: SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION)?,
+#     timestamp: Timestamp::now_utc(),
+#     level: Level::Info,
+#     service: service.clone(),
+#     target: TargetCategory::new("app.core")?,
+#     action: ActionName::new("startup")?,
+#     message: Some("service booted".to_string()),
+#     identity: ProcessIdentity::default(),
+#     trace: None,
+#     request_id: None,
+#     correlation_id: None,
+#     outcome: Some(OutcomeLabel::new("ok")?),
+#     diagnostic: None,
+#     state_transition: None,
+#     fields: serde_json::Map::new(),
+# };
+logger.emit(event)?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+After:
+
+```rust
+# use sc_observability::{ActionName, Level, LogEvent, Logger, LoggerConfig, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName, TargetCategory, Timestamp, OBSERVATION_ENVELOPE_VERSION};
+# use std::path::PathBuf;
+# let service = ServiceName::new("my-service")?;
+# let logger = Logger::new(LoggerConfig::default_for(service.clone(), PathBuf::from("./observability")))?;
+# let event = LogEvent {
+#     version: SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION)?,
+#     timestamp: Timestamp::now_utc(),
+#     level: Level::Info,
+#     service: service.clone(),
+#     target: TargetCategory::new("app.core")?,
+#     action: ActionName::new("startup")?,
+#     message: Some("service booted".to_string()),
+#     identity: ProcessIdentity::default(),
+#     trace: None,
+#     request_id: None,
+#     correlation_id: None,
+#     outcome: Some(OutcomeLabel::new("ok")?),
+#     diagnostic: None,
+#     state_transition: None,
+#     fields: serde_json::Map::new(),
+# };
+logger.log(event)?;
+logger.flush()?;
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 

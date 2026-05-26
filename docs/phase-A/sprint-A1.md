@@ -159,15 +159,15 @@ impl Logger<Running> {
 ```rust
 pub enum LogError {
     InvalidEvent(EventError),
-    WriterDegraded,
-    ShutdownTimedOut,
+    WriterDegraded(#[source] Box<ErrorContext>),
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
 }
 
 pub enum TryLogError {
     InvalidEvent(EventError),
-    QueueFull,
-    WriterDegraded,
-    ShutdownTimedOut,
+    QueueFull(#[source] Box<ErrorContext>),
+    WriterDegraded(#[source] Box<ErrorContext>),
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
 }
 ```
 

@@ -721,8 +721,8 @@ mod tests {
         crate::MaintenanceCadence::new(Duration::from_secs(value))
     }
 
-    fn join_secs(value: u64) -> crate::MaintenanceJoinTimeout {
-        crate::MaintenanceJoinTimeout::new(Duration::from_secs(value))
+    fn join_secs(value: u64) -> crate::WriterShutdownTimeout {
+        crate::WriterShutdownTimeout::new(Duration::from_secs(value))
     }
 
     #[test]
@@ -742,7 +742,7 @@ mod tests {
                 rotation_max_files: file_count(1),
                 retention_max_age: retention_secs(3600),
                 maintenance_cadence: cadence_secs(60),
-                maintenance_join_timeout: join_secs(5),
+                writer_shutdown_timeout: join_secs(5),
                 maintenance_max_work_per_pass: None,
             })
             .expect_err("maintenance failure");
@@ -772,7 +772,7 @@ mod tests {
                 rotation_max_files: file_count(1),
                 retention_max_age: retention_secs(3600),
                 maintenance_cadence: cadence_secs(60),
-                maintenance_join_timeout: join_secs(5),
+                writer_shutdown_timeout: join_secs(5),
                 maintenance_max_work_per_pass: Some(2),
             })
             .expect("maintenance pass");

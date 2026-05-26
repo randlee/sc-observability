@@ -34,10 +34,10 @@ Sprint planning status convention:
 
 | Sprint | Accepted Commit | Verdict | Current Status | Notes |
 | --- | --- | --- | --- | --- |
-| A.1 | `PENDING` | `PENDING` | `implemented` | branch `feature/thread-optimization-a1-architecture-lock` closes the architecture/API lock deliverables; awaiting QA verdict and accepted commit |
-| A.2 | `PENDING` | `PENDING` | `implemented` | branch `feature/thread-optimization-a2-api-governance` closes the public-API governance gates and approval workflow deliverables; awaiting QA verdict and accepted commit |
-| A.3 | `PENDING` | `PENDING` | `implemented` | branch `feature/thread-optimization-a3-writer-runtime` closes the writer runtime, queue-backed logging API, compatibility emit path, and queue/writer health deliverables; awaiting QA verdict and accepted commit |
-| A.4 | `PENDING` | `PENDING` | `implemented` | branch `feature/thread-optimization-a4-consumer-rollout` closes the consumer rollout, log()/try_log() adoption guidance, and queue/writer health inspection deliverables; awaiting QA verdict and accepted commit |
+| A.1 | `58e5065` | `ACCEPTED` | `accepted` | merged from `feature/thread-optimization-a1-architecture-lock`; architecture/API lock accepted on integrate |
+| A.2 | `4e81a00` | `ACCEPTED` | `accepted` | merged from `feature/thread-optimization-a2-api-governance` via PR `#77`; governance automation accepted on integrate |
+| A.3 | `192be19` | `ACCEPTED` | `accepted` | merged from `feature/thread-optimization-a3-writer-runtime` via PR `#78`; writer runtime and queue-backed API accepted on integrate |
+| A.4 | `4d007c7` | `ACCEPTED` | `accepted` | merged from `feature/thread-optimization-a4-consumer-rollout` via PR `#79`; consumer rollout and migration guidance accepted on integrate |
 
 ## Phase-A Compliance Note
 

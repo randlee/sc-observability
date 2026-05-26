@@ -98,7 +98,7 @@ impl WriterRuntime {
             sender,
             done_rx: Mutex::new(done_rx),
             join_handle,
-            join_timeout: policy.maintenance_join_timeout.as_duration(),
+            join_timeout: policy.writer_shutdown_timeout.as_duration(),
             writer_tracker,
             maintenance_tracker,
         }

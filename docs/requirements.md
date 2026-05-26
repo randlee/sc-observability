@@ -144,7 +144,7 @@ This crate is the lightweight logging layer.
   - `rotation_max_files = FileCount::from_usize(10)`
   - `retention_max_age = RetentionMaxAge::from_days(7)`
   - `maintenance_cadence = MaintenanceCadence::new(60 s)`
-  - `maintenance_join_timeout = MaintenanceJoinTimeout::new(5 s)`
+  - `writer_shutdown_timeout = WriterShutdownTimeout::new(5 s)`
   - `maintenance_max_work_per_pass = None`
   - bearer-token redaction enabled
   - built-in file sink enabled
@@ -159,7 +159,7 @@ This crate is the lightweight logging layer.
     `follow()` are available only on `Logger<Running>`
   - `log()` blocks until queue admission and does not guarantee durability
   - `try_log()` is non-blocking and returns explicit queue-full failure
-  - exceeding `maintenance_join_timeout` records degraded shutdown health but
+  - exceeding `writer_shutdown_timeout` records degraded shutdown health but
     does not permit the writer thread to continue detached after
     `Logger::shutdown()` returns
   - `Logger<Stopped>` remains usable for health inspection only
@@ -189,7 +189,7 @@ This crate is the lightweight logging layer.
   maintenance to downstream applications.
 - LOG-040 The retained-log policy surface shall expose additive configuration
   for `rotation_max_bytes`, `rotation_max_files`, `retention_max_age`,
-  `maintenance_cadence`, `maintenance_join_timeout`, and
+  `maintenance_cadence`, `writer_shutdown_timeout`, and
   `maintenance_max_work_per_pass`, using strong public newtypes for bytes and
   maintenance timing fields. `retention_max_age` supersedes the prior
   `retention.max_age_days` field.

@@ -68,7 +68,7 @@ Note:
 - [x] `FileCount`
 - [x] `RetentionMaxAge`
 - [x] `MaintenanceCadence`
-- [x] `MaintenanceJoinTimeout`
+- [x] `WriterShutdownTimeout`
 - [x] `SpanRecord<S>`
 - [x] `SpanEvent`
 - [x] `SpanSignal`
