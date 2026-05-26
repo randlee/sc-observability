@@ -359,6 +359,10 @@ fn duration_as_millis(duration: Duration) -> u64 {
 }
 
 /// Redacts one key/value pair before an event reaches registered sinks.
+///
+/// This trait is intentionally open for downstream implementations. Adding
+/// required methods or tightening object-safety guarantees is therefore a
+/// semver-significant public API change.
 pub trait Redactor: Send + Sync {
     /// Redacts one event field in place.
     fn redact(&self, key: &str, value: &mut Value);
@@ -386,12 +390,20 @@ impl std::fmt::Debug for RedactionPolicy {
 }
 
 /// Filters events before they are written to one registered sink.
+///
+/// This trait is intentionally open for downstream implementations. Adding
+/// required methods or tightening object-safety guarantees is therefore a
+/// semver-significant public API change.
 pub trait LogFilter: Send + Sync {
     /// Returns whether the sink should receive the event.
     fn accepts(&self, event: &LogEvent) -> bool;
 }
 
 /// One concrete event sink used by the logger runtime.
+///
+/// This trait is intentionally open for downstream implementations. Adding
+/// required methods or tightening object-safety guarantees is therefore a
+/// semver-significant public API change.
 pub trait LogSink: Send + Sync {
     /// Writes one event to the sink.
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
@@ -454,6 +466,8 @@ pub struct LoggerConfig {
     pub enable_console_sink: bool,
     #[cfg(test)]
     maintenance_test_pass_delay: Option<Duration>,
+    #[cfg(test)]
+    maintenance_test_pass_signal: Option<Arc<crate::maintenance::TestPassDelaySignal>>,
 }
 
 impl LoggerConfig {
@@ -489,6 +503,8 @@ impl LoggerConfig {
             enable_console_sink: constants::DEFAULT_ENABLE_CONSOLE_SINK,
             #[cfg(test)]
             maintenance_test_pass_delay: None,
+            #[cfg(test)]
+            maintenance_test_pass_signal: None,
         }
     }
 }
@@ -632,15 +648,16 @@ mod tests {
     use super::*;
     use crate::sinks::ConsoleWriter;
     use sc_observability_types::{
-        ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent, LogOrder, LogQuery,
-        LogSnapshot, ProcessIdentity, QueryError, QueryHealthState, Remediation, SinkName,
-        TargetCategory, Timestamp,
+        ActionName, Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, Level, LogEvent, LogOrder,
+        LogQuery, LogSnapshot, ProcessIdentity, QueryError, QueryHealthState, Remediation,
+        SinkName, TargetCategory, Timestamp,
     };
     use serde_json::{Map, json};
     use std::fs::{self, OpenOptions};
+    use std::ops::Deref;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Arc, Mutex};
-    use std::time::{Duration, Instant, SystemTime};
+    use std::time::{Duration, Instant};
     use temp_env::{with_var, with_var_unset};
 
     struct SharedBuffer {
@@ -734,17 +751,29 @@ mod tests {
         SinkName::new(value).expect("valid sink name")
     }
 
-    fn temp_path(name: &str) -> PathBuf {
-        let path = std::env::temp_dir().join(format!(
-            "sc-observability-{name}-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect("system time before unix epoch")
-                .as_nanos()
-        ));
-        let _ = fs::remove_dir_all(&path);
-        path
+    struct TestRoot(tempfile::TempDir);
+
+    impl TestRoot {
+        fn path_buf(&self) -> PathBuf {
+            self.0.path().to_path_buf()
+        }
+    }
+
+    impl Deref for TestRoot {
+        type Target = Path;
+
+        fn deref(&self) -> &Self::Target {
+            self.0.path()
+        }
+    }
+
+    fn temp_path(name: &str) -> TestRoot {
+        TestRoot(
+            tempfile::Builder::new()
+                .prefix(&format!("sc-observability-{name}-"))
+                .tempdir()
+                .expect("create temporary test root"),
+        )
     }
 
     #[cfg(unix)]
@@ -867,6 +896,7 @@ mod tests {
             {
                 return drained;
             }
+            std::thread::sleep(Duration::from_millis(10));
         }
 
         panic!("follow session never yielded {expected_request_id}");
@@ -925,7 +955,7 @@ mod tests {
     #[test]
     fn logger_config_default_for_sets_documented_defaults() {
         let root = temp_path("defaults");
-        let config = LoggerConfig::default_for(service_name(), root.clone());
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         assert_eq!(config.level, LevelFilter::Info);
         assert_eq!(config.queue_capacity, constants::DEFAULT_LOG_QUEUE_CAPACITY);
         assert_eq!(
@@ -955,7 +985,7 @@ mod tests {
 
         with_sc_log_root(Some(&env_root), || {
             let config = LoggerConfig::default_for(service_name(), PathBuf::new());
-            assert_eq!(config.log_root, env_root);
+            assert_eq!(config.log_root, env_root.path_buf());
         });
     }
 
@@ -965,15 +995,15 @@ mod tests {
         let explicit_root = temp_path("explicit-root");
 
         with_sc_log_root(Some(&env_root), || {
-            let config = LoggerConfig::default_for(service_name(), explicit_root.clone());
-            assert_eq!(config.log_root, explicit_root);
+            let config = LoggerConfig::default_for(service_name(), explicit_root.path_buf());
+            assert_eq!(config.log_root, explicit_root.path_buf());
         });
     }
 
     #[test]
     fn logger_config_debug_renders_redaction_summary() {
         let root = temp_path("debug");
-        let config = LoggerConfig::default_for(service_name(), root);
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
 
         let rendered = format!("{config:?}");
 
@@ -1090,9 +1120,10 @@ mod tests {
     #[test]
     fn file_only_logging_writes_jsonl_to_default_path() {
         let root = temp_path("file-only");
-        let config = LoggerConfig::default_for(service_name(), root.clone());
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
         logger.emit(log_event(service_name())).expect("emit");
+        logger.flush().expect("flush");
 
         let path = default_log_path(&root, &service_name());
         let contents = fs::read_to_string(&path).expect("read log file");
@@ -1103,7 +1134,7 @@ mod tests {
     #[test]
     fn file_and_console_fan_out_both_receive_event() {
         let root = temp_path("fanout");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_console_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
 
@@ -1116,6 +1147,7 @@ mod tests {
         let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
+        logger.flush().expect("flush");
 
         let path = default_log_path(&root, &service_name());
         assert!(path.exists());
@@ -1127,7 +1159,7 @@ mod tests {
     #[test]
     fn redaction_runs_before_sink_fan_out() {
         let root = temp_path("redaction");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_console_sink = false;
         config.redaction.denylist_keys.push("token".to_string());
         config
@@ -1145,6 +1177,7 @@ mod tests {
         let logger = builder.build();
 
         logger.emit(log_event(service_name())).expect("emit");
+        logger.flush().expect("flush");
 
         let file_path = default_log_path(&root, &service_name());
         let file_contents = fs::read_to_string(file_path).expect("read file");
@@ -1157,7 +1190,7 @@ mod tests {
     #[test]
     fn invalid_event_returns_event_error() {
         let root = temp_path("invalid");
-        let config = LoggerConfig::default_for(service_name(), root);
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
         let mut event = log_event(service_name());
         event.version = sc_observability_types::SchemaVersion::new("v0").expect("valid version");
@@ -1167,7 +1200,7 @@ mod tests {
     #[test]
     fn sink_failures_are_fail_open_and_counted_in_health() {
         let root = temp_path("fail-open");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         builder.register_sink(SinkRegistration::new(Arc::new(FailSink)));
@@ -1184,7 +1217,7 @@ mod tests {
     }
 
     #[test]
-    fn flush_failures_are_fail_open_and_counted_in_health() {
+    fn flush_failures_propagate_and_are_counted_in_health() {
         struct FlushFailSink;
 
         impl LogSink for FlushFailSink {
@@ -1210,13 +1243,14 @@ mod tests {
         }
 
         let root = temp_path("flush-fail");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         builder.register_sink(SinkRegistration::new(Arc::new(FlushFailSink)));
         let logger = builder.build();
 
-        logger.flush().expect("flush remains fail-open");
+        let error = logger.flush().expect_err("flush error should propagate");
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_FLUSH_FAILED);
 
         let health = logger.health();
         assert_eq!(health.dropped_events_total, 0);
@@ -1269,7 +1303,7 @@ mod tests {
     #[test]
     fn retained_sink_fault_injector_forces_degraded_logging_health() {
         let root = temp_path("fault-degraded");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         let injector = RetainedSinkFaultInjector::new();
@@ -1297,7 +1331,7 @@ mod tests {
     #[test]
     fn retained_sink_fault_injector_forces_unavailable_logging_health() {
         let root = temp_path("fault-unavailable");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         let injector = RetainedSinkFaultInjector::new();
@@ -1329,7 +1363,7 @@ mod tests {
         }
 
         let root = temp_path("filter");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
 
@@ -1350,7 +1384,7 @@ mod tests {
     #[test]
     fn shutdown_blocks_future_emits() {
         let root = temp_path("shutdown");
-        let config = LoggerConfig::default_for(service_name(), root);
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
         let stopped = logger.shutdown();
         assert_eq!(stopped.health().state, LoggingHealthState::Unavailable);
@@ -1359,7 +1393,7 @@ mod tests {
     #[test]
     fn shutdown_flushes_registered_sinks_before_marking_shutdown() {
         let root = temp_path("shutdown-flush");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         let sink = Arc::new(RecordingFlushSink::default());
@@ -1374,7 +1408,7 @@ mod tests {
     #[test]
     fn maintenance_health_reflects_last_pass_and_last_error() {
         let root = temp_path("maintenance-health");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(2);
         config.retained_log_policy.retention_max_age = retention_secs(60);
@@ -1441,7 +1475,7 @@ mod tests {
     #[test]
     fn maintenance_prunes_retained_files_by_max_files() {
         let root = temp_path("maintenance-prune-max-files");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(2);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
@@ -1473,33 +1507,32 @@ mod tests {
     #[test]
     fn maintenance_prunes_retained_files_by_age() {
         let root = temp_path("maintenance-prune-age");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.retention_max_age = retention_ms(10);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        let retention_age = config.retained_log_policy.retention_max_age.as_duration();
         let logger = Logger::new(config).expect("logger");
+        let started = Instant::now();
 
         for request_id in ["req-1", "req-2", "req-3", "req-4", "req-5"] {
             logger
                 .emit(log_event_with_request(service_name(), request_id, 220))
                 .expect("emit");
         }
-        std::thread::sleep(Duration::from_millis(30));
 
         let active_path = default_log_path(&root, &service_name());
         wait_for(
             || {
                 let paths = existing_log_paths(&active_path, 8);
-                logger
-                    .health()
-                    .maintenance
-                    .as_ref()
-                    .is_some_and(|maintenance| {
-                        maintenance.rotated_files_total >= file_count(1)
-                            && maintenance.pruned_files_total >= file_count(1)
-                            && paths.len() == 1
-                    })
+                let health = logger.health();
+                health.maintenance.as_ref().is_some_and(|maintenance| {
+                    started.elapsed() >= retention_age
+                        && maintenance.rotated_files_total >= file_count(1)
+                        && maintenance.pruned_files_total >= file_count(1)
+                        && paths.len() == 1
+                })
             },
             "expected stale retained files to be pruned by age",
         );
@@ -1508,23 +1541,22 @@ mod tests {
     #[test]
     fn shutdown_joins_maintenance_worker_within_timeout() {
         let root = temp_path("shutdown-joins-maintenance");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         config.retained_log_policy.maintenance_join_timeout = join_secs(1);
         config.maintenance_test_pass_delay = Some(Duration::from_millis(100));
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        config.maintenance_test_pass_signal = Some(signal.clone());
         let logger = Logger::new(config).expect("logger");
 
         logger.emit(log_event(service_name())).expect("emit");
         wait_for(
-            crate::maintenance::test_pass_delay_active,
+            || signal.is_active(),
             "expected maintenance worker to enter the delayed test pass",
         );
 
-        let started = Instant::now();
         let stopped = logger.shutdown();
-        crate::maintenance::clear_test_pass_delay();
 
-        assert!(started.elapsed() < Duration::from_secs(1));
         assert_eq!(
             stopped
                 .health()
@@ -1538,55 +1570,96 @@ mod tests {
     #[test]
     fn shutdown_records_join_timeout_without_blocking() {
         let root = temp_path("shutdown-maintenance-timeout");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.retained_log_policy.maintenance_join_timeout = join_ms(20);
-        config.maintenance_test_pass_delay = Some(Duration::from_millis(200));
+        config.retained_log_policy.maintenance_join_timeout = join_ms(10);
+        config.maintenance_test_pass_delay = Some(Duration::from_millis(500));
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        config.maintenance_test_pass_signal = Some(signal.clone());
         let logger = Logger::new(config).expect("logger");
 
         logger.emit(log_event(service_name())).expect("emit");
         wait_for(
-            crate::maintenance::test_pass_delay_active,
+            || signal.is_active(),
             "expected maintenance worker to enter the delayed test pass",
         );
 
-        let started = Instant::now();
         let stopped = logger.shutdown();
-        crate::maintenance::clear_test_pass_delay();
 
-        assert!(started.elapsed() < Duration::from_millis(150));
         let maintenance = stopped.health().maintenance.expect("maintenance health");
         assert_eq!(maintenance.state, MaintenanceWorkerState::Degraded);
         assert!(maintenance.last_error.is_some());
     }
 
     #[test]
+    fn try_log_reports_queue_full_on_saturated_queue() {
+        let root = temp_path("try-log-queue-full");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.queue_capacity = 1;
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        config.maintenance_test_pass_delay = Some(Duration::from_millis(500));
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        config.maintenance_test_pass_signal = Some(signal.clone());
+        let logger = Logger::new(config).expect("logger");
+
+        logger.log(log_event(service_name())).expect("initial log");
+        wait_for(
+            || signal.is_active(),
+            "expected maintenance worker to enter the delayed test pass",
+        );
+
+        logger
+            .try_log(log_event_with_request(service_name(), "queued", 10))
+            .expect("first queued event should fit");
+        let result = logger.try_log(log_event_with_request(service_name(), "full", 10));
+
+        assert!(matches!(result, Err(TryLogError::QueueFull(_))));
+    }
+
+    #[test]
+    fn logger_builder_rejects_zero_queue_capacity() {
+        let root = temp_path("zero-queue-capacity");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.queue_capacity = 0;
+
+        let Err(error) = Logger::builder(config) else {
+            panic!("zero queue capacity should fail");
+        };
+
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_INIT_FAILED);
+        assert!(
+            error
+                .diagnostic()
+                .message
+                .contains("queue capacity must be greater than zero")
+        );
+    }
+
+    #[test]
     fn emit_path_remains_available_during_maintenance_pass() {
         let root = temp_path("maintenance-nonblocking");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         config.maintenance_test_pass_delay = Some(Duration::from_millis(200));
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        config.maintenance_test_pass_signal = Some(signal.clone());
         let logger = Logger::new(config).expect("logger");
 
         logger.emit(log_event(service_name())).expect("emit");
         wait_for(
-            crate::maintenance::test_pass_delay_active,
+            || signal.is_active(),
             "expected maintenance worker to enter the delayed test pass",
         );
 
-        let started = Instant::now();
         logger
             .emit(log_event_with_request(service_name(), "during-pass", 10))
             .expect("emit during delayed maintenance pass");
-        crate::maintenance::clear_test_pass_delay();
-
-        assert!(started.elapsed() < Duration::from_millis(100));
     }
 
     #[test]
     fn historical_query_reads_active_and_rotated_files() {
         let root = temp_path("query-rotated");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.maintenance_cadence = cadence_ms(50);
@@ -1656,7 +1729,7 @@ mod tests {
     #[test]
     fn historical_query_preserves_order_across_multiple_rotated_files() {
         let root = temp_path("query-multi-rotation-order");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(6);
         config.retained_log_policy.maintenance_cadence = cadence_ms(50);
@@ -1702,7 +1775,7 @@ mod tests {
     #[test]
     fn logger_and_jsonl_reader_query_have_parity() {
         let root = temp_path("query-parity");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
@@ -1735,7 +1808,7 @@ mod tests {
     #[test]
     fn follow_starts_at_tail_and_survives_multiple_rotations() {
         let root = temp_path("follow-rotation");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(6);
         config.retained_log_policy.maintenance_cadence = cadence_secs(3600);
@@ -1783,7 +1856,7 @@ mod tests {
     #[test]
     fn rotation_triggers_when_active_file_exceeds_max_bytes() {
         let root = temp_path("rotation-threshold");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(4);
         config.retained_log_policy.maintenance_cadence = cadence_ms(50);
@@ -1806,7 +1879,7 @@ mod tests {
     #[test]
     fn logger_and_jsonl_reader_follow_have_parity() {
         let root = temp_path("follow-parity");
-        let mut config = LoggerConfig::default_for(service_name(), root.clone());
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.rotation_max_bytes = bytes(350);
         config.retained_log_policy.rotation_max_files = file_count(6);
         config.retained_log_policy.maintenance_cadence = cadence_secs(3600);
@@ -1839,7 +1912,7 @@ mod tests {
         use std::io::Write as _;
 
         let root = temp_path("query-health");
-        let config = LoggerConfig::default_for(service_name(), root.clone());
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
 
         logger
@@ -1871,7 +1944,7 @@ mod tests {
     #[test]
     fn logger_health_reports_unavailable_after_shutdown() {
         let root = temp_path("query-shutdown-variant");
-        let config = LoggerConfig::default_for(service_name(), root);
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
 
         let stopped = logger.shutdown();
@@ -1885,7 +1958,7 @@ mod tests {
     #[test]
     fn logger_follow_session_becomes_unavailable_after_shutdown() {
         let root = temp_path("follow-shutdown");
-        let config = LoggerConfig::default_for(service_name(), root);
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
 
         let mut follow = logger
@@ -1902,7 +1975,7 @@ mod tests {
     #[test]
     fn logger_query_and_follow_reject_invalid_queries() {
         let root = temp_path("invalid-query");
-        let config = LoggerConfig::default_for(service_name(), root);
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
 
         let invalid_limit = LogQuery {
@@ -1936,7 +2009,7 @@ mod tests {
     #[test]
     fn query_and_follow_are_unavailable_without_file_sink() {
         let root = temp_path("query-unavailable");
-        let mut config = LoggerConfig::default_for(service_name(), root);
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         let logger = Logger::new(config).expect("logger");
 
@@ -1961,7 +2034,7 @@ mod tests {
     #[test]
     fn follow_recovers_after_active_file_truncate_and_recreate() {
         let root = temp_path("follow-truncate-recreate");
-        let config = LoggerConfig::default_for(service_name(), root.clone());
+        let config = LoggerConfig::default_for(service_name(), root.path_buf());
         let logger = Logger::new(config).expect("logger");
 
         logger

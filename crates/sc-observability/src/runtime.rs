@@ -40,6 +40,7 @@ impl LoggerRuntime {
         retained_log_policy: RetainedLogPolicy,
         queue_capacity: usize,
         #[cfg(test)] test_pass_delay: Option<Duration>,
+        #[cfg(test)] test_pass_signal: Option<Arc<crate::maintenance::TestPassDelaySignal>>,
     ) -> Self {
         let dropped_events_total = Arc::new(AtomicU64::new(0));
         let flush_errors_total = Arc::new(AtomicU64::new(0));
@@ -64,6 +65,8 @@ impl LoggerRuntime {
                 last_error,
                 #[cfg(test)]
                 test_pass_delay,
+                #[cfg(test)]
+                test_pass_signal,
             )),
             writer_snapshot: Mutex::new(None),
         }
@@ -99,9 +102,10 @@ impl Logger<Running> {
             .writer
             .as_ref()
             .expect("running logger must retain its writer runtime");
-        writer
-            .enqueue_blocking(event)
-            .map_err(|()| self.log_runtime_error())
+        writer.enqueue_blocking(event).map_err(|error| match error {
+            TryEnqueueError::Disconnected => self.log_disconnected_error(),
+            TryEnqueueError::Full => unreachable!("blocking queue admission cannot report full"),
+        })
     }
 
     /// Attempts non-blocking queue admission for one structured log event.
@@ -139,7 +143,7 @@ impl Logger<Running> {
                     ),
                 ))))
             }
-            Err(TryEnqueueError::Disconnected) => Err(self.try_log_runtime_error()),
+            Err(TryEnqueueError::Disconnected) => Err(self.try_log_disconnected_error()),
         }
     }
 
@@ -163,9 +167,8 @@ impl Logger<Running> {
 
     /// Flushes all registered sinks through the writer-owned runtime.
     ///
-    /// Sink flush failures are absorbed into logger health and counters so the
-    /// caller can continue shutdown or health inspection without a secondary
-    /// runtime failure.
+    /// Sink flush failures are recorded in logger health and returned to the
+    /// caller as `FlushError`.
     ///
     /// # Panics
     ///
@@ -181,7 +184,7 @@ impl Logger<Running> {
                 .flush_errors_total
                 .fetch_add(1, Ordering::SeqCst);
             self.record_last_error(DiagnosticSummary::from(error.diagnostic()));
-            return Ok(());
+            return Err(error);
         }
         Ok(())
     }
@@ -291,7 +294,7 @@ impl Logger<Running> {
         ))
     }
 
-    fn log_runtime_error(&self) -> LogError {
+    fn log_disconnected_error(&self) -> LogError {
         match self.runtime_snapshot().last_writer_error {
             Some(summary)
                 if summary.code.as_ref() == Some(&error_codes::LOGGER_SHUTDOWN_TIMED_OUT) =>
@@ -301,15 +304,18 @@ impl Logger<Running> {
                 )))
             }
             Some(summary) => {
-                LogError::WriterDegraded(Box::new(writer_degraded_error_context(&summary.message)))
+                LogError::WriterDegraded(Box::new(writer_degraded_error_context(&format!(
+                    "writer thread disconnected while admitting log work: {}",
+                    summary.message
+                ))))
             }
             None => LogError::WriterDegraded(Box::new(writer_degraded_error_context(
-                "writer thread is not accepting new log work",
+                "writer thread disconnected while admitting log work",
             ))),
         }
     }
 
-    fn try_log_runtime_error(&self) -> TryLogError {
+    fn try_log_disconnected_error(&self) -> TryLogError {
         match self.runtime_snapshot().last_writer_error {
             Some(summary)
                 if summary.code.as_ref() == Some(&error_codes::LOGGER_SHUTDOWN_TIMED_OUT) =>
@@ -318,11 +324,14 @@ impl Logger<Running> {
                     &summary.message,
                 )))
             }
-            Some(summary) => TryLogError::WriterDegraded(Box::new(writer_degraded_error_context(
-                &summary.message,
-            ))),
+            Some(summary) => {
+                TryLogError::WriterDegraded(Box::new(writer_degraded_error_context(&format!(
+                    "writer thread disconnected while admitting non-blocking log work: {}",
+                    summary.message
+                ))))
+            }
             None => TryLogError::WriterDegraded(Box::new(writer_degraded_error_context(
-                "writer thread is not accepting new log work",
+                "writer thread disconnected while admitting non-blocking log work",
             ))),
         }
     }
