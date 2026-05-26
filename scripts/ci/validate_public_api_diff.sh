@@ -20,7 +20,7 @@ has_diff=0
 while IFS=$'\t' read -r package manifest_path; do
     [[ -n "$package" ]] || continue
     echo "=== ${package} ===" >>"$report_path"
-    tmp_output="$(mktemp)"
+    tmp_output="$(mktemp -t public-api-diff-XXXXXX)"
     if cargo public-api --manifest-path "$manifest_path" -sss diff --deny all latest >"$tmp_output" 2>&1; then
         echo "no public API diff against latest published version" >>"$report_path"
         cat "$tmp_output" >>"$report_path"
@@ -48,6 +48,7 @@ cat "$report_path"
 
 if [[ $has_diff -eq 1 ]]; then
     echo "public API diff report generated (diffs detected)"
+    exit 1
 else
     echo "public API diff validation passed"
 fi
