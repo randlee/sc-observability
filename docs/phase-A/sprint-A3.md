@@ -105,7 +105,7 @@ with one queue-backed writer runtime and the locked public logging API surface.
 - `bash scripts/ci/validate_repo_boundaries.sh`
 - `bash scripts/ci/validate_docs_consistency.sh`
 - `bash scripts/ci/validate_public_api_diff.sh`
-- `bash scripts/ci/validate_public_api_semver.sh`
+- `python3 scripts/ci/validate_public_api_semver.py`
 - `bash scripts/ci/validate_public_api_docs.sh`
 
 ## Non-Closure
