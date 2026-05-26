@@ -89,6 +89,15 @@ jobs:
       - name: Validate version literals
         run: python3 scripts/ci/validate_version_literals.py
 
+      - name: Validate public API diff visibility
+        run: bash scripts/ci/validate_public_api_diff.sh
+
+      - name: Validate public API semver compatibility
+        run: bash scripts/ci/validate_public_api_semver.sh
+
+      - name: Validate public API documentation approvals
+        run: bash scripts/ci/validate_public_api_docs.sh
+
       - name: Validate repo boundaries
         run: bash scripts/ci/validate_repo_boundaries.sh
 

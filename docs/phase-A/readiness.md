@@ -35,7 +35,7 @@ Sprint planning status convention:
 | Sprint | Accepted Commit | Verdict | Current Status | Notes |
 | --- | --- | --- | --- | --- |
 | A.1 | `PENDING` | `PENDING` | `implemented` | branch `feature/thread-optimization-a1-architecture-lock` closes the architecture/API lock deliverables; awaiting QA verdict and accepted commit |
-| A.2 | `PENDING` | `PENDING` | `planned` | add semver/public-API governance gates before runtime API changes land |
+| A.2 | `PENDING` | `PENDING` | `implemented` | branch `feature/thread-optimization-a2-api-governance` closes the public-API governance gates and approval workflow deliverables; awaiting QA verdict and accepted commit |
 | A.3 | `PENDING` | `PENDING` | `planned` | implement bounded queue, writer thread, batching, compatibility deprecation path, and health/runtime updates |
 | A.4 | `PENDING` | `PENDING` | `planned` | publish consumer rollout and operational guidance for queue-backed logging and doctor-facing health checks |
 
