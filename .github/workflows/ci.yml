@@ -104,6 +104,9 @@ jobs:
           toolchain: "1.94.1"
           components: rustfmt, clippy
 
+      - name: Install nightly toolchain for cargo-public-api
+        run: rustup toolchain install nightly
+
       - name: Validate public API diff visibility
         run: bash scripts/ci/validate_public_api_diff.sh
 
