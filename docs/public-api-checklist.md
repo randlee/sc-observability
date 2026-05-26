@@ -268,7 +268,7 @@ land:
 
 - `scripts/ci/validate_public_api_diff.sh` must expose the additive public API
   diff against the latest published baseline for each workspace crate
-- `scripts/ci/validate_public_api_semver.sh` must pass against the current
+- `scripts/ci/validate_public_api_semver.py` must pass against the current
   release baseline
 - `scripts/ci/validate_public_api_docs.sh` must pass
 - `docs/public-api-checklist.md` must be updated in the same branch
