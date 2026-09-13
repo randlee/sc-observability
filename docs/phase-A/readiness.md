@@ -29,6 +29,10 @@ Sprint planning status convention:
 - [`sprint-A2.md`](./sprint-A2.md)
 - [`sprint-A3.md`](./sprint-A3.md)
 - [`sprint-A4.md`](./sprint-A4.md)
+- [`log-facade-bridge-design.md`](./log-facade-bridge-design.md) (proposed
+  follow-on design review)
+- [`sprint-A5-log-facade-bridge.md`](./sprint-A5-log-facade-bridge.md)
+  (proposed follow-on workstream)
 
 ## Initial State
 
@@ -38,6 +42,7 @@ Sprint planning status convention:
 | A.2 | `4e81a00` | `ACCEPTED` | `accepted` | merged from `feature/thread-optimization-a2-api-governance` via PR `#77`; governance automation accepted on integrate |
 | A.3 | `192be19` | `ACCEPTED` | `accepted` | merged from `feature/thread-optimization-a3-writer-runtime` via PR `#78`; writer runtime and queue-backed API accepted on integrate |
 | A.4 | `4d007c7` | `ACCEPTED` | `accepted` | merged from `feature/thread-optimization-a4-consumer-rollout` via PR `#79`; consumer rollout and migration guidance accepted on integrate |
+| A.5 | — | `PROPOSED` | `planned` | companion log-facade bridge migration, DTO adapter direction, and language-binding feasibility; does not alter accepted A.1–A.4 closure until separately accepted |
 
 ## Phase-A Compliance Note
 
