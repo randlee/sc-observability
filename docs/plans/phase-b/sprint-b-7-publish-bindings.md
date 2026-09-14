@@ -1,16 +1,16 @@
 ---
-id: B.6
+id: B.7
 status: proposed
-branch: feature/phase-b-6-publish-bindings
+branch: feature/phase-b-7-publish-bindings
 base: develop
 ---
 
-# B.6 — Publish the language binding packages
+# B.7 — Publish the language binding packages
 
 ## Goal and dependencies
 
-Publish the already-working B.3 TypeScript and B.4/B.5 Python artifacts so external
-consumers can install them. `must_follow` B.5 and transitively B.4/B.3/B.2: preserve
+Publish the already-working B.3 TypeScript and B.4/B.5/B.6 Python artifacts so external
+consumers can install them. `must_follow` B.6 and transitively B.5/B.4/B.3/B.2: preserve
 the accepted runtime/schema contracts. This sprint owns distribution and
 registry proof, not unfinished runtime work.
 
@@ -31,7 +31,7 @@ registry proof, not unfinished runtime work.
    npm/PyPI versions into fresh external fixtures with no local path override.
    Exercise the TypeScript client with the released host adapter and the Python
    API against temporary logs. Build a registry-only Rust embedding consumer
-   using the published Python binding rlib, and prove shared Rust/Python records. Write `docs/plans/phase-b/handoff-b-6.md` with
+   using the published Python binding rlib, and prove shared Rust/Python records. Write `docs/plans/phase-b/handoff-b-7.md` with
    registry URLs, versions, hashes, source tag, public API coverage, platform
    results and adoption examples. Update root consumer/release documentation.
 
@@ -62,7 +62,8 @@ a released version or substitute different wheel bytes after testing.
   distributable packages; Rust prerequisites resolve from crates.io.
 - AC2: Registry-only TypeScript and Python examples exercise supported runtime
   operations on their promised platform matrices. Types/stubs and schema version
-  agree across installed artifacts.
+  agree across installed artifacts. Examples handle or deliberately ignore
+  discriminated results; no published wrapper replaces them with exceptions.
 - AC3: Documentation distinguishes Rust bridge adoption, Tauri frontend usage,
   Python-owned logging and deferred Go support. Missing publication access leaves
   this sprint pending; a staged package or release-ready PR is not closure.
@@ -81,7 +82,7 @@ bash scripts/ci/validate_docs_consistency.sh
 
 The registry-consumer script reads exact versions from the release record and
 rejects placeholders, unavailable artifacts, version/schema mismatches or skipped
-platform evidence. Reuse the accepted B.3/B.4/B.5 runtime tests on release artifacts;
+platform evidence. Reuse the accepted B.3/B.4/B.5/B.6 runtime tests on release artifacts;
 do not replace them with import-only checks.
 
 ## Paths to delete

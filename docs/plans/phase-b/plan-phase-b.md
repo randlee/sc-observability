@@ -24,7 +24,8 @@ this proposal's status.
 | B.3 | Generated TypeScript contract and functioning Tauri frontend client | [TypeScript](sprint-b-3-typescript.md) |
 | B.4 | Python logging API implemented through PyO3, with tested maturin wheels | [Python](sprint-b-4-python.md) |
 | B.5 | Standard-library Python logging and context propagation in mixed applications | [Python integration](sprint-b-5-python-integration.md) |
-| B.6 | Published TypeScript and Python packages with registry-consumer proof | [Binding publication](sprint-b-6-publish-bindings.md) |
+| B.6 | Fire-and-forget Python submission with optional asynchronous confirmation | [Async Python](sprint-b-6-python-async.md) |
+| B.7 | Published TypeScript and Python packages with registry-consumer proof | [Binding publication](sprint-b-7-publish-bindings.md) |
 
 ## Source and phase boundaries
 
@@ -67,6 +68,28 @@ The user-selected first TypeScript runtime is Tauri because BTIT is the concrete
 consumer. A standalone Node.js runtime would require an additional native-addon
 or service transport sprint; generated TypeScript alone does not execute Rust.
 
+## Default logging behavior
+
+Every public operation returns a discriminated result, including creation,
+validation, emission, query, health, flush, shutdown, and asynchronous waiting.
+Operational errors are values; neither language binding intentionally throws,
+raises, rejects a Promise, or uses exceptions internally for expected failures.
+Rust continues to use Result/enums. B.3 owns the shared result/error schema;
+Python generates equivalent tagged dataclasses and unions from that contract.
+
+Normal emission is nonblocking. Calling code may ignore its returned result and
+continue, including when an error record cannot be logged. Ignoring an error is
+then the caller's choice; the library does not disguise a failed record as a
+success or require error handling to keep the application running. Best-effort
+bounded health accounting never recurses through logging. If accounting also
+fails, preserve the original operation result and do not raise a second failure.
+Foreign formatter/transport errors are converted at the boundary, not propagated.
+
+Python B.6 adds immediate submission with an optional awaitable receipt and
+async flush. sc-runtime's process/interpreter topology, IPC, supervision, worker
+fairness and cross-worker ordering remain deferred. The in-process host example
+is a supported mode, not a decision about the future runtime architecture.
+
 ## Initial public API coverage
 
 The first language bindings cover structured logging, bounded historical query,
@@ -91,7 +114,8 @@ BTIT's later switch to the published crates is a separate BTIT change.
 | B.3 must_follow B.2 | Bind against the published Rust baseline; own shared DTO schema once |
 | B.4 must_follow B.3 | Reuse the accepted DTO conversions/error registry and conformance fixtures |
 | B.5 must_follow B.4 | Integrate Python logging/context with the implemented owned/attached runtime |
-| B.6 must_follow B.5 | Publish the already-tested TypeScript and Python artifacts together |
+| B.6 must_follow B.5 | Add receipt/wait support to the established Python runtime/context behavior |
+| B.7 must_follow B.6 | Publish the already-tested TypeScript and Python artifacts together |
 
 No pair currently meets the guideline's full `parallel_safe` conditions: they
 share public contracts, workspace/release metadata, or conformance fixtures.

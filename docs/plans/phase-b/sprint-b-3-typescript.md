@@ -25,11 +25,11 @@ transport and is outside this sprint.
    never enter this crate or the core dependency graph.
 2. Create `bindings/typescript/` with a locked package/toolchain, a Rust exporter
    under `bindings/typescript/exporter/`, generated declarations, and a typed
-   Promise-based client. Pin a compatible Specta/serde exporter combination
+   client with nonblocking logging and discriminated results for every operation. Pin a compatible Specta/serde exporter combination
    there; validate the emitted JSON representation, not Rust type names alone.
    Export a transport interface and a Tauri invoke implementation. Publishable
    package name proposed: `@sc-observability/client`; availability/ownership is
-   checked in B.6, not assumed here.
+   checked in B.7, not assumed here.
 3. Create `bindings/tauri/` and `examples/tauri-logging/` as isolated adapter and
    consumer workspaces. A host installs command handlers over its existing
    logger/control API; the frontend cannot create or shut down the host logger.
@@ -46,41 +46,75 @@ transport and is outside this sprint.
 
 ## Contract and operation signatures
 
-The transport carries JSON values only. Frontend API (all methods reject with
-an `ObservabilityError` exposing `code`, `message`, and `remediation` on failure):
+The transport carries JSON values only. Every public factory, validator and
+operation returns Result; async operations resolve Result and never reject for
+operational errors. Do not throw then catch the library's own expected failures.
+Convert foreign transport/formatter errors into Failure at the boundary. Error
+objects are data, not Error subclasses. No convenience unwrap-or-throw API ships.
 
 ```ts
-export interface ObservabilityClient {
-  tryLog(event: LogEventDto): Promise<AdmissionDto>;
-  log(event: LogEventDto): Promise<AdmissionDto>;
-  query(query: LogQueryDto): Promise<LogSnapshotDto>;
-  health(): Promise<LogHealthDto>;
-  flush(timeoutMs: number): Promise<CompletionDto>;
-}
-export type AdmissionDto = { status: "accepted" };
-export type CompletionDto = { status: "completed" };
-export type RemediationDto =
-  | { kind: "retry"; after_ms: number | null }
-  | { kind: "action"; steps: string[] }
-  | { kind: "none" };
-export interface ObservabilityErrorDto {
-  schema_version: 1;
+export type Result<T> =
+  | { kind: "ok"; value: T }
+  | { kind: "error"; error: Failure };
+export type Failure =
+  | (Diagnostic & { kind: "validation"; field: string })
+  | (Diagnostic & { kind: "queue_full" })
+  | (Diagnostic & { kind: "closed" })
+  | (Diagnostic & { kind: "unavailable" })
+  | (Diagnostic & { kind: "io" })
+  | (Diagnostic & { kind: "timeout"; operation: string })
+  | (Diagnostic & { kind: "cancelled"; operation: string })
+  | (Diagnostic & { kind: "unsupported_version"; received: number })
+  | (Diagnostic & { kind: "internal" });
+export interface Diagnostic {
   code: string;
   message: string;
   remediation: RemediationDto;
 }
-export interface JsonTransport {
-  request(operation: "try_log" | "log" | "query" | "health" | "flush",
-          request: unknown): Promise<unknown>;
+export type RemediationDto =
+  | { kind: "retry"; after_ms: number | null }
+  | { kind: "action"; steps: string[] }
+  | { kind: "none" };
+export interface ObservabilityClient {
+  log(event: LogEventDto): Result<DispatchDto>;
+  tryLog(event: LogEventDto): Promise<Result<AdmissionDto>>;
+  query(query: LogQueryDto): Promise<Result<LogSnapshotDto>>;
+  health(): Promise<Result<LogHealthDto>>;
+  flush(timeoutMs: number): Promise<Result<CompletionDto>>;
 }
+export type DispatchDto = { kind: "scheduled" };
+export type AdmissionDto = { kind: "accepted" };
+export type CompletionDto = { kind: "completed" };
+export interface JsonTransport {
+  request(operation: "try_log" | "query" | "health" | "flush",
+          request: unknown): Promise<Result<unknown>>;
+}
+export declare function createClient(transport: JsonTransport): Result<ObservabilityClient>;
 ```
 
-Admission means accepted by the Rust API, not persisted; level filtering follows
-Rust behavior. `tryLog` reports queue-full immediately as a stable error;
-`log` may wait for admission, so the host runs blocking work off the UI/async
-executor thread. Flush timeout means the caller stopped waiting. Use the
-accepted control API if available; otherwise a bounded, coalesced helper owns
-the in-flight operation. Repeated timeouts must not create unbounded threads.
+Result envelopes carry `schema_version: 1` at the wire boundary; generated
+language Result wrappers project that envelope without losing its discriminator.
+The error registry fixes each code's Failure variant and remediation mapping.
+Unknown foreign codes map to `internal` with their source code retained in the
+diagnostic; callers must not parse messages. Invalid union tags become a
+validation result. Serialize only the active variant's fields: never use a
+success flag plus nullable value/error combinations that permit invalid states.
+
+Normal `log` validates and schedules the nonblocking host try_log request and
+returns `ok/scheduled` or an immediate error; scheduled does not mean accepted
+by the host. Later transport/admission errors update bounded client health, with
+no unhandled Promise rejection. Callers wanting host confirmation use tryLog and
+inspect its Result. Core admission includes level-filter handling and does not
+mean writing or persistence. The API explicitly distinguishes local dispatch
+from host acknowledgement, and never upgrades dispatch into a persistence claim.
+
+All error handling is nonrecursive. If best-effort health accounting fails,
+preserve the original result and do not attempt another log/fallback sink.
+No retry queue may grow without bound. The host runs blocking query/flush work
+off the UI/async executor thread. Flush timeout is an error result indicating
+that the caller stopped waiting; it does not stop or retry the underlying flush.
+Use the accepted control API or a bounded, coalesced helper that owns the
+in-flight operation. Repeated timeouts must not create unbounded threads.
 
 The published schema is authoritative for these value shapes:
 
@@ -113,8 +147,8 @@ value:"18446744073709551615"}`; other values are explicitly tagged null, boolean
 string, finite float, array, or object, so user objects cannot collide with a
 magic integer key. Public wrappers convert ergonomic inputs into this wire form.
 Dates are canonical UTC RFC3339; query bounds retain core inclusive semantics.
-Paths project to nullable UTF-8 text plus an explicit encoding-error flag for
-unrepresentable paths; they are diagnostic output, never file-operation authority.
+Paths project to a tagged union: `{kind:"utf8", value:string}`,
+`{kind:"unrepresentable"}`, or `{kind:"absent"}`; they are diagnostic output, never file-operation authority.
 
 The host enforces a maximum serialized request size of 64 KiB and depth 32,
 configured target allowlist, required redaction, bounded query limit and stable
@@ -128,11 +162,16 @@ pre-existing unredacted history; access remains host-authorized.
   operations through real Tauri IPC with expected JSONL/query/health results,
   including correlated frontend/Rust backend records in one application log.
 - AC2: Rust JSON, generated declarations, runtime validators and fixture results
-  agree, including max u64, negative large integers, nulls, UTC, invalid paths,
+  agree, including every Result/Failure variant, exhaustive TypeScript narrowing,
+  max u64, negative large integers, nulls, UTC, invalid paths,
   same-timestamp query results, invalid versions and every error variant.
 - AC3: Input policy cannot be bypassed by direct invoke calls; denied targets,
   oversized/deep payloads, invalid fields, redaction, queue-full and flush-timeout
-  cases have boundary tests. The host stays responsive during blocked I/O.
+  cases have boundary tests. Default log failures, including a disconnected host
+  and failed diagnostic accounting, do not throw or trigger unhandled Promise
+  rejections. Factory, validation, query, health and lifecycle errors also return
+  Result rather than throwing/rejecting; tests fail on a hidden exception path.
+  The host stays responsive during blocked I/O.
 - AC4: Generated drift fails CI; core dependency/API invariants remain intact.
   Packed TypeScript and packaged Rust adapter artifacts work outside the repo.
 
@@ -146,6 +185,11 @@ bash scripts/ci/validate_repo_boundaries.sh
 bash scripts/ci/validate_docs_consistency.sh
 ```
 
+The new script checks authored TypeScript/Rust adapter paths for throw/panic/
+unwrap-based operational control flow, runs fault injection on every public
+Result-returning path, and compiles exhaustive Result/Failure narrowing fixtures.
+Foreign transport failures must be converted without escaping.
+
 The new script owns exact locked exporter/package-manager commands, temporary
 package-consumer installation, and Rust/IPC integration tests, and fails if any
 stage is skipped. Record macOS/Linux/Windows results and the generated artifact
@@ -157,7 +201,7 @@ None.
 
 ## Non-closure
 
-No registry publication (B.6), actual BTIT migration, Node.js addon, Python, Go,
+No registry publication (B.7), actual BTIT migration, Node.js addon, Python, Go,
 follow stream, custom callback sink/redactor, OTLP, log deletion, or frontend
 lifecycle ownership. Preserve the narrow public logging subset explicitly.
 
