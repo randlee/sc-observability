@@ -97,6 +97,23 @@ export interface JsonTransport {
 export declare function createClient(transport: JsonTransport): Result<ObservabilityClient>;
 ```
 
+Tauri command wrappers return an ordinary serializable WireEnvelope<T>, with
+schema_version and a flattened tagged WireResult<T>. They do not expose a native
+Result<T, E> command return that Tauri routes into Promise rejection. Convert
+native Rust Result into this value at the command boundary:
+
+```rust
+#[derive(serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum WireResult<T> {
+    Ok { value: T },
+    Error { error: Failure },
+}
+```
+
+Transport-level invoke failures are still converted by the client boundary;
+expected application failures travel as resolved error envelopes end-to-end.
+
 Result envelopes carry `schema_version: 1` at the wire boundary; generated
 language Result wrappers project that envelope without losing its discriminator.
 The error registry fixes each code's Failure variant and remediation mapping.
