@@ -15,10 +15,11 @@ B.4 `must_follow` B.3 because B.3 owns the shared DTO/schema/error contract.
 The first user-selected runtime is Tauri; standalone Node.js requires a distinct
 transport and is outside this sprint.
 
-Bridge-backed integration also requires an accepted public result-returning
-structured submission/control API; see [upstream recommendations](btit-api-handoff.md).
-A missing capability needs a separately reviewed API change before this sprint
-starts, not a private-module call or a second writer.
+The result-returning direct-submit/control/health contract is owned and accepted
+by sc-observability before B.1, then implemented/reviewed in BTIT and copied.
+Use [the accepted target](target-bridge-api.md); this sprint projects that public
+API into the binding contract without a hidden-module call or a second writer.
+The binding proposals below are reviewed against the accepted target revision.
 
 ## Deliverables (authoritative)
 

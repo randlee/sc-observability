@@ -34,17 +34,30 @@ Phase A in this repository is complete at v1.2.0; its accepted record is
 proposal in the separate `plan/phase-a-log-facade-bridge` branch is not a new
 accepted Phase A sprint and is not this plan's authority.
 
-BTIT's critical review is maintained separately in its repository at
-`docs/plans/phase-a/review-a-5.md`. At planning time it reports open findings
-against `f6f69dc`. That SHA is an audit reference, **not an approved import
-source**. B.1 starts only after BTIT's fixes and re-review produce an accepted,
-immutable source commit. The copy sprint preserves the accepted lifecycle,
-formatting, identity, and health behavior. New correctness findings return to BTIT before
-import; a destination-only redesign requires a separately scoped sprint.
+sc-observability owns the target public API. The
+[target bridge API proposal](target-bridge-api.md) is reviewed now so BTIT can
+complete its initial design/implementation against the accepted contract. This
+is an active contract-review gate, not a passive wait for an arbitrary BTIT API.
+The proposal is not yet an accepted freeze. No backward-compatibility/semver
+constraint from BTIT's unpublished API applies to this initial destination API.
 
-The [BTIT API handoff recommendations](btit-api-handoff.md) identify existing
-Result coverage and the proposed direct-submission/control addition. They are
-coordination input; BTIT acceptance and implementation are not assumed.
+B.1 requires a committed sc-observability-approved target contract, completed
+BTIT implementation/design, accepted critical-review closure, and the exact
+resulting source SHA. The critical review remains in BTIT at
+`docs/plans/phase-a/review-a-5.md`. Inspected `f6f69dc` and `5fd63ca` are historical
+references, not approved import sources. B.1 copies the accepted implementation
+of the locked target API with mechanical workspace adaptation; it is not a
+second API design/implementation sprint. B.2 publishes that companion pair;
+all bridge API changes foreseeable today are included in that target and
+implemented by BTIT before migration. Subsequent planned API work here is the
+language bindings. Later unforeseen bridge changes remain possible but are not
+a planned migration/refactor sprint. This preserves a working reference design
+for the initial release and avoids implementing the same changes twice.
+
+The [BTIT handoff record](btit-api-handoff.md) defines the shared gate and division
+of responsibility. Source behavior is preserved only where selected in the
+target matrix; intentional revisions are explicit. Existing published core
+crates retain their own release guarantees.
 
 ## Proposed binding architecture
 
@@ -113,7 +126,7 @@ BTIT's later switch to the published crates is a separate BTIT change.
 
 | Relation | Rationale |
 | --- | --- |
-| B.1 must_follow BTIT accepted review/fix handoff | Import only corrected, independently accepted source |
+| B.1 must_follow target public-API contract approval and BTIT accepted implementation/review closure | Copy only the implementation of the sc-observability-owned locked target |
 | B.2 must_follow B.1 | Packages and provenance must exist before publication |
 | B.3 must_follow B.2 | Bind against the published Rust baseline; own shared DTO schema once |
 | B.4 must_follow B.3 | Reuse the accepted DTO conversions/error registry and conformance fixtures |
@@ -140,4 +153,6 @@ The plan uses the merged
 Each sprint writes its own execution evidence only when executed; no empty
 handoff file is treated as evidence. Commands named as new validation scripts
 in sprint deliverables must be implemented by that sprint before its acceptance.
-The next step is plan review, then source-handoff readiness for B.1.
+The next step is review/acceptance of the target bridge API proposal so BTIT can
+complete implementation and review. B.1 stays blocked until that full contract
+and source-acceptance gate passes.

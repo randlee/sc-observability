@@ -1,83 +1,45 @@
-# BTIT API handoff recommendations
+# BTIT implementation handoff for the destination-owned target API
 
-Status: proposed recommendations, not an accepted BTIT change request.
-Inspected BTIT `integrate/phase-a` at
-`5fd63ca697fb36e91d754610cb631b1ddb9a3a31`. This record complements its separate
-`docs/plans/phase-a/review-a-5.md`; it does not replace its critical review,
-claim pending fixes are complete, or approve an import SHA.
+Status: target public-API contract under review; source implementation not yet
+accepted. This supersedes earlier wording that gave BTIT authority to accept or
+decline destination API recommendations, or deferred destination design until
+after copy.
 
-## Existing API impact
+sc-observability owns the [target public API and disposition matrix](target-bridge-api.md).
+We review/lock that contract now so BTIT can finish its initial bridge design and
+implementation against a stable adopted design. The new companion crate has no
+legacy BTIT API/semver obligation; retain useful behavior and identify intentional
+changes explicitly. The current target proposal is not itself an approved freeze.
 
-BTIT `crates/sc-observability-log/src/lib.rs` already returns Rust Result from
-init, flush and shutdown. `src/error.rs` defines typed InitError, FlushError and
-ShutdownError variants, stable codes, and remediation accessors. Rust Result
-and these enums already are discriminated unions. `thiserror::Error` derives
-formatting/error-trait implementations; they do not throw exceptions.
+## Required sequence
 
-The missing binding path is per-record submission to the installed logger:
-`src/handle.rs::submit_guarded` returns unit after counting its internal Result;
-`src/lib.rs::__private::emit` is hidden support, also returning unit. Exposing
-mutable Logger ownership or making the bindings call __private would violate
-the intended public boundary.
+1. sc-observability reviews and accepts a committed target public-API contract,
+   including exact lifecycle/control/direct-submit/health/error signatures,
+   variant/code mapping, facade compatibility policy, field-key/collision rules,
+   identity, global-install behavior and initial version policy.
+2. BTIT completes implementation against that accepted contract, resolves its
+   critical-review findings, and obtains acceptance. The review remains in BTIT
+   at `docs/plans/phase-a/review-a-5.md`; it records the adopted target revision,
+   full resulting source SHA and focused/cross-platform evidence.
+3. B.1 copies only the accepted generic source and verifies its exported API and
+   behavior against that locked target. The copy is mechanical; no second
+   destination API redesign is scheduled afterward.
+4. B.2 publishes the companion pair. B.3–B.6 implement the destination-owned
+   TypeScript/Python/async binding proposals; B.7 publishes those artifacts.
 
-## Recommend before source API freeze
+BTIT retains application authorization, UI, filesystem deletion, and its later
+published-dependency switch. This planning record does not itself authorize a
+BTIT code change or claim that its implementation/review is complete.
 
-1. Preserve existing Result-returning lifecycle APIs and typed variants. Add
-   no exception emulation or JSON/exporter/PyO3 dependencies to the Rust facade.
-2. On the lifecycle-control handle being designed for the existing BTIT fixes,
-   expose nonblocking structured emission to the same installed writer with an
-   inspectable Result. Proposed shape, with final names/input type settled in
-   BTIT's API review:
+## Current source observations
 
-   ```rust
-   pub fn try_log(&self, event: LogEvent) -> Result<EmitOutcome, BridgeEmitError>;
-   pub enum EmitOutcome { Accepted, Filtered }
-   ```
+At inspected `5fd63ca697fb36e91d754610cb631b1ddb9a3a31`, init/flush/shutdown already
+use Rust Result with typed errors. Public direct submission and lifecycle/health
+ownership need the target contract review; hidden emit/guarded helpers currently
+return unit. These observations inform the matrix but are not accepted source
+readiness. Neither this SHA nor `f6f69dc` is selected for import.
 
-   The accepted public input must preserve validated correlation/trace fields
-   and define identity/target policy. Queue-full, invalid event, stopped logger,
-   reentrancy and contained formatter/backend failure need typed variants or
-   typed wrapped causes, stable codes and remediation. Do not invent a Filtered
-   result unless the selected path actually distinguishes filtering from queue
-   admission; otherwise explicitly document accepted-or-filtered semantics.
-3. Make the one guarded internal submission operation return its Result. The
-   direct API preserves it; the compatibility facade/macros may intentionally
-   discard it after exactly-once drop accounting. Standard log::Log methods
-   have unit returns and cannot be changed to Result without abandoning that
-   trait. Preserve compatibility and document the result-discarding adapter.
-4. Complete the existing health/lifecycle review requirements: read-only health,
-   one shutdown owner, and observation of late completion after timeout. Expose
-   results without handing bindings ownership of the mutable logger. State
-   admission versus flush versus durable-storage guarantees explicitly.
-
-These are targeted recommendations to coordinate with BTIT before its next API
-freeze. B.1 still only copies accepted corrected source. Record BTIT's disposition
-and final signatures in B.1's provenance/handoff. If the accepted copy lacks the
-required direct submission/control capability, B.3's bridge-backed integration
-entry remains blocked until a separately approved upstream or destination API
-change lands; do not implement a hidden second logger or silently redesign B.1.
-
-## Owned here in Phase B
-
-B.3 owns JSON result/error projections, serializer/exporter compatibility,
-exhaustive union-version policy and Tauri Result preservation. B.4–B.6 own Python
-result factories, native/async adapters and event-loop behavior. BTIT should not
-implement those mechanisms merely to satisfy the copy handoff.
-
-BTIT's current Tauri app commands also flatten errors into Result<T, String> or
-return unit for frontend logs. When BTIT adopts the later shared bindings, its
-command wrappers should preserve a tagged success/error envelope end-to-end
-rather than flattening errors into text or exposing invoke Promise rejections.
-That is an application integration change, separate from the generic crate copy.
-
-## Acceptance evidence to request with the recommendation
-
-A direct-submission consumer checks both successful admission and each typed
-failure, proving the same writer is used by facade, frontend and backend calls.
-Facade/direct paths each increment a drop counter exactly once; ignoring the
-returned Result does not raise or retry. Health and timeout-completion results
-remain inspectable after the lifecycle owner initiates shutdown. Code/remediation
-mapping fixtures preserve native variant meaning through the later DTO layer.
-
-References: [Rust Result](https://doc.rust-lang.org/std/result/enum.Result.html)
-and the fixed-return [log::Log trait](https://docs.rs/log/latest/log/trait.Log.html).
+The target deliberately retains unit-return standard log::Log/macro adapters and
+adds a direct result-preserving path. Error/health wire projections belong to
+sc-observability's later bindings; BTIT implements the accepted neutral Rust
+contract without Tauri/PyO3/exporter dependencies in the generic bridge.

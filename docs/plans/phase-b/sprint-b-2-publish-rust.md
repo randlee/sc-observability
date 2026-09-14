@@ -17,7 +17,9 @@ the phase dependency rule; the consumer check waits for registry visibility.
 ## Deliverables (authoritative)
 
 1. Remove `publish = false` only from the bridge and macros, and choose the
-   release version through existing workspace release policy. Maintain an
+   initial release version through the workspace release train. No legacy BTIT
+   API/version constrains the new companion pair; the approved target contract
+   is its first public baseline. Existing published core semver gates remain. Maintain an
    exact bridge → macros `=V` pin and version+path dependencies that package
    correctly outside the checkout. Update release inventory, version-literal
    checks (including `=V`), package metadata/licenses, changelog and consumer
@@ -57,7 +59,7 @@ copy private bridge support code into the consumer.
 - AC1: Both public packages are downloadable at the recorded version, and the
   downloaded bridge resolves the exact matching macros package. The CI-only
   crate is absent from the publish inventory.
-- AC2: Package contents are self-contained and reproduce B.1 behavior; public
+- AC2: Package contents are self-contained and implement the approved target contract; public
   API/semver checks give actionable crate-specific results for every package.
 - AC3: The clean registry-only fixture passes on macOS/Linux/Windows. BTIT is
   given the version and adoption instructions without changing its dependency

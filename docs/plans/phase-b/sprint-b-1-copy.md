@@ -9,18 +9,26 @@ base: develop
 
 ## Goal and entry gate
 
-Copy the code, with only mechanical workspace adaptation. Entry requires the
-BTIT review at `docs/plans/phase-a/review-a-5.md` to record resolved Blocking and
-Important findings, accepted re-review, and the exact source commit. The
-independent sc-observability design-review requirement in that record must be
-satisfied. Record the actual commit; never substitute the known-unapproved
-`f6f69dc`. Until that exists, this sprint is waiting for source readiness.
+Copy only the accepted implementation of the
+[sc-observability-owned target bridge API](target-bridge-api.md), with mechanical
+workspace adaptation. The target contract is reviewed/locked now so BTIT can
+complete its initial implementation against it. This is not a post-copy API
+redesign and does not freeze the unfinished inspected baseline.
+
+Entry requires the recorded approved target-contract commit, completed BTIT
+initial design/implementation, resolved critical-review findings and accepted
+re-review, plus the full immutable source commit implementing that contract.
+The source review remains `docs/plans/phase-a/review-a-5.md` in BTIT. Neither
+`f6f69dc` nor `5fd63ca` is an approved import SHA. There is no BTIT semver or
+backward-compatibility obligation for this initial destination public API;
+source parity is checked against the newly accepted target, not legacy behavior.
 
 ## Dependencies
 
-- `must_follow`: BTIT fix/re-review handoff, because it determines the source
-  behavior and exported signatures.
-- B.2 `must_follow` B.1; no binding sprint or publication is part of B.1.
+- `must_follow`: sc-observability target public-API contract approval and BTIT
+  completed implementation/accepted critical-review closure for that contract.
+- B.2 `must_follow` B.1; no binding sprint, publication or second public-API
+  redesign is part of B.1.
 
 ## Deliverables (authoritative)
 
@@ -38,11 +46,12 @@ satisfied. Record the actual commit; never substitute the known-unapproved
    public signatures, or diagnostic behavior.
 3. Create `docs/plans/phase-b/import-provenance.json` and
    `scripts/ci/validate_log_import.py`. Record repository URL, accepted full SHA,
-   source review path/verdict, every copied file's source Git blob ID, and each
+   approved target-contract commit, source design/review verdicts, every copied file's source Git blob ID, and each
    permitted adaptation with reason. The validator accepts `--source-repo PATH`,
    verifies the immutable source and complete file inventory, and rejects any
-   unexplained addition, deletion, or content difference. Snapshot the accepted
-   public signatures in the handoff rather than inventing replacement APIs.
+   unexplained addition, deletion, or content difference. Verify the complete
+   exported API/impl inventory against the approved target matrix, including
+   additions made after the provisional source inspection.
 4. Update the affected dependency/structural CI allowlists and normative
    dependency diagram only to recognize the companion crates. Resolve any
    conflict with TYP-030 by an explicit scoped exception for the copied bridge's
@@ -51,9 +60,10 @@ satisfied. Record the actual commit; never substitute the known-unapproved
    with Scope/Approval/Affected Artifacts and actual reviewer approval before
    merge. Store execution evidence in `docs/plans/phase-b/handoff-b-1.md`.
 
-The [BTIT API handoff recommendations](btit-api-handoff.md) are coordination
-input for the source API freeze. Record their disposition and the accepted public
-signatures; they do not authorize API redesign in this copy sprint.
+The [BTIT handoff record](btit-api-handoff.md) describes the joint gate.
+Destination signatures and intentional behavior changes are settled in the
+target contract before BTIT's final implementation and this copy, not invented
+while copying. The completed source must carry the accepted contract reference.
 
 ## Boundary samples
 
@@ -83,7 +93,8 @@ macro-expansion hygiene check.
 
 - AC1: The provenance validator covers the entire accepted source tree and
   allows only the recorded mechanical changes. The copied runtime/public API
-  matches the accepted BTIT baseline.
+  matches the accepted locked target API and its BTIT implementation; both
+  contract approval and completed source/review acceptance are present.
 - AC2: All imported compatibility, formatter/panic, lifecycle, health, and UI
   tests pass on macOS/Linux/Windows, alongside existing workspace tests; no
   ignored failing fixtures or regeneration used to disguise behavioral changes.
