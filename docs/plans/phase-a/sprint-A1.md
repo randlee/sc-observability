@@ -64,7 +64,7 @@ Execution note:
 - `docs/project-plan.md`
 - `docs/public-api-checklist.md`
 - `docs/performance-pass.md`
-- `docs/phase-A/readiness.md`
+- `docs/plans/phase-a/readiness.md`
 - `scripts/ci/validate_writer_thread_lock.sh`
 
 ## Deliverables
@@ -128,7 +128,7 @@ Execution note:
   governance gate
 - explicit `project-plan.md` phase-A section for `v1.2.0` containing the
   sprint sequence `A.1` through `A.4` and exit criteria consistent with
-  `docs/phase-A/readiness.md`
+  `docs/plans/phase-a/readiness.md`
 - update `docs/performance-pass.md` so it no longer conflicts with the approved
   redesign
 - dedicated validation gate `scripts/ci/validate_writer_thread_lock.sh` that
@@ -228,7 +228,7 @@ pub enum WriterState {
 - the docs explicitly record that future public API changes require both docs
   updates and automated API-gate approval
 - `project-plan.md` contains the `v1.2.0` phase-A section, sprint sequence,
-  and exit criteria consistent with `docs/phase-A/readiness.md`
+  and exit criteria consistent with `docs/plans/phase-a/readiness.md`
 - `NFR-010` and `NFR-011` compliance is explicitly verified for the normative
   doc updates, including the `1.2.0` version literal used by the planned
   deprecation annotation

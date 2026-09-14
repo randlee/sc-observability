@@ -170,7 +170,7 @@ Internal-only:
 
 Phase-A rule:
 
-- these additions are design-locked by `docs/phase-A/sprint-A1.md` and become
+- these additions are design-locked by `docs/plans/phase-a/sprint-A1.md` and become
   `[x]` only after `A.3` lands and `A.2` public-API governance gates accept
   the resulting public surface
 

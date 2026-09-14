@@ -41,7 +41,7 @@ commands.
 - `README.md`
 - `CONSUMING.md`
 - `examples/custom-sink-example/`
-- `docs/phase-A/readiness.md`
+- `docs/plans/phase-a/readiness.md`
 
 ## Deliverables
 
