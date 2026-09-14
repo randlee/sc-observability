@@ -15,7 +15,7 @@ API changes introduced after the currently shipped baseline.
 ## Phase-A Usage
 
 Phase A uses this directory as the approval-artifact target referenced by
-[`docs/phase-A/sprint-A2.md`](../phase-A/sprint-A2.md).
+[`docs/plans/phase-a/sprint-A2.md`](../plans/phase-a/sprint-A2.md).
 
 The directory may remain empty until the first intentional public API change is
 proposed, but the directory and its required artifact format must exist before

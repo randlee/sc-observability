@@ -76,11 +76,11 @@ phase-A thread optimization effort for `sc-observability`.
 
 Controlling phase folder:
 
-- [`phase-A/readiness.md`](./phase-A/readiness.md)
-- [`phase-A/sprint-A1.md`](./phase-A/sprint-A1.md)
-- [`phase-A/sprint-A2.md`](./phase-A/sprint-A2.md)
-- [`phase-A/sprint-A3.md`](./phase-A/sprint-A3.md)
-- [`phase-A/sprint-A4.md`](./phase-A/sprint-A4.md)
+- [`plans/phase-a/readiness.md`](./plans/phase-a/readiness.md)
+- [`plans/phase-a/sprint-A1.md`](./plans/phase-a/sprint-A1.md)
+- [`plans/phase-a/sprint-A2.md`](./plans/phase-a/sprint-A2.md)
+- [`plans/phase-a/sprint-A3.md`](./plans/phase-a/sprint-A3.md)
+- [`plans/phase-a/sprint-A4.md`](./plans/phase-a/sprint-A4.md)
 
 Planned sequence:
 
@@ -102,7 +102,7 @@ Planned sequence:
 Phase A exit criteria:
 
 - `A.1` through `A.4` each record an accepted commit and verdict in
-  `docs/phase-A/readiness.md`
+  `docs/plans/phase-a/readiness.md`
 - the final accepted runtime uses one writer-owned queue-backed logging model
   rather than a maintenance-only background worker
 - public API changes are documented and CI-visible
