@@ -108,6 +108,15 @@ Phase A exit criteria:
 - public API changes are documented and CI-visible
 - consumer docs teach `log()` / `try_log()` as the preferred logging APIs
 
+## Phase B — Log bridge publication and language bindings
+
+The proposed next lettered phase is tracked in
+[`plans/phase-b/plan-phase-b.md`](./plans/phase-b/plan-phase-b.md).
+It starts by copying the review-corrected generic BTIT crates, then publishes
+them for future BTIT consumption, followed by dedicated TypeScript and Python
+binding work. Go remains future scope. The proposal does not reopen the accepted
+Phase A closure or claim that BTIT's currently open review findings are resolved.
+
 ## Rule
 
 Any sprint plan added here must preserve the standalone boundary defined by:
