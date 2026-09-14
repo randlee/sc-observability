@@ -42,6 +42,10 @@ immutable source commit. The copy sprint preserves the accepted lifecycle,
 formatting, identity, and health behavior. New correctness findings return to BTIT before
 import; a destination-only redesign requires a separately scoped sprint.
 
+The [BTIT API handoff recommendations](btit-api-handoff.md) identify existing
+Result coverage and the proposed direct-submission/control addition. They are
+coordination input; BTIT acceptance and implementation are not assumed.
+
 ## Proposed binding architecture
 
 Rust's public logging API remains the behavior authority. Companion packages

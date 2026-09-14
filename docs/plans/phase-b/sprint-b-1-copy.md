@@ -51,6 +51,10 @@ satisfied. Record the actual commit; never substitute the known-unapproved
    with Scope/Approval/Affected Artifacts and actual reviewer approval before
    merge. Store execution evidence in `docs/plans/phase-b/handoff-b-1.md`.
 
+The [BTIT API handoff recommendations](btit-api-handoff.md) are coordination
+input for the source API freeze. Record their disposition and the accepted public
+signatures; they do not authorize API redesign in this copy sprint.
+
 ## Boundary samples
 
 Destination manifest shape (versions inherit this workspace; do not hard-code

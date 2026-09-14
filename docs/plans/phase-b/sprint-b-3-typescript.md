@@ -15,6 +15,11 @@ B.4 `must_follow` B.3 because B.3 owns the shared DTO/schema/error contract.
 The first user-selected runtime is Tauri; standalone Node.js requires a distinct
 transport and is outside this sprint.
 
+Bridge-backed integration also requires an accepted public result-returning
+structured submission/control API; see [upstream recommendations](btit-api-handoff.md).
+A missing capability needs a separately reviewed API change before this sprint
+starts, not a private-module call or a second writer.
+
 ## Deliverables (authoritative)
 
 1. Create `crates/sc-observability-dto/` containing checked conversions between
@@ -65,16 +70,16 @@ export type Failure =
   | (Diagnostic & { kind: "timeout"; operation: string })
   | (Diagnostic & { kind: "cancelled"; operation: string })
   | (Diagnostic & { kind: "unsupported_version"; received: number })
-  | (Diagnostic & { kind: "internal" });
+  | (Diagnostic & { kind: "internal" })
+  | (Diagnostic & { kind: "unknown_remote"; remote_kind: string });
 export interface Diagnostic {
   code: string;
   message: string;
   remediation: RemediationDto;
 }
 export type RemediationDto =
-  | { kind: "retry"; after_ms: number | null }
-  | { kind: "action"; steps: string[] }
-  | { kind: "none" };
+  | { kind: "recoverable"; steps: string[] }
+  | { kind: "not_recoverable"; justification: string };
 export interface ObservabilityClient {
   log(event: LogEventDto): Result<DispatchDto>;
   tryLog(event: LogEventDto): Promise<Result<AdmissionDto>>;
@@ -95,8 +100,11 @@ export declare function createClient(transport: JsonTransport): Result<Observabi
 Result envelopes carry `schema_version: 1` at the wire boundary; generated
 language Result wrappers project that envelope without losing its discriminator.
 The error registry fixes each code's Failure variant and remediation mapping.
-Unknown foreign codes map to `internal` with their source code retained in the
-diagnostic; callers must not parse messages. Invalid union tags become a
+A valid but unknown remote failure tag maps to unknown_remote with its original
+kind/code/message retained in bounded diagnostic data; malformed envelopes produce
+a validation result. Unknown codes within a known variant remain available in
+code; callers must not parse messages. Native remediation is projected faithfully:
+recoverable actions do not imply an automatic retry or a retry delay. Invalid union tags become a
 validation result. Serialize only the active variant's fields: never use a
 success flag plus nullable value/error combinations that permit invalid states.
 
@@ -137,7 +145,11 @@ All wire property names use snake_case. Missing optional input fields normalize
 to null; output nullable fields are present. Unknown schema versions and unknown
 input fields produce stable validation errors. Additive optional output fields
 are accepted; changed required fields/tags/meaning require a new schema version.
-Version DTOs independently of crate/package releases. Treat error codes as stable
+Adding or changing a Result/Failure/Remediation variant can break exhaustive
+callers: require a new DTO schema and an appropriate breaking package version,
+with old/new consumer fixtures. The predeclared unknown_remote variant handles
+forward-compatibility explicitly. Version DTOs independently of crate/package
+releases. Treat error codes as stable
 identifiers; never parse display strings to reconstruct them.
 
 All i64/u64 counters and values outside JavaScript's safe integer range use
@@ -164,7 +176,8 @@ pre-existing unredacted history; access remains host-authorized.
 - AC2: Rust JSON, generated declarations, runtime validators and fixture results
   agree, including every Result/Failure variant, exhaustive TypeScript narrowing,
   max u64, negative large integers, nulls, UTC, invalid paths,
-  same-timestamp query results, invalid versions and every error variant.
+  same-timestamp query results, invalid versions, every error/remediation variant,
+  unknown remote failures, and old/new schema consumer compatibility.
 - AC3: Input policy cannot be bypassed by direct invoke calls; denied targets,
   oversized/deep payloads, invalid fields, redaction, queue-full and flush-timeout
   cases have boundary tests. Default log failures, including a disconnected host
