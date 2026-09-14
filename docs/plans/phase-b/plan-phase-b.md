@@ -20,6 +20,7 @@ this proposal's status.
 | Sprint | Production deliverable | Authoritative plan |
 | --- | --- | --- |
 | B.1 | Traceable copy of corrected generic BTIT crates, building in this workspace | [Copy](sprint-b-1-copy.md) |
+| B.1a | Improved core error API, deprecated compatibility interface, and downstream upgrade guidance | [Error API migration](sprint-b-1a-error-api.md) |
 | B.2 | Published Rust bridge and macros, verified from crates.io | [Rust publication](sprint-b-2-publish-rust.md) |
 | B.3 | Generated TypeScript contract and functioning Tauri frontend client | [TypeScript](sprint-b-3-typescript.md) |
 | B.4 | Python logging API implemented through PyO3, with tested maturin wheels | [Python](sprint-b-4-python.md) |
@@ -58,6 +59,17 @@ The [BTIT handoff record](btit-api-handoff.md) defines the shared gate and divis
 of responsibility. Source behavior is preserved only where selected in the
 target matrix; intentional revisions are explicit. Existing published core
 crates retain their own release guarantees.
+
+## Core error API migration
+
+[B.1a](sprint-b-1a-error-api.md) adds the improved typed error implementation
+and public entry points, retaining legacy interfaces with compiler-visible
+deprecation warnings. It also extends the existing adoption skill with an
+incremental downstream upgrade guide. This is the additive portion of issue #92;
+legacy removal and the breaking 2.0 conversion remain unscheduled. B.1 remains
+the first sprint and copies code only. B.1a precedes B.2 publication and changes
+no accepted bridge public signatures. The phase now contains eight sprints; the
+B.1a identifier preserves existing sprint references.
 
 ## Proposed binding architecture
 
@@ -127,7 +139,8 @@ BTIT's later switch to the published crates is a separate BTIT change.
 | Relation | Rationale |
 | --- | --- |
 | B.1 must_follow target public-API contract approval and BTIT accepted implementation/review closure | Copy only the implementation of the sc-observability-owned locked target |
-| B.2 must_follow B.1 | Packages and provenance must exist before publication |
+| B.1a must_follow B.1 | Verify additive core error evolution against the copied bridge contract |
+| B.2 must_follow B.1a | Publish the improved core API and compatibility adapters with the companion release |
 | B.3 must_follow B.2 | Bind against the published Rust baseline; own shared DTO schema once |
 | B.4 must_follow B.3 | Reuse the accepted DTO conversions/error registry and conformance fixtures |
 | B.5 must_follow B.4 | Integrate Python logging/context with the implemented owned/attached runtime |

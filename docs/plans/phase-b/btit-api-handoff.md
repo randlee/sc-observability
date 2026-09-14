@@ -24,7 +24,9 @@ changes explicitly. The current target proposal is not itself an approved freeze
 3. B.1 copies only the accepted generic source and verifies its exported API and
    behavior against that locked target. The copy is mechanical; no second
    destination API redesign is scheduled afterward.
-4. B.2 publishes the companion pair. B.3–B.6 implement the destination-owned
+4. B.1a adds the destination core error API and warning-only legacy adapters,
+   preserving the accepted bridge contract; it does not schedule bridge redesign.
+   B.2 publishes the core update and companion pair. B.3–B.6 implement the destination-owned
    TypeScript/Python/async binding proposals; B.7 publishes those artifacts.
 
 BTIT retains application authorization, UI, filesystem deletion, and its later

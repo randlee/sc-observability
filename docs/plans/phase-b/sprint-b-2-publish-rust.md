@@ -10,14 +10,15 @@ base: develop
 ## Goal and dependencies
 
 Make the migrated crates available from crates.io so BTIT can adopt released
-versions later. `must_follow` B.1: use its accepted source inventory and exact
-API. B.3 `must_follow` this sprint's published baseline. Merge-forward follows
+versions later. `must_follow` B.1a: publish its additive core error API and
+warning-only compatibility path, retaining B.1's accepted bridge inventory/API. B.3 `must_follow` this sprint's published baseline. Merge-forward follows
 the phase dependency rule; the consumer check waits for registry visibility.
 
 ## Deliverables (authoritative)
 
 1. Remove `publish = false` only from the bridge and macros, and choose the
-   initial release version through the workspace release train. No legacy BTIT
+   initial release version through the workspace release train, including the
+   minor core release required by B.1a and its concrete deprecation version. No legacy BTIT
    API/version constrains the new companion pair; the approved target contract
    is its first public baseline. Existing published core semver gates remain. Maintain an
    exact bridge → macros `=V` pin and version+path dependencies that package
