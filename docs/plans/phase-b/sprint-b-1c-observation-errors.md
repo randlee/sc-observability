@@ -20,6 +20,10 @@ call sites or release artifacts intersect.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Implement the methods below over the same observation runtime, using typed
    init/flush/shutdown failure production and legacy boundary adapters. Preserve
    the existing ObservationError routing enum and emit signature unchanged.

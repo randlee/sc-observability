@@ -720,6 +720,23 @@ Consequences:
 
 ## 7. ADRs
 
+ADR navigation index (status is recorded in each decision below):
+
+- [ADR-001: Observation-First Producers](#adr-001-observation-first-producers)
+- [ADR-002: Linear Dependency Order](#adr-002-linear-dependency-order)
+- [ADR-003: Logging Is Self-Contained](#adr-003-logging-is-self-contained)
+- [ADR-004: OTel Belongs Only At The Top](#adr-004-otel-belongs-only-at-the-top)
+- [ADR-005: Centralized Registries For Error Codes And Constants](#adr-005-centralized-registries-for-error-codes-and-constants)
+- [ADR-006: ATM Adapter Boundary](#adr-006-atm-adapter-boundary)
+- [ADR-007: Boot-Phase Observability Precedes Plugin Registration](#adr-007-boot-phase-observability-precedes-plugin-registration)
+- [ADR-008: Shared Approval Is Not ATM Migration Approval](#adr-008-shared-approval-is-not-atm-migration-approval)
+- [ADR-009: Boundary CI Must Enforce Shared-Repo Purity](#adr-009-boundary-ci-must-enforce-shared-repo-purity)
+- [ADR-010: Queue-Backed Writer Thread Owns Logging And Maintenance](#adr-010-queue-backed-writer-thread-owns-logging-and-maintenance)
+- [ADR-011: Companion Boundaries And Pre-Copy Contract](#adr-011-companion-boundaries-and-pre-copy-contract)
+- [ADR-012: Additive Typed Errors And Warning-Only Migration](#adr-012-additive-typed-errors-and-warning-only-migration)
+- [ADR-013: Owner-Controlled Shared Runtime Level](#adr-013-owner-controlled-shared-runtime-level)
+- [ADR-014: Result-Preserving Language Boundaries](#adr-014-result-preserving-language-boundaries)
+
 ### ADR-001: Observation-First Producers
 
 - **Status**: Accepted

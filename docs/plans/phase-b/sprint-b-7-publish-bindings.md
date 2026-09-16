@@ -18,6 +18,10 @@ child development/fix round and parent PR merge before child completion.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Add `release/bindings-artifacts.toml` recording Rust DTO/adapter/embedding crates,
    npm and PyPI package names, owners, versions, schema compatibility, source
    commit and artifact paths/hashes. Check registry name/control availability

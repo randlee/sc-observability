@@ -16,6 +16,10 @@ the phase dependency rule; the consumer check waits for registry visibility.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Remove `publish = false` only from the bridge and macros, and choose the
    initial companion release version through the workspace release train, including the
    minor core release selected by B.1e and its concrete deprecation version. This version is greater than the already-published B.P2 release; never

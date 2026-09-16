@@ -29,6 +29,10 @@ They are part of this sprint's reviewable contract, not future design work.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Create `bindings/typescript/` with a locked package/toolchain, a Rust exporter
    under `bindings/typescript/exporter/`, generated declarations, and a typed
    client with nonblocking logging and discriminated results for every operation. Pin a compatible Specta/serde exporter combination

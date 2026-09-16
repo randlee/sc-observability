@@ -20,6 +20,10 @@ parent PR merge precedes child completion, as defined in the phase index.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Add `submit` to owned Logger and AttachedLogger, returning the receipt below,
    and implement async receipt waiting and flush in
    `bindings/python/sc-observability-py/python/sc_observability/async_logging.py`

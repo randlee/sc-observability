@@ -20,6 +20,10 @@ call sites or release artifacts intersect.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Implement the typed methods below over the existing configuration, span
    assembly, exporter and lifecycle implementation. Convert internal exporter
    failures to ExportFailure and retain compatibility at public legacy boundaries.

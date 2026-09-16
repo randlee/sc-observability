@@ -39,6 +39,10 @@ source parity is checked against the newly accepted target, not legacy behavior.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Copy the complete reviewed `crates/sc-observability-log/`,
    `crates/sc-observability-log-macros/`, and CI-only
    `crates/sc-observability-log-consumer-check/` trees, including Rust source,

@@ -18,6 +18,10 @@ for this crate's production closure.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Create `crates/sc-observability-dto/` implementing every wire type and checked
    core conversion in [binding-contract.md](binding-contract.md), including the
    declarations below, decimal integers, paths, full health/event projections,

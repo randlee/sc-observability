@@ -23,6 +23,10 @@ They are part of this sprint's reviewable contract, not future design work.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Create the isolated mixed Rust/Python project
    `bindings/python/sc-observability-py/` with `pyproject.toml`, locked Rust
    dependencies, PyO3 `cdylib` plus Rust `rlib` embedding target,

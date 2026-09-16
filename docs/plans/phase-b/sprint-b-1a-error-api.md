@@ -22,6 +22,10 @@ call sites or release artifacts intersect.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Implement `typed::ClassifiedError`, the nine distinct `*Failure` values and their
    `*FailureKind` discriminated enums in `sc-observability-types`, with named
    constructors, diagnostic/context access and bidirectional legacy conversion

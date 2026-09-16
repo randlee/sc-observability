@@ -17,6 +17,10 @@ trigger merge-forward before every child dev/fix round; parent PR merges first.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Complete maturin packaging in `bindings/python/sc-observability-py/` using
    B.4's locked dependencies, `abi3-py310`, stubs and `py.typed`. Produce wheels
    plus an sdist containing required Rust/Python sources or resolvable registry

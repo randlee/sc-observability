@@ -19,6 +19,10 @@ round; parent PR merges before child completion.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Add the runtime contract's OperationDiagnostic, LevelState, LevelChangeSource, ChangeDiagnostic,
    LevelChange, LevelChangeError and AdmissionOutcome to sc-observability-types, with central
    codes/remediation; add LevelOwner and construction/accessors to

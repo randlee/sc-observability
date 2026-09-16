@@ -212,3 +212,8 @@ and source-acceptance gate passes.
 The [consistency review record](review-consistency.md) captures the iterative
 documentation checks and resolved findings; it is not implementation or API
 approval.
+
+The [required-document map](document-coverage.md) links per-crate requirements,
+architecture, ADRs and test guidance. [Boundary contracts](boundaries.json) are
+machine-readable planning definitions; [issue dispositions](issues-inventory.md)
+record inclusion and deferral without asserting implementation closure.

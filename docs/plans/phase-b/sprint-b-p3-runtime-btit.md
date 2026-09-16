@@ -19,6 +19,10 @@ and immutable accepted commits rather than an impossible Git merge.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. BTIT resolves B.P2's published core capability and implements LogGuard owner
    operations against its single LevelOwner. Use the shared core filter for
    direct/facade/macro producers; keep LogControl read-only. Remove independent

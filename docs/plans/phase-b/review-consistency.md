@@ -97,3 +97,32 @@ makes implementation detail concrete, without a new capability or breaking API.
 
 Target develop was current before editing. This records author corrections;
 it does not assert that the scope reviewer has accepted the revised commit.
+
+## Sprint-scope author audit — STEP3-R1 (2026-09-16)
+
+Input: team-lead supplied plan-scope-reviewer PASS for `80b7744` with fingerprint
+`phaseb-r2-clean`. This records that routed result, not a new reviewer verdict.
+The corrected task `phase-b-plan-hardening-step-3-r2` retains round STEP3-R1.
+Target develop was current. No substantial user-scope conflict was found.
+
+The complete first-audit task list was identified before edits:
+
+| Finding | Document/section | Type | Problem | Resolution |
+| --- | --- | --- | --- | --- |
+| S3-001 | All 17 sprint deliverable sections | DROP-RISK | Production-ready completion and evidence for every numbered deliverable were not stated explicitly in each sprint. | Resolved: each authoritative list now carries the same all-deliverables closure rule. |
+| S3-002 | Required-document coverage (missing map); architecture §7 | GAP | Per-crate central documents, proposed companion contracts, testing guidance and embedded ADR navigation were not mapped for QA. | Resolved: document-coverage.md maps every required category/crate, architecture has an ADR index, and test-strategy links Phase B validation ownership. |
+| S3-003 | Machine-readable boundary definitions (missing) | GAP | Planned interfaces were concrete in prose/code blocks but lacked a machine-readable boundary contract/owner inventory. | Resolved: boundaries.json declares transport, operations, result rules, invariants and implementation owner for each boundary; full declarations remain linked contracts. |
+| S3-004 | Phase B issues inventory (missing) | GAP | Inclusion and deferral of the discussed issues/topics were scattered among sprint documents. | Resolved: issues-inventory.md centralizes scope disposition without claiming live issue status or implementation closure. |
+
+Second audit: zero remaining findings within this sprint-shape/ownership pass.
+All 17 records exist, preserve single authoritative lists, identify dependencies
+and non-closure, and own production behavior rather than shape-only placeholders.
+No additional sprint split is needed after B.3/B.3a and B.4/B.4a. Shared contracts
+supply the complete declaration sets; release sprints consume prior behavior
+rather than duplicate its implementation. Generated wire schemas remain an
+explicit B.3 deliverable; the planning manifest does not claim they already exist.
+The document map links existing centralized requirements/architecture instead
+of creating conflicting per-crate copies. Phase B changes no ATM workflow.
+
+Critical review and the subsequent consistency pass remain required. This
+author audit is not authorization for QA routing or implementation.

@@ -17,6 +17,10 @@ B.1 remains the first migration sprint; no bridge is imported or published here.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Select the next minor workspace release after the current published version,
    retaining the existing four-crate release train and dependency order. Package
    the B.P1 API with changelog, consumer documentation and approved additive

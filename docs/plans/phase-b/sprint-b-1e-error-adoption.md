@@ -21,6 +21,10 @@ call sites or release artifacts intersect.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Apply the contract's exact deprecation policy to nine wrapper types and the
    mapped old methods in B.1b–B.1d. Each `since` is the selected next minor release
    after the B.P2 publication; each `note` names its method/type replacement and the migration guide.

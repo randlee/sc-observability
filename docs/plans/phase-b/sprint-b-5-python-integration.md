@@ -20,6 +20,10 @@ child development/fix round; parent PR merges before child completion.
 
 ## Deliverables (authoritative)
 
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
 1. Add `python/sc_observability/logging.py` with a standard-library
    `logging.Handler` adapter for either B.4 Logger or AttachedLogger. Map Python
    levels, logger name, message, exception/stack text and explicitly selected
