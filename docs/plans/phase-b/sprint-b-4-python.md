@@ -1,0 +1,317 @@
+---
+id: B.4
+status: proposed
+branch: feature/phase-b-4-python
+base: develop
+---
+
+# B.4 — Owned and host-attached Python runtime API
+
+## Goal and dependencies
+
+Deliver owned and Rust-host-attached Python logging over the public Rust API,
+with typed Python values and deterministic lifecycle behavior.
+`must_follow` B.3a for tested transport/conformance evidence, transitively B.3
+for the shared schema. B.4a `must_follow` B.4 for packaging the complete API.
+Shared Python sources and build metadata preclude parallel_safe work; parent
+pushes trigger merge-forward before each child dev/fix round and parent PR
+merges first. B.7 owns publication.
+
+The complete new DTO declarations, conversion boundaries, validation defaults
+and error mapping are incorporated from [the binding contract](binding-contract.md).
+They are part of this sprint's reviewable contract, not future design work.
+
+## Deliverables (authoritative)
+
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item, including its code,
+documentation and validation artifacts; partial completion leaves the sprint open.
+
+1. Create the isolated mixed Rust/Python project
+   `bindings/python/sc-observability-py/` with `pyproject.toml`, locked Rust
+   dependencies, PyO3 `cdylib` plus Rust `rlib` embedding target,
+   `python/sc_observability/__init__.py`, stubs,
+   `py.typed`, tests and examples. Proposed distribution: `sc-observability`;
+   availability is a publication gate. Use the shared DTO and sc-observability-binding-runtime crates via B.4a’s
+   prepublication source-bundle procedure and record the schema version. The
+   proposed crates.io name for the Rust extension/embedding package is
+   `sc-observability-py`; its Python distribution remains `sc-observability`.
+2. Implement the API below through B.3b create_core_backend and its supplied
+   CoreLoggerOwner/CoreLoggerBackend. Owned instances create independent
+   nonglobal loggers; no second coordinator or conversion implementation is added. Attached
+   instances share
+   a provided BridgeControlBackend or CoreLoggerBackend and never create a second writer or own host
+   shutdown. B.3b separates Python lifetime from native operations. Owned instances retain
+   CoreLoggerOwner, which contains the sole LevelOwner and expose elevate/reset;
+   attached instances expose only shared read-only level health. Add `examples/rust-python-logging/` to prove attachment.
+   Convert to
+   owned Rust inputs while attached, then detach around blocking backend calls, query,
+   flush, shutdown and synchronization waits. Python callbacks are excluded.
+3. Generate frozen DTO dataclasses, Literal unions and matching stubs with
+   `scripts/generate_python_bindings.py --schema bindings/schema/v1.json
+   --output-dir bindings/python/sc-observability-py/python/sc_observability/generated
+   --check`, using B.3's fixed generation interpreter. Canonical JSON schema is
+   the sole input; the script is repository-owned and fails on unsupported
+   schema constructs or drift. Implement checked ergonomic Python-to-wire conversions and a stable
+   discriminated Result/Failure data model carrying code/message/remediation. Python
+   integers remain exact; convert through B.3's integer representation for
+   fixtures and serialization. Use the same event/query/error rules, with
+   explicit `LoggerConfig` creation mapping for service, root, level and built-in
+   sinks; remaining core config uses documented defaults. No silent `str(error)`
+   parsing, panic escape, process-global logging installation, or unrelated
+   instance sharing.
+4. Add `scripts/ci/validate_python_bindings.sh` for runtime/conformance/threaded
+   tests, stubs and the Rust embedding example, with a Linux x86_64 GIL CPython
+   3.10 source-build CI lane. Lock compatible PyO3/maturin dependencies and
+   `abi3-py310` settings for the extension plus distinct embedding link settings.
+   Record results in `docs/plans/phase-b/handoff-b-4.md`. This lane proves the
+   complete runtime API; B.4a owns wheel/sdist distribution and all-platform
+   qualification, rather than leaving any B.4 runtime behavior unfinished.
+
+## Public signatures and lifecycle
+
+```python
+@dataclass(frozen=True)
+class Ok(Generic[T]):
+    value: T
+    kind: Literal["ok"] = field(default="ok", init=False)
+
+@dataclass(frozen=True)
+class Err:
+    error: Failure
+    kind: Literal["error"] = field(default="error", init=False)
+
+Result = Union[Ok[T], Err]
+
+# Failure is a generated union of frozen dataclasses with the B.3 kind tags.
+# No variant inherits Exception. Clients narrow by kind or pattern matching.
+def create_logger(config: LoggerConfig) -> Result[Logger]: ...
+def get_host_logger() -> Result[AttachedLogger]: ...
+
+class Logger:
+    def log(self, event: LogEvent) -> Result[Admission]: ...
+    def query(self, query: LogQuery) -> Result[LogSnapshot]: ...
+    def health(self) -> Result[LogHealth]: ...
+    def flush(self, timeout_ms: int = 2000) -> Result[Completion]: ...
+    def shutdown(self, timeout_ms: int = 2000) -> Result[LogHealth]: ...
+    def wait_stopped(self, timeout_ms: int = 2000) -> Result[LogHealth]: ...
+    def elevate_level(self, level: LevelFilter,
+                      source: LevelChangeSource = "application") -> Result[LevelChange]: ...
+    def reset_level(self, source: LevelChangeSource = "application") -> Result[LevelChange]: ...
+```
+
+Factory construction replaces a public fallible __init__. DTO decoding and
+validation also return Result. Python wrappers convert foreign exceptions and
+PyO3 extraction failures into tagged data before returning to user code; no
+internal raise/catch implementation for the library's own expected errors and
+no public unwrap-or-raise helper. Rust helpers use Result; a native panic cannot
+unwind through the FFI boundary and must produce a stable internal failure where
+containment is possible. Do not change unrelated published core APIs in this
+binding sprint; report any uncovered source contract incompatibility explicitly.
+
+Rust embedding surface (uses public DTO/error types from the shared contract):
+
+```rust
+pub use sc_observability_binding_runtime::{
+    HostLoggingBackend, BridgeControlBackend, CoreLoggerBackend,
+    CoreLoggerOwner, Operation, OperationState,
+};
+pub fn install_host_logger(
+    module: &pyo3::Bound<'_, pyo3::types::PyModule>,
+    backend: std::sync::Arc<dyn HostLoggingBackend>,
+) -> Result<(), Failure>;
+```
+
+Host installation is immutable and once per PyO3 module instance. The first
+install stores a backend Arc in module state; any repeat, even the same Arc,
+returns unavailable with SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED and
+leaves the first backend unchanged. No replacement/reset API ships. Concurrent
+installs use one atomic winner; losers return that same error. get_host_logger
+before installation returns unavailable with
+SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED. Each attached handle retains the
+backend Arc so removing the module does not create a dangling reference; backend
+implementations must keep only nonowning control of the host logger and never
+retain its lifecycle owner. Existing handles observe closed after host shutdown,
+even if module/handle/backend references remain. Interpreter teardown releases
+module-owned state without calling Python or shutting down the host.
+
+The module exposes the result-returning host factory above. AttachedLogger exposes log/query/health/flush
+with the same Result signatures as Logger, without shutdown or wait_stopped. Host shutdown or Python handle drop never
+transfers host lifecycle ownership. Backend methods must release locks before
+blocking on writer operations and return stable closed outcomes after host stop.
+The Rust embedding example installs B.3b’s supplied backend, using its
+centralized conversion map instead of reimplementing the trait. It proves Rust and Python records reach the same
+writer and observe the same redaction, correlation, health and stop boundary.
+
+The Rust host compiles the binding `rlib` and registers its PyO3 module in its
+embedded interpreter. Do not also load an independently built wheel extension
+and exchange Rust trait objects across dynamic-library boundaries. No raw pointer,
+Python integer handle, or C ABI is exposed; arbitrary external-process attachment
+is future scope. This build topology and supported embedding initialization order
+must be documented and tested. Extension-wheel and embedded-executable linking
+configurations are distinct: pin the PyO3 build settings for each and verify both
+without extension-only flags leaking into the host executable. The Rust embedding
+crate is a B.7 publish artifact so hosts can consume this API from crates.io.
+
+Python `LoggerConfig` requires `service` and `log_root`; optional level defaults
+to info, file sink to enabled and console sink to disabled, matching the checked
+core defaults. No user-provided Rust ownership pointers or callback objects are
+accepted. `log(event)` performs nonblocking admission through public Rust try_log
+and returns Result[Admission]. It never waits for queue capacity or I/O. Queue-full,
+invalid fields, protected provenance-key spoofing, conversion/formatting errors and unavailable/closed host are tagged
+errors, not exceptions. The caller can ignore the result for fire-and-forget usage
+or handle it at a higher level. Admission is the generated union of accepted and filtered values: accepted
+means queue admission, filtered means valid but excluded by threshold. Neither
+is proof of persistence. The core implementation uses the additive
+try_log_with_outcome API, not a guessed outcome from legacy Result<()>.
+LevelFilter and LevelChangeSource are Literal unions matching B.3; LevelState,
+LevelChange and ChangeDiagnostic are generated frozen dataclasses matching its
+field names and discriminator tags, with Python exact ints for revisions and
+checked decimal-string encoding on wire. Owned operations serialize with
+shutdown over the same owner lock, never holding it for sink I/O. Invalid
+level/source arguments return validation; all runtime mutation failures preserve
+B.3's tagged error mapping and every diagnostic. A successful change whose
+logging failed remains Ok(changed/not_accepted). AttachedLogger and
+HostLoggingBackend expose no elevation/reset methods. Already accepted events that fail later
+are reported through the discriminated health snapshot, not retroactive failure
+on the producer call.
+
+Maintain bounded in-memory counters and a last diagnostic if possible. Failure in
+that bookkeeping must preserve the original result without raising or recursively
+logging. Validate timeouts/query inputs into validation variants (including
+bool-as-int, negative, non-finite and overflowing values). Setup and lifecycle
+failures also use Result, so there is no exception-based alternate error API.
+
+Owned-mode lifecycle is `running -> stopping -> stopped` or terminal `failed`. Timeout is
+a wait result, never a claim that a worker stopped. Shutdown closes admission
+once, assigns exactly one owner to final core shutdown, and retains completion
+and final health independently of Python reference counts. Already admitted
+operations may finish; later log/query/flush calls return Err with a closed
+variant. A caller ignoring that result remains unaffected. `health` and `wait_stopped` remain usable. Repeated shutdown waits on the
+same completion; it never starts a second core shutdown. A worker failure is
+observable via the saved stable error. Read-only handles cannot prevent final
+ownership transfer indefinitely. One adapter flush slot is retained until the native call returns; observer
+timeout alone does not release it. Bridge-native timeout releases the adapter
+slot but not the bridge slot as defined in B.3b; concurrent adapter requests
+return queue_full/SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS without coalescing distinct barriers.
+
+GC finalization schedules bounded best-effort cleanup once without an unbounded
+interpreter-thread wait and records the result if possible. It never raises or
+calls Python during interpreter teardown. Explicit shutdown/wait_stopped return
+the final Result and are the supported observable cleanup path. Context-manager
+protocol conveniences are deferred until they can expose cleanup results without
+hiding them behind __exit__'s boolean protocol or masking application exceptions.
+
+## Acceptance criteria (authoritative)
+
+- AC1: A clean source build runs every supported operation and the typed
+  example on the B.4 Linux x86_64 CPython 3.10 CI lane.
+  File logs, Result/Failure tags and bounded snapshots match the shared
+  Rust/TypeScript fixtures. No exception class is exported as an error contract.
+- AC2: B.3b’s N=32 concurrent-producer fixture never yields DISPATCH_FULL
+  merely from overlapping submissions, in owned and attached modes. A full queue or held sink does not stop an independent Python thread;
+  concurrent log/query/flush/shutdown yields documented results, never PyO3
+  borrow-check exceptions as lifecycle policy. Two owned instances remain isolated; an attached instance instead shares the
+  host log/health/correlation and cannot shut it down or silently open a second
+  writer. Host shutdown while Python is active produces stable closed outcomes.
+  Missing host, duplicate install and concurrent install follow the once-per-module
+  contract; module teardown and surviving handles never shut down the host.
+- AC3: Timeout then late completion/failure is observed through wait_stopped;
+  shutdown runs once; post-stop health persists; explicit and GC cleanup paths
+  pass subprocess tests without process hangs or implicit global logger install.
+- AC4: Default log calls with formatting/conversion failure, queue-full, failed
+  sink or stopped host never propagate a logging exception or wait for sink I/O.
+  Every protected-provenance fixture in binding-contract.md is rejected before
+  admission for both owned and attached backends. Failures return the appropriate
+  union variant, including factory/query/health/
+  flush/shutdown errors. Failed diagnostic accounting preserves the original
+  result; recursion is rejected and counted once. Typed examples demonstrate
+  both exhaustive handling and intentional omission of the returned result.
+- AC5: Owned baseline/elevate/reduce/reset/repeat/Off and late-owner lifecycle
+  cases agree with Rust and B.3 fixtures, including invalid input, unsupported
+  levels where applicable, queue-full diagnostic failure and revision overflow.
+  Attached health follows host changes with exact revisions but exposes no owner
+  mutation methods. Concurrent mutation/shutdown stays typed and isolated between
+  independent owned instances. Admission accepted/filtered and diagnostic message and remediation
+  steps survive Rust/Python/wire conversion.
+
+## Required validation (authoritative)
+
+```sh
+bash scripts/ci/validate_python_bindings.sh
+bash scripts/ci/validate_dependency_bans.sh
+bash scripts/ci/validate_docs_consistency.sh
+```
+
+The new script builds the extension from locked sources, runs pytest and
+stub/type checks in a clean venv, builds/runs the Rust embedding example,
+executes deterministic threaded and shutdown subprocess tests, and validates
+shared fixtures. B.4a extends this same validator to installed distributions
+and the full matrix; its package validation is not a B.4 completion claim.
+Source-build tests must execute the actual Rust backend, not mocks. Add static checks against
+authored raise/panic/unwrap-based operational control flow, fault injection for
+every public Result path (including factories and health), and Python type-check
+fixtures that exhaustively narrow Result/Failure variants. Foreign PyO3/formatter
+errors must be converted at the boundary without escaping. Explicit host-lifetime
+fixtures cover get_host_logger before installation; second installation with
+both the same and a different backend; simultaneous installs with exactly one
+winner and one HOST_ALREADY_INSTALLED result; module collection with live attached
+handles; backend retention until the last module/handle reference is gone; host
+shutdown while handles survive; and interpreter teardown without calling Python
+or shutting down the application-owned logger. No race test may accept two
+successful installations or conceal a replacement by comparing only pointers. Include real owned
+mutation and attached-host health tests, threaded owner/shutdown races,
+accepted/filtered fixtures, full remediation round-trips and every level union
+variant; validate generated stubs and runtime values together.
+
+## Paths to delete
+
+None.
+
+## Non-closure
+
+No wheel/sdist or platform-matrix qualification (B.4a), PyPI publication (B.7), standard-library Handler/context integration (B.5), context-manager lifecycle
+conveniences, implicit Rust
+facade installation, Python callback sinks/redactors, follow stream, async receipt/wait API (B.6),
+OTLP, Go, or whole-workspace public API parity.
+
+## Technical references
+
+[PyO3 detach guidance](https://pyo3.rs/main/parallelism) applies to every blocking
+Rust call. [PyO3 thread safety](https://pyo3.rs/v0.29.0/class/thread-safety.html)
+requires explicit concurrency design beyond releasing the GIL.
+[PyO3 build and embedding guidance](https://pyo3.rs/main/building-and-distribution)
+requires distinct linking configuration for embedding and extension builds.
+[Maturin mixed-project guidance](https://www.maturin.rs/tutorial.html?highlight=stable)
+informs the extension/package layout and wheel validation.
+
+## Native operation coordinator
+
+B.4 consumes the complete [B.3b coordinator contract](native-binding-runtime.md#native-operation-coordinator).
+It implements no additional worker pool. Per backend there are exactly three
+native helpers plus core's existing writer (or the already-owned bridge runtime),
+with one process-shared timer helper, one query slot and one flush slot. Backend
+creation handles all spawn failures through COORDINATOR_START_FAILED rollback.
+Python query/flush call start_query/start_flush and then Operation::wait while
+released from the GIL; health/log remain bounded immediate backend calls.
+Shutdown starts CoreLoggerOwner::start_shutdown, releases the Python wrapper
+borrow/lock, then waits on that operation with the GIL released; wait_stopped
+observes its retained result. Level mutation delegates to CoreLoggerOwner’s
+short owner critical section. Native
+shutdown results persist independently of Python handles and loop lifetime.
+
+```rust
+// Python binding internals use the shared, public Rust backend signatures:
+fn flush_python(backend: &dyn HostLoggingBackend, timeout: std::time::Duration)
+    -> Result<CompletionDto, Failure> {
+    backend.start_flush(timeout)?.wait(timeout)
+}
+```
+
+The public Python signatures do not change. Backend origin is fixed to Python
+inside the binding, never decoded from user fields. B.6 polls saved Operation state on its owning asyncio loop and never registers
+a native callback that calls Python or acquires the GIL. Interpreter teardown
+cancels loop-local timers and drops observers as specified in B.3b;
+attached teardown cannot initiate host shutdown. Embedding topology and rejected
+cross-library/IPC alternatives are recorded in
+[ADR-015](../../architecture.md#adr-015-embedded-python-and-shared-binding-runtime).

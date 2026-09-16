@@ -43,7 +43,7 @@ deprecations land.
 - `docs/public-api-checklist.md`
 - `docs/api-approvals/`
 - contributor/review docs that define API-change approval workflow
-- `docs/phase-A/readiness.md`
+- `docs/plans/phase-a/readiness.md`
 
 ## Deliverables
 

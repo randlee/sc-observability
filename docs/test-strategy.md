@@ -153,3 +153,17 @@ A sprint is only complete when:
 
 See also: [`implementation-plan.md`](./implementation-plan.md) §5 Cross-Crate
 Acceptance Gates.
+
+## 7. Proposed Phase B Validation Ownership
+
+Phase B supplements these baseline tests with the authoritative validation lists
+in its [18 sprint records](plans/phase-b/plan-phase-b.md). The
+[document map](plans/phase-b/document-coverage.md) routes each affected crate to
+its requirements, architecture and contract. B.P1/B.P3 own runtime/bridge races
+and fault injection; B.1a–B.1e own compatibility and typed-failure fixtures;
+B.3 owns schema conversion; B.3b owns shared native backends/coordinator;
+B.3a owns real Tauri IPC; B.4 owns Python runtime;
+B.4a owns all 25 Python/platform cells; B.5/B.6 extend those installed-artifact
+checks for integration/async behavior. Release sprints rerun consumer checks
+against their immutable published artifacts. No planning pass claims those
+future implementation checks have already run.

@@ -1,0 +1,333 @@
+{
+  "format_version": 1,
+  "phase": "B",
+  "status": "proposed",
+  "implementation_status": "not_implemented",
+  "authority": "Each contract document supplies complete declarations; this manifest defines boundary ownership, transport and result rules without changing those declarations.",
+  "boundaries": [
+    {
+      "id": "runtime_level",
+      "implementation_owner": "B.P1",
+      "contract": "docs/plans/phase-b/runtime-level-contract.md",
+      "transport": "native_rust",
+      "operations": [
+        "try_log_with_outcome",
+        "new_with_level_owner",
+        "build_with_level_owner",
+        "level_state",
+        "elevate_level",
+        "reset_level"
+      ],
+      "result_contract": "Rust Result for fallible operations; infallible state snapshot",
+      "invariants": [
+        "owner_only_mutation",
+        "immutable_configured_baseline",
+        "accepted_or_filtered",
+        "weak_owner_does_not_retain_writer"
+      ]
+    },
+    {
+      "id": "bridge",
+      "implementation_owner": "B.P3",
+      "contract": "docs/plans/phase-b/target-bridge-api.md",
+      "transport": "native_rust",
+      "operations": [
+        "init",
+        "try_log",
+        "query",
+        "health",
+        "flush",
+        "shutdown",
+        "wait_stopped",
+        "elevate_level",
+        "reset_level"
+      ],
+      "result_contract": "Native signatures and complete export inventory in target contract",
+      "invariants": [
+        "BTIT_implementation_before_B1_copy",
+        "single_lifecycle_owner",
+        "one_inflight_flush",
+        "shutdown_late_result_retained",
+        "EmitOutcome_aliases_core_AdmissionOutcome"
+      ]
+    },
+    {
+      "id": "macros",
+      "implementation_owner": "B.P3",
+      "contract": "docs/plans/phase-b/target-bridge-api.md",
+      "transport": "rust_macro_expansion",
+      "operations": [
+        "trace!",
+        "debug!",
+        "info!",
+        "warn!",
+        "error!",
+        "event!",
+        "#[instrument]"
+      ],
+      "result_contract": "Unit-return compatibility with bounded failure accounting",
+      "invariants": [
+        "consumer_depends_on_bridge_only",
+        "nonfatal_nonrecursive"
+      ]
+    },
+    {
+      "id": "neutral_typed_errors",
+      "implementation_owner": "B.1a",
+      "contract": "docs/plans/phase-b/error-api-contract.md",
+      "transport": "native_rust",
+      "operations": [
+        "ClassifiedError",
+        "IdentityFailure",
+        "InitFailure",
+        "EventFailure",
+        "FlushFailure",
+        "ShutdownFailure",
+        "ProjectionFailure",
+        "SubscriberFailure",
+        "LogSinkFailure",
+        "ExportFailure",
+        "TypedProcessIdentityResolver",
+        "TypedObservationSubscriber",
+        "TypedLogProjector",
+        "TypedSpanProjector",
+        "TypedMetricProjector",
+        "legacy_identity",
+        "typed_identity",
+        "legacy_subscriber",
+        "typed_subscriber",
+        "legacy_log_projector",
+        "typed_log_projector",
+        "legacy_span_projector",
+        "typed_span_projector",
+        "legacy_metric_projector",
+        "typed_metric_projector"
+      ],
+      "result_contract": "Typed failures preserving original boxed ErrorContext",
+      "invariants": [
+        "published_types_unchanged",
+        "typed_traits_not_root_reexported",
+        "no_blanket_overlap"
+      ]
+    },
+    {
+      "id": "typed_logger",
+      "implementation_owner": "B.1b",
+      "contract": "docs/plans/phase-b/sprint-b-1b-logger-errors.md",
+      "transport": "native_rust",
+      "operations": [
+        "new_typed",
+        "new_with_level_owner_typed",
+        "builder_typed",
+        "log_typed",
+        "try_log_typed",
+        "try_log_with_outcome_typed",
+        "flush_typed",
+        "build_typed",
+        "build_with_level_owner_typed",
+        "legacy_sink",
+        "typed_sink"
+      ],
+      "result_contract": "Result with new classified failure types",
+      "invariants": [
+        "legacy_signature_compatibility",
+        "single_underlying_operation",
+        "metadata_preserved"
+      ]
+    },
+    {
+      "id": "typed_observation",
+      "implementation_owner": "B.1c",
+      "contract": "docs/plans/phase-b/sprint-b-1c-observation-errors.md",
+      "transport": "native_rust",
+      "operations": [
+        "default_for_typed",
+        "service_name_typed",
+        "new_typed",
+        "flush_typed",
+        "shutdown_typed",
+        "build_typed"
+      ],
+      "result_contract": "Result with new classified failure types",
+      "invariants": [
+        "legacy_signature_compatibility",
+        "single_underlying_operation",
+        "metadata_preserved"
+      ]
+    },
+    {
+      "id": "typed_telemetry",
+      "implementation_owner": "B.1d",
+      "contract": "docs/plans/phase-b/sprint-b-1d-telemetry-errors.md",
+      "transport": "native_rust",
+      "operations": [
+        "new_typed",
+        "build_typed",
+        "push_typed",
+        "flush_typed",
+        "shutdown_typed"
+      ],
+      "result_contract": "Result with new classified failure types",
+      "invariants": [
+        "legacy_signature_compatibility",
+        "single_underlying_operation",
+        "metadata_preserved"
+      ]
+    },
+    {
+      "id": "wire_schema",
+      "implementation_owner": "B.3",
+      "contract": "docs/plans/phase-b/binding-contract.md",
+      "transport": "json_v1",
+      "operations": [
+        "event",
+        "query",
+        "snapshot",
+        "health",
+        "admission",
+        "completion",
+        "level_state",
+        "level_change",
+        "failure"
+      ],
+      "result_contract": "schema_version=1; kind=ok/value or kind=error/error",
+      "invariants": [
+        "snake_case",
+        "checked_decimal_integers",
+        "no_native_error_context",
+        "explicit_unknown_remote",
+        "request_bytes_max_65536",
+        "depth_max_32",
+        "canonical_JSON_schema_generates_both_languages",
+        "reserved_sc_observability_binding_namespace"
+      ]
+    },
+    {
+      "id": "tauri_client",
+      "implementation_owner": "B.3a",
+      "contract": "docs/plans/phase-b/sprint-b-3a-typescript.md",
+      "transport": "tauri_json_invoke",
+      "operations": [
+        "plugin",
+        "plugin:sc-observability|sc_observability_try_log",
+        "plugin:sc-observability|sc_observability_query",
+        "plugin:sc-observability|sc_observability_health",
+        "plugin:sc-observability|sc_observability_flush",
+        "app_observability_level_change"
+      ],
+      "result_contract": "Resolved WireEnvelope; foreign invoke rejection converted into Failure",
+      "invariants": [
+        "host_authorization",
+        "shared_writer",
+        "no_frontend_lifecycle_owner",
+        "bounded_local_client_status",
+        "uses_shared_HostLoggingBackend"
+      ],
+      "crate": "sc-observability-tauri"
+    },
+    {
+      "id": "python_runtime",
+      "implementation_owner": "B.4",
+      "contract": "docs/plans/phase-b/sprint-b-4-python.md",
+      "transport": "pyo3_in_process",
+      "operations": [
+        "create_logger",
+        "get_host_logger",
+        "install_host_logger",
+        "Logger",
+        "AttachedLogger"
+      ],
+      "result_contract": "Frozen tagged Ok/Err values; native Rust Result at embedding boundary",
+      "invariants": [
+        "one_install_per_module",
+        "attached_no_lifecycle_owner",
+        "release_GIL_for_blocking_calls",
+        "no_cross_dylib_trait_objects",
+        "uses_shared_provided_backends",
+        "immutable_module_install",
+        "bridge_transitive_dependency_no_global_install"
+      ],
+      "crate": "sc-observability-py",
+      "adr": "docs/architecture.md#adr-015-embedded-python-and-shared-binding-runtime",
+      "reexports": [
+        "sc-observability-binding-runtime::HostLoggingBackend"
+      ]
+    },
+    {
+      "id": "python_integration",
+      "implementation_owner": "B.5",
+      "contract": "docs/plans/phase-b/sprint-b-5-python-integration.md",
+      "transport": "python_standard_logging_and_context",
+      "operations": [
+        "create_handler",
+        "ObservabilityHandler.emit",
+        "ObservabilityHandler.flush",
+        "ObservabilityHandler.close",
+        "ObservabilityHandler.health",
+        "ObservabilityHandler.last_result",
+        "bind_context",
+        "ContextScope.enter",
+        "ContextScope.close"
+      ],
+      "result_contract": "Handler unit protocol with inspectable status; context tagged Result",
+      "invariants": [
+        "no_recursive_logging",
+        "LIFO_same_task_thread",
+        "application_exception_preserved"
+      ]
+    },
+    {
+      "id": "python_async",
+      "implementation_owner": "B.6",
+      "contract": "docs/plans/phase-b/sprint-b-6-python-async.md",
+      "transport": "asyncio_future_loop_local_call_later_polling",
+      "operations": [
+        "submit",
+        "LogReceipt.state",
+        "LogReceipt.wait",
+        "flush_async"
+      ],
+      "result_contract": "Immediate submit Result; optional waits resolve tagged Result",
+      "invariants": [
+        "one_inflight_flush",
+        "timeout_does_not_cancel_shared_work",
+        "no_prior_flush_result_accessor",
+        "receipt_resolved_on_return",
+        "no_admission_Operation_or_pending_registry",
+        "B6_owns_at_most_64_loop_local_flush_observers"
+      ]
+    },
+    {
+      "id": "shared_native_binding_runtime",
+      "implementation_owner": "B.3b",
+      "contract": "docs/plans/phase-b/native-binding-runtime.md",
+      "crate": "sc-observability-binding-runtime",
+      "transport": "native_rust",
+      "operations": [
+        "HostLoggingBackend",
+        "CoreLoggerBackend",
+        "CoreLoggerOwner",
+        "BridgeControlBackend",
+        "create_core_backend",
+        "bridge_backend",
+        "Operation",
+        "OperationState",
+        "CompletionSubscription"
+      ],
+      "result_contract": "Rust Result; saved Operation completion; single-owned core/bridge runtime DTO conversion",
+      "invariants": [
+        "three_helper_threads_per_backend",
+        "one_process_timer_helper",
+        "one_query_slot",
+        "one_flush_slot",
+        "64_observers_per_operation",
+        "no_Tauri_or_PyO3_dependency",
+        "single_trusted_provenance_stamp",
+        "process_timer_persists_until_process_exit",
+        "shared_nonexclusive_admission_registration",
+        "bridge_native_timeout_completes_adapter_call_only"
+      ],
+      "adr": "docs/architecture.md#adr-015-embedded-python-and-shared-binding-runtime"
+    }
+  ]
+}

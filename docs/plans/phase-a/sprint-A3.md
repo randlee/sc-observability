@@ -48,7 +48,7 @@ with one queue-backed writer runtime and the locked public logging API surface.
 - `crates/sc-observability/src/jsonl_reader.rs`
 - `crates/sc-observability-types/src/health.rs`
 - matching tests and consumer-facing rustdoc
-- `docs/phase-A/readiness.md`
+- `docs/plans/phase-a/readiness.md`
 
 ## Deliverables
 

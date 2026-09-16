@@ -34,8 +34,8 @@ work.
    cross-repo reviews do not rely on inferred layering or stale assumptions.
 8. Keep completed sprint records archived without leaving root `docs/`
    cluttered.
-9. Stage the post-`v1.1.0` logging-runtime thread optimization work through a
-   dedicated phase-A sprint plan before implementation begins.
+9. Preserve the completed `v1.2.0` Phase A record and route new migration,
+   additive API and binding work through the proposed Phase B plan.
 
 ## Issue #70 / v1.1.0
 
@@ -71,16 +71,16 @@ Historical sequence:
 
 ## Thread Optimization / v1.2.0 Phase A
 
-The next logging-runtime workstream after retained-log maintenance is the
-phase-A thread optimization effort for `sc-observability`.
+The completed logging-runtime workstream after retained-log maintenance was
+the Phase A thread optimization effort, released in `v1.2.0`.
 
 Controlling phase folder:
 
-- [`phase-A/readiness.md`](./phase-A/readiness.md)
-- [`phase-A/sprint-A1.md`](./phase-A/sprint-A1.md)
-- [`phase-A/sprint-A2.md`](./phase-A/sprint-A2.md)
-- [`phase-A/sprint-A3.md`](./phase-A/sprint-A3.md)
-- [`phase-A/sprint-A4.md`](./phase-A/sprint-A4.md)
+- [`plans/phase-a/readiness.md`](./plans/phase-a/readiness.md)
+- [`plans/phase-a/sprint-A1.md`](./plans/phase-a/sprint-A1.md)
+- [`plans/phase-a/sprint-A2.md`](./plans/phase-a/sprint-A2.md)
+- [`plans/phase-a/sprint-A3.md`](./plans/phase-a/sprint-A3.md)
+- [`plans/phase-a/sprint-A4.md`](./plans/phase-a/sprint-A4.md)
 
 Planned sequence:
 
@@ -102,11 +102,25 @@ Planned sequence:
 Phase A exit criteria:
 
 - `A.1` through `A.4` each record an accepted commit and verdict in
-  `docs/phase-A/readiness.md`
+  `docs/plans/phase-a/readiness.md`
 - the final accepted runtime uses one writer-owned queue-backed logging model
   rather than a maintenance-only background worker
 - public API changes are documented and CI-visible
 - consumer docs teach `log()` / `try_log()` as the preferred logging APIs
+
+## Phase B — Log bridge publication and language bindings
+
+The proposed next lettered phase is tracked in
+[`plans/phase-b/plan-phase-b.md`](./plans/phase-b/plan-phase-b.md).
+Its first migration sprint copies the review-corrected generic BTIT crates.
+Explicit prerequisite sprints implement/publish additive core runtime elevation
+and obtain accepted BTIT integration before that copy. Bounded core error
+migration sprints add improved methods and warning-only legacy adapters before
+Rust publication, followed by separately gated shared schema (B.3),
+shared native runtime (B.3b), TypeScript/Tauri (B.3a), Python runtime (B.4) and Python distribution/platform
+qualification (B.4a), then Python integration/async support and binding release.
+Go remains future scope. The proposal does not reopen the accepted
+Phase A closure or claim that BTIT's currently open review findings are resolved.
 
 ## Rule
 
