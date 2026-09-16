@@ -175,3 +175,36 @@ Second author audit and bounded independent follow-up found no residual material
 finding in the revised coordinator/ownership contracts. All 11 critical findings
 and four wording items have an explicit correction disposition above. This is
 an author result only; it does not substitute for critical-plan-reviewer PASS.
+
+## Critical correction — STEP3-R3 (2026-09-16)
+
+Input: critical-plan-reviewer FAIL at `bb810ea`, fingerprint
+`phaseb-crit-r2-bb810ea-b0-i5-m6`. The full correction list was reviewed before
+editing; no new capability or sprint split is introduced.
+
+| Finding | Type / target | Resolution |
+| --- | --- | --- |
+| PLAN-CRIT-012 | VAGUE / B.6 admission | submit calls synchronous try_log; successful receipts are already Resolved, failures return directly; no Pending state, admission Operation, receipt registry or unreachable capacity codes. Optional await remains supported. |
+| PLAN-CRIT-013 | VAGUE / bridge flush | start_flush accepts validated native timeout; native bridge timeout ends the adapter call only, and a later call can receive native overlap from that same prior flush. Core blocking flush keeps its slot until return. |
+| PLAN-CRIT-014 | VAGUE / admission gate | Shared atomic registration/recheck rejects only lifecycle closure, never ordinary concurrency; DISPATCH_FULL is restricted to owner mutation/client dispatch capacity. N=32 fixtures cover both modes and shutdown. |
+| PLAN-CRIT-015 | DROP-RISK / packaging helper | B.4a reuses the sole B.3 helper; B.3 now proves offline layout/consumer behavior and missing-member/stale-lock/escaping-path failures itself. |
+| PLAN-CRIT-016 | GAP / runtime dependency gates | B.3b owns exact workspace-edge allowlists, normative diagram and repo-boundary validation with injected forbidden-edge checks. |
+| PLAN-CRIT-M5 | VAGUE / coordinator ownership | B.6 names B.3b ownership and B.4 projection. |
+| PLAN-CRIT-M6 | GAP / routing | Issue inventory and phase summary include B.3b. |
+| PLAN-CRIT-M7 | VAGUE / trait duplication | Python manifest records HostLoggingBackend as a re-export only. |
+| PLAN-CRIT-M8 | GAP / timer lifetime | Process-shared timer persists until process exit; churn baseline includes one idle timer with an empty heap. |
+| PLAN-CRIT-M9 | GAP / release sample | DTO and shared runtime crates added to the release record sample. |
+| PLAN-CRIT-M10 | VAGUE / observer ownership | Removed unreachable native receipt retention; B.6 owns loop-local flush timers, B.3b owns native operation observers. |
+
+This supersedes previous descriptions of a pending-admission receipt registry
+and of adapter flush slots surviving a completed bridge-native timeout call.
+It preserves immediate nonblocking logging and optional asynchronous observation;
+no asynchronous admission transport is presumed before sc-runtime is designed.
+Author correction does not assert critical review approval.
+
+The targeted follow-up confirmed receipt/admission/timeout consistency and found
+a flush-observer cleanup race. B.6 now caps Python observer registrations at 64
+per backend, including native-completed calls awaiting a loop poll, with explicit
+reservation cleanup and a deterministic race fixture. Native slot and observer
+capacity are separate bounds. Second author audit found no remaining correction
+target; formal critical re-review remains required.

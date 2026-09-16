@@ -698,6 +698,23 @@ Important boundary:
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
 
+### Proposed Phase B Binding Runtime Edges
+
+B.3b updates structural/dependency CI to enforce this exact set of workspace
+edges for sc-observability-binding-runtime; third-party support crates retain
+normal dependency review. Tauri and PyO3 may depend on the runtime, never the
+reverse. This proposed diagram does not claim the crate is implemented.
+
+```mermaid
+graph TD
+  Runtime[sc-observability-binding-runtime] --> Core[sc-observability]
+  Runtime --> Types[sc-observability-types]
+  Runtime --> DTO[sc-observability-dto]
+  Runtime --> Bridge[sc-observability-log]
+  Tauri[sc-observability-tauri] --> Runtime
+  Python[sc-observability-py] --> Runtime
+```
+
 ## 6.1 Query/Follow Dependency Order
 
 The implementation dependency order for the query/follow work is:

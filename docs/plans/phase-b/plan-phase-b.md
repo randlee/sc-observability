@@ -159,7 +159,8 @@ attachment without lifecycle ownership in host mode, standard-library logging
 integration, context propagation and owner-only level elevation/reset. Python is a first-class supported language
 with the same release quality and conformance expectations as TypeScript. This is
 an explicit logging subset of the public API, not a claim of whole-workspace
-parity. B.3 owns the shared DTO contract and limits; B.3a/B.4 own language runtime behavior.
+parity. B.3 owns shared DTOs and limits; B.3b owns native backends/coordination;
+B.3a/B.4 own language runtime projections.
 
 Deferred: `follow` sessions, custom callback sinks/redactors, Rust proc macros,
 `sc-observe` generic observation routing, OTLP attachment/exporter setup,

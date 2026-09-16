@@ -7,7 +7,7 @@ owner: B.3b
 
 `crates/sc-observability-binding-runtime/` (proposed crates.io name
 `sc-observability-binding-runtime`) owns runtime-to-DTO conversion and bounded
-native operations for Tauri and Python. It depends on the published core, DTOs
+native operations for Tauri and Python. It depends on the published core, sc-observability-types, DTOs
 and `sc-observability-log`; it never depends on Tauri or PyO3. Python depends on
 this crate and thus transitively on the bridge crate, without installing its
 process-global facade. This keeps bridge constants and conversions single-owned.
@@ -32,7 +32,8 @@ pub trait HostLoggingBackend: Send + Sync {
     fn start_query(&self, query: LogQueryDto)
         -> Result<Operation<LogSnapshotDto>, Failure>;
     fn health(&self) -> Result<LogHealthDto, Failure>;
-    fn start_flush(&self) -> Result<Operation<CompletionDto>, Failure>;
+    fn start_flush(&self, native_timeout: std::time::Duration)
+        -> Result<Operation<CompletionDto>, Failure>;
 }
 pub enum OperationState<T> { Pending, Completed { result: Result<T, Failure> } }
 pub struct Operation<T> { /* shared bounded completion */ }
@@ -72,6 +73,9 @@ flush receipts. Their retained completions are bounded by caller ownership;
 Python exposes no accessor for an old flush after timeout. `completion` checks
 an absolute monotonic deadline without blocking its poll thread. Use one process-shared monotonic timer helper with a deadline heap and
 one entry per registered timed waiter, not a thread or executor per wait.
+After first successful initialization the timer helper persists until process
+exit; its heap is empty when no timed observers remain. Churn-test baseline is
+one shared timer plus existing host workers, with zero per-backend helpers.
 Initialize that helper fallibly before per-backend workers; spawn failure uses
 COORDINATOR_START_FAILED. Removing a waiter also removes its heap entry. Subscription callbacks run once outside state locks;
 foreign callback panics are contained and counted without replacing the saved
@@ -95,19 +99,45 @@ construction failure similarly rolls back idle helpers. No native thread-start
 failure is hidden as success or intentional panic.
 
 The operation worker has a two-entry mailbox: one query slot and one flush slot.
-Each slot covers queued plus executing work; another request of the same class
-immediately returns queue_full with BINDING_QUERY_IN_PROGRESS or
+Each slot covers queued plus executing adapter work; another request of the
+same class immediately returns queue_full with BINDING_QUERY_IN_PROGRESS or
 BINDING_FLUSH_IN_PROGRESS. Queries and flushes execute in arrival order on this
-single worker. Deadline expiry or dropping observers does not release a slot;
-actual completion does. Bridge-native errors pass through, including native
-LOG_FLUSH_IN_PROGRESS if an external bridge caller already owns its flush slot.
-The adapter does not fabricate that native code for its own slot rejection.
+single worker. Observer deadline expiry or dropping observers does not release
+a slot. The worker's completed native call does, with this explicit distinction:
 
-Submission/health borrow the core logger only through a short admission gate.
-A busy gate returns queue_full/BINDING_DISPATCH_FULL; no producer waits on sink
-I/O or capacity. Each admitted call increments an active-operation counter and
-holds a temporary logger reference; it drops the reference before decrementing
-and signaling. Backend handles do not count as active operations. Shutdown
+- Core mode invokes blocking core flush once; native_timeout is validated but
+  cannot cancel that primitive. The adapter slot stays occupied until it returns.
+- Bridge mode invokes LogControl::flush(native_timeout) exactly once. The duration
+  must be integral milliseconds in 0..60000; invalid duration returns INVALID_INPUT
+  before claiming a slot. Native FlushError::TimedOut is a completed adapter call:
+  save its native timeout Failure, release the adapter slot, and leave the bridge's
+  internal flush running. The adapter has no API to retrieve that prior native
+  result and must not poll by calling flush again. A subsequent explicit request
+  may get native LOG_FLUSH_IN_PROGRESS from this adapter's own earlier timed-out
+  flush or from another bridge caller. Preserve that native code/remediation;
+  it is not BINDING_FLUSH_IN_PROGRESS. Once the bridge slot releases, a later
+  explicit request starts a new barrier. No timeout causes automatic resubmission.
+
+Tauri/Python supply their validated flush timeout to start_flush and use the
+same value for their observer deadline, measured from the wrapper call. Queue
+delay may make the observer expire first; it still does not cancel queued work.
+Health preserves the distinction between adapter call completion and native
+writer completion. No observer result claims persistence or terminal shutdown.
+
+Submission/health use shared, nonexclusive admission registration, never an
+exclusive try-lock or DISPATCH_FULL rejection for ordinary concurrency. An
+atomic closed flag and active count (SeqCst ordering) serialize the close boundary: read open,
+register active, recheck open, then borrow the immutable shared logger reference;
+if closed on recheck, unregister and return closed/BINDING_CLOSED. Shutdown
+sets closed before waiting for active registrations to drain. The reference is
+never removed while active registrations exist. Registration performs no sink
+I/O, capacity wait or per-producer mutex ownership. Each call drops its temporary
+reference before decrementing/signaling. A full core writer queue still yields
+its actual native queue-full error, not a fabricated dispatch-contention error.
+Health after close uses the retained snapshot instead of admission. New event,
+query and flush work after close returns closed/BINDING_CLOSED. DISPATCH_FULL is
+reserved for the owner mutation try-lock and Tauri's 256 outstanding client limit.
+Backend handles do not count as active operations. Shutdown
 atomically closes admission, then the lifecycle worker waits for admitted calls
 and the two slots to finish, takes the unique Logger once, and invokes core
 shutdown once. No Arc polling or dependence on client-handle drop is permitted.
@@ -172,8 +202,9 @@ callback cancellation/completion races, retained result after observer drop,
 foreign callback panic and failed accounting. Core: shared-timer/first/second/third helper spawn
 failure and core-start rollback, shutdown racing admissions/query/flush/level
 changes, handles surviving shutdown, held sink with responsive producers, and
-failed helper without false stopped. Bridge: external flush overlap preserves
-the original bridge code, controls never gain shutdown authority. Python teardown
+failed helper without false stopped. Bridge: native timeout completes the adapter Operation and releases only its
+slot; the next request preserves native InProgress from either its own prior
+flush or another caller; later native completion allows a new barrier, controls never gain shutdown authority. Python teardown
 and loop-closure fixtures run through B.4/B.6 without duplicating this runtime.
 
 Query observers in Tauri and Python use the fixed 2000 ms deadline; flush uses
@@ -186,3 +217,13 @@ completed states; retained completed Operation without retained helpers; repeate
 bridge attach/drop without host shutdown or thread growth. Level changes execute
 directly after a nonblocking owner-gate acquisition and never queue behind I/O;
 busy ownership returns queue_full/BINDING_DISPATCH_FULL without mutation.
+
+Admission fixture: N=32 synchronized producers with enough writer capacity
+all return native Accepted/Filtered without BINDING_DISPATCH_FULL; repeat with
+shutdown crossing registration to assert only admitted outcomes or BINDING_CLOSED.
+The same fixture covers Python owned/attached concurrency and async submit.
+
+Admission is synchronous only: try_log returns its final admission Result. B.6
+submit wraps successful admission in an already-resolved receipt. There is no
+admission Operation, Pending receipt, native receipt registry or admission-waiter
+limit in this phase; Operation polling is used for flush, not log admission.

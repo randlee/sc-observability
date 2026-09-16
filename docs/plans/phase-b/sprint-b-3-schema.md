@@ -203,7 +203,15 @@ export type LevelRequestDto =
   unions/defaults/integer mappings from the canonical file with no Rust parser,
   Specta or independent language schema. Input/output Serde differences and
   unsupported-keyword failures have fixtures; two clean runs match byte-for-byte.
-- AC5: Generated drift fails CI, crate API approval names the DTO crate, and no
+- AC5: The actual `scripts/ci/build_binding_source_bundle.py` helper produces
+  a self-contained bundle for an external DTO consumer. From a fresh directory
+  outside every checkout, with fresh CARGO_HOME/CARGO_TARGET_DIR and network and
+  checkout access disabled, `cargo metadata --locked --offline` and
+  `cargo run --locked --offline` resolve only bundled dependencies and execute
+  the public conversion fixture. Missing bundle members, a stale frozen lock
+  and escaping manifest/archive paths each fail explicitly; cache or checkout
+  fallback cannot satisfy this gate.
+- AC6: Generated drift fails CI, crate API approval names the DTO crate, and no
   native ErrorContext/source/backtrace or ownership capability enters the wire.
 
 ## Required validation (authoritative)
@@ -216,8 +224,25 @@ bash scripts/ci/validate_repo_boundaries.sh
 bash scripts/ci/validate_docs_consistency.sh
 ```
 
-The new validator runs all conformance cases, packages and compiles the external
-consumer, checks schema generation deterministically and fails on skipped stages.
+The new validator runs all conformance cases and checks schema generation
+and both language generators deterministically. Its external-consumer stage
+calls `python3 scripts/ci/build_binding_source_bundle.py --root-manifest
+crates/sc-observability-dto/Cargo.toml --output "$BINDING_BUNDLE_DIR"` against the
+actual DTO package. It creates a minimal conversion consumer within that artifact
+with versioned dependencies and the helper's artifact-local root patches/source
+replacement. It transfers only that self-contained artifact to a fresh
+external directory, provisions the pinned toolchain before isolation, and runs
+`cargo metadata --locked --offline` followed by `cargo run --locked --offline`
+with fresh CARGO_HOME/CARGO_TARGET_DIR, no network and no checkout access. Assert
+metadata manifest paths are confined to the artifact; record helper command,
+bundle hashes, dependency provenance and fixture output in the B.3 handoff.
+
+Run separate negative copies with a missing unpublished bundle member, stale
+Cargo.lock and an escaping path (manifest dependency or archive entry). Each
+must fail validation/build before any external read or fallback resolution.
+These exercise the actual helper/output, not a mocked packaging path. The
+validator fails if any positive or negative stage is skipped; B.4a later reuses
+this same helper with its expanded Python/runtime dependency closure.
 Negative fixtures assert the exact failure tag/code, not merely rejection.
 
 ## Paths to delete

@@ -190,7 +190,9 @@ operations may finish; later log/query/flush calls return Err with a closed
 variant. A caller ignoring that result remains unaffected. `health` and `wait_stopped` remain usable. Repeated shutdown waits on the
 same completion; it never starts a second core shutdown. A worker failure is
 observable via the saved stable error. Read-only handles cannot prevent final
-ownership transfer indefinitely. One in-flight flush slot is retained until completion; concurrent requests
+ownership transfer indefinitely. One adapter flush slot is retained until the native call returns; observer
+timeout alone does not release it. Bridge-native timeout releases the adapter
+slot but not the bridge slot as defined in B.3b; concurrent adapter requests
 return queue_full/SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS without coalescing distinct barriers.
 
 GC finalization schedules bounded best-effort cleanup once without an unbounded
@@ -206,7 +208,8 @@ hiding them behind __exit__'s boolean protocol or masking application exceptions
   example on the B.4 Linux x86_64 CPython 3.10 CI lane.
   File logs, Result/Failure tags and bounded snapshots match the shared
   Rust/TypeScript fixtures. No exception class is exported as an error contract.
-- AC2: A full queue or held sink does not stop an independent Python thread;
+- AC2: B.3b’s N=32 concurrent-producer fixture never yields DISPATCH_FULL
+  merely from overlapping submissions, in owned and attached modes. A full queue or held sink does not stop an independent Python thread;
   concurrent log/query/flush/shutdown yields documented results, never PyO3
   borrow-check exceptions as lifecycle policy. Two owned instances remain isolated; an attached instance instead shares the
   host log/health/correlation and cannot shut it down or silently open a second
@@ -301,7 +304,7 @@ shutdown results persist independently of Python handles and loop lifetime.
 // Python binding internals use the shared, public Rust backend signatures:
 fn flush_python(backend: &dyn HostLoggingBackend, timeout: std::time::Duration)
     -> Result<CompletionDto, Failure> {
-    backend.start_flush()?.wait(timeout)
+    backend.start_flush(timeout)?.wait(timeout)
 }
 ```
 

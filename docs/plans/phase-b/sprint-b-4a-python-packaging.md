@@ -61,8 +61,9 @@ and publication belong to B.7.
 ## Prepublication Rust source bundle
 
 B.3/B.3b/B.4 artifacts are not on crates.io until B.7. Therefore B.4a cannot
-require an unpublished version to resolve from that registry. Add
-`scripts/package_binding_sources.py` to build an isolated staging workspace
+require an unpublished version to resolve from that registry. Reuse B.3's sole helper
+`scripts/ci/build_binding_source_bundle.py --root-manifest PATH --output DIR`
+to build an isolated staging workspace
 from the reviewed source and generate `rust-bundle/manifest.json`. Its inventory
 contains every first-party package name/version/source revision, .crate SHA-256,
 normalized manifest hash, archive member hashes and all locked target-dependent

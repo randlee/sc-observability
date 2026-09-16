@@ -175,13 +175,15 @@ from host acknowledgement, and never upgrades dispatch into a persistence claim.
 
 All error handling is nonrecursive. If best-effort health accounting fails,
 preserve the original result and do not attempt another log/fallback sink.
-No retry queue may grow without bound. The host uses B.3b start_query/start_flush and awaits Operation::completion;
+No retry queue may grow without bound. The host uses B.3b start_query/start_flush and awaits Operation::completion; start_flush receives the validated timeout;
 no query/flush work or synchronous wait runs on the UI/async executor thread. Flush timeout is an error result indicating
 that the caller stopped waiting; it does not stop or retry the underlying flush.
 Use the accepted control API with one in-flight flush per logger. Overlapping
 requests return queue_full/SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS; a later request never shares an
-earlier flush barrier. The slot remains owned until actual completion, including
-after caller timeout. Repeated timeouts cannot create unbounded threads.
+earlier flush barrier. The adapter slot remains owned after observer timeout until the native call
+returns. A bridge-native timeout completes the adapter call and releases only
+its slot; the next explicit request may return native LOG_FLUSH_IN_PROGRESS
+from that same prior flush. Core flush releases only when core returns. Repeated timeouts cannot create unbounded threads.
 
 The published schema is authoritative for these value shapes:
 

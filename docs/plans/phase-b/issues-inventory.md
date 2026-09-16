@@ -14,8 +14,8 @@ All implementation rows remain planned until their sprint acceptance is proven.
 | #97 runtime level elevation | Included as pre-copy core capability | B.P1 core, B.P2 release, B.P3 BTIT integration; B.1 copies accepted reference |
 | #96 settings loader | Independent/deferred from Phase B | No Phase B implementation promise or dependency; baseline comes from LoggerConfig |
 | BTIT initial bridge design/review | Required before copy, not assumed finished | B.P3 accepted critical re-review/source; authoritative B.1 entry gate |
-| Shared frontend/backend logging | Included, Tauri first | B.3 schema, B.3a real Tauri IPC/client; B.7 registry proof |
-| First-class Python | Included, owned and host-attached | B.4 runtime, B.4a wheels/platform matrix, B.5 Handler/context, B.6 optional waits, B.7 publication |
+| Shared frontend/backend logging | Included, Tauri first | B.3 schema, B.3b shared native runtime, B.3a real Tauri IPC/client; B.7 registry proof |
+| First-class Python | Included, owned and host-attached | B.3b shared native runtime, B.4 projection, B.4a wheels/platform matrix, B.5 Handler/context, B.6 optional waits, B.7 publication |
 | sc-runtime topology, Node.js and Go | Deferred without selecting transport/runtime design | No Phase B owner or implied implementation; in-process Python support remains included |
 
 The [review record](review-consistency.md) tracks resolved planning findings.

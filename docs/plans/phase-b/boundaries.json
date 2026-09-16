@@ -233,7 +233,6 @@
       "operations": [
         "create_logger",
         "get_host_logger",
-        "HostLoggingBackend",
         "install_host_logger",
         "Logger",
         "AttachedLogger"
@@ -249,7 +248,10 @@
         "bridge_transitive_dependency_no_global_install"
       ],
       "crate": "sc-observability-py",
-      "adr": "docs/architecture.md#adr-015-embedded-python-and-shared-binding-runtime"
+      "adr": "docs/architecture.md#adr-015-embedded-python-and-shared-binding-runtime",
+      "reexports": [
+        "sc-observability-binding-runtime::HostLoggingBackend"
+      ]
     },
     {
       "id": "python_integration",
@@ -287,11 +289,12 @@
       ],
       "result_contract": "Immediate submit Result; optional waits resolve tagged Result",
       "invariants": [
-        "pending_receipts_max_64",
-        "waiters_per_receipt_max_64",
         "one_inflight_flush",
         "timeout_does_not_cancel_shared_work",
-        "no_prior_flush_result_accessor"
+        "no_prior_flush_result_accessor",
+        "receipt_resolved_on_return",
+        "no_admission_Operation_or_pending_registry",
+        "B6_owns_at_most_64_loop_local_flush_observers"
       ]
     },
     {
@@ -319,7 +322,10 @@
         "one_flush_slot",
         "64_observers_per_operation",
         "no_Tauri_or_PyO3_dependency",
-        "single_trusted_provenance_stamp"
+        "single_trusted_provenance_stamp",
+        "process_timer_persists_until_process_exit",
+        "shared_nonexclusive_admission_registration",
+        "bridge_native_timeout_completes_adapter_call_only"
       ],
       "adr": "docs/architecture.md#adr-015-embedded-python-and-shared-binding-runtime"
     }

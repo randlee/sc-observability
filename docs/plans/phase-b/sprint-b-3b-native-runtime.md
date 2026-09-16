@@ -24,7 +24,12 @@ documentation and validation artifacts; partial completion leaves the sprint ope
 1. Implement `crates/sc-observability-binding-runtime/` and every exact signature
    in [the native runtime contract](native-binding-runtime.md#public-rust-contract):
    HostLoggingBackend, provided core/bridge backends, unique core owner,
-   Operation/OperationState and subscription handling. Centralize all runtime
+   Operation/OperationState and subscription handling. Update dependency and
+   structural CI allowlists, architecture §6 dependency diagram and the
+   document-coverage entry: permitted workspace dependencies are exactly core,
+   types, DTO and sc-observability-log; no Tauri/PyO3 edge is allowed.
+   Third-party support dependencies are reviewed separately, never a bypass
+   for a forbidden workspace/runtime edge. Centralize all runtime
    conversions and protected provenance stamping here; hosts consume supplied
    implementations instead of repeating mapping logic.
 2. Implement the contract's fixed three-helper coordinator, shared timer service,
@@ -58,8 +63,11 @@ left to downstream Tauri/Python implementation.
   callback/waiter, shutdown and failed-helper cases listed in the native runtime
   contract pass deterministically; worker counts obey the fixed bounds.
 - AC3: Read-only handles cannot shut down or mutate owners; surviving handles
-  never prevent final shutdown. External bridge overlap passes its native code;
-  adapter overlap uses the binding registry code. Ignored failures remain nonfatal.
+  never prevent final shutdown. Bridge-native timeout releases only the adapter slot; a later request may
+  pass native overlap from its own prior call or an external caller. Adapter
+  overlap uses the binding registry code. Test both modes, native versus observer
+  timeout, zero/maximum/invalid durations, eventual bridge completion and a new
+  barrier, without retry or false success. Ignored failures remain nonfatal.
 - AC4: The packaged external consumer runs both backends using public signatures,
   with unchanged published-core and accepted-bridge API fixtures passing.
 
@@ -69,13 +77,17 @@ left to downstream Tauri/Python implementation.
 bash scripts/ci/validate_binding_runtime.sh
 cargo test --locked -p sc-observability-binding-runtime
 bash scripts/ci/validate_dependency_bans.sh
+bash scripts/ci/validate_repo_boundaries.sh
 bash scripts/ci/validate_docs_consistency.sh
 ```
 
 The new script runs the complete contract fixture list in debug/release on
 macOS/Linux/Windows, captures thread/slot counts, and compiles/runs the isolated
 consumer. It fails on skipped cases, overwritten golden diagnostics or missing
-platform evidence. No throughput benchmark substitutes for boundedness tests.
+platform evidence. Assert the crate’s resolved workspace dependency set equals
+the four-crate allowlist and rejects injected Tauri/PyO3 edges. Include the
+N=32 producer registration/shutdown fixture with no contention DISPATCH_FULL.
+No throughput benchmark substitutes for boundedness tests.
 
 ## Paths to delete
 

@@ -62,6 +62,20 @@ source_commit = "<full immutable main commit>"
 
 [[artifacts]]
 kind = "crates-io"
+name = "sc-observability-dto"
+version = "<approved crate version>"
+dto_schema = 1
+source_commit = "<full immutable main commit>"
+
+[[artifacts]]
+kind = "crates-io"
+name = "sc-observability-binding-runtime"
+version = "<approved crate version>"
+dto_schema = 1
+source_commit = "<full immutable main commit>"
+
+[[artifacts]]
+kind = "crates-io"
 name = "sc-observability-tauri"
 version = "<approved crate version>"
 dto_schema = 1

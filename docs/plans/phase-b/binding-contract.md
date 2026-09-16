@@ -398,7 +398,12 @@ expansion of configuration needs its own additive reviewed contract.
   SC_OBSERVABILITY_BINDING_QUERY_IN_PROGRESS. Do not coalesce a later flush behind an earlier barrier.
   Tauri fire-and-forget dispatch allows at most 256 outstanding requests per
   client; the next returns queue_full before scheduling. Query and flush helper
-  slots remain occupied until actual operation completion even after timeout.
+  slots remain occupied after observer timeout until the native call returns.
+  For bridge flush, a native TimedOut ends that adapter call and releases only
+  the adapter slot; the bridge slot stays occupied until its own completion.
+  A later explicit request may return native LOG_FLUSH_IN_PROGRESS from the
+  same adapter’s prior timed-out flush. Core flush remains occupied until core
+  returns. No implicit retry or prior native-result retrieval is introduced.
   Level request commands acquire the owner's gate nonblockingly and perform the
   short mutation directly; busy gates return DISPATCH_FULL without mutation.
   They never queue behind query/flush I/O or spawn a thread per call.
@@ -452,6 +457,7 @@ occurs. Capture time is boundary UTC unless an original native timestamp exists.
 | `SC_OBSERVABILITY_BINDING_INVALID_INPUT` | validation | Correct the named input field and submit a new request |
 | `SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION` | unsupported_version | Install client and host packages supporting the same schema |
 | `SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE` | validation | Reduce remote diagnostic text or remediation steps to the documented bounds |
+| `SC_OBSERVABILITY_BINDING_CLOSED` | closed | Stop submitting through the closed backend and inspect its retained health |
 | `SC_OBSERVABILITY_BINDING_DISPATCH_FULL` | queue_full | Wait for an outstanding request to complete before submitting again |
 | `SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS` | queue_full | Wait for the current adapter flush to finish before submitting another |
 | `SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED` | unavailable | Restore native thread resources before explicitly creating another backend |
