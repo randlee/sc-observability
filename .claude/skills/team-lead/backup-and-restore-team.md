@@ -136,11 +136,23 @@ atm gh pr list       # open PRs and CI status
 atm send cobs "New session (session-id: <SESSION_ID>). Team $ATM_TEAM restored. Please acknowledge and confirm status."
 ```
 
-If no response within ~60s, nudge via tmux:
+`atm send` already nudges live agents automatically when their roster entry has
+`backend = herdr` (the normal case). If no response within ~60s, first check the roster
+is healthy rather than reaching for a manual nudge:
 
 ```bash
-tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_title}'
-tmux send-keys -t <pane-id> "You have unread ATM messages. Run: atm read --team $ATM_TEAM" Enter
+atm doctor --team $ATM_TEAM
+```
+
+A missing `backend = herdr` on the member is the usual cause of a silent non-delivery; fix
+with `atm teams update-member $ATM_TEAM <member> --backend herdr`, then re-send.
+
+Only if `atm`/herdr integration itself is down should you fall back to a manual, last-resort
+nudge (bypasses mailbox/ack tracking):
+
+```bash
+herdr agent list
+herdr agent prompt <name> "You have unread ATM messages. Run: atm read --team $ATM_TEAM"
 ```
 
 ---

@@ -99,7 +99,9 @@ After each scrum-master reports completion:
    atm send cobs "Sprint {P}.{S} merged (PR #{N}). Critical design review requested. Review: gh pr diff {N} --repo randlee/agent-team-mail. Focus: correctness bugs, architectural violations, missing edge cases."
    ```
 2. Start the next eligible sprint immediately (dependency permitting) — do NOT wait for cobs review before continuing development
-3. Run cobs review in parallel (use delay agent, nudge via tmux if no reply in 2 min)
+3. Run cobs review in parallel (use delay agent; `atm send` re-nudges cobs automatically via herdr
+   if no reply in 2 min — check `atm doctor --team $ATM_TEAM` if it still doesn't land, rather than
+   reaching for manual `herdr agent prompt`, which is a last resort only)
 4. Track cobs findings:
    - **No issues**: Continue to next sprint
    - **Issues found**: Create/update a **parallel cobs fix track** in a separate worktree (`feature/{P}-fixes-arch-review`) to address findings while later sprint waves continue

@@ -96,11 +96,18 @@ When assigning work to any teammate:
 
 ### Communication Rules
 
+- **`atm send` nudges automatically.** When a member's roster entry has `backend = herdr`,
+  `atm send` (especially with `--requires-ack`) injects a live nudge into that member's herdr
+  pane itself — no separate nudge step is needed for Codex agents or anyone else. If a member
+  never receives the injection, check `atm doctor --team $ATM_TEAM` first — the usual cause is
+  a roster entry missing `backend = herdr` (fix with `atm teams update-member <team> <member>
+  --backend herdr`), not a limitation of the agent type.
 - **No ACK = work is not being done.** If a teammate does not acknowledge within a reasonable
-  window, assume the message was not received and follow up (nudge via tmux for Codex agents).
-- **Codex agents (cobs, arch-ctask)** do not receive message injection — they only see
-  new messages when they check mail after their current task completes. Do not assume they
-  received a message until they ACK.
+  window after `atm doctor` confirms the roster is healthy, re-send the message before assuming
+  anything is wrong more deeply.
+- **Manual `herdr agent prompt`/`send-keys` is a last resort only** — use it if `atm`/herdr
+  integration itself is misconfigured or the daemon is down. It bypasses ATM's mailbox and
+  ack tracking entirely.
 
 ---
 
