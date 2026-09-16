@@ -655,7 +655,7 @@ mod tests {
     use serde_json::{Map, json};
     use std::fs::{self, OpenOptions};
     use std::ops::Deref;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
     use temp_env::{with_var, with_var_unset};
@@ -1573,8 +1573,9 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
         config.retained_log_policy.writer_shutdown_timeout = join_ms(10);
-        config.maintenance_test_pass_delay = Some(Duration::from_millis(500));
+        config.maintenance_test_pass_delay = Some(Duration::ZERO);
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
         config.maintenance_test_pass_signal = Some(signal.clone());
         let logger = Logger::new(config).expect("logger");
 
@@ -1584,13 +1585,26 @@ mod tests {
             "expected maintenance worker to enter the delayed test pass",
         );
 
-        let started = Instant::now();
-        let stopped = logger.shutdown();
+        let shutdown_finished = Arc::new(AtomicBool::new(false));
+        let finished = shutdown_finished.clone();
+        let shutdown = std::thread::spawn(move || {
+            let stopped = logger.shutdown();
+            finished.store(true, Ordering::SeqCst);
+            stopped
+        });
 
-        assert!(
-            started.elapsed() >= Duration::from_millis(450),
-            "shutdown should wait for delayed writer completion even after recording the timeout threshold"
+        wait_for(
+            || signal.shutdown_timeout_recorded(),
+            "expected shutdown to record the configured timeout while maintenance is gated",
         );
+        assert!(
+            !shutdown_finished.load(Ordering::SeqCst),
+            "shutdown must remain blocked until the maintenance gate is released"
+        );
+        signal.release_delay();
+        let stopped = shutdown
+            .join()
+            .expect("shutdown thread should complete after the maintenance gate is released");
         let maintenance = stopped.health().maintenance.expect("maintenance health");
         assert_eq!(maintenance.state, MaintenanceWorkerState::Stopped);
         assert!(maintenance.last_error.is_some());

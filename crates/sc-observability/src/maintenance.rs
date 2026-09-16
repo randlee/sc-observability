@@ -44,6 +44,8 @@ pub(crate) struct WriterRuntime {
     join_timeout: Duration,
     writer_tracker: Arc<WriterTracker>,
     maintenance_tracker: Option<Arc<MaintenanceTracker>>,
+    #[cfg(test)]
+    test_pass_signal: Option<Arc<TestPassDelaySignal>>,
 }
 
 impl WriterRuntime {
@@ -73,6 +75,8 @@ impl WriterRuntime {
 
         let worker_writer_tracker = writer_tracker.clone();
         let worker_maintenance_tracker = maintenance_tracker.clone();
+        #[cfg(test)]
+        let shutdown_test_pass_signal = test_pass_signal.clone();
         let join_handle = thread::Builder::new()
             .name("sc-observability-writer".to_string())
             .spawn(move || {
@@ -101,6 +105,8 @@ impl WriterRuntime {
             join_timeout: policy.writer_shutdown_timeout.as_duration(),
             writer_tracker,
             maintenance_tracker,
+            #[cfg(test)]
+            test_pass_signal: shutdown_test_pass_signal,
         }
     }
 
@@ -178,6 +184,10 @@ impl WriterRuntime {
                 timed_out = true;
                 self.writer_tracker
                     .record_shutdown_timeout(self.join_timeout);
+                #[cfg(test)]
+                if let Some(signal) = self.test_pass_signal.as_ref() {
+                    signal.record_shutdown_timeout();
+                }
                 if let Some(tracker) = self.maintenance_tracker.as_ref() {
                     tracker.record_failure(&ErrorContext::new(
                         error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
@@ -785,19 +795,55 @@ fn run_maintenance_if_due(
 #[cfg(test)]
 #[derive(Debug, Default)]
 pub(crate) struct TestPassDelaySignal {
-    active: Mutex<bool>,
+    active: AtomicBool,
+    block_until_released: AtomicBool,
+    released: AtomicBool,
+    shutdown_timeout_recorded: AtomicBool,
+    gate: Mutex<()>,
     changed: Condvar,
 }
 
 #[cfg(test)]
 impl TestPassDelaySignal {
     fn set_active(&self, active: bool) {
-        *self.active.lock().expect("test signal poisoned") = active;
+        self.active.store(active, Ordering::SeqCst);
         self.changed.notify_all();
     }
 
     pub(crate) fn is_active(&self) -> bool {
-        *self.active.lock().expect("test signal poisoned")
+        self.active.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn block_delay_until_released(&self) {
+        self.released.store(false, Ordering::SeqCst);
+        self.block_until_released.store(true, Ordering::SeqCst);
+    }
+
+    fn wait_until_released(&self) -> bool {
+        if !self.block_until_released.load(Ordering::SeqCst) {
+            return false;
+        }
+
+        let mut gate = self.gate.lock().expect("test gate poisoned");
+        while !self.released.load(Ordering::SeqCst) {
+            gate = self.changed.wait(gate).expect("test gate poisoned");
+        }
+        self.block_until_released.store(false, Ordering::SeqCst);
+        true
+    }
+
+    pub(crate) fn release_delay(&self) {
+        self.released.store(true, Ordering::SeqCst);
+        self.changed.notify_all();
+    }
+
+    fn record_shutdown_timeout(&self) {
+        self.shutdown_timeout_recorded.store(true, Ordering::SeqCst);
+        self.changed.notify_all();
+    }
+
+    pub(crate) fn shutdown_timeout_recorded(&self) -> bool {
+        self.shutdown_timeout_recorded.load(Ordering::SeqCst)
     }
 }
 
@@ -815,9 +861,11 @@ fn maybe_run_test_delay(
 
     if let Some(signal) = test_pass_signal {
         signal.set_active(true);
-    }
-    thread::sleep(delay);
-    if let Some(signal) = test_pass_signal {
+        if !signal.wait_until_released() {
+            thread::sleep(delay);
+        }
         signal.set_active(false);
+    } else {
+        thread::sleep(delay);
     }
 }
