@@ -1,6 +1,6 @@
 agents:
   quality-mgr:
-    version: 1.0.0
+    version: 0.1.0
     path: .claude/agents/quality-mgr.md
   rust-architect:
     version: 1.0.0
@@ -15,20 +15,35 @@ agents:
     version: 1.0.0
     path: .claude/agents/rust-developer.md
   rust-qa-agent:
-    version: 1.0.0
+    version: 0.11.0
     path: .claude/agents/rust-qa-agent.md
   req-qa:
-    version: 1.0.0
+    version: 0.2.0
     path: .claude/agents/req-qa.md
   arch-qa:
-    version: 1.0.0
+    version: 0.1.0
     path: .claude/agents/arch-qa.md
   flaky-test-qa:
-    version: 1.0.0
+    version: 0.1.0
     path: .claude/agents/flaky-test-qa.md
   test-stability-auditor:
     version: 1.0.0
     path: .claude/agents/test-stability-auditor.md
+  ruthless-boundary-qa:
+    version: 0.1.0
+    path: .claude/agents/ruthless-boundary-qa.md
+  rust-best-practices-agent:
+    version: 0.11.0
+    path: .claude/agents/rust-best-practices-agent.md
+  rust-service-hardening-agent:
+    version: 0.11.0
+    path: .claude/agents/rust-service-hardening-agent.md
+  plan-scope-reviewer:
+    version: 0.1.0
+    path: .claude/agents/plan-scope-reviewer.md
+  critical-plan-reviewer:
+    version: 0.1.0
+    path: .claude/agents/critical-plan-reviewer.md
 
 skills:
   rust-development:
@@ -37,4 +52,4 @@ skills:
       rust-code-reviewer: "1.x"
       rust-code-explorer: "1.x"
       rust-developer: "1.x"
-      rust-qa-agent: "1.x"
+      rust-qa-agent: "0.x"
