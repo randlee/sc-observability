@@ -46,7 +46,7 @@ an explicit family disposition before the contract gate is accepted.
 | `LogGuard::active_log_path` | Preserve | `(&self) -> Option<&Path>`; init-cached path, None if file sink disabled |
 | `Drop for LogGuard` | Revise behavior intentionally | Starts final shutdown at most once; waits at most fallback timeout; preserves outcome for extant controls; cannot panic or start a second attempt |
 | `InitError` and variants/code()/remediation() | Revise payloads; add RuntimeStart/UnsupportedLevel | Serializable typed diagnostics replace opaque native source objects; see definitions below |
-| `FlushError` and variants/code()/remediation() | Revise payloads; add NotRunning | Stop/timeout/helper failure remain distinct typed paths |
+| `FlushError` and variants/code()/remediation() | Revise payloads; add NotRunning and InProgress | Stop/timeout/overlap/helper failure remain distinct typed paths |
 | `ShutdownError` and variants/code()/remediation() | Revise payloads; retain four named cases | Timeout is a waiting error, not terminal completion; final results are separately observable |
 | `error_codes` module, seven named constants, ALL | Preserve existing names/string values; extend registry | Existing code meanings remain stable; new cases get the constants listed below |
 | `__private` module and all reachable support | Retain as hidden macro support; may revise with macros in lockstep | Not a supported adapter API; exact bridge/macros version pin governs changes |
@@ -242,7 +242,7 @@ source chain. Expected operational errors return these data values, not throws.
 | InitError::IdentityResolution | IDENTITY_RESOLUTION_FAILED unless a native diagnostic exists | Recoverable: repair identity configuration, then explicitly retry initialization |
 | InitError::RuntimeStart | RUNTIME_START_FAILED | Recoverable: inspect thread/resource availability, then explicitly retry initialization |
 | InitError::Logger, FlushError::Logger, ShutdownError::FinalFlush | native diagnostic code; summary code if present; otherwise STATUS_UNAVAILABLE | NotRecoverable: inspect logger health and original diagnostic; no automatic retry or success claim |
-| FlushError::TimedOut | FLUSH_TIMED_OUT | Recoverable: inspect health and await the existing operation; do not spawn another helper |
+| FlushError::TimedOut | FLUSH_TIMED_OUT | Recoverable: inspect health while the existing operation completes and releases its slot; no late-result retrieval or automatic retry |
 | ShutdownError::TimedOut | SHUTDOWN_TIMED_OUT | Recoverable: use control.wait_stopped to observe the original shutdown |
 | helper-spawn variants | HELPER_SPAWN_FAILED | NotRecoverable: inspect resource availability and logger health; lifecycle completion is unconfirmed |
 | helper-lost variants | HELPER_LOST | NotRecoverable: inspect saved lifecycle/health; do not claim worker completion |

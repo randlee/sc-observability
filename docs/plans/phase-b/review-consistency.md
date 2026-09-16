@@ -58,3 +58,23 @@ implemented before copy; no post-copy bridge public redesign is scheduled.
   implementation tests are specified for their owning sprints, not claimed run.
 
 Full team review and contract acceptance remain required before implementation.
+
+## Author guideline pass — STEP1-R1 (2026-09-16)
+
+Re-read the current sprint and shared contracts with their requirements/ADR
+references, then the sprint-planning guidelines. Merge target `develop` through
+`d16e0c8` before making author edits; its reviewer-routing fixes do not change
+Phase B scope or the guideline text. The 15 existing sprint records cover the
+requested scope, with no additional sprint or public API redesign introduced.
+
+Correct the target bridge inventory to include the already-declared flush
+`InProgress` variant. Align its timeout remediation with the existing contract:
+late completion updates health and releases the slot; no operation retrieves
+the timed-out flush result. A later explicit flush establishes a new barrier.
+These corrections preserve the selected behavior and do not change a published
+API. Requirements and ADRs already express the applicable nonfatal result and
+bounded-operation rules; no normative scope amendment is needed for this pass.
+
+This is the author's preparation for team-lead's scope review, not a scope,
+critical-plan, or QA reviewer approval. Required validation is rerun after the
+push report, with results sent separately to team-lead before task closure.
