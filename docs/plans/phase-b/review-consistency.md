@@ -126,3 +126,8 @@ of creating conflicting per-crate copies. Phase B changes no ATM workflow.
 
 Critical review and the subsequent consistency pass remain required. This
 author audit is not authorization for QA routing or implementation.
+
+Post-push validation caught two mistyped family names in the new boundary
+manifest (LogFailure/ObserveFailure). Corrected them to the existing contract's
+EventFailure/ShutdownFailure; no API change is implied. This was a manifest
+transcription fix under S3-003, followed by another validation pass.
