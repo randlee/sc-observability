@@ -17,7 +17,10 @@ changes explicitly. The current target proposal is not itself an approved freeze
    including exact lifecycle/control/direct-submit/health/error signatures,
    variant/code mapping, facade compatibility policy, field-key/collision rules,
    identity, global-install behavior and initial version policy.
-2. BTIT completes implementation against that accepted contract, resolves its
+2. sc-observability publishes the reviewed core capability from the
+   [runtime-level contract](runtime-level-contract.md). BTIT integrates its
+   owner-only setters, shared filtering and health before migration.
+   BTIT completes implementation against that accepted contract, resolves its
    critical-review findings, and obtains acceptance. The review remains in BTIT
    at `docs/plans/phase-a/review-a-5.md`; it records the adopted target revision,
    full resulting source SHA and focused/cross-platform evidence.

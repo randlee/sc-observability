@@ -222,3 +222,15 @@ requires explicit concurrency design beyond releasing the GIL.
 requires distinct linking configuration for embedding and extension builds.
 [Maturin mixed-project guidance](https://www.maturin.rs/tutorial.html?highlight=stable)
 informs the extension/package layout and wheel validation.
+
+## Runtime level contract integration
+
+Apply the accepted [runtime-level contract](runtime-level-contract.md) in the
+shared health DTO/conformance fixtures: configured_level, effective_level and
+level_revision must agree across Rust and attached language clients. Convert
+revision through the existing checked integer policy. Attached clients carry
+no owner capability. UI requests route through the application-owned handler;
+its typed outcomes distinguish mutation failure from change-diagnostic failure.
+Python owned mode exposes elevate_level/reset_level as typed-result wrappers
+over its owner capability; attached mode does not. Include baseline/reset and
+ownership restrictions in the required integration tests.

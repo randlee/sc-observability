@@ -287,3 +287,14 @@ creating a speculative redesign workstream now.
 
 No reviewer approval, source readiness or contract freeze is asserted by the
 current proposed status.
+
+## Runtime elevation extension required before copy
+
+The [runtime level contract](runtime-level-contract.md) is part of this proposed
+target: LogGuard gains owner-only elevate_level/reset_level Result methods and
+BridgeHealthReport gains configured_level, effective_level and level_revision.
+LogControl gains no mutation authority. The contract specifies the shared core
+filter, concurrency, typed outcomes, diagnostic submission and compile-time
+ceiling behavior. This extends the export disposition matrix for these methods,
+re-exported level values/errors and health fields. Review/accept it and publish
+the core prerequisite before BTIT completes the working reference.

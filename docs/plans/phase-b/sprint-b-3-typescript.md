@@ -242,3 +242,12 @@ lifecycle ownership. Preserve the narrow public logging subset explicitly.
 host/client split. [Specta integer export policy](https://docs.rs/specta/latest/specta/ts/enum.BigIntExportBehavior.html)
 requires a wire encoding that agrees with generated types; merely exporting
 `bigint` is insufficient for JSON.
+
+## Runtime level contract integration
+
+Apply the accepted [runtime-level contract](runtime-level-contract.md) in the
+shared health DTO/conformance fixtures: configured_level, effective_level and
+level_revision must agree across Rust and attached language clients. Convert
+revision through the existing checked integer policy. Attached clients carry
+no owner capability. UI requests route through the application-owned handler;
+its typed outcomes distinguish mutation failure from change-diagnostic failure.

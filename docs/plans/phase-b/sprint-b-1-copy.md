@@ -15,6 +15,10 @@ workspace adaptation. The target contract is reviewed/locked now so BTIT can
 complete its initial implementation against it. This is not a post-copy API
 redesign and does not freeze the unfinished inspected baseline.
 
+Entry also requires the [runtime-level prerequisite](runtime-level-contract.md):
+published core support and accepted BTIT integration, including release-mode
+elevation evidence.
+
 Entry requires the recorded approved target-contract commit, completed BTIT
 initial design/implementation, resolved critical-review findings and accepted
 re-review, plus the full immutable source commit implementing that contract.
@@ -27,7 +31,7 @@ source parity is checked against the newly accepted target, not legacy behavior.
 
 - `must_follow`: sc-observability target public-API contract approval and BTIT
   completed implementation/accepted critical-review closure for that contract.
-- B.2 `must_follow` B.1; no binding sprint, publication or second public-API
+- B.1a `must_follow` B.1; no binding sprint, publication or second public-API
   redesign is part of B.1.
 
 ## Deliverables (authoritative)

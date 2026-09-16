@@ -42,6 +42,9 @@ is an active contract-review gate, not a passive wait for an arbitrary BTIT API.
 The proposal is not yet an accepted freeze. No backward-compatibility/semver
 constraint from BTIT's unpublished API applies to this initial destination API.
 
+B.1 also requires the reviewed/published runtime-level core capability and
+accepted BTIT bridge integration described in the prerequisite contract.
+
 B.1 requires a committed sc-observability-approved target contract, completed
 BTIT implementation/design, accepted critical-review closure, and the exact
 resulting source SHA. The critical review remains in BTIT at
@@ -59,6 +62,14 @@ The [BTIT handoff record](btit-api-handoff.md) defines the shared gate and divis
 of responsibility. Source behavior is preserved only where selected in the
 target matrix; intentional revisions are explicit. Existing published core
 crates retain their own release guarantees.
+
+## Runtime level prerequisite
+
+[Runtime level elevation](runtime-level-contract.md) implements issue #97 as an
+explicit pre-copy core release and BTIT integration gate. Core owns the shared
+effective level; the host retains mutation authority. B.1 remains the first
+migration sprint. No bridge setter or filtering redesign is deferred until after
+copy. #96 configuration loading is independent; LoggerConfig supplies baseline.
 
 ## Core error API migration
 
