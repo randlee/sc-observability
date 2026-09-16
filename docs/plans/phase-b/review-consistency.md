@@ -223,3 +223,36 @@ Also specified the timer's fallible OnceLock initialization and isolated tests,
 a private shared failure-builder macro, and all six bridge operation-error derive
 lists plus trait/round-trip fixtures. These are documentation corrections, not
 implementation or a claim that Step 5 has completed.
+
+## Consistency author pass — STEP5-R1 (2026-09-16)
+
+Reviewed the full 18-sprint set, shared runtime/bridge/error/binding contracts,
+requirements, architecture/ADRs, API/checklist, machine-readable boundaries,
+issue/coverage inventories and testing/platform guidance. Background checks
+covered error migration/source acceptance and generator/package ownership.
+No user-scope conflict or new implementation workstream was identified.
+
+The complete audit list before edits:
+
+| Finding | Target / type | Problem and resolution |
+| --- | --- | --- |
+| S5-001 | Requirements PHB-013, ADR-011/014, API §21.3 / CROSS-DOC | Generic late-result promises predated resolved receipts and separate bridge-native timeout; summaries now preserve the operation-specific behavior of B.3b/B.6. |
+| S5-002 | API ADR link, ADR-015 teardown / CROSS-DOC | ADR range omitted 015 and Python teardown still named native subscriptions; updated range and loop-local timer/observer terminology. |
+| S5-003 | document-coverage.md interfaces/generator rows / CROSS-DOC | Navigation omitted native runtime and assigned generators to B.3a; added B.3b and routed both generators to B.3. |
+| S5-004 | B.5 HandlerDropCause / GAP | Same-named failure mapping lacked permission_denied and owner-only variants a custom backend can return; made local accounting total with all existing Failure tags and table-driven fixtures. No wire variant is added. |
+| S5-005 | Routed review handoff / CONTRA | Input labeled final author fixes an independent critical-review PASS despite no rerun; team-lead acknowledged correction, and accurate provenance is recorded below. |
+
+Review provenance: critical-plan-reviewer reached its configured two-cycle cap
+at STEP4-R2 with FAIL and five Important findings outstanding. The author then
+corrected those findings at fb70e4e without independent reviewer re-verification.
+Thus critical review is cap-exhausted/not-converged, author-corrected; it is not
+an independently verified PASS. Team-lead's 2026-09-16 routing message reports
+an override to continue; this record attributes that statement to team-lead,
+not to a reviewer or an independently observed user approval. The later
+quality-mgr PASS and its QA follow-up fixes are separate evidence.
+
+Second audit found no remaining document-consistency finding in this author
+pass. Error/API compatibility, immutable source acceptance, package/platform
+scope and all 18 sprint dependencies remain intact. This result does not grant
+implementation approval or alter historical review verdicts. The requested
+next routing is quality-mgr plan QA, subject to accurate review provenance.

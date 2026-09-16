@@ -2313,7 +2313,7 @@ This draft is ready for review against these questions:
 ## 21. Phase B API Evolution — Proposed for Review
 
 [PHB-001–014](requirements.md#10-phase-b-additions--proposed-for-review) and
-[ADR-011–014](architecture.md#adr-011-companion-boundaries-and-pre-copy-contract)
+[ADR-011–015](architecture.md#adr-011-companion-boundaries-and-pre-copy-contract)
 record the requested scope and proposed architecture. The [Phase B index](plans/phase-b/plan-phase-b.md)
 routes authoritative sprint signatures, deliverables and validation. This section
 is a compatibility boundary, not a second competing signature inventory.
@@ -2379,7 +2379,10 @@ A filtered event is a distinct successful no-enqueue outcome, not accepted
 admission. Local scheduling is not host admission; neither is persistence.
 Attached Python and TypeScript cannot shut down or mutate the host logger.
 Python-owned handles may hold the corresponding owner capabilities. Optional
-async waits preserve underlying operations and late completion after caller
-timeout/cancellation. Wire variants, diagnostic projections, integer/path
+receipt awaits inspect synchronous admission; async flush observer waits do
+not cancel native operations on timeout/cancellation. Shutdown retains its
+terminal result, while an earlier timed-out flush has no result accessor. A
+bridge-native timeout ends its adapter call only; the native slot may still
+reject a new explicit flush until completion. Wire variants, diagnostic projections, integer/path
 conversion, unknown-result handling and package versions follow the sprint
 schema contract without changing native published serialization.

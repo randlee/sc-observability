@@ -437,7 +437,9 @@ records Err(Failure.internal) with code SC_OBSERVABILITY_PY_HANDLER_REENTRANT,
 message `Recursive Python logging handler invocation`, current boundary UTC time,
 and Recoverable steps `["Remove logging calls from handler formatting and error callbacks"]`.
 It increments only the local reentrant drop counter once for that rejected event,
-not the internal counter as well. Backend internal failures still map to the
+not the internal counter as well. Other handler failures map every declared
+Failure.kind to its same-named HandlerDropCause, including permission_denied and
+owner-only variants returned by a custom backend. Backend internal failures still map to the
 internal cause; do not infer local reentrancy from arbitrary diagnostic text/code.
 
 The B.3/B.3a/B.4 authoritative validation lists include fixtures for every union tag,

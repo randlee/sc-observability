@@ -51,6 +51,9 @@ documentation and validation artifacts; partial completion leaves the sprint ope
 class HandlerDropCause(str, Enum):
     VALIDATION = "validation"
     QUEUE_FULL = "queue_full"
+    BELOW_BASELINE = "below_baseline"
+    UNSUPPORTED_LEVEL = "unsupported_level"
+    PERMISSION_DENIED = "permission_denied"
     CLOSED = "closed"
     UNAVAILABLE = "unavailable"
     IO = "io"
@@ -127,8 +130,11 @@ at u64::MAX and snapshots are immutable copies. Backend Failure.kind maps to the
 same-named cause. REENTRANT is a Python-local synthesized cause: the recursion
 guard records Failure.internal with SC_OBSERVABILITY_PY_HANDLER_REENTRANT using
 the exact diagnostic mapping in binding-contract.md. It is not a new wire
-Failure.kind. Increment reentrant once and do not also increment internal. Additional owner-only level-change
-errors do not arise on handler submission. Initial status is Ok(HandlerIdle).
+Failure.kind. Increment reentrant once and do not also increment internal. Provided backends do not emit owner-only level-change failures on handler
+submission, but custom backends can return any declared Failure variant. Mapping
+is total: every declared Failure.kind has its same-named cause, including
+permission_denied/below_baseline/unsupported_level; preserve the original failure
+and increment that one counter without throwing or inventing unknown_remote. Initial status is Ok(HandlerIdle).
 A filtered event is HandlerEmitted(filtered), not a drop. Each failed event
 increments one cause once; failed flush/close updates last_result without counting
 an event drop. No retained LogRecord or unbounded exception history is kept.
@@ -209,7 +215,8 @@ bash scripts/ci/validate_python_bindings.sh
 
 Extend that script with standard logging/handler shutdown tests, formatter
 recursion (assert internal Failure tag, exact handler-reentrancy code/remediation,
-one reentrant increment and no internal double-count), exception-redaction, ContextVar async isolation, explicit thread
+one reentrant increment and no internal double-count), a custom backend returning
+every Failure variant to prove total cause mapping and retained diagnostics, exception-redaction, ContextVar async isolation, explicit thread
 transfer and Rust-host correlation tests. Required cases: empty/malformed context;
 sibling-task isolation; child inheritance without token ownership; explicit
 thread transfer; re-enter/reuse; close-before-enter, repeated close, out-of-order

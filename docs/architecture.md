@@ -906,8 +906,10 @@ ADR navigation index (status is recorded in each decision below):
   and reviews every foreseeable bridge change before the mechanical B.1 copy.
 - **Consequences**: One host-owned writer/control boundary serves backend,
   frontend and attached Python. Bridge ownership is unique, producer controls
-  cannot initiate shutdown, and timed-out waits retain one operation's eventual
-  result. Core shutdown still waits for definitive completion (ADR-010); bridge
+  cannot initiate shutdown. Shutdown waiters can retrieve the retained terminal
+  result through wait_stopped. A timed-out flush has no prior-result accessor;
+  its native operation continues and later health/slot availability reflect
+  completion without treating a new flush as observation of the old one. Core shutdown still waits for definitive completion (ADR-010); bridge
   timeout bounds the caller's wait, not writer completion. No post-copy bridge
   redesign or BTIT dependency switch is scheduled here. The bridge retains its
   accepted coordinator; a separate shared binding-runtime coordinator handles
@@ -972,8 +974,10 @@ ADR navigation index (status is recorded in each decision below):
 - **Consequences**: Ignored errors are caller omissions, not hidden success.
   Required unit-return protocol adapters retain results in bounded status.
   Python supports owned and attached modes with explicit context transfer and
-  bounded optional waits; timeout/cancellation ends observation, not the shared
-  operation. Existing infallible Rust accessors and source contracts stay intact.
+  bounded optional flush waits; receipt admission is synchronously resolved
+  before submit returns. Observer timeout/cancellation ends observation, not the
+  native operation. Bridge-native timeout can complete an adapter call while the
+  bridge flush continues; the shared runtime contract distinguishes those slots. Existing infallible Rust accessors and source contracts stay intact.
   Node.js, Go, sc-runtime IPC/interpreters and durable receipts are deferred.
   Shared native backends own runtime conversions and bounded core-host operations;
   language wrappers own transport/extraction only. Canonical schema-v1 JSON drives
@@ -1000,7 +1004,9 @@ ADR navigation index (status is recorded in each decision below):
   library cannot safely assume Rust ABI/type identity; IPC introduces transport,
   ordering and supervisor semantics absent from the current runtime specification.
 - **Consequences**: No replacement/reset installation, raw pointer or cross-dylib
-  trait-object transfer. Teardown releases subscriptions/module references and
+  trait-object transfer. Python teardown releases loop-local flush observers,
+  timers and module references; native completion never calls Python or acquires
+  its GIL. Teardown
   cannot shut down the attached host. External-process attachment is deferred
   with the future Go/sc-runtime transport decision. This does not promise
   subinterpreter or free-threaded support. Shared backend policy and provenance

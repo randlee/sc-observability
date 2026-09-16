@@ -17,8 +17,8 @@ execution outputs, not existing implementation evidence.
 | Requirements | [Requirements](../../requirements.md), especially PHB-001–014 | Owning sprint updates implementation status only after evidence |
 | Architecture and ADRs | [Architecture](../../architecture.md), ADR index in §7 | ADR-011–015 stay proposed until accepted |
 | Crate requirements/architecture | Per-crate table below | Each listed owner verifies additions against published compatibility |
-| Interfaces/protocols | [Runtime](runtime-level-contract.md), [bridge](target-bridge-api.md), [errors](error-api-contract.md), [bindings](binding-contract.md) | Signatures and all corner-case fixtures belong to their assigned sprint |
-| Machine-readable boundaries | [Boundary manifest](boundaries.json) | Planned contracts and owners now; generated schema-v1 artifacts in B.3, runtime consumers in B.3a/B.4 |
+| Interfaces/protocols | [Runtime](runtime-level-contract.md), [bridge](target-bridge-api.md), [errors](error-api-contract.md), [bindings](binding-contract.md), [native runtime](native-binding-runtime.md) | Signatures and all corner-case fixtures belong to their assigned sprint |
+| Machine-readable boundaries | [Boundary manifest](boundaries.json) | Planned contracts and owners now; generated schema-v1 artifacts in B.3, native runtime in B.3b and language projections in B.3a/B.4 |
 | Known issue disposition | [Issues inventory](issues-inventory.md) | Scope disposition only; execution evidence closes work, not a planning edit |
 | Testing/platforms | [Test strategy](../../test-strategy.md), [platform guidelines](../../cross-platform-guidelines.md), sprint validation lists | Core/bridge desktop matrices and B.4a Python matrix are explicit gates |
 | Process/QA/triage | [Team protocol](../../team-protocol.md), [planning guidelines](../../../.claude/skills/plan-hardening/sprint-planning-guidelines.md) | No Phase B change to ATM workflow or QA routing is planned |
@@ -40,7 +40,8 @@ contracts define the new companions and adapters at the same level of authority.
 | sc-observability-log-consumer-check | PHB-001/014 | ADR-011; B.1 consumer manifest/signatures | B.1 unpublished consumer fixture |
 | sc-observability-dto | PHB-002/010/012/013 | ADR-014; binding contract and B.3 shared signatures | B.3 neutral wire types/conversions |
 | sc-observability-binding-runtime | PHB-002/010–013 | ADR-011/014/015; [native contract](native-binding-runtime.md) | B.3b shared core/bridge backends, coordinator and CI allowlists for core/types/DTO/bridge only; no Tauri/PyO3 dependency |
-| TypeScript client/generator and Tauri adapter | PHB-010–012 | ADR-014; B.3a client and command signatures | B.3a client, host adapter and real IPC example |
+| Schema and language generators | PHB-002/010/012/013 | ADR-014; B.3 canonical schema and generation contract | B.3 both schema-only TS/Python generators; B.3a/B.4 consume generated output |
+| TypeScript client and Tauri adapter | PHB-010–012 | ADR-014; B.3a client and command signatures | B.3a client, host adapter and real IPC example |
 | Python extension and Rust embedding rlib | PHB-010/011/013 | ADR-014/015; B.4 host/lifecycle signatures | B.4 runtime; B.4a platform distributions; B.5 integration; B.6 optional async |
 
 B.1e alone owns warning activation and adoption guidance; B.P2, B.2 and B.7 own

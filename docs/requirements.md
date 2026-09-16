@@ -475,8 +475,11 @@ record the proposed architecture. No item below asserts implementation closure.
 - PHB-013 Python shall be first-class in owned and Rust-host-attached modes, using
   shared DTO/error contracts and one writer per owner. Attachment shall not gain
   lifecycle/level ownership. Standard logging/context integration and optional
-  asynchronous receipt/flush waits shall preserve nonfatal typed outcomes,
-  bounded work, cancellation boundaries and observable late completion.
+  optional receipt/flush awaits shall preserve nonfatal typed outcomes and
+  bounded work. Admission receipts are resolved on submit return; async flush
+  observer timeout/cancellation does not cancel native work. Retained shutdown
+  results are observable; timed-out flush has no prior-result retrieval API,
+  and bridge-native timeout follows the documented separate adapter/native slots.
 - PHB-014 Release closure shall require downloadable immutable artifacts and
   registry-only consumer evidence. Core runtime-level support shall be published
   before BTIT integration; migrated Rust companions and subsequent language
