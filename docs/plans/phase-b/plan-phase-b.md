@@ -37,8 +37,10 @@ entry assumptions. They must complete before the first migration sprint B.1.
 | B.1d | Additive telemetry runtime methods | [Telemetry errors](sprint-b-1d-telemetry-errors.md) |
 | B.1e | Warning-only legacy migration and downstream adoption guidance | [Error adoption](sprint-b-1e-error-adoption.md) |
 | B.2 | Published Rust bridge and macros, verified from crates.io | [Rust publication](sprint-b-2-publish-rust.md) |
-| B.3 | Generated TypeScript contract and functioning Tauri frontend client | [TypeScript](sprint-b-3-typescript.md) |
-| B.4 | Python logging API implemented through PyO3, with tested maturin wheels | [Python](sprint-b-4-python.md) |
+| B.3 | Neutral DTO crate, checked conversions, schema and conformance fixtures | [Shared schema](sprint-b-3-schema.md) |
+| B.3a | Generated TypeScript client, Tauri host adapter and real IPC consumer | [TypeScript](sprint-b-3a-typescript.md) |
+| B.4 | Owned and host-attached Python runtime API through PyO3 | [Python runtime](sprint-b-4-python.md) |
+| B.4a | Maturin wheels, sdist and full Python/platform qualification | [Python packaging](sprint-b-4a-python-packaging.md) |
 | B.5 | Standard-library Python logging and context propagation in mixed applications | [Python integration](sprint-b-5-python-integration.md) |
 | B.6 | Fire-and-forget Python submission with optional asynchronous confirmation | [Async Python](sprint-b-6-python-async.md) |
 | B.7 | Published TypeScript and Python packages with registry-consumer proof | [Binding publication](sprint-b-7-publish-bindings.md) |
@@ -57,23 +59,16 @@ is an active contract-review gate, not a passive wait for an arbitrary BTIT API.
 The proposal is not yet an accepted freeze. No backward-compatibility/semver
 constraint from BTIT's unpublished API applies to this initial destination API.
 
-B.1 also requires the reviewed/published runtime-level core capability and
-accepted BTIT bridge integration described in the prerequisite contract.
+The authoritative [B.1 entry gate](sprint-b-1-copy.md#goal-and-entry-gate)
+defines contract approval, published runtime capability, accepted BTIT
+implementation/review and immutable source provenance. B.1 is a mechanical
+copy of that accepted implementation; all foreseeable bridge API changes are
+implemented in BTIT before migration. B.2 publishes the companion pair.
+Subsequent core error evolution and language bindings preserve the accepted
+bridge public contract. Unforeseen future changes remain possible but are not
+a planned redesign sprint.
 
-B.1 requires a committed sc-observability-approved target contract, completed
-BTIT implementation/design, accepted critical-review closure, and the exact
-resulting source SHA. The critical review remains in BTIT at
-`docs/plans/phase-a/review-a-5.md`. Inspected `f6f69dc` and `5fd63ca` are historical
-references, not approved import sources. B.1 copies the accepted implementation
-of the locked target API with mechanical workspace adaptation; it is not a
-second API design/implementation sprint. B.2 publishes that companion pair;
-all bridge API changes foreseeable today are included in that target and
-implemented by BTIT before migration. Subsequent planned API work here is additive core error evolution and the
-language bindings; neither changes the accepted bridge public contract. Later unforeseen bridge changes remain possible but are not
-a planned migration/refactor sprint. This preserves a working reference design
-for the initial release and avoids implementing the same changes twice.
-
-The [BTIT handoff record](btit-api-handoff.md) defines the shared gate and division
+The [BTIT handoff record](btit-api-handoff.md) routes that gate and records the division
 of responsibility. Source behavior is preserved only where selected in the
 target matrix; intentional revisions are explicit. Existing published core
 crates retain their own release guarantees.
@@ -97,7 +92,7 @@ structs, traits, enum exhaustiveness, codes and serialized forms remain intact.
 New methods and types coexist with old interfaces; no planned removal or 2.0
 conversion is authorized. B.2 publishes the completed additive migration.
 
-The plan contains 15 bounded sprint records including the three pre-copy
+The plan contains 17 bounded sprint records including the three pre-copy
 prerequisites. The identifiers retain existing B.1–B.7 references; scope is split
 by production closure rather than hidden in prerequisites or implementation notes.
 
@@ -135,7 +130,7 @@ Operational errors are values; neither language binding intentionally throws,
 raises, rejects a Promise, or uses exceptions internally for expected failures.
 Rust continues to use Result/enums. Existing infallible accessors and fixed
 standard-library unit-return adapters retain their signatures; adapters record
-ignored results in inspectable status, without changing published APIs. B.3 owns the shared result/error schema;
+ignored results in inspectable status, without changing published APIs. B.3 owns the shared result/error schema; B.3a implements TypeScript/Tauri;
 Python generates equivalent tagged dataclasses and unions from that contract.
 Accepted and filtered admissions remain distinct; neither implies persistence.
 
@@ -160,7 +155,7 @@ attachment without lifecycle ownership in host mode, standard-library logging
 integration, context propagation and owner-only level elevation/reset. Python is a first-class supported language
 with the same release quality and conformance expectations as TypeScript. This is
 an explicit logging subset of the public API, not a claim of whole-workspace
-parity. The B.3 sprint owns the detailed operation/DTO contract and its limits.
+parity. B.3 owns the shared DTO contract and limits; B.3a/B.4 own language runtime behavior.
 
 Deferred: `follow` sessions, custom callback sinks/redactors, Rust proc macros,
 `sc-observe` generic observation routing, OTLP attachment/exporter setup,
@@ -181,9 +176,11 @@ BTIT's later switch to the published crates is a separate BTIT change.
 | B.1d must_follow B.1c | Telemetry composes the completed observation/runtime adapters |
 | B.1e must_follow B.1d | Deprecate only after all replacements and upgrade fixtures work |
 | B.2 must_follow B.1e | Publish the improved core API and warning-only compatibility path with the companion release |
-| B.3 must_follow B.2 | Bind against the published Rust baseline; own shared DTO schema once |
-| B.4 must_follow B.3 | Reuse the accepted DTO conversions/error registry and conformance fixtures |
-| B.5 must_follow B.4 | Integrate Python logging/context with the implemented owned/attached runtime |
+| B.3 must_follow B.2 | Implement neutral DTO conversions against the published Rust baseline |
+| B.3a must_follow B.3 | Consume the accepted schema in TypeScript/Tauri and real IPC tests |
+| B.4 must_follow B.3a | Reuse schema and proven cross-language conformance evidence |
+| B.4a must_follow B.4 | Qualify distributions of the completed Python runtime API |
+| B.5 must_follow B.4a | Integrate Python logging/context using the qualified package baseline |
 | B.6 must_follow B.5 | Add receipt/wait support to the established Python runtime/context behavior |
 | B.7 must_follow B.6 | Publish the already-tested TypeScript and Python artifacts together |
 

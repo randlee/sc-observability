@@ -13,17 +13,10 @@ changes explicitly. The current target proposal is not itself an approved freeze
 
 ## Required sequence
 
-1. sc-observability reviews and accepts a committed target public-API contract,
-   including exact lifecycle/control/direct-submit/health/error signatures,
-   variant/code mapping, facade compatibility policy, field-key/collision rules,
-   identity, global-install behavior and initial version policy.
-2. B.P1 implements and B.P2 publishes the reviewed core capability from the
-   [runtime-level contract](runtime-level-contract.md). BTIT integrates its
-   owner-only setters, shared filtering and health before migration.
-   B.P3: BTIT completes implementation against that accepted contract, resolves its
-   critical-review findings, and obtains acceptance. The review remains in BTIT
-   at `docs/plans/phase-a/review-a-5.md`; it records the adopted target revision,
-   full resulting source SHA and focused/cross-platform evidence.
+1. Apply the authoritative [B.1 entry gate](sprint-b-1-copy.md#goal-and-entry-gate)
+   for the accepted destination contract and source/review evidence.
+2. B.P1 implements and B.P2 publishes the runtime-level capability; B.P3 owns
+   BTIT integration and acceptance against that contract before source handoff.
 3. B.1 copies only the accepted generic source and verifies its exported API and
    behavior against that locked target. The copy is mechanical; no second
    destination API redesign is scheduled afterward.

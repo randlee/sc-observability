@@ -79,7 +79,7 @@ payloads additionally have Copy/Eq. Native enum serialization uses snake_case
 discriminants. Payload enums use `#[serde(tag = "kind", content = "value",
 rename_all = "snake_case")]`; unit-only enums serialize their snake_case string.
 Struct fields use snake_case and only active variant payloads are serialized.
-B.3 projects the language wire format rather than exposing native
+B.3 owns the shared wire format; B.3a/B.4 project it rather than exposing native
 Duration, PathBuf or large integers directly. Opaque LogControl is Debug/Clone/
 Send/Sync, not Serialize; LogGuard is Debug/Send/Sync, not Clone or Serialize.
 
@@ -334,13 +334,10 @@ only with the exact matching macro package. DTO schema versions remain separate.
 
 ## Public-API contract gate required before copy
 
-sc-observability reviews and accepts this target contract (including any revised
-matrix/signatures) at a recorded commit. BTIT then completes implementation and
-critical-review fixes against that accepted revision. Its handoff includes the
-full source commit, completed design/implementation verdicts, complete exported
-API inventory including impls, variant/code fixtures, behavioral tests above,
-macro/UI/consumer compilation, and three-platform results. B.1 verifies parity
-with the accepted target; it cannot use the inspected baseline as a substitute.
+The [B.1 entry gate](sprint-b-1-copy.md#goal-and-entry-gate) is authoritative
+for copy admission. This contract supplies its exported API inventory,
+variant/code fixtures and behavioral evidence; B.P3 supplies accepted BTIT
+implementation and cross-platform critical-review evidence.
 All bridge changes foreseeable in this proposal are BTIT pre-migration work.
 Do not defer an identified target-contract change to a planned post-copy API
 revision. Future unforeseen changes can be reviewed after migration without

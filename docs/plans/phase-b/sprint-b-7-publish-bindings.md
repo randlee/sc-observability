@@ -9,8 +9,8 @@ base: develop
 
 ## Goal and dependencies
 
-Publish the already-working B.3 TypeScript and B.4/B.5/B.6 Python artifacts so external
-consumers can install them. `must_follow` B.6 and transitively B.5/B.4/B.3/B.2: preserve
+Publish the already-working B.3a TypeScript and B.4/B.5/B.6 Python artifacts so external
+consumers can install them. `must_follow` B.6 and transitively B.5/B.4a/B.4/B.3a/B.3/B.2: preserve
 the accepted runtime/schema contracts. This sprint owns distribution and
 registry proof, not unfinished runtime work. Shared release/runtime artifacts
 preclude parallel_safe execution; follow parent-push merge-forward before each
@@ -26,9 +26,9 @@ child development/fix round and parent PR merge before child completion.
 2. Extend the existing release workflow with explicit binding artifact jobs.
    Publish prerequisite Rust DTO/adapter crates before packages or sdists that
    resolve them from registries. Build Python wheels from an immutable main
-   release commit for the B.4 matrix and publish those tested bytes. Include
+   release commit for the B.4a matrix and publish those tested bytes. Include
    stubs, py.typed, licenses and source distribution; npm ships generated
-   declarations, client, transport and package exports tested by B.3.
+   declarations, client, transport and package exports tested by B.3a.
 3. Create `scripts/ci/validate_binding_registry_consumers.sh` to install exact
    npm/PyPI versions into fresh external fixtures with no local path override.
    Exercise the TypeScript client with the released host adapter and the Python
@@ -84,7 +84,7 @@ bash scripts/ci/validate_docs_consistency.sh
 
 The registry-consumer script reads exact versions from the release record and
 rejects placeholders, unavailable artifacts, version/schema mismatches or skipped
-platform evidence. Reuse the accepted B.3/B.4/B.5/B.6 runtime tests on release artifacts;
+platform evidence. Reuse the accepted B.3a/B.4/B.4a/B.5/B.6 runtime/package tests on release artifacts;
 do not replace them with import-only checks.
 
 ## Paths to delete

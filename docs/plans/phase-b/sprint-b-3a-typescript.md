@@ -1,17 +1,19 @@
 ---
-id: B.3
+id: B.3a
 status: proposed
-branch: feature/phase-b-3-typescript
+branch: feature/phase-b-3a-typescript
 base: develop
 ---
 
-# B.3 — TypeScript bindings for the public logging API
+# B.3a — TypeScript bindings for the public logging API
 
 ## Goal and dependencies
 
 Deliver a working Tauri-backed TypeScript logging client, with generated types
-and explicit runtime validation. `must_follow` B.2 for the released Rust API.
-B.4 `must_follow` B.3 because B.3 owns the shared DTO/schema/error contract.
+and explicit runtime validation. `must_follow` B.3 for its completed DTO/schema/error contract.
+B.4 `must_follow` B.3a for the proven cross-language transport/conformance baseline.
+Shared schema consumers and fixtures preclude parallel_safe execution. Parent
+pushes trigger merge-forward before each child dev/fix round; parent PR merges first.
 The first user-selected runtime is Tauri; standalone Node.js requires a distinct
 transport and is outside this sprint.
 
@@ -27,15 +29,7 @@ They are part of this sprint's reviewable contract, not future design work.
 
 ## Deliverables (authoritative)
 
-1. Create `crates/sc-observability-dto/` containing checked conversions between
-   wire DTOs and public core types, plus `bindings/schema/v1.json`,
-   `bindings/schema/errors-v1.json`, and `bindings/conformance/v1/` fixtures.
-   Add `bindings/API-COVERAGE.md` mapping each supported public operation to
-   its DTO and runtime test, with explicit exclusions. Runtime-specific tools
-   never enter this crate or the core dependency graph. Include LevelStateDto,
-   LevelChangeDto and all typed level errors from the runtime contract, with
-   configured/effective levels and checked decimal-string revisions in health.
-2. Create `bindings/typescript/` with a locked package/toolchain, a Rust exporter
+1. Create `bindings/typescript/` with a locked package/toolchain, a Rust exporter
    under `bindings/typescript/exporter/`, generated declarations, and a typed
    client with nonblocking logging and discriminated results for every operation. Pin a compatible Specta/serde exporter combination
    there; validate the emitted JSON representation, not Rust type names alone.
@@ -44,7 +38,7 @@ They are part of this sprint's reviewable contract, not future design work.
    a transport interface and a Tauri invoke implementation. Publishable
    package name proposed: `@sc-observability/client`; availability/ownership is
    checked in B.7, not assumed here.
-3. Create `bindings/tauri/` and `examples/tauri-logging/` as isolated adapter and
+2. Create `bindings/tauri/` and `examples/tauri-logging/` as isolated adapter and
    consumer workspaces. A host installs command handlers over its existing
    logger/control API; the frontend cannot create or shut down the host logger.
    Host command registration, permissions, log root, targets, redaction and
@@ -52,13 +46,13 @@ They are part of this sprint's reviewable contract, not future design work.
    health/flush through IPC; it is not a mock-only demonstration. Add the
    application-owned level-request handler specified below, retaining LogGuard
    authority in Rust and returning ordinary tagged envelopes.
-4. Create `scripts/ci/validate_typescript_bindings.sh` and a binding CI job that
-   regenerate-and-diff schema/declarations, type-check, test package installation,
+3. Create `scripts/ci/validate_typescript_bindings.sh` and a binding CI job that
+   consume and verify B.3 schema fixtures, regenerate-and-diff declarations, type-check, test package installation,
    exercise the real Tauri command boundary on supported desktop platforms,
    and run all conversion/error fixtures. Write usage and migration documentation
-   plus `docs/plans/phase-b/handoff-b-3.md`. Document the DTO ownership exception
-   to TYP-030: these are wire projections; core runtime health/errors stay owned
-   by their existing crates. Add scoped public-API approval for the DTO package.
+   plus `docs/plans/phase-b/handoff-b-3a.md`. Extend B.3 API-COVERAGE with
+   concrete client/IPC runtime test references. DTO definitions, schema generation
+   and crate API approval remain B.3 artifacts; this sprint consumes them.
 
 ## Contract and operation signatures
 
@@ -69,32 +63,7 @@ Convert foreign transport/formatter errors into Failure at the boundary. Error
 objects are data, not Error subclasses. No convenience unwrap-or-throw API ships.
 
 ```ts
-export type Result<T> =
-  | { kind: "ok"; value: T }
-  | { kind: "error"; error: Failure };
-export type Failure =
-  | (Diagnostic & { kind: "validation"; field: string })
-  | (Diagnostic & { kind: "queue_full" })
-  | (Diagnostic & { kind: "below_baseline"; requested: LevelFilterDto; configured: LevelFilterDto })
-  | (Diagnostic & { kind: "unsupported_level"; requested: LevelFilterDto; available: LevelFilterDto })
-  | (Diagnostic & { kind: "permission_denied" })
-  | (Diagnostic & { kind: "closed" })
-  | (Diagnostic & { kind: "unavailable" })
-  | (Diagnostic & { kind: "io" })
-  | (Diagnostic & { kind: "timeout"; operation: string })
-  | (Diagnostic & { kind: "cancelled"; operation: string })
-  | (Diagnostic & { kind: "unsupported_version"; received: number })
-  | (Diagnostic & { kind: "internal" })
-  | (Diagnostic & { kind: "unknown_remote"; remote_kind: string });
-export interface Diagnostic {
-  at: string; // original diagnostic timestamp, or boundary capture time for foreign failures
-  code: string;
-  message: string;
-  remediation: RemediationDto;
-}
-export type RemediationDto =
-  | { kind: "recoverable"; steps: string[] }
-  | { kind: "not_recoverable"; justification: string };
+// Result, Failure and DTOs are generated from B.3; see binding-contract.md.
 export interface ObservabilityClient {
   log(event: LogEventDto): Result<DispatchDto>;
   tryLog(event: LogEventDto): Promise<Result<AdmissionDto>>;
@@ -115,9 +84,6 @@ export interface ClientStatus {
   last_result: Result<ClientOutcome>;
   last_failure: Failure | null;
 }
-export type DispatchDto = { kind: "scheduled" };
-export type AdmissionDto = { kind: "accepted" } | { kind: "filtered" };
-export type CompletionDto = { kind: "completed" };
 export interface JsonTransport {
   request(operation: "try_log" | "query" | "health" | "flush",
           request: unknown): Promise<Result<unknown>>;
@@ -125,34 +91,10 @@ export interface JsonTransport {
 export declare function createClient(transport: JsonTransport): Result<ObservabilityClient>;
 ```
 
-The following shared level values are emitted by the DTO crate and generated for
-both languages; native Rust level names map explicitly to lowercase strings.
-These are new schema-v1 types and do not alter existing core health Serde.
+Shared level values are generated from B.3 and detailed in the binding contract.
+The application-level helper has this signature:
 
 ```ts
-export type LevelFilterDto = "off" | "error" | "warn" | "info" | "debug" | "trace";
-export type LevelChangeSourceDto = "application" | "user_request" | "diagnostic_session";
-export interface LevelStateDto {
-  configured_level: LevelFilterDto;
-  effective_level: LevelFilterDto;
-  level_revision: string; // canonical unsigned u64 decimal
-}
-export interface DiagnosticSummaryDto {
-  code: string | null;
-  message: string;
-  at: string; // canonical UTC RFC3339
-}
-export interface OperationDiagnosticDto extends Diagnostic {}
-export type ChangeDiagnosticDto =
-  | { kind: "accepted" }
-  | { kind: "not_accepted"; diagnostic: OperationDiagnosticDto };
-export type LevelChangeDto =
-  | { kind: "changed"; previous: LevelStateDto; current: LevelStateDto;
-      source: LevelChangeSourceDto; diagnostic: ChangeDiagnosticDto }
-  | { kind: "unchanged"; state: LevelStateDto };
-export type LevelRequestDto =
-  | { kind: "elevate"; level: LevelFilterDto }
-  | { kind: "reset" };
 // Example application API, not a method on ObservabilityClient/LogControl:
 export declare function requestLevelChange(request: LevelRequestDto): Promise<Result<LevelChangeDto>>;
 ```
@@ -313,7 +255,7 @@ pre-existing unredacted history; access remains host-authorized.
 
 ```sh
 bash scripts/ci/validate_typescript_bindings.sh
-cargo test --locked -p sc-observability-dto
+bash scripts/ci/validate_binding_schema.sh
 bash scripts/ci/validate_dependency_bans.sh
 bash scripts/ci/validate_repo_boundaries.sh
 bash scripts/ci/validate_docs_consistency.sh
@@ -338,7 +280,7 @@ None.
 
 ## Non-closure
 
-No registry publication (B.7), actual BTIT migration, Node.js addon, Python, Go,
+No DTO/schema redesign (B.3 owns the accepted definitions), registry publication (B.7), actual BTIT migration, Node.js addon, Python, Go,
 follow stream, custom callback sink/redactor, OTLP, log deletion, or frontend
 lifecycle ownership. Preserve the narrow public logging subset explicitly.
 

@@ -29,9 +29,12 @@ parent PR merge precedes child completion, as defined in the phase index.
 2. Implement completion transfer between native operations and asyncio loops.
    Never block the event-loop thread on sink I/O, writer capacity, a native
    mutex, or a thread join. Completion belongs to the logger/backend rather
-   than the lifetime of a waiting Python task. Pin the supported async bridge
-   mechanism in the package; reuse the host runtime where appropriate instead
-   of starting a Rust executor for each Python call.
+   than the lifetime of a waiting Python task. Use asyncio Future values and loop.call_soon_threadsafe for native-to-loop
+   completion transfer, with tagged results passed to set_result, never
+   set_exception. Use loop.call_later for timeout results; cancel that timer
+   and unregister the waiter on completion/cancellation. No per-call Rust
+   executor or asyncio.to_thread pool is introduced. Reuse the bounded native
+   operation coordinator; callback registration obeys the limits below.
 3. Extend the B.4 validator, typed stubs, packaged examples and
    `docs/plans/phase-b/handoff-b-6.md` with receipts ignored, awaited, timed out,
    cancelled and completed after a loop closes. Exercise concurrent asyncio
@@ -139,7 +142,9 @@ This limitation is documented in the example and tested, not hidden behind a
 promise of universal late-result retrieval.
 
 Native callbacks must resolve Python waiters on their owning loops through a
-thread-safe scheduling bridge. A closed loop leaves saved receipt/shutdown results and
+loop.call_soon_threadsafe bridge. A callback checks whether its Future is
+already done before setting a result; foreign closed-loop scheduling failures
+are contained and release waiter registration. A closed loop leaves saved receipt/shutdown results and
 logger health intact; no callback attempts to revive a closed interpreter. Factories,
 validation, queries, health and lifecycle operations retain their Result contracts;
 no exception-based alternate path is introduced for async use.
@@ -175,7 +180,7 @@ bash scripts/ci/validate_python_bindings.sh
 Extend the script to run packaged asyncio tests with debug mode/warnings treated
 as failures, deterministic held-writer tests, heartbeat and resource-bound checks,
 multiple-loop/worker-thread completion tests, and loop/interpreter shutdown
-subprocess tests. Run both owned and attached modes on the B.4 Python/platform
+subprocess tests. Run both owned and attached modes on the B.4a Python/platform
 matrix. Use deterministic operation counts and bounded outstanding-work checks
 rather than a throughput benchmark as correctness evidence.
 

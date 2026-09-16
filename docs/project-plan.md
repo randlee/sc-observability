@@ -116,7 +116,10 @@ Its first migration sprint copies the review-corrected generic BTIT crates.
 Explicit prerequisite sprints implement/publish additive core runtime elevation
 and obtain accepted BTIT integration before that copy. Bounded core error
 migration sprints add improved methods and warning-only legacy adapters before
-Rust publication, followed by dedicated TypeScript and Python binding work. Go remains future scope. The proposal does not reopen the accepted
+Rust publication, followed by separately gated shared schema (B.3),
+TypeScript/Tauri (B.3a), Python runtime (B.4) and Python distribution/platform
+qualification (B.4a), then Python integration/async support and binding release.
+Go remains future scope. The proposal does not reopen the accepted
 Phase A closure or claim that BTIT's currently open review findings are resolved.
 
 ## Rule

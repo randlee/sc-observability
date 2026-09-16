@@ -5,15 +5,17 @@ branch: feature/phase-b-4-python
 base: develop
 ---
 
-# B.4 — Python bindings through PyO3 and maturin
+# B.4 — Owned and host-attached Python runtime API
 
 ## Goal and dependencies
 
 Deliver owned and Rust-host-attached Python logging over the public Rust API,
-with typed Python values, deterministic lifecycle behavior and installable wheels.
-`must_follow` B.3: reuse its accepted wire schema, stable error registry and
-conformance fixtures, rather than creating a second schema authority. B.5
-`must_follow` B.4 for idiomatic Python integration; B.7 owns publication.
+with typed Python values and deterministic lifecycle behavior.
+`must_follow` B.3a for tested transport/conformance evidence, transitively B.3
+for the shared schema. B.4a `must_follow` B.4 for packaging the complete API.
+Shared Python sources and build metadata preclude parallel_safe work; parent
+pushes trigger merge-forward before each child dev/fix round and parent PR
+merges first. B.7 owns publication.
 
 The complete new DTO declarations, conversion boundaries, validation defaults
 and error mapping are incorporated from [the binding contract](binding-contract.md).
@@ -46,15 +48,13 @@ They are part of this sprint's reviewable contract, not future design work.
    sinks; remaining core config uses documented defaults. No silent `str(error)`
    parsing, panic escape, process-global logging installation, or unrelated
    instance sharing.
-4. Add `scripts/ci/validate_python_bindings.sh`, runtime/conformance/threaded
-   tests, wheel build/install CI, and `docs/plans/phase-b/handoff-b-4.md`.
-   Proposed initial support: GIL-enabled CPython 3.10–3.14, `abi3-py310`, macOS
-   arm64/x86_64, Linux glibc x86_64/aarch64, Windows x86_64. Confirm compatible
-   pinned PyO3/maturin versions and Rust MSRV at entry; if that matrix cannot
-   pass, revise this proposed scope before implementation instead of silently
-   dropping platforms. Use manylinux_2_28 for Linux and deployment targets
-   recorded in wheel metadata. Free-threaded Python, PyPy, musl and Windows
-   arm64 are explicitly deferred.
+4. Add `scripts/ci/validate_python_bindings.sh` for runtime/conformance/threaded
+   tests, stubs and the Rust embedding example, with a Linux x86_64 GIL CPython
+   3.10 source-build CI lane. Lock compatible PyO3/maturin dependencies and
+   `abi3-py310` settings for the extension plus distinct embedding link settings.
+   Record results in `docs/plans/phase-b/handoff-b-4.md`. This lane proves the
+   complete runtime API; B.4a owns wheel/sdist distribution and all-platform
+   qualification, rather than leaving any B.4 runtime behavior unfinished.
 
 ## Public signatures and lifecycle
 
@@ -192,8 +192,8 @@ hiding them behind __exit__'s boolean protocol or masking application exceptions
 
 ## Acceptance criteria (authoritative)
 
-- AC1: Clean wheel installations run every supported operation and the typed
-  example on the approved Python/platform matrix with no source-tree imports.
+- AC1: A clean source build runs every supported operation and the typed
+  example on the B.4 Linux x86_64 CPython 3.10 CI lane.
   File logs, Result/Failure tags and bounded snapshots match the shared
   Rust/TypeScript fixtures. No exception class is exported as an error contract.
 - AC2: A full queue or held sink does not stop an independent Python thread;
@@ -219,9 +219,6 @@ hiding them behind __exit__'s boolean protocol or masking application exceptions
   mutation methods. Concurrent mutation/shutdown stays typed and isolated between
   independent owned instances. Admission accepted/filtered and diagnostic message and remediation
   steps survive Rust/Python/wire conversion.
-- AC6: Wheel and source distributions contain stubs, py.typed and all required
-  Rust sources or resolvable registry dependencies. Installation/type checking
-  succeeds outside the monorepo; imported core API/dependency gates still pass.
 
 ## Required validation (authoritative)
 
@@ -231,13 +228,12 @@ bash scripts/ci/validate_dependency_bans.sh
 bash scripts/ci/validate_docs_consistency.sh
 ```
 
-The new script builds wheels with locked maturin/PyO3, installs them into clean
-venvs, runs pytest and stub/type checks there, builds/runs the Rust embedding example,
-executes deterministic threaded
-and shutdown subprocess tests, validates shared fixtures, and rebuilds a wheel
-from the produced sdist outside the checkout. CI supplies each supported target;
-record exact wheel tags, architectures, Python versions, hashes and results.
-Development installs alone do not satisfy validation. Add static checks against
+The new script builds the extension from locked sources, runs pytest and
+stub/type checks in a clean venv, builds/runs the Rust embedding example,
+executes deterministic threaded and shutdown subprocess tests, and validates
+shared fixtures. B.4a extends this same validator to installed distributions
+and the full matrix; its package validation is not a B.4 completion claim.
+Source-build tests must execute the actual Rust backend, not mocks. Add static checks against
 authored raise/panic/unwrap-based operational control flow, fault injection for
 every public Result path (including factories and health), and Python type-check
 fixtures that exhaustively narrow Result/Failure variants. Foreign PyO3/formatter
@@ -259,7 +255,7 @@ None.
 
 ## Non-closure
 
-No PyPI publication (B.7), standard-library Handler/context integration (B.5), context-manager lifecycle
+No wheel/sdist or platform-matrix qualification (B.4a), PyPI publication (B.7), standard-library Handler/context integration (B.5), context-manager lifecycle
 conveniences, implicit Rust
 facade installation, Python callback sinks/redactors, follow stream, async receipt/wait API (B.6),
 OTLP, Go, or whole-workspace public API parity.

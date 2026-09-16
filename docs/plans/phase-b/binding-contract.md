@@ -1,16 +1,20 @@
 ---
 status: proposed_for_public_api_review
-owners: B.3 shared DTO and Tauri, B.4 Python projection
+owners: B.3 shared DTO/schema, B.3a TypeScript/Tauri, B.4 Python projection
 ---
 
 # Shared binding declarations and boundary rules
 
-This appendix supplies the complete new wire data shapes used by B.3/B.4.
-The Result, Failure, RemediationDto, ClientStatus, ClientOutcome, LevelStateDto, LevelChangeDto,
-LevelRequestDto, DiagnosticSummaryDto and OperationDiagnosticDto declarations
-in [B.3](sprint-b-3-typescript.md#contract-and-operation-signatures) are
-incorporated here without a second definition. All other wire declarations are
-below. These are new DTOs, not edits to published core structs or their Serde.
+This appendix supplies the complete new wire shapes owned by B.3 and consumed
+by B.3a/B.4. Result, Failure, RemediationDto, DispatchDto, AdmissionDto,
+CompletionDto, LevelStateDto, LevelChangeDto,
+LevelRequestDto, DiagnosticSummaryDto and OperationDiagnosticDto are declared
+in [B.3 shared signatures](sprint-b-3-schema.md#shared-signatures).
+ClientStatus/ClientOutcome are declared in
+[B.3a client signatures](sprint-b-3a-typescript.md#contract-and-operation-signatures).
+Those declarations are incorporated here without a second definition. All other
+wire declarations are below. These are new DTOs, not edits to published core
+structs or their Serde.
 Python exposes equivalent frozen dataclasses/tagged unions; wire integer strings
 become checked Python ints in ergonomic values. New DTO Rust types live only in
 sc-observability-dto, use the same names/fields and explicit Serde tags, and derive
@@ -228,7 +232,7 @@ boundary. Copy own enumerable plain-object entries once; reject symbol keys and
 never traverse inherited properties. Callers can use encodeValue for query field
 matches. No overload silently accepts ergonomic inputs where a wire DTO is required.
 
-B.3 must test each input variant, min/max/overflow bigint, safe/unsafe number
+B.3a must test each input variant, min/max/overflow bigint, safe/unsafe number
 boundaries, negative zero, cycles, own/inherited/symbol keys, failing getters and
 exact size/depth limits. The packed external consumer runs encodeEvent then log
 and observes the exact stored integer via query; conversion-only tests are not
@@ -271,7 +275,7 @@ EventStamp fields are public because hosts construct it; its values already use
 validated core newtypes. Existing core validation applies again before admission.
 
 Tauri adapter commands return WireEnvelope values even on failure. Their
-serialization/argument shape is precisely the B.3 command table; command bodies
+serialization/argument shape is precisely the B.3a command table; command bodies
 accept raw serde_json::Value so malformed user input becomes a tagged validation
 result rather than Tauri's implicit argument-extraction rejection. Missing or
 invalid invoke-level arguments that prevent command entry are foreign transport
@@ -416,7 +420,7 @@ original OperationDiagnostic or ErrorContext code/message/remediation/timestamp;
 replace a typed error by parsing its display string. Legacy health summaries
 remain summaries rather than an invented full diagnostic.
 
-The B.3/B.4 authoritative validation lists include fixtures for every union tag,
+The B.3/B.3a/B.4 authoritative validation lists include fixtures for every union tag,
 all nested stored event/health fields, empty and multistep remediation, absent
 summary code, maximum integers, invalid decimal forms, NaN/infinity, cycles,
 exact size/depth boundaries, unknown input versus additive output fields,

@@ -11,7 +11,8 @@ base: develop
 
 Make existing Python code idiomatic to integrate without rewriting every log
 call, while sharing Rust-hosted observability in mixed applications.
-`must_follow` B.4: use its tested owned/attached runtime and stable errors.
+`must_follow` B.4a: use its qualified packages and B.4’s tested owned/attached
+runtime and stable errors.
 B.6 `must_follow` this sprint for optional async waiting; B.7 owns publication.
 These sprints share the Python runtime and conformance artifacts, so they are
 not parallel_safe. Follow the phase parent-push merge-forward rule before every
@@ -190,7 +191,7 @@ Rust host and Python use the same validated IDs to query a mixed request.
   hidden duplicate shutdown, or unbounded exit waits. Redaction fixtures pass. Handler creation/context validation return Err on
   invalid inputs; adapter status preserves each ignored failure variant.
 - AC4: Typed examples run against built wheels and the embedded Rust module on
-  the B.4 support matrix. Python documentation describes supported operations,
+  the B.4a support matrix. Python documentation describes supported operations,
   failure behavior, lifecycle, installation and version compatibility directly.
 
 ## Required validation (authoritative)

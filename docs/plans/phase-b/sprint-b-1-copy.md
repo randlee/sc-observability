@@ -9,6 +9,9 @@ base: develop
 
 ## Goal and entry gate
 
+This section is the authoritative copy-entry gate; other Phase B documents
+link here rather than define competing entry criteria.
+
 Copy only the accepted implementation of the
 [sc-observability-owned target bridge API](target-bridge-api.md), with mechanical
 workspace adaptation. The target contract is reviewed/locked now so BTIT can

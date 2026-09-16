@@ -2362,8 +2362,11 @@ cannot convert a successful transition into a failure or defeat redaction.
 
 ### 21.3 Binding And Nonfatal Result Contracts
 
-[Tauri TypeScript](plans/phase-b/sprint-b-3-typescript.md) owns the shared DTO
-schema and [Python](plans/phase-b/sprint-b-4-python.md) reuses it. Adapters, not core,
+[Shared DTO/schema](plans/phase-b/sprint-b-3-schema.md) owns the wire contract;
+[Tauri TypeScript](plans/phase-b/sprint-b-3a-typescript.md) and
+[Python runtime](plans/phase-b/sprint-b-4-python.md) consume it.
+[Python packaging](plans/phase-b/sprint-b-4a-python-packaging.md) separately
+qualifies distributions on the full support matrix. Adapters, not core,
 own runtime integration. New operational paths return tagged values; foreign
 exceptions are converted at boundaries, and ordinary failures do not throw,
 raise or reject. Existing infallible accessors retain plain values. Standard

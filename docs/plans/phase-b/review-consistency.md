@@ -78,3 +78,22 @@ bounded-operation rules; no normative scope amendment is needed for this pass.
 This is the author's preparation for team-lead's scope review, not a scope,
 critical-plan, or QA reviewer approval. Required validation is rerun after the
 push report, with results sent separately to team-lead before task closure.
+
+## Scope-review correction — STEP1-R2 (2026-09-16)
+
+Address PLAN-SCOPE-001 by separating B.3's working neutral DTO/schema conversions
+from B.3a's generated TypeScript client, Tauri host adapter and IPC example.
+Address PLAN-SCOPE-002 by separating B.4's owned/attached Python runtime API
+from B.4a's wheel/sdist and 25-cell platform qualification. Each record has its
+own authoritative deliverables, acceptance, validation and non-closure. The
+phase now contains 17 sprint records; downstream dependencies and ownership
+references follow the new boundaries. Existing API contracts remain unchanged.
+
+Consolidate copy admission under B.1's entry gate (M1/M3). Name asyncio Futures,
+call_soon_threadsafe and bounded native completion as the B.6 bridge mechanism
+(M2), preserving its existing cancellation/result/resource contract. Requirements
+PHB-001–014 and ADR-011–014 remain consistent: this changes work ownership and
+makes implementation detail concrete, without a new capability or breaking API.
+
+Target develop was current before editing. This records author corrections;
+it does not assert that the scope reviewer has accepted the revised commit.
