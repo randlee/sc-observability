@@ -76,6 +76,20 @@ one entry per registered timed waiter, not a thread or executor per wait.
 After first successful initialization the timer helper persists until process
 exit; its heap is empty when no timed observers remain. Churn-test baseline is
 one shared timer plus existing host workers, with zero per-backend helpers.
+Use a private `static TIMER: OnceLock<Mutex<Option<Arc<TimerService>>>>`.
+OnceLock initializes only the empty synchronization cell; under its short init
+mutex, the first caller spawns the timer and publishes Some only on success.
+Concurrent creators reuse that same Arc, never spawn competing timer threads.
+Spawn failure leaves None for a later explicit creation attempt; map poisoned
+initialization state to BINDING_INTERNAL without unwrap/panic. This is a scoped
+M-AVOID-STATICS exception for resource sharing only: it stores no logger, policy,
+process-global facade or application configuration. Production never resets it.
+Parallel logger tests share the timer but use distinct observer IDs/deadlines;
+one logger's cancellation cannot remove another's heap entry. Fault-injection
+and first-initialization tests run in isolated subprocesses rather than resetting
+a live singleton. Test concurrent first creation, failed spawn then successful
+retry, cross-logger cancellation isolation and the one-thread/empty-heap baseline.
+
 Initialize that helper fallibly before per-backend workers; spawn failure uses
 COORDINATOR_START_FAILED. Removing a waiter also removes its heap entry. Subscription callbacks run once outside state locks;
 foreign callback panics are contained and counted without replacing the saved

@@ -142,6 +142,7 @@ Replace opaque source objects in the unpublished bridge's three old error enums
 with OperationDiagnostic; no published core error or summary changes shape.
 
 ```rust
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum InitError {
     AlreadyInitialized,
     ForeignLoggerInstalled,
@@ -150,6 +151,7 @@ pub enum InitError {
     Logger { diagnostic: OperationDiagnostic },
     RuntimeStart { diagnostic: OperationDiagnostic },
 }
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum FlushError {
     TimedOut { timeout: std::time::Duration },
     Logger { diagnostic: OperationDiagnostic },
@@ -158,6 +160,7 @@ pub enum FlushError {
     InProgress,
     NotRunning { phase: LifecyclePhase },
 }
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ShutdownError {
     TimedOut { timeout: std::time::Duration },
     FinalFlush { diagnostic: OperationDiagnostic },
@@ -169,6 +172,7 @@ pub enum FieldKeyError {
     ReservedPrefix,
     Collision { other_raw_key: String },
 }
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum EmitError {
     InvalidField { raw_key: String, reason: FieldKeyError },
     InvalidEvent { diagnostic: OperationDiagnostic },
@@ -179,11 +183,13 @@ pub enum EmitError {
     Reentrant,
     Panicked,
 }
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ControlError {
     NotRunning { phase: LifecyclePhase },
     Query { diagnostic: OperationDiagnostic },
     Unavailable { diagnostic: OperationDiagnostic },
 }
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum WaitError {
     NotStarted,
     TimedOut { timeout: std::time::Duration },
@@ -225,6 +231,18 @@ uses the explicit fallback remediation policy below. FieldKeyError is a nested r
 error. ALL lists every bridge-defined code once; test uniqueness and exhaustive
 variant-to-code/remediation mapping. No language binding maps these errors to
 exception classes; B.3's Result/Failure/Remediation union is the wire projection.
+
+The six operation-error enums above deliberately derive only Debug, Clone,
+Serialize and Deserialize; no Copy, Eq, PartialEq or default variant is promised.
+Their nested LifecyclePhase and FieldKeyError must also implement Debug, Clone,
+Serialize and Deserialize (LifecyclePhase additionally Copy + Eq + PartialEq).
+OperationDiagnostic already supplies the required diagnostic derives. Keep the
+native tagged serialization rules in the runtime contract. Implement Display
+and std::error::Error for all six; Display is diagnostic text, never a decoding
+protocol, and source() returns None because these values retain projected
+OperationDiagnostic data rather than native source objects. Assert trait bounds,
+clone fidelity, every variant's Serde round trip and Error/Display usability in
+B.P3; B.1 reruns those accepted fixtures. No published core derive list changes.
 
 ### Bridge variant/code and fallback remediation map
 

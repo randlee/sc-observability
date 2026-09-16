@@ -45,7 +45,10 @@ warning-denial policies can intentionally reject those warnings. Removal remains
 unscheduled. Changes to the unpublished BTIT initial design are reviewed and
 implemented before copy; no post-copy bridge public redesign is scheduled.
 
-## Validation evidence
+## Validation evidence — initial author review, 2026-09-15
+
+Historical snapshot before the later sprint splits; the current phase contains
+18 sprint records. The checks below describe the initial 15-sprint revision.
 
 - All Phase B sprint records have one authoritative deliverable, acceptance,
   validation and deletion list, explicit non-closure and dependency relations.
@@ -208,3 +211,15 @@ per backend, including native-completed calls awaiting a loop poll, with explici
 reservation cleanup and a deterministic race fixture. Native slot and observer
 capacity are separate bounds. Second author audit found no remaining correction
 target; formal critical re-review remains required.
+
+## QA follow-up — 2026-09-16
+
+Team-lead relayed quality-mgr PASS (zero blocking) for phase-b-plan-qa and requested
+these corrections before Step 5: REQ-QA-003 now maps Python-local REENTRANT to
+existing Failure.internal with a single-owned code and exact-once accounting;
+REQ-QA-001 dates the historical 15-sprint validation snapshot; REQ-QA-002 adds the
+PyPI release example; REQ-QA-004 links the platform guideline to binding matrices.
+Also specified the timer's fallible OnceLock initialization and isolated tests,
+a private shared failure-builder macro, and all six bridge operation-error derive
+lists plus trait/round-trip fixtures. These are documentation corrections, not
+implementation or a claim that Step 5 has completed.

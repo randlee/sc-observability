@@ -124,7 +124,10 @@ def bind_context(*, request_id: str | None = None,
 
 HandlerHealth always contains all cause keys, initially zero; counters saturate
 at u64::MAX and snapshots are immutable copies. Backend Failure.kind maps to the
-same-named cause; recursion uses reentrant. Additional owner-only level-change
+same-named cause. REENTRANT is a Python-local synthesized cause: the recursion
+guard records Failure.internal with SC_OBSERVABILITY_PY_HANDLER_REENTRANT using
+the exact diagnostic mapping in binding-contract.md. It is not a new wire
+Failure.kind. Increment reentrant once and do not also increment internal. Additional owner-only level-change
 errors do not arise on handler submission. Initial status is Ok(HandlerIdle).
 A filtered event is HandlerEmitted(filtered), not a drop. Each failed event
 increments one cause once; failed flush/close updates last_result without counting
@@ -205,7 +208,8 @@ bash scripts/ci/validate_python_bindings.sh
 ```
 
 Extend that script with standard logging/handler shutdown tests, formatter
-recursion, exception-redaction, ContextVar async isolation, explicit thread
+recursion (assert internal Failure tag, exact handler-reentrancy code/remediation,
+one reentrant increment and no internal double-count), exception-redaction, ContextVar async isolation, explicit thread
 transfer and Rust-host correlation tests. Required cases: empty/malformed context;
 sibling-task isolation; child inheritance without token ownership; explicit
 thread transfer; re-enter/reuse; close-before-enter, repeated close, out-of-order

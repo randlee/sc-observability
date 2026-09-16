@@ -44,3 +44,15 @@
 5. Writer-thread queueing and batching must not change the documented
    query/follow visibility contract: queued-but-unflushed records are not
    required to appear in file-backed query/follow results.
+
+## Proposed Phase B Platform Gates
+
+The baseline rules above continue to apply. Phase B's authoritative platform
+acceptance is specified in [B.3a TypeScript/Tauri](plans/phase-b/sprint-b-3a-typescript.md)
+for real IPC on macOS/Linux/Windows, and
+[B.4a Python packaging](plans/phase-b/sprint-b-4a-python-packaging.md) for all
+25 GIL CPython interpreter/platform cells, wheel tags, deployment targets and
+sdist rebuilds. B.5/B.6 rerun their added behavior on that Python matrix; B.7
+checks released artifacts. [Test strategy §7](test-strategy.md#7-proposed-phase-b-validation-ownership)
+routes the other Phase B validation owners. These proposed gates do not claim
+that new platforms or binding implementations are already qualified.

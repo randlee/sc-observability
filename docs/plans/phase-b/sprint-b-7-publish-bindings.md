@@ -61,6 +61,13 @@ dto_schema = 1
 source_commit = "<full immutable main commit>"
 
 [[artifacts]]
+kind = "pypi"
+name = "sc-observability"
+version = "<approved Python package version>"
+dto_schema = 1
+source_commit = "<full immutable main commit>"
+
+[[artifacts]]
 kind = "crates-io"
 name = "sc-observability-dto"
 version = "<approved crate version>"

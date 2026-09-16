@@ -431,6 +431,15 @@ original OperationDiagnostic or ErrorContext code/message/remediation/timestamp;
 replace a typed error by parsing its display string. Legacy health summaries
 remain summaries rather than an invented full diagnostic.
 
+HandlerDropCause.REENTRANT is a Python-local synthesized accounting cause, not
+an omitted Failure.kind or a new B.3 union variant. B.5's handler recursion guard
+records Err(Failure.internal) with code SC_OBSERVABILITY_PY_HANDLER_REENTRANT,
+message `Recursive Python logging handler invocation`, current boundary UTC time,
+and Recoverable steps `["Remove logging calls from handler formatting and error callbacks"]`.
+It increments only the local reentrant drop counter once for that rejected event,
+not the internal counter as well. Backend internal failures still map to the
+internal cause; do not infer local reentrancy from arbitrary diagnostic text/code.
+
 The B.3/B.3a/B.4 authoritative validation lists include fixtures for every union tag,
 all nested stored event/health fields, empty and multistep remediation, absent
 summary code, maximum integers, invalid decimal forms, NaN/infinity, cycles,
@@ -469,6 +478,7 @@ occurs. Capture time is boundary UTC unless an original native timestamp exists.
 | `SC_OBSERVABILITY_BINDING_TRANSPORT_UNAVAILABLE` | unavailable | Restore the host connection before submitting a new request |
 | `SC_OBSERVABILITY_BINDING_TIMEOUT` | timeout | Inspect operation status before deciding whether another operation is needed |
 | `SC_OBSERVABILITY_BINDING_CANCELLED` | cancelled | Inspect the saved operation result if confirmation is still needed |
+| `SC_OBSERVABILITY_PY_HANDLER_REENTRANT` | internal | Remove logging calls from handler formatting and error callbacks |
 | `SC_OBSERVABILITY_BINDING_INTERNAL` | internal | Inspect the retained status and restore the affected host or client |
 
 Adapter slot overlap uses SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS and
