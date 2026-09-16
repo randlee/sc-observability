@@ -37,6 +37,9 @@ pub(crate) enum TryEnqueueError {
     Disconnected,
 }
 
+pub(crate) type DiagnosticAdmitter =
+    Arc<dyn Fn(LogEvent) -> Result<(), TryEnqueueError> + Send + Sync>;
+
 pub(crate) struct WriterRuntime {
     sender: mpsc::SyncSender<WriterCommand>,
     done_rx: Mutex<mpsc::Receiver<()>>,
@@ -56,7 +59,7 @@ impl WriterRuntime {
             reason = "writer runtime construction bundles sink ownership, queue state, health trackers, and test-only harness hooks at one runtime boundary"
         )
     )]
-    pub(crate) fn new(
+    pub(crate) fn try_new(
         sinks: Vec<SinkRegistration>,
         file_sink: Option<Arc<JsonlFileSink>>,
         policy: RetainedLogPolicy,
@@ -65,7 +68,7 @@ impl WriterRuntime {
         last_error: Arc<Mutex<Option<DiagnosticSummary>>>,
         #[cfg(test)] test_pass_delay: Option<Duration>,
         #[cfg(test)] test_pass_signal: Option<Arc<TestPassDelaySignal>>,
-    ) -> Self {
+    ) -> std::io::Result<Self> {
         let writer_tracker = Arc::new(WriterTracker::new(queue_capacity));
         let maintenance_tracker = file_sink
             .as_ref()
@@ -95,10 +98,9 @@ impl WriterRuntime {
                     #[cfg(test)]
                     test_pass_signal,
                 );
-            })
-            .expect("writer thread should spawn");
+            })?;
 
-        Self {
+        Ok(Self {
             sender,
             done_rx: Mutex::new(done_rx),
             join_handle,
@@ -107,7 +109,7 @@ impl WriterRuntime {
             maintenance_tracker,
             #[cfg(test)]
             test_pass_signal: shutdown_test_pass_signal,
-        }
+        })
     }
 
     pub(crate) fn enqueue_blocking(&self, event: LogEvent) -> Result<(), TryEnqueueError> {
@@ -134,6 +136,26 @@ impl WriterRuntime {
                 }
             })?;
         Ok(())
+    }
+
+    pub(crate) fn diagnostic_admitter(&self) -> DiagnosticAdmitter {
+        let sender = self.sender.clone();
+        let tracker = self.writer_tracker.clone();
+        Arc::new(move |event| {
+            tracker.record_enqueue();
+            sender
+                .try_send(WriterCommand::Log(event))
+                .map_err(|error| match error {
+                    mpsc::TrySendError::Full(_) => {
+                        tracker.record_write_completion(1);
+                        TryEnqueueError::Full
+                    }
+                    mpsc::TrySendError::Disconnected(_) => {
+                        tracker.record_write_completion(1);
+                        TryEnqueueError::Disconnected
+                    }
+                })
+        })
     }
 
     pub(crate) fn record_queue_full_drop(&self) -> DiagnosticSummary {

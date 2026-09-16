@@ -67,7 +67,10 @@ pub use health::{
     SinkHealth, SinkHealthState, TelemetryHealthReport, TelemetryHealthState, WriterState,
 };
 #[doc(inline)]
-pub use level::{Level, LevelFilter};
+pub use level::{
+    AdmissionOutcome, ChangeDiagnostic, Level, LevelChange, LevelChangeError, LevelChangeSource,
+    LevelFilter, LevelState, OperationDiagnostic,
+};
 #[doc(inline)]
 pub use metric::{MetricKind, MetricRecord};
 #[doc(inline)]

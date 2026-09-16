@@ -7,13 +7,13 @@
     reason = "builder methods are used immediately in fluent construction, so extra must_use decoration is intentionally omitted here"
 )]
 
-use std::sync::{Arc, atomic::AtomicBool};
+use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 use sc_observability_types::{ErrorContext, InitError, Remediation};
 
 use crate::{
-    ConsoleSink, JsonlFileSink, Logger, LoggerConfig, LoggerRuntime, Running, SinkRegistration,
-    default_log_path,
+    ConsoleSink, JsonlFileSink, LevelControl, LevelOwner, Logger, LoggerConfig, LoggerRuntime,
+    Running, SinkRegistration, default_log_path,
 };
 
 /// Construction-time logger builder that owns sink registration.
@@ -84,7 +84,31 @@ impl LoggerBuilder {
     }
 
     /// Finalizes construction and returns the logger runtime.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the operating system cannot start the writer thread. New
+    /// code that needs a recoverable startup error should use
+    /// [`Self::build_with_level_owner`].
     pub fn build(self) -> Logger<Running> {
+        self.build_inner(false)
+            .expect("existing infallible builder expects writer thread startup")
+            .0
+    }
+
+    /// Finalizes construction and returns the logger with weak level ownership.
+    pub fn build_with_level_owner(
+        self,
+    ) -> Result<(Logger<Running>, LevelOwner), sc_observability_types::InitError> {
+        let (logger, control) = self.build_inner(true)?;
+        Ok((logger, LevelOwner::new(&control)))
+    }
+
+    fn build_inner(
+        self,
+        fallible_writer_start: bool,
+    ) -> Result<(Logger<Running>, Arc<Mutex<LevelControl>>), sc_observability_types::InitError>
+    {
         let Self {
             config,
             file_sink,
@@ -93,8 +117,8 @@ impl LoggerBuilder {
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let query_available = active_log_path.exists() || config.enable_file_sink;
         let retained_log_policy = config.retained_log_policy;
-        Logger {
-            runtime: LoggerRuntime::new(
+        let runtime = if fallible_writer_start {
+            LoggerRuntime::try_new(
                 query_available,
                 sinks.clone(),
                 file_sink,
@@ -104,11 +128,37 @@ impl LoggerBuilder {
                 config.maintenance_test_pass_delay,
                 #[cfg(test)]
                 config.maintenance_test_pass_signal.clone(),
-            ),
-            config,
-            sinks,
-            shutdown: Arc::new(AtomicBool::new(false)),
-            state: std::marker::PhantomData,
-        }
+            )?
+        } else {
+            LoggerRuntime::new(
+                query_available,
+                sinks.clone(),
+                file_sink,
+                retained_log_policy,
+                config.queue_capacity,
+                #[cfg(test)]
+                config.maintenance_test_pass_delay,
+                #[cfg(test)]
+                config.maintenance_test_pass_signal.clone(),
+            )
+        };
+        let diagnostic_admitter = runtime.diagnostic_admitter();
+        let control = Arc::new(Mutex::new(LevelControl::new(
+            config.level,
+            config.service_name.clone(),
+            &diagnostic_admitter,
+        )));
+        Ok((
+            Logger {
+                runtime,
+                diagnostic_admitter: Some(diagnostic_admitter),
+                config,
+                sinks,
+                shutdown: Arc::new(AtomicBool::new(false)),
+                level_control: control.clone(),
+                state: std::marker::PhantomData,
+            },
+            control,
+        ))
     }
 }

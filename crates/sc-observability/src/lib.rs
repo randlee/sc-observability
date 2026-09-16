@@ -31,8 +31,8 @@ mod sinks;
 
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 #[doc(inline)]
@@ -43,11 +43,13 @@ pub use follow::LogFollowSession;
 pub use jsonl_reader::JsonlLogReader;
 #[doc(inline)]
 pub use sc_observability_types::{
-    ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, EventError, FileCount,
-    Level, LogEvent, LogQuery, LogSinkError, LogSnapshot, LoggingHealthReport, LoggingHealthState,
-    MaintenanceHealthReport, MaintenanceWorkerState, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel,
-    ProcessIdentity, Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState,
-    SinkName, TargetCategory, Timestamp, WriterState,
+    ActionName, AdmissionOutcome, ChangeDiagnostic, Diagnostic, DiagnosticSummary, ErrorCode,
+    ErrorContext, EventError, FileCount, Level, LevelChange, LevelChangeError, LevelChangeSource,
+    LevelState, LogEvent, LogQuery, LogSinkError, LogSnapshot, LoggingHealthReport,
+    LoggingHealthState, MaintenanceHealthReport, MaintenanceWorkerState,
+    OBSERVATION_ENVELOPE_VERSION, OperationDiagnostic, OutcomeLabel, ProcessIdentity, Remediation,
+    SchemaVersion, ServiceName, SinkHealth, SinkHealthState, SinkName, TargetCategory, Timestamp,
+    WriterState,
 };
 use sc_observability_types::{LevelFilter, ProcessIdentityPolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -59,7 +61,8 @@ pub use sinks::RetainedSinkFaultInjector;
 pub use sinks::{ConsoleSink, JsonlFileSink};
 use thiserror::Error;
 
-pub(crate) use runtime::LoggerRuntime;
+pub(crate) use maintenance::DiagnosticAdmitter;
+pub(crate) use runtime::{LevelControl, LoggerRuntime};
 
 /// Rotation limits for the built-in JSONL file sink.
 ///
@@ -527,7 +530,26 @@ pub struct Logger<State = Running> {
     sinks: Vec<SinkRegistration>,
     shutdown: Arc<AtomicBool>,
     runtime: LoggerRuntime,
+    diagnostic_admitter: Option<DiagnosticAdmitter>,
+    level_control: Arc<Mutex<LevelControl>>,
     state: PhantomData<State>,
+}
+
+/// Weak authority for changing one running logger's effective level.
+///
+/// The owner deliberately retains no writer, sender, or logger handle. Dropping
+/// the logger therefore makes subsequent requests return `Stopped`.
+#[derive(Debug)]
+pub struct LevelOwner {
+    control: Weak<Mutex<LevelControl>>,
+}
+
+impl LevelOwner {
+    pub(crate) fn new(control: &Arc<Mutex<LevelControl>>) -> Self {
+        Self {
+            control: Arc::downgrade(control),
+        }
+    }
 }
 
 /// Blocking queue-admission error surface for `Logger::log(...)`.
@@ -1653,6 +1675,43 @@ mod tests {
                 .message
                 .contains("queue capacity must be greater than zero")
         );
+    }
+
+    #[test]
+    fn level_owner_changes_only_its_logger_and_filters_with_shared_admission() {
+        let root = temp_path("level-owner");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        config.level = LevelFilter::Info;
+        let (logger, mut owner) =
+            Logger::new_with_level_owner(config).expect("construct logger with owner");
+
+        assert_eq!(logger.level_state().revision, 0);
+        let changed = owner
+            .elevate_level(LevelFilter::Debug, LevelChangeSource::UserRequest)
+            .expect("elevate level");
+        assert!(matches!(changed, LevelChange::Changed { .. }));
+        assert_eq!(logger.level_state().effective_level, LevelFilter::Debug);
+        assert_eq!(logger.level_state().revision, 1);
+
+        let mut event = log_event(service_name());
+        event.level = Level::Debug;
+        assert_eq!(
+            logger.try_log_with_outcome(event).expect("debug admitted"),
+            AdmissionOutcome::Accepted
+        );
+
+        assert!(matches!(
+            owner.elevate_level(LevelFilter::Off, LevelChangeSource::Application),
+            Err(LevelChangeError::BelowBaseline { .. })
+        ));
+        let stopped = logger.shutdown();
+        assert!(matches!(
+            owner.reset_level(LevelChangeSource::Application),
+            Err(LevelChangeError::Stopped)
+        ));
+        assert_eq!(stopped.level_state().effective_level, LevelFilter::Debug);
     }
 
     #[test]
