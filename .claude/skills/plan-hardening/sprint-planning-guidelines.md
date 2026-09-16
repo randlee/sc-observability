@@ -61,9 +61,9 @@ alone would leave implementation choices open.
 ## Recommended Agent / Model
 
 Optional `recommended_agent`/`recommended_model` select from the current
-developer pool: Cipher-311d/fast for bounded or documentation work;
-cobs/deep-reasoning for algorithmic, architectural, or performance work.
-They are advice, not an assignment.
+developer pool (`cobs`, `aobs`, `lobs`) based on task fit: deep-reasoning for
+algorithmic, architectural, or performance work; fast for bounded or
+documentation work. They are advice, not an assignment.
 
 ## Dependency Relations
 

@@ -1,12 +1,13 @@
 ---
 name: 01-plan-scope-review-task
 version: 2.0.0
-description: lead assignment template for the initial cobs guidelines pass before background scope review.
+description: lead assignment template for the initial plan-author guidelines pass before background scope review.
 format: xml
 required_variables:
   - task_id
   - phase
   - description
+  - plan_author
   - worktree_path
   - branch
   - pr_target
@@ -34,7 +35,7 @@ metadata:
     transition: scope-review
     iteration_variable: round_index
 ---
-<atm-task id="{{ task_id }}" sprint="{{ phase }}" assignee="cobs" mode="plan-hardening-guidelines-pass">
+<atm-task id="{{ task_id }}" sprint="{{ phase }}" assignee="{{ plan_author }}" mode="plan-hardening-guidelines-pass">
   <description>{{ description }}</description>
 
   <worktree>{{ worktree_path }}</worktree>

@@ -7,6 +7,7 @@ required_variables:
   - task_id
   - phase
   - description
+  - plan_author
   - worktree_path
   - branch
   - pr_target
@@ -35,7 +36,7 @@ metadata:
     transition: consistency-hardening
     iteration_variable: round_index
 ---
-<atm-task id="{{ task_id }}" sprint="{{ phase }}" assignee="cobs" mode="plan-hardening-consistency">
+<atm-task id="{{ task_id }}" sprint="{{ phase }}" assignee="{{ plan_author }}" mode="plan-hardening-consistency">
   <description>{{ description }}</description>
 
   <worktree>{{ worktree_path }}</worktree>

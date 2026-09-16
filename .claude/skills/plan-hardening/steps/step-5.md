@@ -1,4 +1,7 @@
-# Step 5 — Consistency Hardening (`cobs`)
+# Step 5 — Consistency Hardening (`plan_author`)
+
+Route this step to the same `plan_author` used in Steps 1 and 3 — the agent
+who authored the plan being hardened. It is not always `cobs`.
 
 ## Execute
 
@@ -22,27 +25,28 @@ It must also carry current round metadata:
 - `previous_reviewed_commit`
 - `findings_hash`
 
-**2. Send to `cobs`**
+**2. Send to `plan_author`**
 
 ```bash
-atm send cobs --stdin < /tmp/step-5-message.xml
+PLAN_AUTHOR="$(jq -r .plan_author /tmp/plan-hardening-vars.json)"
+atm send "$PLAN_AUTHOR" --stdin < /tmp/step-5-message.xml
 ```
 
 **3. Check the response**
 
-Read the `cobs` response and confirm it contains fenced JSON.
+Read the `plan_author` response and confirm it contains fenced JSON.
 The expected output shape is specified inside
 `03-consistency-hardening.xml.j2`.
 Do not proceed to Step 6 until that fenced JSON is present and well formed.
 If the response is incomplete or malformed, send a correction request to
-`cobs` immediately.
+`plan_author` immediately.
 Save the extracted fenced JSON to `/tmp/step-5.json`.
 
 **4. Route by status**
 
 - `PASS` -> proceed to Step 6
-- `FAIL` -> re-render and re-send Step 5 to `cobs`
-- if `cobs` ACKs but responds as though the same already-fixed round is
+- `FAIL` -> re-render and re-send Step 5 to `plan_author`
+- if `plan_author` ACKs but responds as though the same already-fixed round is
   being replayed, increment `round_index`, update `round_id`, refresh
   `replay_nonce` with the current UTC timestamp, and re-render before
   re-sending

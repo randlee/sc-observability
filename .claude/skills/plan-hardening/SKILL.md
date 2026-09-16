@@ -41,15 +41,24 @@ Sprint plan approved by:
 Always use:
 - `.claude/skills/plan-hardening/sprint-planning-guidelines.md`
 
+## Plan Author
+
+`plan_author` is the agent who created (or owns) the plan being hardened —
+`cobs`, `aobs`, `lobs`, or any other dev agent on the team. It is not fixed to
+one agent: `team-lead` sets it in the vars file at kickoff based on who
+actually authored the plan in scope, and every plan-editing step (1, 3, 5)
+routes to that same agent for the duration of a single hardening run. Do not
+default it to `cobs` when a different agent wrote the plan.
+
 ## Execution Table
 
 | # | Route to | Input required | Output expected | Read before executing |
 |---|----------|----------------|-----------------|-----------------------|
-| 1 | `cobs` | vars file | `step-1` fenced JSON | `steps/step-1.md` |
+| 1 | `plan_author` | vars file | `step-1` fenced JSON | `steps/step-1.md` |
 | 2 | `plan-scope-reviewer` (background) | context + `step-1` JSON | `step-2` fenced JSON | `steps/step-2.md` |
-| 3 | `cobs` | `step-2` JSON | `step-3` fenced JSON | `steps/step-3.md` |
+| 3 | `plan_author` | `step-2` JSON | `step-3` fenced JSON | `steps/step-3.md` |
 | 4 | `critical-plan-reviewer` (background) | context + `step-3` JSON | `step-4` fenced JSON | `steps/step-4.md` |
-| 5 | `cobs` | `step-4` JSON | `step-5` fenced JSON | `steps/step-5.md` |
+| 5 | `plan_author` | `step-4` JSON | `step-5` fenced JSON | `steps/step-5.md` |
 | 6 | `quality-mgr` | `step-5` JSON + QA vars file | codex-orchestration plan-QA handoff | `steps/step-6.md` |
 
 ## Round Tracking
@@ -79,10 +88,11 @@ Use the example in:
 Cycle-cap behavior:
 
 - every `FAIL` from `plan-scope-reviewer` or `critical-plan-reviewer` must be
-  routed to `cobs` immediately through the matching plan-editing step
+  routed to `plan_author` immediately through the matching plan-editing step
 - no reviewer findings may be accepted as-is or bypass the plan-editing agent
 - if a reviewer returns `FAIL` on the final allowed reviewer cycle, `team-lead`
-  must still send those findings to `cobs` for one final correction pass
+  must still send those findings to `plan_author` for one final correction
+  pass
 - after that final correction pass, if no reviewer cycles remain, stop the
   hardening run as `cap-exhausted / not converged` and report status plainly
 - do not ask the user how to proceed, do not offer multiple-choice options,
@@ -104,7 +114,7 @@ Cycle-cap behavior:
 - if a sprint cannot credibly land its committed deliverables at a
   production-ready level, split it before implementation
 - if a reviewer loop reaches its configured cap without converging, stop after
-  routing the last findings to `cobs` and report `cap-exhausted / not
+  routing the last findings to `plan_author` and report `cap-exhausted / not
   converged`; do not continue launching background reviewers and do not ask
   the user for a decision mid-loop
 

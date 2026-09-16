@@ -1,4 +1,8 @@
-# Step 1 — Plan Scope Review (`cobs`)
+# Step 1 — Plan Scope Review (`plan_author`)
+
+Route this step to `plan_author` — the agent who authored the plan being
+hardened (`cobs`, `aobs`, `lobs`, etc.), set in the vars file. It is not
+always `cobs`.
 
 ## Execute
 
@@ -24,26 +28,27 @@ Make sure the vars file includes the current round metadata:
 - `previous_reviewed_commit`
 - `findings_hash`
 
-**2. Send to `cobs`**
+**2. Send to `plan_author`**
 
 ```bash
-atm send cobs --stdin < /tmp/step-1-message.xml
+PLAN_AUTHOR="$(jq -r .plan_author /tmp/plan-hardening-vars.json)"
+atm send "$PLAN_AUTHOR" --stdin < /tmp/step-1-message.xml
 ```
 
 **3. Check the response**
 
-Read the `cobs` response and confirm it contains fenced JSON.
+Read the `plan_author` response and confirm it contains fenced JSON.
 The expected output shape is specified inside `01-plan-scope-review.xml.j2`.
 Do not proceed to Step 2 until that fenced JSON is present and well formed.
 If the response is incomplete or malformed, send a correction request to
-`cobs` immediately.
+`plan_author` immediately.
 Save the extracted fenced JSON to `/tmp/step-1.json`.
 
 **4. Route by status**
 
 - `PASS` -> proceed to Step 2
-- `FAIL` -> re-render and re-send Step 1 to `cobs`
-- if `cobs` ACKs but returns no new fenced JSON, increment `round_index`,
+- `FAIL` -> re-render and re-send Step 1 to `plan_author`
+- if `plan_author` ACKs but returns no new fenced JSON, increment `round_index`,
   update `round_id`, refresh `replay_nonce` with the current UTC timestamp,
   and re-render Step 1 before re-sending
 
