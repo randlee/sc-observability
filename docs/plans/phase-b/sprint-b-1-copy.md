@@ -29,8 +29,8 @@ source parity is checked against the newly accepted target, not legacy behavior.
 
 ## Dependencies
 
-- `must_follow`: sc-observability target public-API contract approval and BTIT
-  completed implementation/accepted critical-review closure for that contract.
+- `must_follow`: B.P3 accepted source handoff, incorporating target contract
+  approval, B.P2 published core and BTIT completed implementation/critical review.
 - B.1a `must_follow` B.1; no binding sprint, publication or second public-API
   redesign is part of B.1.
 

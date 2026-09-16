@@ -1,6 +1,6 @@
 # SC-Observability Architecture
 
-**Status**: Approved
+**Status**: Approved baseline; ADR-011–ADR-014 proposed for Phase B review
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Related documents**:
 - [`requirements.md`](./requirements.md)
@@ -77,8 +77,8 @@ Owns:
 - `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
 - `MaintenanceHealthReport`, `MaintenanceWorkerState`, `WriterState`
 - health report contracts
-- shared open traits such as `Observable`, `DiagnosticInfo`,
-  subscribers, filters, and projectors
+- shared open traits such as `Observable`, subscribers, filters, and projectors
+- the published sealed `DiagnosticInfo` diagnostic contract
 
 Must not own:
 
@@ -848,11 +848,92 @@ Consequences:
   than silently dropping records
 - queue-full drops, writer degradation, and last-writer-error reporting are
   part of `LoggingHealthReport`
-  - `Logger::shutdown()` now drains queued events and joins the writer thread
-    within a bounded timeout rather than joining a separate maintenance worker
+  - `Logger::shutdown()` drains queued events and waits for definitive writer
+    completion; exceeding the configured timeout records degraded health but
+    does not return a stopped logger while the writer remains detached
   - `MaintenanceWorkerState` remains the retained-log maintenance health
     vocabulary, but its semantics describe writer-owned maintenance execution
     rather than an independently joinable background thread
+
+### ADR-011: Companion Boundaries And Pre-Copy Contract
+
+- **Status**: Proposed for Phase B review; does not amend accepted ADRs yet.
+- **Context**: The log bridge is being extracted from BTIT for public reuse,
+  while TypeScript and Python need shared logging without lower-layer runtime
+  dependencies. TYP-030 currently centralizes core errors and health.
+- **Proposed decision**: Keep the existing four-crate layering unchanged. Add
+  bridge/macros above core; the bridge owns only its facade/lifecycle errors,
+  health and constants. Add a neutral DTO crate for versioned wire projections,
+  with Tauri and PyO3 conversion/transport implementations above those contracts.
+  Neither DTOs nor neutral types depend on bridge runtime, Tauri, PyO3 or OTLP.
+  This is a scoped TYP-030 companion exception; existing core definitions keep
+  their owner. sc-observability accepts its target contract first, BTIT implements
+  and reviews every foreseeable bridge change before the mechanical B.1 copy.
+- **Consequences**: One host-owned writer/control boundary serves backend,
+  frontend and attached Python. Bridge ownership is unique, producer controls
+  cannot initiate shutdown, and timed-out waits retain one operation's eventual
+  result. Core shutdown still waits for definitive completion (ADR-010); bridge
+  timeout bounds the caller's wait, not writer completion. No post-copy bridge
+  redesign or BTIT dependency switch is scheduled here.
+- **Contracts**: PHB-001/002/014; [target API](plans/phase-b/target-bridge-api.md).
+
+### ADR-012: Additive Typed Errors And Warning-Only Migration
+
+- **Status**: Proposed for Phase B review.
+- **Context**: Issue #92 requests typed failure handling without a forced
+  migration of consumers of published diagnostic wrappers and extension traits.
+- **Proposed decision**: Add improved failure types, classification and operation/
+  extension entry points. Preserve the published DiagnosticInfo seal and existing
+  trait implementations/signatures and existing method-call resolution. New
+  typed extension traits must not make old unqualified calls ambiguous. Legacy
+  adapters retain metadata and wire
+  shape, and deprecation warnings identify working replacements. Never replace
+  published structs in place, add required legacy trait methods or mark existing
+  enums non-exhaustive. Total unclassified handling preserves custom diagnostics.
+- **Consequences**: One runtime implementation serves both APIs. Existing
+  consumers continue with warnings under default lints; strict warning policies
+  require deliberate migration. A practical adoption guide and old/new/custom
+  trait fixtures are release gates. No removal version or major conversion is
+  planned. Scoped API approvals review additions; they cannot authorize a break.
+- **Contracts**: PHB-003–006; [error migration](plans/phase-b/sprint-b-1a-error-api.md).
+
+### ADR-013: Owner-Controlled Shared Runtime Level
+
+- **Status**: Proposed for Phase B review.
+- **Context**: Issue #97 requires runtime verbosity changes across core, facade
+  and bindings; a bridge-only threshold cannot override core config filtering.
+- **Proposed decision**: Core owns effective state and serializes its transitions
+  with admission/shutdown. Add a separate mutation capability, read-only state
+  accessors and typed elevate/reset outcomes without changing published health
+  or config construction. Baseline is immutable; overrides are nonpersistent,
+  above-or-equal to baseline, and explicitly reset by the owner. Attached clients
+  request authorized changes from the application rather than gaining ownership.
+- **Consequences**: Core support must be released before accepted BTIT integration
+  and copy. One coherent revision identifies each actual transition. Queued events
+  are not retroactively filtered. Failed diagnostic admission is distinct from a
+  successful change and preserves queue/redaction/sink policy. Supported release
+  feature graphs retain required sites; runtime changes cannot undo compile-time
+  filtering. #96 is not a dependency; no timer/lease stack is introduced.
+- **Contracts**: PHB-007–009; [runtime contract](plans/phase-b/runtime-level-contract.md).
+
+### ADR-014: Result-Preserving Language Boundaries
+
+- **Status**: Proposed for Phase B review.
+- **Context**: Mixed Rust/Python and Tauri frontend applications need first-class
+  logging that cannot make application work fail when a log cannot be recorded.
+- **Proposed decision**: Use discriminated operational results through public
+  Rust/TypeScript/Python boundaries, versioned neutral wire values and explicit
+  checked conversions. Tauri handlers resolve tagged envelopes; Python factories
+  and waits return tagged data. Expected failures do not intentionally throw,
+  raise or panic. Convert foreign failures at the boundary. Default submissions
+  are nonblocking; optional waits never turn admission into persistence claims.
+- **Consequences**: Ignored errors are caller omissions, not hidden success.
+  Required unit-return protocol adapters retain results in bounded status.
+  Python supports owned and attached modes with explicit context transfer and
+  bounded optional waits; timeout/cancellation ends observation, not the shared
+  operation. Existing infallible Rust accessors and source contracts stay intact.
+  Node.js, Go, sc-runtime IPC/interpreters and durable receipts are deferred.
+- **Contracts**: PHB-010–014; [Phase B](plans/phase-b/plan-phase-b.md).
 
 ## 8. API-Design Consistency
 

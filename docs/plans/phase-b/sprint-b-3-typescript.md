@@ -21,6 +21,10 @@ Use [the accepted target](target-bridge-api.md); this sprint projects that publi
 API into the binding contract without a hidden-module call or a second writer.
 The binding proposals below are reviewed against the accepted target revision.
 
+The complete new DTO declarations, conversion boundaries, validation defaults
+and error mapping are incorporated from [the binding contract](binding-contract.md).
+They are part of this sprint's reviewable contract, not future design work.
+
 ## Deliverables (authoritative)
 
 1. Create `crates/sc-observability-dto/` containing checked conversions between
@@ -28,12 +32,16 @@ The binding proposals below are reviewed against the accepted target revision.
    `bindings/schema/errors-v1.json`, and `bindings/conformance/v1/` fixtures.
    Add `bindings/API-COVERAGE.md` mapping each supported public operation to
    its DTO and runtime test, with explicit exclusions. Runtime-specific tools
-   never enter this crate or the core dependency graph.
+   never enter this crate or the core dependency graph. Include LevelStateDto,
+   LevelChangeDto and all typed level errors from the runtime contract, with
+   configured/effective levels and checked decimal-string revisions in health.
 2. Create `bindings/typescript/` with a locked package/toolchain, a Rust exporter
    under `bindings/typescript/exporter/`, generated declarations, and a typed
    client with nonblocking logging and discriminated results for every operation. Pin a compatible Specta/serde exporter combination
    there; validate the emitted JSON representation, not Rust type names alone.
-   Export a transport interface and a Tauri invoke implementation. Publishable
+   Export the exact encodeValue/encodeEvent helpers in the
+   [binding contract](binding-contract.md#typescript-ergonomic-conversion-api),
+   a transport interface and a Tauri invoke implementation. Publishable
    package name proposed: `@sc-observability/client`; availability/ownership is
    checked in B.7, not assumed here.
 3. Create `bindings/tauri/` and `examples/tauri-logging/` as isolated adapter and
@@ -41,7 +49,9 @@ The binding proposals below are reviewed against the accepted target revision.
    logger/control API; the frontend cannot create or shut down the host logger.
    Host command registration, permissions, log root, targets, redaction and
    size policy are explicit. The example executes real Rust logging/query/
-   health/flush through IPC; it is not a mock-only demonstration.
+   health/flush through IPC; it is not a mock-only demonstration. Add the
+   application-owned level-request handler specified below, retaining LogGuard
+   authority in Rust and returning ordinary tagged envelopes.
 4. Create `scripts/ci/validate_typescript_bindings.sh` and a binding CI job that
    regenerate-and-diff schema/declarations, type-check, test package installation,
    exercise the real Tauri command boundary on supported desktop platforms,
@@ -65,6 +75,9 @@ export type Result<T> =
 export type Failure =
   | (Diagnostic & { kind: "validation"; field: string })
   | (Diagnostic & { kind: "queue_full" })
+  | (Diagnostic & { kind: "below_baseline"; requested: LevelFilterDto; configured: LevelFilterDto })
+  | (Diagnostic & { kind: "unsupported_level"; requested: LevelFilterDto; available: LevelFilterDto })
+  | (Diagnostic & { kind: "permission_denied" })
   | (Diagnostic & { kind: "closed" })
   | (Diagnostic & { kind: "unavailable" })
   | (Diagnostic & { kind: "io" })
@@ -74,6 +87,7 @@ export type Failure =
   | (Diagnostic & { kind: "internal" })
   | (Diagnostic & { kind: "unknown_remote"; remote_kind: string });
 export interface Diagnostic {
+  at: string; // original diagnostic timestamp, or boundary capture time for foreign failures
   code: string;
   message: string;
   remediation: RemediationDto;
@@ -86,10 +100,23 @@ export interface ObservabilityClient {
   tryLog(event: LogEventDto): Promise<Result<AdmissionDto>>;
   query(query: LogQueryDto): Promise<Result<LogSnapshotDto>>;
   health(): Promise<Result<LogHealthDto>>;
+  client_status(): Result<ClientStatus>;
   flush(timeoutMs: number): Promise<Result<CompletionDto>>;
 }
+export type ClientOutcome =
+  | { kind: "idle" }
+  | { kind: "scheduled"; operation: "log" }
+  | { kind: "accepted"; operation: "log" | "try_log" }
+  | { kind: "filtered"; operation: "log" | "try_log" }
+  | { kind: "completed"; operation: "query" | "health" | "flush" };
+export interface ClientStatus {
+  in_flight: number; // integer 0..256
+  failures_by_kind: Record<Failure["kind"], string>; // saturating u64 decimal
+  last_result: Result<ClientOutcome>;
+  last_failure: Failure | null;
+}
 export type DispatchDto = { kind: "scheduled" };
-export type AdmissionDto = { kind: "accepted" };
+export type AdmissionDto = { kind: "accepted" } | { kind: "filtered" };
 export type CompletionDto = { kind: "completed" };
 export interface JsonTransport {
   request(operation: "try_log" | "query" | "health" | "flush",
@@ -97,6 +124,60 @@ export interface JsonTransport {
 }
 export declare function createClient(transport: JsonTransport): Result<ObservabilityClient>;
 ```
+
+The following shared level values are emitted by the DTO crate and generated for
+both languages; native Rust level names map explicitly to lowercase strings.
+These are new schema-v1 types and do not alter existing core health Serde.
+
+```ts
+export type LevelFilterDto = "off" | "error" | "warn" | "info" | "debug" | "trace";
+export type LevelChangeSourceDto = "application" | "user_request" | "diagnostic_session";
+export interface LevelStateDto {
+  configured_level: LevelFilterDto;
+  effective_level: LevelFilterDto;
+  level_revision: string; // canonical unsigned u64 decimal
+}
+export interface DiagnosticSummaryDto {
+  code: string | null;
+  message: string;
+  at: string; // canonical UTC RFC3339
+}
+export interface OperationDiagnosticDto extends Diagnostic {}
+export type ChangeDiagnosticDto =
+  | { kind: "accepted" }
+  | { kind: "not_accepted"; diagnostic: OperationDiagnosticDto };
+export type LevelChangeDto =
+  | { kind: "changed"; previous: LevelStateDto; current: LevelStateDto;
+      source: LevelChangeSourceDto; diagnostic: ChangeDiagnosticDto }
+  | { kind: "unchanged"; state: LevelStateDto };
+export type LevelRequestDto =
+  | { kind: "elevate"; level: LevelFilterDto }
+  | { kind: "reset" };
+// Example application API, not a method on ObservabilityClient/LogControl:
+export declare function requestLevelChange(request: LevelRequestDto): Promise<Result<LevelChangeDto>>;
+```
+
+The example registers `sc_observability_try_log`, `sc_observability_query`,
+`sc_observability_health`, and `sc_observability_flush`. Each takes one argument
+`request` carrying schema_version 1 plus respectively `event`, `query`, no
+operation fields, or `timeout_ms`, and returns WireEnvelope of AdmissionDto,
+LogSnapshotDto, LogHealthDto, or CompletionDto. JsonTransport maps its operation
+names to those exact commands. `log` schedules the same try_log command.
+
+The example-only `app_observability_level_change` takes `request` containing
+schema_version 1 and LevelRequestDto under `change`, and returns
+WireEnvelope<LevelChangeDto>. The registered main application window is the only
+authorized caller; direct calls from other windows return permission_denied.
+The host supplies source=user_request (the caller cannot forge a source), uses
+one mutex over its LogGuard owner for level/shutdown commands, and executes the
+short mutation on its bounded host worker. No lock is held while waiting on sink
+I/O. Unknown fields, bad tags and malformed levels return validation results.
+Stopping/Stopped map to closed, BelowBaseline/UnsupportedLevel preserve their
+payloads, Unavailable maps to unavailable; diagnostic failure remains an ok
+changed value with not_accepted. The sample helper uses the same transport error
+containment as the library and never grants frontend ownership. Its fixed window
+policy is an example default; production authorization remains application-owned.
+
 
 Tauri command wrappers return an ordinary serializable WireEnvelope<T>, with
 schema_version and a flattened tagged WireResult<T>. They do not expose a native
@@ -129,9 +210,18 @@ success flag plus nullable value/error combinations that permit invalid states.
 Normal `log` validates and schedules the nonblocking host try_log request and
 returns `ok/scheduled` or an immediate error; scheduled does not mean accepted
 by the host. Later transport/admission errors update bounded client health, with
-no unhandled Promise rejection. Callers wanting host confirmation use tryLog and
-inspect its Result. Core admission includes level-filter handling and does not
-mean writing or persistence. The API explicitly distinguishes local dispatch
+no unhandled Promise rejection. client_status() reads that local status without
+IPC, including after host disconnection. Initially all failure counters/in_flight
+are zero, last_result is ok/idle and last_failure is null. Each completed
+operation replaces last_result with its payload-free ClientOutcome or Failure;
+a failure also increments its fixed kind counter and retains last_failure.
+Dispatch starts as scheduled and later becomes accepted/filtered/error; this is
+completion order, not a per-call receipt. Successful later calls do not erase
+last_failure. The status accessor itself does not change these counters/status
+or recurse; unavailable local state returns internal. Callers wanting host confirmation use tryLog and
+inspect its Result. AdmissionDto preserves Accepted versus Filtered: filtered means valid but
+excluded by the effective threshold, accepted means queued. Neither means
+writing or persistence. The API explicitly distinguishes local dispatch
 from host acknowledgement, and never upgrades dispatch into a persistence claim.
 
 All error handling is nonrecursive. If best-effort health accounting fails,
@@ -139,8 +229,10 @@ preserve the original result and do not attempt another log/fallback sink.
 No retry queue may grow without bound. The host runs blocking query/flush work
 off the UI/async executor thread. Flush timeout is an error result indicating
 that the caller stopped waiting; it does not stop or retry the underlying flush.
-Use the accepted control API or a bounded, coalesced helper that owns the
-in-flight operation. Repeated timeouts must not create unbounded threads.
+Use the accepted control API with one in-flight flush per logger. Overlapping
+requests return queue_full/SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS; a later request never shares an
+earlier flush barrier. The slot remains owned until actual completion, including
+after caller timeout. Repeated timeouts cannot create unbounded threads.
 
 The published schema is authoritative for these value shapes:
 
@@ -150,7 +242,7 @@ The published schema is authoritative for these value shapes:
 | LogQueryDto | `schema_version: 1`, nullable service/target/action/request_id/correlation_id/since/until filters, levels array, field_matches array, integer limit 1..1000 (default 100), order oldest_first/newest_first mapped to core ordering |
 | LogSnapshotDto | `schema_version: 1`, full stored event projections and `truncated`; bounded snapshot, no continuation cursor or pagination promise |
 | Stored event projection | Every public `LogEvent` field, including schema version, timestamp, service, identity, trace and outcome; explicit conversion inventory in API-COVERAGE |
-| LogHealthDto | `schema_version: 1`, full public logging health projection, nullable bridge health projection if host uses the bridge; no mutable ownership handle |
+| LogHealthDto | `schema_version: 1`, full public logging health projection, nullable bridge health projection if host uses the bridge; required `level_state: LevelStateDto`, no mutable ownership handle |
 
 Frontend and backend events use the same host-owned writer and health state.
 The example logs one correlated operation from TypeScript and Rust, proving both
@@ -160,7 +252,7 @@ source language/channel using protected metadata that frontend fields cannot
 overwrite. Redaction and retention are applied by the same host policy.
 
 All wire property names use snake_case. Missing optional input fields normalize
-to null; output nullable fields are present. Unknown schema versions and unknown
+to null; output nullable fields are present. Unknown schema versions produce unsupported_version; unknown
 input fields produce stable validation errors. Additive optional output fields
 are accepted; changed required fields/tags/meaning require a new schema version.
 Adding or changing a Result/Failure/Remediation variant can break exhaustive
@@ -189,7 +281,7 @@ pre-existing unredacted history; access remains host-authorized.
 ## Acceptance criteria (authoritative)
 
 - AC1: A clean TypeScript consumer installs the packed package and uses all five
-  operations through real Tauri IPC with expected JSONL/query/health results,
+  remote operations through real Tauri IPC with expected JSONL/query/health results,
   including correlated frontend/Rust backend records in one application log.
 - AC2: Rust JSON, generated declarations, runtime validators and fixture results
   agree, including every Result/Failure variant, exhaustive TypeScript narrowing,
@@ -202,9 +294,20 @@ pre-existing unredacted history; access remains host-authorized.
   and failed diagnostic accounting, do not throw or trigger unhandled Promise
   rejections. Factory, validation, query, health and lifecycle errors also return
   Result rather than throwing/rejecting; tests fail on a hidden exception path.
-  The host stays responsive during blocked I/O.
-- AC4: Generated drift fails CI; core dependency/API invariants remain intact.
+  The host stays responsive during blocked I/O. After disconnected-host and
+  delayed admission failures, client_status exposes the retained local error
+  without IPC, bounded fixed-kind counts and correct in_flight recovery; remote
+  health cannot substitute for this local evidence.
+- AC4: Baseline/elevation/reduce/reset/repeat/Off scenarios produce coherent
+  core/bridge/frontend health; maximum revision survives round-trip. Unauthorized
+  window/direct invoke and malformed requests return tagged failures. Queue-full
+  change diagnostics preserve successful change outcomes; capped/lifecycle
+  mutation failures preserve prior state. Admission accepted/filtered fixtures
+  and diagnostic message and remediation steps round-trip without information loss.
+- AC5: Generated drift fails CI; core dependency/API invariants remain intact.
   Packed TypeScript and packaged Rust adapter artifacts work outside the repo.
+  The packed consumer exercises ergonomic integer conversion through real
+  logging/query; invalid/cyclic/getter-failing inputs return typed errors.
 
 ## Required validation (authoritative)
 
@@ -219,7 +322,10 @@ bash scripts/ci/validate_docs_consistency.sh
 The new script checks authored TypeScript/Rust adapter paths for throw/panic/
 unwrap-based operational control flow, runs fault injection on every public
 Result-returning path, and compiles exhaustive Result/Failure narrowing fixtures.
-Foreign transport failures must be converted without escaping.
+Foreign transport failures must be converted without escaping. Include real
+level-command authorization, owner/shutdown races, health coherence,
+accepted/filtered distinction and every level-result/error fixture; a mock-only
+endpoint test does not satisfy these checks.
 
 The new script owns exact locked exporter/package-manager commands, temporary
 package-consumer installation, and Rust/IPC integration tests, and fails if any
@@ -242,12 +348,3 @@ lifecycle ownership. Preserve the narrow public logging subset explicitly.
 host/client split. [Specta integer export policy](https://docs.rs/specta/latest/specta/ts/enum.BigIntExportBehavior.html)
 requires a wire encoding that agrees with generated types; merely exporting
 `bigint` is insufficient for JSON.
-
-## Runtime level contract integration
-
-Apply the accepted [runtime-level contract](runtime-level-contract.md) in the
-shared health DTO/conformance fixtures: configured_level, effective_level and
-level_revision must agree across Rust and attached language clients. Convert
-revision through the existing checked integer policy. Attached clients carry
-no owner capability. UI requests route through the application-owned handler;
-its typed outcomes distinguish mutation failure from change-diagnostic failure.

@@ -15,6 +15,10 @@ with typed Python values, deterministic lifecycle behavior and installable wheel
 conformance fixtures, rather than creating a second schema authority. B.5
 `must_follow` B.4 for idiomatic Python integration; B.7 owns publication.
 
+The complete new DTO declarations, conversion boundaries, validation defaults
+and error mapping are incorporated from [the binding contract](binding-contract.md).
+They are part of this sprint's reviewable contract, not future design work.
+
 ## Deliverables (authoritative)
 
 1. Create the isolated mixed Rust/Python project
@@ -29,7 +33,8 @@ conformance fixtures, rather than creating a second schema authority. B.5
    instances share
    an application-provided backend and never create a second writer or own host
    shutdown. A synchronization layer separates Python lifetime from in-flight
-   Rust operations; add `examples/rust-python-logging/` to prove attachment.
+   Rust operations. Owned instances retain LevelOwner and expose elevate/reset;
+   attached instances expose only shared read-only level health. Add `examples/rust-python-logging/` to prove attachment.
    Convert to
    owned Rust inputs while attached, then detach around blocking backend calls, query,
    flush, shutdown and synchronization waits. Python callbacks are excluded.
@@ -78,6 +83,9 @@ class Logger:
     def flush(self, timeout_ms: int = 2000) -> Result[Completion]: ...
     def shutdown(self, timeout_ms: int = 2000) -> Result[LogHealth]: ...
     def wait_stopped(self, timeout_ms: int = 2000) -> Result[LogHealth]: ...
+    def elevate_level(self, level: LevelFilter,
+                      source: LevelChangeSource = "application") -> Result[LevelChange]: ...
+    def reset_level(self, source: LevelChangeSource = "application") -> Result[LevelChange]: ...
 ```
 
 Factory construction replaces a public fallible __init__. DTO decoding and
@@ -93,7 +101,7 @@ Rust embedding surface (uses public DTO/error types from the shared contract):
 
 ```rust
 pub trait HostLoggingBackend: Send + Sync {
-    fn try_log(&self, event: LogEventDto) -> Result<(), Failure>;
+    fn try_log(&self, event: LogEventDto) -> Result<AdmissionDto, Failure>;
     fn query(&self, query: LogQueryDto) -> Result<LogSnapshotDto, Failure>;
     fn health(&self) -> Result<LogHealthDto, Failure>;
     fn flush(&self, timeout: std::time::Duration) -> Result<(), Failure>;
@@ -104,8 +112,20 @@ pub fn install_host_logger(
 ) -> Result<(), Failure>;
 ```
 
-The module exposes the result-returning host factory above; no attached host
-produces an unavailable variant. AttachedLogger exposes log/query/health/flush
+Host installation is immutable and once per PyO3 module instance. The first
+install stores a backend Arc in module state; any repeat, even the same Arc,
+returns unavailable with SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED and
+leaves the first backend unchanged. No replacement/reset API ships. Concurrent
+installs use one atomic winner; losers return that same error. get_host_logger
+before installation returns unavailable with
+SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED. Each attached handle retains the
+backend Arc so removing the module does not create a dangling reference; backend
+implementations must keep only nonowning control of the host logger and never
+retain its lifecycle owner. Existing handles observe closed after host shutdown,
+even if module/handle/backend references remain. Interpreter teardown releases
+module-owned state without calling Python or shutting down the host.
+
+The module exposes the result-returning host factory above. AttachedLogger exposes log/query/health/flush
 with the same Result signatures as Logger, without shutdown or wait_stopped. Host shutdown or Python handle drop never
 transfers host lifecycle ownership. Backend methods must release locks before
 blocking on writer operations and return stable closed outcomes after host stop.
@@ -130,8 +150,19 @@ accepted. `log(event)` performs nonblocking admission through public Rust try_lo
 and returns Result[Admission]. It never waits for queue capacity or I/O. Queue-full,
 invalid fields, conversion/formatting errors and unavailable/closed host are tagged
 errors, not exceptions. The caller can ignore the result for fire-and-forget usage
-or handle it at a higher level. A successful admission includes core level-filter
-handling; it is not proof of persistence. Already accepted events that fail later
+or handle it at a higher level. Admission is the generated union of accepted and filtered values: accepted
+means queue admission, filtered means valid but excluded by threshold. Neither
+is proof of persistence. The core implementation uses the additive
+try_log_with_outcome API, not a guessed outcome from legacy Result<()>.
+LevelFilter and LevelChangeSource are Literal unions matching B.3; LevelState,
+LevelChange and ChangeDiagnostic are generated frozen dataclasses matching its
+field names and discriminator tags, with Python exact ints for revisions and
+checked decimal-string encoding on wire. Owned operations serialize with
+shutdown over the same owner lock, never holding it for sink I/O. Invalid
+level/source arguments return validation; all runtime mutation failures preserve
+B.3's tagged error mapping and every diagnostic. A successful change whose
+logging failed remains Ok(changed/not_accepted). AttachedLogger and
+HostLoggingBackend expose no elevation/reset methods. Already accepted events that fail later
 are reported through the discriminated health snapshot, not retroactive failure
 on the producer call.
 
@@ -149,7 +180,8 @@ operations may finish; later log/query/flush calls return Err with a closed
 variant. A caller ignoring that result remains unaffected. `health` and `wait_stopped` remain usable. Repeated shutdown waits on the
 same completion; it never starts a second core shutdown. A worker failure is
 observable via the saved stable error. Read-only handles cannot prevent final
-ownership transfer indefinitely. Outstanding flush helpers are coalesced/bounded.
+ownership transfer indefinitely. One in-flight flush slot is retained until completion; concurrent requests
+return queue_full/SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS without coalescing distinct barriers.
 
 GC finalization schedules bounded best-effort cleanup once without an unbounded
 interpreter-thread wait and records the result if possible. It never raises or
@@ -169,6 +201,8 @@ hiding them behind __exit__'s boolean protocol or masking application exceptions
   borrow-check exceptions as lifecycle policy. Two owned instances remain isolated; an attached instance instead shares the
   host log/health/correlation and cannot shut it down or silently open a second
   writer. Host shutdown while Python is active produces stable closed outcomes.
+  Missing host, duplicate install and concurrent install follow the once-per-module
+  contract; module teardown and surviving handles never shut down the host.
 - AC3: Timeout then late completion/failure is observed through wait_stopped;
   shutdown runs once; post-stop health persists; explicit and GC cleanup paths
   pass subprocess tests without process hangs or implicit global logger install.
@@ -178,7 +212,14 @@ hiding them behind __exit__'s boolean protocol or masking application exceptions
   flush/shutdown errors. Failed diagnostic accounting preserves the original
   result; recursion is rejected and counted once. Typed examples demonstrate
   both exhaustive handling and intentional omission of the returned result.
-- AC5: Wheel and source distributions contain stubs, py.typed and all required
+- AC5: Owned baseline/elevate/reduce/reset/repeat/Off and late-owner lifecycle
+  cases agree with Rust and B.3 fixtures, including invalid input, unsupported
+  levels where applicable, queue-full diagnostic failure and revision overflow.
+  Attached health follows host changes with exact revisions but exposes no owner
+  mutation methods. Concurrent mutation/shutdown stays typed and isolated between
+  independent owned instances. Admission accepted/filtered and diagnostic message and remediation
+  steps survive Rust/Python/wire conversion.
+- AC6: Wheel and source distributions contain stubs, py.typed and all required
   Rust sources or resolvable registry dependencies. Installation/type checking
   succeeds outside the monorepo; imported core API/dependency gates still pass.
 
@@ -200,7 +241,17 @@ Development installs alone do not satisfy validation. Add static checks against
 authored raise/panic/unwrap-based operational control flow, fault injection for
 every public Result path (including factories and health), and Python type-check
 fixtures that exhaustively narrow Result/Failure variants. Foreign PyO3/formatter
-errors must be converted at the boundary without escaping.
+errors must be converted at the boundary without escaping. Explicit host-lifetime
+fixtures cover get_host_logger before installation; second installation with
+both the same and a different backend; simultaneous installs with exactly one
+winner and one HOST_ALREADY_INSTALLED result; module collection with live attached
+handles; backend retention until the last module/handle reference is gone; host
+shutdown while handles survive; and interpreter teardown without calling Python
+or shutting down the application-owned logger. No race test may accept two
+successful installations or conceal a replacement by comparing only pointers. Include real owned
+mutation and attached-host health tests, threaded owner/shutdown races,
+accepted/filtered fixtures, full remediation round-trips and every level union
+variant; validate generated stubs and runtime values together.
 
 ## Paths to delete
 
@@ -222,15 +273,3 @@ requires explicit concurrency design beyond releasing the GIL.
 requires distinct linking configuration for embedding and extension builds.
 [Maturin mixed-project guidance](https://www.maturin.rs/tutorial.html?highlight=stable)
 informs the extension/package layout and wheel validation.
-
-## Runtime level contract integration
-
-Apply the accepted [runtime-level contract](runtime-level-contract.md) in the
-shared health DTO/conformance fixtures: configured_level, effective_level and
-level_revision must agree across Rust and attached language clients. Convert
-revision through the existing checked integer policy. Attached clients carry
-no owner capability. UI requests route through the application-owned handler;
-its typed outcomes distinguish mutation failure from change-diagnostic failure.
-Python owned mode exposes elevate_level/reset_level as typed-result wrappers
-over its owner capability; attached mode does not. Include baseline/reset and
-ownership restrictions in the required integration tests.

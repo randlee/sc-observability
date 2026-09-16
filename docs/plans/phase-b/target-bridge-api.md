@@ -38,12 +38,14 @@ an explicit family disposition before the contract gate is accepted.
 | `DropCause`; ALL and current seven variants/derives | Preserve all | QueueFull, InvalidEvent, WriterDegraded, ShutdownTimedOut, NotInstalled, LoggerPanicked, ReentrantEmit; new direct-path errors map to these existing accounting categories |
 | `DEFAULT_DROP_SHUTDOWN_TIMEOUT` | Preserve | Duration = 2 seconds; fallback wait limit, not a second shutdown operation |
 | `LogGuard`; Debug, must_use, !Clone | Preserve shape of ownership; revise shutdown coordination | Sole owner; opaque fields; Send+Sync; consumers share LogControl rather than Arc<LogGuard> |
+| `LogGuard::elevate_level` / `reset_level` | Add before copy | Owner-only Result methods defined by [runtime contract](runtime-level-contract.md); never added to LogControl |
+| Runtime level value/error re-exports and BridgeHealthReport level fields | Add before copy | Core-owned definitions and coherent configured/effective/revision snapshot |
 | `LogGuard::flush` | Preserve signature; revise post-stop behavior | `(&self, Duration) -> Result<(), FlushError>`; no success on a stopped/nonrunning logger |
 | `LogGuard::shutdown` | Preserve signature; revise completion ownership | `(self, Duration) -> Result<(), ShutdownError>`; exactly one operation, deadline includes contention, late result retained |
 | `LogGuard::dropped_events` | Preserve | `(&self) -> DroppedEvents` infallible snapshot accessor |
 | `LogGuard::active_log_path` | Preserve | `(&self) -> Option<&Path>`; init-cached path, None if file sink disabled |
 | `Drop for LogGuard` | Revise behavior intentionally | Starts final shutdown at most once; waits at most fallback timeout; preserves outcome for extant controls; cannot panic or start a second attempt |
-| `InitError` and variants/code()/remediation() | Revise payloads; add RuntimeStart | Serializable typed diagnostics replace opaque native source objects; see definitions below |
+| `InitError` and variants/code()/remediation() | Revise payloads; add RuntimeStart/UnsupportedLevel | Serializable typed diagnostics replace opaque native source objects; see definitions below |
 | `FlushError` and variants/code()/remediation() | Revise payloads; add NotRunning | Stop/timeout/helper failure remain distinct typed paths |
 | `ShutdownError` and variants/code()/remediation() | Revise payloads; retain four named cases | Timeout is a waiting error, not terminal completion; final results are separately observable |
 | `error_codes` module, seven named constants, ALL | Preserve existing names/string values; extend registry | Existing code meanings remain stable; new cases get the constants listed below |
@@ -74,13 +76,16 @@ All types below are bridge-owned companion contracts under an explicit scoped
 TYP-030 exception; core types remain owned by sc-observability-types. Pure data
 has Debug/Clone/PartialEq plus serde Serialize/Deserialize; value enums without
 payloads additionally have Copy/Eq. Native enum serialization uses snake_case
-discriminants; B.3 projects the language wire format rather than exposing native
+discriminants. Payload enums use `#[serde(tag = "kind", content = "value",
+rename_all = "snake_case")]`; unit-only enums serialize their snake_case string.
+Struct fields use snake_case and only active variant payloads are serialized.
+B.3 projects the language wire format rather than exposing native
 Duration, PathBuf or large integers directly. Opaque LogControl is Debug/Clone/
 Send/Sync, not Serialize; LogGuard is Debug/Send/Sync, not Clone or Serialize.
 
 Re-export the defining neutral types needed by public signatures: LogEvent,
 LogQuery, LogSnapshot, CorrelationId, TraceContext, OutcomeLabel,
-LoggingHealthReport and DiagnosticSummary. Re-export core Level as `EventLevel`
+LoggingHealthReport and OperationDiagnostic. Re-export core Level as `EventLevel`
 so the existing tracing-style `Level` name retains its meaning. The input record
 is a typed producer description, not permission to replace host identity:
 
@@ -125,31 +130,38 @@ the API remain caller code.
 
 ## Error and completion signatures
 
-`DiagnosticSummary` is the existing code/message/remediation data type. Replace
-opaque source objects in the three old error enums with typed diagnostic data;
-this payload change is explicitly intentional. Preserve original native codes
-and remediation in wrappers, never parse Display strings or infer retry policy.
+`OperationDiagnostic` is the additive neutral code/message/remediation/timestamp
+value defined by the [runtime-level contract](runtime-level-contract.md) and
+published by B.P2. The existing DiagnosticSummary has only optional code, message
+and timestamp; it cannot preserve remediation and remains unchanged. Convert
+from an original Diagnostic/ErrorContext before reducing to a summary. Where a
+core API exposes only summary data, use the explicit operation-specific fallback
+remediation below rather than claiming original remediation survived.
+Replace opaque source objects in the unpublished bridge's three old error enums
+with OperationDiagnostic; no published core error or summary changes shape.
 
 ```rust
 pub enum InitError {
     AlreadyInitialized,
     ForeignLoggerInstalled,
-    IdentityResolution { diagnostic: DiagnosticSummary },
-    Logger { diagnostic: DiagnosticSummary },
-    RuntimeStart { diagnostic: DiagnosticSummary },
+    UnsupportedLevel { configured: LevelFilter, available: LevelFilter },
+    IdentityResolution { diagnostic: OperationDiagnostic },
+    Logger { diagnostic: OperationDiagnostic },
+    RuntimeStart { diagnostic: OperationDiagnostic },
 }
 pub enum FlushError {
     TimedOut { timeout: std::time::Duration },
-    Logger { diagnostic: DiagnosticSummary },
-    HelperSpawn { diagnostic: DiagnosticSummary },
-    HelperLost { diagnostic: DiagnosticSummary },
+    Logger { diagnostic: OperationDiagnostic },
+    HelperSpawn { diagnostic: OperationDiagnostic },
+    HelperLost { diagnostic: OperationDiagnostic },
+    InProgress,
     NotRunning { phase: LifecyclePhase },
 }
 pub enum ShutdownError {
     TimedOut { timeout: std::time::Duration },
-    FinalFlush { diagnostic: DiagnosticSummary },
-    HelperSpawn { diagnostic: DiagnosticSummary },
-    HelperLost { diagnostic: DiagnosticSummary },
+    FinalFlush { diagnostic: OperationDiagnostic },
+    HelperSpawn { diagnostic: OperationDiagnostic },
+    HelperLost { diagnostic: OperationDiagnostic },
 }
 pub enum FieldKeyError {
     Empty,
@@ -158,31 +170,31 @@ pub enum FieldKeyError {
 }
 pub enum EmitError {
     InvalidField { raw_key: String, reason: FieldKeyError },
-    InvalidEvent { diagnostic: DiagnosticSummary },
-    QueueFull { diagnostic: DiagnosticSummary },
-    WriterDegraded { diagnostic: DiagnosticSummary },
-    ShutdownTimedOut { diagnostic: DiagnosticSummary },
+    InvalidEvent { diagnostic: OperationDiagnostic },
+    QueueFull { diagnostic: OperationDiagnostic },
+    WriterDegraded { diagnostic: OperationDiagnostic },
+    ShutdownTimedOut { diagnostic: OperationDiagnostic },
     NotRunning { phase: LifecyclePhase },
     Reentrant,
     Panicked,
 }
 pub enum ControlError {
     NotRunning { phase: LifecyclePhase },
-    Query { diagnostic: DiagnosticSummary },
-    Unavailable { diagnostic: DiagnosticSummary },
+    Query { diagnostic: OperationDiagnostic },
+    Unavailable { diagnostic: OperationDiagnostic },
 }
 pub enum WaitError {
     NotStarted,
     TimedOut { timeout: std::time::Duration },
-    Unavailable { diagnostic: DiagnosticSummary },
+    Unavailable { diagnostic: OperationDiagnostic },
 }
 pub enum UnconfirmedShutdown {
-    HelperSpawn { diagnostic: DiagnosticSummary },
-    HelperLost { diagnostic: DiagnosticSummary },
+    HelperSpawn { diagnostic: OperationDiagnostic },
+    HelperLost { diagnostic: OperationDiagnostic },
 }
 pub enum ShutdownOutcome {
     Stopped,
-    StoppedWithFlushError { diagnostic: DiagnosticSummary },
+    StoppedWithFlushError { diagnostic: OperationDiagnostic },
     Unconfirmed { cause: UnconfirmedShutdown },
 }
 pub struct ShutdownReport {
@@ -195,23 +207,66 @@ pub struct BridgeHealthReport {
     pub dropped: DroppedEvents,
     pub lifecycle: LifecyclePhase,
     pub active_log_path: Option<std::path::PathBuf>,
+    pub configured_level: LevelFilter,
+    pub effective_level: LevelFilter,
+    pub level_revision: u64,
 }
 ```
 
 Every public failure enum has `code(&self) -> ErrorCode` and
 `remediation(&self) -> Remediation`. Add these prefixed registry constants:
 RUNTIME_START_FAILED, NOT_RUNNING, INVALID_FIELD, REENTRANT_EMIT, LOGGER_PANICKED,
-STATUS_UNAVAILABLE, SHUTDOWN_NOT_STARTED. Existing helper/timeout constants apply
+STATUS_UNAVAILABLE, SHUTDOWN_NOT_STARTED, FLUSH_IN_PROGRESS, UNSUPPORTED_LEVEL. Existing helper/timeout constants apply
 to the corresponding new observation variants; wrapped core diagnostics preserve
-their native code. FieldKeyError is a nested reason, not an independent operation
+their native code and remediation. OperationDiagnostic.code is mandatory;
+summary-only input uses STATUS_UNAVAILABLE if its optional code is absent and
+uses the explicit fallback remediation policy below. FieldKeyError is a nested reason, not an independent operation
 error. ALL lists every bridge-defined code once; test uniqueness and exhaustive
 variant-to-code/remediation mapping. No language binding maps these errors to
 exception classes; B.3's Result/Failure/Remediation union is the wire projection.
 
+### Bridge variant/code and fallback remediation map
+
+All bridge codes below use the SC_OBSERVABILITY_LOG_ prefix. Wrapped
+OperationDiagnostic values return their contained code/remediation unchanged.
+For native ErrorContext/Diagnostic input, copy those fields exactly. Where only
+DiagnosticSummary or a foreign helper error exists, use the listed fallback;
+never parse Display text, infer recoverability from text, or invent an original
+source chain. Expected operational errors return these data values, not throws.
+
+| Variant family | Code | Fallback remediation |
+| --- | --- | --- |
+| InitError::AlreadyInitialized | ALREADY_INITIALIZED | NotRecoverable: reuse the existing logger; do not reinstall |
+| InitError::UnsupportedLevel | UNSUPPORTED_LEVEL | NotRecoverable: rebuild with the required static level support or choose a supported startup baseline |
+| InitError::ForeignLoggerInstalled | FOREIGN_LOGGER_INSTALLED | NotRecoverable: choose one application logger before startup |
+| InitError::IdentityResolution | IDENTITY_RESOLUTION_FAILED unless a native diagnostic exists | Recoverable: repair identity configuration, then explicitly retry initialization |
+| InitError::RuntimeStart | RUNTIME_START_FAILED | Recoverable: inspect thread/resource availability, then explicitly retry initialization |
+| InitError::Logger, FlushError::Logger, ShutdownError::FinalFlush | native diagnostic code; summary code if present; otherwise STATUS_UNAVAILABLE | NotRecoverable: inspect logger health and original diagnostic; no automatic retry or success claim |
+| FlushError::TimedOut | FLUSH_TIMED_OUT | Recoverable: inspect health and await the existing operation; do not spawn another helper |
+| ShutdownError::TimedOut | SHUTDOWN_TIMED_OUT | Recoverable: use control.wait_stopped to observe the original shutdown |
+| helper-spawn variants | HELPER_SPAWN_FAILED | NotRecoverable: inspect resource availability and logger health; lifecycle completion is unconfirmed |
+| helper-lost variants | HELPER_LOST | NotRecoverable: inspect saved lifecycle/health; do not claim worker completion |
+| FlushError::InProgress | FLUSH_IN_PROGRESS | Recoverable: wait for the in-flight flush to finish before an explicit new request |
+| FlushError/EmitError/ControlError::NotRunning | NOT_RUNNING | NotRecoverable: stop submitting through this logger and inspect lifecycle |
+| EmitError::InvalidField | INVALID_FIELD | Recoverable: repair the rejected field keys before explicit resubmission |
+| EmitError::InvalidEvent/QueueFull/WriterDegraded/ShutdownTimedOut | contained native code | Preserve the native diagnostic remediation |
+| EmitError::Reentrant | REENTRANT_EMIT | NotRecoverable: remove logging from formatter/redactor/diagnostic callbacks |
+| EmitError::Panicked | LOGGER_PANICKED | NotRecoverable: repair the panicking callback; do not retry implicitly |
+| ControlError::Query | contained native code | Preserve native query diagnostic; summary-only uses NotRecoverable inspection guidance |
+| ControlError/WaitError::Unavailable | STATUS_UNAVAILABLE | NotRecoverable: inspect logger health and lifecycle evidence |
+| WaitError::NotStarted | SHUTDOWN_NOT_STARTED | Recoverable: request shutdown from the owner before waiting |
+| WaitError::TimedOut | SHUTDOWN_TIMED_OUT | Recoverable: call wait_stopped again to observe the same operation |
+
+Fallback Recoverable values retain nonempty ordered action steps; diagnostic
+message is a separate field. NotRecoverable values retain their justification. They never authorize an
+automatic retry. FieldKeyError remains a nested reason under INVALID_FIELD.
+
 ## Lifecycle and admission contract
 
 - Initialization establishes one owner and an independently retained completion
-  state. Failure to start required lifecycle machinery is RuntimeStart; it must
+  state. A baseline above log::STATIC_MAX_LEVEL fails initialization with
+  UnsupportedLevel before global installation or a usable writer is created.
+  Core-only loggers have no facade ceiling. Failure to start required lifecycle machinery is RuntimeStart; it must
   not leave a usable partial global installation.
 - Running accepts direct and compatibility records. Check the selected level
   before queue admission: Filtered means no enqueue, Accepted means successful
@@ -231,8 +286,14 @@ exception classes; B.3's Result/Failure/Remediation union is the wire projection
   A failed final flush remains distinguishable from an unconfirmed join.
 - Health/path/counter snapshots remain inspectable after stop or owner timeout;
   query and flush reject nonrunning use. Final health is retained without requiring
-  the consumed Logger to remain borrowable. All helper counts/queues are bounded;
-  coalesce overlapping flushes, and do not spawn a detached thread per timeout.
+  the consumed Logger to remain borrowable. At most one native flush is in flight
+  per logger. A concurrent request returns FlushError::InProgress immediately;
+  no implicit retry or coalescing across different admission barriers. A timeout
+  leaves the slot occupied until completion. Initialization reserves one lifecycle
+  coordinator; shutdown is executed once by it, with at most one final shutdown
+  operation. Do not spawn a thread per timeout. Completion waiters are synchronous
+  caller-owned waits with no retained per-waiter native registration; async
+  adapters enforce their own bounded waiter counts.
 - Direct and ignored-result facade paths count each failed record exactly once.
   Filtered records are not drops. Failed diagnostic accounting cannot replace an
   operation result with a panic, recursion, retry or success.
@@ -284,6 +345,20 @@ All bridge changes foreseeable in this proposal are BTIT pre-migration work.
 Do not defer an identified target-contract change to a planned post-copy API
 revision. Future unforeseen changes can be reviewed after migration without
 creating a speculative redesign workstream now.
+
+## Required error and corner-case fixtures
+
+B.P3 owns bridge integration fixtures and B.1 reruns the accepted set: every
+InitError/FlushError/ShutdownError/EmitError/ControlError/WaitError variant and
+its stable code/remediation; native enum Serde roundtrip; repeated/foreign/failed
+install; resolver failure then retry; invalid/empty/reserved/colliding field keys;
+formatter panic and nested logging; direct accepted versus filtered outcomes;
+queue saturation; running/stopping/stopped/failed health and operations; concurrent
+flush InProgress, timeout then late flush completion, zero-duration timeout;
+shutdown during flush, retained controls after owner drop, repeated wait_stopped,
+helper-spawn/lost-helper failures and final-flush failure without false stopped
+claims. Fault accounting failure never replaces the original result. Include the
+runtime-level transition/diagnostic/static-cap matrix from its contract.
 
 No reviewer approval, source readiness or contract freeze is asserted by the
 current proposed status.

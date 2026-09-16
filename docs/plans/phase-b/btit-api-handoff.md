@@ -17,17 +17,17 @@ changes explicitly. The current target proposal is not itself an approved freeze
    including exact lifecycle/control/direct-submit/health/error signatures,
    variant/code mapping, facade compatibility policy, field-key/collision rules,
    identity, global-install behavior and initial version policy.
-2. sc-observability publishes the reviewed core capability from the
+2. B.P1 implements and B.P2 publishes the reviewed core capability from the
    [runtime-level contract](runtime-level-contract.md). BTIT integrates its
    owner-only setters, shared filtering and health before migration.
-   BTIT completes implementation against that accepted contract, resolves its
+   B.P3: BTIT completes implementation against that accepted contract, resolves its
    critical-review findings, and obtains acceptance. The review remains in BTIT
    at `docs/plans/phase-a/review-a-5.md`; it records the adopted target revision,
    full resulting source SHA and focused/cross-platform evidence.
 3. B.1 copies only the accepted generic source and verifies its exported API and
    behavior against that locked target. The copy is mechanical; no second
    destination API redesign is scheduled afterward.
-4. B.1a adds the destination core error API and warning-only legacy adapters,
+4. B.1a–B.1e add the destination core error API and warning-only legacy adapters,
    preserving the accepted bridge contract; it does not schedule bridge redesign.
    B.2 publishes the core update and companion pair. B.3–B.6 implement the destination-owned
    TypeScript/Python/async binding proposals; B.7 publishes those artifacts.

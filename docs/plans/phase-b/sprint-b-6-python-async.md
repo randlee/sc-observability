@@ -14,6 +14,9 @@ callers asynchronously observe submission or flush completion. `must_follow`
 B.5: reuse B.4 runtime ownership and B.5 context capture/standard logging.
 B.7 `must_follow` this sprint for publication. This closes an asyncio client
 capability without selecting sc-runtime's parallel-worker architecture.
+Shared Python runtime/conformance artifacts preclude parallel_safe execution.
+Parent pushes trigger merge-forward before child development/fix rounds and
+parent PR merge precedes child completion, as defined in the phase index.
 
 ## Deliverables (authoritative)
 
@@ -78,8 +81,9 @@ receipt retains the final admission Result, including any later error.
 B.4's in-process try_log backend may resolve the receipt before submit returns.
 A caller ignoring the returned Result causes no warning, escalation, or retry.
 
-An Ok admission includes core level-filter handling; it is not proof of writing
-or durability. Queue-full/closed/validation/backend failures use the corresponding
+An Ok admission preserves the accepted/filtered discriminator from the backend.
+Filtered means no enqueue; accepted means queue admission, not writing or
+durability. Queue-full/closed/validation/backend failures use the corresponding
 Failure variant. Distinguish immediate submission failure, pending confirmation,
 and resolved admission explicitly; no successful result may hide a known failure.
 
@@ -93,22 +97,49 @@ starts or a loop that never executes it is controlled by asyncio; the submission
 still exists independently and remains inspectable through the receipt. There
 is no exception-based cancellation API implemented inside the library.
 
-Other waiters can still observe final completion. An ignored receipt never
+Other receipt waiters can still observe final admission completion. An ignored receipt never
 creates an unawaited-coroutine warning, unhandled Future exception, or logger-owned
 collection that grows without bound. Best-effort health accounts for failures
 even when no receipt is observed. If accounting fails, preserve the original
 Result without raising or attempting to log the accounting failure.
 
 Do not add an unbounded queue/thread pool in front of the bounded Rust queue.
-Receipt completion stores only fixed-size status/diagnostic data after admission,
-not the submitted payload. Async flush operations are coalesced/bounded using the
-established lifecycle owner. A flush result describes the core sink-flush
+Receipt completion stores bounded status/diagnostic data after admission,
+not the submitted payload. Native retention is limited to 64 pending receipts per
+logger and 64 waiters per receipt; exceeding either returns queue_full with a
+distinct stable operation code before allocating more work. Completed receipts
+are caller-owned and removed from the native pending registry immediately.
+Retaining arbitrarily many completed receipts is caller-owned memory, not a
+claim of constant total process memory. Receipt payloads use the shared bounded Failure conversion contract: per-string
+4096 UTF-8 bytes and at most 32 remediation steps. Oversized foreign diagnostics
+produce the explicit binding validation result with code
+SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE; do not truncate into an undeclared
+metadata field or claim a native failure was preserved verbatim. The native
+operation/health evidence remains its source of truth, while the receipt retains
+the representable conversion failure. Receipt-limit failure uses
+SC_OBSERVABILITY_PY_PENDING_RECEIPTS_FULL; waiter-limit failure uses
+SC_OBSERVABILITY_PY_RECEIPT_WAITERS_FULL. Both use Failure.queue_full and neither
+starts extra work or silently retries.
+
+At most one native async flush is in flight per logger. Every overlapping request
+returns queue_full with code SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS; it does not
+join an earlier barrier. The slot remains occupied until actual completion even
+if the caller times out or cancels. A flush result describes the core sink-flush
 contract, not fsync durability; event ordering/barrier semantics must match the
 core implementation. A flush request cannot report success merely because its
 waiter was cancelled or its event loop closed.
 
+A completed admission receipt retains its Result for later state/wait calls.
+Shutdown late results remain observable through B.4 wait_stopped. Flush has no
+receipt/status accessor in this release: after its caller times out or cancels,
+the native operation finishes once, updates health on failure and releases its
+slot, but the caller cannot retrieve that prior flush's Result. A later explicit
+flush starts a new barrier; it is not observation or retry of the previous one.
+This limitation is documented in the example and tested, not hidden behind a
+promise of universal late-result retrieval.
+
 Native callbacks must resolve Python waiters on their owning loops through a
-thread-safe scheduling bridge. A closed loop leaves the saved native result and
+thread-safe scheduling bridge. A closed loop leaves saved receipt/shutdown results and
 logger health intact; no callback attempts to revive a closed interpreter. Factories,
 validation, queries, health and lifecycle operations retain their Result contracts;
 no exception-based alternate path is introduced for async use.
@@ -124,9 +155,13 @@ no exception-based alternate path is introduced for async use.
   application work. Ignoring the result remains the caller's choice. Fault-free configured logging delivers expected records.
 - AC3: Concurrent producers leave an asyncio heartbeat responsive during blocked
   writer/flush operations. Outstanding work and retained receipt memory remain
-  bounded by explicit limits, not the number of historical calls.
+  bounded by the 64-pending/64-waiter/one-flush limits and do not grow with
+  historical calls after completed receipts leave the registry. Test caller-held
+  receipt memory separately from logger-owned retention.
 - AC4: Timeout, task cancellation, multiple waiters, loop closure and host
-  shutdown preserve exactly one underlying operation and observable late results.
+  shutdown preserve exactly one underlying operation. Receipt admission and
+  shutdown support observable late Results; timed/cancelled flush supports only
+  eventual health accounting and slot release, without a prior-result accessor.
   Executing wait boundaries resolve cancellation/timeout variants; cancellation
   before task start is tested separately from library completion.
   Admission, flush completion and durability claims are distinguished in examples.
@@ -152,7 +187,7 @@ None.
 
 No sc-runtime worker pool, subprocess IPC, subinterpreter/free-threaded support,
 worker fairness policy, cross-worker global ordering, per-record persistence
-receipt, or durable-on-disk guarantee. Those require a runtime/transport spec.
+receipt, prior-flush-result accessor after timeout/cancellation, or durable-on-disk guarantee. Those require a runtime/transport spec.
 Publication is B.7. Existing B.4/B.5 runtime behavior must remain production-ready;
 this sprint adds optional waiting without making it necessary for logging.
 

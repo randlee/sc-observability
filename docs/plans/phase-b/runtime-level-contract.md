@@ -15,30 +15,12 @@ hands off the working reference. B.1 remains the first migration sprint and
 copies it mechanically. Do not mark this prerequisite complete from plan approval
 alone; record the core release and accepted BTIT source in the import gate.
 
-`must_follow`: acceptance of this contract and scoped core API approval before
-core implementation closure/publication; BTIT integration must follow core
-registry availability; B.1 must follow accepted BTIT integration/review.
-No parallel-safe relationship is claimed for these shared public contracts.
-Apply the phase merge-forward and parent-merge rules to their development PRs.
-
-## Deliverables (authoritative)
-
-1. Add one core-owned runtime level state shared by all producer paths. Retain
-   LoggerConfig.level as the immutable configured baseline. Core admission uses
-   effective state rather than continuing to filter against config.level.
-   New owner-capability construction is additive; existing construction works
-   unchanged without granting producer handles mutation rights.
-2. Implement owner-only temporary override/reset, typed outcomes, lifecycle
-   serialization, health snapshots and bounded best-effort change diagnostics
-   under the contract below. Keep the capability non-Clone; do not add mutation
-   methods to LogControl or other attached producer handles.
-3. Publish the reviewed core API through the existing release process with scoped
-   semver approvals and a registry-only capability consumer. BTIT then implements
-   all bridge integration before B.1, including release-build filter checks.
-4. Extend B.3/B.4 health projections and conformance requirements with configured
-   and effective levels and the state revision. Document the host-owned command
-   forwarding example. Add adoption guidance for compile-time filter limits,
-   baseline/reset behavior and diagnostic failure handling.
+Execution ownership and closure are defined once in the prerequisite sprints:
+[B.P1 core implementation](sprint-b-p1-runtime-core.md),
+[B.P2 core publication](sprint-b-p2-runtime-publish.md), and
+[B.P3 BTIT integration](sprint-b-p3-runtime-btit.md).
+This document is the normative signature/behavior reference, not an additional
+sprint or a separate closure checklist. B.3/B.4 own binding projections.
 
 ## Proposed API and values
 
@@ -47,6 +29,17 @@ Core types live in the neutral types crate; owner/state implementation lives in
 sc-observability. Bridge re-exports these values rather than duplicating enums.
 
 ```rust
+// Value types derive Debug, Clone, PartialEq; AdmissionOutcome, LevelChangeSource
+// and LevelState additionally derive Copy + Eq. DiagnosticSummary is not Eq.
+// Error/value native Serde is additive and separate from binding wire Serde.
+// OperationDiagnostic derives Debug + Clone + PartialEq + Serialize + Deserialize.
+pub struct OperationDiagnostic {
+    pub code: ErrorCode,
+    pub message: String,
+    pub remediation: Remediation,
+    pub at: Timestamp,
+}
+pub enum AdmissionOutcome { Accepted, Filtered }
 pub enum LevelChangeSource { Application, UserRequest, DiagnosticSession }
 pub struct LevelState {
     pub configured_level: LevelFilter,
@@ -55,7 +48,7 @@ pub struct LevelState {
 }
 pub enum ChangeDiagnostic {
     Accepted,
-    NotAccepted { diagnostic: DiagnosticSummary },
+    NotAccepted { diagnostic: OperationDiagnostic },
 }
 pub enum LevelChange {
     Changed {
@@ -71,15 +64,29 @@ pub enum LevelChangeError {
     Stopped,
     BelowBaseline { requested: LevelFilter, configured: LevelFilter },
     UnsupportedLevel { requested: LevelFilter, available: LevelFilter },
-    Unavailable { diagnostic: DiagnosticSummary },
+    Unavailable { diagnostic: OperationDiagnostic },
 }
+impl LevelChangeError {
+    pub fn code(&self) -> ErrorCode;
+    pub fn remediation(&self) -> Remediation;
+}
+// LevelChangeError implements Display + std::error::Error. No source object is
+// invented from diagnostic data; source() returns None.
+// Opaque capability: Debug (no internal addresses), Send + Sync, not Clone.
+// Private fields are deliberately not part of the public contract.
+pub struct LevelOwner { /* private weak control-state reference */ }
 impl Logger<Running> {
+    pub fn try_log_with_outcome(&self, event: LogEvent)
+        -> Result<AdmissionOutcome, TryLogError>;
     pub fn new_with_level_owner(config: LoggerConfig)
         -> Result<(Self, LevelOwner), sc_observability_types::InitError>;
+}
+impl<State> Logger<State> {
     pub fn level_state(&self) -> LevelState;
 }
 impl LoggerBuilder {
-    pub fn build_with_level_owner(self) -> (Logger<Running>, LevelOwner);
+    pub fn build_with_level_owner(self)
+        -> Result<(Logger<Running>, LevelOwner), sc_observability_types::InitError>;
 }
 impl LevelOwner {
     pub fn elevate_level(&mut self, level: LevelFilter, source: LevelChangeSource)
@@ -95,14 +102,67 @@ impl LogGuard {
 }
 ```
 
-B.1a's improved error API must include the new construction boundary in its
+B.1b's improved logger error API must include the new construction boundary in its
 inventory; this prerequisite preserves existing core error conventions until
 that additive migration ships. Failure enums carry stable code/remediation
 accessors. Binding DTOs use explicit snake_case discriminators and their checked
 u64 conversion for revision; deriving Serde alone does not establish wire
-compatibility. Core level health is an additive accessor, not a breaking field
+compatibility. AdmissionOutcome lives in the neutral types crate and is re-exported by core.
+try_log_with_outcome returns Filtered only after successful event validation and
+level filtering, with no enqueue attempt; Accepted means queue admission. It
+uses the same implementation as legacy try_log, which maps either outcome to
+Ok(()). No additional queue or second validation/redaction pass is introduced.
+
+Core level health is an additive accessor, not a breaking field
 addition to a published constructible health struct. The unpublished bridge
 health contract includes configured_level, effective_level and level_revision.
+
+## Native serialization contract
+
+All new value/error types derive Serialize/Deserialize. AdmissionOutcome and
+LevelChangeSource serialize as snake_case strings. LevelState and
+OperationDiagnostic serialize as objects with their declared snake_case fields;
+revision is a native u64 number and ErrorCode/Timestamp/Remediation retain their
+existing public native encodings. ChangeDiagnostic, LevelChange and
+LevelChangeError use `#[serde(tag = "kind", content = "value", rename_all = "snake_case")]`:
+unit variants have kind only; payload variants have a value object containing
+exactly their declared fields. Missing required fields or unknown enum tags
+fail deserialization; additional object fields follow Serde's default ignored
+unknown-field behavior. No native field has a silent default. LevelOwner has no
+Serialize/Deserialize implementation. Native shapes are frozen on first release;
+the B.3 wire DTOs deliberately project them into their own flattened versioned
+schema with checked integers. Existing native types/Serde are untouched.
+
+## Level failure registry
+
+The new closed enums have no non_exhaustive attribute; adding variants later
+requires a separately reviewed compatibility strategy. LevelChangeError code()
+returns the following stable registry identifiers. Display is diagnostic text,
+never a machine classification input. remediation() returns Recoverable with
+these actions, except unavailable/overflow as specified.
+
+| Variant | Stable code | Remediation action |
+| --- | --- | --- |
+| Stopping | `SC_OBSERVABILITY_LEVEL_STOPPING` | Wait for shutdown completion; create a new logger if logging is still needed |
+| Stopped | `SC_OBSERVABILITY_LEVEL_STOPPED` | Create a new logger; do not retry this owner |
+| BelowBaseline | `SC_OBSERVABILITY_LEVEL_BELOW_BASELINE` | Request the configured level or greater verbosity |
+| UnsupportedLevel | `SC_OBSERVABILITY_LEVEL_UNSUPPORTED` | Rebuild the application without the conflicting static level cap |
+| Unavailable | contained OperationDiagnostic.code | Preserve its contained remediation; no inferred retry |
+
+For Unavailable, code()/remediation() return the contained fields unchanged.
+When synthesizing state-unavailable or revision-exhausted diagnostics, use
+NotRecoverable with justification to inspect state and create a new logger;
+other variants use the listed Recoverable action as their sole first step.
+
+Revision exhaustion stores diagnostic code `SC_OBSERVABILITY_LEVEL_REVISION_EXHAUSTED`
+inside Unavailable; it never wraps. Other Unavailable conditions are a failed
+writer or poisoned internal mutation state. They carry the original diagnostic
+where available, otherwise a stable `SC_OBSERVABILITY_LEVEL_STATE_UNAVAILABLE`
+diagnostic. Diagnostic admission failures preserve code/message/remediation/time
+from their original ErrorContext in ChangeDiagnostic::NotAccepted. Existing
+DiagnosticSummary stays unchanged; if only a legacy summary is available, use
+the explicit operation-specific remediation above and retain its message/time,
+rather than claim lost remediation was preserved.
 
 ## Behavioral contract
 
@@ -115,34 +175,53 @@ health contract includes configured_level, effective_level and level_revision.
   the override. Repeating the effective level is Unchanged, without a diagnostic
   or revision increment. No timer, lease stack or automatic expiry is promised;
   the host serializes multiple UI requests and explicitly resets on session end.
-- LevelOwner owns mutation authority, not logger shutdown. Dropping it leaves
+- LevelOwner is opaque, non-Clone and Send, owns mutation authority, and retains
+  only a weak reference to per-logger control state, never a writer sender, a
+  Logger, or shutdown ownership. Logger shutdown/drop marks state stopped even
+  if the capability outlives it; subsequent mutation returns Stopped. It cannot
+  delay final writer shutdown or manufacture a new logger. Dropping it leaves
   the effective level until shutdown; hosts must explicitly reset. LogGuard
   remains sole bridge lifecycle owner and retains this capability internally.
-  Python owned mode may expose owner operations; attached Python and TypeScript
+  Python owned mode exposes owner operations; attached Python and TypeScript
   request changes through an application-owned handler, never LogControl.
 - A committed change has one linearization point shared with authoritative core
   admission and stopping transitions. A submission overlapping the change may
   use either revision; a submission starting after successful return sees the
   new state. Already admitted records are not retroactively filtered or purged.
-  Health returns a coherent baseline/effective/revision snapshot. Serialize
+  Health returns a coherent baseline/effective/revision snapshot. The initial
+  revision is zero. Read-only level_state returns the last committed snapshot
+  even after stop; internal poison does not panic or fabricate a new revision.
+  Mutation on poisoned state returns Unavailable without modifying the snapshot. Serialize
   mutations against shutdown; failed requests leave state unchanged. Revision
   overflow returns Unavailable without wrapping or panicking.
 - THRESHOLD and log::set_max_level are separate atomics, not one transaction.
   Remove independent bridge policy in favor of shared core state. Any facade
   fast filter must be a conservative ceiling throughout transitions; it must
   never reject an event the current core level allows. A fixed runtime Trace
-  ceiling with core-owned effective filtering is acceptable. Document the
-  chosen strategy and its performance tradeoff. Only the installed bridge
+  ceiling with core-owned effective filtering is the selected implementation.
+  enabled() consults the current core snapshot; submission rechecks core state.
+  Document the added enabled-path synchronization cost. Only the installed bridge
   changes process-global facade state; standalone core loggers do not.
 - Compile-time max_level/release_max_level features cannot be undone at runtime.
   BTIT's supported release feature graph must retain Debug/Trace sites required
   by elevation. If a bridge build cannot honor a requested level, return
   UnsupportedLevel with no mutation; do not claim that the facade captured
-  events compiled out of the executable.
+  events compiled out of the executable. The bridge checks resolved
+  `log::STATIC_MAX_LEVEL` before mutation. Bridge initialization rejects a
+  configured baseline above that cap with InitError::UnsupportedLevel before
+  installing the global facade; reset therefore always has a supported baseline. Independent core loggers support
+  constructed events through Trace regardless of facade compile features and
+  never read/write global facade settings. Application calls to log::set_max_level
+  after installation are unsupported because they bypass bridge ownership.
 - Each actual change attempts one structured Info diagnostic containing old,
   new, baseline, revision and typed source. Use a dedicated internal admission
   path that bypasses only the level threshold (including Off), preserving
-  redaction, sink policy and queue bounds. Never recurse through the facade.
+  redaction, sink policy and queue bounds. This path is private to the core
+  LevelOwner implementation; expose no public threshold-bypass operation.
+  The core stamps its configured service/identity, target `sc_observability`,
+  action `logging.level_changed`, and fields `previous_level`, `effective_level`,
+  `configured_level`, `level_revision`, `source`; no user-supplied fields enter
+  this event. Never recurse through the facade.
   Accepted means queue admission, not persistence; sink filters or writer
   failures can still prevent storage. Diagnostic failure produces Changed with
   NotAccepted, never rollback, an exception, or a false transition failure.
@@ -151,37 +230,18 @@ health contract includes configured_level, effective_level and level_revision.
   shutdown failures remain typed and accounted for. A level change must not
   introduce extra silent drops or bypass application validation/redaction.
 
-## Acceptance criteria (authoritative)
+## Published compatibility
 
-- AC1: Baseline/elevate/reduce/reset/repeat and Off cases obey the table above;
-  invalid/lifecycle/unsupported requests leave level state unchanged.
-- AC2: Core direct, facade, macro, Tauri and Python paths observe the same state;
-  post-return ordering and coherent health are proven with synchronized tests,
-  including concurrent submissions and shutdown. Queue saturation remains a
-  visible admission failure, not a failed lossless test assumption.
-- AC3: Diagnostic admission at Warn/Error/Off and queue-full/writer-failure cases
-  preserves the change outcome and nonfatal behavior without recursive logging.
-- AC4: Debug/Trace elevation works in the supported BTIT release build; a capped
-  build explicitly reports its limitation. Legacy core consumers still compile.
-- AC5: Core release, registry consumer proof, target approval, BTIT integration
-  and critical-review acceptance are recorded before the copy gate passes.
-
-## Required validation (authoritative)
-
-Run core workspace tests/doctests, formatting, clippy and existing public API,
-semver, documentation and release checks. Add synchronized transition/admission/
-shutdown tests, baseline and reset cases, typed error and serialization fixtures,
-redaction and diagnostic-failure tests. Inspect the resolved release feature graph
-and run facade/macro elevation in release mode. BTIT records focused integration
-and critical-review evidence. B.3/B.4 run shared binding level-state fixtures.
-Record the prerequisite's core commit/version, release proof and source handoff
-in `docs/plans/phase-b/handoff-runtime-level.md` when executed.
-
-## Paths to delete
-
-Remove obsolete independent bridge threshold policy during BTIT integration;
-record exact affected symbols/files in its accepted implementation inventory.
-No published core API is removed.
+Keep existing LoggerConfig and LoggingHealthReport fields, legacy Result types,
+constructors, trait implementability, enum exhaustiveness, and serialized forms
+unchanged. level_state is a new accessor, including on Logger<Stopped>; runtime
+state is internal. New construction methods opt in to owner capability without
+changing Logger::new, LoggerBuilder::new or build. No published type gains a
+required field or trait method. The existing default level and legacy filtered
+Ok(()) behavior stay unchanged. B.1b's distinct improved entry points may expose
+richer admission/errors additively; the bridge's new EmitOutcome must preserve
+Accepted versus Filtered independently. New level types get documented stable
+codes/remediation and explicit wire conversions, not a rewrite of legacy Serde.
 
 ## Non-closure
 

@@ -1,6 +1,6 @@
 # SC-Observability Public API Checklist
 
-**Status**: Approved
+**Status**: Approved released baseline; Phase B additions below are proposed
 **Purpose**: Track the intended public API so implementation does not invent or
 change the public surface opportunistically.
 
@@ -286,3 +286,31 @@ Steady-state rule:
 
 - when no public API diff exists, `docs/api-approvals/README.md` may be the
   only file under `docs/api-approvals/`
+
+## 8. Proposed Phase B additions — not implemented or approved
+
+The [phase index](plans/phase-b/plan-phase-b.md) routes authoritative sprint
+contracts. These pending entries do not alter the finalized items above.
+
+- [ ] Neutral runtime level state/results and an opaque core mutation capability;
+  see [runtime contract](plans/phase-b/runtime-level-contract.md). Preserve
+  existing LoggerConfig and health struct shapes and constructor signatures.
+- [ ] Initial companion bridge/control/error/health API and exact-pinned macros;
+  see [target matrix](plans/phase-b/target-bridge-api.md). BTIT implements the
+  reviewed initial design before copy; this is not a published compatibility
+  baseline or authority to redesign after copy.
+- [ ] Additive typed errors, classified diagnostics and improved entry points;
+  see [error migration](plans/phase-b/sprint-b-1a-error-api.md) and its successors.
+  Preserve legacy names, signatures, trait implementability, source metadata and
+  serialized representations. Deprecation warns with a concrete replacement;
+  existing consumer code remains buildable with ordinary warning settings.
+- [ ] Independent DTO schema and Tauri/Python APIs with discriminated operational
+  results, including accepted versus filtered admission and full remediation.
+  Runtime/tooling dependencies stay out of the four published core contracts.
+
+No Phase B sprint may remove/rename a published item, add required methods to
+consumer-implemented traits, change existing enum exhaustiveness or public struct
+fields, or alter legacy serialization. An approval artifact is not a waiver for
+a breaking change in this phase. New trait/type names coexist with old interfaces.
+All new contracts are approved per affected crate before implementation closure;
+no entry becomes implemented merely because a plan or approval document exists.

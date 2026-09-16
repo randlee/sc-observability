@@ -34,8 +34,8 @@ work.
    cross-repo reviews do not rely on inferred layering or stale assumptions.
 8. Keep completed sprint records archived without leaving root `docs/`
    cluttered.
-9. Stage the post-`v1.1.0` logging-runtime thread optimization work through a
-   dedicated phase-A sprint plan before implementation begins.
+9. Preserve the completed `v1.2.0` Phase A record and route new migration,
+   additive API and binding work through the proposed Phase B plan.
 
 ## Issue #70 / v1.1.0
 
@@ -71,8 +71,8 @@ Historical sequence:
 
 ## Thread Optimization / v1.2.0 Phase A
 
-The next logging-runtime workstream after retained-log maintenance is the
-phase-A thread optimization effort for `sc-observability`.
+The completed logging-runtime workstream after retained-log maintenance was
+the Phase A thread optimization effort, released in `v1.2.0`.
 
 Controlling phase folder:
 
@@ -112,9 +112,11 @@ Phase A exit criteria:
 
 The proposed next lettered phase is tracked in
 [`plans/phase-b/plan-phase-b.md`](./plans/phase-b/plan-phase-b.md).
-It starts by copying the review-corrected generic BTIT crates, then publishes
-them for future BTIT consumption, followed by dedicated TypeScript and Python
-binding work. Go remains future scope. The proposal does not reopen the accepted
+Its first migration sprint copies the review-corrected generic BTIT crates.
+Explicit prerequisite sprints implement/publish additive core runtime elevation
+and obtain accepted BTIT integration before that copy. Bounded core error
+migration sprints add improved methods and warning-only legacy adapters before
+Rust publication, followed by dedicated TypeScript and Python binding work. Go remains future scope. The proposal does not reopen the accepted
 Phase A closure or claim that BTIT's currently open review findings are resolved.
 
 ## Rule

@@ -10,16 +10,16 @@ base: develop
 ## Goal and dependencies
 
 Make the migrated crates available from crates.io so BTIT can adopt released
-versions later. `must_follow` B.1a: publish its additive core error API and
+versions later. `must_follow` B.1e: publish B.1a–B.1e's additive core error API and
 warning-only compatibility path, retaining B.1's accepted bridge inventory/API. B.3 `must_follow` this sprint's published baseline. Merge-forward follows
 the phase dependency rule; the consumer check waits for registry visibility.
 
 ## Deliverables (authoritative)
 
 1. Remove `publish = false` only from the bridge and macros, and choose the
-   initial release version through the workspace release train, including the
-   minor core release required by B.1a and its concrete deprecation version. No legacy BTIT
-   API/version constrains the new companion pair; the approved target contract
+   initial companion release version through the workspace release train, including the
+   minor core release selected by B.1e and its concrete deprecation version. This version is greater than the already-published B.P2 release; never
+   republish its versions. No legacy BTIT API/version constrains the new companion pair; the approved target contract
    is its first public baseline. Existing published core semver gates remain. Maintain an
    exact bridge → macros `=V` pin and version+path dependencies that package
    correctly outside the checkout. Update release inventory, version-literal
@@ -32,7 +32,7 @@ the phase dependency rule; the consumer check waits for registry visibility.
    a tool error or semver failure. Exclude the CI-only consumer package.
 3. Publish through the existing `main`-based release workflow after CI/review.
    Keep the four existing packages' dependency order and place macros before
-   bridge. If the workspace release includes core packages, publish those
+   bridge. The release includes the changed core packages from B.1a–B.1e; publish those
    first. Wait for dependency index visibility before publishing dependents;
    bounded retries must fail visibly rather than claiming completion.
 4. Add `scripts/ci/validate_log_registry_consumer.py --version V`, which creates

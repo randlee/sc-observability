@@ -1,130 +1,103 @@
 ---
 id: B.1a
 status: proposed
-branch: feature/phase-b-1a-error-api
+branch: feature/phase-b-1a-errors
 base: develop
 ---
 
-# B.1a — Typed error implementation and warning-only legacy migration
+# B.1a — Typed failure values and neutral extension adapters
 
 ## Goal and dependencies
 
-Implement the additive migration portion of issue #92 before first Phase B
-publication. The improved implementation is the recommended API; the existing
-interface stays functional with compiler-visible deprecation warnings. Removal
-has no scheduled release. This is published core API evolution, not redesign of
-the copied bridge contract.
+Implement the neutral portion of #92 with stored typed classification and
+lossless legacy conversion. `must_follow` B.1 so inventory includes the accepted
+bridge and published runtime-level prerequisite. B.1b `must_follow` this sprint.
+The normative signatures and code mapping are in [the contract](error-api-contract.md),
+which is part of this sprint's QA scope, not a future design deliverable.
 
-`must_follow` B.1 because the copied bridge participates in compatibility checks.
-B.2 `must_follow` this sprint so the improved API and upgrade guidance ship with
-the Rust release. B.3 consumes this classification contract for binding mappings.
-These sprints share public contracts and release artifacts and are not
-`parallel_safe`. Follow the phase merge-forward and parent-merge rules.
+For every `must_follow`, merge pushed parent development into the child before
+every development/fix round; the parent PR merges before child completion.
+No listed related sprint is `parallel_safe`: shared neutral contracts, runtime
+call sites or release artifacts intersect.
 
 ## Deliverables (authoritative)
 
-1. Inventory all nine opaque error families (Identity, Init, Event, Flush,
-   Shutdown, Projection, Subscriber, LogSink, Export), every production
-   construction site, and every public function/trait exposing them across the
-   four published core crates. Record the old-to-new symbol mapping, concrete
-   variant/code table, adapters, serialization policy, and scoped API approval
-   in `docs/plans/phase-b/error-api-contract.md`. Include custom sink/projector/
-   subscriber implementations and error paths not emitted by built-in code.
-2. Implement improved enum errors in the neutral types crate, with mandatory
-   ErrorContext payloads, source/backtrace preservation and shared diagnostic
-   classification. Create errors as typed variants at the failure site rather
-   than routing new code through legacy wrappers or parsing messages. Preserve
-   stable diagnostic codes. Use distinct new names to coexist with deprecated
-   types; do not replace published structs in place.
-3. Add improved public entry points and extension contracts using those errors.
-   Preserve existing signatures and trait implementability through adapters;
-   do not add required methods to existing consumer-implemented traits. Both
-   paths use one implementation and preserve lifecycle, nonblocking admission,
-   and failure behavior. Use Rust `#[deprecated(since = "V", note = "...")]`
-   on legacy types/entry points, with an exact replacement in each note and V
-   replaced by the selected minor release. Trait-only classification or
-   documentation-only deprecation does not close this deliverable.
-4. Migrate first-party production callers/examples to the improved path; retain
-   explicit legacy compatibility fixtures. Limit deprecation allowances to
-   compatibility modules/tests, never blanket-suppress them workspace-wide.
-   Keep the bridge's accepted public signature/variant contract intact; any
-   foreseeable bridge-facing requirement discovered while planning must be
-   resolved with BTIT before the B.1 source gate, not scheduled as a later
-   bridge public API change.
-5. Extend `.claude/skills/sc-observability-adopting/SKILL.md` to route existing
-   consumers to `references/migrate-error-api.md`. The reference covers version
-   prerequisites, symbol mappings, before/after examples, custom trait adapters,
-   replacing code-string comparisons with typed matches, preserving remediation,
-   incremental upgrades, and compiler/test verification. Update API design,
-   migration guide, changelog and release documentation. Do not instruct repos
-   to suppress all warnings or introduce unwrap/expect/throw/raise handling.
+1. Implement `typed::ClassifiedError`, the nine distinct `*Failure` values and their
+   `*FailureKind` discriminated enums in `sc-observability-types`, with named
+   constructors, diagnostic/context access and bidirectional legacy conversion
+   exactly as specified in the linked contract. First-party new constructors
+   select kinds at the failure site; context classification is a compatibility path.
+2. Add the five typed resolver/subscriber/projector traits and explicit adapters
+   in the contract under `sc_observability_types::typed`, without root
+   re-exports. They operate only on neutral types and existing registration
+   interfaces; do not depend on runtime crates or modify existing traits.
+3. Add the conversion/trait compile fixtures and a checked production-constructor
+   inventory at `docs/plans/phase-b/error-api-inventory.md` during execution.
+   Inventory every use of the nine wrappers, including public signatures,
+   feature-gated code, custom extension points and internal exporters against
+   the source ownership table in the contract. This is execution evidence for
+   that fixed scope, not deferred API design or discretionary boundary selection.
 
-## Contract direction
-
-The sprint contract must enumerate all concrete replacements before its
-implementation is accepted. The following shared trait is additive; existing
-DiagnosticInfo implementations and sealing remain unchanged:
+## Contract
 
 ```rust
+// In sc_observability_types::typed, never root-re-exported.
 pub trait ClassifiedError: DiagnosticInfo {
     type Kind: Copy + Eq;
     fn kind(&self) -> Self::Kind;
+    fn context(&self) -> &ErrorContext;
 }
+// Representative; exact families and constructors are enumerated in the contract.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdentityFailureKind { ResolutionFailed, Unclassified }
+pub struct IdentityFailure { /* private kind and original Box<ErrorContext> */ }
+impl IdentityFailure {
+    pub fn resolution_failed(message: impl Into<String>, remediation: Remediation) -> Self;
+    pub fn from_context(context: Box<ErrorContext>) -> Self;
+    pub fn into_context(self) -> Box<ErrorContext>;
+}
+impl From<IdentityError> for IdentityFailure { /* move original context */ }
+impl From<IdentityFailure> for IdentityError { /* move original context */ }
 ```
 
-Improved errors use names such as `InitFailure`, retain an ErrorContext in every
-failure variant, and implement ClassifiedError and std::error::Error. Legacy
-wrappers implement classification as a migration convenience. Keep this trait
-and kind accessors supported through any future representation change.
-
-Classification of externally constructed legacy values is total: an explicit
-Unclassified kind retains the original diagnostic through the error object.
-Unknown/custom codes never panic, become success, or lose metadata. Named
-constructors enforce the variant/code association; arbitrary contexts entering
-through compatibility adapters are validated/classified, not mislabeled.
-
-New kind/variant extensibility must be explicit in the reviewed contract:
-`#[non_exhaustive]` requires downstream fallback handling and does not force
-callers to update on each added variant. Do not add it to existing public enums
-in this minor release. Preserve the old types' Serde representation; new native
-error serialization and versioned binding DTOs are separate contracts. Never
-serialize native source objects/backtraces into language binding error payloads.
+The failure is a new opaque value with an immutable, discriminated kind, rather
+than an in-place change to the legacy tuple struct. This prevents callers from
+pairing a named variant with the wrong code. No fields are added to published
+structs, and no variants or attributes are added to published enums. Existing
+`DiagnosticInfo` sealing remains unchanged. Native failure types have no Serde
+implementation in this phase; legacy serialization and versioned binding DTOs
+remain separate contracts.
 
 ## Acceptance criteria (authoritative)
 
-- AC1: The inventory accounts for every affected public boundary and production
-  error constructor. Improved APIs expose typed failures and usable diagnostic
-  classification without requiring caller string comparisons.
-- AC2: An unchanged legacy consumer, including custom trait implementations,
-  compiles and runs with default lint settings and emits actionable deprecation
-  warnings. Its migrated counterpart passes with deprecated usage denied.
-  Projects choosing `-D warnings` may fail on warnings; this is documented, not
-  disguised as a source-signature break or silently suppressed.
-- AC3: Both APIs preserve behavior, diagnostic/source data and legacy serialized
-  fixtures. Custom/unknown legacy codes and adapter failure paths return values
-  without panics or recursive logging. The imported bridge contract is unchanged.
-- AC4: A downstream upgrade fixture follows the adoption reference successfully;
-  public API/semver approval establishes an additive minor release. Documentation
-  states that legacy removal and a 2.0 conversion are unscheduled.
+- AC1: All nine families expose total typed classification and named creation;
+  missing/custom/cross-family codes yield `Unclassified` without data loss or panic.
+- AC2: Conversions preserve the same boxed context, source chain and backtrace;
+  every existing legacy serialized fixture and custom-trait compile fixture passes.
+- AC3: Both adapter directions retain object safety, Send/Sync bounds, success
+  values and original failure metadata; adapters never recurse or retry operations.
+- AC4: Published API review is additive; no deprecations are enabled before the
+  recommended runtime paths land in B.1b–B.1d.
 
 ## Required validation (authoritative)
 
-Run workspace formatting, tests, doctests and clippy with warnings denied, using
-only documented narrow compatibility allowances. Run existing public API diff,
-semver, public API docs and docs-consistency checks and attach crate-specific
-approvals. Add downstream compile/run fixtures for old and new entry points and
-custom traits; assert deprecation diagnostic codes/replacement notes from Cargo
-JSON output, not just successful compilation. Exercise failure classification,
-unknown codes, metadata/source preservation, serialized compatibility and
-behavior parity. Run the bridge's accepted API/behavior regression checks.
-Record results in `docs/plans/phase-b/handoff-b-1a.md` during execution.
+Run `cargo fmt --all -- --check`, `cargo test --locked -p sc-observability-types`,
+workspace doctests and `cargo clippy --locked --workspace --all-targets -- -D warnings`.
+Run public API diff/semver/docs and dependency-ban checks. Add table-driven
+fixtures for every contract mapping, every named constructor, unknown codes and
+wrong-family codes; compare context pointer identity across round trips and
+legacy Serde bytes. Compile/run unchanged and typed implementations of all five
+open extension traits through their explicit adapters, and compile unchanged root-glob consumers
+without adding qualifications or changing imports. Record evidence in
+`docs/plans/phase-b/handoff-b-1a.md`.
 
 ## Paths to delete
 
-None. Legacy interfaces remain available.
+None. Existing APIs, representations, registrations and compatibility paths remain.
 
 ## Non-closure
 
-No legacy API removal, in-place struct-to-enum replacement, scheduled 2.0 release,
-BTIT dependency switch, or post-copy bridge public API redesign. Publication
-belongs to B.2. This sprint closes the additive migration scope, not all of #92.
+No runtime replacement, warning activation, publication, binding schema change,
+legacy removal or changed bridge signature. B.1e owns deprecation and adoption.
+This sprint closes neutral types/adapters, not all of #92.

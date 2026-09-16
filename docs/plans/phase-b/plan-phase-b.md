@@ -8,19 +8,34 @@ guideline_commit: 3d9ddbb0e8d9079a8efa0c471f5b5d8be549a878
 
 # Phase B — Publish the log bridge and add language bindings
 
-This proposal follows the user's sequence: first copy the corrected generic
+This proposal keeps B.1 as the first migration sprint: copy the corrected generic
 BTIT code; publish the Rust crates so BTIT can consume them later; then add
 TypeScript and Python bindings. Go is future scope. This document is a routing
 index; each linked sprint is authoritative for its own deliverables, acceptance,
 validation, and non-closure. No implementation or publication is authorized by
 this proposal's status.
 
-## Sprint sequence
+## Pre-copy prerequisite sprints
+
+These are real implementation/release/integration work units, not invisible
+entry assumptions. They must complete before the first migration sprint B.1.
+
+| Sprint | Production deliverable | Authoritative plan |
+| --- | --- | --- |
+| B.P1 | Additive per-logger runtime level state, owner capability and admission outcomes | [Core runtime](sprint-b-p1-runtime-core.md) |
+| B.P2 | Published core capability with registry-consumer proof | [Prerequisite release](sprint-b-p2-runtime-publish.md) |
+| B.P3 | Accepted BTIT bridge integration and critical-review closure | [BTIT integration](sprint-b-p3-runtime-btit.md) |
+
+## Migration, error evolution and binding sprints
 
 | Sprint | Production deliverable | Authoritative plan |
 | --- | --- | --- |
 | B.1 | Traceable copy of corrected generic BTIT crates, building in this workspace | [Copy](sprint-b-1-copy.md) |
-| B.1a | Improved core error API, deprecated compatibility interface, and downstream upgrade guidance | [Error API migration](sprint-b-1a-error-api.md) |
+| B.1a | Neutral classified failures and explicit typed extension adapters | [Error model](sprint-b-1a-error-api.md) |
+| B.1b | Additive logger methods and typed sink integration | [Logger errors](sprint-b-1b-logger-errors.md) |
+| B.1c | Additive observation runtime methods | [Observation errors](sprint-b-1c-observation-errors.md) |
+| B.1d | Additive telemetry runtime methods | [Telemetry errors](sprint-b-1d-telemetry-errors.md) |
+| B.1e | Warning-only legacy migration and downstream adoption guidance | [Error adoption](sprint-b-1e-error-adoption.md) |
 | B.2 | Published Rust bridge and macros, verified from crates.io | [Rust publication](sprint-b-2-publish-rust.md) |
 | B.3 | Generated TypeScript contract and functioning Tauri frontend client | [TypeScript](sprint-b-3-typescript.md) |
 | B.4 | Python logging API implemented through PyO3, with tested maturin wheels | [Python](sprint-b-4-python.md) |
@@ -53,8 +68,8 @@ references, not approved import sources. B.1 copies the accepted implementation
 of the locked target API with mechanical workspace adaptation; it is not a
 second API design/implementation sprint. B.2 publishes that companion pair;
 all bridge API changes foreseeable today are included in that target and
-implemented by BTIT before migration. Subsequent planned API work here is the
-language bindings. Later unforeseen bridge changes remain possible but are not
+implemented by BTIT before migration. Subsequent planned API work here is additive core error evolution and the
+language bindings; neither changes the accepted bridge public contract. Later unforeseen bridge changes remain possible but are not
 a planned migration/refactor sprint. This preserves a working reference design
 for the initial release and avoids implementing the same changes twice.
 
@@ -73,14 +88,18 @@ copy. #96 configuration loading is independent; LoggerConfig supplies baseline.
 
 ## Core error API migration
 
-[B.1a](sprint-b-1a-error-api.md) adds the improved typed error implementation
-and public entry points, retaining legacy interfaces with compiler-visible
-deprecation warnings. It also extends the existing adoption skill with an
-incremental downstream upgrade guide. This is the additive portion of issue #92;
-legacy removal and the breaking 2.0 conversion remain unscheduled. B.1 remains
-the first sprint and copies code only. B.1a precedes B.2 publication and changes
-no accepted bridge public signatures. The phase now contains eight sprints; the
-B.1a identifier preserves existing sprint references.
+[B.1a](sprint-b-1a-error-api.md) through
+[B.1e](sprint-b-1e-error-adoption.md) share the concrete
+[error API contract](error-api-contract.md). They separately implement neutral
+failures/adapters, logger, observation and telemetry entry points, then the
+warning-only migration and adoption guide. Existing published signatures,
+structs, traits, enum exhaustiveness, codes and serialized forms remain intact.
+New methods and types coexist with old interfaces; no planned removal or 2.0
+conversion is authorized. B.2 publishes the completed additive migration.
+
+The plan contains 15 bounded sprint records including the three pre-copy
+prerequisites. The identifiers retain existing B.1–B.7 references; scope is split
+by production closure rather than hidden in prerequisites or implementation notes.
 
 ## Proposed binding architecture
 
@@ -110,12 +129,15 @@ or service transport sprint; generated TypeScript alone does not execute Rust.
 
 ## Default logging behavior
 
-Every public operation returns a discriminated result, including creation,
+Every new fallible public operation returns a discriminated result, including creation,
 validation, emission, query, health, flush, shutdown, and asynchronous waiting.
 Operational errors are values; neither language binding intentionally throws,
 raises, rejects a Promise, or uses exceptions internally for expected failures.
-Rust continues to use Result/enums. B.3 owns the shared result/error schema;
+Rust continues to use Result/enums. Existing infallible accessors and fixed
+standard-library unit-return adapters retain their signatures; adapters record
+ignored results in inspectable status, without changing published APIs. B.3 owns the shared result/error schema;
 Python generates equivalent tagged dataclasses and unions from that contract.
+Accepted and filtered admissions remain distinct; neither implies persistence.
 
 Normal emission is nonblocking. Calling code may ignore its returned result and
 continue, including when an error record cannot be logged. Ignoring an error is
@@ -135,7 +157,7 @@ is a supported mode, not a decision about the future runtime architecture.
 The first language bindings cover structured logging, bounded historical query,
 health, and flush. Python also exposes explicit creation/shutdown in owned mode,
 attachment without lifecycle ownership in host mode, standard-library logging
-integration and context propagation. Python is a first-class supported language
+integration, context propagation and owner-only level elevation/reset. Python is a first-class supported language
 with the same release quality and conformance expectations as TypeScript. This is
 an explicit logging subset of the public API, not a claim of whole-workspace
 parity. The B.3 sprint owns the detailed operation/DTO contract and its limits.
@@ -149,9 +171,16 @@ BTIT's later switch to the published crates is a separate BTIT change.
 
 | Relation | Rationale |
 | --- | --- |
-| B.1 must_follow target public-API contract approval and BTIT accepted implementation/review closure | Copy only the implementation of the sc-observability-owned locked target |
+| B.P1 must_follow accepted runtime contract | Implement a reviewed additive core surface |
+| B.P2 must_follow B.P1 | Publish the tested core capability |
+| B.P3 must_follow B.P2 and accepted target bridge contract | BTIT integrates released core behavior before source acceptance |
+| B.1 must_follow B.P3 | Copy only the accepted implementation of the sc-observability-owned locked target |
 | B.1a must_follow B.1 | Verify additive core error evolution against the copied bridge contract |
-| B.2 must_follow B.1a | Publish the improved core API and compatibility adapters with the companion release |
+| B.1b must_follow B.1a | Logger methods consume neutral failures and adapters |
+| B.1c must_follow B.1b | Observation integration uses the completed logger compatibility path |
+| B.1d must_follow B.1c | Telemetry composes the completed observation/runtime adapters |
+| B.1e must_follow B.1d | Deprecate only after all replacements and upgrade fixtures work |
+| B.2 must_follow B.1e | Publish the improved core API and warning-only compatibility path with the companion release |
 | B.3 must_follow B.2 | Bind against the published Rust baseline; own shared DTO schema once |
 | B.4 must_follow B.3 | Reuse the accepted DTO conversions/error registry and conformance fixtures |
 | B.5 must_follow B.4 | Integrate Python logging/context with the implemented owned/attached runtime |
@@ -163,7 +192,9 @@ share public contracts, workspace/release metadata, or conformance fixtures.
 For each internal `must_follow`, pushed parent development triggers merge-forward
 before every child development/fix round; parent PR must merge before child PR
 completion. A registry-dependent acceptance test additionally waits for the
-parent's published artifact; a merged PR is not publication evidence.
+parent's published artifact; a merged PR is not publication evidence. Cross-repo
+B.P2→B.P3→B.1 edges use recorded release/source commits, not Git merges across
+unrelated repositories.
 
 Use feature branches/worktrees from `develop`; normal PRs target `develop`.
 Release tags come from `main` under the existing release procedure. The team
@@ -177,6 +208,10 @@ The plan uses the merged
 Each sprint writes its own execution evidence only when executed; no empty
 handoff file is treated as evidence. Commands named as new validation scripts
 in sprint deliverables must be implemented by that sprint before its acceptance.
-The next step is review/acceptance of the target bridge API proposal so BTIT can
-complete implementation and review. B.1 stays blocked until that full contract
+The next step is review/acceptance of the complete target/runtime/error/binding
+contracts and their proposed requirements/ADRs, followed by B.P1–B.P3. B.1 stays blocked until that full contract
 and source-acceptance gate passes.
+
+The [consistency review record](review-consistency.md) captures the iterative
+documentation checks and resolved findings; it is not implementation or API
+approval.

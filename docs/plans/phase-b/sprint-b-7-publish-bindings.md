@@ -12,7 +12,9 @@ base: develop
 Publish the already-working B.3 TypeScript and B.4/B.5/B.6 Python artifacts so external
 consumers can install them. `must_follow` B.6 and transitively B.5/B.4/B.3/B.2: preserve
 the accepted runtime/schema contracts. This sprint owns distribution and
-registry proof, not unfinished runtime work.
+registry proof, not unfinished runtime work. Shared release/runtime artifacts
+preclude parallel_safe execution; follow parent-push merge-forward before each
+child development/fix round and parent PR merge before child completion.
 
 ## Deliverables (authoritative)
 
