@@ -10,7 +10,8 @@ base: develop
 ## Goal and dependencies
 
 Deliver a usable neutral Rust DTO crate and versioned JSON contract over the
-published Rust API. `must_follow` B.2; B.3a `must_follow` this accepted schema.
+published Rust API. `must_follow` B.2; B.3b `must_follow` this accepted schema for shared runtime adapters;
+B.3a/B.4 consume its generated language projections.
 Shared public contracts and conformance artifacts prevent parallel_safe work.
 Parent pushes trigger merge-forward before every child dev/fix round; parent PR
 must merge before child completion. No language transport runtime is required
@@ -26,19 +27,98 @@ documentation and validation artifacts; partial completion leaves the sprint ope
    core conversion in [binding-contract.md](binding-contract.md), including the
    declarations below, decimal integers, paths, full health/event projections,
    runtime levels and diagnostic-preserving Failure mappings. Runtime-dependent
-   conversions stay in B.3a/B.4 adapters; the neutral crate never imports bridge,
-   Tauri, Specta exporters or PyO3 runtime dependencies.
-2. Generate `bindings/schema/v1.json` and `bindings/schema/errors-v1.json` from
-   the crate's Serde shapes. Add `bindings/conformance/v1/` with valid and invalid
+   conversions belong to B.3b shared backends; the neutral crate never imports bridge,
+   Tauri or PyO3 runtime dependencies. The optional `schema-gen` feature enables
+   Schemars only for tooling; default DTO builds retain types/serde/serde_json.
+2. Create the isolated unpublished `bindings/schema-generator/` Cargo package
+   and CLI `sc-observability-schema`, generating canonical
+   `bindings/schema/v1.json` from Rust DTO Serde shapes with Schemars =1.2.2.
+   Generate `bindings/schema/errors-v1.json` as a projection of its embedded
+   error registry, never a second handwritten type authority. Add `bindings/conformance/v1/` with valid and invalid
    input/output examples and expected results. Add `bindings/API-COVERAGE.md`
    mapping each supported operation/type to its conversion fixture and explicit
    exclusions; B.3a and B.4 append their runtime evidence later.
 3. Implement `scripts/ci/validate_binding_schema.sh` and a schema CI job for
    Rust conversion tests, schema/Serde agreement, regenerate-and-diff checks,
-   and an external packaged-crate consumer. Record hashes, scoped DTO public-API
+   and an external packaged-crate consumer. Implement reusable
+   `scripts/ci/build_binding_source_bundle.py --root-manifest PATH --output DIR`
+   for the prepublication source-bundle procedure specified in B.4a; B.3 owns
+   this helper now so B.3b/B.3a/B.4 do not depend on future B.4a code. Inputs
+   are a manifest path and fresh staging directory; output is manifest.json,
+   checksummed archives, extracted unpublished roots, published vendor tree,
+   staged root patches/config and a frozen layout-specific lock. Reject missing
+   or escaping dependencies and stale locks. B.4a reuses it for sdists/matrix. Record hashes, scoped DTO public-API
    approval and TYP-030 wire-only ownership exception in
    `docs/plans/phase-b/handoff-b-3.md`. Generation must use a locked toolchain
-   and report drift without overwriting it into a passing result.
+   and report drift without overwriting it into a passing result. Implement
+   repository-owned `scripts/generate_typescript_bindings.py` and
+   `scripts/generate_python_bindings.py` as deterministic schema-only generators;
+   their generated declarations/tagged data and conversion scaffolding are
+   consumed by later runtime sprints, not alternate Rust exporters.
+
+## Generation contract and locked tooling
+
+The selected source chain is Rust DTO declarations/Serde annotations ->
+Schemars -> `bindings/schema/v1.json` -> repository-owned TypeScript/Python
+scripts. There is no Specta dependency/exporter and neither language generator
+reads Rust source, errors-v1.json, or a handwritten parallel interface inventory.
+Serde-conformance tests remain necessary: schema generation is not a substitute
+for checked conversion behavior.
+
+DTO manifest has optional `schemars = { version = "=1.2.2", optional = true }`
+and `schema-gen = ["dep:schemars"]`; only wire DTOs derive JsonSchema behind
+that feature. Core crates acquire no Schemars dependency. The generator is an
+isolated workspace with committed `Cargo.lock`, DTO `schema-gen` enabled, and
+Schemars exactly =1.2.2. It uses the repository's pinned Rust toolchain. This
+Schemars release declares Rust 1.74 MSRV, below this repo's Rust 1.94.1 baseline;
+lockfile and compile tests still gate actual compatibility. Schemars explicitly
+uses Serde attributes, and its generated structure can change between versions,
+which is why the exact pin is required. [Schemars 1.2.2 documentation](https://docs.rs/schemars/1.2.2/schemars/)
+
+Use `SchemaSettings::draft2020_12().for_serialize()` for output definitions and
+`.for_deserialize()` for input definitions, retaining separate `Input...` and
+`Output...` names where required/default/unknown-field rules differ. Both sets
+live in the single canonical file's `$defs`; `x-sc-entrypoints` maps each
+operation/type to the correct local `$ref`. Never validate all operations through
+an ambiguous generic root union. Every referenced type and concrete generic
+Result/envelope instantiation is registered explicitly in the Rust generator.
+[Schemars settings](https://docs.rs/schemars/1.2.2/schemars/generate/struct.SchemaSettings.html)
+
+The same artifact embeds `x-sc-error-registry` from the Rust diagnostic registry
+and `x-sc-bindings` hints for canonical integer domains, normalization/defaults,
+public type names and operation mappings. These are emitted from Rust DTO/tooling
+metadata and checked against conformance fixtures, not patched into generated
+JSON. Semantic checks JSON Schema cannot express (for example since <= until)
+remain the binding contract's checked converter behavior and generated tests.
+Canonicalization sorts object keys, preserves array order, emits UTF-8 with LF
+and one final newline, and excludes timestamps/absolute paths. All $refs are
+local; duplicated names or unsupported schema keywords fail generation.
+
+Concrete CLI surface (each tool supports `--check`, which compares temporary
+output without rewriting committed files and exits nonzero on any drift):
+
+```sh
+cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc-observability-schema -- --output bindings/schema/v1.json --errors-output bindings/schema/errors-v1.json --check
+python3 scripts/generate_typescript_bindings.py --schema bindings/schema/v1.json --output-dir bindings/typescript/src/generated --check
+python3 scripts/generate_python_bindings.py --schema bindings/schema/v1.json --output-dir bindings/python/sc-observability-py/python/sc_observability/generated --check
+```
+
+B.3 owns both scripts and their golden outputs/tests. B.3a/B.4 import those
+outputs and add runtime implementations. Each script uses Python 3.12.10 and
+stdlib only; record that exact generation interpreter in
+`bindings/generation-toolchain.toml`. This pin is independent of the supported
+Python runtime matrix. CI verifies generator source revision, toolchain/lockfile
+hashes, canonical schema hash and generated output hashes, then runs twice from
+clean temporary directories and requires byte-identical outputs. An intentional
+schema/tooling change updates reviewed artifacts explicitly; check mode cannot
+regenerate its own expected baseline. Generated Python stubs and runtime tagged
+data originate from the same script/schema; TypeScript declarations and runtime
+validators likewise share one schema traversal.
+
+The external DTO fixture uses its packaged .crate outside the checkout with
+only its already-published core dependencies. It does not publish DTO to satisfy
+B.3; subsequent unpublished dependent-crate fixtures follow B.4a's bundled-source
+strategy. No registry-only DTO claim is made until B.7.
 
 ## Shared signatures
 
@@ -116,9 +196,14 @@ export type LevelRequestDto =
 - AC3: Fixtures cover min/max/overflow signed and unsigned integers, decimal
   canonicalization, finite/nonfinite floats, null/missing/unknown fields, UTC
   timestamps and equal/inclusive query bounds, unrepresentable paths, request
-  size/depth/query limits, oversized diagnostics, maximum level revision and
+  size/depth/query limits, every protected-provenance spoofing case from the
+  binding contract, oversized diagnostics, maximum level revision and
   unsuccessful change diagnostics. Old/new schema compatibility rules are tested.
-- AC4: Generated drift fails CI, crate API approval names the DTO crate, and no
+- AC4: Both schema-only language generators reproduce complete declarations,
+  unions/defaults/integer mappings from the canonical file with no Rust parser,
+  Specta or independent language schema. Input/output Serde differences and
+  unsupported-keyword failures have fixtures; two clean runs match byte-for-byte.
+- AC5: Generated drift fails CI, crate API approval names the DTO crate, and no
   native ErrorContext/source/backtrace or ownership capability enters the wire.
 
 ## Required validation (authoritative)
@@ -141,7 +226,7 @@ None.
 
 ## Non-closure
 
-No generated TypeScript package/exporter, Tauri host/IPC example (B.3a), Python
+No TypeScript runtime package, Tauri host/IPC example (B.3a), Python
 runtime (B.4), platform wheels (B.4a), or registry publication (B.7). This sprint
 closes working neutral conversions and schema; it does not claim language
 runtime behavior from schema-only tests.

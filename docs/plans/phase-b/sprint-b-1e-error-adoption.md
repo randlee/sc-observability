@@ -26,7 +26,8 @@ scope. Completion requires evidence for every numbered item, including its code,
 documentation and validation artifacts; partial completion leaves the sprint open.
 
 1. Apply the contract's exact deprecation policy to nine wrapper types and the
-   mapped old methods in B.1b–B.1d. Each `since` is the selected next minor release
+   mapped old methods in B.1b–B.1d except the explicit supported-method
+   exemptions below. Each `since` is the selected next minor release
    after the B.P2 publication; each `note` names its method/type replacement and the migration guide.
    Existing `Logger::emit` keeps its existing deprecation version and documents
    typed blocking versus nonblocking alternatives without changing behavior.
@@ -51,11 +52,22 @@ documentation and validation artifacts; partial completion leaves the sprint ope
 
 The old→new method mapping is exact: every `foo_typed` declaration in B.1b–B.1d
 recommends the same owner's `foo` operation, retaining arguments, success values
-and consuming/borrowing semantics. The single exception to warning activation is
-legacy infallible LoggerBuilder::build: keep it unchanged and supported; its new
+and consuming/borrowing semantics. Exceptions to method warning activation are
+legacy infallible LoggerBuilder::build and the B.P1 owner constructors. Keep
+legacy build unchanged and supported; its new
 build_typed counterpart adds a fallible startup boundary rather than changing
-the old signature. new_with_level_owner and build_with_level_owner retain their
-B.P1 Result signatures and receive warnings pointing to typed counterparts. Nine `XError` wrappers recommend `XFailure`.
+the old signature. Logger::new_with_level_owner and
+LoggerBuilder::build_with_level_owner retain their B.P1 Result signatures and
+remain supported without method-level deprecation; avoid publishing them in
+B.P2 only to deprecate the methods in B.2. Their `_typed` counterparts are
+additive recommended alternatives, not mandatory replacements. Nine `XError`
+wrappers still recommend `XFailure`, including InitError returned by those
+supported owner constructors. Explicitly naming/constructing InitError can warn;
+that is a wrapper warning, not a deprecated-method warning. Keep narrowly
+justified allowances on retained signatures/compatibility implementations where
+required, and explain that strict-lint consumers can use the typed counterparts
+or allow the specific wrapper use. Do not promise warning-free use of explicitly
+named legacy error types.
 Do not mark unrelated methods/types deprecated. The existing LogError/TryLogError,
 ObservationError, TelemetryError and QueryError remain supported; new logger
 methods use improved nested EventFailure without changing those old enums.
@@ -76,6 +88,8 @@ failure; import-only examples do not establish an upgrade path.
 
 - AC1: Every deprecated item has a working, documented replacement; no warning
   encourages a planned-only API. New consumer fixtures deny deprecated usage.
+  Both B.P1 owner constructors remain callable with no method-level deprecation
+  attribute; their InitError wrapper policy is documented separately.
 - AC2: Legacy/default-lint and partially migrated fixtures execute successfully
   with expected deprecation diagnostic codes, exact replacement notes and
   unchanged Serde fixtures; custom traits compile without required-method changes.
@@ -93,7 +107,12 @@ allows, public API diff/semver/docs, docs-consistency and copied bridge regressi
 The new validator parses Cargo JSON warning diagnostics, asserts each deprecated
 item's code and replacement note, rejects unexpected warnings and broad allows,
 runs all three fixtures and legacy JSON golden values, and fails if a fixture or
-code mapping is skipped. Test migration of tuple construction/access, match-based
+code mapping is skipped. Add focused fixtures calling both B.P1 owner
+constructors without explicitly naming InitError, explicitly naming InitError,
+and using both `_typed` counterparts under deny(deprecated). Assert no method
+is marked deprecated, isolate any wrapper-use diagnostic by its span/item, and
+verify the typed counterparts need no deprecation allowance. A blanket allow
+that hides unexpected method warnings fails validation. Test migration of tuple construction/access, match-based
 kind handling, custom codes, source chains, each open trait adapter and mixed
 old/new registrations, and unchanged root-glob imports. New typed traits and
 adapters are imported from explicit typed modules; no new root re-exports

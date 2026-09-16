@@ -2365,7 +2365,9 @@ cannot convert a successful transition into a failure or defeat redaction.
 [Shared DTO/schema](plans/phase-b/sprint-b-3-schema.md) owns the wire contract;
 [Tauri TypeScript](plans/phase-b/sprint-b-3a-typescript.md) and
 [Python runtime](plans/phase-b/sprint-b-4-python.md) consume it.
-[Python packaging](plans/phase-b/sprint-b-4a-python-packaging.md) separately
+[Shared native backends](plans/phase-b/native-binding-runtime.md) own runtime
+conversion and bounded core-host operations for both adapters; the bridge keeps
+its accepted pre-copy coordinator. [Python packaging](plans/phase-b/sprint-b-4a-python-packaging.md) separately
 qualifies distributions on the full support matrix. Adapters, not core,
 own runtime integration. New operational paths return tagged values; foreign
 exceptions are converted at boundaries, and ordinary failures do not throw,

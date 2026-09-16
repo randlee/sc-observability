@@ -33,12 +33,16 @@ documentation and validation artifacts; partial completion leaves the sprint ope
 2. Implement completion transfer between native operations and asyncio loops.
    Never block the event-loop thread on sink I/O, writer capacity, a native
    mutex, or a thread join. Completion belongs to the logger/backend rather
-   than the lifetime of a waiting Python task. Use asyncio Future values and loop.call_soon_threadsafe for native-to-loop
-   completion transfer, with tagged results passed to set_result, never
-   set_exception. Use loop.call_later for timeout results; cancel that timer
-   and unregister the waiter on completion/cancellation. No per-call Rust
-   executor or asyncio.to_thread pool is introduced. Reuse the bounded native
-   operation coordinator; callback registration obeys the limits below.
+   than the lifetime of a waiting Python task.
+   Use asyncio Future values resolved only with set_result. Poll B.3b's
+   nonblocking Operation::state from the owning loop using loop.call_later with
+   a 1 ms interval while pending; check the monotonic deadline on each callback.
+   An already-resolved operation completes immediately. Cancel the timer and
+   unregister the waiter on completion/cancellation. At most one timer per
+   registered waiter is live; the existing 64-waiter bound applies. No native
+   thread acquires the GIL or invokes Python, and no Rust executor or thread is
+   created per call. This consumes B.4's defined native coordinator without a
+   cross-thread interpreter-finalization race.
 3. Extend the B.4 validator, typed stubs, packaged examples and
    `docs/plans/phase-b/handoff-b-6.md` with receipts ignored, awaited, timed out,
    cancelled and completed after a loop closes. Exercise concurrent asyncio
@@ -129,8 +133,9 @@ SC_OBSERVABILITY_PY_RECEIPT_WAITERS_FULL. Both use Failure.queue_full and neithe
 starts extra work or silently retries.
 
 At most one native async flush is in flight per logger. Every overlapping request
-returns queue_full with code SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS; it does not
-join an earlier barrier. The slot remains occupied until actual completion even
+returns queue_full with code SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS; it does not
+join an earlier barrier. A native bridge overlap returned through the backend
+retains its distinct SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS code. The slot remains occupied until actual completion even
 if the caller times out or cancels. A flush result describes the core sink-flush
 contract, not fsync durability; event ordering/barrier semantics must match the
 core implementation. A flush request cannot report success merely because its
@@ -145,13 +150,12 @@ flush starts a new barrier; it is not observation or retry of the previous one.
 This limitation is documented in the example and tested, not hidden behind a
 promise of universal late-result retrieval.
 
-Native callbacks must resolve Python waiters on their owning loops through a
-loop.call_soon_threadsafe bridge. A callback checks whether its Future is
-already done before setting a result; foreign closed-loop scheduling failures
-are contained and release waiter registration. A closed loop leaves saved receipt/shutdown results and
-logger health intact; no callback attempts to revive a closed interpreter. Factories,
-validation, queries, health and lifecycle operations retain their Result contracts;
-no exception-based alternate path is introduced for async use.
+Loop-local polling leaves saved receipt/shutdown results and logger health
+intact when a loop closes. No native completion path holds Python objects or
+calls into an interpreter. Factories, validation, query, health and lifecycle
+retain their Result contracts. Test a loop closing with every waiter timer
+active and interpreter teardown while native flush is held; native work must
+finish without attempting GIL attachment or reviving the closed loop.
 
 ## Acceptance criteria (authoritative)
 

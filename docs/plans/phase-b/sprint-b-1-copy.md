@@ -25,8 +25,15 @@ elevation evidence.
 Entry requires the recorded approved target-contract commit, completed BTIT
 initial design/implementation, resolved critical-review findings and accepted
 re-review, plus the full immutable source commit implementing that contract.
-The source review remains `docs/plans/phase-a/review-a-5.md` in BTIT. Neither
-`f6f69dc` nor `5fd63ca` is an approved import SHA. There is no BTIT semver or
+The authoritative acceptance record is B.P3's
+`docs/plans/phase-b/handoff-b-p3.md`. It must cite the actual BTIT-side critical
+review/re-review document by repository-relative path and immutable document
+commit, record its accepted verdict and the exact source SHA reviewed, and
+identify the sc-observability acceptance of that handoff. A historical review
+filename or a moving branch link does not establish acceptance. The accepted
+source SHA in that handoff must equal the SHA in `import-provenance.json` and
+the source commit read by the import validator. Neither `f6f69dc` nor `5fd63ca`
+is an approved import SHA. There is no BTIT semver or
 backward-compatibility obligation for this initial destination public API;
 source parity is checked against the newly accepted target, not legacy behavior.
 
@@ -57,7 +64,9 @@ documentation and validation artifacts; partial completion leaves the sprint ope
    public signatures, or diagnostic behavior.
 3. Create `docs/plans/phase-b/import-provenance.json` and
    `scripts/ci/validate_log_import.py`. Record repository URL, accepted full SHA,
-   approved target-contract commit, source design/review verdicts, every copied file's source Git blob ID, and each
+   approved target-contract commit, the accepted B.P3 handoff revision and its
+   immutable BTIT review document/commit citations, source design/review verdicts,
+   every copied file's source Git blob ID, and each
    permitted adaptation with reason. The validator accepts `--source-repo PATH`,
    verifies the immutable source and complete file inventory, and rejects any
    unexplained addition, deletion, or content difference. Verify the complete
@@ -105,7 +114,10 @@ macro-expansion hygiene check.
 - AC1: The provenance validator covers the entire accepted source tree and
   allows only the recorded mechanical changes. The copied runtime/public API
   matches the accepted locked target API and its BTIT implementation; both
-  contract approval and completed source/review acceptance are present.
+  contract approval and completed source/review acceptance are present. The
+  accepted source SHA in handoff-b-p3.md equals import-provenance.json's source
+  SHA and the exact imported Git commit. The handoff's immutable review citation
+  explicitly covers that SHA; stale, absent or mismatched evidence fails AC1.
 - AC2: All imported compatibility, formatter/panic, lifecycle, health, and UI
   tests pass on macOS/Linux/Windows, alongside existing workspace tests; no
   ignored failing fixtures or regeneration used to disguise behavioral changes.
@@ -130,6 +142,12 @@ bash scripts/ci/validate_dependency_bans.sh
 bash scripts/ci/validate_repo_boundaries.sh
 bash scripts/ci/validate_docs_consistency.sh
 ```
+
+The import validator must reject a missing/unaccepted B.P3 handoff, missing
+review-document path/immutable commit, a review verdict covering a different
+source commit, or a mismatch between handoff and provenance SHAs. Include one
+valid immutable handoff fixture and negative fixtures for each of those cases;
+never substitute the previously inspected source or a conventional review path.
 
 The imported API freeze/consumer fixtures validate the new private packages;
 existing published-core API/semver gates must also remain green in normal CI.

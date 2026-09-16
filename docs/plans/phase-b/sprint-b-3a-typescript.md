@@ -10,7 +10,7 @@ base: develop
 ## Goal and dependencies
 
 Deliver a working Tauri-backed TypeScript logging client, with generated types
-and explicit runtime validation. `must_follow` B.3 for its completed DTO/schema/error contract.
+and explicit runtime validation. `must_follow` B.3b for shared native backends and transitively B.3 for schema.
 B.4 `must_follow` B.3a for the proven cross-language transport/conformance baseline.
 Shared schema consumers and fixtures preclude parallel_safe execution. Parent
 pushes trigger merge-forward before each child dev/fix round; parent PR merges first.
@@ -33,18 +33,21 @@ Every listed deliverable must land production-ready for this sprint's stated
 scope. Completion requires evidence for every numbered item, including its code,
 documentation and validation artifacts; partial completion leaves the sprint open.
 
-1. Create `bindings/typescript/` with a locked package/toolchain, a Rust exporter
-   under `bindings/typescript/exporter/`, generated declarations, and a typed
-   client with nonblocking logging and discriminated results for every operation. Pin a compatible Specta/serde exporter combination
-   there; validate the emitted JSON representation, not Rust type names alone.
+1. Create `bindings/typescript/` with a locked package/toolchain, generated
+   declarations and a typed nonblocking client. Use the repository-owned
+   `scripts/generate_typescript_bindings.py --schema bindings/schema/v1.json
+   --output-dir bindings/typescript/src/generated --check` with B.3's pinned
+   generation interpreter. The canonical schema is its only type input; remove
+   the proposed Specta/Rust exporter workstream. Regenerate to temporary output
+   and fail CI on drift; runtime validators consume the same schema fixtures.
    Export the exact encodeValue/encodeEvent helpers in the
    [binding contract](binding-contract.md#typescript-ergonomic-conversion-api),
    a transport interface and a Tauri invoke implementation. Publishable
    package name proposed: `@sc-observability/client`; availability/ownership is
    checked in B.7, not assumed here.
 2. Create `bindings/tauri/` and `examples/tauri-logging/` as isolated adapter and
-   consumer workspaces. A host installs command handlers over its existing
-   logger/control API; the frontend cannot create or shut down the host logger.
+   consumer workspaces. The proposed crate `sc-observability-tauri` registers the plugin API below
+   over B.3b supplied backends; the frontend cannot create or shut down the host logger.
    Host command registration, permissions, log root, targets, redaction and
    size policy are explicit. The example executes real Rust logging/query/
    health/flush through IPC; it is not a mock-only demonstration. Add the
@@ -115,8 +118,8 @@ schema_version 1 and LevelRequestDto under `change`, and returns
 WireEnvelope<LevelChangeDto>. The registered main application window is the only
 authorized caller; direct calls from other windows return permission_denied.
 The host supplies source=user_request (the caller cannot forge a source), uses
-one mutex over its LogGuard owner for level/shutdown commands, and executes the
-short mutation on its bounded host worker. No lock is held while waiting on sink
+one try-lock gate over its LogGuard owner for level/shutdown commands, and
+executes short mutations directly; contention returns queue_full/DISPATCH_FULL. No lock is held while waiting on sink
 I/O. Unknown fields, bad tags and malformed levels return validation results.
 Stopping/Stopped map to closed, BelowBaseline/UnsupportedLevel preserve their
 payloads, Unavailable maps to unavailable; diagnostic failure remains an ok
@@ -172,11 +175,11 @@ from host acknowledgement, and never upgrades dispatch into a persistence claim.
 
 All error handling is nonrecursive. If best-effort health accounting fails,
 preserve the original result and do not attempt another log/fallback sink.
-No retry queue may grow without bound. The host runs blocking query/flush work
-off the UI/async executor thread. Flush timeout is an error result indicating
+No retry queue may grow without bound. The host uses B.3b start_query/start_flush and awaits Operation::completion;
+no query/flush work or synchronous wait runs on the UI/async executor thread. Flush timeout is an error result indicating
 that the caller stopped waiting; it does not stop or retry the underlying flush.
 Use the accepted control API with one in-flight flush per logger. Overlapping
-requests return queue_full/SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS; a later request never shares an
+requests return queue_full/SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS; a later request never shares an
 earlier flush barrier. The slot remains owned until actual completion, including
 after caller timeout. Repeated timeouts cannot create unbounded threads.
 
@@ -226,8 +229,8 @@ pre-existing unredacted history; access remains host-authorized.
 
 ## Acceptance criteria (authoritative)
 
-- AC1: A clean TypeScript consumer installs the packed package and uses all five
-  remote operations through real Tauri IPC with expected JSONL/query/health results,
+- AC1: A clean TypeScript consumer installs the packed package and uses the four client commands plus the example-only
+  level-change command through real Tauri IPC with expected JSONL/query/health results,
   including correlated frontend/Rust backend records in one application log.
 - AC2: Rust JSON, generated declarations, runtime validators and fixture results
   agree, including every Result/Failure variant, exhaustive TypeScript narrowing,
@@ -235,7 +238,8 @@ pre-existing unredacted history; access remains host-authorized.
   same-timestamp query results, invalid versions, every error/remediation variant,
   unknown remote failures, and old/new schema consumer compatibility.
 - AC3: Input policy cannot be bypassed by direct invoke calls; denied targets,
-  oversized/deep payloads, invalid fields, redaction, queue-full and flush-timeout
+  oversized/deep payloads, invalid fields, every protected-provenance spoofing
+  fixture in binding-contract.md, redaction, queue-full and flush-timeout
   cases have boundary tests. Default log failures, including a disconnected host
   and failed diagnostic accounting, do not throw or trigger unhandled Promise
   rejections. Factory, validation, query, health and lifecycle errors also return
@@ -251,7 +255,9 @@ pre-existing unredacted history; access remains host-authorized.
   mutation failures preserve prior state. Admission accepted/filtered fixtures
   and diagnostic message and remediation steps round-trip without information loss.
 - AC5: Generated drift fails CI; core dependency/API invariants remain intact.
-  Packed TypeScript and packaged Rust adapter artifacts work outside the repo.
+  Packed TypeScript and packaged Rust adapter artifacts work outside the repo
+  using B.4a’s prepublication vendored-source/temporary root patch procedure;
+  no checkout path dependency or premature crates.io publication is allowed.
   The packed consumer exercises ergonomic integer conversion through real
   logging/query; invalid/cyclic/getter-failing inputs return typed errors.
 
@@ -273,7 +279,7 @@ level-command authorization, owner/shutdown races, health coherence,
 accepted/filtered distinction and every level-result/error fixture; a mock-only
 endpoint test does not satisfy these checks.
 
-The new script owns exact locked exporter/package-manager commands, temporary
+The new script owns exact locked generator/package-manager commands, temporary
 package-consumer installation, and Rust/IPC integration tests, and fails if any
 stage is skipped. Record macOS/Linux/Windows results and the generated artifact
 hashes. It must not overwrite drift and then report success.
@@ -291,6 +297,48 @@ lifecycle ownership. Preserve the narrow public logging subset explicitly.
 ## Technical references
 
 [Tauri command boundary](https://v2.tauri.app/develop/calling-rust/) informs the
-host/client split. [Specta integer export policy](https://docs.rs/specta/latest/specta/ts/enum.BigIntExportBehavior.html)
-requires a wire encoding that agrees with generated types; merely exporting
-`bigint` is insufficient for JSON.
+host/client split. The canonical schema keeps integer wire values as checked decimal strings;
+generated TypeScript types and runtime conversions must agree.
+
+## Host adapter Rust API
+
+`bindings/tauri/` publishes `sc-observability-tauri`. Its plugin consumes
+`sc-observability-binding-runtime` and re-exports its HostLoggingBackend trait.
+The host retains logger configuration, log root and unique lifecycle owner.
+
+```rust
+pub struct AdapterPolicy {
+    pub allowed_window_labels: std::collections::BTreeSet<String>,
+    pub allowed_targets: std::collections::BTreeSet<String>,
+    pub max_request_bytes: u32,
+    pub max_depth: u32,
+    pub redacted_field_keys: std::collections::BTreeSet<String>,
+}
+pub fn plugin<R: tauri::Runtime>(
+    backend: std::sync::Arc<dyn HostLoggingBackend>,
+    policy: AdapterPolicy,
+) -> Result<tauri::plugin::TauriPlugin<R>, Failure>;
+```
+
+The host calls builder.plugin(value) only after plugin returns Ok; plugin
+construction validates nonempty window/target sets, valid labels and positive
+limits no greater than 65536 bytes/depth32. Invalid policy returns INVALID_INPUT.
+Redacted field keys are recursively replaced with the string `[REDACTED]` before
+native submission; keys in the protected provenance namespace are invalid policy.
+Core redaction remains an additional required layer. Empty redacted_field_keys
+is allowed when the core policy alone suffices; no frontend request can edit it.
+Authorize the invoking window for every command including query/health/flush;
+validate event target against allowed_targets before admission. Query target
+filters must also be allowlisted and unfiltered queries must be constrained to
+that allowlist before returning records, never expose unauthorized history.
+
+Plugin name is `sc-observability`; the four transport invoke names are
+`plugin:sc-observability|sc_observability_try_log`,
+`plugin:sc-observability|sc_observability_query`,
+`plugin:sc-observability|sc_observability_health`, and
+`plugin:sc-observability|sc_observability_flush`. The short names earlier are
+plugin command identifiers, not bare invoke paths. This registration composes
+with the host's own invoke handler, including app_observability_level_change.
+The application-owned level command remains outside the plugin. Backend origin
+is always TauriFrontend. Test malformed/empty policy, forbidden windows and
+targets, raw invoke bypasses, redaction and preexisting host command composition.

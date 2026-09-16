@@ -131,3 +131,47 @@ Post-push validation caught two mistyped family names in the new boundary
 manifest (LogFailure/ObserveFailure). Corrected them to the existing contract's
 EventFailure/ShutdownFailure; no API change is implied. This was a manifest
 transcription fix under S3-003, followed by another validation pass.
+
+## Critical correction — STEP3-R2 (2026-09-16)
+
+Input: critical-plan-reviewer FAIL at `931c3f4`, fingerprint
+`phaseb-crit-r1-931c3f4-b2-i9-m4`. Audit scope remains the user's Phase B work;
+all correction targets were enumerated before fixes. This pass adds B.3b as a
+split of already-required native binding behavior; the phase now has 18 sprints.
+
+| Finding | Type / target | Correction disposition |
+| --- | --- | --- |
+| PLAN-CRIT-001 | GAP / Python native coordination | B.3b shared runtime contract defines fixed workers, spawn rollback, bounded slots, owner transfer, retained completion and teardown; B.4/B.6 consume it. |
+| PLAN-CRIT-002 | MISSING-CODE-SAMPLE / Tauri host API | B.3a declares sc-observability-tauri plugin, AdapterPolicy and supplied backend interface, with window/target/redaction policy tests. |
+| PLAN-CRIT-003 | GAP / runtime conversion ownership | One sc-observability-binding-runtime crate supplies CoreLoggerBackend and BridgeControlBackend; host examples no longer repeat mappings. |
+| PLAN-CRIT-004 | GAP / trusted provenance | binding-contract defines reserved namespace, exact stamped keys/values, normalized-key rejection and input/output distinction; B.3/B.3a/B.4 fixtures enforce it. |
+| PLAN-CRIT-005 | VAGUE / flush code ownership | Adapter overlap uses DTO-owned BINDING_FLUSH_IN_PROGRESS; only an actual native bridge error passes through LOG_FLUSH_IN_PROGRESS. |
+| PLAN-CRIT-006 | VAGUE / duplicate admission enum | EmitOutcome becomes an alias of re-exported core AdmissionOutcome; no parallel enum/conversion remains. |
+| PLAN-CRIT-007 | DROP-RISK / constructor churn | Newly published owner constructors are exempt from method deprecation, with typed alternatives and separate InitError-wrapper warning guidance; ADR-012 records this. |
+| PLAN-CRIT-008 | ORDERING / prepublication packaging | B.3 owns reusable source-bundle helper; early validators use versioned bundled root patches plus published-source vendoring; B.4a proves offline sdist/host builds and B.7 retains registry gates. |
+| PLAN-CRIT-009 | VAGUE / schema generation | Schemars =1.2.2 optional generation feature emits canonical JSON; named repository-owned TS/Python generators consume only that schema under locked tooling. |
+| PLAN-CRIT-010 | GAP / embedding ADR | ADR-015 records embedded rlib, immutable module installation, rejected ABI/shared-library/IPC alternatives and future transport boundary. |
+| PLAN-CRIT-011 | VAGUE / source acceptance | B.P3 immutable handoff is authoritative and must match import-provenance SHA; actual BTIT review path/commit is cited there rather than presumed. |
+| PLAN-CRIT-M1 | VAGUE / projection ownership | Runtime contract now distinguishes schema, shared native runtime and language projections. |
+| PLAN-CRIT-M2 | VAGUE / Tauri AC1 | Explicitly names four client commands plus example-only level request. |
+| PLAN-CRIT-M3 | GAP / generator tool | Resolved with PLAN-CRIT-009's exact generator/pin/commands. |
+| PLAN-CRIT-M4 | GAP / crate names | Proposed Tauri and Python rlib names are declared in contracts and B.7 release record. |
+
+Independent bounded integration review found four additional details in the new
+coordinator draft: helper exit, callback/shutdown starvation, mutation scheduling,
+and GIL/teardown ordering. The corrected contract uses three fixed helpers with
+128 reserved callback slots and explicit exit rules; mutations use a direct
+nonblocking owner gate. Python waits poll saved state on their own loop, removing
+native callback/GIL finalization races. This supersedes the earlier STEP1-R2
+call_soon_threadsafe choice while preserving immediate submit and optional typed
+waiting. These are corrections to the assigned coordinator finding, not a new
+runtime capability or sc-runtime topology commitment.
+
+No published API break, post-copy bridge redesign or implementation approval is
+introduced. Formal critical re-review and the subsequent consistency pass remain
+required after this author correction.
+
+Second author audit and bounded independent follow-up found no residual material
+finding in the revised coordinator/ownership contracts. All 11 critical findings
+and four wording items have an explicit correction disposition above. This is
+an author result only; it does not substitute for critical-plan-reviewer PASS.

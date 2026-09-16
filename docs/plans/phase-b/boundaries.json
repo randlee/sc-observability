@@ -47,7 +47,8 @@
         "BTIT_implementation_before_B1_copy",
         "single_lifecycle_owner",
         "one_inflight_flush",
-        "shutdown_late_result_retained"
+        "shutdown_late_result_retained",
+        "EmitOutcome_aliases_core_AdmissionOutcome"
       ]
     },
     {
@@ -196,7 +197,9 @@
         "no_native_error_context",
         "explicit_unknown_remote",
         "request_bytes_max_65536",
-        "depth_max_32"
+        "depth_max_32",
+        "canonical_JSON_schema_generates_both_languages",
+        "reserved_sc_observability_binding_namespace"
       ]
     },
     {
@@ -205,10 +208,11 @@
       "contract": "docs/plans/phase-b/sprint-b-3a-typescript.md",
       "transport": "tauri_json_invoke",
       "operations": [
-        "sc_observability_try_log",
-        "sc_observability_query",
-        "sc_observability_health",
-        "sc_observability_flush",
+        "plugin",
+        "plugin:sc-observability|sc_observability_try_log",
+        "plugin:sc-observability|sc_observability_query",
+        "plugin:sc-observability|sc_observability_health",
+        "plugin:sc-observability|sc_observability_flush",
         "app_observability_level_change"
       ],
       "result_contract": "Resolved WireEnvelope; foreign invoke rejection converted into Failure",
@@ -216,8 +220,10 @@
         "host_authorization",
         "shared_writer",
         "no_frontend_lifecycle_owner",
-        "bounded_local_client_status"
-      ]
+        "bounded_local_client_status",
+        "uses_shared_HostLoggingBackend"
+      ],
+      "crate": "sc-observability-tauri"
     },
     {
       "id": "python_runtime",
@@ -237,8 +243,13 @@
         "one_install_per_module",
         "attached_no_lifecycle_owner",
         "release_GIL_for_blocking_calls",
-        "no_cross_dylib_trait_objects"
-      ]
+        "no_cross_dylib_trait_objects",
+        "uses_shared_provided_backends",
+        "immutable_module_install",
+        "bridge_transitive_dependency_no_global_install"
+      ],
+      "crate": "sc-observability-py",
+      "adr": "docs/architecture.md#adr-015-embedded-python-and-shared-binding-runtime"
     },
     {
       "id": "python_integration",
@@ -267,7 +278,7 @@
       "id": "python_async",
       "implementation_owner": "B.6",
       "contract": "docs/plans/phase-b/sprint-b-6-python-async.md",
-      "transport": "asyncio_future_call_soon_threadsafe",
+      "transport": "asyncio_future_loop_local_call_later_polling",
       "operations": [
         "submit",
         "LogReceipt.state",
@@ -282,6 +293,35 @@
         "timeout_does_not_cancel_shared_work",
         "no_prior_flush_result_accessor"
       ]
+    },
+    {
+      "id": "shared_native_binding_runtime",
+      "implementation_owner": "B.3b",
+      "contract": "docs/plans/phase-b/native-binding-runtime.md",
+      "crate": "sc-observability-binding-runtime",
+      "transport": "native_rust",
+      "operations": [
+        "HostLoggingBackend",
+        "CoreLoggerBackend",
+        "CoreLoggerOwner",
+        "BridgeControlBackend",
+        "create_core_backend",
+        "bridge_backend",
+        "Operation",
+        "OperationState",
+        "CompletionSubscription"
+      ],
+      "result_contract": "Rust Result; saved Operation completion; single-owned core/bridge runtime DTO conversion",
+      "invariants": [
+        "three_helper_threads_per_backend",
+        "one_process_timer_helper",
+        "one_query_slot",
+        "one_flush_slot",
+        "64_observers_per_operation",
+        "no_Tauri_or_PyO3_dependency",
+        "single_trusted_provenance_stamp"
+      ],
+      "adr": "docs/architecture.md#adr-015-embedded-python-and-shared-binding-runtime"
     }
   ]
 }

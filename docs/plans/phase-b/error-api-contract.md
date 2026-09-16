@@ -361,14 +361,30 @@ The old traits remain supported indefinitely for old consumers.
 ## Compatibility and warning policy (B.1e)
 
 Deprecate the nine old wrapper types and only the old entry points whose complete
-recommended counterpart appears in B.1b–B.1d. Each note names its exact replacement
-and the migration guide. Do not deprecate DiagnosticInfo, ErrorContext,
+recommended counterpart appears in B.1b–B.1d, subject to the explicit exemptions
+below. Each note names its exact replacement and the migration guide. Do not deprecate DiagnosticInfo, ErrorContext,
 Diagnostic, ErrorCode, existing kinded errors, old open traits, registrations,
-config fields, legacy infallible LoggerBuilder::build, or constructors that
-have no equivalent replacement. build_typed adds recoverable startup failure
+config fields, legacy infallible LoggerBuilder::build, the B.P1
+Logger::new_with_level_owner and LoggerBuilder::build_with_level_owner methods,
+or constructors that have no equivalent replacement. build_typed adds recoverable startup failure
 reporting without altering the old infallible build contract. Old traits
 remain documented as supported interoperability boundaries; typed traits and
 explicit adapters are recommended for new implementations.
+
+The two B.P1 owner constructors were published as the prerequisite capability
+in B.P2 and remain supported without method-level deprecation in B.1e/B.2.
+Their additive `_typed` counterparts remain available and recommended when a
+caller wants InitFailure; do not publish an owner method and immediately mark
+that method obsolete. Preserve their exact Result signatures returning InitError.
+This exemption does not exempt InitError itself from the nine-wrapper warning
+policy: explicit downstream naming/construction of that wrapper can still warn.
+Documentation must distinguish those wrapper warnings from method deprecation,
+and must not promise every use is warning-free under `-D deprecated`. Use only
+narrow, justified allowances on retained constructor signatures/compatibility
+implementations where the deprecated return type requires them. Existing caller
+source still works with default lints; callers seeking an entirely typed path
+can select new_with_level_owner_typed/build_with_level_owner_typed without a
+forced upgrade or a changed owner capability.
 
 B.1e selects the next available minor workspace version greater than the runtime
 prerequisite release and substitutes it for V in #[deprecated(since = "V", ...)].

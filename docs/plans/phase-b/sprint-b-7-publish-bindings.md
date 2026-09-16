@@ -10,7 +10,7 @@ base: develop
 ## Goal and dependencies
 
 Publish the already-working B.3a TypeScript and B.4/B.5/B.6 Python artifacts so external
-consumers can install them. `must_follow` B.6 and transitively B.5/B.4a/B.4/B.3a/B.3/B.2: preserve
+consumers can install them. `must_follow` B.6 and transitively B.5/B.4a/B.4/B.3a/B.3b/B.3/B.2: preserve
 the accepted runtime/schema contracts. This sprint owns distribution and
 registry proof, not unfinished runtime work. Shared release/runtime artifacts
 preclude parallel_safe execution; follow parent-push merge-forward before each
@@ -22,13 +22,13 @@ Every listed deliverable must land production-ready for this sprint's stated
 scope. Completion requires evidence for every numbered item, including its code,
 documentation and validation artifacts; partial completion leaves the sprint open.
 
-1. Add `release/bindings-artifacts.toml` recording Rust DTO/adapter/embedding crates,
+1. Add `release/bindings-artifacts.toml` recording Rust DTO/native-runtime/Tauri-adapter/embedding crates,
    npm and PyPI package names, owners, versions, schema compatibility, source
    commit and artifact paths/hashes. Check registry name/control availability
    before freezing names; record any reviewed rename consistently. Preserve
    independently versioned language packages and schema-v1 compatibility.
 2. Extend the existing release workflow with explicit binding artifact jobs.
-   Publish prerequisite Rust DTO/adapter crates before packages or sdists that
+   Publish prerequisite Rust DTO/native-runtime/adapter crates before packages or sdists that
    resolve them from registries. Build Python wheels from an immutable main
    release commit for the B.4a matrix and publish those tested bytes. Include
    stubs, py.typed, licenses and source distribution; npm ships generated
@@ -37,9 +37,15 @@ documentation and validation artifacts; partial completion leaves the sprint ope
    npm/PyPI versions into fresh external fixtures with no local path override.
    Exercise the TypeScript client with the released host adapter and the Python
    API against temporary logs. Build a registry-only Rust embedding consumer
-   using the published Python binding rlib, and prove shared Rust/Python records. Write `docs/plans/phase-b/handoff-b-7.md` with
+   using sc-observability-py and the supplied shared native backend, and prove
+   shared Rust/Python records without implementing new DTO mappings. Write `docs/plans/phase-b/handoff-b-7.md` with
    registry URLs, versions, hashes, source tag, public API coverage, platform
    results and adoption examples. Update root consumer/release documentation.
+
+Proposed crates.io names: `sc-observability-dto`,
+`sc-observability-binding-runtime`, `sc-observability-tauri`, and
+`sc-observability-py`. B.7 verifies ownership/availability for each before release.
+Publish in that dependency order; language packages consume these tested versions.
 
 ## Release compatibility record
 
@@ -51,6 +57,20 @@ schema_version = 1
 kind = "npm" # other entries: pypi or crates-io
 name = "@sc-observability/client"
 version = "<approved package version>"
+dto_schema = 1
+source_commit = "<full immutable main commit>"
+
+[[artifacts]]
+kind = "crates-io"
+name = "sc-observability-tauri"
+version = "<approved crate version>"
+dto_schema = 1
+source_commit = "<full immutable main commit>"
+
+[[artifacts]]
+kind = "crates-io"
+name = "sc-observability-py"
+version = "<approved crate version>"
 dto_schema = 1
 source_commit = "<full immutable main commit>"
 ```

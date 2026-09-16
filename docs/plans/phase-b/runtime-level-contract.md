@@ -20,7 +20,8 @@ Execution ownership and closure are defined once in the prerequisite sprints:
 [B.P2 core publication](sprint-b-p2-runtime-publish.md), and
 [B.P3 BTIT integration](sprint-b-p3-runtime-btit.md).
 This document is the normative signature/behavior reference, not an additional
-sprint or a separate closure checklist. B.3/B.4 own binding projections.
+sprint or a separate closure checklist. B.3 owns the shared wire projection; B.3b owns native backends and conversions;
+B.3a and B.4 own TypeScript/Tauri and Python runtime projections.
 
 ## Proposed API and values
 

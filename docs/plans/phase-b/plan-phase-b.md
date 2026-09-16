@@ -38,6 +38,7 @@ entry assumptions. They must complete before the first migration sprint B.1.
 | B.1e | Warning-only legacy migration and downstream adoption guidance | [Error adoption](sprint-b-1e-error-adoption.md) |
 | B.2 | Published Rust bridge and macros, verified from crates.io | [Rust publication](sprint-b-2-publish-rust.md) |
 | B.3 | Neutral DTO crate, checked conversions, schema and conformance fixtures | [Shared schema](sprint-b-3-schema.md) |
+| B.3b | Shared native core/bridge backends, conversions and bounded operation coordinator | [Native runtime](sprint-b-3b-native-runtime.md) |
 | B.3a | Generated TypeScript client, Tauri host adapter and real IPC consumer | [TypeScript](sprint-b-3a-typescript.md) |
 | B.4 | Owned and host-attached Python runtime API through PyO3 | [Python runtime](sprint-b-4-python.md) |
 | B.4a | Maturin wheels, sdist and full Python/platform qualification | [Python packaging](sprint-b-4a-python-packaging.md) |
@@ -92,7 +93,7 @@ structs, traits, enum exhaustiveness, codes and serialized forms remain intact.
 New methods and types coexist with old interfaces; no planned removal or 2.0
 conversion is authorized. B.2 publishes the completed additive migration.
 
-The plan contains 17 bounded sprint records including the three pre-copy
+The plan contains 18 bounded sprint records including the three pre-copy
 prerequisites. The identifiers retain existing B.1–B.7 references; scope is split
 by production closure rather than hidden in prerequisites or implementation notes.
 
@@ -105,6 +106,9 @@ neither language runtime becomes a dependency of the core crates.
 - `crates/sc-observability-dto/`: language-neutral, versioned wire values and
   checked conversions, owned by B.3. It depends on public types, not Tauri or
   PyO3. Language exporters live outside this crate.
+- `crates/sc-observability-binding-runtime/`: B.3b owns provided core/bridge
+  backends, runtime-to-DTO conversion and bounded native operation coordination.
+  It depends on core, DTOs and bridge; it has no Tauri/PyO3 dependency.
 - `bindings/typescript/`: generated DTO declarations, transport abstraction,
   and Tauri client; `bindings/tauri/` owns host-side integration. The host owns
   initialization, filesystem policy, command registration, and shutdown.
@@ -177,7 +181,8 @@ BTIT's later switch to the published crates is a separate BTIT change.
 | B.1e must_follow B.1d | Deprecate only after all replacements and upgrade fixtures work |
 | B.2 must_follow B.1e | Publish the improved core API and warning-only compatibility path with the companion release |
 | B.3 must_follow B.2 | Implement neutral DTO conversions against the published Rust baseline |
-| B.3a must_follow B.3 | Consume the accepted schema in TypeScript/Tauri and real IPC tests |
+| B.3b must_follow B.3 | Implement native backends against the accepted DTO contract |
+| B.3a must_follow B.3b | Consume shared native runtime in TypeScript/Tauri and real IPC tests |
 | B.4 must_follow B.3a | Reuse schema and proven cross-language conformance evidence |
 | B.4a must_follow B.4 | Qualify distributions of the completed Python runtime API |
 | B.5 must_follow B.4a | Integrate Python logging/context using the qualified package baseline |

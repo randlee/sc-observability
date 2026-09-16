@@ -101,7 +101,8 @@ pub struct BridgeEvent {
     pub correlation_id: Option<CorrelationId>,
     pub trace: Option<TraceContext>,
 }
-pub enum EmitOutcome { Accepted, Filtered }
+pub use sc_observability_types::AdmissionOutcome;
+pub type EmitOutcome = AdmissionOutcome; // compatibility spelling, not a second enum
 pub enum LifecyclePhase { Running, Stopping, Stopped, Failed }
 
 impl LogGuard {
@@ -109,7 +110,7 @@ impl LogGuard {
     pub fn health(&self) -> Result<BridgeHealthReport, ControlError>;
 }
 impl LogControl {
-    pub fn try_log(&self, event: BridgeEvent) -> Result<EmitOutcome, EmitError>;
+    pub fn try_log(&self, event: BridgeEvent) -> Result<AdmissionOutcome, EmitError>;
     pub fn query(&self, query: &LogQuery) -> Result<LogSnapshot, ControlError>;
     pub fn flush(&self, timeout: std::time::Duration) -> Result<(), FlushError>;
     pub fn health(&self) -> Result<BridgeHealthReport, ControlError>;
@@ -297,6 +298,9 @@ automatic retry. FieldKeyError remains a nested reason under INVALID_FIELD.
 - Direct and ignored-result facade paths count each failed record exactly once.
   Filtered records are not drops. Failed diagnostic accounting cannot replace an
   operation result with a panic, recursion, retry or success.
+
+EmitOutcome is a public alias of core AdmissionOutcome; matching/conversion uses
+the same type identity. No duplicate admission enum or mapping is introduced.
 
 ## Behavioral compatibility decisions
 

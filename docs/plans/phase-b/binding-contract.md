@@ -1,6 +1,6 @@
 ---
 status: proposed_for_public_api_review
-owners: B.3 shared DTO/schema, B.3a TypeScript/Tauri, B.4 Python projection
+owners: B.3 shared DTO/schema, B.3b native runtime, B.3a TypeScript/Tauri, B.4 Python projection
 ---
 
 # Shared binding declarations and boundary rules
@@ -266,13 +266,14 @@ pub struct EventStamp {
 }
 ```
 
-EventStamp comes from the host, never input DTOs. `to_core_event` supplies current
-native schema version and no diagnostic/state_transition; source provenance is
-added by the host using protected metadata before conversion. The DTO crate
-depends on public types, serde and serde_json only; bridge health conversion lives in the
-Tauri/Python adapters to avoid depending on runtime crates in the DTO crate.
-EventStamp fields are public because hosts construct it; its values already use
-validated core newtypes. Existing core validation applies again before admission.
+EventStamp comes from the host, never input DTOs. `to_core_event` supplies
+current native schema version and no diagnostic/state_transition. DTO default
+runtime dependencies remain public types, serde and serde_json; optional
+`schema-gen` uses Schemars only for generation. The shared
+[native binding runtime](native-binding-runtime.md) owns all core/bridge runtime
+conversion, including trusted provenance insertion after public input validation.
+Tauri and Python use its provided backends; hosts do not reimplement conversion
+maps. EventStamp fields remain public validated native values.
 
 Tauri adapter commands return WireEnvelope values even on failure. Their
 serialization/argument shape is precisely the B.3a command table; command bodies
@@ -281,12 +282,16 @@ result rather than Tauri's implicit argument-extraction rejection. Missing or
 invalid invoke-level arguments that prevent command entry are foreign transport
 failures contained by JsonTransport. No unvalidated raw value reaches core.
 
-The application retains its LogGuard and gives the adapter a read-only
-LogControl; independent core-host implementations provide equivalent public
-operations, without creating a bridge or global logger. Python's
-HostLoggingBackend contract in B.4 is the embedding boundary, not a raw pointer
-or cross-dynamic-library ABI. Full core query/health use public native types;
-bridge admission uses EmitOutcome; core admission uses AdmissionOutcome.
+The application retains its LogGuard and installs the provided BridgeControlBackend
+around a LogControl, or constructs its core logger through create_core_backend.
+CoreLoggerBackend conveys no ownership; CoreLoggerOwner remains with the host.
+Both implement HostLoggingBackend from sc-observability-binding-runtime. Python
+re-exports this trait for source-level Rust embedding convenience, never defines
+a competing trait or dynamic-library ABI. The shared crate depends on the bridge;
+Python depends on it transitively but never installs the facade implicitly.
+Bridge admission re-exports core AdmissionOutcome; EmitOutcome is only an alias.
+The bridge coordinator and shared core-host binding coordinator are deliberately
+separate implementations; Tauri and Python reuse the latter's fixed native bounds.
 
 ## Python ergonomic declarations
 
@@ -389,13 +394,14 @@ expansion of configuration needs its own additive reviewed contract.
   wait, never cancels underlying ownership, changes level state or implies
   shutdown completed.
 - Each adapter maintains at most one in-flight flush and one query per logger.
-  Overlap returns queue_full with stable code SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS or
+  Overlap returns queue_full with stable code SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS or
   SC_OBSERVABILITY_BINDING_QUERY_IN_PROGRESS. Do not coalesce a later flush behind an earlier barrier.
   Tauri fire-and-forget dispatch allows at most 256 outstanding requests per
   client; the next returns queue_full before scheduling. Query and flush helper
   slots remain occupied until actual operation completion even after timeout.
-  Level request commands share the owner's short critical section and run on
-  that bounded host adapter worker, never spawn an unbounded thread per call.
+  Level request commands acquire the owner's gate nonblockingly and perform the
+  short mutation directly; busy gates return DISPATCH_FULL without mutation.
+  They never queue behind query/flush I/O or spawn a thread per call.
 - Best-effort client failure state is one last Failure and saturating counters
   by known Failure kind; no unbounded history. A failed update preserves the
   original result and makes no logging attempt. Diagnostic code/message and
@@ -447,6 +453,9 @@ occurs. Capture time is boundary UTC unless an original native timestamp exists.
 | `SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION` | unsupported_version | Install client and host packages supporting the same schema |
 | `SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE` | validation | Reduce remote diagnostic text or remediation steps to the documented bounds |
 | `SC_OBSERVABILITY_BINDING_DISPATCH_FULL` | queue_full | Wait for an outstanding request to complete before submitting again |
+| `SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS` | queue_full | Wait for the current adapter flush to finish before submitting another |
+| `SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED` | unavailable | Restore native thread resources before explicitly creating another backend |
+| `SC_OBSERVABILITY_BINDING_WAITERS_FULL` | queue_full | Wait for an existing operation observer to finish before registering another |
 | `SC_OBSERVABILITY_BINDING_QUERY_IN_PROGRESS` | queue_full | Wait for the existing query to finish before starting another |
 | `SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED` | unavailable | Install a host backend before requesting an attached logger |
 | `SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED` | unavailable | Reuse the module's existing backend; replacement is unsupported |
@@ -456,14 +465,39 @@ occurs. Capture time is boundary UTC unless an original native timestamp exists.
 | `SC_OBSERVABILITY_BINDING_CANCELLED` | cancelled | Inspect the saved operation result if confirmation is still needed |
 | `SC_OBSERVABILITY_BINDING_INTERNAL` | internal | Inspect the retained status and restore the affected host or client |
 
-Overlap of native or adapter flush uses the existing accepted bridge literal
-`SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS` and queue_full; preserve that bridge
-code and its operation-specific remediation. For core-only Python hosts, the
-adapter uses the same documented literal for equivalent semantics, without a
-runtime bridge dependency. unknown_remote retains the remote code and tag,
+Adapter slot overlap uses SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS and
+queue_full. Only an actual native bridge FlushError::InProgress passes through
+SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS with its original remediation; do not
+manufacture or duplicate that literal for a core-only operation. unknown_remote retains the remote code and tag,
 not a fabricated replacement code. A malformed remote envelope uses INVALID_INPUT
 with field `response`; an oversized diagnostic uses DIAGNOSTIC_TOO_LARGE with
 field `response.error`. Validators reject duplicate/missing registry literals
 and test kind/remediation/timestamp mapping for each row. Additional B.5/B.6
 operation-specific codes are defined by those sprints before first publication,
 using the same generated registry rather than standalone language constants.
+
+## Protected source provenance
+
+Reserved event-field namespace: `sc_observability.binding.`. Exactly two trusted
+stored fields are stamped by the shared native backend: `sc_observability.binding.language`
+and `sc_observability.binding.channel`. ProducerOrigin maps TauriFrontend to
+`typescript`/`tauri`, Python to `python`/`pyo3`, and RustHost to `rust`/`native`.
+The native Rust LogEvent fields map carries these strings; no new LogEvent field
+or published core serialization change is introduced.
+
+Input validation rejects every user field key beginning with that namespace,
+at every object depth, both before and after the bridge's documented key
+normalization (`::` becomes `.`, non-label characters become `_`). It returns
+validation/SC_OBSERVABILITY_BINDING_INVALID_INPUT naming the offending field;
+it never silently overwrites caller data. This rule applies to decode_event,
+encodeValue/encodeEvent, Python ergonomic conversion, direct host invokes and
+both provided backends. Trusted stamping occurs after validation and native
+conversion, immediately before submission. Its private stamp path is not a public
+input bypass. Stored-event decoding accepts trusted output provenance; input and
+output schemas distinguish those contexts. Root redaction/sink policy still runs.
+
+Fixtures cover exact reserved keys, arbitrary reserved suffixes, nested objects,
+normalized aliases such as `sc_observability::binding::language`, mixed valid/
+forged fields, and both core-only and bridge-backed hosts. Assert the complete
+record fails once before queue admission and successful records carry the two
+host-selected values. Query filters may inspect provenance but cannot set it.

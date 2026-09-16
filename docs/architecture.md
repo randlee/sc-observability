@@ -1,6 +1,6 @@
 # SC-Observability Architecture
 
-**Status**: Approved baseline; ADR-011–ADR-014 proposed for Phase B review
+**Status**: Approved baseline; ADR-011–ADR-015 proposed for Phase B review
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Related documents**:
 - [`requirements.md`](./requirements.md)
@@ -736,6 +736,7 @@ ADR navigation index (status is recorded in each decision below):
 - [ADR-012: Additive Typed Errors And Warning-Only Migration](#adr-012-additive-typed-errors-and-warning-only-migration)
 - [ADR-013: Owner-Controlled Shared Runtime Level](#adr-013-owner-controlled-shared-runtime-level)
 - [ADR-014: Result-Preserving Language Boundaries](#adr-014-result-preserving-language-boundaries)
+- [ADR-015: Embedded Python And Shared Binding Runtime](#adr-015-embedded-python-and-shared-binding-runtime)
 
 ### ADR-001: Observation-First Producers
 
@@ -891,7 +892,10 @@ ADR navigation index (status is recorded in each decision below):
   cannot initiate shutdown, and timed-out waits retain one operation's eventual
   result. Core shutdown still waits for definitive completion (ADR-010); bridge
   timeout bounds the caller's wait, not writer completion. No post-copy bridge
-  redesign or BTIT dependency switch is scheduled here.
+  redesign or BTIT dependency switch is scheduled here. The bridge retains its
+  accepted coordinator; a separate shared binding-runtime coordinator handles
+  core-only hosts, reused by Tauri/Python rather than duplicated per language.
+  EmitOutcome is an alias of core AdmissionOutcome, not a duplicate enum.
 - **Contracts**: PHB-001/002/014; [target API](plans/phase-b/target-bridge-api.md).
 
 ### ADR-012: Additive Typed Errors And Warning-Only Migration
@@ -911,7 +915,11 @@ ADR navigation index (status is recorded in each decision below):
   consumers continue with warnings under default lints; strict warning policies
   require deliberate migration. A practical adoption guide and old/new/custom
   trait fixtures are release gates. No removal version or major conversion is
-  planned. Scoped API approvals review additions; they cannot authorize a break.
+  planned. The newly published B.P1 owner constructors remain exempt from
+  B.1e method deprecation, avoiding publish-then-deprecate churn. InitError
+  wrapper warnings remain distinct; explicit legacy type users may need narrow
+  lint allowances, while typed alternatives are available. Scoped API approvals
+  review additions; they cannot authorize a break.
 - **Contracts**: PHB-003–006; [error migration](plans/phase-b/sprint-b-1a-error-api.md).
 
 ### ADR-013: Owner-Controlled Shared Runtime Level
@@ -950,7 +958,39 @@ ADR navigation index (status is recorded in each decision below):
   bounded optional waits; timeout/cancellation ends observation, not the shared
   operation. Existing infallible Rust accessors and source contracts stay intact.
   Node.js, Go, sc-runtime IPC/interpreters and durable receipts are deferred.
+  Shared native backends own runtime conversions and bounded core-host operations;
+  language wrappers own transport/extraction only. Canonical schema-v1 JSON drives
+  both generated language models, with Rust Serde/schema agreement checked in CI.
 - **Contracts**: PHB-010–014; [Phase B](plans/phase-b/plan-phase-b.md).
+
+### ADR-015: Embedded Python And Shared Binding Runtime
+
+- **Status**: Proposed for Phase B review.
+- **Context**: Attached Python must share a Rust host logger and its typed
+  operations without exchanging Rust trait objects between independently linked
+  libraries or building a new process transport before sc-runtime is specified.
+- **Proposed decision**: Hosts link the `sc-observability-py` rlib and register
+  its module in an embedded GIL-enabled interpreter. `install_host_logger` stores
+  one immutable backend per module; repeated/racing installations return typed
+  failures. Hosts install provided core/bridge backends from
+  `sc-observability-binding-runtime`, which owns native DTO conversion and the
+  bounded core-host operation coordinator. Python-owned mode uses the same core
+  backend with a unique owner; attached mode never owns shutdown/level mutation.
+  A standalone extension wheel is a separate loading mode, not a mechanism to
+  exchange Rust objects with an independently compiled host extension.
+- **Alternatives rejected for this phase**: C ABI/capsule/integer-pointer handles
+  require a separate lifetime and ABI contract; separate wheel plus host shared
+  library cannot safely assume Rust ABI/type identity; IPC introduces transport,
+  ordering and supervisor semantics absent from the current runtime specification.
+- **Consequences**: No replacement/reset installation, raw pointer or cross-dylib
+  trait-object transfer. Teardown releases subscriptions/module references and
+  cannot shut down the attached host. External-process attachment is deferred
+  with the future Go/sc-runtime transport decision. This does not promise
+  subinterpreter or free-threaded support. Shared backend policy and provenance
+  apply equally to core-only and bridge hosts.
+- **Contracts**: PHB-002/010–014;
+  [native coordinator](plans/phase-b/native-binding-runtime.md),
+  [Python embedding](plans/phase-b/sprint-b-4-python.md).
 
 ## 8. API-Design Consistency
 

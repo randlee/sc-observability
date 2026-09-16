@@ -403,7 +403,7 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
 The user has requested this scope; its detailed design and sprint execution are
 not yet approved. Existing requirements above remain the released baseline.
 The [Phase B index](plans/phase-b/plan-phase-b.md) routes the authoritative sprint
-contracts; [ADR-011 through ADR-014](architecture.md#adr-011-companion-boundaries-and-pre-copy-contract)
+contracts; [ADR-011 through ADR-015](architecture.md#adr-011-companion-boundaries-and-pre-copy-contract)
 record the proposed architecture. No item below asserts implementation closure.
 
 - PHB-001 sc-observability shall own and review the target bridge contract before
@@ -417,7 +417,9 @@ record the proposed architecture. No item below asserts implementation closure.
   only. These are scoped TYP-030 exceptions, not permission to duplicate core
   diagnostics, move published definitions, or introduce Tauri/PyO3/log/runtime
   dependencies into neutral types. Runtime adapters convert companion failures
-  to neutral DTOs without a reverse dependency from DTOs to the bridge.
+  to neutral DTOs without a reverse dependency from DTOs to the bridge. A shared
+  native binding-runtime crate owns core/bridge backends and conversions for both
+  Tauri and Python; language adapters do not repeat those runtime mappings.
 - PHB-003 Phase B shall schedule no breaking change to a published API. Preserve
   existing signatures, trait implementability/object safety and method resolution,
   public struct construction, error variants, serialization and lifecycle behavior. New error
