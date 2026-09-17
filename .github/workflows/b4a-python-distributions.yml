@@ -160,6 +160,9 @@ jobs:
           if [[ "$B4A_DEVELOPMENT" == true ]]; then flags+=(--allow-incomplete-runtime); fi
           sdist=( "$RUNNER_TEMP"/b4a-source/dist/*.tar.gz )
           wheel=( "$RUNNER_TEMP"/b4a-wheel/*.whl )
+          shopt -s nullglob
+          companion=( "$RUNNER_TEMP"/b4a-wheel/instrumented/*.whl )
+          if (( ${#companion[@]} == 1 )); then flags+=(--instrumented-wheel "${companion[0]}"); fi
           bash scripts/ci/validate_python_bindings.sh --distribution cell --sdist "${sdist[0]}" --wheel "${wheel[0]}" \
             --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/b4a-cell" "${flags[@]}"
       - uses: actions/upload-artifact@v4
@@ -185,4 +188,11 @@ jobs:
           sdist=( "$RUNNER_TEMP"/b4a-evidence/b4a-sdist/dist/*.tar.gz )
           python scripts/ci/validate_python_distribution.py aggregate \
             --policy release/python-platform-policy.json --sdist "${sdist[0]}" \
-            --evidence "$RUNNER_TEMP/b4a-evidence" --source-commit "${{ github.sha }}"
+            --evidence "$RUNNER_TEMP/b4a-evidence" --source-commit "${{ github.sha }}" \
+            --output "$RUNNER_TEMP/b4a-evidence/production-artifacts.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: b4a-production-inventory
+          path: ${{ runner.temp }}/b4a-evidence/production-artifacts.json
+          if-no-files-found: error
+          retention-days: 90

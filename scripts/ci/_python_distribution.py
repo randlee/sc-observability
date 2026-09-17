@@ -35,6 +35,25 @@ def runtime_options(contract: dict) -> tuple[list[str], dict[str, str]]:
     return flags, environment
 
 
+def fault_paths(contract: dict) -> list[str]:
+    paths = contract.get('fault_pytest_paths', [])
+    if (not isinstance(paths, list) or any(not isinstance(path, str) for path in paths)
+            or len(paths) != len(set(paths))):
+        raise DistributionError('fault_pytest_paths must contain unique test file paths')
+    for path in paths:
+        confined(Path('/suite'), path)
+        if not path.startswith('tests/') or not path.endswith('.py'):
+            raise DistributionError('fault suite exclusions must be explicit files under tests/')
+    return paths
+
+
+def release_wheel(record: dict) -> dict:
+    if (record.get('role') != 'production' or record.get('publication') != 'pending_B.7'
+            or 'test-hooks' in record.get('maturin_features', [])):
+        raise DistributionError('instrumented artifact cannot satisfy the production release wheel gate')
+    return record
+
+
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 

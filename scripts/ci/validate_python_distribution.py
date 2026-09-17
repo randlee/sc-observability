@@ -16,7 +16,7 @@ import zipfile
 from pathlib import Path
 
 from _python_distribution import (DistributionError, actual_cell, confined, digest,
-                                  extract_sdist, inspect_wheel, verify_source, runtime_options)
+                                  extract_sdist, inspect_wheel, verify_source, runtime_options, fault_paths, release_wheel, tomllib)
 from _python_sandbox import Sandbox, registered_checkouts
 
 
@@ -218,13 +218,33 @@ def build(args) -> None:
             wheels = list((scratch / 'wheels').glob('*.whl'))
             if len(wheels) != 1:
                 raise DistributionError('expected exactly one ABI wheel for the platform')
-            linked = linkage(wheels[0], selected, sandbox, scratch)
+            features = tomllib.loads((root / 'pyproject.toml').read_text())['tool']['maturin']['features']
+            linked = {**linkage(wheels[0], selected, sandbox, scratch), 'role': 'production',
+                      'maturin_features': features, 'publication': 'pending_B.7'}
+            release_wheel(linked)
+            instrumented = None
+            if fault_paths(source['runtime_suite']):
+                private_command = command.copy()
+                private_command[private_command.index('--out') + 1] = str(scratch / 'instrumented-wheels')
+                private_command += ['--features', ','.join(sorted(set(features) | {'test-hooks'}))]
+                sandbox.run(private_command, root)
+                private_wheels = list((scratch / 'instrumented-wheels').glob('*.whl'))
+                if len(private_wheels) != 1:
+                    raise DistributionError('expected exactly one private fault companion')
+                instrumented = {**linkage(private_wheels[0], selected, sandbox, scratch),
+                                'role': 'instrumented', 'publication': 'never',
+                                'maturin_features': sorted(set(features) | {'test-hooks'}),
+                                'path': 'instrumented/' + private_wheels[0].name}
+                if instrumented['sha256'] == linked['sha256']:
+                    raise DistributionError('instrumented companion is not distinct from production')
+                (output / 'instrumented').mkdir()
+                shutil.copyfile(private_wheels[0], output / instrumented['path'])
             embedded = run_embedding(root, scratch, sandbox, sys.executable)
             negatives = negative_cases(root, scratch, sandbox, metadata)
             verify_source(root)
             record = {'schema_version': 1, 'status': 'passed', 'development_only': source.get('development_only', False), 'source_commit': source['source_commit'],
                       'sdist_sha256': digest(args.sdist), 'platform': args.platform,
-                      'build_interpreter': actual, 'wheel': linked, 'resolution': resolution,
+                      'build_interpreter': actual, 'wheel': linked, 'instrumented': instrumented, 'resolution': resolution,
                       'isolation': probes, 'native_runtime_tests': 'passed', 'native_test_count': native_count, 'embedding': 'passed', 'embedding_interpreter': embedded, 'negative_results': negatives,
                       'commands': sandbox.commands, 'publication': 'pending_B.7'}
             shutil.copyfile(wheels[0], output / wheels[0].name)
@@ -252,6 +272,19 @@ def cell(args) -> None:
             sandbox.run([python, '-I', '-c', 'import sc_observability, sc_observability._native; print(sc_observability.__file__)'], scratch)
         execute([python, '-m', 'pip', 'install', '--disable-pip-version-check',
                  '-r', str(root / 'qualification/python-packaging-requirements.txt')])
+        contract = source['runtime_suite']
+        private_paths = fault_paths(contract)
+        private_python, private_wheel = None, None
+        if private_paths:
+            if not args.instrumented_wheel:
+                raise DistributionError('private fault companion is required by the source contract')
+            private_wheel = inspect_wheel(args.instrumented_wheel, selected, source['version'])
+            if private_wheel['sha256'] == wheel['sha256']:
+                raise DistributionError('instrumented wheel cannot substitute for production')
+            execute([sys.executable, '-m', 'venv', str(scratch / 'fault-venv')])
+            private_python = str(scratch / 'fault-venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python'))
+            execute([private_python, '-m', 'pip', 'install', '--disable-pip-version-check',
+                     str(args.instrumented_wheel), '-r', str(root / 'qualification/python-packaging-requirements.txt')])
         suite = scratch / 'suite'
         suite.mkdir()
         for relative in ('tests', 'examples'):
@@ -268,13 +301,15 @@ def cell(args) -> None:
                 'root=pathlib.Path(sys.prefix).resolve(); '
                 'assert pathlib.Path(sc_observability.__file__).resolve().is_relative_to(root); '
                 'assert pathlib.Path(n.__file__).resolve().is_relative_to(root); '
+                'assert not any(name.startswith("_test") for name in dir(n)), "private hooks leaked into production"; '
                 'print(n.__file__)'], suite)
             flags, environment = runtime_options(contract)
             sandbox.env.update(environment)
             sandbox.env['SC_OBSERVABILITY_RUNTIME_TEST'] = '1'
             junit = scratch / 'runtime.xml'
             paths = [str(confined(suite, path)) for path in contract['pytest_paths']]
-            sandbox.run([python, *flags, '-m', 'pytest', *paths, '-ra', '--junitxml', str(junit)], suite)
+            ignored = ['--ignore=' + str(confined(suite, path)) for path in private_paths]
+            sandbox.run([python, *flags, '-m', 'pytest', *paths, *ignored, '-ra', '--junitxml', str(junit)], suite)
             tree = ET.parse(junit)
             cases = tree.findall('.//testcase')
             if not cases or tree.findall('.//skipped') or tree.findall('.//failure') or tree.findall('.//error'):
@@ -282,6 +317,28 @@ def cell(args) -> None:
             typed = [str(confined(suite, path)) for path in contract['typing_paths']]
             sandbox.run([python, '-I', '-m', 'mypy', '--strict', '--no-incremental',
                          '--cache-dir', str(scratch / 'mypy-cache'), *typed], suite)
+            fault_result = None
+            if private_python:
+                private_identity = json.loads(sandbox.run([private_python, '-I', '-c',
+                    'import json,pathlib,sys,sc_observability._native as n; '
+                    'assert pathlib.Path(n.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()); '
+                    'assert any(name.startswith("_test") for name in dir(n)); '
+                    'print(json.dumps({"python_full":sys.version,"native":n.__file__}))'], suite))
+                if private_identity['python_full'] != actual['python_full']:
+                    raise DistributionError('fault companion interpreter differs from production cell')
+                fault_junit = scratch / 'fault-runtime.xml'
+                sandbox.run([private_python, *flags, '-m', 'pytest',
+                             *[str(confined(suite, path)) for path in private_paths],
+                             '-ra', '--junitxml', str(fault_junit)], suite)
+                fault_tree = ET.parse(fault_junit)
+                fault_cases = fault_tree.findall('.//testcase')
+                if not fault_cases or any(fault_tree.findall('.//' + kind) for kind in ('skipped', 'failure', 'error')):
+                    raise DistributionError('private fault suite missing, skipped or failed')
+                fault_result = {'status': 'passed', 'role': 'instrumented', 'publication': 'never',
+                                'wheel': private_wheel, 'executable': private_python,
+                                'python_full': private_identity['python_full'], 'test_count': len(fault_cases),
+                                'test_cases': sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in fault_cases)}
+                shutil.copyfile(fault_junit, output / 'fault-runtime.xml')
             embedded = None
             if contract.get('embedding_in_each_cell'):
                 embedded = run_embedding(root, scratch, sandbox, python)
@@ -292,7 +349,8 @@ def cell(args) -> None:
                       'source_commit': source['source_commit'], 'sdist_sha256': digest(args.sdist),
                       'wheel': wheel, 'runtime_suite': contract, 'test_count': len(cases),
                       'test_cases': sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in cases),
-                      'installed_extension': imported.strip(), 'isolation': probes, 'embedding': embedded,
+                      'installed_extension': imported.strip(), 'production_hooks_absent': True,
+                      'fault_companion': fault_result, 'isolation': probes, 'embedding': embedded,
                       'typecheck': 'passed', 'interpreter_flags': flags, 'runtime_environment': environment,
                       'commands': sandbox.commands, 'publication': 'pending_B.7'}
             shutil.copyfile(junit, output / 'runtime.xml')
@@ -326,6 +384,7 @@ def aggregate(args) -> None:
                 or source['source_commit'] != args.source_commit):
             raise DistributionError('source contract is not a completed qualification candidate')
         runtime_options(contract)
+        production_features = sorted(tomllib.loads((root / 'pyproject.toml').read_text())['tool']['maturin']['features'])
     for item in cells:
         if item.get('runtime_suite') != contract:
             raise DistributionError('cell contract differs from the immutable source contract')
@@ -338,7 +397,27 @@ def aggregate(args) -> None:
                 raise DistributionError('missing interpreter-matched embedded-host execution')
         if item['wheel']['sha256'] != wheel_hashes[item['platform']] or item.get('typecheck') != 'passed':
             raise DistributionError('interpreter cell did not execute its shared ABI wheel and type suite')
+    for item in cells:
+        if item.get('production_hooks_absent') is not True:
+            raise DistributionError('production wheel lacks an executed private-hook absence proof')
+    private_hashes = {build['platform']: (build.get('instrumented') or {}).get('sha256') for build in builds}
+    private_cases = set()
     for path, item in zip(cell_paths, cells):
+        if fault_paths(contract):
+            fault = item.get('fault_companion') or {}
+            if (fault.get('status') != 'passed' or fault.get('role') != 'instrumented'
+                    or fault.get('publication') != 'never' or fault.get('python_full') != item['python_full']
+                    or fault.get('wheel', {}).get('sha256') != private_hashes[item['platform']]
+                    or fault.get('wheel', {}).get('sha256') == item['wheel']['sha256']):
+                raise DistributionError('missing separately identified same-interpreter fault companion')
+            private_xml = ET.parse(path.with_name('fault-runtime.xml'))
+            names = sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in private_xml.findall('.//testcase'))
+            if (not names or names != fault.get('test_cases') or len(names) != fault.get('test_count')
+                    or any(private_xml.findall('.//' + kind) for kind in ('skipped', 'failure', 'error'))
+                    or not any(command['command'][0] == fault.get('executable') and 'pytest' in command['command']
+                               and command['exit_code'] == 0 for command in item['commands'])):
+                raise DistributionError('missing raw zero-skip private fault execution evidence')
+            private_cases.add(tuple(names))
         xml = ET.parse(path.with_name('runtime.xml'))
         actual_cases = sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in xml.findall('.//testcase'))
         if (actual_cases != item['test_cases'] or len(actual_cases) != item['test_count']
@@ -347,17 +426,36 @@ def aggregate(args) -> None:
         for tool in ('pytest', 'mypy'):
             if not any(tool in command['command'] and command['exit_code'] == 0 for command in item['commands']):
                 raise DistributionError('missing successful runtime/type command log')
+    if fault_paths(contract) and len(private_cases) != 1:
+        raise DistributionError('cells executed different private fault suites')
     cases = {tuple(cell['test_cases']) for cell in cells}
     if len(cases) != 1:
         raise DistributionError('interpreter/platform cells executed different runtime suites')
+    publication_wheels = []
     for path, build in zip(build_paths, builds):
+        production = release_wheel(build['wheel'])
+        if sorted(production.get('maturin_features', [])) != production_features:
+            raise DistributionError('production feature identity differs from immutable source')
+        publication_wheels.append({'platform': build['platform'], **production})
         selected = next(item for item in policy['platforms'] if item['id'] == build['platform'])
         wheel = confined(path.parent, build['wheel']['wheel'])
         inspected = inspect_wheel(wheel, selected, policy['candidate_version'])
+        if fault_paths(contract):
+            private = build.get('instrumented') or {}
+            if (private.get('role') != 'instrumented' or private.get('publication') != 'never'
+                    or private.get('maturin_features') != sorted(set(production_features) | {'test-hooks'})):
+                raise DistributionError('fault companion lacks exact non-public feature identity')
+            private_inspection = inspect_wheel(confined(path.parent, private['path']), selected, policy['candidate_version'])
+            if private_inspection['sha256'] != private.get('sha256') or private['sha256'] == inspected['sha256']:
+                raise DistributionError('retained fault companion identity disagrees with build evidence')
         if inspected['sha256'] != build['wheel']['sha256']:
             raise DistributionError('retained wheel checksum differs from build evidence')
         if build.get('embedding') != 'passed' or build.get('native_runtime_tests') != 'passed' or len(build.get('negative_results', {})) != 9:
             raise DistributionError('missing embedding or negative-artifact execution evidence')
+    publication = {'schema_version': 1, 'source_commit': args.source_commit, 'publication': 'pending_B.7',
+                   'sdist_sha256': digest(args.sdist), 'wheels': publication_wheels}
+    if getattr(args, 'output', None):
+        args.output.write_text(json.dumps(publication, indent=2) + '\n')
     print('B4A_QUALIFIED: five ABI wheels, 25 installed full-suite cells, offline sdist and embedding')
 
 
@@ -373,6 +471,7 @@ def main() -> None:
             child.add_argument('--platform', required=True)
         else:
             child.add_argument('--wheel', type=Path, required=True)
+            child.add_argument('--instrumented-wheel', type=Path)
             child.add_argument('--allow-incomplete-runtime', action='store_true',
                                help='execute provisional suites; aggregate still rejects these results')
     child = commands.add_parser('aggregate')
@@ -380,6 +479,7 @@ def main() -> None:
     child.add_argument('--sdist', type=Path, required=True)
     child.add_argument('--evidence', type=Path, required=True)
     child.add_argument('--source-commit', required=True)
+    child.add_argument('--output', type=Path, help='write production-only future publication inventory')
     args = parser.parse_args()
     {'build': build, 'cell': cell, 'aggregate': aggregate}[args.mode](args)
 

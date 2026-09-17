@@ -14,6 +14,26 @@ from _python_distribution import DistributionError, extract_sdist, inspect_wheel
 
 
 class DistributionTests(unittest.TestCase):
+    def test_tracked_source_copy_excludes_generated_caches_without_removing_them(self):
+        import subprocess
+        from prepare_python_distributions import copy_tracked_tree
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'checkout'; source.mkdir()
+            subprocess.run(['git', 'init', '-q', str(source)], check=True)
+            for relative in ('python/package', 'embedding'):
+                directory = source / relative; directory.mkdir(parents=True)
+                (directory / 'source.py').write_text('VALUE = 1\n')
+                subprocess.run(['git', 'add', relative + '/source.py'], cwd=source, check=True)
+                (directory / '__pycache__').mkdir()
+                cached = directory / '__pycache__/source.cpython-310.pyc'
+                cached.write_bytes(b'generated cache')
+                (directory / 'source.pyo').write_bytes(b'generated optimized cache')
+                destination = root / ('copied-' + directory.name)
+                copy_tracked_tree(source, Path(relative), destination)
+                self.assertEqual([path.name for path in destination.iterdir()], ['source.py'])
+                self.assertEqual(cached.read_bytes(), b'generated cache')
+
     def test_rejects_escaping_or_linked_sdist_members(self):
         for name, kind in [('../outside', tarfile.REGTYPE), ('root/link', tarfile.SYMTYPE)]:
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
@@ -60,6 +80,16 @@ class DistributionTests(unittest.TestCase):
             verify_native_architecture(arm, 'macosx_10_13_x86_64')
         with self.assertRaisesRegex(DistributionError, 'architecture'):
             verify_native_architecture(b'MZ', 'win_amd64')
+
+    def test_instrumented_wheel_cannot_enter_publication_inventory(self):
+        from _python_distribution import release_wheel, fault_paths
+        production = {'role': 'production', 'publication': 'pending_B.7', 'maturin_features': ['pyo3/abi3-py310']}
+        self.assertEqual(release_wheel(production), production)
+        for changed in ({'role': 'instrumented', 'publication': 'never'}, {'maturin_features': ['test-hooks']}):
+            with self.subTest(changed=changed), self.assertRaisesRegex(DistributionError, 'production release'):
+                release_wheel({**production, **changed})
+        with self.assertRaises(DistributionError):
+            fault_paths({'fault_pytest_paths': ['tests/']})
 
     def test_policy_preserves_all_twenty_five_cells(self):
         path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
@@ -108,6 +138,7 @@ class DistributionTests(unittest.TestCase):
                     path = source / relative; path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_text('fixture')
                 contract = {'schema_version': 1, 'runtime_complete': True, 'embedding_in_each_cell': True}
+                (source / 'pyproject.toml').write_text('[tool.maturin]\nfeatures = ["pyo3/abi3-py310"]\n')
                 manifest = {'schema_version': 1, 'publication': 'pending_B.7', 'source_commit': 'a' * 40,
                             'runtime_suite': contract, 'files': {path: digest(source / path) for path in required}}
                 (source / 'distribution-manifest.json').write_text(json.dumps(manifest))
