@@ -41,6 +41,18 @@ The task-plan fixture matrix records the paired legacy/typed and retained
 behavior coverage. The copied bridge regression is pending B.1 source
 integration and is intentionally not represented as a completed local run.
 
+## Startup ordering and rollback boundary
+
+`LoggerBuilder::build_inner` calls `LoggerRuntime::try_new` before creating the
+`LevelControl` or returning a `Logger`/`LevelOwner`. `WriterRuntime::try_new`
+allocates the channel and starts its only worker as its final fallible operation;
+if that spawn fails, no worker exists to roll back and the partially allocated
+channel/tracker values are dropped. The builder returns `InitFailure` before it
+can construct a logger or owner. The paired injected-start tests verify the
+legacy and typed paths retain the native source and return no owner. There is
+no coordinator or secondary worker stage in this runtime, so no invented
+partial-start rollback path is claimed.
+
 ## Remaining integration boundary
 
 This is scoped B.1b preparation only. B.1 accepted bridge integration,

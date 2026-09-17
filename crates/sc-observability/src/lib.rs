@@ -1391,9 +1391,17 @@ mod tests {
         let error = logger.flush().expect_err("flush error should propagate");
         assert_eq!(error.diagnostic().code, error_codes::LOGGER_FLUSH_FAILED);
 
+        let typed_error = logger
+            .flush_typed()
+            .expect_err("typed flush error should propagate");
+        assert_eq!(
+            typed_error.diagnostic().code,
+            error_codes::LOGGER_FLUSH_FAILED
+        );
+
         let health = logger.health();
         assert_eq!(health.dropped_events_total, 0);
-        assert_eq!(health.flush_errors_total, 1);
+        assert_eq!(health.flush_errors_total, 2);
         assert!(health.last_error.is_some());
     }
 
@@ -1828,11 +1836,30 @@ mod tests {
             AdmissionOutcome::Filtered
         );
 
+        let mut invalid_schema = log_event(service_name());
+        invalid_schema.version = SchemaVersion::new("v0").expect("valid test schema value");
+        assert!(matches!(
+            logger.log_typed(invalid_schema),
+            Err(LogFailure::InvalidEvent(_))
+        ));
+
         let wrong_service = ServiceName::new("other-service").expect("valid service");
         assert!(matches!(
             logger.log_typed(log_event(wrong_service)),
             Err(LogFailure::InvalidEvent(_))
         ));
+
+        let root = temp_path("typed-accepted-admission");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let logger = Logger::new_typed(config).expect("typed logger");
+        assert_eq!(
+            logger
+                .try_log_with_outcome_typed(log_event(service_name()))
+                .expect("accepted event"),
+            AdmissionOutcome::Accepted
+        );
     }
 
     #[test]
@@ -1906,6 +1933,142 @@ mod tests {
         assert_eq!(
             crate::typed::TypedLogSink::health(typed.as_ref()).state,
             SinkHealthState::Healthy
+        );
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the adapter parity fixture keeps both directions, their explicit failures, and exact preservation assertions together"
+    )]
+    fn typed_sink_adapters_preserve_explicit_failure_source_health_and_call_counts() {
+        struct TypedFailingSink {
+            writes: AtomicU64,
+            flushes: AtomicU64,
+        }
+
+        impl crate::typed::TypedLogSink for TypedFailingSink {
+            fn write(
+                &self,
+                _event: &LogEvent,
+            ) -> Result<(), sc_observability_types::typed::LogSinkFailure> {
+                self.writes.fetch_add(1, Ordering::SeqCst);
+                Err(sc_observability_types::typed::LogSinkFailure::from_context(
+                    Box::new(
+                        ErrorContext::new(
+                            ErrorCode::new_static("CUSTOM_TYPED_WRITE"),
+                            "typed write failed",
+                            Remediation::recoverable("retry", ["retry"]),
+                        )
+                        .source(Box::new(std::io::Error::other("typed write source"))),
+                    ),
+                ))
+            }
+
+            fn flush(&self) -> Result<(), sc_observability_types::typed::LogSinkFailure> {
+                self.flushes.fetch_add(1, Ordering::SeqCst);
+                Err(sc_observability_types::typed::LogSinkFailure::from_context(
+                    Box::new(
+                        ErrorContext::new(
+                            ErrorCode::new_static("CUSTOM_TYPED_FLUSH"),
+                            "typed flush failed",
+                            Remediation::recoverable("retry", ["retry"]),
+                        )
+                        .source(Box::new(std::io::Error::other("typed flush source"))),
+                    ),
+                ))
+            }
+
+            fn health(&self) -> SinkHealth {
+                SinkHealth {
+                    name: sink_name("typed-failing"),
+                    state: SinkHealthState::DegradedDropping,
+                    last_error: None,
+                }
+            }
+        }
+
+        struct LegacyFailingSink {
+            writes: AtomicU64,
+            flushes: AtomicU64,
+        }
+
+        impl LogSink for LegacyFailingSink {
+            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+                self.writes.fetch_add(1, Ordering::SeqCst);
+                Err(LogSinkError(Box::new(
+                    ErrorContext::new(
+                        ErrorCode::new_static("CUSTOM_LEGACY_WRITE"),
+                        "legacy write failed",
+                        Remediation::recoverable("retry", ["retry"]),
+                    )
+                    .source(Box::new(std::io::Error::other("legacy write source"))),
+                )))
+            }
+
+            fn flush(&self) -> Result<(), LogSinkError> {
+                self.flushes.fetch_add(1, Ordering::SeqCst);
+                Err(LogSinkError(Box::new(
+                    ErrorContext::new(
+                        ErrorCode::new_static("CUSTOM_LEGACY_FLUSH"),
+                        "legacy flush failed",
+                        Remediation::recoverable("retry", ["retry"]),
+                    )
+                    .source(Box::new(std::io::Error::other("legacy flush source"))),
+                )))
+            }
+
+            fn health(&self) -> SinkHealth {
+                SinkHealth {
+                    name: sink_name("legacy-failing"),
+                    state: SinkHealthState::Unavailable,
+                    last_error: None,
+                }
+            }
+        }
+
+        let typed = Arc::new(TypedFailingSink {
+            writes: AtomicU64::new(0),
+            flushes: AtomicU64::new(0),
+        });
+        let legacy = legacy_sink(typed.clone());
+        let write = legacy
+            .write(&log_event(service_name()))
+            .expect_err("write fails");
+        assert_eq!(write.diagnostic().code.as_str(), "CUSTOM_TYPED_WRITE");
+        assert_eq!(
+            std::error::Error::source(&write)
+                .expect("source")
+                .to_string(),
+            "typed write failed; caused by: typed write source"
+        );
+        let flush = legacy.flush().expect_err("flush fails");
+        assert_eq!(flush.diagnostic().code.as_str(), "CUSTOM_TYPED_FLUSH");
+        assert_eq!(typed.writes.load(Ordering::SeqCst), 1);
+        assert_eq!(typed.flushes.load(Ordering::SeqCst), 1);
+        assert_eq!(legacy.health().state, SinkHealthState::DegradedDropping);
+
+        let legacy = Arc::new(LegacyFailingSink {
+            writes: AtomicU64::new(0),
+            flushes: AtomicU64::new(0),
+        });
+        let typed = typed_sink(legacy.clone());
+        let write = crate::typed::TypedLogSink::write(typed.as_ref(), &log_event(service_name()))
+            .expect_err("write fails");
+        assert_eq!(write.diagnostic().code.as_str(), "CUSTOM_LEGACY_WRITE");
+        assert_eq!(
+            std::error::Error::source(&write)
+                .expect("source")
+                .to_string(),
+            "legacy write failed; caused by: legacy write source"
+        );
+        let flush = crate::typed::TypedLogSink::flush(typed.as_ref()).expect_err("flush fails");
+        assert_eq!(flush.diagnostic().code.as_str(), "CUSTOM_LEGACY_FLUSH");
+        assert_eq!(legacy.writes.load(Ordering::SeqCst), 1);
+        assert_eq!(legacy.flushes.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            crate::typed::TypedLogSink::health(typed.as_ref()).state,
+            SinkHealthState::Unavailable
         );
     }
 
