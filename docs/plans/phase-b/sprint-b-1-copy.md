@@ -131,10 +131,15 @@ macro-expansion hygiene check.
 ## Required validation (authoritative)
 
 From repo root; `BTIT_SOURCE_REPO` is the local checkout containing the accepted
-commit, recorded in the handoff:
+commit, recorded in the handoff. The import validator call is continuously
+enforced in CI by the `log-bridge-import-integrity` job in
+`.github/workflows/ci.yml`, which clones the accepted BTIT source by URL on
+every run rather than relying on a one-time manual transcript:
 
 ```sh
-python3 scripts/ci/validate_log_import.py --source-repo "$BTIT_SOURCE_REPO"
+python3 scripts/ci/validate_log_import.py --source-repo "$BTIT_SOURCE_REPO" \
+  --post-import-adaptations docs/plans/phase-b/post-import-adaptations.json \
+  --release-adaptations docs/plans/phase-b/release-adaptations-b-2.json
 cargo fmt --all -- --check
 cargo test --locked --workspace --all-targets
 cargo test --locked --workspace --doc
