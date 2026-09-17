@@ -235,6 +235,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sc-observability-dto"
+version = "1.2.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "sc-observability-log"
 version = "1.2.0"
 dependencies = [
