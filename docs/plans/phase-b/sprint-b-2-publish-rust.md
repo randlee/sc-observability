@@ -50,15 +50,16 @@ documentation and validation artifacts; partial completion leaves the sprint ope
    `main`, waiting for dependency index visibility between publishes; bounded
    retries must fail visibly rather than claiming completion.
 4. Add `scripts/ci/validate_log_staged_consumer.py --version V`: create a
-   clean temporary Cargo project that pins only the staged bridge/macros
-   candidate archives by exact version+path (no ambient workspace checkout
-   and no `[patch]` override); ordinary third-party dependencies still
-   resolve normally from crates.io. Run an enabled macro plus explicit flush
-   and shutdown against a temporary log directory. Store version, candidate
-   source commit, checksums, staged package locations, dependency resolution
-   and consumer results in `docs/plans/phase-b/handoff-b-2.md`. B.7 alone
-   later runs its own separate registry-only consumer proof after real
-   publication.
+   clean temporary Cargo project that resolves every first-party candidate —
+   the changed core packages from B.1a–B.1e, macros and bridge — from this
+   sprint's verified staged archives using exact versions and controlled
+   path/patch configuration, and rejects ambient checkout dependencies.
+   Ordinary third-party dependencies may still resolve normally from
+   crates.io. Run an enabled macro plus explicit flush and shutdown against a
+   temporary log directory. Store version, candidate source commit,
+   checksums, staged package locations, dependency resolution and consumer
+   results in `docs/plans/phase-b/handoff-b-2.md`. B.7 alone later runs its
+   own separate registry-only consumer proof after real publication.
 
 ## Consumer contract
 
@@ -69,12 +70,13 @@ The consumer manifest pins the staged candidate version (substitute the staged `
 sc-observability-log = "=V"
 ```
 
-This sprint's staged-consumer check resolves the first-party pin against B.2's
-immutable candidate packages directly, not the registry; other, ordinary
-dependencies resolve normally from crates.io. The executable fixture uses the
-exact accepted public initialization/lifecycle signatures captured by B.1; it
-checks JSONL content after shutdown and does not copy private bridge support
-code into the consumer.
+This sprint's staged-consumer check resolves every first-party candidate
+(changed core, macros and bridge) against B.2's and B.1a–B.1e's immutable
+staged archives directly, not the registry; ordinary third-party dependencies
+resolve normally from crates.io. The executable fixture uses the exact
+accepted public initialization/lifecycle signatures captured by B.1; it checks
+JSONL content after shutdown and does not copy private bridge support code
+into the consumer.
 
 ## Acceptance criteria (authoritative)
 
