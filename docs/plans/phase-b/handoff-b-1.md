@@ -44,9 +44,10 @@ layout, so neither required a `dependency_path` relocation.
 - Root `Cargo.toml`: added the three crates to `[workspace.members]` and to
   `[workspace.dependencies]` (`sc-observability-log-macros` pinned
   `=1.2.0`, an exact pin against this workspace's shared version, per the
-  sprint doc's "exact `=V` version plus workspace path" requirement -- both
-  copied packages always share this workspace's single version, so the pin is
-  self-maintaining across version bumps); added the crates' third-party
+  sprint doc's "exact `=V` version plus workspace path" requirement -- this is
+  a hard-coded literal, not self-maintaining: nothing in this repo's
+  automation currently re-syncs it when `workspace.package.version` bumps, so
+  a future version bump must update this pin by hand); added the crates' third-party
   dependencies (`log`, `hostname`, `tempfile`, `trybuild`, `tracing`, `tokio`,
   `syn`, `quote`, `proc-macro2`) to `[workspace.dependencies]` at the exact
   version/feature sets BTIT's own workspace used.
@@ -68,8 +69,13 @@ layout, so neither required a `dependency_path` relocation.
   documented and accepted as part of the target contract entry gate).
 - `docs/api-approvals/phase-b-log-import.md`: created with
   Scope/Approval/Affected Artifacts, recording that all three crates retain
-  `publish = false` so `validate_public_api_diff.sh`/`validate_public_api_docs.sh`
-  report no public API diff for this copy (confirmed by running both).
+  `publish = false` so they contribute zero lines to
+  `validate_public_api_diff.sh`/`validate_public_api_docs.sh`. Running the
+  whole command is expected to, and does, exit 1 with a nonempty additive
+  diff against the four published core crates, inherited from the
+  already-merged B.1a/B.1b/B.1c typed-API preparation layers underneath this
+  branch -- not introduced by this copy, and not a "no diff"/PASS state.
+  `validate_public_api_docs.sh` separately passes (rustdoc coverage only).
 
 ## Validation (clean at HEAD)
 
@@ -89,10 +95,49 @@ bash scripts/ci/validate_dependency_bans.sh                        -> dependency
 bash scripts/ci/validate_repo_boundaries.sh                        -> repo boundary validation passed
 bash scripts/ci/validate_docs_consistency.sh                       -> docs consistency validation passed;
                                                                        rustdoc missing-docs validation passed
-bash scripts/ci/validate_public_api_diff.sh                        -> no diff detected for the four
-                                                                       published core crates
+bash scripts/ci/validate_public_api_diff.sh                        -> exit 1: additive-only diff for the
+                                                                       four published core crates, inherited
+                                                                       from already-merged B.1a/B.1b/B.1c
+                                                                       typed-API prep (not introduced by
+                                                                       this copy; the three new crates stay
+                                                                       publish=false and contribute nothing)
 bash scripts/ci/validate_public_api_docs.sh                        -> public API docs validation passed
+cargo test --locked -p sc-observability-log --all-targets \
+  --features test_hooks                                            -> all green, 0 failed (55+ tests
+                                                                       across unit/doc/UI-trybuild targets)
+cargo test --locked -p sc-observability-log --release \
+  --features static_level_cap_test --test static_level_cap         -> 1 passed, 0 failed
+  (capped_release_rejects_trace_before_install_then_allows_info)
+python3 scripts/ci/validate_runtime_level_qualification_metadata.py -> B.P2 qualification metadata and
+                                                                       roster are coherent
+python3 scripts/ci/tests/test_validate_runtime_level_qualification_metadata.py -v
+  -> Ran 10 tests, OK (3 pre-existing + 7 new WorkspaceMemberRosterTests)
 ```
+
+All three of the above extra commands were run under this workspace's pinned
+1.94.1 toolchain, with no Rust source changes, in response to aobs
+completeness findings B1-C02 (feature-gated regression coverage) and B1-C03
+(CI qualification workspace-member roster) on `phase-b-b1-copy`.
+
+## Imported regression gate scope (B1-C02)
+
+- `sc-observability-log`'s two opt-in Cargo features (`test_hooks`,
+  `static_level_cap_test`) are exercised above under the destination's pinned
+  toolchain; `static_level_cap_test` requires `--release` since it enables
+  `log/release_max_level_info`, which only takes effect in the release
+  profile. Neither feature was previously exercised in this worktree's
+  evidence before this fix round.
+- Three-platform CI proof requirement: this workspace's existing CI matrix
+  runs `cargo test --locked --workspace --all-targets` (default features)
+  across macOS/Linux/Windows per AC2; the two opt-in-feature commands above
+  are not yet wired into that matrix as separate CI steps and remain a
+  locally-verified gap tracked here rather than silently assumed covered by
+  the default-feature workspace run.
+- Exported API/impl inventory reconciliation against the approved
+  `target-bridge-api.md` disposition matrix: see
+  `docs/plans/phase-b/log-import-export-report.md`, generated from
+  `cargo public-api` against both copied library crates and checked
+  row-by-row against both of `target-bridge-api.md`'s disposition tables.
 
 The final parent merge-forward is `0c31d7a133bf85b20be123261b23020722c7ccaf`
 (`feature/phase-b-1c-observation-prep`'s
