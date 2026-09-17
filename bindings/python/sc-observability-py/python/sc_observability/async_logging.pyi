@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Literal, TypeAlias
+from typing import Literal, NoReturn, TypeAlias
 from . import Result, generated
 
 @dataclass(frozen=True)
@@ -10,6 +10,7 @@ class Resolved:
 ReceiptState: TypeAlias = Resolved
 
 class LogReceipt:
+    def __init__(self, _private: NoReturn) -> None: ...
     def state(self) -> ReceiptState: ...
     async def wait(self, timeout_ms: int = 2000) -> Result[generated.Admission]: ...
 

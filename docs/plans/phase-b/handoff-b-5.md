@@ -69,3 +69,29 @@ run the full immutable sdist/wheel and real embedded host suite on all 25 B.4a
 interpreter/platform cells. Retain source/artifact identities and raw command
 logs; update this document and the two-pass checklist from actual evidence.
 Sprint closure, QA, PR merge and package publication have not been claimed.
+
+## Corrected-parent qualification increment
+
+Parent `0f579b65` merged in `79654a0`; integration source `87400df`, generation
+provenance `df9953e`. Added root facade stub and `qualification-suite.json`,
+and extended the shared validator to the complete installed suite. The shared
+CPython 3.10 gate passes 60 tests, strict typing, the standard logging example
+and real mixed host. The isolated macOS ARM64 source-distribution build passes
+native tests, embedding and all nine negative cases; its CPython 3.12 installed
+cell passes all 60 tests and strict typing with checkout/cache/network denied.
+Raw local records are in `target/b5-macos-build-df9953e/build-result.json`,
+`target/b5-macos-cell-df9953e/cell-result.json`, and `target/b5-validation/`.
+These remain incremental local evidence pending final retained matrix artifacts.
+
+API digest `3879489bf925437f1704bf54f7160b0d1526d73b6c0cfced076abb655d2da1fc`
+adds exactly `SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID`; lead approval is
+recorded in `docs/api-approvals/phase-b-python-context.json` under ATM
+`01M2QF5M1GW741SY3CGCJ16N6J`. `2f11f75` corrects the inherited registry-count
+assertion to 18 and explicitly requires that constant; all 17 DTO conversion
+tests pass. Schema compiler, both generators and generation hashes are clean.
+
+Platform run `35211438801` uses `df9953e` and remains incomplete; Linux wheel
+jobs failed and require packaging-owner resolution. The next corrected parent
+will also carry per-interpreter embedding qualification. Full matrix and lead
+completeness remain outstanding; the tracked task stays open while execution
+is yielded to the Tauri specialist by explicit lead request.
