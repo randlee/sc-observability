@@ -14,24 +14,48 @@ The mechanical B.1 copy of `crates/sc-observability-log`,
 `84b32e9d6718418371ffd25a3de52346278725ca`. All three packages retain
 `publish = false` (`sc-observability-log-consumer-check` permanently); none is
 part of the workspace's published public API surface, so this is a source-only
-governance approval, not a public API approval
-(`bash scripts/ci/validate_public_api_docs.sh` and
-`validate_public_api_diff.sh` report no public API diff for the copy, since
-`publish = false` crates are excluded from that scan).
+governance approval, not a public API approval for these three crates
+specifically: `scripts/ci/public_api_common.sh`'s `workspace_public_crates()`
+excludes any `publish = false` package, so the three copied crates contribute
+zero lines to `validate_public_api_diff.sh`/`validate_public_api_docs.sh`.
+That said, running the whole command is expected to exit 1 with a nonempty,
+purely additive diff against the four already-published core crates
+(`sc-observability-types`, `sc-observability`, `sc-observe`,
+`sc-observability-otlp`) -- this diff is inherited from the already-merged
+B.1a/B.1b/B.1c typed-API preparation layers underneath this branch, not
+introduced by this copy, and it is not a "no diff"/PASS state. Confirmed by a
+fresh run at `c0a4cddaede02a7e3234bc48c421cd56be01660b`:
+`validate_public_api_diff.sh` reports "public API diff report generated
+(diffs detected)" (exit 1) with only additive entries under
+`sc_observability_types::typed`/`error_codes` and the corresponding
+`sc-observe` typed methods; `validate_public_api_docs.sh` separately passes
+(exit 0, rustdoc coverage only, unaffected by the diff).
 
 ## Approval
 
-Phase lead aobs's `docs/plans/phase-b/handoff-b-p3.md` records BTIT source
-acceptance for mechanical import. Team-lead executed the mechanical copy under
-that acceptance: all 85 source files verified byte-identical to the accepted
-commit by Git blob ID (zero mismatches), with only the mechanical adaptations
-declared in `import-provenance.json` (workspace-inherited `[package]`
-metadata, and toolchain-drift `trybuild` `.stderr` rewording since this
-workspace pins Rust 1.94.1 while BTIT pins 1.98.1) applied on top. This
-approval covers the copy's structural conformance; it grants no publication,
-no BTIT dependency switch, and no runtime-contract closure (Phase B's
-runtime-level contract remains owner-deferred per
-`docs/api-approvals/phase-b-runtime-level.md`).
+Two distinct approvals are in play; they must not be conflated:
+
+- **BTIT source acceptance (already granted, upstream).** Phase lead aobs's
+  `docs/plans/phase-b/handoff-b-p3.md` records acceptance of BTIT's
+  implementation/critical-review of the target bridge API at source commit
+  `396a9d9f77ca1950eeb92d4f88c0eecadb5ef00b`. This is settled and is the basis
+  for this copy's entry gate; it is not re-litigated here.
+- **Destination-copy review (pending, this repository).** Team-lead executed
+  the mechanical copy under that upstream acceptance: all 85 source files
+  verified byte-identical to the accepted commit by Git blob ID (zero
+  mismatches), with only the mechanical adaptations declared in
+  `import-provenance.json` (workspace-inherited `[package]` metadata, and
+  toolchain-drift `trybuild` `.stderr` rewording since this workspace pins
+  Rust 1.94.1 while BTIT pins 1.98.1) applied on top. This document records
+  that execution; it is not itself the destination-copy reviewer sign-off.
+  Independent QA and an API-approval reviewer's actual sign-off on this
+  destination copy remain outstanding (tracked in
+  `docs/plans/phase-b/handoff-b-1.md`'s "Not in scope here" section) and are
+  required before this approval can be treated as final.
+
+Neither approval grants publication, a BTIT dependency switch, or
+runtime-contract closure (Phase B's runtime-level contract remains
+owner-deferred per `docs/api-approvals/phase-b-runtime-level.md`).
 
 ## Affected Artifacts
 
@@ -52,3 +76,24 @@ runtime-level contract remains owner-deferred per
 - `docs/architecture.md` Crate Boundary Table (new rows for the three copied
   crates).
 - `docs/plans/phase-b/handoff-b-1.md` (execution evidence).
+- `docs/plans/phase-b/log-import-export-report.md` and
+  `docs/plans/phase-b/evidence/b1-log-export.txt` /
+  `b1-log-macros-export.txt` (generated exported API/impl inventory,
+  reconciled against `target-bridge-api.md`'s disposition tables; added in
+  response to completeness finding B1-C02).
+- `scripts/ci/_runtime_level_common.py` and
+  `scripts/ci/validate_runtime_level_qualification_metadata.py` (workspace
+  member roster check adapted to tolerate the three unpublished companion
+  crates while preserving the staged four-package publish order and the
+  private consumer-check crate's permanent exclusion from that roster;
+  `scripts/ci/tests/test_validate_runtime_level_qualification_metadata.py`
+  gained focused positive/negative coverage; added in response to
+  completeness finding B1-C03).
+- `scripts/ci/prepare_runtime_level_staged_packages.py` (advance the
+  bridge-to-macros exact `=V` version pin to the candidate version when
+  staging B.P2 packages, alongside the plain-pin dependencies already
+  advanced; the staged four-package roster/order and
+  `release/publish-artifacts.toml` are unchanged).
+- `.github/workflows/ci.yml` (the three-platform `test` job now also runs
+  `sc-observability-log`'s `test_hooks` and release-mode
+  `static_level_cap_test` opt-in features).
