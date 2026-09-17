@@ -90,7 +90,7 @@ six adapter tests. Raw local evidence is retained at
 pass the strict hash and case-inventory checks. Windows remains unresolved;
 there is no successful three-platform aggregate or sprint completion claim.
 
-The Windows runs at `b4bc807`, `4cb9cd7`, `92ed698`, and `2646c96` ended with hosted-runner
+The Windows runs at `b4bc807`, `4cb9cd7`, `92ed698`, `2646c96`, and `71215ca` ended with hosted-runner
 communication-loss annotations and no uploaded Windows runtime evidence. Those
 annotations are retained separately and do not establish an application cause.
 Build command output now uses regular-file capture: a retained descendant handle
@@ -117,5 +117,10 @@ team share. The full command is not claimed as passing.
 The artifact ledger is
 `evidence/b3a-qualification/qualification-artifacts-71215ca.json`. It is explicitly
 incomplete and is not the successful production inventory emitted by the CI
-aggregate. The current Windows run remains unresolved at this documentation
-checkpoint. No further application cause is inferred from missing runner logs.
+aggregate. Run `35232045864` ended with Windows runner communication loss; the
+Windows job logs endpoint returned HTTP 404. Run `35238021860` retries the same
+immutable source `71215ca` using workflow revision `c203b4a` and the supported
+`windows-2022` image. The runner label is the only workflow change; isolation,
+archive identity, lock closure and required cases are unchanged. This retry is
+pending at this documentation checkpoint. No further application cause is
+inferred from missing runner logs.
