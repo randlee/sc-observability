@@ -50,6 +50,9 @@ class ImportContractFixture:
         ),
         "crates/sc-observability-log-consumer-check/Cargo.toml": '[package]\nname = "consumer-check"\n',
         "crates/sc-observability-log-consumer-check/src/main.rs": "fn main() {}\n",
+        "crates/sc-observability-log/src/control.rs": "pub fn control() {}\n",
+        "crates/sc-observability-log/src/handle.rs": "pub fn handle() {}\n",
+        "crates/sc-observability-log/src/mapping.rs": "pub fn mapping() {}\n",
         "crates/sc-observability-log/tests/ui/rejected.stderr": (
             "error[E0308]: mismatched types\n"
             " --> tests/ui/rejected.rs:3:5\n"
@@ -169,6 +172,46 @@ class ImportContractFixture:
     def recorded_inventory(self) -> dict[str, str]:
         return {path: blob_id(content, self.source_repo) for path, content in self.FILES.items()}
 
+    def post_import_adaptations(self) -> dict:
+        blocks = {
+            "crates/sc-observability-log/src/control.rs": (
+                "#[allow(\n"
+                "    deprecated,\n"
+                "    reason = \"copied bridge compatibility boundary\"\n"
+                ")]"
+            ),
+            "crates/sc-observability-log/src/handle.rs": (
+                "#[allow(\n"
+                "    deprecated,\n"
+                "    reason = \"copied bridge lifecycle boundary\"\n"
+                ")]"
+            ),
+            "crates/sc-observability-log/src/mapping.rs": (
+                "#[allow(\n"
+                "    deprecated,\n"
+                "    reason = \"copied bridge identity boundary\"\n"
+                ")]"
+            ),
+        }
+        adaptations = []
+        for path, block in blocks.items():
+            before = self.FILES[path]
+            after = f"{block}\n{before}"
+            (self.destination / path).write_text(after)
+            adaptations.append({
+                "path": path,
+                "kind": "deprecated_warning_allowance",
+                "reason": "retain the copied bridge's legacy compatibility boundary",
+                "before_blob": blob_id(before, self.source_repo),
+                "after_blob": blob_id(after, self.source_repo),
+                "blocks": [block],
+            })
+        return {
+            "historical_provenance": "docs/plans/phase-b/import-provenance.json",
+            "source_commit": self.source_commit,
+            "adaptations": adaptations,
+        }
+
     def handoff_text(self, *, accepted_sha: str | None = None, verdict: str = "accepted",
                       acceptance: str = "accepted", include_review: bool = True,
                       review_path: str | None = None, review_commit: str | None = None,
@@ -234,6 +277,63 @@ class ValidateLogImportTests(unittest.TestCase):
             }])
             validate_import(provenance, fixture.source_repo, fixture.destination,
                              fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_accepts_separate_post_import_warning_adaptations(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            post_import = fixture.post_import_adaptations()
+            validate_import(
+                fixture.provenance(),
+                fixture.source_repo,
+                fixture.destination,
+                fixture.handoff_text(),
+                doc_repo=fixture.doc_repo,
+                post_import_adaptations=post_import,
+            )
+
+    def test_rejects_post_import_body_change(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            post_import = fixture.post_import_adaptations()
+            path = "crates/sc-observability-log/src/control.rs"
+            (fixture.destination / path).write_text(
+                (fixture.destination / path).read_text().replace("control()", "control_changed()")
+            )
+            with self.assertRaisesRegex(SystemExit, "after blob"):
+                validate_import(
+                    fixture.provenance(), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                    post_import_adaptations=post_import,
+                )
+
+    def test_rejects_post_import_signature_change(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            post_import = fixture.post_import_adaptations()
+            path = "crates/sc-observability-log/src/handle.rs"
+            (fixture.destination / path).write_text(
+                (fixture.destination / path).read_text().replace("pub fn handle()", "pub fn handle(extra: usize)")
+            )
+            with self.assertRaisesRegex(SystemExit, "after blob"):
+                validate_import(
+                    fixture.provenance(), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                    post_import_adaptations=post_import,
+                )
+
+    def test_rejects_post_import_undeclared_file_change(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            post_import = fixture.post_import_adaptations()
+            (fixture.destination / "crates/sc-observability-log/src/lib.rs").write_text(
+                "pub fn noop() { /* undeclared adaptation */ }\n\n#[path = \"tests/original.rs\"]\nmod tests;\n"
+            )
+            with self.assertRaisesRegex(SystemExit, "destination tree.*src/lib.rs"):
+                validate_import(
+                    fixture.provenance(), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                    post_import_adaptations=post_import,
+                )
 
     def test_accepts_declared_package_metadata_workspace_inheritance(self) -> None:
         """Converting hard-coded [package] fields to `.workspace = true` is a permitted metadata change."""
