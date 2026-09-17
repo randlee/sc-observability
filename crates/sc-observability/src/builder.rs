@@ -114,6 +114,7 @@ impl LoggerBuilder {
             file_sink,
             sinks,
         } = self;
+        let config = Arc::new(config);
         let active_log_path = default_log_path(&config.log_root, &config.service_name);
         let query_available = active_log_path.exists() || config.enable_file_sink;
         let retained_log_policy = config.retained_log_policy;
@@ -147,11 +148,7 @@ impl LoggerBuilder {
             )
         };
         let diagnostic_admitter = runtime.diagnostic_admitter();
-        let control = Arc::new(Mutex::new(LevelControl::new(
-            config.level,
-            config.service_name.clone(),
-            &diagnostic_admitter,
-        )));
+        let control = Arc::new(Mutex::new(LevelControl::new(&config, &diagnostic_admitter)));
         Ok((
             Logger {
                 runtime,

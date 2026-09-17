@@ -530,7 +530,7 @@ pub struct Stopped;
     reason = "logger owns runtime handles and trait-object sinks whose internal state is not a stable public debug contract"
 )]
 pub struct Logger<State = Running> {
-    config: LoggerConfig,
+    config: Arc<LoggerConfig>,
     sinks: Vec<SinkRegistration>,
     shutdown: Arc<AtomicBool>,
     runtime: LoggerRuntime,
@@ -675,11 +675,12 @@ pub(crate) fn rotated_log_path(active_path: &Path, index: usize) -> PathBuf {
 )]
 mod tests {
     use super::*;
+    use crate::runtime::LevelLifecycle;
     use crate::sinks::ConsoleWriter;
     use sc_observability_types::{
         ActionName, Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, Level, LogEvent, LogOrder,
-        LogQuery, LogSnapshot, ProcessIdentity, QueryError, QueryHealthState, Remediation,
-        SinkName, TargetCategory, Timestamp,
+        LogQuery, LogSnapshot, ProcessIdentity, ProcessIdentityPolicy, QueryError,
+        QueryHealthState, Remediation, SinkName, TargetCategory, Timestamp,
     };
     use serde_json::{Map, json};
     use std::fs::{self, OpenOptions};
@@ -710,6 +711,39 @@ mod tests {
             if key == "secret" {
                 *value = Value::String("custom-redacted".to_string());
             }
+        }
+    }
+
+    struct SourceRedactor {
+        control: Mutex<Option<std::sync::Weak<Mutex<LevelControl>>>>,
+        observed_unlocked: AtomicBool,
+    }
+
+    impl SourceRedactor {
+        fn attach(&self, control: &Arc<Mutex<LevelControl>>) {
+            *self.control.lock().expect("redactor control") = Some(Arc::downgrade(control));
+        }
+    }
+
+    impl Redactor for SourceRedactor {
+        fn redact(&self, key: &str, value: &mut Value) {
+            if key == "source" {
+                let is_unlocked = self
+                    .control
+                    .lock()
+                    .expect("redactor control")
+                    .as_ref()
+                    .and_then(std::sync::Weak::upgrade)
+                    .is_some_and(|control| control.try_lock().is_ok());
+                self.observed_unlocked.store(is_unlocked, Ordering::SeqCst);
+                *value = Value::String("redacted-source".to_string());
+            }
+        }
+    }
+
+    impl Redactor for Arc<SourceRedactor> {
+        fn redact(&self, key: &str, value: &mut Value) {
+            (**self).redact(key, value);
         }
     }
 
@@ -1949,6 +1983,58 @@ mod tests {
     }
 
     #[test]
+    fn level_change_diagnostic_uses_configured_context_and_redacts_outside_state_lock() {
+        let root = temp_path("level-diagnostic-context");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        config.level = LevelFilter::Off;
+        config.process_identity = ProcessIdentityPolicy::Fixed {
+            hostname: Some("diagnostic-host".to_string()),
+            pid: Some(42),
+        };
+        let redactor = Arc::new(SourceRedactor {
+            control: Mutex::new(None),
+            observed_unlocked: AtomicBool::new(false),
+        });
+        config
+            .redaction
+            .custom_redactors
+            .push(Box::new(redactor.clone()));
+        let sink = Arc::new(RecordingEventSink::default());
+        let mut builder = Logger::builder(config).expect("builder");
+        builder.register_sink(SinkRegistration::new(sink.clone()));
+        let (logger, mut owner) = builder.build_with_level_owner().expect("owner logger");
+        redactor.attach(&logger.level_control);
+
+        owner
+            .elevate_level(LevelFilter::Warn, LevelChangeSource::UserRequest)
+            .expect("level change");
+        logger.flush().expect("flush diagnostic");
+
+        let events = sink.events.lock().expect("recording events");
+        let diagnostic = events
+            .iter()
+            .find(|event| event.action.as_str() == "logging.level_changed")
+            .expect("level diagnostic");
+        assert_eq!(diagnostic.service, service_name());
+        assert_eq!(
+            diagnostic.identity,
+            ProcessIdentity {
+                hostname: Some("diagnostic-host".to_string()),
+                pid: Some(42),
+            }
+        );
+        assert_eq!(
+            diagnostic.fields.get("source").and_then(Value::as_str),
+            Some("redacted-source")
+        );
+        assert!(redactor.observed_unlocked.load(Ordering::SeqCst));
+        drop(events);
+        let _ = logger.shutdown();
+    }
+
+    #[test]
     fn saturated_diagnostic_queue_keeps_the_level_change_committed() {
         let root = temp_path("level-diagnostic-saturation");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
@@ -1984,6 +2070,53 @@ mod tests {
         ));
         signal.release_delay();
         let _ = logger.shutdown();
+    }
+
+    #[test]
+    fn level_owner_rejects_changes_during_an_actual_shutdown_stopping_window() {
+        let root = temp_path("level-owner-stopping-window");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_console_sink = false;
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        config.maintenance_test_pass_delay = Some(Duration::from_millis(500));
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
+        config.maintenance_test_pass_signal = Some(signal.clone());
+        let (logger, mut owner) =
+            Logger::new_with_level_owner(config).expect("construct logger with owner");
+        let initial_state = logger.level_state();
+        let control = logger.level_control.clone();
+
+        logger
+            .log(log_event(service_name()))
+            .expect("start maintenance");
+        wait_for(
+            || signal.is_active(),
+            "expected writer maintenance gate before shutdown",
+        );
+
+        let shutdown = std::thread::spawn(move || logger.shutdown());
+        wait_for(
+            || {
+                control
+                    .lock()
+                    .map(|state| state.lifecycle == LevelLifecycle::Stopping)
+                    .unwrap_or(false)
+            },
+            "expected logger shutdown to publish the stopping lifecycle",
+        );
+
+        assert!(matches!(
+            owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application),
+            Err(LevelChangeError::Stopping)
+        ));
+        signal.release_delay();
+        let stopped = shutdown.join().expect("shutdown thread");
+        assert_eq!(stopped.level_state(), initial_state);
+        assert!(matches!(
+            owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application),
+            Err(LevelChangeError::Stopped)
+        ));
     }
 
     #[test]

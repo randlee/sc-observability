@@ -23,9 +23,9 @@ use crate::maintenance::{
 use crate::redact::{redact_bearer_token_text, redact_string_value};
 use crate::sinks::JsonlFileSink;
 use crate::{
-    LevelOwner, LogError, LogEvent, Logger, RetainedLogPolicy, Running, ServiceName, Stopped,
-    TryLogError, default_log_path, error_codes, shutdown_timed_out_error_context,
-    writer_degraded_error_context,
+    LevelOwner, LogError, LogEvent, Logger, LoggerConfig, RedactionPolicy, RetainedLogPolicy,
+    Running, ServiceName, Stopped, TryLogError, default_log_path, error_codes,
+    shutdown_timed_out_error_context, writer_degraded_error_context,
 };
 
 pub(crate) struct LoggerRuntime {
@@ -48,7 +48,13 @@ pub(crate) struct LevelControl {
     pub(crate) state: LevelState,
     pub(crate) lifecycle: LevelLifecycle,
     diagnostic_admitter: Weak<dyn Fn(LogEvent) -> Result<(), TryEnqueueError> + Send + Sync>,
-    service: ServiceName,
+    config: Weak<LoggerConfig>,
+}
+
+#[derive(Clone)]
+struct LevelDiagnosticContext {
+    admitter: Weak<dyn Fn(LogEvent) -> Result<(), TryEnqueueError> + Send + Sync>,
+    config: Weak<LoggerConfig>,
 }
 
 impl std::fmt::Debug for LevelControl {
@@ -63,28 +69,47 @@ impl std::fmt::Debug for LevelControl {
 
 impl LevelControl {
     pub(crate) fn new(
-        configured_level: LevelFilter,
-        service: ServiceName,
+        config: &Arc<LoggerConfig>,
         diagnostic_admitter: &DiagnosticAdmitter,
     ) -> Self {
         Self {
             state: LevelState {
-                configured_level,
-                effective_level: configured_level,
+                configured_level: config.level,
+                effective_level: config.level,
                 revision: 0,
             },
             lifecycle: LevelLifecycle::Running,
             diagnostic_admitter: Arc::downgrade(diagnostic_admitter),
-            service,
+            config: Arc::downgrade(config),
         }
     }
 
+    fn diagnostic_context(&self) -> LevelDiagnosticContext {
+        LevelDiagnosticContext {
+            admitter: self.diagnostic_admitter.clone(),
+            config: self.config.clone(),
+        }
+    }
+}
+
+impl LevelDiagnosticContext {
+    /// Performs the fixed diagnostic event construction and bounded admission
+    /// after the level-state mutex has been released. Identity resolvers and
+    /// custom redactors are caller-provided code and must never run while the
+    /// state transition lock is held.
     fn admit_change_diagnostic(
         &self,
         previous: LevelState,
         current: LevelState,
         source: LevelChangeSource,
     ) -> ChangeDiagnostic {
+        let Some(config) = self.config.upgrade() else {
+            return ChangeDiagnostic::NotAccepted {
+                diagnostic: unavailable_level_diagnostic(
+                    "logger stopped while recording the change diagnostic",
+                ),
+            };
+        };
         let event = LogEvent {
             version: sc_observability_types::SchemaVersion::new(
                 sc_observability_types::OBSERVATION_ENVELOPE_VERSION,
@@ -92,13 +117,13 @@ impl LevelControl {
             .expect("workspace schema constant is valid"),
             timestamp: Timestamp::now_utc(),
             level: sc_observability_types::Level::Info,
-            service: self.service.clone(),
+            service: config.service_name.clone(),
             target: sc_observability_types::TargetCategory::new("sc_observability")
                 .expect("static diagnostic target is valid"),
             action: sc_observability_types::ActionName::new("logging.level_changed")
                 .expect("static diagnostic action is valid"),
             message: Some("logger level changed".to_string()),
-            identity: sc_observability_types::ProcessIdentity::default(),
+            identity: diagnostic_identity(&config.process_identity),
             trace: None,
             request_id: None,
             correlation_id: None,
@@ -125,7 +150,8 @@ impl LevelControl {
                 ("source".to_string(), serde_json::json!(source)),
             ]),
         };
-        let Some(admitter) = self.diagnostic_admitter.upgrade() else {
+        let event = redact_event_with_policy(event, &config.redaction);
+        let Some(admitter) = self.admitter.upgrade() else {
             return ChangeDiagnostic::NotAccepted {
                 diagnostic: unavailable_level_diagnostic(
                     "logger stopped while recording the change diagnostic",
@@ -134,31 +160,33 @@ impl LevelControl {
         };
         match admitter(event) {
             Ok(()) => ChangeDiagnostic::Accepted,
-            Err(TryEnqueueError::Full) => ChangeDiagnostic::NotAccepted {
-                diagnostic: OperationDiagnostic {
-                    code: error_codes::LOGGER_QUEUE_FULL,
-                    message: "writer queue is full; level change diagnostic was not admitted"
-                        .to_string(),
-                    remediation: Remediation::recoverable(
-                        "reduce logging pressure or increase queue capacity",
-                        ["inspect logger.health().queue_depth"],
-                    ),
-                    at: Timestamp::now_utc(),
-                },
-            },
-            Err(TryEnqueueError::Disconnected) => ChangeDiagnostic::NotAccepted {
-                diagnostic: OperationDiagnostic {
-                    code: error_codes::LOGGER_WRITER_DEGRADED,
-                    message: "writer is unavailable; level change diagnostic was not admitted"
-                        .to_string(),
-                    remediation: Remediation::recoverable(
-                        "inspect logger writer-thread health",
-                        ["recreate the logger instance"],
-                    ),
-                    at: Timestamp::now_utc(),
-                },
+            Err(error) => ChangeDiagnostic::NotAccepted {
+                diagnostic: diagnostic_admission_failure(error),
             },
         }
+    }
+}
+
+fn diagnostic_admission_failure(error: TryEnqueueError) -> OperationDiagnostic {
+    match error {
+        TryEnqueueError::Full => OperationDiagnostic {
+            code: error_codes::LOGGER_QUEUE_FULL,
+            message: "writer queue is full; level change diagnostic was not admitted".to_string(),
+            remediation: Remediation::recoverable(
+                "reduce logging pressure or increase queue capacity",
+                ["inspect logger.health().queue_depth"],
+            ),
+            at: Timestamp::now_utc(),
+        },
+        TryEnqueueError::Disconnected => OperationDiagnostic {
+            code: error_codes::LOGGER_WRITER_DEGRADED,
+            message: "writer is unavailable; level change diagnostic was not admitted".to_string(),
+            remediation: Remediation::recoverable(
+                "inspect logger writer-thread health",
+                ["recreate the logger instance"],
+            ),
+            at: Timestamp::now_utc(),
+        },
     }
 }
 
@@ -194,6 +222,45 @@ fn unavailable_event_error(message: &str) -> EventError {
         message,
         Remediation::not_recoverable("inspect state and create a new logger"),
     )))
+}
+
+fn diagnostic_identity(
+    policy: &sc_observability_types::ProcessIdentityPolicy,
+) -> sc_observability_types::ProcessIdentity {
+    match policy {
+        sc_observability_types::ProcessIdentityPolicy::Auto => {
+            sc_observability_types::ProcessIdentity::default()
+        }
+        sc_observability_types::ProcessIdentityPolicy::Fixed { hostname, pid } => {
+            sc_observability_types::ProcessIdentity {
+                hostname: hostname.clone(),
+                pid: *pid,
+            }
+        }
+        sc_observability_types::ProcessIdentityPolicy::Resolver(resolver) => {
+            resolver.resolve().unwrap_or_default()
+        }
+    }
+}
+
+fn redact_event_with_policy(mut event: LogEvent, policy: &RedactionPolicy) -> LogEvent {
+    if policy.redact_bearer_tokens
+        && let Some(message) = event.message.as_mut()
+    {
+        *message = redact_bearer_token_text(message);
+    }
+    for (key, value) in &mut event.fields {
+        if policy.denylist_keys.iter().any(|deny| deny == key) {
+            *value = Value::String(crate::constants::REDACTED_VALUE.to_string());
+        }
+        if policy.redact_bearer_tokens {
+            redact_string_value(value);
+        }
+        for redactor in &policy.custom_redactors {
+            redactor.redact(key, value);
+        }
+    }
+    event
 }
 
 impl LoggerRuntime {
@@ -510,32 +577,8 @@ impl Logger<Running> {
         Ok(Some(self.redact_event(event)))
     }
 
-    fn redact_event(&self, mut event: LogEvent) -> LogEvent {
-        if self.config.redaction.redact_bearer_tokens
-            && let Some(message) = event.message.as_mut()
-        {
-            *message = redact_bearer_token_text(message);
-        }
-
-        for (key, value) in &mut event.fields {
-            if self
-                .config
-                .redaction
-                .denylist_keys
-                .iter()
-                .any(|deny| deny == key)
-            {
-                *value = Value::String(crate::constants::REDACTED_VALUE.to_string());
-            }
-            if self.config.redaction.redact_bearer_tokens {
-                redact_string_value(value);
-            }
-            for redactor in &self.config.redaction.custom_redactors {
-                redactor.redact(key, value);
-            }
-        }
-
-        event
+    fn redact_event(&self, event: LogEvent) -> LogEvent {
+        redact_event_with_policy(event, &self.config.redaction)
     }
 
     fn query_reader(&self) -> Result<JsonlLogReader, QueryError> {
@@ -767,10 +810,11 @@ impl LevelOwner {
             ..previous
         };
         let current = control.state;
+        let diagnostic_context = control.diagnostic_context();
         // This is a non-blocking bounded admission attempt. It bypasses only
         // the level threshold and never waits for writer or sink work.
-        let diagnostic = control.admit_change_diagnostic(previous, current, source);
         drop(control);
+        let diagnostic = diagnostic_context.admit_change_diagnostic(previous, current, source);
         Ok(LevelChange::Changed {
             previous,
             current,

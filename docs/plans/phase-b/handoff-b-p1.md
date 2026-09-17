@@ -49,7 +49,7 @@ QA-B010 remains explicitly open: `runtime-level-contract.md` stays
 review failure is represented here as a PASS, and this handoff does not claim
 sprint closure.
 
-## QA-2 durable evidence correction
+## QA-2 and QA-3 evidence record
 
 QA-2 reviewed `08e33dd5f2597885fe9f33b0d9b8b4bb98d3e604` for PR #103 and
 returned **FAIL**. Its report permalink is
@@ -61,30 +61,58 @@ and its timestamp was a placeholder. The subsequent correction is recorded at
 the authoritative count is seven, 11/17 findings were independently resolved,
 and the verdict remains FAIL.
 
-The raw QA-2 command logs were deleted after the QA task closed. They cannot be
-reconstructed, so this document does not report their tool output as durable
-evidence or call it PASS. Fresh QA-3 must retain raw fmt/clippy/test/API/semver
-outputs, tool versions, and the exact reviewed SHA before QA-B005 can close.
-On the reviewed SHA, CI format, clippy, docs-consistency, and dependency-bans
-were successful; version-literals failed, and test, manifest-validation, and
-public-api-governance were skipped because they depend on that failing gate.
+The deleted QA-2 logs are historical context only; they are not evidence for
+this revision. QA-3 reviewed
+`41dd3201a2005c3ecac1f107f6892055f403518f` and returned **FAIL**; its report
+is [the QA-3 PR record](https://github.com/randlee/sc-observability/pull/103#issuecomment-5706715286).
+The retained raw evidence is the exact directory
+`/Users/randlee/.config/atm/share/sc-obs/qa-evidence/phase-b-bp1-qa-3/41dd3201a2005c3ecac1f107f6892055f403518f/rust-qa-agent/`:
+`tool-versions.txt`, `fmt.log`, `clippy.log`, `tests-debug.log`,
+`tests-release.log`, `doctests.log`, `version-literals.log`,
+`consumer-fixture.log`, `gh-pr-checks-103.log`, `gh-pr-view-103.log`, and
+`SHA256SUMS.txt`. The recorded checksums are the integrity reference for those
+logs; their presence is evidence retention, not a self-certified QA PASS.
+
+QA-3's tracker denominator is 18 (the original 17 plus QA-B011): 13 findings
+were independently fixed, and QA-B003, QA-B004, QA-B005, QA-B007, and QA-B010
+remained open at that review. The implementation changes below are submitted
+for a subsequent independent disposition. QA-B010 remains
+`proposed_for_public_api_review`; it has no implementation-side closure.
 
 ## Compatibility fixture provenance and commands
 
-The immutable legacy consumer and `LevelFilter` fixture record the reported
-published `v1.2.0` baseline provenance (`dcc5263`). That object is not present
-in this checkout, so this claim must be independently checked against the
-published release before fixture regeneration; the fixture must never be
-regenerated from B.P1 code. The consumer manifest and lock use package version
-`1.2.0` to satisfy the repository's literal-consistency rule while preserving
-the legacy source API shape.
+The immutable legacy consumer and `LevelFilter` fixture are traced to the
+verified `v1.2.0` release commit
+`dcc52685fd845c8d1bddde29199e799ae921cf5c` (2026-05-26). The native
+`LevelFilter` Serde fixture is frozen from that baseline and must never be
+regenerated from B.P1 code.
 
-Quality-mgr can independently capture the required fresh transcript with:
+The two legs deliberately exercise the same frozen legacy source in isolated
+dependency environments: `bp1-published-v1.2.0-baseline` locks exact registry
+`=1.2.0` crates, while `bp1-published-v1.2.0-consumer` resolves the B.P1
+candidate through local paths. The committed lockfiles make the distinction
+inspectable: only the baseline lock has registry source/checksum entries for
+the two `sc-observability` crates.
+
+The fixture-input SHA-256 values are:
+
+| Input | SHA-256 |
+| --- | --- |
+| `level_filter.json` | `93d3f2db5b07e292122ac983b6f82e7d957a948cd9ddf3b98d2113223fa1afb5` |
+| released-baseline `Cargo.toml` | `c0d8651563c2c40d13d420df08a1bc9ec76294527c9c237107661a8810a6a465` |
+| released-baseline `Cargo.lock` | `5aff91a6449ec0be1b588ff19bce1cb093e23e78ae8351cd0048ea8ce374c65f` |
+| released-baseline `src/main.rs` | `68ef6d6426edc348ec2b46b879525f190d306a3af5ac2fdb94ece000c3597557` |
+| candidate `Cargo.toml` | `68f4c0d5d03ef8361319e8d0a54a324b8f8caef9edc6fef549b6c3e5fba8b7d6` |
+| candidate `Cargo.lock` | `e084747a104c243ec9bcc6f51777a1fb7720c8f92902a26cf936552fb4899fa2` |
+| candidate `src/main.rs` | `68ef6d6426edc348ec2b46b879525f190d306a3af5ac2fdb94ece000c3597557` |
+
+Quality-mgr can independently reproduce both legs with:
 
 ```sh
-git show dcc5263:crates/sc-observability-types/src/level.rs
+git show dcc52685fd845c8d1bddde29199e799ae921cf5c:crates/sc-observability-types/src/level.rs
 cargo test -p sc-observability-types published_level_filter_fixture_retains_its_native_serde_shape
-cargo run --manifest-path crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-consumer/Cargo.toml
+cargo run --locked --manifest-path crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-baseline/Cargo.toml
+cargo run --locked --manifest-path crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-consumer/Cargo.toml
 python3 scripts/ci/validate_version_literals.py
 ```
 
@@ -96,7 +124,7 @@ python3 scripts/ci/validate_version_literals.py
 | Post-stop retained snapshot; poisoned state | `level_state_recovers_the_last_committed_snapshot_after_poisoning`. |
 | Stale owner after shutdown | `level_owner_changes_only_its_logger_and_filters_with_shared_admission`. |
 | Owner cannot retain writer shutdown | The same test shuts down while the weak owner remains available and then observes `Stopped`. |
-| Independent logger isolation | Pending fresh QA verification; no claim of completion is made here. |
+| Independent logger isolation | `separate_level_owners_do_not_cross_logger_boundaries`. |
 
 ## AC3 test mapping
 
@@ -105,3 +133,10 @@ diagnostics for Warn/Error/Off transitions. `saturated_diagnostic_queue_keeps_th
 uses the existing writer maintenance gate to deterministically fill the bounded
 queue, then verifies `Changed` with revision 2 and the original queue-full
 diagnostic rather than rollback.
+
+`level_owner_rejects_changes_during_an_actual_shutdown_stopping_window` holds
+the writer in its controlled maintenance pass, starts shutdown, observes the
+published `Stopping` lifecycle, and verifies a rejected owner change does not
+mutate the retained state. `level_change_diagnostic_uses_configured_context_and_redacts_outside_state_lock`
+verifies configured service/identity, custom-redactor application, and that the
+redactor can acquire the level-state mutex, proving callback work is outside it.
