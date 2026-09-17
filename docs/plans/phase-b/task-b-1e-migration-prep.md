@@ -22,7 +22,7 @@ their pending gates are recorded in the handoff.
 The task document was absent when this child started. This file records the
 authoritative sprint and contract as the replacement scoped task record rather
 than silently assuming a missing plan. The telemetry parent was merged at
-`d4997029f83664331c8c4e3cc20005ae656d254a` after its C01 correction removed
+`4b1df6a8f05875db0bac9e2eac1742f1eb056390` after its C01 correction removed
 the unplanned `with_typed_*` projector builders.
 
 ## Deliverables

@@ -4,7 +4,7 @@
 
 - Branch: `feature/phase-b-1e-migration-prep`
 - Parent: `feature/phase-b-1d-telemetry-prep`
-- Parent merged before final preparation: `d4997029f83664331c8c4e3cc20005ae656d254a`
+- Parent merged before final preparation: `4b1df6a8f05875db0bac9e2eac1742f1eb056390`
 - Authoritative sources: `sprint-b-1e-error-adoption.md` and
   `error-api-contract.md`
 - Scope: exact migration guide, warning inventory and adoption-skill routing
