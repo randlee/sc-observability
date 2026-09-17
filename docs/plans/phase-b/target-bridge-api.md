@@ -11,12 +11,13 @@ service_hardening_coverage: scope_skipped_zero_findings
 
 # Target bridge public API contract and disposition matrix
 
-sc-observability owns this proposed public contract. It is being reviewed now so
-BTIT can complete its initial implementation against the accepted design.
-`proposed_for_public_api_review` is not approval or a completed freeze. Acceptance
-must name a committed revision of this contract; BTIT's subsequent implementation
-and critical-review closure must refer to that revision. Only then may B.1 copy
-the resulting accepted crate set. There is no post-copy bridge redesign sprint.
+sc-observability owns this target public contract. Its target design is accepted
+for BTIT's initial implementation at the committed revision recorded below.
+`accepted_target_design_not_source_acceptance` is a scoped design decision, not
+runtime public-API approval or a completed source freeze. BTIT's subsequent
+implementation and critical-review closure must refer to that revision before
+B.1 may copy the resulting accepted crate set. There is no post-copy bridge
+redesign sprint.
 
 ## Scoped target-design acceptance
 
