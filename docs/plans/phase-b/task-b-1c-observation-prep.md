@@ -1,6 +1,6 @@
 ---
 id: B.1c-observation-prep
-status: complete
+status: in_progress
 branch: feature/phase-b-1c-observation-prep
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1c-observation-prep
 parent: feature/phase-b-1b-logger-prep

@@ -33,11 +33,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use sc_observability::{LogError, Logger, LoggerConfig, RetainedLogPolicy, Running, Stopped};
-use sc_observability_types::typed::{
-    FlushFailure, InitFailure, ShutdownFailure, TypedLogProjector, TypedMetricProjector,
-    TypedObservationSubscriber, TypedSpanProjector, legacy_log_projector, legacy_metric_projector,
-    legacy_span_projector, legacy_subscriber,
-};
+use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError,
     ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, Remediation,
@@ -510,17 +506,6 @@ impl ObservabilityBuilder {
         self
     }
 
-    /// Registers a subscriber that reports neutral typed failures.
-    pub fn register_typed_subscriber<T>(
-        self,
-        subscriber: Arc<dyn TypedObservationSubscriber<T>>,
-    ) -> Self
-    where
-        T: Observable,
-    {
-        self.register_subscriber(SubscriberRegistration::new(legacy_subscriber(subscriber)))
-    }
-
     /// Registers one typed observation projection set at construction time.
     ///
     /// # Panics
@@ -590,39 +575,6 @@ impl ObservabilityBuilder {
         self
     }
 
-    /// Registers a typed log projector through the existing legacy route.
-    pub fn register_typed_log_projector<T>(self, projector: Arc<dyn TypedLogProjector<T>>) -> Self
-    where
-        T: Observable,
-    {
-        self.register_projection(
-            ProjectionRegistration::new().with_log_projector(legacy_log_projector(projector)),
-        )
-    }
-
-    /// Registers a typed span projector through the existing legacy route.
-    pub fn register_typed_span_projector<T>(self, projector: Arc<dyn TypedSpanProjector<T>>) -> Self
-    where
-        T: Observable,
-    {
-        self.register_projection(
-            ProjectionRegistration::new().with_span_projector(legacy_span_projector(projector)),
-        )
-    }
-
-    /// Registers a typed metric projector through the existing legacy route.
-    pub fn register_typed_metric_projector<T>(
-        self,
-        projector: Arc<dyn TypedMetricProjector<T>>,
-    ) -> Self
-    where
-        T: Observable,
-    {
-        self.register_projection(
-            ProjectionRegistration::new().with_metric_projector(legacy_metric_projector(projector)),
-        )
-    }
-
     /// Finalizes registration and constructs the routing runtime.
     pub fn build(self) -> Result<Observability, InitError> {
         self.build_typed().map_err(Into::into)
@@ -688,6 +640,7 @@ mod tests {
     };
     use sc_observability_types::typed::{
         ClassifiedError, InitFailureKind, SubscriberFailure, TypedObservationSubscriber,
+        legacy_subscriber,
     };
     use sc_observability_types::{
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
@@ -1155,9 +1108,11 @@ mod tests {
         );
 
         let runtime = Observability::builder(config)
-            .register_typed_subscriber(Arc::new(TypedRecordingSubscriber {
-                calls: calls.clone(),
-            }))
+            .register_subscriber(SubscriberRegistration::new(legacy_subscriber(Arc::new(
+                TypedRecordingSubscriber {
+                    calls: calls.clone(),
+                },
+            ))))
             .build_typed()
             .expect("typed runtime");
 
@@ -1191,9 +1146,11 @@ mod tests {
                 .expect("typed config");
         config.queue_capacity = 0;
         let error = match Observability::builder(config)
-            .register_typed_subscriber(Arc::new(TypedRecordingSubscriber {
-                calls: Arc::new(AtomicU64::new(0)),
-            }))
+            .register_subscriber(SubscriberRegistration::new(legacy_subscriber(Arc::new(
+                TypedRecordingSubscriber {
+                    calls: Arc::new(AtomicU64::new(0)),
+                },
+            ))))
             .build_typed()
         {
             Err(error) => error,
@@ -1209,9 +1166,11 @@ mod tests {
                 ObservabilityConfig::default_for_typed(tool_name(), temp_path("typed-concurrent"))
                     .expect("typed config"),
             )
-            .register_typed_subscriber(Arc::new(TypedRecordingSubscriber {
-                calls: Arc::new(AtomicU64::new(0)),
-            }))
+            .register_subscriber(SubscriberRegistration::new(legacy_subscriber(Arc::new(
+                TypedRecordingSubscriber {
+                    calls: Arc::new(AtomicU64::new(0)),
+                },
+            ))))
             .build_typed()
             .expect("typed runtime"),
         );
