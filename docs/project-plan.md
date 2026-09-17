@@ -186,6 +186,16 @@ shutdown operations while retaining existing exporters, telemetry lifecycle,
 projector registration, serialization, and public error surfaces. Copied-bridge
 integration, warning rollout, publication, and independent QA remain separate.
 
+### B.1a/B.1b — QA1 reconciled corrections
+
+The six scoped QA1 corrections are recorded in
+[`plans/phase-b/task-b-1ab-qa1-fixes.md`](./plans/phase-b/task-b-1ab-qa1-fixes.md).
+They harden test-only concurrency controls, preserve standalone sink diagnostic
+remediation/source semantics, and use the canonical typed identity code without
+changing the retained logger configuration, shutdown behavior, or root exports.
+Coordinator completeness passed at
+`57176ba4c263a6cf603ef4d78a7e3be94b5d1568`; independent QA remains separate.
+
 ### B.1 — Copy the corrected generic BTIT crates
 
 The mechanical copy sprint is tracked in
