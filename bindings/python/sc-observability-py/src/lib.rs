@@ -1,4 +1,4 @@
-//! PyO3 transport over the shared binding-runtime backends.
+//! `PyO3` transport over the shared binding-runtime backends.
 //!
 //! Python values are encoded to canonical DTO JSON in the Python facade. This
 //! crate deliberately owns no native conversion map: DTO validation and all
@@ -22,7 +22,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -84,7 +83,7 @@ fn result_json<T: Serialize>(value: Result<T, Failure>) -> String {
     }
 }
 
-/// No Rust panic may cross a public PyO3 call boundary as `PanicException`.
+/// No Rust panic may cross a public `PyO3` call boundary as `PanicException`.
 fn contained_json(call: impl FnOnce() -> String) -> String {
     match catch_unwind(AssertUnwindSafe(call)) {
         Ok(result) => result,
@@ -142,7 +141,7 @@ fn logger_config(value: &str) -> Result<sc_observability::LoggerConfig, Failure>
             ))
         })?,
     )?;
-    let mut native = sc_observability::LoggerConfig::default_for(service, PathBuf::from(root));
+    let mut native = sc_observability::LoggerConfig::default_for(service, root);
     native.level = level(&config.level)?;
     native.enable_file_sink = config.enable_file_sink;
     native.enable_console_sink = config.enable_console_sink;
@@ -349,11 +348,16 @@ fn create_owned(py: Python<'_>, config: &str) -> PyResult<(Option<Py<NativeLogge
     }
 }
 
-/// Installs a host-owned backend once for this concrete PyO3 module instance.
+/// Installs a host-owned backend once for this concrete `PyO3` module instance.
 ///
 /// The module state owns one `Arc`; each attached handle clones it. Repeated
 /// installation cannot replace the first backend and returns tagged data to
 /// the Rust embedding caller instead of relying on Python exceptions.
+///
+/// # Errors
+///
+/// Returns a tagged failure when the module slot already exists or the Python
+/// module cannot be inspected or updated.
 pub fn install_host_logger(
     module: &Bound<'_, PyModule>,
     backend: Arc<dyn HostLoggingBackend>,
@@ -420,17 +424,14 @@ fn attached_logger_from_module(
     py: Python<'_>,
     module: &Bound<'_, PyModule>,
 ) -> PyResult<(Option<Py<NativeAttachedLogger>>, String)> {
-    let slot = match module.getattr("_sc_observability_host_backend") {
-        Ok(slot) => slot,
-        Err(_) => {
-            return Ok((
-                None,
-                result_json::<()>(Err(unavailable_failure(
-                    sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED,
-                    "host logger has not been installed in this module",
-                ))),
-            ));
-        }
+    let Ok(slot) = module.getattr("_sc_observability_host_backend") else {
+        return Ok((
+            None,
+            result_json::<()>(Err(unavailable_failure(
+                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED,
+                "host logger has not been installed in this module",
+            ))),
+        ));
     };
     let slot = match slot.extract::<Py<HostSlot>>() {
         Ok(slot) => slot,
@@ -449,6 +450,11 @@ fn attached_logger_from_module(
 }
 
 /// Native module used only by the high-level Python facade.
+///
+/// # Errors
+///
+/// Returns a Python error only when the module cannot register its private
+/// classes or functions during initialization.
 #[pymodule(gil_used = true)]
 pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeLogger>()?;
@@ -459,6 +465,13 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::assertions_on_constants,
+    clippy::manual_let_else,
+    clippy::needless_borrow,
+    clippy::single_match_else,
+    reason = "fixture early exits make each PyO3 setup failure explicit without changing production control flow"
+)]
 mod tests {
     use super::*;
     use sc_observability_dto::error_codes::{

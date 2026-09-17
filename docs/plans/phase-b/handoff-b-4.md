@@ -14,7 +14,7 @@ owned loggers, and non-owning Rust-host attachments. Owned lifecycle and level
 authority stay with `CoreLoggerOwner`; attached handles retain only a shared
 `HostLoggingBackend` Arc and cannot stop or mutate the host.
 
-Current source evidence is `7ac8c57c241922c4a7d3e8d6707187d98099e683`.
+Current source evidence is `9f44dc7892976a10fb3e6203f30f99ec261518aa`.
 It carries frozen B.3, B.3b and telemetry/copy ancestors while retaining the
 direct TypeScript parent. The facade contains no authored validation `raise`:
 malformed Python values, hostile mappings/accessors, foreign native exceptions,
@@ -58,6 +58,38 @@ suffixes, normalized `::` and space aliases, and nested/mixed forged maps before
 owned or attached dispatch. An installed-wheel fixture replaces the active JSONL
 file with a directory before construction, then verifies a real lazy sink write
 fault is retained in tagged health rather than escaping from `log` or `flush`.
+
+The retained B.3b coordinator operation matrix was also run one named process
+case at a time: timer/bootstrap rollback, worker rollback, waiters/callbacks,
+query/flush slot ordering and timeout, held sink/shutdown, N=32 admission and
+close, helper failure, bridge timeout/churn, teardown, and native-diagnostic
+fidelity all pass. Python uses these shared operations rather than introducing
+another worker or conversion path.
+
+## Active completeness checklist — pass 1: implementation paths
+
+| Requirement | Retained evidence | State |
+| --- | --- | --- |
+| Owned and attached lifecycle, N=32 admission, host once-only, surviving handles | Installed wheel tests plus six native PyO3 tests | covered |
+| Python input/result containment and protected provenance | Nine facade tests and strict Failure narrowing fixture | covered |
+| Host level authority and attached revision observation | Installed owned-level test and native attached-owner fixture | covered |
+| Embedding correlation/redaction/query/health/stop | `cargo run -p rust-python-logging` | covered |
+| GC/interpreter teardown | Installed owned-handle subprocess and native module-collection fixture | covered |
+| Shared helper rollback, held sink, slot/timeout and late-result mechanics | all named B.3b coordinator cases | covered in supplied backend |
+| Python-bound blocked-sink heartbeat and every detailed operation interleaving | no direct Python fixture yet | active |
+| Native fault injection through every Python public Result method | no test-only PyO3 fault control yet | active |
+| Revision-overflow/diagnostic/remediation round-trips through Python | no direct Python fixture yet | active |
+
+## Active completeness checklist — pass 2: validation paths
+
+| Gate | Result | State |
+| --- | --- | --- |
+| `validate_python_bindings.sh` (CPython 3.10.21) | green: 9 facade, 7 installed runtime, 6 native binding tests, embedding example | covered |
+| `cargo clippy --locked -p sc-observability-py --all-targets -- -D warnings` | green; included in the Python validator | covered |
+| `validate_dependency_bans.sh` | green | covered |
+| `validate_docs_consistency.sh` | green | covered |
+| Linux x86_64 source CI | platform run not yet retained on this active head | active |
+| B.4a wheel/sdist matrix | owned by B.4a and not a B.4 completion substitute | external qualification |
 
 This handoff remains an implementation evidence record until coordinator
 completeness review and the sprint closeout update are complete.

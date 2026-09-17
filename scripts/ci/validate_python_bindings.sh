@@ -13,6 +13,7 @@ B4_TEMP_DIR="$(mktemp -d -t sc-observability-b4.XXXXXX)"
 trap 'rm -rf "$B4_TEMP_DIR"' EXIT
 
 cargo fmt --all -- --check
+cargo clippy --locked -p sc-observability-py --all-targets -- -D warnings
 cargo test --locked -p sc-observability-binding-runtime
 cargo test --locked -p sc-observability-py
 cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc-observability-schema -- \
