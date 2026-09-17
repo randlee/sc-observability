@@ -88,12 +88,21 @@ fn decode<T: DeserializeOwned>(value: Value, field: &str) -> Result<T, Failure> 
 }
 /// Decodes and validates all event fields before native queue admission.
 pub fn decode_event(value: Value) -> Result<LogEventDto, Failure> {
+    strict_event(&value)?;
     let dto: LogEventDto = decode(value, "event")?;
     validate_event(&dto)?;
     Ok(dto)
 }
 /// Decodes and validates the inclusive native query contract.
 pub fn decode_query(value: Value) -> Result<LogQueryDto, Failure> {
+    if let Some(matches) = value.get("field_matches").and_then(Value::as_array) {
+        for (index, entry) in matches.iter().enumerate() {
+            let object = strict_object(entry, &["field", "value"], &format!("field_matches[{index}]"))?;
+            if let Some(value) = object.get("value") {
+                strict_value(value, &format!("field_matches[{index}].value"))?;
+            }
+        }
+    }
     let dto: LogQueryDto = decode(value, "query")?;
     to_core_query(dto.clone())?;
     Ok(dto)
@@ -133,6 +142,64 @@ fn normalize_key(value: &str) -> String {
         })
         .collect()
 }
+
+fn strict_object<'a>(value: &'a Value, allowed: &[&str], field: &str) -> Result<&'a Map<String, Value>, Failure> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| invalid_input(field, "expected object"))?;
+    if object.keys().any(|key| !allowed.contains(&key.as_str())) {
+        return Err(invalid_input(field, "unknown field"));
+    }
+    Ok(object)
+}
+
+fn strict_value(value: &Value, field: &str) -> Result<(), Failure> {
+    let object = strict_object(value, &["kind", "value"], field)?;
+    let kind = object
+        .get("kind")
+        .and_then(Value::as_str)
+        .ok_or_else(|| invalid_input(field, "value kind is required"))?;
+    if kind == "null" && object.len() != 1 {
+        return Err(invalid_input(field, "null values do not carry a payload"));
+    }
+    if !matches!(kind, "null" | "boolean" | "string" | "integer" | "float" | "array" | "object") {
+        return Err(invalid_input(field, "unknown value kind"));
+    }
+    match kind {
+        "array" => object
+            .get("value")
+            .and_then(Value::as_array)
+            .ok_or_else(|| invalid_input(field, "array value is required"))?
+            .iter()
+            .enumerate()
+            .try_for_each(|(index, child)| strict_value(child, &format!("{field}.value[{index}]")))?,
+        "object" => object
+            .get("value")
+            .and_then(Value::as_object)
+            .ok_or_else(|| invalid_input(field, "object value is required"))?
+            .iter()
+            .try_for_each(|(key, child)| strict_value(child, &format!("{field}.value.{key}")))?,
+        _ => {}
+    }
+    Ok(())
+}
+
+fn strict_event(value: &Value) -> Result<(), Failure> {
+    let event = strict_object(value, &["schema_version", "level", "target", "action", "message", "trace", "request_id", "correlation_id", "outcome", "fields"], "event")?;
+    if let Some(trace) = event.get("trace") {
+        if !trace.is_null() {
+            strict_object(trace, &["trace_id", "span_id", "parent_span_id"], "event.trace")?;
+        }
+    }
+    if let Some(fields) = event.get("fields") {
+        let fields = fields.as_object().ok_or_else(|| invalid_input("event.fields", "fields must be an object"))?;
+        for (key, value) in fields {
+            strict_value(value, &format!("event.fields.{key}"))?;
+        }
+    }
+    Ok(())
+}
+
 fn protected(key: &str) -> bool {
     key.starts_with("sc_observability.binding.")
         || normalize_key(key).starts_with("sc_observability.binding.")
