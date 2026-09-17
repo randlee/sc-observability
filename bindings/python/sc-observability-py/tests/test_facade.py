@@ -161,6 +161,25 @@ class _HostileMapping(dict[str, object]):
         raise _UnprintableForeignError()
 
 
+class _MalformedEntriesMapping(dict[str, object]):
+    def items(self) -> object:
+        return [1]
+
+
+class _ExplosiveEvent(LogEvent):
+    def __getattribute__(self, name: str) -> object:
+        if name == "level":
+            raise _UnprintableForeignError()
+        return super().__getattribute__(name)
+
+
+class _LookupExplodes:
+    def __getattribute__(self, name: str) -> object:
+        if name == "health":
+            raise _UnprintableForeignError()
+        return super().__getattribute__(name)
+
+
 def test_foreign_native_and_mapping_failures_are_tagged() -> None:
     owned = Logger(_ForeignNative())
     attached = AttachedLogger(_ForeignNative())
@@ -180,9 +199,16 @@ def test_foreign_native_and_mapping_failures_are_tagged() -> None:
         owned.elevate_level("debug"),
         owned.reset_level(),
         _event(LogEvent(level="info", target="python.test", action="emit", fields=_HostileMapping())),
+        _event(LogEvent(level="info", target="python.test", action="emit", fields=_MalformedEntriesMapping())),
+        _event(_ExplosiveEvent(level="info", target="python.test", action="emit")),
+        Logger(cast(Any, _LookupExplodes())).health(),
     )
     assert all(isinstance(result, Err) for result in results)
-    assert all(result.error.code == "SC_OBSERVABILITY_BINDING_INTERNAL" for result in results)
+    assert all(
+        result.error.code
+        in ("SC_OBSERVABILITY_BINDING_INTERNAL", "SC_OBSERVABILITY_BINDING_INVALID_INPUT")
+        for result in results
+    )
 
 
 def test_malformed_runtime_dataclass_values_are_tagged() -> None:

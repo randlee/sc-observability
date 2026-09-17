@@ -398,6 +398,14 @@ fn get_installed_host_logger_inner(
             ));
         }
     };
+    attached_logger_from_module(py, &module)
+}
+
+/// Projects a retained module host slot to one non-owning Python handle.
+fn attached_logger_from_module(
+    py: Python<'_>,
+    module: &Bound<'_, PyModule>,
+) -> PyResult<(Option<Py<NativeAttachedLogger>>, String)> {
     let slot = match module.getattr("_sc_observability_host_backend") {
         Ok(slot) => slot,
         Err(_) => {
@@ -439,7 +447,10 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED;
+    use sc_observability_dto::error_codes::{
+        SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED,
+        SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED,
+    };
 
     #[test]
     fn host_installation_is_immutable_per_module() {
@@ -476,6 +487,55 @@ mod tests {
             };
             let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
             first_install && duplicate_is_rejected && retained_slot && stopped
+        });
+        assert!(passed);
+    }
+
+    #[test]
+    fn attached_factory_preserves_host_ownership_and_retained_health() {
+        Python::initialize();
+        let passed = Python::attach(|py| {
+            let module = match PyModule::new(py, "_b4_attached_host_test") {
+                Ok(module) => module,
+                Err(_) => return false,
+            };
+            let missing_is_tagged = matches!(
+                attached_logger_from_module(py, &module),
+                Ok((None, result)) if result.contains(SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED)
+            );
+            let service = match ServiceName::new("b4-attached-host-test") {
+                Ok(service) => service,
+                Err(_) => return false,
+            };
+            let mut config = sc_observability::LoggerConfig::default_for(
+                service,
+                std::env::temp_dir().join("sc-observability-b4-attached-host-test"),
+            );
+            config.enable_console_sink = false;
+            let (owner, backend) = match create_core_backend(config) {
+                Ok(pair) => pair,
+                Err(_) => return false,
+            };
+            let host: Arc<dyn HostLoggingBackend> = Arc::new(backend);
+            if install_host_logger(&module, host).is_err() {
+                return false;
+            }
+            let attached = match attached_logger_from_module(py, &module) {
+                Ok((Some(attached), result)) if result.contains("\"kind\":\"ok\"") => attached,
+                _ => return false,
+            };
+            let event = r#"{"schema_version":1,"level":"info","target":"python.attached","action":"host-owned","fields":{}}"#;
+            let admitted = attached
+                .borrow(py)
+                .log(py, event)
+                .contains("\"kind\":\"ok\"");
+            let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
+            let closed = attached
+                .borrow(py)
+                .log(py, event)
+                .contains(sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED);
+            let retained_health = attached.borrow(py).health().contains("\"kind\":\"ok\"");
+            missing_is_tagged && admitted && stopped && closed && retained_health
         });
         assert!(passed);
     }

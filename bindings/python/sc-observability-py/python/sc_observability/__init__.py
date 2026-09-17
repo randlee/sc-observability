@@ -199,7 +199,10 @@ def _value(value: object, path: str, seen: set[int], depth: int = 0) -> Result[d
                 entries = tuple(value.items())
             except BaseException as error:  # foreign Mapping implementation
                 return Err(_internal(f"could not inspect mapping input: {_foreign_message(error)}"))
-            for key, item in entries:
+            for entry in entries:
+                if type(entry) not in (tuple, list) or len(entry) != 2:
+                    return Err(_failure(path, "mapping entries must be key-value pairs"))
+                key, item = cast(tuple[object, object] | list[object], entry)
                 if type(key) is not str:
                     return Err(_failure(path, "object keys must be strings"))
                 if _normalised_key(key).startswith("sc_observability.binding."):
@@ -215,6 +218,13 @@ def _value(value: object, path: str, seen: set[int], depth: int = 0) -> Result[d
 
 
 def _event(event: object) -> Result[dict[str, object]]:
+    try:
+        return _event_checked(event)
+    except BaseException as error:  # foreign dataclass subclass/accessor
+        return Err(_internal(f"could not inspect event input: {_foreign_message(error)}"))
+
+
+def _event_checked(event: object) -> Result[dict[str, object]]:
     if not isinstance(event, LogEvent):
         return Err(_failure("event", "expected LogEvent"))
     if type(event.level) is not str or event.level not in ("trace", "debug", "info", "warn", "error"):
@@ -251,7 +261,10 @@ def _event(event: object) -> Result[dict[str, object]]:
         entries = tuple(event.fields.items())
     except BaseException as error:  # foreign Mapping implementation
         return Err(_internal(f"could not inspect event fields: {_foreign_message(error)}"))
-    for key, value in entries:
+    for entry in entries:
+        if type(entry) not in (tuple, list) or len(entry) != 2:
+            return Err(_failure("fields", "mapping entries must be key-value pairs"))
+        key, value = cast(tuple[object, object] | list[object], entry)
         if type(key) is not str:
             return Err(_failure("fields", "object keys must be strings"))
         if _normalised_key(key).startswith("sc_observability.binding."):
@@ -275,6 +288,13 @@ def _event(event: object) -> Result[dict[str, object]]:
 
 
 def _query(query: object) -> Result[dict[str, object]]:
+    try:
+        return _query_checked(query)
+    except BaseException as error:  # foreign dataclass subclass/accessor
+        return Err(_internal(f"could not inspect query input: {_foreign_message(error)}"))
+
+
+def _query_checked(query: object) -> Result[dict[str, object]]:
     if not isinstance(query, LogQuery):
         return Err(_failure("query", "expected LogQuery"))
     if type(query.limit) is not int or not 1 <= query.limit <= 1000:
@@ -387,6 +407,13 @@ def _native_call(name: str, call: Callable[[], object]) -> Result[object]:
 
 
 def _logger_config(config: object) -> Result[dict[str, object]]:
+    try:
+        return _logger_config_checked(config)
+    except BaseException as error:  # foreign dataclass subclass/accessor
+        return Err(_internal(f"could not inspect logger configuration: {_foreign_message(error)}"))
+
+
+def _logger_config_checked(config: object) -> Result[dict[str, object]]:
     if not isinstance(config, LoggerConfig):
         return Err(_failure("config", "expected LoggerConfig"))
     if type(config.service) is not str or not config.service:
@@ -436,7 +463,7 @@ class Logger:
         )
 
     def health(self) -> Result[generated.LogHealth]:
-        return _typed(_native_call("OutputResultDtoLogHealthDto", self._native.health))
+        return _typed(_native_call("OutputResultDtoLogHealthDto", lambda: self._native.health()))
 
     def flush(self, timeout_ms: int = 2000) -> Result[generated.Completion]:
         timeout = _timeout(timeout_ms)
@@ -508,7 +535,7 @@ class AttachedLogger:
         )
 
     def health(self) -> Result[generated.LogHealth]:
-        return _typed(_native_call("OutputResultDtoLogHealthDto", self._native.health))
+        return _typed(_native_call("OutputResultDtoLogHealthDto", lambda: self._native.health()))
 
     def flush(self, timeout_ms: int = 2000) -> Result[generated.Completion]:
         timeout = _timeout(timeout_ms)
