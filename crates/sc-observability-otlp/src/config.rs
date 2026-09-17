@@ -555,7 +555,10 @@ mod tests {
             metrics: None,
         };
 
-        assert!(validate_config(&config).is_err());
+        let legacy = validate_config(&config).expect_err("legacy zero timeout");
+        let typed = validate_config_typed(&config).expect_err("typed zero timeout");
+        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
     }
 
     #[test]
@@ -574,7 +577,10 @@ mod tests {
             metrics: None,
         };
 
-        assert!(validate_config(&config).is_err());
+        let legacy = validate_config(&config).expect_err("legacy backoff inversion");
+        let typed = validate_config_typed(&config).expect_err("typed backoff inversion");
+        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
     }
 
     #[test]
@@ -595,7 +601,10 @@ mod tests {
             metrics: None,
         };
 
-        assert!(validate_config(&config).is_err());
+        let legacy = validate_config(&config).expect_err("legacy no signals");
+        let typed = validate_config_typed(&config).expect_err("typed no signals");
+        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
     }
 
     #[test]
@@ -617,7 +626,10 @@ mod tests {
             traces: None,
             metrics: None,
         };
-        assert!(validate_config(&zero_logs).is_err());
+        let legacy = validate_config(&zero_logs).expect_err("legacy zero logs batch");
+        let typed = validate_config_typed(&zero_logs).expect_err("typed zero logs batch");
+        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
 
         let zero_metrics = TelemetryConfig {
             service_name,
@@ -630,7 +642,10 @@ mod tests {
                 export_interval_ms: 0_u64.into(),
             }),
         };
-        assert!(validate_config(&zero_metrics).is_err());
+        let legacy = validate_config(&zero_metrics).expect_err("legacy zero metric interval");
+        let typed = validate_config_typed(&zero_metrics).expect_err("typed zero metric interval");
+        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
     }
 
     #[test]
