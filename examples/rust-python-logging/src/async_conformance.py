@@ -175,5 +175,23 @@ assert key not in _pools or not _pools[key].observers
 loop.close()
 
 if mode == "owned":
-    assert isinstance(logger.shutdown(), Ok)
-    assert isinstance(logger.wait_stopped(0), Ok)
+    controls.hold()
+    receipt = logger.submit(LogEvent(level="info", target="async.embed", action="shutdown.held"))
+    assert isinstance(receipt, Ok)
+    async def late_shutdown():
+        pending = asyncio.create_task(logger.flush_async(60000))
+        await asyncio.sleep(0.005)
+        stopped = await asyncio.to_thread(logger.shutdown, 1)
+        assert isinstance(stopped, Err) and stopped.error.kind == "timeout", stopped
+        closed = logger.submit(LogEvent(level="info", target="async.embed", action="after.close"))
+        assert isinstance(closed, Err) and closed.error.kind == "closed", closed
+        pending.cancel()
+        cancelled = await pending
+        assert isinstance(cancelled, Err) and cancelled.error.kind == "cancelled", cancelled
+        controls.release()
+        late = await asyncio.to_thread(logger.wait_stopped, 2000)
+        assert isinstance(late, Ok), late
+        assert isinstance(await receipt.value.wait(0), Ok)
+        assert logger.wait_stopped(0) == late
+        assert logger.shutdown(0) == late
+    asyncio.run(late_shutdown(), debug=True)

@@ -15,6 +15,7 @@ use std::time::Duration;
 struct Counted {
     backend: Arc<dyn HostLoggingBackend>,
     flushes: Arc<AtomicUsize>,
+    recorded: Option<Arc<std::sync::OnceLock<Operation<CompletionDto>>>>,
 }
 impl HostLoggingBackend for Counted {
     fn try_log(&self, event: LogEventDto, origin: ProducerOrigin) -> Result<AdmissionDto, Failure> {
@@ -28,7 +29,11 @@ impl HostLoggingBackend for Counted {
     }
     fn start_flush(&self, timeout: Duration) -> Result<Operation<CompletionDto>, Failure> {
         self.flushes.fetch_add(1, Ordering::SeqCst);
-        self.backend.start_flush(timeout)
+        let operation = self.backend.start_flush(timeout)?;
+        if let Some(recorded) = &self.recorded {
+            let _ = recorded.set(operation.clone());
+        }
+        Ok(operation)
     }
 }
 
@@ -120,6 +125,7 @@ pub fn run(py: Python<'_>) -> PyResult<()> {
                 Arc::new(Counted {
                     backend,
                     flushes: flushes.clone(),
+                    recorded: None,
                 }),
             )
             .map_err(failure)?;
@@ -165,8 +171,129 @@ pub fn run(py: Python<'_>) -> PyResult<()> {
         }
         result?;
     }
+    for mode in ["core", "bridge"] {
+        py.detach(move || finalization_child(mode))
+            .map_err(failure)?;
+    }
     println!(
         "B6_EMBEDDED_ASYNC_PASSED: owned/core/bridge held writer, heartbeat, cancellation, timeout and admission"
     );
     Ok(())
+}
+
+/// Isolated process: finalize Python while a native flush is held, then let
+/// that exact native operation complete and shut down its Rust owner afterward.
+pub fn finalize(mode: &str) -> Result<(), String> {
+    let service =
+        sc_observability_types::ServiceName::new("b6-finalize").map_err(|e| e.to_string())?;
+    let root = std::env::temp_dir().join(format!("b6-finalize-{}", std::process::id()));
+    let mut config = sc_observability::LoggerConfig::default_for(service, root);
+    config.enable_console_sink = true;
+    let mut core_owner = None;
+    let mut bridge_owner = None;
+    let backend: Arc<dyn HostLoggingBackend> = if mode == "bridge" {
+        let guard = sc_observability_log::init(
+            config,
+            sc_observability_log::BridgeOptions {
+                default_action: sc_observability_types::ActionName::new("finalize.host")
+                    .map_err(|e| e.to_string())?,
+                parse_bracket_action: false,
+            },
+        )
+        .map_err(|e| format!("{e:?}"))?;
+        let backend = sc_observability_binding_runtime::bridge_backend(guard.control())
+            .map_err(|e| format!("{e:?}"))?;
+        bridge_owner = Some(guard);
+        Arc::new(backend)
+    } else {
+        let (owner, backend) = sc_observability_binding_runtime::create_core_backend(config)
+            .map_err(|e| format!("{e:?}"))?;
+        core_owner = Some(owner);
+        Arc::new(backend)
+    };
+    let recorded = Arc::new(std::sync::OnceLock::new());
+    let flushes = Arc::new(AtomicUsize::new(0));
+    let counted: Arc<dyn HostLoggingBackend> = Arc::new(Counted {
+        backend: backend.clone(),
+        flushes: flushes.clone(),
+        recorded: Some(recorded.clone()),
+    });
+    let stdout = std::io::stdout();
+    let hold = stdout.lock();
+    // SAFETY: main selects this isolated subprocess branch before any Python
+    // initialization. It executes once; the closure returns only owned Rust
+    // Result<(), String>, and all subsequent work uses native Rust values only.
+    let python_result = unsafe {
+        pyo3::with_embedded_python_interpreter(|py| -> Result<(), String> {
+            let action = || -> PyResult<()> {
+                let module = PyModule::new(py, "_native")?;
+                binding::_native(&module)?;
+                binding::install_host_logger(&module, counted).map_err(failure)?;
+                let sys = PyModule::import(py, "sys")?;
+                sys.getattr("modules")?
+                    .cast_into::<PyDict>()?
+                    .set_item("sc_observability._native", module)?;
+                let source = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../bindings/python/sc-observability-py/python");
+                sys.getattr("path")?
+                    .call_method1("insert", (0, source.to_string_lossy().as_ref()))?;
+                py.run(c"import asyncio\nfrom sc_observability import Ok,LogEvent,get_host_logger\nfrom sc_observability.async_logging import _pools\nlogger=get_host_logger().value\nreceipt=logger.submit(LogEvent(level='info',target='finalize.host',action='held'))\nassert isinstance(receipt,Ok)\nloop=asyncio.new_event_loop()\nwait=logger.flush_async(60000)\nloop.call_soon(wait.send,None)\nloop.run_until_complete(asyncio.sleep(0))\nassert len(_pools[logger._native.observer_key()].observers)==1\nloop.close()", None, None)
+            };
+            action().map_err(|error| error.to_string())
+        })
+    };
+    // Python is finalized. The held native operation must still be pending.
+    let operation = recorded
+        .get()
+        .ok_or_else(|| "native flush was never started".to_owned())?;
+    if !matches!(
+        operation.state(),
+        sc_observability_binding_runtime::OperationState::Pending
+    ) {
+        return Err("native flush unexpectedly finished before writer release".into());
+    }
+    drop(hold);
+    operation
+        .wait(Duration::from_secs(5))
+        .map_err(|e| format!("{e:?}"))?;
+    if flushes.load(Ordering::SeqCst) != 1 {
+        return Err("native flush was resubmitted".into());
+    }
+    backend.health().map_err(|e| format!("{e:?}"))?;
+    if let Some(owner) = core_owner {
+        owner
+            .shutdown(Duration::from_secs(5))
+            .map_err(|e| format!("{e:?}"))?;
+    }
+    if let Some(guard) = bridge_owner {
+        guard
+            .shutdown(Duration::from_secs(5))
+            .map_err(|e| format!("{e:?}"))?;
+    }
+    python_result?;
+    println!("B6_FINALIZATION_PASSED: {mode} native flush completed after Python finalized");
+    Ok(())
+}
+
+fn finalization_child(mode: &str) -> Result<(), String> {
+    let mut child = std::process::Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
+        .arg(format!("--b6-finalize={mode}"))
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            return if status.success() {
+                Ok(())
+            } else {
+                Err(format!("{mode} finalization subprocess failed"))
+            };
+        }
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("{mode} finalization subprocess timed out"));
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
 }

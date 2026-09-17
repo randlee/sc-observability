@@ -168,7 +168,47 @@ struct NativeAttachedLogger {
 // Opaque Python-local identity; never a pointer/integer handle or capability.
 // Stored only by Python wrapper/module state, never native workers.
 #[pyclass(frozen, weakref)]
-struct NativeObserverIdentity {}
+struct NativeObserverIdentity {
+    count: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[pymethods]
+impl NativeObserverIdentity {
+    fn reserve(&self) -> Option<NativeObserverPermit> {
+        use std::sync::atomic::Ordering;
+        self.count
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                (count < 64).then_some(count + 1)
+            })
+            .ok()?;
+        Some(NativeObserverPermit {
+            count: self.count.clone(),
+            active: std::sync::atomic::AtomicBool::new(true),
+        })
+    }
+}
+
+#[pyclass(frozen)]
+struct NativeObserverPermit {
+    count: Arc<std::sync::atomic::AtomicUsize>,
+    active: std::sync::atomic::AtomicBool,
+}
+
+#[pymethods]
+impl NativeObserverPermit {
+    fn release(&self) {
+        use std::sync::atomic::Ordering;
+        if self.active.swap(false, Ordering::SeqCst) {
+            self.count.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+}
+
+impl Drop for NativeObserverPermit {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
 
 // This transport holds only native shared completion; it never registers a
 // callback or retains a Python loop/Future in native coordinator state.
@@ -377,7 +417,12 @@ fn create_owned(py: Python<'_>, config: &str) -> PyResult<(Option<Py<NativeLogge
             let logger = Py::new(
                 py,
                 NativeLogger {
-                    observer_identity: Py::new(py, NativeObserverIdentity {})?,
+                    observer_identity: Py::new(
+                        py,
+                        NativeObserverIdentity {
+                            count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                        },
+                    )?,
                     backend,
                     owned: Mutex::new(OwnedState {
                         owner,
@@ -411,14 +456,18 @@ pub fn install_host_logger(
             "a host logger is already installed for this module",
         ));
     }
-    let observer_identity = Py::new(module.py(), NativeObserverIdentity {}).map_err(|error| {
-        internal_failure(format!("could not allocate observer identity: {error}"))
-    })?;
+    let observer_identity = Py::new(
+        module.py(),
+        NativeObserverIdentity {
+            count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        },
+    )
+    .map_err(|error| internal_failure(format!("could not allocate observer identity: {error}")))?;
     let slot = Py::new(
         module.py(),
         HostSlot {
-            backend,
             observer_identity,
+            backend,
         },
     )
     .map_err(|error| internal_failure(format!("could not allocate module host state: {error}")))?;
@@ -472,8 +521,8 @@ fn get_installed_host_logger(
     let logger = Py::new(
         py,
         NativeAttachedLogger {
-            backend,
             observer_identity,
+            backend,
         },
     )?;
     Ok((Some(logger), result_json::<()>(Ok(()))))

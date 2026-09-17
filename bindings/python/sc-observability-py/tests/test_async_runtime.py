@@ -161,3 +161,75 @@ def test_submit_snapshots_context_and_nested_values_at_call_boundary(tmp_path: P
         assert len(event.fields["nested"].value) == 1
         assert event.fields["nested"].value[0].value == index
     assert isinstance(logger.shutdown(), Ok)
+
+
+def test_native_writer_failure_preserves_admission_and_is_reported_in_health(tmp_path: Path) -> None:
+    import subprocess
+    import sys
+    script = r'''
+import asyncio, sys
+from sc_observability import Err, Ok, LogEvent, LoggerConfig, create_logger
+made = create_logger(LoggerConfig(service="async-broken", log_root=sys.argv[1], enable_console_sink=True, enable_file_sink=False))
+assert isinstance(made, Ok), made
+logger = made.value
+submitted = logger.submit(LogEvent(level="info", target="async.fault", action="broken.pipe"))
+assert isinstance(submitted, Ok), submitted
+# Closing stdout's reader is a real sink error, observed after queue admission.
+flushed = asyncio.run(logger.flush_async(), debug=True)
+assert isinstance(flushed, Ok), flushed
+health = logger.health()
+assert isinstance(health, Ok), health
+assert health.value.logging.writer_state == "degraded", health
+assert health.value.logging.dropped_events_total == 1, health
+assert health.value.logging.last_writer_error.code == "SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED", health
+assert submitted.value.state().admission.kind == "accepted"
+assert isinstance(asyncio.run(submitted.value.wait(0)), Ok)
+assert isinstance(logger.shutdown(), Ok)
+sys.stderr.write("B6_WRITER_FAILURE_HEALTH_PASSED\n")
+'''
+    child = subprocess.Popen([sys.executable, "-I", "-W", "error", "-c", script, str(tmp_path)],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    assert child.stdout is not None
+    child.stdout.close()
+    try:
+        child.wait(timeout=15)
+        assert child.stderr is not None
+        errors = child.stderr.read().decode()
+        assert child.returncode == 0, errors
+        assert errors == "B6_WRITER_FAILURE_HEALTH_PASSED\n", errors
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
+        if child.stderr is not None:
+            child.stderr.close()
+
+
+def test_native_observer_permits_are_atomic_across_threads_and_release_once(tmp_path: Path) -> None:
+    made = create_logger(LoggerConfig(service="async-permits", log_root=str(tmp_path)))
+    assert isinstance(made, Ok)
+    logger = made.value
+    identity = logger._native.observer_key()
+    barrier = threading.Barrier(32)
+    def reserve(_: int) -> tuple[object, object]:
+        first, second = identity.reserve(), identity.reserve()
+        assert first is not None and second is not None
+        barrier.wait(timeout=10)
+        assert identity.reserve() is None
+        return first, second
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        pairs = tuple(executor.map(reserve, range(32)))
+    assert identity.reserve() is None
+    for pair in pairs:
+        for permit in pair:
+            permit.release()
+            permit.release()
+    permits = [identity.reserve() for _ in range(64)]
+    assert all(permit is not None for permit in permits)
+    assert identity.reserve() is None
+    del permits
+    gc.collect()
+    recovered = identity.reserve()
+    assert recovered is not None
+    recovered.release()
+    assert isinstance(logger.shutdown(), Ok)

@@ -19,6 +19,17 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 fn main() -> PyResult<()> {
+    if let Some(mode) =
+        std::env::args().find_map(|arg| arg.strip_prefix("--b6-finalize=").map(str::to_owned))
+    {
+        match async_conformance::finalize(&mode) {
+            Ok(()) => std::process::exit(0),
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        }
+    }
     pyo3::append_to_inittab!(native_module);
     Python::initialize();
     Python::attach(|py| {

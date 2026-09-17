@@ -41,6 +41,20 @@ class Native:
         self.calls = 0
         self.operations: list[Operation] = []
         self.done = done
+        self.reserved = 0
+
+    def reserve(self) -> object | None:
+        if self.reserved == 64:
+            return None
+        self.reserved += 1
+        native = self
+        class Permit:
+            active = True
+            def release(self) -> None:
+                if self.active:
+                    self.active = False
+                    native.reserved -= 1
+        return Permit()
 
     def observer_key(self) -> object:
         return self
