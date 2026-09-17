@@ -7,6 +7,7 @@ members = [
   "crates/sc-observability-log",
   "crates/sc-observability-log-macros",
   "crates/sc-observability-log-consumer-check",
+  "crates/sc-observability-dto",
 ]
 exclude = ["examples/atm-adapter-example"]
 resolver = "2"
