@@ -47,12 +47,15 @@ def verified_package(stage: Path, package: dict[str, object], root: Path) -> Pat
     archive_root = str(package["archive_root"])
     with tarfile.open(archive, "r:gz") as contents:
         names = sorted(member.name for member in contents.getmembers() if member.isfile())
-        if names != package["checked_contents"] or any(not name.startswith(f"{archive_root}/") for name in names):
+        if names != package["checked_contents"] or any(not name.startswith(f"{archive_root}/") or ".." in Path(name).parts for name in names):
             raise SystemExit(f"archive inventory mismatch: {archive}")
         contents.extractall(root, filter="data")
     extracted = root / archive_root
-    declared = stage / str(package["extracted_root"])
-    if not declared.is_dir():
+    declared_relative = Path(str(package["extracted_root"]))
+    if declared_relative.is_absolute() or ".." in declared_relative.parts:
+        raise SystemExit(f"extracted path escapes stage: {declared_relative}")
+    declared = (stage / declared_relative).resolve()
+    if stage not in declared.parents or not declared.is_dir():
         raise SystemExit(f"declared extracted content differs from archive: {declared}")
     for name in names:
         relative = name.removeprefix(f"{archive_root}/")
