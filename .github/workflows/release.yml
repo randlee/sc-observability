@@ -20,6 +20,12 @@ jobs:
     outputs:
       release_tag: ${{ steps.meta.outputs.release_tag }}
       release_version: ${{ steps.meta.outputs.release_version }}
+      # Purely additive: exposes the same main_sha this step already computes
+      # and tags, as a job output. No change to tag-creation logic/behavior.
+      # Needed so a reusable-workflow-call job (which can only have `uses:`/
+      # `with:`/`secrets:`, no other steps) can pass the exact commit SHA as
+      # an input without re-deriving it itself.
+      release_commit: ${{ steps.tagcommit.outputs.release_commit }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,6 +59,7 @@ jobs:
             --version '${{ steps.meta.outputs.release_version }}'
 
       - name: Ensure tag is correct or create it
+        id: tagcommit
         shell: bash
         run: |
           set -euo pipefail
@@ -63,6 +70,7 @@ jobs:
           if [[ -n "$remote_tag_sha" ]]; then
             if [[ "$remote_tag_sha" == "$main_sha" ]]; then
               echo "Tag ${tag} already exists and points to origin/main (${main_sha}), skipping creation"
+              echo "release_commit=${main_sha}" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "Tag ${tag} exists but points to ${remote_tag_sha}, not origin/main (${main_sha})" >&2
@@ -70,6 +78,7 @@ jobs:
           fi
           git tag "$tag" origin/main
           git push origin "$tag"
+          echo "release_commit=${main_sha}" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: gate-and-tag
@@ -227,8 +236,56 @@ jobs:
             fi
           done <<< "$plan"
 
+  # Cheap self-check only (not the real release matrix): builds and
+  # self-verifies a single host-platform sdist/wheel via the same
+  # build-evidence/verify-evidence machinery
+  # scripts/ci/validate_binding_registry_consumers.sh exercises, so an
+  # obviously-broken build/packaging regression fails fast before waiting on
+  # the expensive full 25-cell qualification below. This is NOT what gets
+  # uploaded to PyPI -- see qualify-python-wheel-matrix/publish-python-wheel.
+  precheck-python-wheel-build:
+    needs: [gate-and-tag]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate-and-tag.outputs.release_tag }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+      - name: Build and self-verify candidate evidence for the PyPI package
+        run: |
+          python3 scripts/release_bindings_artifacts.py build-evidence \
+            --manifest release/bindings-artifacts.toml --workspace-toml Cargo.toml \
+            --out release/evidence
+          python3 scripts/release_bindings_artifacts.py verify-evidence \
+            --manifest release/bindings-artifacts.toml --workspace-toml Cargo.toml \
+            --evidence release/evidence/bindings-candidate.json
+
+  # The real, exact-tested-bytes qualification: calls
+  # b4a-python-distributions.yml's workflow_call interface (pushed at c403bcf
+  # on feature/phase-b-4a-python-packaging; not yet an ancestor of this
+  # branch's parent as of this writing -- this job activates once normal
+  # merge-forward propagation brings that file's `workflow_call:` trigger
+  # into this tree). Always runs the full, strict 5-platform x 5-interpreter
+  # matrix (no development flag) checked out at the exact release commit --
+  # never a branch HEAD. Produces one b4a-production-inventory artifact:
+  # production-artifacts.json + dist/ with exactly one sdist and five
+  # qualified production wheels, each byte's sha256 recorded. No secrets
+  # required; no companion files.
+  qualify-python-wheel-matrix:
+    needs: [gate-and-tag, publish-binding-crates, precheck-python-wheel-build]
+    uses: ./.github/workflows/b4a-python-distributions.yml
+    with:
+      source_commit: ${{ needs.gate-and-tag.outputs.release_commit }}
+
   publish-python-wheel:
-    needs: [gate-and-tag, publish-binding-crates]
+    needs: [gate-and-tag, publish-binding-crates, qualify-python-wheel-matrix]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -240,28 +297,19 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: "1.94.1"
-
-      # This job's full 5-platform x 5-interpreter release matrix is built by
-      # .github/workflows/b4a-python-distributions.yml's plan -> sdist/wheel
-      # matrix -> installed-suite -> aggregate pipeline. That workflow is not
-      # currently structured as a reusable `workflow_call` target, so it is
-      # not refactored here. This step instead builds and self-verifies a
-      # real host-platform sdist/wheel via the same build-evidence/
-      # verify-evidence machinery scripts/ci/validate_binding_registry_consumers.sh
-      # exercises, so the auth gate and (eventual) upload below act on real,
-      # freshly-built, hash-verified bytes rather than a placeholder.
-      - name: Build and self-verify candidate evidence for the PyPI package
+      # Wrong-source rejection: the reusable workflow's own output must echo
+      # back exactly the commit we asked it to qualify. A mismatch means the
+      # qualification ran against different bytes than the ones about to be
+      # published -- refuse rather than trust it blindly.
+      - name: Verify the qualified source commit matches the requested release commit
         run: |
-          python3 scripts/release_bindings_artifacts.py build-evidence \
-            --manifest release/bindings-artifacts.toml --workspace-toml Cargo.toml \
-            --out release/evidence
-          python3 scripts/release_bindings_artifacts.py verify-evidence \
-            --manifest release/bindings-artifacts.toml --workspace-toml Cargo.toml \
-            --evidence release/evidence/bindings-candidate.json
+          set -euo pipefail
+          requested='${{ needs.gate-and-tag.outputs.release_commit }}'
+          qualified='${{ needs.qualify-python-wheel-matrix.outputs.qualified_source_commit }}'
+          if [[ "$requested" != "$qualified" ]]; then
+            echo "wrong-source rejection: requested ${requested}, qualification workflow reports ${qualified}" >&2
+            exit 1
+          fi
 
       # Fails closed today (blocked-on-auth): PYPI_API_TOKEN is not yet
       # configured (registry_secret_configured = false for the pypi package
@@ -273,6 +321,47 @@ jobs:
           python3 scripts/release_bindings_artifacts.py list-publish-plan \
             --manifest release/bindings-artifacts.toml --workspace-toml Cargo.toml \
             --require-ready --require-secrets --only-kind pypi
+
+      - name: Download the qualified production inventory
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.qualify-python-wheel-matrix.outputs.production_inventory_artifact_name }}
+          path: release/evidence/b4a-production-inventory
+
+      # Changed-byte rejection: re-hash every file the inventory lists and
+      # refuse to upload anything that doesn't match what was qualified.
+      - name: Verify every production artifact byte matches the qualified inventory
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import sys
+          from pathlib import Path
+
+          root = Path("release/evidence/b4a-production-inventory")
+          manifest = json.loads((root / "production-artifacts.json").read_text())
+          expected_inventory_sha256 = "${{ needs.qualify-python-wheel-matrix.outputs.inventory_sha256 }}"
+          actual_inventory_sha256 = hashlib.sha256((root / "production-artifacts.json").read_bytes()).hexdigest()
+          if actual_inventory_sha256 != expected_inventory_sha256:
+              print(
+                  f"changed-byte rejection: production-artifacts.json sha256 "
+                  f"{actual_inventory_sha256} != qualified inventory_sha256 {expected_inventory_sha256}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          mismatches = []
+          for relative_path, recorded in manifest.get("files", manifest.get("artifacts", {})).items():
+              recorded_sha256 = recorded["sha256"] if isinstance(recorded, dict) else recorded
+              actual_path = root / "dist" / relative_path
+              actual_sha256 = hashlib.sha256(actual_path.read_bytes()).hexdigest()
+              if actual_sha256 != recorded_sha256:
+                  mismatches.append(f"{relative_path}: recorded={recorded_sha256} actual={actual_sha256}")
+          if mismatches:
+              print("changed-byte rejection:\n" + "\n".join(mismatches), file=sys.stderr)
+              sys.exit(1)
+          print(f"{len(manifest.get('files', manifest.get('artifacts', {})))} production artifact file(s) hash-verified")
+          PY
 
       - name: Publish to PyPI
         env:
@@ -288,10 +377,9 @@ jobs:
             exit 1
           fi
           python3 -m pip install --upgrade twine
-          sdist=(release/evidence/artifacts/pypi/*.tar.gz)
-          wheel=(release/evidence/artifacts/pypi/*.whl)
           twine upload --non-interactive -u __token__ -p "${PYPI_API_TOKEN}" \
-            "${sdist[0]}" "${wheel[@]}"
+            release/evidence/b4a-production-inventory/dist/*.tar.gz \
+            release/evidence/b4a-production-inventory/dist/*.whl
 
   publish-npm-client:
     needs: [gate-and-tag, publish-binding-crates]
