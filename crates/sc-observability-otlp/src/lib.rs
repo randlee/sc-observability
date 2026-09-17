@@ -761,6 +761,32 @@ mod tests {
         }
     }
 
+    fn metric_record() -> MetricRecord {
+        MetricRecord {
+            timestamp: Timestamp::UNIX_EPOCH,
+            service: service_name(),
+            name: MetricName::new("agent.events_total").expect("valid metric"),
+            kind: MetricKind::Counter,
+            value: 1.0,
+            unit: Some(sc_observability_types::MetricUnit::new("1").expect("valid unit")),
+            attributes: Map::new(),
+        }
+    }
+
+    fn complete_span_signals() -> (SpanSignal, SpanSignal) {
+        let started = SpanRecord::<SpanStarted>::new(
+            Timestamp::UNIX_EPOCH,
+            service_name(),
+            ActionName::new("agent.run").expect("valid action"),
+            trace_context(),
+            Map::new(),
+        );
+        let ended = started
+            .clone()
+            .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(5));
+        (SpanSignal::Started(started), SpanSignal::Ended(ended))
+    }
+
     #[test]
     fn telemetry_config_builder_defaults() {
         // TelemetryConfig is constructed independently of ObservabilityConfig (OTLP-018).
@@ -1015,6 +1041,58 @@ mod tests {
     }
 
     #[test]
+    fn typed_flush_records_and_recovers_all_exporter_families() {
+        let log_exporter = Arc::new(RecordingLogExporter::default());
+        let trace_exporter = Arc::new(RecordingTraceExporter::default());
+        let metric_exporter = Arc::new(RecordingMetricExporter::default());
+        log_exporter.fail.store(true, Ordering::SeqCst);
+        trace_exporter.fail.store(true, Ordering::SeqCst);
+        metric_exporter.fail.store(true, Ordering::SeqCst);
+        let telemetry = Telemetry::new_with_exporters_typed(
+            telemetry_config(),
+            log_exporter.clone(),
+            trace_exporter.clone(),
+            metric_exporter.clone(),
+        )
+        .expect("typed telemetry");
+
+        telemetry
+            .emit_log(&log_event(service_name(), "first"))
+            .expect("log");
+        let (started, ended) = complete_span_signals();
+        telemetry.emit_span(&started).expect("started");
+        telemetry.emit_span(&ended).expect("ended");
+        telemetry.emit_metric(&metric_record()).expect("metric");
+        telemetry.flush_typed().expect("typed fail-open flush");
+        assert!(
+            telemetry
+                .health()
+                .exporter_statuses
+                .iter()
+                .all(|status| status.state == ExporterHealthState::Degraded)
+        );
+
+        log_exporter.fail.store(false, Ordering::SeqCst);
+        trace_exporter.fail.store(false, Ordering::SeqCst);
+        metric_exporter.fail.store(false, Ordering::SeqCst);
+        telemetry
+            .emit_log(&log_event(service_name(), "second"))
+            .expect("log");
+        let (started, ended) = complete_span_signals();
+        telemetry.emit_span(&started).expect("started");
+        telemetry.emit_span(&ended).expect("ended");
+        telemetry.emit_metric(&metric_record()).expect("metric");
+        telemetry.flush_typed().expect("typed recovery flush");
+        assert!(
+            telemetry
+                .health()
+                .exporter_statuses
+                .iter()
+                .all(|status| status.state == ExporterHealthState::Healthy)
+        );
+    }
+
+    #[test]
     fn post_shutdown_returns_shutdown_error() {
         let telemetry = Telemetry::new(telemetry_config()).expect("telemetry");
         telemetry.shutdown().expect("shutdown");
@@ -1151,7 +1229,7 @@ mod tests {
             .expect("emit");
 
         let error = telemetry
-            .shutdown()
+            .shutdown_typed()
             .expect_err("shutdown should surface flush failures");
         assert_eq!(
             error.diagnostic().message,
