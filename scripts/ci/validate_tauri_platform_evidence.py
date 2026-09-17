@@ -28,7 +28,7 @@ def validate(root, source=None):
         name = report['platform']
         if name in found:
             raise ValueError('duplicate platform evidence: ' + name)
-        if report.get('status') != 'passed' or report.get('schema_version') != 1:
+        if report.get('status') != 'passed' or report.get('schema_version') != 1 or report.get('source_dirty') is not False:
             raise ValueError('failed or incompatible platform: ' + name)
         if source and report['source_commit'] != source:
             raise ValueError('source revision mismatch: ' + name)

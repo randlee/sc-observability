@@ -12,6 +12,39 @@ on:
   workflow_dispatch:
 
 jobs:
+  schema-and-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: echo "BINDING_RUNTIME_PYTHON=$(command -v python)" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.10"
+      - run: python -m pip install mypy==2.3.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+      - name: Install isolation helper
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Full schema and shared contracts
+        run: |
+          bash scripts/ci/validate_binding_schema.sh
+          bash scripts/ci/validate_dependency_bans.sh
+          bash scripts/ci/validate_repo_boundaries.sh
+          bash scripts/ci/validate_docs_consistency.sh
   real-ipc-artifacts:
     strategy:
       fail-fast: false
@@ -36,7 +69,12 @@ jobs:
           toolchain: "1.94.1"
       - name: Install Linux webview and isolation dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xvfb bubblewrap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xvfb bubblewrap
+          if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
       - name: Validate real IPC from packaged artifacts
         shell: bash
         run: |
@@ -52,7 +90,7 @@ jobs:
           path: target/tauri-qualification/
           if-no-files-found: error
   all-platforms:
-    needs: real-ipc-artifacts
+    needs: [schema-and-contract, real-ipc-artifacts]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

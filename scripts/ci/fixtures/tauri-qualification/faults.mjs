@@ -39,6 +39,20 @@ await test('unknown-remote-oversized-diagnostic', async () => {
   const client = clientFor({ schema_version: 1, kind: 'error', error: { kind: 'future', ...diagnostic, message: 'x'.repeat(5000) } });
   assert.equal(err(await client.tryLog(event), 'validation').code, 'SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE');
 });
+await test('unknown-remote-remediation-preserved', async () => {
+  const client = clientFor({ schema_version: 1, kind: 'error', error: { kind: 'future', ...diagnostic } });
+  const failure = err(await client.tryLog(event), 'unknown_remote');
+  assert.deepEqual(failure.remediation, diagnostic.remediation);
+  assert.equal(failure.remote_kind, 'future');
+});
+await test('unknown-remote-kind-overflow', async () => {
+  const client = clientFor({ schema_version: 1, kind: 'error', error: { kind: 'x'.repeat(5000), ...diagnostic } });
+  assert.equal(err(await client.tryLog(event), 'validation').code, 'SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE');
+});
+await test('response-schema-version', async () => {
+  const client = clientFor({ schema_version: 2, kind: 'ok', value: { kind: 'accepted' } });
+  assert.equal(err(await client.tryLog(event), 'unsupported_version').received, 2);
+});
 for (const method of ['query', 'tryLog', 'log', 'encodeEvent', 'encodeValue', 'createClient']) {
   await test(`revoked-proxy-${method}`, async () => {
     const { proxy, revoke } = Proxy.revocable({}, {}); revoke();
@@ -72,6 +86,19 @@ for (const mode of ['throw', 'reject', 'getter']) {
     });
   }
 }
+await test('failed-diagnostic-accounting-preserves-original', async () => {
+  const client = clientFor({ schema_version: 1, kind: 'error', error: { kind: 'closed', ...diagnostic } });
+  // Deliberate fault injection into emitted private counter storage.
+  Object.freeze(client.counts);
+  const failure = err(await client.tryLog(event), 'closed');
+  assert.equal(failure.code, diagnostic.code);
+  assert.equal(client.inFlight, 0);
+});
+await test('unavailable-status-is-result', () => {
+  const client = clientFor({});
+  Object.defineProperty(client, 'counts', { get() { throw new Error('accounting storage unavailable'); } });
+  err(client.client_status(), 'internal');
+});
 await test('bounded-dispatch-delayed-failure', async () => {
   const releases = [];
   const client = ok(createClient({ request: () => new Promise((resolve) => releases.push(resolve)) }));

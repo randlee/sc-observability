@@ -195,6 +195,10 @@ def build(root_manifest,output):
         groups.setdefault(owner,[]).append(package)
     for owner,packages in sorted(groups.items()):
         args=['cargo','package','--locked','--allow-dirty','--no-verify','--manifest-path',str(owner/'Cargo.toml'),'--target-dir',str(build_target)]
+        # Standalone library archives must not resolve unpublished siblings
+        # through crates.io. The bundle retains and verifies the reviewed root
+        # Cargo.lock separately; the consuming workspace owns resolution.
+        if len(groups)>1 and owner!=source_root:args+=['--exclude-lockfile']
         for package in packages:args+=['-p',package['name']]
         package_log.append(command(args,owner));package_commands.append(args)
     (output/'package.log').write_text('\n'.join(package_log))
@@ -225,9 +229,13 @@ def build(root_manifest,output):
     shutil.rmtree(build_target)
     patches='\n'.join(f'{p["name"]} = {{ path = "{p["root"]}" }}' for p in entries)
     dependencies='\n'.join(f'{p["name"]} = "={p["version"]}"' for p in entries)
-    members=json.dumps([p['root'] for p in entries])
+    # A standalone root lock includes dev dependencies of that root only.
+    # Do not promote its external path dependencies into workspace members,
+    # which would silently select their unreviewed dev dependency closures.
+    members=json.dumps([p['root'] for p in entries if len(groups)==1 or p['name']==root['name']])
+    excluded=json.dumps([p['root'] for p in entries if len(groups)>1 and p['name']!=root['name']])
     json_dependency='' if any(p['name']=='serde_json' for p in entries) else 'serde_json = "1"\n'
-    (output/'Cargo.toml').write_text('[package]\nname = "binding-source-consumer"\nversion = "0.0.0"\nedition = "2024"\npublish = false\n\n[workspace]\nmembers = '+members+'\n\n[dependencies]\n'+dependencies+'\n'+json_dependency+'\n[patch.crates-io]\n'+patches+'\n')
+    (output/'Cargo.toml').write_text('[package]\nname = "binding-source-consumer"\nversion = "0.0.0"\nedition = "2024"\npublish = false\n\n[workspace]\nmembers = '+members+'\nexclude = '+excluded+'\n\n[dependencies]\n'+dependencies+'\n'+json_dependency+'\n[patch.crates-io]\n'+patches+'\n')
     (output/'src').mkdir();(output/'src/main.rs').write_text('fn main() { println!("binding source bundle ready"); }\n')
     # Seed from the reviewed source lock. Cargo may rewrite only local layout identities;
     # every selected third-party identity/checksum must remain byte-for-byte equivalent.

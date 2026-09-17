@@ -21,6 +21,7 @@ pub fn seed(backend: &dyn HostLoggingBackend) -> Result<(), String> {
 
 pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(Reports::default());
+    app.manage(OwnerHold::default());
     tauri::WebviewWindowBuilder::new(
         app, "forbidden", tauri::WebviewUrl::App("index.html?forbidden=1".into()),
     ).title("Unauthorized qualification caller").build()?;
@@ -47,5 +48,48 @@ pub fn qualification_report(
         let passed = reports.values().all(|value| value.get("passed") == Some(&Value::Bool(true)));
         app.exit(if passed { 0 } else { 1 });
     }
+    Ok(())
+}
+
+#[derive(Default)]
+pub struct OwnerHold(Mutex<Option<(std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>>);
+
+/// Hold only the existing owner mutex; subsequent level IPC runs unchanged.
+/// The holder is bounded to one thread and releases automatically after 30 s.
+#[tauri::command]
+pub fn qualification_owner_gate(
+    held: bool,
+    owner: tauri::State<'_, super::OwnerState>,
+    state: tauri::State<'_, OwnerHold>,
+) -> Result<(), String> {
+    use std::{sync::mpsc, time::Duration};
+    let mut slot = state.0.lock().map_err(|_| "holder state poisoned")?;
+    if !held {
+        if let Some((release, done)) = slot.take() {
+            release.send(()).map_err(|_| "holder exited early")?;
+            done.recv_timeout(Duration::from_secs(2)).map_err(|_| "holder did not release")?;
+        }
+        return Ok(());
+    }
+    if slot.is_some() {
+        return Err("owner holder already active".into());
+    }
+    let owner = owner.0.clone();
+    let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::channel();
+    let (done_tx, done_rx) = mpsc::channel();
+    std::thread::Builder::new().name("qualification-owner-holder".into()).spawn(move || {
+        let guard = owner.lock();
+        if ready_tx.send(guard.is_ok()).is_err() { return; }
+        if guard.is_ok() {
+            let _ = release_rx.recv_timeout(Duration::from_secs(30));
+        }
+        drop(guard);
+        let _ = done_tx.send(());
+    }).map_err(|error| error.to_string())?;
+    if !ready_rx.recv_timeout(Duration::from_secs(2)).map_err(|_| "owner acquisition timed out")? {
+        return Err("owner mutex poisoned".into());
+    }
+    *slot = Some((release_tx, done_rx));
     Ok(())
 }

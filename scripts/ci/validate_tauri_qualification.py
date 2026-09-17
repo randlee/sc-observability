@@ -57,7 +57,7 @@ def stage_host(destination, bundle, report):
         '    if let Err(error) = qualification::seed(&backend) {\n        eprintln!("{error}");\n        std::process::exit(1);\n    }\n    let policy = AdapterPolicy {')
     instrumented = replace_once(instrumented,
         '.invoke_handler(tauri::generate_handler![app_observability_level_change])',
-        '.invoke_handler(tauri::generate_handler![app_observability_level_change, qualification::qualification_report])\n        .setup(qualification::setup)')
+        '.invoke_handler(tauri::generate_handler![app_observability_level_change, qualification::qualification_report, qualification::qualification_owner_gate])\n        .setup(qualification::setup)')
     (destination / 'src/main.rs').write_text(instrumented)
     shutil.copyfile(FIXTURE / 'qualification.rs', destination / 'src/qualification.rs')
     report['host_source_sha256'] = digest(source / 'src/main.rs')
@@ -91,7 +91,8 @@ def main():
     args = parser.parse_args()
     output = args.evidence.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    report = {'schema_version': 1, 'status': 'failed', 'platform': platform.system(),
+    report = {'source_dirty': subprocess.run(['git', 'diff', '--quiet', 'HEAD'], cwd=ROOT).returncode != 0,
+              'schema_version': 1, 'status': 'failed', 'platform': platform.system(),
               'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
               'commands': [], 'publication': 'pending_B.7'}
     try:
@@ -131,6 +132,8 @@ def main():
             shutil.copyfile(ROOT / 'bindings/conformance/v1/schema-cases.json', consumer / 'schema-cases.json')
             try:
                 run(['node', 'faults.mjs'], consumer, commands)
+            except RuntimeError as error:
+                report['fault_error'] = str(error)
             finally:
                 if (consumer / 'fault-results.json').exists():
                     shutil.copyfile(consumer / 'fault-results.json', output / 'fault-results.json')
@@ -145,6 +148,7 @@ def main():
             stage_host(host, bundle, report)
             # The example's reviewed lock owns its extra OS webview dependencies.
             reviewed = registry_identities(tomllib.loads((host / 'Cargo.lock').read_text()))
+            run(['cargo', 'fetch', '--locked', '--manifest-path', ROOT / 'examples/tauri-logging/src-tauri/Cargo.toml'], ROOT, commands)
             run(['cargo', 'metadata', '--offline', '--format-version', '1'], host, commands)
             selected = registry_identities(tomllib.loads((host / 'Cargo.lock').read_text()))
             source_registry = {(entry['name'], entry['version']): entry for entry in reviewed}
@@ -187,6 +191,10 @@ def main():
             if not jsonl:
                 raise RuntimeError('real JSONL artifact missing')
             report['jsonl'] = {str(path.relative_to(output)): digest(path) for path in jsonl}
+            if report.get('fault_error'):
+                raise RuntimeError('packed client fault/conformance cases failed; see fault-results.json')
+            if report['source_dirty']:
+                raise RuntimeError('qualification source has uncommitted edits; commit and rerun before claiming evidence')
             report['status'] = 'passed'
     except Exception as error:
         report['error'] = str(error)

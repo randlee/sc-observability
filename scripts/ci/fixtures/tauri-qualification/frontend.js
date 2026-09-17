@@ -1,4 +1,4 @@
-import { createClient, encodeEvent, encodeValue } from '@sc-observability/client';
+import { createClient, createTauriTransport, encodeEvent, encodeValue } from '@sc-observability/client';
 
 // This fixture runs inside the real OS webview. No mockIPC/test runtime is used.
 const invoke = window.__TAURI__.core.invoke;
@@ -31,7 +31,8 @@ async function run() {
     failure('forbidden-window-level', await invoke('app_observability_level_change', { request: { ...request, change: { kind: 'reset' } } }), 'permission_denied');
     return;
   }
-  const client = value('factory', createClient({ request: command }));
+  const transport = value('tauri-transport-factory', createTauriTransport(invoke));
+  const client = value('factory', createClient(transport));
   const initial = value('initial-local-status', client.client_status());
   check('initial-idle', initial.in_flight === 0 && initial.last_result.value.kind === 'idle', initial);
   const fields = { max: 18446744073709551615n, min: -9223372036854775808n, zero: -0, nil: null, fraction: 1.25, nested: { secret: 'must-not-survive' } };
@@ -51,6 +52,7 @@ async function run() {
     check(`trusted-${language}-provenance`, row.fields['sc_observability.binding.language'].value === language && row.fields['sc_observability.binding.channel'].value === channel, row);
   }
   const health = value('health', await client.health());
+  check('bridge-health-coherence', health.bridge !== null && JSON.stringify(health.logging) === JSON.stringify(health.bridge.logging) && health.level_state.configured_level === health.bridge.configured_level && health.level_state.effective_level === health.bridge.effective_level && health.level_state.level_revision === health.bridge.level_revision, health);
   check('baseline-info', health.level_state.configured_level === 'info' && health.level_state.effective_level === 'info', health);
   check('admission-filtered', value('filtered', await client.tryLog({ ...event, level: 'debug' })).kind === 'filtered');
   const level = (change) => invoke('app_observability_level_change', { request: { ...request, change } });
@@ -62,10 +64,20 @@ async function run() {
   failure('off-below-baseline', await level({ kind: 'elevate', level: 'off' }), 'below_baseline');
   value('reset', await level({ kind: 'reset' }));
   check('health-reset', value('health-reset-result', await client.health()).level_state.effective_level === 'info');
+  const beforeContention = value('health-before-owner-contention', await client.health()).level_state;
+  await invoke('qualification_owner_gate', { held: true });
+  try {
+    const busy = await level({ kind: 'elevate', level: 'debug' });
+    failure('owner-contention-queue-full', busy, 'queue_full');
+    check('owner-contention-code', busy.error.code === 'SC_OBSERVABILITY_BINDING_DISPATCH_FULL', busy);
+    check('owner-contention-state-preserved', JSON.stringify(value('health-during-owner-contention', await client.health()).level_state) === JSON.stringify(beforeContention));
+  } finally {
+    await invoke('qualification_owner_gate', { held: false });
+  }
   failure('level-forged-source', await level({ kind: 'reset', source: 'application' }), 'validation');
   failure('level-invalid-tag', await level({ kind: 'unknown' }), 'validation');
-  failure('direct-denied-target', await command('try_log', { ...request, event: wireEvent({ target: 'forbidden' }) }), 'permission_denied');
-  failure('direct-denied-query', await command('query', { ...request, query: { ...request, target: 'forbidden' } }), 'permission_denied');
+  failure('direct-denied-target', await command('try_log', { ...request, event: wireEvent({ target: 'forbidden' }) }), 'validation');
+  failure('direct-denied-query', await command('query', { ...request, query: { ...request, target: 'forbidden' } }), 'validation');
   for (const key of ['sc_observability.binding.language', 'sc_observability.binding.future', 'sc_observability::binding::language']) {
     for (const nested of [false, true]) {
       const forged = { [key]: { kind: 'string', value: 'rust' } };
@@ -75,6 +87,11 @@ async function run() {
   }
   failure('unknown-event-field', await command('try_log', { ...request, event: wireEvent({ authority: true }) }), 'validation');
   failure('unknown-request-field', await command('health', { ...request, authority: true }), 'validation');
+  const exactRequest = { ...request, event: wireEvent({ message: '' }) };
+  exactRequest.event.message = 'x'.repeat(65536 - new TextEncoder().encode(JSON.stringify(exactRequest)).length);
+  value('exact-64k-request', await command('try_log', exactRequest));
+  failure('one-byte-oversize-request', await command('try_log', { ...exactRequest, event: { ...exactRequest.event, message: exactRequest.event.message + 'x' } }), 'validation');
+  failure('unknown-wire-version', await command('health', { schema_version: 2 }), 'unsupported_version');
   failure('oversized-request', await command('try_log', { ...request, event: wireEvent({ message: 'x'.repeat(65536) }) }), 'validation');
   let deep = { kind: 'null' };
   for (let i = 0; i < 33; i++) deep = { kind: 'array', value: [deep] };
