@@ -117,3 +117,131 @@ jobs:
         with:
           tag_name: ${{ needs.gate-and-tag.outputs.release_tag }}
           generate_release_notes: true
+
+  # --- B.7 binding-release jobs (release/bindings-artifacts.toml) ---
+  #
+  # These jobs are intentionally kept in the workflow file even though this
+  # branch only has 3 of the 4 target crates.io crates and neither language
+  # package is fully publishable yet (sc-observability-tauri and
+  # bindings/typescript are pending a known, already-tracked
+  # fix/phase-b-3a-completeness parent-checkpoint merge; npm/PyPI registry
+  # credentials are not provisioned). Direction is to keep npm and all four
+  # binding crates in the release machinery now and integrate the real
+  # artifacts as they land, rather than gating them out of the workflow.
+
+  publish-binding-crates:
+    needs: [gate-and-tag, publish]
+    runs-on: ubuntu-latest
+    environment: crates-io
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate-and-tag.outputs.release_tag }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate binding manifest
+        run: |
+          python3 scripts/release_bindings_artifacts.py validate-manifest \
+            --manifest release/bindings-artifacts.toml --workspace-toml Cargo.toml
+
+      - name: Verify binding crate versions match workspace
+        run: |
+          python3 scripts/release_bindings_artifacts.py verify-versions \
+            --manifest release/bindings-artifacts.toml --workspace-toml Cargo.toml
+
+      # NOTE: this step is expected to fail closed today. sc-observability-tauri
+      # is status = "pending" in release/bindings-artifacts.toml (bindings/tauri
+      # does not exist in this branch's tree yet), so --require-ready refuses to
+      # produce a publish plan. That is correct: this job must never publish a
+      # partial 3-of-4 binding crate set. Once fix/phase-b-3a-completeness
+      # merges forward and sc-observability-tauri flips to "ready", this step
+      # (and the cargo publish loop below) will start succeeding with no
+      # further changes to this workflow.
+      - name: Publish binding crates in order (fails closed until all are ready)
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS='|' read -r kind package wait_secs status; do
+            [[ "$kind" == "crate" ]] || continue
+            cargo publish -p "$package" --locked
+            if [[ "$wait_secs" != "0" ]]; then
+              sleep "$wait_secs"
+            fi
+          done < <(python3 scripts/release_bindings_artifacts.py list-publish-plan \
+                      --manifest release/bindings-artifacts.toml --require-ready)
+
+  publish-python-wheel:
+    needs: [gate-and-tag, publish-binding-crates]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate-and-tag.outputs.release_tag }}
+
+      # This job depends on the wheel/sdist artifacts built by
+      # .github/workflows/b4a-python-distributions.yml's plan -> sdist/wheel
+      # matrix -> installed-suite -> aggregate pipeline. That workflow is not
+      # currently structured as a reusable `workflow_call` target, so it is
+      # not refactored here; this job instead documents the dependency and
+      # performs an honest, credential-gated upload attempt only.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Publish to PyPI if credentials are configured, else report pending
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${PYPI_API_TOKEN}" ]]; then
+            echo "PyPI credential (PYPI_API_TOKEN) not configured, skipping live upload"
+            exit 0
+          fi
+          python3 -m pip install --upgrade twine
+          # Real upload wires in the b4a-sdist/b4a-wheel-* artifacts produced by
+          # .github/workflows/b4a-python-distributions.yml (download-artifact
+          # from that workflow's run for this same release tag) once PyPI
+          # credentials exist; deliberately not fabricated here.
+          echo "PYPI_API_TOKEN is configured, but wiring to b4a artifact download is not yet implemented; not uploading."
+          exit 0
+
+  publish-npm-client:
+    needs: [gate-and-tag, publish-binding-crates]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate-and-tag.outputs.release_tag }}
+
+      - name: Publish npm client if present and credentials are configured, else report pending
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f bindings/typescript/package.json ]]; then
+            echo "bindings/typescript/package.json does not exist yet (pending parent-checkpoint merge from fix/phase-b-3a-completeness); skipping npm publish"
+            exit 0
+          fi
+          if python3 -c "import json,sys; sys.exit(0 if json.load(open('bindings/typescript/package.json')).get('private') is True else 1)"; then
+            echo "bindings/typescript/package.json is still \"private\": true; must be cleared before publish is possible"
+            exit 0
+          fi
+          if [[ -z "${NPM_TOKEN}" ]]; then
+            echo "npm credential (NPM_TOKEN) not configured, skipping live upload"
+            exit 0
+          fi
+          npm publish --workspace bindings/typescript --access public

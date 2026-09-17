@@ -2,6 +2,7 @@
 id: B.7
 status: proposed
 branch: feature/phase-b-7-publish-bindings
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-7-publish-bindings
 base: develop
 ---
 

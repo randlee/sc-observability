@@ -85,3 +85,15 @@ When adding or reordering crates:
 
 No workflow edits are required for normal artifact-list changes when the
 manifest is kept current.
+
+## Binding packages (Rust DTO/native-runtime/Tauri/Python, npm, PyPI)
+
+Language-binding artifacts (the DTO and native-runtime crates, the Tauri host
+adapter crate, the Python PyPI package, and the TypeScript npm client) are
+tracked separately in `release/bindings-artifacts.toml`, validated by
+`scripts/release_bindings_artifacts.py`, and published by the
+`publish-binding-crates`/`publish-python-wheel`/`publish-npm-client` jobs in
+`.github/workflows/release.yml` (after the core crates above). See
+[`docs/plans/phase-b/handoff-b-7.md`](./docs/plans/phase-b/handoff-b-7.md) for
+current readiness status, including which binding artifacts are published
+versus still pending.

@@ -1,0 +1,83 @@
+schema_version = 1
+
+# B.7 binding-release manifest. Publishes after release/publish-artifacts.toml's
+# 6 core/bridge crates. See docs/plans/phase-b/handoff-b-7.md for full context.
+#
+# status = "ready": file exists in this branch's tree today, structurally valid.
+# status = "pending": file does not exist in this branch's tree yet; blocked on
+# a named, already-tracked parent-checkpoint merge, not cancelled scope.
+#
+# No crate/package here carries a literal version field on purpose: versions
+# are always read live from each artifact's own Cargo.toml/pyproject.toml/
+# package.json at validate/verify time (mirrors release/publish-artifacts.toml,
+# and keeps scripts/ci/validate_version_literals.py's [package]/
+# [workspace.package]-only scan blind to this file, as intended).
+#
+# publish_order is a single shared numeric space across [[crates]] and
+# [[packages]] in this manifest (crates.io Rust crates publish first, in
+# their own dependency order, then pypi/npm packages that consume them).
+
+[[crates]]
+artifact = "sc-observability-dto"
+package = "sc-observability-dto"
+cargo_toml = "crates/sc-observability-dto/Cargo.toml"
+workspace_member = true
+publish_order = 1
+depends_on = []
+wait_after_publish_seconds = 30
+status = "ready"
+
+[[crates]]
+artifact = "sc-observability-binding-runtime"
+package = "sc-observability-binding-runtime"
+cargo_toml = "crates/sc-observability-binding-runtime/Cargo.toml"
+workspace_member = true
+publish_order = 2
+depends_on = ["sc-observability-dto"]
+wait_after_publish_seconds = 30
+status = "ready"
+
+[[crates]]
+artifact = "sc-observability-tauri"
+package = "sc-observability-tauri"
+cargo_toml = "bindings/tauri/Cargo.toml"
+workspace_member = false
+publish_order = 3
+depends_on = ["sc-observability-binding-runtime", "sc-observability-dto"]
+wait_after_publish_seconds = 30
+status = "pending"
+pending_reason = "bindings/tauri not yet present in this branch's ancestry; tracked on fix/phase-b-3a-completeness (frozen reference feature/phase-b-3a-typescript@202e4d0), merges forward via B.5->B.6"
+
+[[crates]]
+artifact = "sc-observability-py"
+package = "sc-observability-py"
+cargo_toml = "bindings/python/sc-observability-py/Cargo.toml"
+workspace_member = true
+publish_order = 4
+depends_on = ["sc-observability-binding-runtime"]
+wait_after_publish_seconds = 0
+status = "ready"
+
+[[packages]]
+artifact = "sc-observability-python-wheel"
+kind = "pypi"
+package = "sc-observability"
+manifest_path = "bindings/python/sc-observability-py/pyproject.toml"
+publish_order = 5
+depends_on = ["sc-observability-py"]
+platform_matrix_ref = ".github/workflows/b4a-python-distributions.yml"
+status = "ready"
+registry_secret = "PYPI_API_TOKEN"
+registry_secret_configured = false
+
+[[packages]]
+artifact = "sc-observability-typescript-client"
+kind = "npm"
+package = "@sc-observability/client"
+manifest_path = "bindings/typescript/package.json"
+publish_order = 6
+depends_on = []
+status = "pending"
+pending_reason = "bindings/typescript not yet present in this branch's ancestry; same parent-checkpoint gap as sc-observability-tauri. Also note: that package.json currently sets \"private\": true, which must be cleared before real publish is possible even after the merge lands."
+registry_secret = "NPM_TOKEN"
+registry_secret_configured = false

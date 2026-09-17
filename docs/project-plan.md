@@ -269,6 +269,34 @@ source is copied, no source approval is granted, and no real
 `import-provenance.json` exists. Full B.1 remains blocked on B.P3's accepted
 source handoff, which QA1 returned FAIL on pending fixes.
 
+### B.7 — Publish bindings: release-readiness machinery
+
+The phase-end publication sprint is tracked in
+[`plans/phase-b/sprint-b-7-publish-bindings.md`](./plans/phase-b/sprint-b-7-publish-bindings.md),
+built from `feature/phase-b-6-python-async`. This entry records the
+release-readiness machinery built for it: `release/bindings-artifacts.toml`
+(new manifest for the 4 binding crates.io crates plus the PyPI and npm
+packages, parallel to the existing `release/publish-artifacts.toml`),
+`scripts/release_bindings_artifacts.py` (validate-manifest/list-publish-plan/
+verify-versions, binding-aware since `sc-observability-tauri` is its own
+standalone Cargo workspace and the PyPI/npm entries are not crates at all),
+an extension to `scripts/ci/validate_publish_order.sh` to also check the new
+manifest, `scripts/ci/validate_binding_registry_consumers.sh`, a 14-case
+pytest/unittest negative-path harness, three new jobs appended to
+`.github/workflows/release.yml` (`publish-binding-crates`,
+`publish-python-wheel`, `publish-npm-client`), and
+[`plans/phase-b/handoff-b-7.md`](./plans/phase-b/handoff-b-7.md). This
+branch has only 3 of the 4 intended binding crates and no TypeScript client
+in its tree yet (`sc-observability-tauri` and `bindings/typescript/` exist
+only on `feature/phase-b-3a-typescript`, not yet merged forward via
+`fix/phase-b-3a-completeness`); the manifest and tooling correctly and
+honestly report those as `pending` with named reasons rather than treating
+them as failures or fabricating placeholder files for them. Live publication
+is not performed by this work: no npm/PyPI registry credentials exist yet,
+and the crates.io/PyPI/npm name-preflight only proved the 6 target names are
+currently unclaimed, not that namespace control is secured. This sprint
+remains open; readiness machinery completion is not sprint closure.
+
 ## Rule
 
 Any sprint plan added here must preserve the standalone boundary defined by:
