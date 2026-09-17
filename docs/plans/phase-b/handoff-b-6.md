@@ -75,3 +75,22 @@ source/archive/wheel hashes, CI run and aggregate proof will be added after thos
 gates pass. The developer verification checklist and lead completeness must both
 finish before this task closes. No skipped matrix cell or development-only
 artifact can qualify this sprint.
+
+## Provisional distribution preflight
+
+Source `98203459bb8779b29b610be4649d55cb4063b07f` produced sdist SHA-256
+`a12415ae265f894874e2ec38e5140967f7615a07f3f9762d6c041b95434054b4`
+and macOS ARM64 ABI3 wheel SHA-256
+`0153ef8c222fb98279e2a63690fea927c59d0a83fb198ddb543fb680342ee6b9`.
+The isolated build passed native tests, the real B.5/B.6 embedding executable
+and all nine negative package checks. That same wheel passed 78 installed tests
+and strict typing under CPython 3.14 with debug/warnings enabled. This is a
+provisional single-platform probe, not the final combined matrix or per-cell
+embedding claim. Full machine records are retained with hashes under
+`evidence/b6-local`; the final matrix supersedes this checkpoint.
+
+The initial preparation exposed B6-P01: ignored `__pycache__` files were copied
+into the inventory but excluded by maturin. Removing generated caches allowed
+this probe; the packaging owner is implementing a tracked-source-only copy and
+regression in the sole helper. B6-R01 moves finalization command dispatch into
+its fixture module so the shared host main meets the Rust lint size bound.

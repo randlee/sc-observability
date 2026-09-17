@@ -1,0 +1,12 @@
+Installed 11 packages in 16ms
+Traceback (most recent call last):
+  File "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-6-python-async/scripts/ci/prepare_python_distributions.py", line 201, in <module>
+    main()
+  File "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-6-python-async/scripts/ci/prepare_python_distributions.py", line 197, in main
+    print(json.dumps(prepare(args.source, args.output, args.allow_incomplete_runtime), indent=2))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-6-python-async/scripts/ci/prepare_python_distributions.py", line 181, in prepare
+    verify_source(extracted)
+  File "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-6-python-async/scripts/ci/_python_distribution.py", line 87, in verify_source
+    raise DistributionError(f'missing or tampered distribution member: {relative}')
+_python_distribution.DistributionError: missing or tampered distribution member: python/sc_observability/__pycache__/__init__.cpython-310.pyc

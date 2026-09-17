@@ -27,5 +27,21 @@
     "B.4 inherited Rust clippy cleanup",
     "immutable source bundle and five-wheel/25-cell qualification with per-cell embedding",
     "lead completeness"
-  ]
+  ],
+  "provisional_distribution": {
+    "source_commit": "98203459bb8779b29b610be4649d55cb4063b07f",
+    "scope": "single macOS ARM64 preflight; final combined matrix and per-cell embedding remain open",
+    "records": [
+      {
+        "record": "provisional-macos-build.json.gz",
+        "sha256": "7a0cd51267935869961b92ab3f5281ac83c9277cd26fb6456a29e2041d302915",
+        "uncompressed_sha256": "e5aac3a4521e06bc2cdcaa4e6a2bf9615978bf2fab40efa8c13fd91bc914c409"
+      },
+      {
+        "record": "provisional-macos-py314-cell.json.gz",
+        "sha256": "69e0343abebbf225ebf65375fe1edc89bf1a5d0b9019a91599ae319fd2943244",
+        "uncompressed_sha256": "b2a327e237e52ec8f97f2bb2df93d54bcfc063fc2da4317b68ab1da95363ca32"
+      }
+    ]
+  }
 }

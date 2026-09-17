@@ -21,3 +21,10 @@ Every row receives an implementation pass followed by an independent verificatio
 | Typed stubs/examples, debug asyncio/warnings strict, no obsolete receipt codes | implemented | local pass | root/async stubs; strict Python 3.10 fixtures/example; full gate78 tests with debug/warnings; obsolete-code scan clean |
 | Full B.4a matrix and required Python validator | source gate implemented; matrix pending parent integration | source gate pass; matrix pending | full required validator78 tests; contract opts into all three strict flags; final companion/per-cell runner awaited |
 | Parent merge, complete handoff/hash evidence and documentation | in progress | pending | direct B.5 checkpoint2f11f75 merged in2bd3e87; handoff-b-6.md retains exact remaining gates |
+
+## Findings and follow-up verification
+
+| Finding | Implement | Verify | Evidence |
+| --- | --- | --- | --- |
+| B6-R01: async finalization dispatch pushed the shared host main above its lint size bound | implemented | pass | dispatch moved to async_conformance::finalize_if_requested; cargo fmt and host clippy --all-targets --no-deps -D warnings pass |
+| B6-P01: ignored Python caches copied into distribution inventory but omitted by maturin | packaging owner implementing tracked-source copy | pending final parent | initial prepare fails on inventoried .pyc; cache-free provisional sdist/build and installed cell pass; owner retains regression |

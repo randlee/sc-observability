@@ -410,3 +410,15 @@ is [`plans/phase-b/handoff-b-3.md`](./plans/phase-b/handoff-b-3.md), including e
 qualified B.2 archive provenance and the lead's crate-specific wire API approval.
 Implementation validation passed; consolidated Phase B QA/ordered merges and
 B.7 registry-only publication proof remain separate.
+
+### B.6 — Python immediate receipts and optional asyncio observation
+
+[B.6](plans/phase-b/sprint-b-6-python-async.md) adds synchronous context-aware
+`submit`, caller-owned resolved receipts and bounded loop-local `flush_async`
+observation for owned and attached backends. The
+[handoff](plans/phase-b/handoff-b-6.md) and
+[checklist](plans/phase-b/checklist-b-6.md) retain implementation, exact-source
+local checks and remaining gates. The final B.4/B.5/B.6 combined candidate must
+pass one immutable five-wheel/25-cell matrix, including actual embedded hosts
+per interpreter. Lead completeness, consolidated QA, ordered parent merges and
+B.7 publication remain separate; no intermediate local result closes the matrix.

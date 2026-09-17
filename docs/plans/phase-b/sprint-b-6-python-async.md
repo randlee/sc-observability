@@ -2,6 +2,7 @@
 id: B.6
 status: in_progress
 branch: feature/phase-b-6-python-async
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-6-python-async
 base: feature/phase-b-5-python-integration
 ---
 
