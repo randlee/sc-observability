@@ -51,6 +51,15 @@ class DistributionTests(unittest.TestCase):
         with self.assertRaises(DistributionError):
             runtime_options({'warnings_as_errors': 'false'})
 
+    def test_binary_architecture_cannot_be_overridden_by_filename(self):
+        from _python_distribution import verify_native_architecture
+        arm = b'\xcf\xfa\xed\xfe' + (0x100000c).to_bytes(4, 'little')
+        verify_native_architecture(arm, 'macosx_11_0_arm64')
+        with self.assertRaisesRegex(DistributionError, 'architecture'):
+            verify_native_architecture(arm, 'macosx_10_13_x86_64')
+        with self.assertRaisesRegex(DistributionError, 'architecture'):
+            verify_native_architecture(b'MZ', 'win_amd64')
+
     def test_policy_preserves_all_twenty_five_cells(self):
         path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
         policy = json.loads(path.read_text())

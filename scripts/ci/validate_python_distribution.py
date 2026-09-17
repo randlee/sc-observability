@@ -69,6 +69,11 @@ def linkage(wheel: Path, policy: dict, sandbox: Sandbox, directory: Path) -> dic
     return {**details, 'linked_libraries': output}
 
 
+def verify_embedding_features(metadata: dict) -> None:
+    if any('extension-module' in node['features'] for node in metadata['resolve']['nodes']):
+        raise DistributionError('extension-only features leaked into embedding link settings')
+
+
 def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) -> dict:
     bundle = json.loads((root / 'rust-bundle/manifest.json').read_text())
     results = {}
@@ -127,6 +132,24 @@ def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) 
         else:
             raise DistributionError(f'{name} incorrectly passed verification')
         shutil.rmtree(copy)
+    import tomli_w
+    from _python_distribution import tomllib
+    copy = scratch / 'extension-link-flags'
+    shutil.copytree(root, copy)
+    manifest_path = copy / 'embedding/Cargo.toml'
+    manifest = tomllib.loads(manifest_path.read_text())
+    dependency = manifest['dependencies']['pyo3']
+    dependency.setdefault('features', []).append('extension-module')
+    manifest_path.write_text(tomli_w.dumps(manifest))
+    wrong_link = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
+                                         '--format-version', '1'], copy / 'embedding'))
+    try:
+        verify_embedding_features(wrong_link)
+    except DistributionError:
+        results['extension-link-flags'] = {'extension_flags_rejected': True}
+    else:
+        raise DistributionError('extension-only embedding flags passed qualification')
+    shutil.rmtree(copy)
     return results
 
 
@@ -165,8 +188,7 @@ def build(args) -> None:
             embedded = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
                                               '--format-version', '1'], root / 'embedding'))
             verify_resolution(embedded, root)
-            if any('extension-module' in node['features'] for node in embedded['resolve']['nodes']):
-                raise DistributionError('extension-only features leaked into embedding link settings')
+            verify_embedding_features(embedded)
             sandbox.run([sandbox.cargo, 'run', '--locked', '--offline', '--release'], root / 'embedding')
             del sandbox.env['PYTHONPATH']
             negatives = negative_cases(root, scratch, sandbox, metadata)
@@ -187,7 +209,7 @@ def cell(args) -> None:
         scratch = Path(temporary).resolve()
         root = extract_sdist(args.sdist, scratch / 'unpacked')
         source = verify_source(root)
-        if source.get('development_only') or not source['runtime_suite'].get('runtime_complete'):
+        if (source.get('development_only') or not source['runtime_suite'].get('runtime_complete')) and not args.allow_incomplete_runtime:
             raise DistributionError('development/incomplete runtime artifact cannot qualify an installed cell')
         actual = actual_cell(policy_at(root))
         selected = next(item for item in policy_at(root)['platforms'] if item['id'] == actual['platform'])
@@ -206,7 +228,8 @@ def cell(args) -> None:
             if (root / relative).exists():
                 shutil.copytree(root / relative, suite / relative)
         contract = source['runtime_suite']
-        if source.get('development_only') or not contract.get('runtime_complete') or not contract.get('typing_paths'):
+        if (not contract.get('typing_paths') or
+                ((source.get('development_only') or not contract.get('runtime_complete')) and not args.allow_incomplete_runtime)):
             raise DistributionError('full runtime/type suite contract is incomplete')
         with Sandbox(scratch, checkouts) as sandbox:
             probes = sandbox.prove_denials(python, args.checkout)
@@ -230,6 +253,7 @@ def cell(args) -> None:
             sandbox.run([python, '-I', '-m', 'mypy', '--strict', '--no-incremental',
                          '--cache-dir', str(scratch / 'mypy-cache'), *typed], suite)
             record = {'schema_version': 1, 'status': 'passed', **actual,
+                      'development_only': args.allow_incomplete_runtime or source.get('development_only', False),
                       'source_commit': source['source_commit'], 'sdist_sha256': digest(args.sdist),
                       'wheel': wheel, 'runtime_suite': contract, 'test_count': len(cases),
                       'test_cases': sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in cases),
@@ -280,7 +304,7 @@ def aggregate(args) -> None:
         inspected = inspect_wheel(wheel, selected, policy['candidate_version'])
         if inspected['sha256'] != build['wheel']['sha256']:
             raise DistributionError('retained wheel checksum differs from build evidence')
-        if build.get('embedding') != 'passed' or len(build.get('negative_results', {})) != 8:
+        if build.get('embedding') != 'passed' or len(build.get('negative_results', {})) != 9:
             raise DistributionError('missing embedding or negative-artifact execution evidence')
     print('B4A_QUALIFIED: five ABI wheels, 25 installed full-suite cells, offline sdist and embedding')
 
@@ -297,6 +321,8 @@ def main() -> None:
             child.add_argument('--platform', required=True)
         else:
             child.add_argument('--wheel', type=Path, required=True)
+            child.add_argument('--allow-incomplete-runtime', action='store_true',
+                               help='execute provisional suites; aggregate still rejects these results')
     child = commands.add_parser('aggregate')
     child.add_argument('--policy', type=Path, required=True)
     child.add_argument('--sdist', type=Path, required=True)

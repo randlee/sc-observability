@@ -100,6 +100,26 @@ def verify_source(root: Path) -> dict:
     return record
 
 
+def verify_native_architecture(data: bytes, tag: str) -> None:
+    """Inspect executable headers independently of the wheel's claimed tag."""
+    if tag.startswith('manylinux_'):
+        expected = 183 if tag.endswith('aarch64') else 62
+        valid = (len(data) >= 20 and data[:6] == b'\x7fELF\x02\x01'
+                 and int.from_bytes(data[18:20], 'little') == expected)
+    elif tag.startswith('macosx_'):
+        expected = 0x100000c if tag.endswith('arm64') else 0x1000007
+        valid = (len(data) >= 8 and data[:4] == b'\xcf\xfa\xed\xfe'
+                 and int.from_bytes(data[4:8], 'little') == expected)
+    elif tag == 'win_amd64':
+        offset = int.from_bytes(data[60:64], 'little') if len(data) >= 64 else len(data)
+        valid = (data[:2] == b'MZ' and data[offset:offset + 4] == b'PE\0\0'
+                 and int.from_bytes(data[offset + 4:offset + 6], 'little') == 0x8664)
+    else:
+        valid = False
+    if not valid:
+        raise DistributionError('native executable architecture differs from wheel platform')
+
+
 def inspect_wheel(wheel: Path, policy: dict, version: str) -> dict:
     from packaging.utils import parse_wheel_filename
     name, actual_version, _, tags = parse_wheel_filename(wheel.name)
@@ -125,6 +145,7 @@ def inspect_wheel(wheel: Path, policy: dict, version: str) -> dict:
                   and name.endswith(('.so', '.pyd'))]
         if len(native) != 1:
             raise DistributionError('wheel must contain exactly one native extension')
+        verify_native_architecture(archive.read(native[0]), policy['wheel_platform'])
         manifests = [name for name in names if name.endswith('.dist-info/WHEEL')]
         if len(manifests) != 1:
             raise DistributionError('ambiguous wheel metadata')

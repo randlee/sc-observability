@@ -4,6 +4,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
+# Distribution jobs share the source validator entry point but consume immutable
+# artifacts. The source validation path below remains the complete B.4 gate.
+if [[ "${1:-}" == --distribution ]]; then
+  shift
+  exec "${B4A_PYTHON:-python3}" scripts/ci/validate_python_distribution.py "$@"
+fi
+
 B4_PYTHON="${B4_PYTHON:-$(uv python find 3.10)}"
 "$B4_PYTHON" -c 'import sys; assert sys.version_info[:2] == (3, 10), "B.4 requires CPython 3.10"'
 B4_GENERATOR_PYTHON="${B4_GENERATOR_PYTHON:-$(uv python find 3.12.10)}"
