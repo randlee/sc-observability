@@ -33,10 +33,20 @@ target document or for its reference being cross-checked against the
 immutable handoff; and the `relocated_doc_or_test_path` mechanical-kind
 pattern matching `.rs`/`.md` as a bare substring anywhere in a changed line
 (including inside an unrelated string literal), rather than only in genuine
-path/mod/include syntax. Both are fixed on this same layer. Merge the parent
-forward before every round once it has pushed commits. Full B.1 closure, the
-real `docs/plans/phase-b/import-provenance.json`, and the real copy remain
-blocked on B.P3's accepted source handoff.
+path/mod/include syntax. Both are fixed on this same layer. A third
+lead-completeness recheck (at this layer's own `0a6fa29`) found that the
+fullmatch tightening validated per-line syntax shape but not mechanical
+equivalence: appending a whole new dependency (with arbitrary features) under
+`dependency_path`, or a whole new `mod` declaration under
+`relocated_doc_or_test_path`, both passed because each added line was
+syntactically valid on its own, even though neither relocates anything that
+already existed. Fixed with structural before/after comparison (dependency
+table/entry set-equality plus non-location-key preservation; `mod` identity
+set-equality and `include!`/`#[path]`/bare-path-literal count-equality), also
+on this same layer. Merge the parent forward before every round once it has
+pushed commits. Full B.1 closure, the real
+`docs/plans/phase-b/import-provenance.json`, and the real copy remain blocked
+on B.P3's accepted source handoff.
 
 ## Deliverables (authoritative)
 
@@ -81,7 +91,18 @@ blocked on B.P3's accepted source handoff.
    containing) that kind's own narrow syntax pattern -- the kind label alone
    does not authorize the change, and a changed line that only incidentally
    contains a keyword or extension substring (e.g. `.rs` inside an unrelated
-   string literal) does not either.
+   string literal) does not either. Per-line syntax alone cannot distinguish a
+   genuine relocation from a wholesale new addition that merely has valid
+   syntax on its own line, so `package_metadata`/`dependency_path` are further
+   restricted to files named `Cargo.toml`, and `dependency_path`/
+   `relocated_doc_or_test_path` additionally require structural before/after
+   equivalence: the same dependency tables and entries must be present on both
+   sides with only their location keys (`path`/`version`/`git`/`branch`/`rev`/
+   `tag`) differing, and the same `mod` names (set-equality) and the same
+   count of `include!`/`#[path=...]`/bare-quoted-path declarations (which
+   carry no identity independent of the path argument itself) must be present
+   on both sides -- a whole new dependency or module appended alongside a
+   real relocation is rejected even when its own line is syntactically valid.
 2. `scripts/ci/tests/test_validate_log_import.py`: fixture coverage built from
    two separate temporary, synthetic Git repositories (a `source_repo`
    modeling BTIT and a `doc_repo` modeling sc-observability's own history)
@@ -106,9 +127,15 @@ blocked on B.P3's accepted source handoff.
    an adaptation with a disallowed kind, an adaptation whose declared
    `before` content does not match the recorded source blob, an arbitrary
    runtime content change mislabeled with a permitted kind (e.g.
-   `dependency_path`), and a changed line merely containing a `.rs`/`.md`
+   `dependency_path`), a changed line merely containing a `.rs`/`.md`
    substring inside unrelated syntax (e.g. a string literal) mislabeled
-   `relocated_doc_or_test_path`.
+   `relocated_doc_or_test_path`, a `dependency_path`/`package_metadata` kind
+   applied to a non-`Cargo.toml` file, a `dependency_path` adaptation that
+   appends a whole new dependency table or a whole new entry to an existing
+   table, a `dependency_path` relocation that also changes a dependency's
+   non-location keys (e.g. `features`), and a `relocated_doc_or_test_path`
+   adaptation that appends a whole new `mod` declaration alongside a genuine
+   relocation.
 3. This task-plan document and its execution evidence.
 
 The validator's handoff markers (`Accepted source SHA:`, `Review document: ...
