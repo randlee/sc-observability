@@ -92,7 +92,7 @@ jobs:
             docker run --rm --cap-add SYS_ADMIN --security-opt seccomp=unconfined --security-opt apparmor=unconfined \
               -v "$GITHUB_WORKSPACE:/checkout:ro" -v "$RUNNER_TEMP/b4a-source:/artifacts:ro" \
               -v "$RUNNER_TEMP/b4a-result:/result" -e B4A_PLATFORM b4a-manylinux \
-              bash -c 'set -e; git config --global --add safe.directory /checkout; sdist=(/artifacts/dist/*.tar.gz); python /checkout/scripts/ci/validate_python_distribution.py build --sdist "${sdist[0]}" --platform "$B4A_PLATFORM" --checkout /checkout --output /result/wheel; chmod -R a+rX /result'
+              bash -c 'set -e; sdist=(/artifacts/dist/*.tar.gz); python /checkout/scripts/ci/validate_python_distribution.py build --sdist "${sdist[0]}" --platform "$B4A_PLATFORM" --checkout /checkout --output /result/wheel; chmod -R a+rX /result'
           else
             sdist=( "$RUNNER_TEMP"/b4a-source/dist/*.tar.gz )
             python scripts/ci/validate_python_distribution.py build --sdist "${sdist[0]}" \

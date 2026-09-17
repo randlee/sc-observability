@@ -54,7 +54,6 @@ def linkage(wheel: Path, policy: dict, sandbox: Sandbox, directory: Path) -> dic
         if 'Python.framework' in output or 'libpython' in output:
             raise DistributionError('extension links an interpreter-specific Python library')
         load = sandbox.run(['otool', '-l', str(native)], directory)
-        minima = re.findall(r'(?:minos|version)\s+(\d+\.\d+)', load)
         # The wheel tag is exact; inspect the actual LC_BUILD_VERSION/LC_VERSION_MIN command.
         deployment = re.findall(r'(?:LC_BUILD_VERSION[\s\S]*?minos|LC_VERSION_MIN_MACOSX[\s\S]*?version)\s+(\d+\.\d+)', load)
         if not deployment or any(tuple(map(int, item.split('.'))) > tuple(map(int, policy['deployment_target'].split('.'))) for item in deployment):
@@ -88,7 +87,7 @@ def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) 
         'missing-unpublished': ('rust-bundle/' + dependency['root'], True),
         'missing-registry': (str(Path(registry[0]['manifest_path']).parent.relative_to(root)), True),
         'missing-target-registry': (str(Path(target_registry[0]['manifest_path']).parent.relative_to(root)), True),
-        'missing-stubs': ('python/sc_observability/__init__.pyi', False),
+        'missing-stubs': ('python/sc_observability/generated/__init__.pyi', False),
         'missing-py-typed': ('python/sc_observability/py.typed', False),
     }
     for name, (relative, build_must_fail) in cases.items():
@@ -200,7 +199,7 @@ def cell(args) -> None:
             if (root / relative).exists():
                 shutil.copytree(root / relative, suite / relative)
         contract = source['runtime_suite']
-        if not contract.get('runtime_complete') or not contract.get('typing_paths'):
+        if source.get('development_only') or not contract.get('runtime_complete') or not contract.get('typing_paths'):
             raise DistributionError('full runtime/type suite contract is incomplete')
         with Sandbox(scratch, checkouts) as sandbox:
             probes = sandbox.prove_denials(python, args.checkout)
@@ -210,6 +209,7 @@ def cell(args) -> None:
                 'assert pathlib.Path(sc_observability.__file__).resolve().is_relative_to(root); '
                 'assert pathlib.Path(n.__file__).resolve().is_relative_to(root); '
                 'print(n.__file__)'], suite)
+            sandbox.env['SC_OBSERVABILITY_RUNTIME_TEST'] = '1'
             junit = scratch / 'runtime.xml'
             paths = [str(confined(suite, path)) for path in contract['pytest_paths']]
             sandbox.run([python, '-I', '-m', 'pytest', *paths, '-ra', '--junitxml', str(junit)], suite)
@@ -233,8 +233,10 @@ def cell(args) -> None:
 def aggregate(args) -> None:
     policy = json.loads(args.policy.read_text())
     expected = {(p['id'], python) for p in policy['platforms'] for python in policy['interpreters']}
-    builds = [json.loads(path.read_text()) for path in args.evidence.rglob('build-result.json')]
-    cells = [json.loads(path.read_text()) for path in args.evidence.rglob('cell-result.json')]
+    build_paths = list(args.evidence.rglob('build-result.json'))
+    cell_paths = list(args.evidence.rglob('cell-result.json'))
+    builds = [json.loads(path.read_text()) for path in build_paths]
+    cells = [json.loads(path.read_text()) for path in cell_paths]
     if len(builds) != 5 or len(cells) != 25:
         raise DistributionError('all five builds and all 25 execution cells are required')
     if {(cell['platform'], cell['python']) for cell in cells} != expected:
@@ -250,10 +252,24 @@ def aggregate(args) -> None:
     for item in cells:
         if item['wheel']['sha256'] != wheel_hashes[item['platform']] or item.get('typecheck') != 'passed':
             raise DistributionError('interpreter cell did not execute its shared ABI wheel and type suite')
+    for path, item in zip(cell_paths, cells):
+        xml = ET.parse(path.with_name('runtime.xml'))
+        actual_cases = sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in xml.findall('.//testcase'))
+        if (actual_cases != item['test_cases'] or len(actual_cases) != item['test_count']
+                or not actual_cases or any(xml.findall('.//' + kind) for kind in ('skipped', 'failure', 'error'))):
+            raise DistributionError('raw JUnit evidence disagrees with the cell result')
+        for tool in ('pytest', 'mypy'):
+            if not any(tool in command['command'] and command['exit_code'] == 0 for command in item['commands']):
+                raise DistributionError('missing successful runtime/type command log')
     cases = {tuple(cell['test_cases']) for cell in cells}
     if len(cases) != 1:
         raise DistributionError('interpreter/platform cells executed different runtime suites')
-    for build in builds:
+    for path, build in zip(build_paths, builds):
+        selected = next(item for item in policy['platforms'] if item['id'] == build['platform'])
+        wheel = confined(path.parent, build['wheel']['wheel'])
+        inspected = inspect_wheel(wheel, selected, policy['candidate_version'])
+        if inspected['sha256'] != build['wheel']['sha256']:
+            raise DistributionError('retained wheel checksum differs from build evidence')
         if build.get('embedding') != 'passed' or len(build.get('negative_results', {})) != 8:
             raise DistributionError('missing embedding or negative-artifact execution evidence')
     print('B4A_QUALIFIED: five ABI wheels, 25 installed full-suite cells, offline sdist and embedding')

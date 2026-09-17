@@ -6,6 +6,7 @@ import tarfile
 import tempfile
 import unittest
 import zipfile
+from argparse import Namespace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -46,7 +47,7 @@ class DistributionTests(unittest.TestCase):
 
     def test_frozen_inventory_rejects_tampering_missing_lock_and_extra_files(self):
         required = ('Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'pyproject.toml',
-                    'python/sc_observability/__init__.py', 'python/sc_observability/__init__.pyi',
+                    'python/sc_observability/__init__.py', 'python/sc_observability/generated/__init__.pyi',
                     'python/sc_observability/py.typed', 'rust-bundle/manifest.json')
         for mutation in ('tamper', 'missing', 'extra'):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
@@ -67,3 +68,32 @@ class DistributionTests(unittest.TestCase):
                     (root / 'unrecorded').write_text('extra')
                 with self.assertRaises(DistributionError):
                     verify_source(root)
+
+    def test_aggregate_rejects_missing_duplicate_and_mixed_source_cells(self):
+        from validate_python_distribution import aggregate
+        policy_path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
+        policy = json.loads(policy_path.read_text())
+        for mutation in ('missing', 'duplicate', 'mixed-source'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                sdist = root / 'fixture.tar.gz'
+                sdist.write_bytes(b'fixture')
+                common = {'status': 'passed', 'source_commit': 'a' * 40,
+                          'sdist_sha256': digest(sdist),
+                          'isolation': {'checkout': True, 'cargo_cache': True, 'network': True}}
+                for index, platform in enumerate(policy['platforms']):
+                    directory = root / f'build-{index}'; directory.mkdir()
+                    record = {**common, 'platform': platform['id'], 'wheel': {'sha256': 'fixture'}}
+                    if mutation == 'mixed-source' and index == 0:
+                        record['source_commit'] = 'b' * 40
+                    (directory / 'build-result.json').write_text(json.dumps(record))
+                    for count, version in enumerate(policy['interpreters']):
+                        if mutation == 'missing' and index == 0 and count == 0:
+                            continue
+                        directory = root / f'cell-{index}-{count}'; directory.mkdir()
+                        record = {**common, 'platform': platform['id'], 'python': version}
+                        if mutation == 'duplicate' and index == 0 and count == 0:
+                            record['python'] = '3.11'
+                        (directory / 'cell-result.json').write_text(json.dumps(record))
+                with self.assertRaises(DistributionError):
+                    aggregate(Namespace(policy=policy_path, evidence=root, sdist=sdist, source_commit='a' * 40))

@@ -71,7 +71,7 @@ def verify_source(root: Path) -> dict:
         if path.is_symlink() or not path.is_file() or digest(path) != expected:
             raise DistributionError(f'missing or tampered distribution member: {relative}')
     required = ('Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'pyproject.toml',
-                'python/sc_observability/__init__.py', 'python/sc_observability/__init__.pyi',
+                'python/sc_observability/__init__.py', 'python/sc_observability/generated/__init__.pyi',
                 'python/sc_observability/py.typed', 'rust-bundle/manifest.json')
     if not set(required) <= record['files'].keys():
         raise DistributionError('sdist inventory omits required package data')
@@ -93,7 +93,7 @@ def inspect_wheel(wheel: Path, policy: dict, version: str) -> dict:
     if not tags or any(tag.interpreter != 'cp310' or tag.abi != 'abi3'
                        or tag.platform != policy['wheel_platform'] for tag in tags):
         raise DistributionError(f'wrong wheel ABI/platform tags: {sorted(map(str, tags))}')
-    required = {'sc_observability/__init__.py', 'sc_observability/__init__.pyi',
+    required = {'sc_observability/__init__.py',
                 'sc_observability/py.typed', 'sc_observability/generated/__init__.py',
                 'sc_observability/generated/__init__.pyi'}
     with zipfile.ZipFile(wheel) as archive:

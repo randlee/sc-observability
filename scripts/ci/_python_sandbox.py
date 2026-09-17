@@ -15,7 +15,7 @@ from _python_distribution import DistributionError
 
 
 def registered_checkouts(checkout: Path) -> list[Path]:
-    result = subprocess.check_output(['git', 'worktree', 'list', '--porcelain'], cwd=checkout, text=True)
+    result = subprocess.check_output(['git', '-c', 'safe.directory=' + str(checkout.resolve()), 'worktree', 'list', '--porcelain'], cwd=checkout, text=True)
     return sorted({Path(line.removeprefix('worktree ')).resolve()
                    for line in result.splitlines() if line.startswith('worktree ')})
 
