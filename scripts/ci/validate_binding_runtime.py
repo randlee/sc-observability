@@ -23,14 +23,14 @@ def source_digest():
     paths = []
     for crate in roots:
         base = ROOT/'crates'/crate
-        paths.extend(sorted((base/'src').rglob('*.rs')))
-        paths.extend(sorted((base/'tests').rglob('*.rs')))
-        paths.extend(sorted((base/'tests').rglob('*.json')))
+        paths.extend(sorted((base/'src').rglob('*.rs'), key=lambda p:p.as_posix()))
+        paths.extend(sorted((base/'tests').rglob('*.rs'), key=lambda p:p.as_posix()))
+        paths.extend(sorted((base/'tests').rglob('*.json'), key=lambda p:p.as_posix()))
         paths.append(base/'Cargo.toml')
     paths += [ROOT/'Cargo.lock',ROOT/'Cargo.toml',ROOT/'scripts/ci/validate_binding_runtime.py',ROOT/'scripts/ci/fixtures/binding-runtime-consumer/main.rs']
     value = hashlib.sha256()
     for path in paths:
-        value.update(path.relative_to(ROOT).as_posix().encode()+b'\0'+path.read_text().replace('\r\n','\n').encode())
+        value.update(path.relative_to(ROOT).as_posix().encode()+b'\0'+path.read_text(encoding="utf-8").replace('\r\n','\n').encode())
     return value.hexdigest()
 def cases():
     source=(ROOT/'crates'/PACKAGE/'src/tests.rs').read_text()

@@ -1,0 +1,32 @@
+[
+  {
+    "case": "missing-platform",
+    "status": "rejected",
+    "reason": "[Errno 2] No such file or directory: '/var/folders/3q/0f7c3v_j6ps28gtz8xfz99km0000gn/T/tmpyg16p0mc/missing-platform/windows.json'"
+  },
+  {
+    "case": "altered-log",
+    "status": "rejected",
+    "reason": "incomplete platform evidence Linux/debug"
+  },
+  {
+    "case": "skipped-case",
+    "status": "rejected",
+    "reason": "incomplete platform evidence Linux/release"
+  },
+  {
+    "case": "stale-source",
+    "status": "rejected",
+    "reason": "stale platform evidence Linux"
+  },
+  {
+    "case": "stale-consumer",
+    "status": "rejected",
+    "reason": "stale packaged consumer source proof"
+  },
+  {
+    "case": "unconfined-consumer",
+    "status": "rejected",
+    "reason": "isolated consumer proof incomplete"
+  }
+]

@@ -1,0 +1,70 @@
+warning: unused workspace dependency `sc-observability-otlp`
+  --> Cargo.toml:33:1
+   |
+33 | sc-observability-otlp = { version = "1.4.0", path = "crates/sc-observability-otlp" }
+   | ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `cargo::unused_workspace_dependencies` is set to `warn` by default
+help: consider removing the workspace dependency `sc-observability-otlp`
+warning: workspace (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observe/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observe` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability-otlp/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability-otlp` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability-types/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability-types` (manifest) generated 1 warning
+warning: missing `[lints]` to inherit `[workspace.lints]`
+  --> crates/sc-observability-dto/Cargo.toml
+   = note: `cargo::missing_lints_inheritance` is set to `warn` by default
+help: to inherit `workspace.lints, add:
+   |
+16 ~ schema-gen = ["dep:schemars"]
+17 + [lints]
+18 + workspace = true
+   |
+help: to clarify your intent to not inherit, add:
+   |
+16 ~ schema-gen = ["dep:schemars"]
+17 + [lints]
+   |
+warning: `sc-observability-dto` (manifest) generated 1 warning
+ Documenting sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-binding-runtime)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s

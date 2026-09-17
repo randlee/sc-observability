@@ -24,18 +24,20 @@ impl Gate {
         })
     }
     pub(crate) fn arrive(&self) {
+        let deadline = Instant::now() + Duration::from_secs(10);
         let mut state = lock(&self.state);
         state.0 += 1;
         self.changed.notify_all();
         while !state.1 {
             let (next, timeout) = self
                 .changed
-                .wait_timeout(state, Duration::from_secs(10))
+                .wait_timeout(state, deadline.saturating_duration_since(Instant::now()))
                 .unwrap();
             state = next;
-            if timeout.timed_out() {
-                return;
-            }
+            assert!(
+                !timeout.timed_out() || state.1,
+                "gate was not explicitly released before the absolute deadline"
+            );
         }
     }
     fn entered(&self, count: usize) {
