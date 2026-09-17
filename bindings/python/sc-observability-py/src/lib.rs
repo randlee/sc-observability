@@ -351,11 +351,11 @@ fn _test_blocked_host_entered(py: Python<'_>) -> bool {
 #[cfg(feature = "test-hooks")]
 #[pyfunction]
 fn _test_release_blocked_host(py: Python<'_>) {
-    if let Some(block) = test_host_block(py) {
-        if let Ok(mut released) = block.released.lock() {
-            *released = true;
-            block.wake.notify_all();
-        }
+    if let Some(block) = test_host_block(py)
+        && let Ok(mut released) = block.released.lock()
+    {
+        *released = true;
+        block.wake.notify_all();
     }
 }
 
