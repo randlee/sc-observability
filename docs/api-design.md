@@ -2343,13 +2343,12 @@ required public-struct field, changed return type or wire-shape change is planne
 Review the [error sprint contract](plans/phase-b/sprint-b-1a-error-api.md) and its
 successors for the exact replacement inventory before implementation approval.
 
-B.1e migration preparation records that inventory in
+B.1e migration implementation records that inventory in
 [`plans/phase-b/warning-inventory-b-1e.md`](plans/phase-b/warning-inventory-b-1e.md)
 and routes adopters through
 `.claude/skills/sc-observability-adopting/references/migrate-error-api.md`.
-The record is not a deprecation approval: the current child does not add
-warning attributes; B.1e implementation/validation selects the exact
-next-minor version after the B.P2 staged prerequisite, and B.2 qualifies that
+The record activates the authorized warning attributes at the exact next-minor
+version after the B.P2 staged prerequisite; B.2 qualifies that
 result. The two B.P1 owner constructors remain method-level
 exemptions, while explicit `InitError` wrapper use is documented separately.
 

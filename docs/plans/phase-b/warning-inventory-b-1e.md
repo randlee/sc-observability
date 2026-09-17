@@ -1,16 +1,16 @@
 # B.1e warning and exemption inventory
 
 Checked against telemetry-parent merge `d4997029f83664331c8c4e3cc20005ae656d254a`
-on `feature/phase-b-1e-migration-prep`. This is a preparation inventory. The
-future B.1e attributes are not active on this branch.
+on `feature/phase-b-1e-migration-validation`. This is the implementation
+inventory. B.1e warning attributes are active and validated on this branch;
+B.2 qualification and B.7 publication remain pending.
 
 ## Version and activation
 
 The B.P2 staged prerequisite is `1.3.0`; the next available workspace minor is
-`1.4.0`. B.1e implementation selects and activates that exact version in
-`#[deprecated(since = "1.4.0", ...)]`, then validates the warning policy. This
-scoped preparation leaves those attributes pending; B.2 qualifies the B.1e
-result and B.7 publishes it. Every future note must point to
+`1.4.0`. B.1e selects and activates that exact version in
+`#[deprecated(since = "1.4.0", ...)]` and validates the warning policy. B.2
+qualifies the B.1e result and B.7 publishes it. Every note points to
 `references/migrate-error-api.md` and name the exact replacement. `Logger::emit`
 is the existing exception with its already-published `since = "1.2.0"` and
 must retain its blocking/nonblocking note and behavior.
@@ -102,9 +102,10 @@ allow and no blanket suppression is valid. Typed counterparts must compile
 under `#![deny(deprecated)]` without an allowance. Future validation must
 separate a wrapper-use diagnostic from a method diagnostic by its span/item.
 
-## Pending gates
+## Implementation gates
 
 The downstream validator, three Cargo fixtures (legacy/default, migrated/deny,
 partial/local-allow), all-four-crate checks, trait-adapter checks and old
-serialized-value goldens remain owned by the team lead/CI follow-up. They are
-not activated or claimed by this docs-only child.
+serialized-value golden are implemented in this child and pass through
+`python3 scripts/ci/validate_error_migration.py`. Qualification remains B.2;
+publication remains B.7.

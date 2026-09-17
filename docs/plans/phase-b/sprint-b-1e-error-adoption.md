@@ -1,8 +1,9 @@
 ---
 id: B.1e
-status: proposed
-branch: feature/phase-b-1e-errors
-base: develop
+status: complete
+branch: feature/phase-b-1e-migration-validation
+base: fix/phase-b-1ab-qa1
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1e-migration-validation
 ---
 
 # B.1e — Warn-only deprecations and downstream upgrade guidance
@@ -118,6 +119,26 @@ kind handling, custom codes, source chains, each open trait adapter and mixed
 old/new registrations, and unchanged root-glob imports. New typed traits and
 adapters are imported from explicit typed modules; no new root re-exports
 introduce same-named trait methods into legacy glob consumers. Record exact versions and results in `handoff-b-1e.md`.
+
+## Completion evidence
+
+B.1e implementation is complete on the branch recorded in the frontmatter.
+The nine legacy wrapper families and all 20 mapped methods carry actionable
+`since = "1.4.0"` warnings with exact typed replacements. The supported
+infallible `LoggerBuilder::build`, both owner-returning constructors, and the
+existing `Logger::emit` `since = "1.2.0"` policy remain unchanged. Ordinary
+routing production paths use typed logger admission and flush APIs; retained
+public trait and adapter boundaries use named, reason-bearing local allowances.
+
+The standalone validator and external fixtures are present at
+`scripts/ci/validate_error_migration.py` and
+`scripts/ci/fixtures/error-migration/`. The validator passed source-contract,
+Cargo JSON diagnostic, legacy Serde golden, migrated `deny(deprecated)`, and
+partial local-allow checks, with all three fixtures compiling and running.
+The implementation also merged the active QA1 parent before final validation.
+
+Qualification remains B.2 work and publication remains B.7 work; this sprint
+does not remove legacy APIs, set a removal schedule, or claim a major release.
 
 ## Paths to delete
 

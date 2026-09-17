@@ -1,5 +1,10 @@
 //! External-consumer fixtures for the neutral typed failure contract.
 
+#![allow(
+    deprecated,
+    reason = "neutral compatibility tests exercise both legacy and typed adapter contracts"
+)]
+
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},

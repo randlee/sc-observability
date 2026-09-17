@@ -21,6 +21,10 @@ use std::sync::{Arc, LazyLock, Mutex};
 
 use config::validate_config_typed;
 use sc_observability_types::typed::{ExportFailure, FlushFailure, InitFailure, ShutdownFailure};
+#[allow(
+    deprecated,
+    reason = "telemetry retains legacy error names in its published compatibility signatures"
+)]
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, ErrorContext, FlushError, InitError, LogEvent, MetricRecord,
     ObservabilityHealthProvider, Remediation, ShutdownError, SinkName, SpanSignal,
@@ -163,6 +167,10 @@ impl MetricExporter for NoopMetricExporter {
 
 impl Telemetry {
     /// Creates a telemetry runtime with the default no-op exporters.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use Telemetry::new_typed(); see migrate-error-api.md."
@@ -182,6 +190,10 @@ impl Telemetry {
     }
 
     #[cfg(test)]
+    #[allow(
+        deprecated,
+        reason = "test exporter injection retains the legacy InitError comparison boundary"
+    )]
     fn new_with_exporters(
         config: TelemetryConfig,
         log_exporter: Arc<dyn LogExporter>,
@@ -265,9 +277,15 @@ impl Telemetry {
             runtime.trace_status.last_error = Some(summary);
             return Err(TelemetryError::ExportFailure(Box::new(context)));
         }
-        if let Some(complete) = runtime.span_assembler.push(span.clone()).map_err(|err| {
-            TelemetryError::ExportFailure(Box::new(error_context_from_diagnostic(err.diagnostic())))
-        })? {
+        if let Some(complete) = runtime
+            .span_assembler
+            .push_typed(span.clone())
+            .map_err(|err| {
+                TelemetryError::ExportFailure(Box::new(error_context_from_diagnostic(
+                    err.diagnostic(),
+                )))
+            })?
+        {
             runtime.span_buffer.push(complete);
         }
         Ok(())
@@ -296,6 +314,10 @@ impl Telemetry {
     /// # Panics
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility lifecycle method keeps the published FlushError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use Telemetry::flush_typed(); see migrate-error-api.md."
@@ -314,6 +336,10 @@ impl Telemetry {
     #[expect(
         clippy::unnecessary_wraps,
         reason = "the helper preserves a Result-shaped internal API so flush behavior can grow direct error propagation without reshaping public callers"
+    )]
+    #[allow(
+        deprecated,
+        reason = "flush_outcome retains the legacy internal result while flush_typed is the public path"
     )]
     fn flush_outcome(&self) -> Result<FlushOutcome, FlushError> {
         let (log_batch, span_batch, metric_batch) = {
@@ -381,6 +407,10 @@ impl Telemetry {
     /// Panics if the internal telemetry runtime mutex has been poisoned while
     /// flushing, dropping incomplete spans, or constructing the final shutdown
     /// error state.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility lifecycle method keeps the published ShutdownError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use Telemetry::shutdown_typed(); see migrate-error-api.md."
@@ -631,6 +661,10 @@ fn shutdown_export_failure_typed(
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "telemetry compatibility tests exercise retained lifecycle and error wrappers"
+)]
 mod tests {
     use super::*;
     use sc_observability_types::{

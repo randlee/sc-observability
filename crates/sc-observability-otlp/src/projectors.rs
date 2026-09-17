@@ -12,6 +12,10 @@
     clippy::return_self_not_must_use,
     reason = "builder-style chaining is explicit from the signatures and intentionally lightweight"
 )]
+#![allow(
+    deprecated,
+    reason = "OTLP projectors preserve the published ProjectionError trait adapter boundary"
+)]
 
 use std::sync::Arc;
 

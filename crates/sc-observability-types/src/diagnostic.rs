@@ -252,6 +252,10 @@ fn capture_backtrace() -> Backtrace {
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "diagnostic compatibility tests exercise the retained wrapper contract"
+)]
 mod tests {
     use super::*;
     use serde_json::json;

@@ -32,8 +32,16 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 
+#[allow(
+    deprecated,
+    reason = "the facade retains legacy error names in its public compatibility signatures"
+)]
 use sc_observability::{LogError, Logger, LoggerConfig, RetainedLogPolicy, Running, Stopped};
 use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
+#[allow(
+    deprecated,
+    reason = "the facade retains legacy error names in its published compatibility signatures"
+)]
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError,
     ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, Remediation,
@@ -83,6 +91,14 @@ impl ObservabilityConfig {
     ///
     /// assert_eq!(config.tool_name.as_str(), "demo-tool");
     /// ```
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
+    #[allow(
+        deprecated,
+        reason = "retained compatibility accessor keeps the published InitError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use ObservabilityConfig::default_for_typed(); see migrate-error-api.md."
@@ -117,6 +133,14 @@ impl ObservabilityConfig {
     }
 
     /// Derives the logging/telemetry service name from the configured tool.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility accessor keeps the published InitError signature"
+    )]
+    #[allow(
+        deprecated,
+        reason = "retained compatibility accessor keeps the published InitError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use ObservabilityConfig::service_name_typed(); see migrate-error-api.md."
@@ -203,6 +227,10 @@ enum LoggerHandle {
     Stopped(Logger<Stopped>),
 }
 
+#[allow(
+    deprecated,
+    reason = "routing keeps the published SubscriberError callback boundary"
+)]
 type SubscriberDispatchFn =
     dyn Fn(&dyn Any) -> Result<DispatchMatch, SubscriberError> + Send + Sync + 'static;
 type ProjectionDispatchFn =
@@ -232,6 +260,14 @@ fn log_error_summary(error: &LogError) -> DiagnosticSummary {
 
 impl Observability {
     /// Builds a runtime using the documented default logger integration.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use Observability::new_typed(); see migrate-error-api.md."
@@ -354,6 +390,14 @@ impl Observability {
     ///
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing its registered sinks.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility lifecycle method keeps the published FlushError signature"
+    )]
+    #[allow(
+        deprecated,
+        reason = "retained compatibility lifecycle method keeps the published FlushError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use Observability::flush_typed(); see migrate-error-api.md."
@@ -388,6 +432,14 @@ impl Observability {
     ///
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing sinks or updating query/follow health during shutdown.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility lifecycle method keeps the published ShutdownError signature"
+    )]
+    #[allow(
+        deprecated,
+        reason = "retained compatibility lifecycle method keeps the published ShutdownError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use Observability::shutdown_typed(); see migrate-error-api.md."
@@ -587,11 +639,12 @@ impl ObservabilityBuilder {
                         Ok(events) => {
                             result.matched = true;
                             for event in events {
-                                if let Err(err) = logger.log(event) {
+                                if let Err(err) = logger.log_typed(event) {
+                                    let err: LogError = err.into();
                                     record_failure(log_error_summary(&err));
                                 }
                             }
-                            if let Err(err) = logger.flush() {
+                            if let Err(err) = logger.flush_typed() {
                                 record_failure(DiagnosticSummary::from(err.diagnostic()));
                             }
                         }
@@ -620,6 +673,14 @@ impl ObservabilityBuilder {
     }
 
     /// Finalizes registration and constructs the routing runtime.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility builder method keeps the published InitError signature"
+    )]
+    #[allow(
+        deprecated,
+        reason = "retained compatibility builder method keeps the published InitError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use ObservabilityBuilder::build_typed(); see migrate-error-api.md."
@@ -682,6 +743,10 @@ where
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "routing compatibility tests exercise retained legacy registrations and errors"
+)]
 mod tests {
     use super::*;
     use sc_observability::{
