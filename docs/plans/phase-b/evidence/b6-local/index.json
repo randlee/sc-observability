@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "source_commit": "2bd3e87ba7ec7fccf081d21049f7123749ded944",
+  "scope": "incremental local macOS ARM64 qualification, not the final distribution matrix",
+  "checks": [
+    {
+      "command": "bash scripts/ci/validate_python_bindings.sh",
+      "exit_code": 0,
+      "log": "full-python-validator.log",
+      "log_sha256": "32aef7a17672d1fbd184b7228e6e6d641d7bfb1fb8e639facafb40e79dff4cac"
+    },
+    {
+      "command": "PYO3_PYTHON=/opt/homebrew/bin/python3.14 PYTHONHOME=/opt/homebrew/opt/python@3.14/Frameworks/Python.framework/Versions/3.14 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error cargo run --locked -p rust-python-logging",
+      "exit_code": 0,
+      "log": "embedding-cpython314.log",
+      "log_sha256": "dcf3a47345996afb6135b0a2803055847e381af56d3807477451e88ff69c83cf"
+    },
+    {
+      "command": "cargo test --locked -p sc-observability-dto",
+      "exit_code": 0,
+      "log": "dto-tests.log",
+      "log_sha256": "bad5ff52ae5ccb18297ef9ef8c1a9dd7970ad8daebb9f75b69f9cd5c3bf5cb6b"
+    }
+  ],
+  "remaining": [
+    "final parent propagation",
+    "B.4 inherited Rust clippy cleanup",
+    "immutable source bundle and five-wheel/25-cell qualification with per-cell embedding",
+    "lead completeness"
+  ]
+}

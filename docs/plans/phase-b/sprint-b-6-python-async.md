@@ -1,8 +1,8 @@
 ---
 id: B.6
-status: proposed
+status: in_progress
 branch: feature/phase-b-6-python-async
-base: develop
+base: feature/phase-b-5-python-integration
 ---
 
 # B.6 — Fire-and-forget Python logging with optional async confirmation
