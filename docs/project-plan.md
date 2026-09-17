@@ -113,7 +113,7 @@ Phase A exit criteria:
 The proposed next lettered phase is tracked in
 [`plans/phase-b/plan-phase-b.md`](./plans/phase-b/plan-phase-b.md).
 Its first migration sprint copies the review-corrected generic BTIT crates.
-Explicit prerequisite sprints implement/publish additive core runtime elevation
+Explicit prerequisite sprints implement/qualify additive core runtime elevation
 and obtain accepted BTIT integration before that copy. Bounded core error
 migration sprints add improved methods and warning-only legacy adapters before
 Rust publication, followed by separately gated shared schema (B.3),
@@ -127,10 +127,14 @@ Phase A closure or claim that BTIT's currently open review findings are resolved
 B.P1 implements the additive neutral runtime-level state, weak ownership, and
 admission-outcome core described by
 [`plans/phase-b/sprint-b-p1-runtime-core.md`](./plans/phase-b/sprint-b-p1-runtime-core.md).
-It must follow an accepted runtime-level contract; B.P2 must follow B.P1's
-merged and independently verified implementation. B.P1 is currently
-implemented pending QA and the recorded contract-acceptance governance ruling;
-it is neither published nor phase-complete.
+It follows the owner-authorized reviewed runtime-level contract; B.P2 follows
+B.P1's merged and independently verified implementation to qualify staged
+artifacts. QA-4 independently verified 17/18 tracked B.P1 findings at
+`a8951321e6b1df6044c2ee1f6f41c07a9dad7d99`; the remaining manual governance
+hold was resolved by the owner's 2026-09-16 direction to complete Phase B with
+publication delayed until the end. This authorizes the Phase B completion
+workflow, not an independent-review PASS; B.P1 is neither live-published nor a
+claim that the phase is complete.
 
 ## Rule
 

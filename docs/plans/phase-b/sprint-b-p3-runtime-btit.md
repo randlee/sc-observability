@@ -10,8 +10,8 @@ repository: beads-task-issue-tracker
 ## Goal and dependencies
 
 Owner: BTIT team implements in its repository; sc-observability reviews the
-public contract and accepts handoff. `must_follow` B.P2 registry availability
-and accepted target-bridge/runtime contracts. B.1 `must_follow` this sprint's
+public contract and accepts handoff. `must_follow` B.P2's exact staged core
+artifacts and accepted target-bridge/runtime contracts. B.1 `must_follow` this sprint's
 accepted immutable source. No parallel-safe relationship spans these shared
 contracts. Within BTIT, merge pushed parent development before each child round
 and merge parent PR first; cross-repository dependency uses released versions
@@ -23,7 +23,7 @@ Every listed deliverable must land production-ready for this sprint's stated
 scope. Completion requires evidence for every numbered item, including its code,
 documentation and validation artifacts; partial completion leaves the sprint open.
 
-1. BTIT resolves B.P2's published core capability and implements LogGuard owner
+1. BTIT resolves B.P2's exact staged core capability and implements LogGuard owner
    operations against its single LevelOwner. Use the shared core filter for
    direct/facade/macro producers; keep LogControl read-only. Remove independent
    threshold policy, retain a conservative fixed Trace runtime facade ceiling,
@@ -79,7 +79,9 @@ integration tests, deterministic races and fault injection, plus release-mode
 logging and capped-build tests. Record resolved Cargo feature graphs and exact
 commands/results rather than assuming debug tests prove release behavior.
 sc-observability checks the handoff against both accepted contracts and B.P2's
-registry version. B.1's independent provenance verification is still required.
+staged artifact version/checksum. B.1's independent provenance verification is
+still required. B.P3's staged consumption is not live registry proof; B.7 owns
+that proof at phase end.
 
 ## Paths to delete
 
@@ -90,6 +92,6 @@ removed and no BTIT files are deleted by sc-observability during this sprint.
 
 ## Non-closure
 
-No destination copy/publication, post-copy redesign, Tauri/Python adapter work,
-BTIT switch to a future published companion crate, or claim that contract
+No destination copy/live publication, post-copy redesign, Tauri/Python adapter
+work, BTIT switch to a future published companion crate, or claim that contract
 approval alone closes source implementation/review.

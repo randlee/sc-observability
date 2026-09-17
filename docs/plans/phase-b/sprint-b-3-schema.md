@@ -10,7 +10,7 @@ base: develop
 ## Goal and dependencies
 
 Deliver a usable neutral Rust DTO crate and versioned JSON contract over the
-published Rust API. `must_follow` B.2; B.3b `must_follow` this accepted schema for shared runtime adapters;
+qualified staged Rust API. `must_follow` B.2; B.3b `must_follow` this accepted schema for shared runtime adapters;
 B.3a/B.4 consume its generated language projections.
 Shared public contracts and conformance artifacts prevent parallel_safe work.
 Parent pushes trigger merge-forward before every child dev/fix round; parent PR

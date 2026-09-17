@@ -5,16 +5,18 @@ branch: feature/phase-b-7-publish-bindings
 base: develop
 ---
 
-# B.7 — Publish the language binding packages
+# B.7 — Final phase-end publication and registry proof
 
 ## Goal and dependencies
 
-Publish the already-working B.3a TypeScript and B.4/B.5/B.6 Python artifacts so external
-consumers can install them. `must_follow` B.6 and transitively B.5/B.4a/B.4/B.3a/B.3b/B.3/B.2: preserve
-the accepted runtime/schema contracts. This sprint owns distribution and
-registry proof, not unfinished runtime work. Shared release/runtime artifacts
-preclude parallel_safe execution; follow parent-push merge-forward before each
-child development/fix round and parent PR merge before child completion.
+At Phase B end, publish the already-qualified Rust, B.3a TypeScript, and
+B.4/B.5/B.6 Python artifacts so external consumers can install them.
+`must_follow` B.6 and transitively B.5/B.4a/B.4/B.3a/B.3b/B.3/B.2/B.1e/B.1 and
+the B.P1/B.P2 core qualification: preserve the accepted runtime/schema
+contracts. This sprint is the sole live crates.io/npm/PyPI distribution and
+registry-proof authority, not unfinished runtime work. Shared release/runtime
+artifacts preclude parallel_safe execution; follow parent-push merge-forward
+before each child development/fix round and parent PR merge before child completion.
 
 ## Deliverables (authoritative)
 
@@ -27,8 +29,9 @@ documentation and validation artifacts; partial completion leaves the sprint ope
    commit and artifact paths/hashes. Check registry name/control availability
    before freezing names; record any reviewed rename consistently. Preserve
    independently versioned language packages and schema-v1 compatibility.
-2. Extend the existing release workflow with explicit binding artifact jobs.
-   Publish prerequisite Rust DTO/native-runtime/adapter crates before packages or sdists that
+2. Extend the existing release workflow with explicit core, bridge, and binding
+   artifact jobs. Publish B.P2 core packages, B.2 bridge/macros, then prerequisite
+   Rust DTO/native-runtime/adapter crates before packages or sdists that
    resolve them from registries. Build Python wheels from an immutable main
    release commit for the B.4a matrix and publish those tested bytes. Include
    stubs, py.typed, licenses and source distribution; npm ships generated
@@ -41,6 +44,8 @@ documentation and validation artifacts; partial completion leaves the sprint ope
    shared Rust/Python records without implementing new DTO mappings. Write `docs/plans/phase-b/handoff-b-7.md` with
    registry URLs, versions, hashes, source tag, public API coverage, platform
    results and adoption examples. Update root consumer/release documentation.
+   The handoff also records the B.P2/B.2 registry-only Rust consumers; prior
+   staged/local/dry-run results are not substitutes for this proof.
 
 Proposed crates.io names: `sc-observability-dto`,
 `sc-observability-binding-runtime`, `sc-observability-tauri`, and
@@ -102,11 +107,24 @@ Registry credentials and publication approval use existing release controls;
 no automated job claims success before artifacts are retrievable. Never overwrite
 a released version or substitute different wheel bytes after testing.
 
+## Final phase-end publication checklist
+
+B.7 is incomplete until the release handoff records, for every Rust core,
+bridge, macro, DTO/native-runtime/adapter, npm, and PyPI artifact: approved
+version, immutable main source tag/commit, package/archive checksum, registry
+URL and successful retrieval. It must retain the published dependency order,
+the macOS/Linux/Windows Rust consumer evidence, TypeScript registry consumer,
+Python registry consumer and registry-only Rust embedding consumer, plus the
+B.4a platform-matrix artifact results. These live registry proofs are pending
+until this sprint; no B.P2, B.2, B.P3, B.3–B.6 staged artifact, package dry-run,
+or local consumer result can satisfy them.
+
 ## Acceptance criteria (authoritative)
 
-- AC1: All approved artifacts are published, downloadable, and match the recorded
-  tested hashes/source commit. No source-tree path dependency escapes into
-  distributable packages; Rust prerequisites resolve from crates.io.
+- AC1: All approved core, bridge, macro, binding, and language artifacts are
+  published, downloadable, and match the recorded tested hashes/source commit.
+  No source-tree path dependency escapes into distributable packages; Rust
+  prerequisites resolve from crates.io.
 - AC2: Registry-only TypeScript and Python examples exercise supported runtime
   operations on their promised platform matrices. Types/stubs and schema version
   agree across installed artifacts. Examples handle or deliberately ignore
@@ -127,10 +145,11 @@ bash scripts/ci/validate_public_api_docs.sh
 bash scripts/ci/validate_docs_consistency.sh
 ```
 
-The registry-consumer script reads exact versions from the release record and
-rejects placeholders, unavailable artifacts, version/schema mismatches or skipped
-platform evidence. Reuse the accepted B.3a/B.4/B.4a/B.5/B.6 runtime/package tests on release artifacts;
-do not replace them with import-only checks.
+The registry-consumer scripts read exact versions from the release record and
+reject placeholders, unavailable artifacts, version/schema mismatches or skipped
+platform evidence. They include B.P2/B.2 Rust registry consumers as well as
+binding consumers. Reuse the accepted B.3a/B.4/B.4a/B.5/B.6 runtime/package
+tests on release artifacts; do not replace them with import-only checks.
 
 ## Paths to delete
 

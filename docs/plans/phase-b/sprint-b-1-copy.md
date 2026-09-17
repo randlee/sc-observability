@@ -19,8 +19,9 @@ complete its initial implementation against it. This is not a post-copy API
 redesign and does not freeze the unfinished inspected baseline.
 
 Entry also requires the [runtime-level prerequisite](runtime-level-contract.md):
-published core support and accepted BTIT integration, including release-mode
-elevation evidence.
+qualified staged core support and accepted BTIT integration, including
+release-mode elevation evidence. Live registry proof remains a B.7 phase-end
+gate and is not a B.1 entry requirement.
 
 Entry requires the recorded approved target-contract commit, completed BTIT
 initial design/implementation, resolved critical-review findings and accepted
@@ -40,7 +41,7 @@ source parity is checked against the newly accepted target, not legacy behavior.
 ## Dependencies
 
 - `must_follow`: B.P3 accepted source handoff, incorporating target contract
-  approval, B.P2 published core and BTIT completed implementation/critical review.
+  approval, B.P2 staged core provenance and BTIT completed implementation/critical review.
 - B.1a `must_follow` B.1; no binding sprint, publication or second public-API
   redesign is part of B.1.
 

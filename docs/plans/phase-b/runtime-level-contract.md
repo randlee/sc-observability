@@ -1,6 +1,7 @@
 ---
-status: proposed_for_public_api_review
+status: owner_authorized_for_phase_execution
 issue: 97
+owner_direction_date: 2026-09-16 America/Los_Angeles
 ---
 
 # Runtime level elevation — pre-copy contract and core prerequisite
@@ -8,12 +9,20 @@ issue: 97
 ## Ownership and sequencing
 
 This is an explicit prerequisite to B.1, not a post-copy implementation task.
-sc-observability implements, reviews and publishes the additive core capability
-first. BTIT implements the corresponding bridge API and behavior against that
-released core and the accepted target contract, closes its critical review, and
-hands off the working reference. B.1 remains the first migration sprint and
-copies it mechanically. Do not mark this prerequisite complete from plan approval
-alone; record the core release and accepted BTIT source in the import gate.
+On 2026-09-16 (America/Los_Angeles), the owner directed: "you task was to
+complete phase-b w/ publish delayed until the end." That authorizes the Phase B
+completion workflow under the reviewed runtime contract and removes the redundant manual
+owner-approval stop formerly represented by `proposed_for_public_api_review`.
+It is owner execution authorization, not an invented independent-review PASS
+or a claim that a reviewer accepted contract wording.
+
+sc-observability implements and qualifies the additive core capability first;
+BTIT implements the corresponding bridge API and behavior against B.P2's exact
+staged core artifacts and the accepted target contract, closes its critical
+review, and hands off the working reference. B.1 remains the first migration
+sprint and copies it mechanically. Live registry publication and registry-only
+consumer proof are deferred to the phase-end release checklist in B.7; record
+the staged core artifact and accepted BTIT source in the import gate instead.
 
 Execution ownership and closure are defined once in the prerequisite sprints:
 [B.P1 core implementation](sprint-b-p1-runtime-core.md),
