@@ -81,6 +81,9 @@ def main():
             try:
                 if recover(recovery, allowed, temporary_root):
                     result = result or 125
+            except Exception as error:
+                result = result or 125
+                print(f'WINDOWS_PROOF_RECOVERY_ERROR: {error}', flush=True)
             finally:
                 invalidate_evidence(args.evidence, result)
         print(f'WINDOWS_PROOF_SUPERVISOR_EXIT {result}', flush=True)

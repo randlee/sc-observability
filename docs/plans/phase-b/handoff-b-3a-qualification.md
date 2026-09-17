@@ -124,3 +124,9 @@ immutable source `71215ca` using workflow revision `c203b4a` and the supported
 archive identity, lock closure and required cases are unchanged. This retry is
 pending at this documentation checkpoint. No further application cause is
 inferred from missing runner logs.
+
+A subsequent supervisor correction also marks retained evidence failed when
+recovery itself raises after a zero worker exit. Its eight supervisor regression
+tests pass locally, including invalid recovery identity and restoration errors.
+This correction is newer than the `71215ca` platform evidence and is not claimed
+as covered by that immutable-source run.

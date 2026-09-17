@@ -53,10 +53,13 @@ class SupervisorTests(unittest.TestCase):
                 with patch.object(supervisor.platform, 'system', return_value='Windows'):
                     with patch.object(supervisor, 'registered_checkouts', return_value=[]):
                         with patch.object(supervisor.subprocess, 'Popen', return_value=process):
-                            with patch.object(supervisor, 'recover', return_value=recovered):
-                                with patch.object(supervisor, 'invalidate_evidence'):
+                            with patch.object(supervisor, 'recover', return_value=recovered,
+                                              side_effect=recovered if isinstance(recovered, Exception) else None):
+                                with patch.object(supervisor, 'invalidate_evidence') as invalidate:
                                     with self.assertRaises(SystemExit) as result:
                                         supervisor.main()
+                                    invalidate.assert_called_once_with(Path('target/tauri-qualification'),
+                                                                       result.exception.code)
         return result.exception.code
 
     def test_normal_worker_success_remains_success(self):
@@ -65,6 +68,11 @@ class SupervisorTests(unittest.TestCase):
     def test_recovery_invalidates_zero_worker_exit(self):
         process = Mock(wait=Mock(return_value=0))
         self.assertEqual(self.execute(process, True), 125)
+
+    def test_recovery_error_invalidates_zero_worker_exit_and_retained_evidence(self):
+        for error in (DistributionError('invalid recovery plan'), OSError('restore failed')):
+            with self.subTest(error=error):
+                self.assertEqual(self.execute(Mock(wait=Mock(return_value=0)), error), 125)
 
     def test_supervisor_timeout_kills_owned_tree_and_fails_after_recovery(self):
         process = Mock(pid=12345, poll=Mock(return_value=None),
