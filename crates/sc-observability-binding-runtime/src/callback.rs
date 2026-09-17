@@ -104,14 +104,13 @@ impl Dispatcher {
                     _backend,
                     _observer,
                 }) = payload
+                    && std::panic::catch_unwind(std::panic::AssertUnwindSafe(callback)).is_err()
                 {
-                    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(callback)).is_err() {
-                        let _ = self
-                            .panics
-                            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
-                                Some(n.saturating_add(1))
-                            });
-                    }
+                    let _ = self
+                        .panics
+                        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
+                            Some(n.saturating_add(1))
+                        });
                 }
             }
         }

@@ -12,16 +12,6 @@ fn every_registered_type_agrees_with_serde_and_frozen_expectations() {
         if case["valid"] != true {
             continue;
         }
-        // Output schemas intentionally accept additive fields for forward
-        // compatibility. The Rust DTO is the shared input/output shape and
-        // therefore strips those fields only after an output decode; the
-        // generated language validators cover acceptance of these fixtures.
-        if case["id"]
-            .as_str()
-            .is_some_and(|id| id.starts_with("additive-output-"))
-        {
-            continue;
-        }
         let entry = case["entrypoint"].as_str().unwrap();
         let name = entry
             .strip_prefix("Input")

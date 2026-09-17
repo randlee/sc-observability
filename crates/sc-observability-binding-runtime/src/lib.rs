@@ -25,8 +25,11 @@ use std::time::Duration;
 /// Trusted adapter identity; never selected from producer event fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProducerOrigin {
+    /// Frontend event stamped as TypeScript through Tauri.
     TauriFrontend,
+    /// Python event stamped as Python through `PyO3`.
     Python,
+    /// Trusted Rust host event stamped as native Rust.
     RustHost,
 }
 /// Read-only lifecycle capability used by host and language clients.
@@ -53,15 +56,38 @@ pub trait HostLoggingBackend: Send + Sync {
     fn start_flush(&self, native_timeout: Duration) -> Result<Operation<CompletionDto>, Failure>;
 }
 /// Cloneable core access without shutdown or level-mutation authority.
+///
+/// ```compile_fail
+/// fn cannot_shutdown(backend: sc_observability_binding_runtime::CoreLoggerBackend) {
+///     backend.start_shutdown();
+/// }
+/// ```
+/// ```compile_fail
+/// fn cannot_mutate(mut backend: sc_observability_binding_runtime::CoreLoggerBackend) {
+///     backend.reset_level(sc_observability_types::LevelChangeSource::Application);
+/// }
+/// ```
 #[derive(Clone)]
 pub struct CoreLoggerBackend {
     shared: Arc<Coordinator>,
 }
 /// Unique core ownership. Drop requests shutdown without joining a helper.
+///
+/// ```compile_fail
+/// fn cannot_clone(owner: sc_observability_binding_runtime::CoreLoggerOwner) {
+///     let duplicate = owner.clone();
+/// }
+/// ```
 pub struct CoreLoggerOwner {
     shared: Arc<Coordinator>,
 }
 /// Cloneable bridge access; it never retains the host's `LogGuard`.
+///
+/// ```compile_fail
+/// fn cannot_shutdown(backend: sc_observability_binding_runtime::BridgeControlBackend) {
+///     backend.start_shutdown();
+/// }
+/// ```
 pub struct BridgeControlBackend {
     shared: Arc<Coordinator>,
 }

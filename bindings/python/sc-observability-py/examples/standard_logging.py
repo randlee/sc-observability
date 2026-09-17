@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 import tempfile
+import sys
 
 from sc_observability import Err, LoggerConfig, LogQuery, create_logger
 from sc_observability.context import bind_context
@@ -65,4 +66,7 @@ def main(root: Path) -> bool:
 
 if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as directory:
-        print("B5_STANDARD_LOGGING_OK" if main(Path(directory)) else "B5_STANDARD_LOGGING_FAILED")
+        succeeded = main(Path(directory))
+        print("B5_STANDARD_LOGGING_OK" if succeeded else "B5_STANDARD_LOGGING_FAILED")
+        if not succeeded:
+            sys.exit(1)

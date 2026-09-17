@@ -1,0 +1,424 @@
+pub mod sc_observability_dto
+pub mod sc_observability_dto::error_codes
+pub struct sc_observability_dto::error_codes::ErrorEntry
+pub sc_observability_dto::error_codes::ErrorEntry::code: &'static str
+pub sc_observability_dto::error_codes::ErrorEntry::kind: &'static str
+pub sc_observability_dto::error_codes::ErrorEntry::remediation: &'static str
+pub const sc_observability_dto::error_codes::REGISTRY: &[sc_observability_dto::error_codes::ErrorEntry]
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CANCELLED: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_DISPATCH_FULL: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_PERMISSION_DENIED: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_QUERY_IN_PROGRESS: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_TRANSPORT_UNAVAILABLE: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_PY_HANDLER_REENTRANT: &str
+pub enum sc_observability_dto::AdmissionDto
+pub sc_observability_dto::AdmissionDto::Accepted
+pub sc_observability_dto::AdmissionDto::Filtered
+impl core::convert::From<sc_observability_dto::AdmissionDto> for sc_observability_types::level::AdmissionOutcome
+pub fn sc_observability_types::level::AdmissionOutcome::from(sc_observability_dto::AdmissionDto) -> Self
+impl core::convert::From<sc_observability_types::level::AdmissionOutcome> for sc_observability_dto::AdmissionDto
+pub fn sc_observability_dto::AdmissionDto::from(sc_observability_types::level::AdmissionOutcome) -> Self
+pub enum sc_observability_dto::AdmissionOperationDto
+pub sc_observability_dto::AdmissionOperationDto::Log
+pub sc_observability_dto::AdmissionOperationDto::TryLog
+pub enum sc_observability_dto::AvailabilityDto
+pub sc_observability_dto::AvailabilityDto::DegradedDropping
+pub sc_observability_dto::AvailabilityDto::Healthy
+pub sc_observability_dto::AvailabilityDto::Unavailable
+impl core::convert::From<sc_observability_dto::AvailabilityDto> for sc_observability_types::health::LoggingHealthState
+pub fn sc_observability_types::health::LoggingHealthState::from(sc_observability_dto::AvailabilityDto) -> Self
+impl core::convert::From<sc_observability_dto::AvailabilityDto> for sc_observability_types::health::SinkHealthState
+pub fn sc_observability_types::health::SinkHealthState::from(sc_observability_dto::AvailabilityDto) -> Self
+impl core::convert::From<sc_observability_types::health::LoggingHealthState> for sc_observability_dto::AvailabilityDto
+pub fn sc_observability_dto::AvailabilityDto::from(sc_observability_types::health::LoggingHealthState) -> Self
+impl core::convert::From<sc_observability_types::health::SinkHealthState> for sc_observability_dto::AvailabilityDto
+pub fn sc_observability_dto::AvailabilityDto::from(sc_observability_types::health::SinkHealthState) -> Self
+pub enum sc_observability_dto::ChangeDiagnosticDto
+pub sc_observability_dto::ChangeDiagnosticDto::Accepted
+pub sc_observability_dto::ChangeDiagnosticDto::NotAccepted
+pub sc_observability_dto::ChangeDiagnosticDto::NotAccepted::diagnostic: sc_observability_dto::OperationDiagnosticDto
+pub enum sc_observability_dto::ClientOutcome
+pub sc_observability_dto::ClientOutcome::Accepted
+pub sc_observability_dto::ClientOutcome::Accepted::operation: sc_observability_dto::AdmissionOperationDto
+pub sc_observability_dto::ClientOutcome::Completed
+pub sc_observability_dto::ClientOutcome::Completed::operation: sc_observability_dto::CompletionOperationDto
+pub sc_observability_dto::ClientOutcome::Filtered
+pub sc_observability_dto::ClientOutcome::Filtered::operation: sc_observability_dto::AdmissionOperationDto
+pub sc_observability_dto::ClientOutcome::Idle
+pub sc_observability_dto::ClientOutcome::Scheduled
+pub sc_observability_dto::ClientOutcome::Scheduled::operation: sc_observability_dto::LogOperationDto
+pub enum sc_observability_dto::CompletionDto
+pub sc_observability_dto::CompletionDto::Completed
+pub enum sc_observability_dto::CompletionOperationDto
+pub sc_observability_dto::CompletionOperationDto::Flush
+pub sc_observability_dto::CompletionOperationDto::Health
+pub sc_observability_dto::CompletionOperationDto::Query
+pub enum sc_observability_dto::DispatchDto
+pub sc_observability_dto::DispatchDto::Scheduled
+pub enum sc_observability_dto::Failure
+pub sc_observability_dto::Failure::BelowBaseline
+pub sc_observability_dto::Failure::BelowBaseline::configured: sc_observability_dto::LevelFilterDto
+pub sc_observability_dto::Failure::BelowBaseline::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::BelowBaseline::requested: sc_observability_dto::LevelFilterDto
+pub sc_observability_dto::Failure::Cancelled
+pub sc_observability_dto::Failure::Cancelled::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::Cancelled::operation: alloc::string::String
+pub sc_observability_dto::Failure::Closed
+pub sc_observability_dto::Failure::Closed::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::Internal
+pub sc_observability_dto::Failure::Internal::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::Io
+pub sc_observability_dto::Failure::Io::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::PermissionDenied
+pub sc_observability_dto::Failure::PermissionDenied::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::QueueFull
+pub sc_observability_dto::Failure::QueueFull::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::Timeout
+pub sc_observability_dto::Failure::Timeout::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::Timeout::operation: alloc::string::String
+pub sc_observability_dto::Failure::Unavailable
+pub sc_observability_dto::Failure::Unavailable::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::UnknownRemote
+pub sc_observability_dto::Failure::UnknownRemote::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::UnknownRemote::remote_kind: alloc::string::String
+pub sc_observability_dto::Failure::UnsupportedLevel
+pub sc_observability_dto::Failure::UnsupportedLevel::available: sc_observability_dto::LevelFilterDto
+pub sc_observability_dto::Failure::UnsupportedLevel::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::UnsupportedLevel::requested: sc_observability_dto::LevelFilterDto
+pub sc_observability_dto::Failure::UnsupportedVersion
+pub sc_observability_dto::Failure::UnsupportedVersion::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::UnsupportedVersion::received: u32
+pub sc_observability_dto::Failure::Validation
+pub sc_observability_dto::Failure::Validation::diagnostic: alloc::boxed::Box<sc_observability_dto::Diagnostic>
+pub sc_observability_dto::Failure::Validation::field: alloc::string::String
+impl sc_observability_dto::Failure
+pub fn sc_observability_dto::Failure::diagnostic(&self) -> &sc_observability_dto::Diagnostic
+pub enum sc_observability_dto::LevelChangeDto
+pub sc_observability_dto::LevelChangeDto::Changed
+pub sc_observability_dto::LevelChangeDto::Changed::current: sc_observability_dto::LevelStateDto
+pub sc_observability_dto::LevelChangeDto::Changed::diagnostic: sc_observability_dto::ChangeDiagnosticDto
+pub sc_observability_dto::LevelChangeDto::Changed::previous: sc_observability_dto::LevelStateDto
+pub sc_observability_dto::LevelChangeDto::Changed::source: sc_observability_dto::LevelChangeSourceDto
+pub sc_observability_dto::LevelChangeDto::Unchanged
+pub sc_observability_dto::LevelChangeDto::Unchanged::state: sc_observability_dto::LevelStateDto
+pub enum sc_observability_dto::LevelChangeSourceDto
+pub sc_observability_dto::LevelChangeSourceDto::Application
+pub sc_observability_dto::LevelChangeSourceDto::DiagnosticSession
+pub sc_observability_dto::LevelChangeSourceDto::UserRequest
+impl core::convert::From<sc_observability_dto::LevelChangeSourceDto> for sc_observability_types::level::LevelChangeSource
+pub fn sc_observability_types::level::LevelChangeSource::from(sc_observability_dto::LevelChangeSourceDto) -> Self
+impl core::convert::From<sc_observability_types::level::LevelChangeSource> for sc_observability_dto::LevelChangeSourceDto
+pub fn sc_observability_dto::LevelChangeSourceDto::from(sc_observability_types::level::LevelChangeSource) -> Self
+pub enum sc_observability_dto::LevelDto
+pub sc_observability_dto::LevelDto::Debug
+pub sc_observability_dto::LevelDto::Error
+pub sc_observability_dto::LevelDto::Info
+pub sc_observability_dto::LevelDto::Trace
+pub sc_observability_dto::LevelDto::Warn
+impl core::convert::From<sc_observability_dto::LevelDto> for sc_observability_types::level::Level
+pub fn sc_observability_types::level::Level::from(sc_observability_dto::LevelDto) -> Self
+impl core::convert::From<sc_observability_types::level::Level> for sc_observability_dto::LevelDto
+pub fn sc_observability_dto::LevelDto::from(sc_observability_types::level::Level) -> Self
+pub enum sc_observability_dto::LevelFilterDto
+pub sc_observability_dto::LevelFilterDto::Debug
+pub sc_observability_dto::LevelFilterDto::Error
+pub sc_observability_dto::LevelFilterDto::Info
+pub sc_observability_dto::LevelFilterDto::Off
+pub sc_observability_dto::LevelFilterDto::Trace
+pub sc_observability_dto::LevelFilterDto::Warn
+impl core::convert::From<sc_observability_dto::LevelFilterDto> for sc_observability_types::level::LevelFilter
+pub fn sc_observability_types::level::LevelFilter::from(sc_observability_dto::LevelFilterDto) -> Self
+impl core::convert::From<sc_observability_types::level::LevelFilter> for sc_observability_dto::LevelFilterDto
+pub fn sc_observability_dto::LevelFilterDto::from(sc_observability_types::level::LevelFilter) -> Self
+pub enum sc_observability_dto::LevelRequestDto
+pub sc_observability_dto::LevelRequestDto::Elevate
+pub sc_observability_dto::LevelRequestDto::Elevate::level: sc_observability_dto::LevelFilterDto
+pub sc_observability_dto::LevelRequestDto::Reset
+pub enum sc_observability_dto::LifecycleDto
+pub sc_observability_dto::LifecycleDto::Failed
+pub sc_observability_dto::LifecycleDto::Running
+pub sc_observability_dto::LifecycleDto::Stopped
+pub sc_observability_dto::LifecycleDto::Stopping
+pub enum sc_observability_dto::LogOperationDto
+pub sc_observability_dto::LogOperationDto::Log
+pub enum sc_observability_dto::LogOrderDto
+pub sc_observability_dto::LogOrderDto::NewestFirst
+pub sc_observability_dto::LogOrderDto::OldestFirst
+pub enum sc_observability_dto::PathDto
+pub sc_observability_dto::PathDto::Absent
+pub sc_observability_dto::PathDto::Unrepresentable
+pub sc_observability_dto::PathDto::Utf8
+pub sc_observability_dto::PathDto::Utf8::value: alloc::string::String
+pub enum sc_observability_dto::QueryStateDto
+pub sc_observability_dto::QueryStateDto::Degraded
+pub sc_observability_dto::QueryStateDto::Healthy
+pub sc_observability_dto::QueryStateDto::Unavailable
+impl core::convert::From<sc_observability_dto::QueryStateDto> for sc_observability_types::health::QueryHealthState
+pub fn sc_observability_types::health::QueryHealthState::from(sc_observability_dto::QueryStateDto) -> Self
+impl core::convert::From<sc_observability_types::health::QueryHealthState> for sc_observability_dto::QueryStateDto
+pub fn sc_observability_dto::QueryStateDto::from(sc_observability_types::health::QueryHealthState) -> Self
+pub enum sc_observability_dto::RemediationDto
+pub sc_observability_dto::RemediationDto::NotRecoverable
+pub sc_observability_dto::RemediationDto::NotRecoverable::justification: alloc::string::String
+pub sc_observability_dto::RemediationDto::Recoverable
+pub sc_observability_dto::RemediationDto::Recoverable::steps: alloc::vec::Vec<alloc::string::String>
+impl core::convert::From<sc_observability_types::diagnostic::Remediation> for sc_observability_dto::RemediationDto
+pub fn sc_observability_dto::RemediationDto::from(sc_observability_types::diagnostic::Remediation) -> Self
+pub enum sc_observability_dto::ResultDto<T>
+pub sc_observability_dto::ResultDto::Error
+pub sc_observability_dto::ResultDto::Error::error: sc_observability_dto::Failure
+pub sc_observability_dto::ResultDto::Ok
+pub sc_observability_dto::ResultDto::Ok::value: T
+pub enum sc_observability_dto::ValueDto
+pub sc_observability_dto::ValueDto::Array
+pub sc_observability_dto::ValueDto::Array::value: alloc::vec::Vec<sc_observability_dto::ValueDto>
+pub sc_observability_dto::ValueDto::Boolean
+pub sc_observability_dto::ValueDto::Boolean::value: bool
+pub sc_observability_dto::ValueDto::Float
+pub sc_observability_dto::ValueDto::Float::value: f64
+pub sc_observability_dto::ValueDto::Integer
+pub sc_observability_dto::ValueDto::Integer::value: sc_observability_dto::DecimalDto
+pub sc_observability_dto::ValueDto::Null
+pub sc_observability_dto::ValueDto::Object
+pub sc_observability_dto::ValueDto::Object::value: alloc::collections::btree::map::BTreeMap<alloc::string::String, sc_observability_dto::ValueDto>
+pub sc_observability_dto::ValueDto::String
+pub sc_observability_dto::ValueDto::String::value: alloc::string::String
+pub enum sc_observability_dto::WireEnvelope<T>
+pub sc_observability_dto::WireEnvelope::Error
+pub sc_observability_dto::WireEnvelope::Error::error: sc_observability_dto::Failure
+pub sc_observability_dto::WireEnvelope::Error::schema_version: u32
+pub sc_observability_dto::WireEnvelope::Ok
+pub sc_observability_dto::WireEnvelope::Ok::schema_version: u32
+pub sc_observability_dto::WireEnvelope::Ok::value: T
+pub enum sc_observability_dto::WorkerStateDto
+pub sc_observability_dto::WorkerStateDto::Degraded
+pub sc_observability_dto::WorkerStateDto::Running
+pub sc_observability_dto::WorkerStateDto::Stopped
+impl core::convert::From<sc_observability_dto::WorkerStateDto> for sc_observability_types::health::MaintenanceWorkerState
+pub fn sc_observability_types::health::MaintenanceWorkerState::from(sc_observability_dto::WorkerStateDto) -> Self
+impl core::convert::From<sc_observability_dto::WorkerStateDto> for sc_observability_types::health::WriterState
+pub fn sc_observability_types::health::WriterState::from(sc_observability_dto::WorkerStateDto) -> Self
+impl core::convert::From<sc_observability_types::health::MaintenanceWorkerState> for sc_observability_dto::WorkerStateDto
+pub fn sc_observability_dto::WorkerStateDto::from(sc_observability_types::health::MaintenanceWorkerState) -> Self
+impl core::convert::From<sc_observability_types::health::WriterState> for sc_observability_dto::WorkerStateDto
+pub fn sc_observability_dto::WorkerStateDto::from(sc_observability_types::health::WriterState) -> Self
+pub struct sc_observability_dto::BridgeHealthDto
+pub sc_observability_dto::BridgeHealthDto::active_log_path: sc_observability_dto::PathDto
+pub sc_observability_dto::BridgeHealthDto::configured_level: sc_observability_dto::LevelFilterDto
+pub sc_observability_dto::BridgeHealthDto::dropped: sc_observability_dto::DropCountsDto
+pub sc_observability_dto::BridgeHealthDto::effective_level: sc_observability_dto::LevelFilterDto
+pub sc_observability_dto::BridgeHealthDto::level_revision: sc_observability_dto::DecimalDto
+pub sc_observability_dto::BridgeHealthDto::lifecycle: sc_observability_dto::LifecycleDto
+pub sc_observability_dto::BridgeHealthDto::logging: sc_observability_dto::LoggingHealthDto
+pub sc_observability_dto::BridgeHealthDto::schema_version: u32
+pub struct sc_observability_dto::ClientStatus
+pub sc_observability_dto::ClientStatus::failures_by_kind: sc_observability_dto::FailureCountsDto
+pub sc_observability_dto::ClientStatus::in_flight: u32
+pub sc_observability_dto::ClientStatus::last_failure: core::option::Option<sc_observability_dto::Failure>
+pub sc_observability_dto::ClientStatus::last_result: sc_observability_dto::ResultDto<sc_observability_dto::ClientOutcome>
+pub struct sc_observability_dto::DecimalDto(_)
+impl sc_observability_dto::DecimalDto
+pub fn sc_observability_dto::DecimalDto::as_str(&self) -> &str
+pub fn sc_observability_dto::DecimalDto::as_u64(&self) -> core::result::Result<u64, alloc::string::String>
+pub fn sc_observability_dto::DecimalDto::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, alloc::string::String>
+impl core::convert::From<i64> for sc_observability_dto::DecimalDto
+pub fn sc_observability_dto::DecimalDto::from(i64) -> Self
+impl core::convert::From<u64> for sc_observability_dto::DecimalDto
+pub fn sc_observability_dto::DecimalDto::from(u64) -> Self
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_dto::DecimalDto
+pub fn sc_observability_dto::DecimalDto::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct sc_observability_dto::Diagnostic
+pub sc_observability_dto::Diagnostic::at: alloc::string::String
+pub sc_observability_dto::Diagnostic::code: alloc::string::String
+pub sc_observability_dto::Diagnostic::message: alloc::string::String
+pub sc_observability_dto::Diagnostic::remediation: sc_observability_dto::RemediationDto
+impl core::convert::From<sc_observability_types::level::OperationDiagnostic> for sc_observability_dto::Diagnostic
+pub fn sc_observability_dto::Diagnostic::from(sc_observability_types::level::OperationDiagnostic) -> Self
+pub struct sc_observability_dto::DiagnosticSummaryDto
+pub sc_observability_dto::DiagnosticSummaryDto::at: alloc::string::String
+pub sc_observability_dto::DiagnosticSummaryDto::code: core::option::Option<alloc::string::String>
+pub sc_observability_dto::DiagnosticSummaryDto::message: alloc::string::String
+impl core::convert::From<sc_observability_types::diagnostic::DiagnosticSummary> for sc_observability_dto::DiagnosticSummaryDto
+pub fn sc_observability_dto::DiagnosticSummaryDto::from(sc_observability_types::diagnostic::DiagnosticSummary) -> Self
+pub struct sc_observability_dto::DropCountsDto
+pub sc_observability_dto::DropCountsDto::invalid_event: sc_observability_dto::DecimalDto
+pub sc_observability_dto::DropCountsDto::logger_panicked: sc_observability_dto::DecimalDto
+pub sc_observability_dto::DropCountsDto::not_installed: sc_observability_dto::DecimalDto
+pub sc_observability_dto::DropCountsDto::queue_full: sc_observability_dto::DecimalDto
+pub sc_observability_dto::DropCountsDto::reentrant_emit: sc_observability_dto::DecimalDto
+pub sc_observability_dto::DropCountsDto::shutdown_timed_out: sc_observability_dto::DecimalDto
+pub sc_observability_dto::DropCountsDto::writer_degraded: sc_observability_dto::DecimalDto
+pub struct sc_observability_dto::EventStamp
+pub sc_observability_dto::EventStamp::identity: sc_observability_types::process::ProcessIdentity
+pub sc_observability_dto::EventStamp::service: sc_observability_types::validation::ServiceName
+pub sc_observability_dto::EventStamp::timestamp: sc_observability_types::primitives::Timestamp
+pub struct sc_observability_dto::FailureCountsDto
+pub sc_observability_dto::FailureCountsDto::below_baseline: sc_observability_dto::DecimalDto
+pub sc_observability_dto::FailureCountsDto::cancelled: sc_observability_dto::DecimalDto
+pub sc_observability_dto::FailureCountsDto::closed: sc_observability_dto::DecimalDto
+pub sc_observability_dto::FailureCountsDto::internal: sc_observability_dto::DecimalDto
+pub sc_observability_dto::FailureCountsDto::io: sc_observability_dto::DecimalDto
+pub sc_observability_dto::FailureCountsDto::permission_denied: sc_observability_dto::DecimalDto
+pub sc_observability_dto::FailureCountsDto::queue_full: sc_observability_dto::DecimalDto
+pub sc_observability_dto::FailureCountsDto::timeout: sc_observability_dto::DecimalDto
+pub sc_observability_dto::FailureCountsDto::unavailable: sc_observability_dto::DecimalDto
+pub sc_observability_dto::FailureCountsDto::unknown_remote: sc_observability_dto::DecimalDto
+pub sc_observability_dto::FailureCountsDto::unsupported_level: sc_observability_dto::DecimalDto
+pub sc_observability_dto::FailureCountsDto::unsupported_version: sc_observability_dto::DecimalDto
+pub sc_observability_dto::FailureCountsDto::validation: sc_observability_dto::DecimalDto
+pub struct sc_observability_dto::FieldMatchDto
+pub sc_observability_dto::FieldMatchDto::field: alloc::string::String
+pub sc_observability_dto::FieldMatchDto::value: sc_observability_dto::ValueDto
+pub struct sc_observability_dto::FlushRequest
+pub sc_observability_dto::FlushRequest::schema_version: u32
+pub sc_observability_dto::FlushRequest::timeout_ms: u32
+pub struct sc_observability_dto::HealthRequest
+pub sc_observability_dto::HealthRequest::schema_version: u32
+pub struct sc_observability_dto::LevelChangeRequest
+pub sc_observability_dto::LevelChangeRequest::change: sc_observability_dto::LevelRequestDto
+pub sc_observability_dto::LevelChangeRequest::schema_version: u32
+pub struct sc_observability_dto::LevelStateDto
+pub sc_observability_dto::LevelStateDto::configured_level: sc_observability_dto::LevelFilterDto
+pub sc_observability_dto::LevelStateDto::effective_level: sc_observability_dto::LevelFilterDto
+pub sc_observability_dto::LevelStateDto::level_revision: sc_observability_dto::DecimalDto
+impl core::convert::From<sc_observability_types::level::LevelState> for sc_observability_dto::LevelStateDto
+pub fn sc_observability_dto::LevelStateDto::from(sc_observability_types::level::LevelState) -> Self
+pub struct sc_observability_dto::LogEventDto
+pub sc_observability_dto::LogEventDto::action: alloc::string::String
+pub sc_observability_dto::LogEventDto::correlation_id: core::option::Option<alloc::string::String>
+pub sc_observability_dto::LogEventDto::fields: alloc::collections::btree::map::BTreeMap<alloc::string::String, sc_observability_dto::ValueDto>
+pub sc_observability_dto::LogEventDto::level: sc_observability_dto::LevelDto
+pub sc_observability_dto::LogEventDto::message: core::option::Option<alloc::string::String>
+pub sc_observability_dto::LogEventDto::outcome: core::option::Option<alloc::string::String>
+pub sc_observability_dto::LogEventDto::request_id: core::option::Option<alloc::string::String>
+pub sc_observability_dto::LogEventDto::schema_version: u32
+pub sc_observability_dto::LogEventDto::target: alloc::string::String
+pub sc_observability_dto::LogEventDto::trace: core::option::Option<sc_observability_dto::TraceContextDto>
+pub struct sc_observability_dto::LogHealthDto
+pub sc_observability_dto::LogHealthDto::bridge: core::option::Option<sc_observability_dto::BridgeHealthDto>
+pub sc_observability_dto::LogHealthDto::level_state: sc_observability_dto::LevelStateDto
+pub sc_observability_dto::LogHealthDto::logging: sc_observability_dto::LoggingHealthDto
+pub sc_observability_dto::LogHealthDto::schema_version: u32
+pub struct sc_observability_dto::LogQueryDto
+pub sc_observability_dto::LogQueryDto::action: core::option::Option<alloc::string::String>
+pub sc_observability_dto::LogQueryDto::correlation_id: core::option::Option<alloc::string::String>
+pub sc_observability_dto::LogQueryDto::field_matches: alloc::vec::Vec<sc_observability_dto::FieldMatchDto>
+pub sc_observability_dto::LogQueryDto::levels: alloc::vec::Vec<sc_observability_dto::LevelDto>
+pub sc_observability_dto::LogQueryDto::limit: usize
+pub sc_observability_dto::LogQueryDto::order: sc_observability_dto::LogOrderDto
+pub sc_observability_dto::LogQueryDto::request_id: core::option::Option<alloc::string::String>
+pub sc_observability_dto::LogQueryDto::schema_version: u32
+pub sc_observability_dto::LogQueryDto::service: core::option::Option<alloc::string::String>
+pub sc_observability_dto::LogQueryDto::since: core::option::Option<alloc::string::String>
+pub sc_observability_dto::LogQueryDto::target: core::option::Option<alloc::string::String>
+pub sc_observability_dto::LogQueryDto::until: core::option::Option<alloc::string::String>
+pub struct sc_observability_dto::LogSnapshotDto
+pub sc_observability_dto::LogSnapshotDto::events: alloc::vec::Vec<sc_observability_dto::StoredEventDto>
+pub sc_observability_dto::LogSnapshotDto::schema_version: u32
+pub sc_observability_dto::LogSnapshotDto::truncated: bool
+pub struct sc_observability_dto::LoggingHealthDto
+pub sc_observability_dto::LoggingHealthDto::active_log_path: sc_observability_dto::PathDto
+pub sc_observability_dto::LoggingHealthDto::dropped_events_total: sc_observability_dto::DecimalDto
+pub sc_observability_dto::LoggingHealthDto::flush_errors_total: sc_observability_dto::DecimalDto
+pub sc_observability_dto::LoggingHealthDto::last_error: core::option::Option<sc_observability_dto::DiagnosticSummaryDto>
+pub sc_observability_dto::LoggingHealthDto::last_writer_error: core::option::Option<sc_observability_dto::DiagnosticSummaryDto>
+pub sc_observability_dto::LoggingHealthDto::maintenance: core::option::Option<sc_observability_dto::MaintenanceHealthDto>
+pub sc_observability_dto::LoggingHealthDto::query: core::option::Option<sc_observability_dto::QueryHealthDto>
+pub sc_observability_dto::LoggingHealthDto::queue_capacity: sc_observability_dto::DecimalDto
+pub sc_observability_dto::LoggingHealthDto::queue_depth: sc_observability_dto::DecimalDto
+pub sc_observability_dto::LoggingHealthDto::queue_full_drops_total: sc_observability_dto::DecimalDto
+pub sc_observability_dto::LoggingHealthDto::queue_high_water_mark: sc_observability_dto::DecimalDto
+pub sc_observability_dto::LoggingHealthDto::sink_statuses: alloc::vec::Vec<sc_observability_dto::SinkHealthDto>
+pub sc_observability_dto::LoggingHealthDto::state: sc_observability_dto::AvailabilityDto
+pub sc_observability_dto::LoggingHealthDto::writer_state: sc_observability_dto::WorkerStateDto
+pub struct sc_observability_dto::MaintenanceHealthDto
+pub sc_observability_dto::MaintenanceHealthDto::last_error: core::option::Option<sc_observability_dto::DiagnosticSummaryDto>
+pub sc_observability_dto::MaintenanceHealthDto::last_pass_at: core::option::Option<alloc::string::String>
+pub sc_observability_dto::MaintenanceHealthDto::pruned_files_total: sc_observability_dto::DecimalDto
+pub sc_observability_dto::MaintenanceHealthDto::rotated_files_total: sc_observability_dto::DecimalDto
+pub sc_observability_dto::MaintenanceHealthDto::state: sc_observability_dto::WorkerStateDto
+pub struct sc_observability_dto::ProcessIdentityDto
+pub sc_observability_dto::ProcessIdentityDto::hostname: core::option::Option<alloc::string::String>
+pub sc_observability_dto::ProcessIdentityDto::pid: core::option::Option<u32>
+pub struct sc_observability_dto::QueryHealthDto
+pub sc_observability_dto::QueryHealthDto::last_error: core::option::Option<sc_observability_dto::DiagnosticSummaryDto>
+pub sc_observability_dto::QueryHealthDto::state: sc_observability_dto::QueryStateDto
+pub struct sc_observability_dto::QueryRequest
+pub sc_observability_dto::QueryRequest::query: sc_observability_dto::LogQueryDto
+pub sc_observability_dto::QueryRequest::schema_version: u32
+pub struct sc_observability_dto::SinkHealthDto
+pub sc_observability_dto::SinkHealthDto::last_error: core::option::Option<sc_observability_dto::DiagnosticSummaryDto>
+pub sc_observability_dto::SinkHealthDto::name: alloc::string::String
+pub sc_observability_dto::SinkHealthDto::state: sc_observability_dto::AvailabilityDto
+pub struct sc_observability_dto::StateTransitionDto
+pub sc_observability_dto::StateTransitionDto::entity_id: core::option::Option<alloc::string::String>
+pub sc_observability_dto::StateTransitionDto::entity_kind: alloc::string::String
+pub sc_observability_dto::StateTransitionDto::from_state: alloc::string::String
+pub sc_observability_dto::StateTransitionDto::reason: core::option::Option<alloc::string::String>
+pub sc_observability_dto::StateTransitionDto::to_state: alloc::string::String
+pub sc_observability_dto::StateTransitionDto::trigger: core::option::Option<alloc::string::String>
+pub struct sc_observability_dto::StoredDiagnosticDto
+pub sc_observability_dto::StoredDiagnosticDto::cause: core::option::Option<alloc::string::String>
+pub sc_observability_dto::StoredDiagnosticDto::code: alloc::string::String
+pub sc_observability_dto::StoredDiagnosticDto::details: alloc::collections::btree::map::BTreeMap<alloc::string::String, sc_observability_dto::ValueDto>
+pub sc_observability_dto::StoredDiagnosticDto::docs: core::option::Option<alloc::string::String>
+pub sc_observability_dto::StoredDiagnosticDto::message: alloc::string::String
+pub sc_observability_dto::StoredDiagnosticDto::remediation: sc_observability_dto::RemediationDto
+pub sc_observability_dto::StoredDiagnosticDto::timestamp: alloc::string::String
+pub struct sc_observability_dto::StoredEventDto
+pub sc_observability_dto::StoredEventDto::action: alloc::string::String
+pub sc_observability_dto::StoredEventDto::correlation_id: core::option::Option<alloc::string::String>
+pub sc_observability_dto::StoredEventDto::diagnostic: core::option::Option<sc_observability_dto::StoredDiagnosticDto>
+pub sc_observability_dto::StoredEventDto::fields: alloc::collections::btree::map::BTreeMap<alloc::string::String, sc_observability_dto::ValueDto>
+pub sc_observability_dto::StoredEventDto::identity: sc_observability_dto::ProcessIdentityDto
+pub sc_observability_dto::StoredEventDto::level: sc_observability_dto::LevelDto
+pub sc_observability_dto::StoredEventDto::message: core::option::Option<alloc::string::String>
+pub sc_observability_dto::StoredEventDto::outcome: core::option::Option<alloc::string::String>
+pub sc_observability_dto::StoredEventDto::request_id: core::option::Option<alloc::string::String>
+pub sc_observability_dto::StoredEventDto::service: alloc::string::String
+pub sc_observability_dto::StoredEventDto::state_transition: core::option::Option<sc_observability_dto::StateTransitionDto>
+pub sc_observability_dto::StoredEventDto::target: alloc::string::String
+pub sc_observability_dto::StoredEventDto::timestamp: alloc::string::String
+pub sc_observability_dto::StoredEventDto::trace: core::option::Option<sc_observability_dto::TraceContextDto>
+pub sc_observability_dto::StoredEventDto::version: alloc::string::String
+pub struct sc_observability_dto::TraceContextDto
+pub sc_observability_dto::TraceContextDto::parent_span_id: core::option::Option<alloc::string::String>
+pub sc_observability_dto::TraceContextDto::span_id: alloc::string::String
+pub sc_observability_dto::TraceContextDto::trace_id: alloc::string::String
+impl core::convert::From<sc_observability_types::tracing::TraceContext> for sc_observability_dto::TraceContextDto
+pub fn sc_observability_dto::TraceContextDto::from(sc_observability_types::tracing::TraceContext) -> Self
+pub struct sc_observability_dto::TryLogRequest
+pub sc_observability_dto::TryLogRequest::event: sc_observability_dto::LogEventDto
+pub sc_observability_dto::TryLogRequest::schema_version: u32
+pub fn sc_observability_dto::boundary_diagnostic(&str, impl core::convert::Into<alloc::string::String>) -> sc_observability_dto::Diagnostic
+pub fn sc_observability_dto::decode_envelope<T: serde_core::de::DeserializeOwned>(serde_json::value::Value) -> core::result::Result<sc_observability_dto::WireEnvelope<T>, sc_observability_dto::Failure>
+pub fn sc_observability_dto::decode_event(serde_json::value::Value) -> core::result::Result<sc_observability_dto::LogEventDto, sc_observability_dto::Failure>
+pub fn sc_observability_dto::decode_level_request(serde_json::value::Value) -> core::result::Result<sc_observability_dto::LevelRequestDto, sc_observability_dto::Failure>
+pub fn sc_observability_dto::decode_query(serde_json::value::Value) -> core::result::Result<sc_observability_dto::LogQueryDto, sc_observability_dto::Failure>
+pub fn sc_observability_dto::decode_timeout(serde_json::value::Value) -> core::result::Result<u32, sc_observability_dto::Failure>
+pub fn sc_observability_dto::from_core_event(sc_observability_types::events::LogEvent) -> core::result::Result<sc_observability_dto::StoredEventDto, sc_observability_dto::Failure>
+pub fn sc_observability_dto::from_core_health(sc_observability_types::health::LoggingHealthReport, sc_observability_types::level::LevelState) -> core::result::Result<sc_observability_dto::LogHealthDto, sc_observability_dto::Failure>
+pub fn sc_observability_dto::from_core_snapshot(sc_observability_types::query::LogSnapshot) -> core::result::Result<sc_observability_dto::LogSnapshotDto, sc_observability_dto::Failure>
+pub fn sc_observability_dto::from_json_value(serde_json::value::Value) -> core::result::Result<sc_observability_dto::ValueDto, sc_observability_dto::Failure>
+pub fn sc_observability_dto::from_level_change(sc_observability_types::level::LevelChange) -> core::result::Result<sc_observability_dto::LevelChangeDto, sc_observability_dto::Failure>
+pub fn sc_observability_dto::from_level_error(sc_observability_types::level::LevelChangeError) -> sc_observability_dto::Failure
+pub fn sc_observability_dto::from_logging_health(sc_observability_types::health::LoggingHealthReport) -> sc_observability_dto::LoggingHealthDto
+pub fn sc_observability_dto::from_path(core::option::Option<&std::path::Path>) -> sc_observability_dto::PathDto
+pub fn sc_observability_dto::invalid_input(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> sc_observability_dto::Failure
+pub fn sc_observability_dto::to_core_event(sc_observability_dto::LogEventDto, sc_observability_dto::EventStamp) -> core::result::Result<sc_observability_types::events::LogEvent, sc_observability_dto::Failure>
+pub fn sc_observability_dto::to_core_query(sc_observability_dto::LogQueryDto) -> core::result::Result<sc_observability_types::query::LogQuery, sc_observability_dto::Failure>
+pub fn sc_observability_dto::to_path(&str, &std::path::Path) -> core::result::Result<std::path::PathBuf, sc_observability_dto::Failure>
+pub fn sc_observability_dto::validate_diagnostic(&sc_observability_dto::Diagnostic, &str) -> core::result::Result<(), sc_observability_dto::Failure>
+pub type sc_observability_dto::OperationDiagnosticDto = sc_observability_dto::Diagnostic

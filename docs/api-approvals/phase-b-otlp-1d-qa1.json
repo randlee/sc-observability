@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "candidate_version": "1.4.0",
+  "source_commit": "bc3cfc3cf385c215138f3d4749233a402ddb75f0",
+  "approved_at": "2026-09-17T09:54:15.457019+00:00",
+  "crates": {
+    "sc-observability-otlp": {
+      "status": "approved",
+      "reviewer": "aobs (appointed Phase B lead)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "docs/plans/phase-b/evidence/b1d-api/sc-observability-otlp-diff.txt",
+      "api_sha256": "6e5c24d161970871bf82662297c8e1fe6b7a7a360a25983eb422940c6fd0fdcd"
+    }
+  },
+  "approval_scope": "Reviewed exact exported API and source delta: manual AuthHeader Debug preserves existing trait availability while redacting credential output. Other additions match the already approved typed API. Public surface only; behavior findings, consolidated QA, owner runtime-contract acceptance and B.7 publication are separate."
+}

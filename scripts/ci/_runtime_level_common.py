@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 QUALIFICATION = ROOT / "release" / "runtime-level-qualification.toml"
-PUBLISH_ARTIFACTS = ROOT / "release" / "publish-artifacts.toml"
+PUBLISH_ARTIFACTS = ROOT / "release" / "bp2-publish-artifacts.toml"
 # B.1 companion crates copied alongside the staged/published core: none of them
 # is a publish-artifacts.toml roster member, so they are workspace members
 # that the staged-order check below must tolerate without being treated as

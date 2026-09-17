@@ -54,8 +54,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function safeFailure(error: unknown, context: string): Failure {
   try {
     if (isFailure(error)) return error;
-    const message = error instanceof Error ? error.message : "foreign operation failed";
-    return internal(`${context}: ${message}`);
+    return internal(`${context}: ${error instanceof Error ? error.message : "foreign operation failed"}`);
   } catch {
     return internal(`${context}: foreign operation failed`);
   }
