@@ -3,6 +3,7 @@ import {
   createTauriTransport,
   encodeEvent,
   encodeValue,
+  parseWireEnvelope,
   SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE,
   SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION,
   type JsonTransport,
@@ -219,6 +220,28 @@ async function main(): Promise<void> {
       result.error.code === SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE,
     "oversized remote diagnostic was silently truncated");
   }
+
+  const throwingLevelResponse = {} as { kind: unknown };
+  Object.defineProperty(throwingLevelResponse, "kind", { enumerable: true, get: () => { throw new Error("kind getter"); } });
+  const containedLevelResponse = parseWireEnvelope(throwingLevelResponse, "OutputWireEnvelopeLevelChangeDto");
+  assert(containedLevelResponse.kind === "error" && containedLevelResponse.error.kind === "internal", "throwing level response escaped shared conversion");
+  const revokedLevelResponse = Proxy.revocable({}, {});
+  revokedLevelResponse.revoke();
+  assert(parseWireEnvelope(revokedLevelResponse.proxy, "OutputWireEnvelopeLevelChangeDto").kind === "error", "revoked level response escaped shared conversion");
+  const oversizedKnownLevelResponse = parseWireEnvelope({
+    schema_version: 1,
+    kind: "error",
+    error: {
+      kind: "closed",
+      at: new Date().toISOString(),
+      code: "SC_OBSERVABILITY_BINDING_CLOSED",
+      message: "x".repeat(5000),
+      remediation: { kind: "recoverable", steps: [] },
+    },
+  }, "OutputWireEnvelopeLevelChangeDto");
+  assert(oversizedKnownLevelResponse.kind === "error" &&
+    oversizedKnownLevelResponse.error.code === SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE,
+  "oversized known level response was accepted");
 
   console.log("TypeScript binding conversion/client smoke tests passed");
 }
