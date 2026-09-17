@@ -1,7 +1,7 @@
 # B.3a TypeScript/Tauri handoff
 
 Status: in progress on `fix/phase-b-3a-completeness`; parent merge-forwarded
-from `origin/feature/phase-b-4a-python-packaging` at `e4ad165` (including
+from `origin/feature/phase-b-4a-python-packaging` at `c403bcf` (including
 the latest B.4a merge-forward).
 
 The child consumes the B.3 canonical schema and the B.3b native
