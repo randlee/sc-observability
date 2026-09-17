@@ -5,6 +5,11 @@ Every fixture here is synthetic (temporary Git repositories with honest,
 made-up review records) -- this task builds and proves the tool ahead of
 B.1's real copy, and never fabricates a production import-provenance.json
 or handoff-b-p3.md.
+
+Two separate synthetic repositories model the two real-world owners: the
+review document is BTIT's own acceptance record and lives in `source_repo`;
+the target-contract commit and the handoff revision are sc-observability's
+own documents and live in `doc_repo`.
 """
 
 from __future__ import annotations
@@ -32,7 +37,7 @@ def blob_id(content: str, repo: Path) -> str:
 
 
 class ImportContractFixture:
-    """Builds a matched (source-repo, doc-repo, destination, provenance, handoff) fixture set."""
+    """Builds a matched (source-repo/BTIT, doc-repo/sc-observability, destination) fixture set."""
 
     FILES = {
         "crates/sc-observability-log/Cargo.toml": '[package]\nname = "sc-observability-log"\n',
@@ -42,17 +47,22 @@ class ImportContractFixture:
         "crates/sc-observability-log-consumer-check/src/main.rs": "fn main() {}\n",
     }
 
+    review_path = "docs/reviews/btit-critical-review.md"
+    handoff_path = "docs/plans/phase-b/handoff-b-p3.md"
+
     def __init__(self, root: Path) -> None:
         self.root = root
-        self.source_repo = root / "source-repo"
+        self.source_repo = root / "source-repo"  # BTIT
         self.destination = root / "destination"
-        self.doc_repo = root / "doc-repo"
+        self.doc_repo = root / "doc-repo"  # sc-observability
         self.source_repo.mkdir()
         self.destination.mkdir()
         self.doc_repo.mkdir()
         self._init_source_repo()
         self._write_destination(self.FILES)
+        self.write_review(self.source_commit, "accepted")
         self._init_doc_repo()
+        self.handoff_revision = self.commit_handoff(self.handoff_text())
 
     def _init_git_repo(self, repo: Path) -> None:
         run("git", "init", "--quiet", cwd=repo)
@@ -76,6 +86,17 @@ class ImportContractFixture:
         run("git", "add", "-A", cwd=self.source_repo)
         run("git", "commit", "--quiet", "-m", "later unrelated change", cwd=self.source_repo)
 
+    def write_review(self, reviewed_commit: str, verdict: str) -> str:
+        """Commit a review document (BTIT's own record) citing `reviewed_commit`/`verdict`."""
+        review = self.source_repo / self.review_path
+        review.parent.mkdir(parents=True, exist_ok=True)
+        review.write_text(f"BTIT source review\n\nReviewed commit: {reviewed_commit}\nVerdict: {verdict}\n")
+        run("git", "add", "-A", cwd=self.source_repo)
+        run("git", "commit", "--quiet", "--allow-empty", "-m", "review document", cwd=self.source_repo)
+        commit = run("git", "rev-parse", "HEAD", cwd=self.source_repo)
+        self.review_commit = commit
+        return commit
+
     def _init_doc_repo(self) -> None:
         self._init_git_repo(self.doc_repo)
         contract = self.doc_repo / "docs/plans/phase-b/runtime-level-contract.md"
@@ -84,19 +105,16 @@ class ImportContractFixture:
         run("git", "add", "-A", cwd=self.doc_repo)
         run("git", "commit", "--quiet", "-m", "target contract accepted", cwd=self.doc_repo)
         self.target_commit = run("git", "rev-parse", "HEAD", cwd=self.doc_repo)
-        self.review_path = "docs/reviews/btit-critical-review.md"
-        self.write_review(self.source_commit, "accepted")
 
-    def write_review(self, reviewed_commit: str, verdict: str) -> str:
-        """Commit a review document citing `reviewed_commit`/`verdict`; returns its commit SHA."""
-        review = self.doc_repo / self.review_path
-        review.parent.mkdir(parents=True, exist_ok=True)
-        review.write_text(f"BTIT source review\n\nReviewed commit: {reviewed_commit}\nVerdict: {verdict}\n")
+    def commit_handoff(self, text: str) -> str:
+        """Commit `text` as the handoff document (sc-observability's own record); returns 'path@sha'."""
+        handoff_file = self.doc_repo / self.handoff_path
+        handoff_file.parent.mkdir(parents=True, exist_ok=True)
+        handoff_file.write_text(text)
         run("git", "add", "-A", cwd=self.doc_repo)
-        run("git", "commit", "--quiet", "--allow-empty", "-m", "review document", cwd=self.doc_repo)
+        run("git", "commit", "--quiet", "--allow-empty", "-m", "handoff revision", cwd=self.doc_repo)
         commit = run("git", "rev-parse", "HEAD", cwd=self.doc_repo)
-        self.review_commit = commit
-        return commit
+        return f"{self.handoff_path}@{commit}"
 
     def _write_destination(self, files: dict[str, str]) -> None:
         for path, content in files.items():
@@ -123,12 +141,12 @@ class ImportContractFixture:
     def provenance(self, *, source_commit: str | None = None, inventory: dict[str, str] | None = None,
                     adaptations: list[dict[str, str]] | None = None, review_path: str | None = None,
                     review_commit: str | None = None, target_contract_commit: str | None = None,
-                    review_verdict: str = "accepted") -> dict:
+                    review_verdict: str = "accepted", handoff_revision: str | None = None) -> dict:
         return {
             "repository_url": "https://example.invalid/beads-task-issue-tracker.git",
             "source_commit": source_commit if source_commit is not None else self.source_commit,
             "target_contract_commit": target_contract_commit if target_contract_commit is not None else self.target_commit,
-            "handoff_revision": "handoff-b-p3.md@synthetic",
+            "handoff_revision": handoff_revision if handoff_revision is not None else self.handoff_revision,
             "review_document": {
                 "path": review_path if review_path is not None else self.review_path,
                 "commit": review_commit if review_commit is not None else self.review_commit,
@@ -274,6 +292,18 @@ class ValidateLogImportTests(unittest.TestCase):
                 validate_import(fixture.provenance(), fixture.source_repo, fixture.destination,
                                  fixture.handoff_text(), doc_repo=fixture.doc_repo)
 
+    def test_rejects_symlinked_directory_in_destination_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            outside = fixture.root / "outside-dir"
+            outside.mkdir()
+            (outside / "sneaky.rs").write_text("pub fn sneaky() {}\n")
+            link_dir = fixture.destination / "crates/sc-observability-log/src/extra_dir"
+            link_dir.symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(SystemExit, "symlink not permitted"):
+                validate_import(fixture.provenance(), fixture.source_repo, fixture.destination,
+                                 fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
     def test_rejects_escaping_path_in_inventory(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             fixture = ImportContractFixture(Path(temp))
@@ -296,11 +326,11 @@ class ValidateLogImportTests(unittest.TestCase):
                     fixture.handoff_text(), doc_repo=fixture.doc_repo,
                 )
 
-    def test_rejects_fake_review_commit_not_in_doc_repo(self) -> None:
+    def test_rejects_fake_review_commit_not_in_source_repo(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             fixture = ImportContractFixture(Path(temp))
             fake_commit = "1" * 40
-            with self.assertRaisesRegex(SystemExit, "review document commit not found"):
+            with self.assertRaisesRegex(SystemExit, "review document commit not found in source repository"):
                 validate_import(
                     fixture.provenance(review_commit=fake_commit), fixture.source_repo, fixture.destination,
                     fixture.handoff_text(review_commit=fake_commit), doc_repo=fixture.doc_repo,
@@ -316,13 +346,25 @@ class ValidateLogImportTests(unittest.TestCase):
                     fixture.handoff_text(review_commit=wrong_commit), doc_repo=fixture.doc_repo,
                 )
 
-    def test_rejects_review_citation_verdict_mismatch(self) -> None:
+    def test_rejects_review_verdict_mismatch_against_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            differently_worded_commit = fixture.write_review(fixture.source_commit, "conditionally-accepted")
+            with self.assertRaisesRegex(SystemExit, "verdict does not match"):
+                validate_import(
+                    fixture.provenance(review_commit=differently_worded_commit, review_verdict="accepted"),
+                    fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(review_commit=differently_worded_commit), doc_repo=fixture.doc_repo,
+                )
+
+    def test_rejects_matching_rejected_review_and_provenance(self) -> None:
+        """A self-consistent rejected verdict must still fail: acceptance is required, not internal agreement."""
         with tempfile.TemporaryDirectory() as temp:
             fixture = ImportContractFixture(Path(temp))
             rejected_commit = fixture.write_review(fixture.source_commit, "rejected")
-            with self.assertRaisesRegex(SystemExit, "verdict does not match"):
+            with self.assertRaisesRegex(SystemExit, "review_verdict must be accepted"):
                 validate_import(
-                    fixture.provenance(review_commit=rejected_commit, review_verdict="accepted"),
+                    fixture.provenance(review_commit=rejected_commit, review_verdict="rejected"),
                     fixture.source_repo, fixture.destination,
                     fixture.handoff_text(review_commit=rejected_commit), doc_repo=fixture.doc_repo,
                 )
@@ -341,9 +383,39 @@ class ValidateLogImportTests(unittest.TestCase):
     def test_rejects_target_contract_commit_not_found(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             fixture = ImportContractFixture(Path(temp))
-            with self.assertRaisesRegex(SystemExit, "target contract commit not found"):
+            with self.assertRaisesRegex(SystemExit, "target contract commit not found in doc repository"):
                 validate_import(
                     fixture.provenance(target_contract_commit="7" * 40), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                )
+
+    def test_rejects_fake_handoff_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            with self.assertRaisesRegex(SystemExit, "handoff_revision must be"):
+                validate_import(
+                    fixture.provenance(handoff_revision="docs/plans/phase-b/handoff-b-p3.md@synthetic"),
+                    fixture.source_repo, fixture.destination, fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                )
+
+    def test_rejects_handoff_revision_commit_not_in_doc_repo(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            fake_revision = f"{fixture.handoff_path}@{'8' * 40}"
+            with self.assertRaisesRegex(SystemExit, "handoff_revision commit not found in doc repository"):
+                validate_import(
+                    fixture.provenance(handoff_revision=fake_revision), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                )
+
+    def test_rejects_handoff_revision_content_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            different_valid_text = fixture.handoff_text() + "\n"
+            stale_revision = fixture.commit_handoff(different_valid_text)
+            with self.assertRaisesRegex(SystemExit, "does not match the provided --handoff"):
+                validate_import(
+                    fixture.provenance(handoff_revision=stale_revision), fixture.source_repo, fixture.destination,
                     fixture.handoff_text(), doc_repo=fixture.doc_repo,
                 )
 
@@ -388,6 +460,36 @@ class ValidateLogImportTests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "'before' content .* does not match the recorded source blob"):
                 validate_import(provenance, fixture.source_repo, fixture.destination,
                                  fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_rejects_arbitrary_runtime_change_labeled_dependency_path(self) -> None:
+        """A kind label alone must not launder an arbitrary content change."""
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/src/lib.rs"
+            before = fixture.FILES[path]
+            after = "pub fn totally_different_runtime_behavior() {}\n"
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "relocate dependency", "kind": "dependency_path",
+                "before": before, "after": after,
+            }])
+            with self.assertRaisesRegex(SystemExit, "not a permitted dependency_path mechanical change"):
+                validate_import(provenance, fixture.source_repo, fixture.destination,
+                                 fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_accepts_declared_dependency_path_relocation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log-macros/Cargo.toml"
+            before = fixture.FILES[path]
+            after = before.rstrip("\n") + '\n\n[dependencies]\nsc-observability-log = { path = "../sc-observability-log" }\n'
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "point at the staged sibling crate", "kind": "dependency_path",
+                "before": before, "after": after,
+            }])
+            validate_import(provenance, fixture.source_repo, fixture.destination,
+                             fixture.handoff_text(), doc_repo=fixture.doc_repo)
 
 
 if __name__ == "__main__":
