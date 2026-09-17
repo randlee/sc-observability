@@ -20,6 +20,7 @@ import tomllib
 from pathlib import Path
 
 from _python_sandbox import Sandbox, registered_checkouts
+from _tauri_webview import execute as execute_webview
 from build_binding_source_bundle import build, digest, verify_bundle, registry_identities
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -53,21 +54,29 @@ def stage_host(destination, bundle, report):
     # Inner crate attributes must remain at the beginning of the file.
     instrumented = original.replace('#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]',
                                     '#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]\nmod qualification;', 1)
+    instrumented = replace_once(instrumented, '    let config = sc_observability::LoggerConfig::default_for(service, PathBuf::from("logs"));',
+        '    let mut config = sc_observability::LoggerConfig::default_for(service, PathBuf::from("logs"));\n    qualification::configure(&mut config);')
     instrumented = replace_once(instrumented, '    let policy = AdapterPolicy {',
         '    if let Err(error) = qualification::seed(&backend) {\n        eprintln!("{error}");\n        std::process::exit(1);\n    }\n    let policy = AdapterPolicy {')
+    instrumented = replace_once(instrumented, '    let policy = AdapterPolicy {',
+        '    let backend: Arc<dyn sc_observability_binding_runtime::HostLoggingBackend> = Arc::new(backend);\n    let policy = AdapterPolicy {')
+    instrumented = replace_once(instrumented, 'plugin::<tauri::Wry>(Arc::new(backend), policy)',
+        'plugin::<tauri::Wry>(Arc::clone(&backend), policy)')
+    instrumented = replace_once(instrumented, 'let result = tauri::Builder::default()',
+        'let result = tauri::Builder::default().manage(qualification::Backend(Arc::clone(&backend)))')
     instrumented = replace_once(instrumented,
         '.invoke_handler(tauri::generate_handler![app_observability_level_change])',
-        '.invoke_handler(tauri::generate_handler![app_observability_level_change, qualification::qualification_report, qualification::qualification_owner_gate])\n        .setup(qualification::setup)')
+        '.invoke_handler(tauri::generate_handler![app_observability_level_change, qualification::qualification_report, qualification::qualification_owner_gate, qualification::qualification_output_gate, qualification::qualification_host_flush])\n        .setup(qualification::setup)')
     (destination / 'src/main.rs').write_text(instrumented)
     build_script = (destination / 'build.rs').read_text()
     build_script = replace_once(build_script, '.commands(&["app_observability_level_change"])',
-        '.commands(&["app_observability_level_change", "qualification_report", "qualification_owner_gate"])')
+        '.commands(&["app_observability_level_change", "qualification_report", "qualification_owner_gate", "qualification_output_gate", "qualification_host_flush"])')
     (destination / 'build.rs').write_text(build_script)
     capabilities = destination / 'capabilities'
     capabilities.mkdir(exist_ok=True)
     (capabilities / 'qualification-observation.json').write_text(json.dumps({
         'identifier': 'qualification-observation', 'windows': ['main', 'forbidden'],
-        'permissions': ['allow-qualification-report', 'allow-qualification-owner-gate'],
+        'permissions': ['allow-qualification-report', 'allow-qualification-owner-gate', 'allow-qualification-output-gate', 'allow-qualification-host-flush'],
     }, indent=2))
     shutil.copyfile(FIXTURE / 'qualification.rs', destination / 'src/qualification.rs')
     report['host_source_sha256'] = digest(source / 'src/main.rs')
@@ -185,9 +194,11 @@ def main():
                     sandbox.run([sandbox.cargo, 'build', '--locked', '--offline'], host)
                     executable = Path(sandbox.env['CARGO_TARGET_DIR']) / 'debug' / ('tauri-logging-example.exe' if os.name == 'nt' else 'tauri-logging-example')
                     report['executable_sha256'] = digest(executable)
-                    sandbox.run([str(executable)], host)
+                    report['output_gate_transitions'] = execute_webview(sandbox, executable, host, external, external)
             finally:
                 report['commands'].extend(sandbox.commands)
+                for runtime_log in external.glob('webview-*.log'):
+                    shutil.copyfile(runtime_log, output / runtime_log.name)
                 if raw_report.exists():
                     shutil.copyfile(raw_report, output / 'ipc.json')
                 if (host / 'logs').exists():

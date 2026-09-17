@@ -22,6 +22,7 @@ pub fn seed(backend: &dyn HostLoggingBackend) -> Result<(), String> {
 pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(Reports::default());
     app.manage(OwnerHold::default());
+    app.manage(HostFlush::default());
     tauri::WebviewWindowBuilder::new(
         app, "forbidden", tauri::WebviewUrl::App("index.html?forbidden=1".into()),
     ).title("Unauthorized qualification caller").build()?;
@@ -92,4 +93,57 @@ pub fn qualification_owner_gate(
     }
     *slot = Some((release_tx, done_rx));
     Ok(())
+}
+
+/// Enable an additional real console sink for the held-pipe fault scenario.
+/// All existing root/level/redaction/queue policy remains host-owned and intact.
+pub fn configure(config: &mut sc_observability::LoggerConfig) {
+    config.enable_console_sink = true;
+}
+
+#[tauri::command]
+pub async fn qualification_output_gate(paused: bool, token: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::time::{Duration, Instant};
+        let base = std::env::var("SC_TAURI_QUALIFICATION_CONTROL")
+            .map_err(|_| "host did not configure output controller")?;
+        std::fs::write(format!("{base}.request"), serde_json::to_vec(&json!({"paused": paused, "token": token})).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if let Ok(text) = std::fs::read_to_string(format!("{base}.ack")) {
+                if let Ok(value) = serde_json::from_str::<Value>(&text) {
+                    if value.get("token").and_then(Value::as_str) == Some(token.as_str()) { return Ok(()); }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        Err("output controller did not acknowledge".into())
+    }).await.map_err(|e| e.to_string())?
+}
+
+pub struct Backend(pub std::sync::Arc<dyn HostLoggingBackend>);
+#[derive(Default)]
+pub struct HostFlush(Mutex<Option<sc_observability_binding_runtime::Operation<sc_observability_dto::CompletionDto>>>);
+
+/// Reserve an actual host flush before frontend query/flush overlap probes.
+/// This calls the supplied backend unchanged with the public maximum timeout.
+#[tauri::command]
+pub fn qualification_host_flush(
+    start: bool,
+    backend: tauri::State<'_, Backend>,
+    state: tauri::State<'_, HostFlush>,
+) -> Result<Value, String> {
+    let mut slot = state.0.lock().map_err(|_| "host flush observation poisoned")?;
+    if start {
+        if slot.is_some() { return Err("host flush already reserved".into()); }
+        *slot = Some(backend.0.start_flush(std::time::Duration::from_secs(60))
+            .map_err(|error| format!("host flush start failed: {error:?}"))?);
+    }
+    let operation = slot.as_ref().ok_or("host flush has not started")?;
+    Ok(match operation.state() {
+        sc_observability_binding_runtime::OperationState::Pending => json!({"pending": true}),
+        sc_observability_binding_runtime::OperationState::Completed { result } =>
+            json!({"pending": false, "completed": result.is_ok(), "result": format!("{result:?}")}),
+    })
 }

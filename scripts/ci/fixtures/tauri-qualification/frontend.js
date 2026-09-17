@@ -101,8 +101,59 @@ async function run() {
   failure('cyclic-value', encodeValue(cyclic), 'validation');
   failure('getter-value', encodeValue({ get value() { throw new Error('foreign getter'); } }), 'validation');
   for (const input of [NaN, Infinity, 9007199254740992, 18446744073709551616n, -9223372036854775809n]) failure(`invalid-number-${input}`, encodeValue(input), 'validation');
+  const gate = (paused, token) => invoke('qualification_output_gate', { paused, token });
+  await gate(true, 'queue-full');
+  try {
+    const capacity = Number(value('blocked-io-initial-health', await client.health()).logging.queue_capacity);
+    check('finite-native-queue', capacity > 0 && capacity <= 65536, capacity);
+    let admitted = 0;
+    let full;
+    for (; admitted < capacity + 256; admitted++) {
+      const result = await client.tryLog({ ...event, action: 'blocked-output', message: 'x'.repeat(8192), fields: {} });
+      if (result.kind === 'error') { full = result; break; }
+      if (result.value.kind !== 'accepted') throw new Error('blocked I/O event unexpectedly filtered');
+    }
+    failure('actual-native-queue-full', full, 'queue_full');
+    check('queue-admission-bounded', admitted <= capacity + 256, { admitted, capacity });
+    const changed = value('level-change-with-full-diagnostics', await level({ kind: 'elevate', level: 'debug' }));
+    check('full-diagnostic-preserves-change', changed.kind === 'changed' && changed.diagnostic.kind === 'not_accepted', changed);
+    const started = await invoke('qualification_host_flush', { start: true });
+    check('native-flush-pending', started.pending === true, started);
+    failure('actual-flush-slot-full', await client.flush(2000), 'queue_full');
+    let heartbeat = 0;
+    const timer = setInterval(() => heartbeat++, 10);
+    const queries = Promise.all([client.query({ schema_version: 1 }), client.query({ schema_version: 1 })]);
+    const responsive = await Promise.race([client.health(), new Promise((resolve) => setTimeout(() => resolve({ kind: 'unresponsive' }), 1000))]);
+    value('host-responsive-during-blocked-io', responsive);
+    const queryResults = await queries;
+    clearInterval(timer);
+    check('query-timeout-and-overlap', queryResults.every((result) => result.kind === 'error') && queryResults.map((result) => result.error.kind).sort().join(',') === 'queue_full,timeout', queryResults);
+    check('frontend-heartbeat-during-blocked-io', heartbeat > 0, heartbeat);
+    failure('query-slot-retained-after-timeout', await client.query({ schema_version: 1 }), 'queue_full');
+  } finally { await gate(false, 'release-queue-full'); }
+  const releaseDeadline = performance.now() + 5000;
+  let completed;
+  do {
+    completed = await invoke('qualification_host_flush', { start: false });
+    if (completed.pending) await new Promise((resolve) => setTimeout(resolve, 10));
+  } while (completed.pending && performance.now() < releaseDeadline);
+  check('native-flush-late-completion', completed.completed === true, completed);
+  value('post-stall-flush', await client.flush(2000));
+  value('reset-after-full-diagnostic', await level({ kind: 'reset' }));
+  await gate(true, 'timeout');
+  try {
+    for (let count = 0; count < 128; count++) {
+      const result = await client.tryLog({ ...event, action: 'timeout-output', message: 'x'.repeat(8192), fields: {} });
+      if (result.kind !== 'ok' || result.value.kind !== 'accepted') throw new Error('timeout setup admission failed');
+    }
+    failure('actual-flush-zero-timeout', await client.flush(0), 'timeout');
+    const overlap = await client.flush(2000);
+    failure('actual-flush-after-timeout-overlap', overlap, 'queue_full');
+    check('native-or-adapter-flush-overlap-code', ['SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS', 'SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS'].includes(overlap.error.code), overlap);
+    value('health-after-flush-timeout', await client.health());
+  } finally { await gate(false, 'release-timeout'); }
   await tick();
-  check('no-hidden-rejection', uncaught.length === 0, uncaught);
+  check('no-hidden-rejection' , uncaught.length === 0, uncaught);
 }
 
 run().then(() => invoke('qualification_report', { report: { passed: true, records, uncaught } }))
