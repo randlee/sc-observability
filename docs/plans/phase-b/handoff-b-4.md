@@ -1,6 +1,6 @@
 ---
 id: B.4-python-handoff
-status: in_progress
+status: complete
 branch: feature/phase-b-4-python
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4-python
 parent: feature/phase-b-3a-typescript
@@ -14,7 +14,8 @@ owned loggers, and non-owning Rust-host attachments. Owned lifecycle and level
 authority stay with `CoreLoggerOwner`; attached handles retain only a shared
 `HostLoggingBackend` Arc and cannot stop or mutate the host.
 
-Current source evidence is `93d90fdf3c56b030bc97d2ad8d2ff7b0bebf1627`.
+Tested runtime implementation evidence is
+`47d48b17759c60eb18936196b53d14930e02c086`.
 It carries frozen B.3, B.3b and telemetry/copy ancestors while retaining the
 direct TypeScript parent. The facade contains no authored validation `raise`:
 malformed Python values, hostile mappings/accessors, foreign native exceptions,
@@ -25,7 +26,7 @@ malformed native payloads and contained native panics return tagged failures.
 `bash scripts/ci/validate_python_bindings.sh` passes with CPython 3.10.21:
 the generated/stub checks and strict Result narrowing fixture pass; ten
 facade adversarial tests pass; a locked feature-gated source-validation wheel
-is built and installed into a clean environment for nine owned and attached
+is built and installed into a clean environment for eleven owned and attached
 lifecycle/isolation/synchronized-N=32,
 level-transition, zero-deadline retained-shutdown and lifecycle-race tests;
 native binding tests pass; and
@@ -66,7 +67,7 @@ a tagged native internal failure before both factories and every owned or
 attached public operation, proving the real PyO3 boundary returns `Err` while
 ordinary package builds expose neither hook nor test host fixture.
 The ordinary locked wheel is also installed independently without that feature:
-its seven production-runtime tests pass and the two source-hook fixtures skip,
+its seven production-runtime tests pass and the four source-hook fixtures skip,
 which proves the companion coverage does not become a package API requirement.
 
 The retained B.3b coordinator operation matrix was also run one named process
@@ -86,21 +87,23 @@ another worker or conversion path.
 | Embedding correlation/redaction/query/health/stop | `cargo run -p rust-python-logging` | covered |
 | GC/interpreter teardown | Installed owned-handle subprocess and native module-collection fixture | covered |
 | Shared helper rollback, held sink, slot/timeout and late-result mechanics | all named B.3b coordinator cases | covered in supplied backend |
-| Python-bound blocked-sink heartbeat and every detailed operation interleaving | source-hook host holds one real attached log while Python health/query/flush progress | active: retained-sink-specific heartbeat still needs native seam |
+| Python-bound blocked-sink heartbeat and every detailed operation interleaving | feature-only builder registers a real held sink after helper reservation; installed Python wheel proves health/query progress and tagged flush timeout before release | covered |
 | Native fault injection through every Python public Result method | feature-gated source wheel forces tagged faults for both factories and all owned/attached methods | covered |
 | Diagnostic/remediation conversion through Python | exact unavailable/IO messages, codes, recoverable steps and terminal justification | covered |
-| Revision-overflow through Python | no direct Python fixture yet | active |
+| Revision-overflow through Python | feature-only real `LevelOwner` terminal revision produces `SC_OBSERVABILITY_LEVEL_REVISION_EXHAUSTED`; health retains `u64::MAX` and `info` | covered |
 
 ## Active completeness checklist — pass 2: validation paths
 
 | Gate | Result | State |
 | --- | --- | --- |
-| `validate_python_bindings.sh` (CPython 3.10.21) | green: 10 facade, 9 installed runtime, 6 native binding tests, embedding example | covered |
+| `validate_python_bindings.sh` (CPython 3.10.21) | green: 10 facade, 11 installed runtime, 6 native binding tests, complete `contract_matrix`, embedding example | covered |
 | `cargo clippy --locked -p sc-observability-py --all-targets -- -D warnings` | green; included in the Python validator | covered |
 | `validate_dependency_bans.sh` | green | covered |
 | `validate_docs_consistency.sh` | green | covered |
 | Linux x86_64 source CI | [run 35212196675](https://github.com/randlee/sc-observability/actions/runs/35212196675) passed at `f5975f9` | covered |
 | B.4a wheel/sdist matrix | owned by B.4a and not a B.4 completion substitute | external qualification |
 
-This handoff remains an implementation evidence record until coordinator
-completeness review and the sprint closeout update are complete.
+The approved default-feature public API digest is
+`d4d01640af4a8a7a980fd86df7b4a844ad65c1fa66f5c364a4ce930f91bd12fd` for
+the six re-exports, `install_host_logger`, and the `PyO3` initializer. Private
+test seams are excluded. B.4a retains distribution qualification ownership.
