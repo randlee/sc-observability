@@ -37,11 +37,19 @@ pub(crate) enum TryEnqueueError {
     Disconnected,
 }
 
+/// Failure possible from the blocking sender path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BlockingEnqueueError {
+    Disconnected,
+}
+
 pub(crate) type DiagnosticAdmitter =
     Arc<dyn Fn(LogEvent) -> Result<(), TryEnqueueError> + Send + Sync>;
 
 pub(crate) struct WriterRuntime {
     sender: mpsc::SyncSender<WriterCommand>,
+    // `mpsc::Receiver` is not Sync. Shutdown receives completion through
+    // shared runtime state, so this mutex supplies that synchronization.
     done_rx: Mutex<mpsc::Receiver<()>>,
     join_handle: JoinHandle<()>,
     join_timeout: Duration,
@@ -68,7 +76,12 @@ impl WriterRuntime {
         last_error: Arc<Mutex<Option<DiagnosticSummary>>>,
         #[cfg(test)] test_pass_delay: Option<Duration>,
         #[cfg(test)] test_pass_signal: Option<Arc<TestPassDelaySignal>>,
+        #[cfg(test)] writer_start_should_fail: bool,
     ) -> std::io::Result<Self> {
+        #[cfg(test)]
+        if writer_start_should_fail {
+            return Err(std::io::Error::other("injected writer start failure"));
+        }
         let writer_tracker = Arc::new(WriterTracker::new(queue_capacity));
         let maintenance_tracker = file_sink
             .as_ref()
@@ -112,50 +125,23 @@ impl WriterRuntime {
         })
     }
 
-    pub(crate) fn enqueue_blocking(&self, event: LogEvent) -> Result<(), TryEnqueueError> {
+    pub(crate) fn enqueue_blocking(&self, event: LogEvent) -> Result<(), BlockingEnqueueError> {
         self.writer_tracker.record_enqueue();
         self.sender.send(WriterCommand::Log(event)).map_err(|_| {
             self.writer_tracker.record_write_completion(1);
-            TryEnqueueError::Disconnected
+            BlockingEnqueueError::Disconnected
         })?;
         Ok(())
     }
 
     pub(crate) fn enqueue_nonblocking(&self, event: LogEvent) -> Result<(), TryEnqueueError> {
-        self.writer_tracker.record_enqueue();
-        self.sender
-            .try_send(WriterCommand::Log(event))
-            .map_err(|error| match error {
-                mpsc::TrySendError::Full(_) => {
-                    self.writer_tracker.record_write_completion(1);
-                    TryEnqueueError::Full
-                }
-                mpsc::TrySendError::Disconnected(_) => {
-                    self.writer_tracker.record_write_completion(1);
-                    TryEnqueueError::Disconnected
-                }
-            })?;
-        Ok(())
+        enqueue_nonblocking(&self.sender, &self.writer_tracker, event)
     }
 
     pub(crate) fn diagnostic_admitter(&self) -> DiagnosticAdmitter {
         let sender = self.sender.clone();
         let tracker = self.writer_tracker.clone();
-        Arc::new(move |event| {
-            tracker.record_enqueue();
-            sender
-                .try_send(WriterCommand::Log(event))
-                .map_err(|error| match error {
-                    mpsc::TrySendError::Full(_) => {
-                        tracker.record_write_completion(1);
-                        TryEnqueueError::Full
-                    }
-                    mpsc::TrySendError::Disconnected(_) => {
-                        tracker.record_write_completion(1);
-                        TryEnqueueError::Disconnected
-                    }
-                })
-        })
+        Arc::new(move |event| enqueue_nonblocking(&sender, &tracker, event))
     }
 
     pub(crate) fn record_queue_full_drop(&self) -> DiagnosticSummary {
@@ -274,6 +260,26 @@ impl WriterRuntime {
             .as_ref()
             .is_some_and(|tracker| tracker.pass_active())
     }
+}
+
+fn enqueue_nonblocking(
+    sender: &mpsc::SyncSender<WriterCommand>,
+    tracker: &WriterTracker,
+    event: LogEvent,
+) -> Result<(), TryEnqueueError> {
+    tracker.record_enqueue();
+    sender
+        .try_send(WriterCommand::Log(event))
+        .map_err(|error| match error {
+            mpsc::TrySendError::Full(_) => {
+                tracker.record_write_completion(1);
+                TryEnqueueError::Full
+            }
+            mpsc::TrySendError::Disconnected(_) => {
+                tracker.record_write_completion(1);
+                TryEnqueueError::Disconnected
+            }
+        })
 }
 
 fn snapshot_from_trackers(

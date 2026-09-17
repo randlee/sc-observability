@@ -128,6 +128,8 @@ impl LoggerBuilder {
                 config.maintenance_test_pass_delay,
                 #[cfg(test)]
                 config.maintenance_test_pass_signal.clone(),
+                #[cfg(test)]
+                config.writer_start_should_fail,
             )?
         } else {
             LoggerRuntime::new(
@@ -140,6 +142,8 @@ impl LoggerBuilder {
                 config.maintenance_test_pass_delay,
                 #[cfg(test)]
                 config.maintenance_test_pass_signal.clone(),
+                #[cfg(test)]
+                config.writer_start_should_fail,
             )
         };
         let diagnostic_admitter = runtime.diagnostic_admitter();

@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use sc_observability_types::{
-    AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, ErrorCode, ErrorContext,
+    AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext,
     EventError, FlushError, InitError, LevelChange, LevelChangeError, LevelChangeSource,
     LevelFilter, LevelState, LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState,
     MaintenanceHealthReport, MaintenanceWorkerState, OperationDiagnostic, QueryError,
@@ -18,7 +18,7 @@ use crate::follow::LogFollowSession;
 use crate::health::QueryHealthTracker;
 use crate::jsonl_reader::JsonlLogReader;
 use crate::maintenance::{
-    DiagnosticAdmitter, TryEnqueueError, WriterHealthSnapshot, WriterRuntime,
+    BlockingEnqueueError, DiagnosticAdmitter, TryEnqueueError, WriterHealthSnapshot, WriterRuntime,
 };
 use crate::redact::{redact_bearer_token_text, redact_string_value};
 use crate::sinks::JsonlFileSink;
@@ -181,7 +181,7 @@ fn unavailable_level_error(message: &str) -> LevelChangeError {
 
 fn unavailable_level_diagnostic(message: &str) -> OperationDiagnostic {
     OperationDiagnostic {
-        code: ErrorCode::new_static("SC_OBSERVABILITY_LEVEL_STATE_UNAVAILABLE"),
+        code: sc_observability_types::error_codes::LEVEL_STATE_UNAVAILABLE,
         message: message.to_string(),
         remediation: Remediation::not_recoverable("inspect state and create a new logger"),
         at: Timestamp::now_utc(),
@@ -190,7 +190,7 @@ fn unavailable_level_diagnostic(message: &str) -> OperationDiagnostic {
 
 fn unavailable_event_error(message: &str) -> EventError {
     EventError(Box::new(ErrorContext::new(
-        ErrorCode::new_static("SC_OBSERVABILITY_LEVEL_STATE_UNAVAILABLE"),
+        sc_observability_types::error_codes::LEVEL_STATE_UNAVAILABLE,
         message,
         Remediation::not_recoverable("inspect state and create a new logger"),
     )))
@@ -204,6 +204,13 @@ impl LoggerRuntime {
             .diagnostic_admitter()
     }
 
+    #[cfg_attr(
+        test,
+        expect(
+            clippy::too_many_arguments,
+            reason = "test-only writer startup injection extends the runtime construction boundary"
+        )
+    )]
     pub(crate) fn new(
         query_available: bool,
         sinks: Vec<crate::SinkRegistration>,
@@ -212,6 +219,7 @@ impl LoggerRuntime {
         queue_capacity: usize,
         #[cfg(test)] test_pass_delay: Option<Duration>,
         #[cfg(test)] test_pass_signal: Option<Arc<crate::maintenance::TestPassDelaySignal>>,
+        #[cfg(test)] writer_start_should_fail: bool,
     ) -> Self {
         Self::try_new(
             query_available,
@@ -223,10 +231,19 @@ impl LoggerRuntime {
             test_pass_delay,
             #[cfg(test)]
             test_pass_signal,
+            #[cfg(test)]
+            writer_start_should_fail,
         )
         .expect("existing infallible logger construction expects writer thread startup")
     }
 
+    #[cfg_attr(
+        test,
+        expect(
+            clippy::too_many_arguments,
+            reason = "test-only writer startup injection extends the runtime construction boundary"
+        )
+    )]
     pub(crate) fn try_new(
         query_available: bool,
         sinks: Vec<crate::SinkRegistration>,
@@ -235,6 +252,7 @@ impl LoggerRuntime {
         queue_capacity: usize,
         #[cfg(test)] test_pass_delay: Option<Duration>,
         #[cfg(test)] test_pass_signal: Option<Arc<crate::maintenance::TestPassDelaySignal>>,
+        #[cfg(test)] writer_start_should_fail: bool,
     ) -> Result<Self, InitError> {
         let dropped_events_total = Arc::new(AtomicU64::new(0));
         let flush_errors_total = Arc::new(AtomicU64::new(0));
@@ -256,6 +274,8 @@ impl LoggerRuntime {
             test_pass_delay,
             #[cfg(test)]
             test_pass_signal,
+            #[cfg(test)]
+            writer_start_should_fail,
         )
         .map_err(|error| {
             InitError(Box::new(
@@ -319,8 +339,7 @@ impl Logger<Running> {
             .as_ref()
             .expect("running logger must retain its writer runtime");
         writer.enqueue_blocking(event).map_err(|error| match error {
-            TryEnqueueError::Disconnected => self.log_disconnected_error(),
-            TryEnqueueError::Full => unreachable!("blocking queue admission cannot report full"),
+            BlockingEnqueueError::Disconnected => self.log_disconnected_error(),
         })
     }
 
@@ -599,14 +618,10 @@ impl<State> Logger<State> {
     /// Returns a coherent snapshot of the logger's runtime level state.
     #[must_use]
     pub fn level_state(&self) -> LevelState {
-        self.level_control
-            .lock()
-            .map(|control| control.state)
-            .unwrap_or(LevelState {
-                configured_level: self.config.level,
-                effective_level: self.config.level,
-                revision: 0,
-            })
+        match self.level_control.lock() {
+            Ok(control) => control.state,
+            Err(poisoned) => poisoned.into_inner().state,
+        }
     }
     /// Returns aggregate logging and query/follow health for the runtime.
     ///
@@ -732,10 +747,20 @@ impl LevelOwner {
         if previous.effective_level == level {
             return Ok(LevelChange::Unchanged { state: previous });
         }
-        let revision = previous
-            .revision
-            .checked_add(1)
-            .ok_or_else(|| unavailable_level_error("logger level revision is exhausted"))?;
+        let revision =
+            previous
+                .revision
+                .checked_add(1)
+                .ok_or_else(|| LevelChangeError::Unavailable {
+                    diagnostic: OperationDiagnostic {
+                        code: sc_observability_types::error_codes::LEVEL_REVISION_EXHAUSTED,
+                        message: "logger level revision is exhausted".to_string(),
+                        remediation: Remediation::not_recoverable(
+                            "inspect state and create a new logger",
+                        ),
+                        at: Timestamp::now_utc(),
+                    },
+                })?;
         control.state = LevelState {
             effective_level: level,
             revision,

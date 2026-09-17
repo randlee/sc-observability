@@ -1,11 +1,18 @@
 ---
 id: B.P1
-status: proposed
-branch: feature/phase-b-p1-runtime-core
+status: implemented
+branch: feature/B-P1-runtime-core
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/B-P1-runtime-core
+target: integrate/phase-b
 base: develop
 ---
 
 # B.P1 — Add per-logger runtime level ownership
+
+Implementation is on the branch/worktree recorded above. This sprint is not
+complete: QA-1 failed at `0a7600584e606b399ad28f5869f0a969a0bf5f61`, QA-2 is
+pending the documented correction round, and the contract-acceptance ruling
+remains an open governance gate.
 
 ## Goal and dependencies
 

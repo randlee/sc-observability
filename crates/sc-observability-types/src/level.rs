@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{ErrorCode, Remediation, Timestamp};
+use crate::{ErrorCode, Remediation, Timestamp, error_codes};
 
 /// Canonical event/log severity level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -161,14 +161,10 @@ impl LevelChangeError {
     #[must_use]
     pub fn code(&self) -> ErrorCode {
         match self {
-            Self::Stopping => ErrorCode::new_static("SC_OBSERVABILITY_LEVEL_STOPPING"),
-            Self::Stopped => ErrorCode::new_static("SC_OBSERVABILITY_LEVEL_STOPPED"),
-            Self::BelowBaseline { .. } => {
-                ErrorCode::new_static("SC_OBSERVABILITY_LEVEL_BELOW_BASELINE")
-            }
-            Self::UnsupportedLevel { .. } => {
-                ErrorCode::new_static("SC_OBSERVABILITY_LEVEL_UNSUPPORTED")
-            }
+            Self::Stopping => error_codes::LEVEL_STOPPING,
+            Self::Stopped => error_codes::LEVEL_STOPPED,
+            Self::BelowBaseline { .. } => error_codes::LEVEL_BELOW_BASELINE,
+            Self::UnsupportedLevel { .. } => error_codes::LEVEL_UNSUPPORTED,
             Self::Unavailable { diagnostic } => diagnostic.code.clone(),
         }
     }
@@ -236,5 +232,16 @@ mod tests {
             error.remediation(),
             Remediation::Recoverable { .. }
         ));
+    }
+
+    #[test]
+    fn published_level_filter_fixture_retains_its_native_serde_shape() {
+        let fixture = include_str!("../tests/fixtures/bp1-v1.2.0/level_filter.json").trim();
+        let level: LevelFilter = serde_json::from_str(fixture).expect("published fixture parses");
+        assert_eq!(level, LevelFilter::Info);
+        assert_eq!(
+            serde_json::to_string(&level).expect("serialize level"),
+            fixture
+        );
     }
 }

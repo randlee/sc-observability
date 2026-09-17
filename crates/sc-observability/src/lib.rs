@@ -471,6 +471,8 @@ pub struct LoggerConfig {
     maintenance_test_pass_delay: Option<Duration>,
     #[cfg(test)]
     maintenance_test_pass_signal: Option<Arc<crate::maintenance::TestPassDelaySignal>>,
+    #[cfg(test)]
+    writer_start_should_fail: bool,
 }
 
 impl LoggerConfig {
@@ -508,6 +510,8 @@ impl LoggerConfig {
             maintenance_test_pass_delay: None,
             #[cfg(test)]
             maintenance_test_pass_signal: None,
+            #[cfg(test)]
+            writer_start_should_fail: false,
         }
     }
 }
@@ -538,7 +542,10 @@ pub struct Logger<State = Running> {
 /// Weak authority for changing one running logger's effective level.
 ///
 /// The owner deliberately retains no writer, sender, or logger handle. Dropping
-/// the logger therefore makes subsequent requests return `Stopped`.
+/// the logger therefore makes subsequent requests return `Stopped`. The opaque
+/// public handle is declared here with the rest of the facade types; its
+/// private runtime behavior lives in `runtime.rs`, beside the control state it
+/// mutates. This keeps the public surface free of runtime implementation types.
 #[derive(Debug)]
 pub struct LevelOwner {
     control: Weak<Mutex<LevelControl>>,
@@ -729,6 +736,29 @@ mod tests {
     #[derive(Default)]
     struct RecordingFlushSink {
         flush_calls: AtomicU64,
+    }
+
+    #[derive(Default)]
+    struct RecordingEventSink {
+        events: Mutex<Vec<LogEvent>>,
+    }
+
+    impl LogSink for RecordingEventSink {
+        fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+            self.events
+                .lock()
+                .expect("recording events mutex poisoned")
+                .push(event.clone());
+            Ok(())
+        }
+
+        fn health(&self) -> SinkHealth {
+            SinkHealth {
+                name: sink_name("recording-events"),
+                state: SinkHealthState::Healthy,
+                last_error: None,
+            }
+        }
     }
 
     impl LogSink for RecordingFlushSink {
@@ -1678,6 +1708,26 @@ mod tests {
     }
 
     #[test]
+    fn owner_construction_returns_the_injected_writer_start_source() {
+        let root = temp_path("writer-start-failure");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        config.writer_start_should_fail = true;
+
+        let Err(error) = Logger::new_with_level_owner(config) else {
+            panic!("writer start must fail");
+        };
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_INIT_FAILED);
+        assert_eq!(
+            std::error::Error::source(&error)
+                .expect("preserved writer start source")
+                .to_string(),
+            "failed to start logger writer thread; caused by: injected writer start failure"
+        );
+    }
+
+    #[test]
     fn level_owner_changes_only_its_logger_and_filters_with_shared_admission() {
         let root = temp_path("level-owner");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
@@ -1712,6 +1762,100 @@ mod tests {
             Err(LevelChangeError::Stopped)
         ));
         assert_eq!(stopped.level_state().effective_level, LevelFilter::Debug);
+    }
+
+    #[test]
+    fn level_state_recovers_the_last_committed_snapshot_after_poisoning() {
+        let root = temp_path("level-poison");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let (logger, mut owner) =
+            Logger::new_with_level_owner(config).expect("construct logger with owner");
+        owner
+            .elevate_level(LevelFilter::Debug, LevelChangeSource::Application)
+            .expect("change state");
+        let control = logger.level_control.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = control.lock().expect("lock control");
+            panic!("intentionally poison level control");
+        })
+        .join();
+
+        assert_eq!(logger.level_state().effective_level, LevelFilter::Debug);
+        assert_eq!(logger.level_state().revision, 1);
+        assert!(matches!(
+            owner.reset_level(LevelChangeSource::Application),
+            Err(LevelChangeError::Unavailable { .. })
+        ));
+        let stopped = logger.shutdown();
+        assert_eq!(stopped.level_state().revision, 1);
+    }
+
+    #[test]
+    fn revision_exhaustion_preserves_state_and_uses_the_dedicated_code() {
+        let root = temp_path("level-overflow");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let (logger, mut owner) =
+            Logger::new_with_level_owner(config).expect("construct logger with owner");
+        logger
+            .level_control
+            .lock()
+            .expect("level state")
+            .state
+            .revision = u64::MAX;
+
+        let error = owner
+            .elevate_level(LevelFilter::Debug, LevelChangeSource::Application)
+            .expect_err("overflow must fail");
+        assert_eq!(
+            error.code().as_str(),
+            "SC_OBSERVABILITY_LEVEL_REVISION_EXHAUSTED"
+        );
+        assert_eq!(logger.level_state().revision, u64::MAX);
+        assert_eq!(logger.level_state().effective_level, LevelFilter::Info);
+        let _ = logger.shutdown();
+    }
+
+    #[test]
+    fn each_changed_level_queues_one_fixed_info_diagnostic() {
+        let root = temp_path("level-diagnostics");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        config.level = LevelFilter::Off;
+        let sink = Arc::new(RecordingEventSink::default());
+        let mut builder = Logger::builder(config).expect("builder");
+        builder.register_sink(SinkRegistration::new(sink.clone()));
+        let (logger, mut owner) = builder.build_with_level_owner().expect("owner logger");
+
+        owner
+            .elevate_level(LevelFilter::Warn, LevelChangeSource::UserRequest)
+            .expect("warn change");
+        owner
+            .elevate_level(LevelFilter::Error, LevelChangeSource::UserRequest)
+            .expect("error change");
+        owner
+            .reset_level(LevelChangeSource::UserRequest)
+            .expect("reset change");
+        logger.flush().expect("flush queued diagnostics");
+
+        let events = sink.events.lock().expect("recording events");
+        let diagnostics: Vec<_> = events
+            .iter()
+            .filter(|event| event.action.as_str() == "logging.level_changed")
+            .collect();
+        assert_eq!(diagnostics.len(), 3);
+        assert!(diagnostics.iter().all(|event| event.level == Level::Info));
+        assert!(
+            diagnostics
+                .iter()
+                .all(|event| event.target.as_str() == "sc_observability")
+        );
+        drop(events);
+        let _ = logger.shutdown();
     }
 
     #[test]

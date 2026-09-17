@@ -122,6 +122,16 @@ qualification (B.4a), then Python integration/async support and binding release.
 Go remains future scope. The proposal does not reopen the accepted
 Phase A closure or claim that BTIT's currently open review findings are resolved.
 
+### B.P1 — Per-logger runtime level core
+
+B.P1 implements the additive neutral runtime-level state, weak ownership, and
+admission-outcome core described by
+[`plans/phase-b/sprint-b-p1-runtime-core.md`](./plans/phase-b/sprint-b-p1-runtime-core.md).
+It must follow an accepted runtime-level contract; B.P2 must follow B.P1's
+merged and independently verified implementation. B.P1 is currently
+implemented pending QA and the recorded contract-acceptance governance ruling;
+it is neither published nor phase-complete.
+
 ## Rule
 
 Any sprint plan added here must preserve the standalone boundary defined by:
