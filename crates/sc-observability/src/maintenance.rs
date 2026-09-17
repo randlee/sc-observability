@@ -845,6 +845,16 @@ pub(crate) struct TestPassDelaySignal {
 }
 
 #[cfg(test)]
+pub(crate) struct TestPassDelayReleaseGuard(Arc<TestPassDelaySignal>);
+
+#[cfg(test)]
+impl Drop for TestPassDelayReleaseGuard {
+    fn drop(&mut self) {
+        self.0.release_delay();
+    }
+}
+
+#[cfg(test)]
 impl TestPassDelaySignal {
     fn set_active(&self, active: bool) {
         self.active.store(active, Ordering::SeqCst);
@@ -860,6 +870,10 @@ impl TestPassDelaySignal {
         self.block_until_released.store(true, Ordering::SeqCst);
     }
 
+    pub(crate) fn release_on_drop(self: &Arc<Self>) -> TestPassDelayReleaseGuard {
+        TestPassDelayReleaseGuard(self.clone())
+    }
+
     fn wait_until_released(&self) -> bool {
         if !self.block_until_released.load(Ordering::SeqCst) {
             return false;
@@ -867,7 +881,15 @@ impl TestPassDelaySignal {
 
         let mut gate = self.gate.lock().expect("test gate poisoned");
         while !self.released.load(Ordering::SeqCst) {
-            gate = self.changed.wait(gate).expect("test gate poisoned");
+            let (next_gate, timeout) = self
+                .changed
+                .wait_timeout(gate, Duration::from_secs(1))
+                .expect("test gate poisoned");
+            gate = next_gate;
+            if timeout.timed_out() && !self.released.load(Ordering::SeqCst) {
+                self.block_until_released.store(false, Ordering::SeqCst);
+                return false;
+            }
         }
         self.block_until_released.store(false, Ordering::SeqCst);
         true

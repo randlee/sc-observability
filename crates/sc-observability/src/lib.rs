@@ -1782,6 +1782,7 @@ mod tests {
         config.maintenance_test_pass_delay = Some(Duration::ZERO);
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
         signal.block_delay_until_released();
+        let _release_delay = signal.release_on_drop();
         config.maintenance_test_pass_signal = Some(signal.clone());
         let logger = Logger::new(config).expect("logger");
 
@@ -1823,8 +1824,10 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.queue_capacity = 1;
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.maintenance_test_pass_delay = Some(Duration::from_millis(500));
+        config.maintenance_test_pass_delay = Some(Duration::ZERO);
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
+        let _release_delay = signal.release_on_drop();
         config.maintenance_test_pass_signal = Some(signal.clone());
         let logger = Logger::new(config).expect("logger");
 
@@ -1844,6 +1847,7 @@ mod tests {
             logger.try_log_typed(log_event_with_request(service_name(), "typed-full", 10)),
             Err(TryLogFailure::QueueFull(_))
         ));
+        signal.release_delay();
     }
 
     #[test]
@@ -2352,8 +2356,12 @@ mod tests {
 
             barrier.wait();
             drop(held_control);
-            let mutation_result = mutation_rx.recv().expect("mutation result");
-            let admission_result = admission_rx.recv().expect("admission result");
+            let mutation_result = mutation_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("mutation result must arrive within the contention bound");
+            let admission_result = admission_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("admission result must arrive within the contention bound");
             mutation.join().expect("mutation thread");
             admission.join().expect("admission thread");
 
@@ -2614,8 +2622,10 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.queue_capacity = 1;
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.maintenance_test_pass_delay = Some(Duration::from_millis(500));
+        config.maintenance_test_pass_delay = Some(Duration::ZERO);
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
+        let _release_delay = signal.release_on_drop();
         config.maintenance_test_pass_signal = Some(signal.clone());
         let (logger, mut owner) =
             Logger::new_with_level_owner(config).expect("construct logger with owner");
@@ -2652,9 +2662,10 @@ mod tests {
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_console_sink = false;
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.maintenance_test_pass_delay = Some(Duration::from_millis(500));
+        config.maintenance_test_pass_delay = Some(Duration::ZERO);
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
         signal.block_delay_until_released();
+        let _release_delay = signal.release_on_drop();
         config.maintenance_test_pass_signal = Some(signal.clone());
         let (logger, mut owner) =
             Logger::new_with_level_owner(config).expect("construct logger with owner");
@@ -2698,8 +2709,10 @@ mod tests {
         let root = temp_path("maintenance-nonblocking");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.retained_log_policy.maintenance_cadence = cadence_ms(5);
-        config.maintenance_test_pass_delay = Some(Duration::from_millis(200));
+        config.maintenance_test_pass_delay = Some(Duration::ZERO);
         let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
+        let _release_delay = signal.release_on_drop();
         config.maintenance_test_pass_signal = Some(signal.clone());
         let logger = Logger::new(config).expect("logger");
 
@@ -2712,6 +2725,11 @@ mod tests {
         logger
             .emit(log_event_with_request(service_name(), "during-pass", 10))
             .expect("emit during delayed maintenance pass");
+        assert!(
+            signal.is_active(),
+            "maintenance remains gated while the concurrent emit completes"
+        );
+        signal.release_delay();
     }
 
     #[test]
