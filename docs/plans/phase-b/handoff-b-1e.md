@@ -122,12 +122,12 @@ The M01–M05 correction evidence is:
   `since = "1.4.0"`) to each of exactly 29 targets, then binds each Cargo
   diagnostic to its expected deprecated item and exact `src/main.rs` fixture
   span. It requires one `deprecated` code and span, rejects secondary spans,
-  unexpected notes/warnings, compares the complete compiler migration note
-  rather than a substring, and compares the exact expected span multiset
-  rather than only an aggregate note count. Real predicate controls cover
-  misplaced attributes, wrong versions/notes, appended notes, duplicate
-  allowed-line diagnostics, missing/extra diagnostics, wrong spans and broad
-  allowances.
+  unexpected notes/warnings, compares both the parsed complete source note
+  literal and complete compiler migration note rather than substrings, and
+  compares the exact expected span multiset rather than only an aggregate
+  note count. Real predicate controls cover misplaced attributes, wrong
+  versions/notes, appended source/compiler notes, duplicate allowed-line
+  diagnostics, missing/extra diagnostics, wrong spans and broad allowances.
 - M02: the legacy fixture exercises all nine wrapper names, every mapped
   method, explicit `InitError` tuple/field access, and the exempt owner
   constructors; the deny-deprecated fixture exercises both owner constructors

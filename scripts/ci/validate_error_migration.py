@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -166,10 +167,16 @@ def item_window(source: str, marker: str, note: str) -> str:
                 continue
             break
         block = "\n".join(reversed(attributes))
+        note_literals = [
+            ast.literal_eval(match.group(1))
+            for match in re.finditer(
+                r'(?m)^\s*note\s*=\s*("(?:\\\\.|[^"\\\\])*")\s*,?\s*$', block
+            )
+        ]
         if (
             "#[deprecated(" in block
             and 'since = "1.4.0"' in block
-            and note in block
+            and note_literals == [note]
         ):
             return block
     raise AssertionError(f"{marker} has no local deprecation attribute/note")
@@ -428,6 +435,10 @@ def check_negative_controls() -> None:
 
     rejected(source.replace('since = "1.4.0"', 'since = "1.3.0"', 1), "wrong version negative did not trigger")
     rejected(source.replace(identity_note, "Use the wrong replacement; see migrate-error-api.md.", 1), "wrong note negative did not trigger")
+    rejected(
+        source.replace(identity_note, identity_note + " EXTRA TEXT", 1),
+        "appended source note negative did not trigger",
+    )
     identity_attribute = re.search(
         r"#\[deprecated\(\n    since = \"1\.4\.0\",\n    note = \"Use sc_observability_types::typed::IdentityFailure; see migrate-error-api\.md\.\"\n\)\]\n",
         source,
