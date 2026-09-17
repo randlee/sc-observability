@@ -5718,5 +5718,23 @@
       }
     },
     "valid": false
+  },
+  {
+    "id": "newline-decimal-0",
+    "entrypoint": "InputDecimalDto",
+    "value": "1\n",
+    "valid": false
+  },
+  {
+    "id": "newline-decimal-1",
+    "entrypoint": "InputDecimalDto",
+    "value": "0\r\n",
+    "valid": false
+  },
+  {
+    "id": "newline-decimal-2",
+    "entrypoint": "InputDecimalDto",
+    "value": "-1\n",
+    "valid": false
   }
 ]
