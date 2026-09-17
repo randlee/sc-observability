@@ -27,8 +27,9 @@ separate review and merge state.
 
 Owner: sc-observability core team. Implement issue #97's core capability while
 preserving every published interface. This is a pre-copy prerequisite; B.1
-remains the first migration sprint. `must_follow` reviewed acceptance of the
-[runtime contract](runtime-level-contract.md). B.P2 `must_follow` B.P1 because
+remains the first migration sprint. `must_follow` the execution-authorized
+[runtime contract](runtime-level-contract.md), with public acceptance
+owner-deferred to Phase B completion. B.P2 `must_follow` B.P1 because
 it qualifies and stages these exact artifacts; B.7 alone publishes them. No
 parallel-safe public-contract work is claimed. Pushed parent development
 triggers merge-forward before each child round; B.P1's PR merges before

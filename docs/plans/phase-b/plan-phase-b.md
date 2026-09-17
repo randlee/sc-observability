@@ -64,7 +64,7 @@ The proposal is not yet an accepted freeze. No backward-compatibility/semver
 constraint from BTIT's unpublished API applies to this initial destination API.
 
 The authoritative [B.1 entry gate](sprint-b-1-copy.md#goal-and-entry-gate)
-defines contract approval, B.P2's staged runtime capability, accepted BTIT
+defines target-contract acceptance, B.P2's staged runtime capability, accepted BTIT
 implementation/review and immutable source provenance. B.1 is a mechanical
 copy of that accepted implementation; live registry proof is deferred to B.7;
 all foreseeable bridge API changes are implemented in BTIT before migration.
