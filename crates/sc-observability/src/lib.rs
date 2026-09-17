@@ -1849,6 +1849,11 @@ mod tests {
             typed_flush.diagnostic().code,
             error_codes::LOGGER_WRITER_DEGRADED
         );
+
+        // Consume the runtime after the intentionally panicked worker has
+        // been observed. Its completion channel is already disconnected, so
+        // shutdown joins the terminated worker without an unbounded wait.
+        let _stopped = logger.shutdown();
     }
 
     #[test]
