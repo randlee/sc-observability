@@ -27,8 +27,9 @@ plugin and retains owner authority in Rust. The example exports a nonrejecting
 BigInt event conversion; the host composition point is
 `examples/tauri-logging/src-tauri/src/main.rs`.
 The plugin ships generated Tauri ACL metadata for all four plugin commands;
-the example build registers its application command and its checked-in
-capability scopes both surfaces to the `main` window.
+the example build registers its application command. Its checked-in
+capabilities keep core APIs on `main` while routing only the five observability
+commands through ACL on all windows, allowing handler-level permission denial.
 
 Focused source validation performed:
 

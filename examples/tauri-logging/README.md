@@ -16,9 +16,11 @@ const event = encodeEvent({ level: "info", target: "tauri-example", action: "sta
 if (client.kind === "ok" && event.kind === "ok") void client.value.tryLog(event.value);
 ```
 
-The checked-in Tauri capability grants the four plugin commands and the
-application level command only to the `main` window. The adapter still applies
-its own window and target policy before backend admission.
+The checked-in Tauri capabilities keep core APIs on `main` while routing the
+four plugin commands and application level command through ACL for all windows.
+The adapter and application handler still apply their own window and target
+policies before backend admission, returning tagged permission denial for
+forbidden windows.
 
 The application also registers `app_observability_level_change` itself. It
 uses the authorized main window and a host-selected `user_request` source;
