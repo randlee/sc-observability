@@ -220,6 +220,28 @@ partial external Cargo consumers with JSON diagnostics and a Serde golden.
 B.2 qualification and B.7 publication remain separately gated; B.7 alone
 publishes and no removal schedule is introduced.
 
+### B.1 integration — Combined B.1a-B.1d reconciliation and registry parity
+
+The integration layer closing the preparation sprints is tracked in
+[`plans/phase-b/task-b-1-integration.md`](./plans/phase-b/task-b-1-integration.md),
+built on the merged B.1a-B.1e preparation layers and cobs's pushed
+`fix/phase-b-1c-qa1` observation fixes. It replaces the preliminary
+`error-api-inventory.md` with a checked nine-family inventory (every
+production constructor, feature-gated path, open trait, private exporter, and
+copied-bridge use, each with an explicit typed-production or named-
+compatibility disposition) backed by an executable workspace parity test
+(`crates/sc-observability-otlp/tests/error_registry_parity.rs`) that asserts
+every typed constructor's diagnostic code against its owning crate's
+`error_codes` registry constant. It also fixes a genuine gap the B.1e warning
+activation exposed: the frozen B.1 BTIT bridge import legitimately still uses
+the newly-deprecated legacy wrapper types and cannot be edited without
+violating `import-provenance.json`'s pinned source bytes, so
+`.github/workflows/ci.yml`'s clippy job is split into an active-crates pass
+(still `-D warnings`) and a separate frozen-bridge pass that allows only
+`deprecated`. Broader AC-by-AC reconciliation, the four handoffs' final
+integration-status update, and independent QA/coordinator completeness review
+remain in progress; this entry does not claim closure.
+
 ### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
 
 [`plans/phase-b/task-b-1-provenance-prep.md`](./plans/phase-b/task-b-1-provenance-prep.md)
