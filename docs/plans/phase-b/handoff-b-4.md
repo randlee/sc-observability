@@ -42,5 +42,12 @@ hang, while the module-collection fixture proves a live attached handle retains
 only the backend: it remains usable after module collection, does not transfer
 host ownership, and retains health after the host closes.
 
+The install mutex uses PyO3 0.29.2's `MutexExt::lock_py_attached`, which detaches
+before a contended Rust-mutex wait. The module state transition reads and writes
+the concrete module dictionary directly rather than calling `hasattr`, so a
+user-defined module `__getattr__` cannot run while the once-only lock is held.
+A five-second subprocess regression races two installers with such a
+GIL-releasing hook and retains the exact one-winner/one-duplicate outcome.
+
 This handoff remains an implementation evidence record until coordinator
 completeness review and the sprint closeout update are complete.

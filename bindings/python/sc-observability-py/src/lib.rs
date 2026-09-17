@@ -9,6 +9,7 @@
 )]
 
 use pyo3::prelude::*;
+use pyo3::sync::MutexExt;
 use sc_observability_binding_runtime::{
     CoreLoggerBackend, CoreLoggerOwner, HostLoggingBackend, Operation, ProducerOrigin,
     create_core_backend,
@@ -357,11 +358,16 @@ pub fn install_host_logger(
     module: &Bound<'_, PyModule>,
     backend: Arc<dyn HostLoggingBackend>,
 ) -> Result<(), Failure> {
+    let py = module.py();
     let _installation = HOST_INSTALLATION_LOCK
-        .lock()
+        .lock_py_attached(py)
         .map_err(|_| internal_failure("host installation lock poisoned"))?;
-    let installed = module
-        .hasattr("_sc_observability_host_backend")
+    // Inspect the module dictionary directly. `hasattr` may invoke a
+    // user-defined module `__getattr__`, which is foreign Python code and can
+    // detach while the once-only transition is locked.
+    let state = module.dict();
+    let installed = state
+        .contains("_sc_observability_host_backend")
         .map_err(|error| {
             internal_failure(format!("could not inspect module host state: {error}"))
         })?;
@@ -371,11 +377,11 @@ pub fn install_host_logger(
             "a host logger is already installed for this module",
         ));
     }
-    let slot = Py::new(module.py(), HostSlot { backend }).map_err(|error| {
+    let slot = Py::new(py, HostSlot { backend }).map_err(|error| {
         internal_failure(format!("could not allocate module host state: {error}"))
     })?;
-    module
-        .add("_sc_observability_host_backend", slot)
+    state
+        .set_item("_sc_observability_host_backend", slot)
         .map_err(|error| internal_failure(format!("could not install module host state: {error}")))
 }
 
@@ -464,6 +470,7 @@ mod tests {
         atomic::{AtomicUsize, Ordering},
     };
     use std::thread;
+    use std::time::Instant;
 
     #[test]
     fn host_installation_is_immutable_per_module() {
@@ -726,5 +733,141 @@ mod tests {
                 .contains("\"kind\":\"ok\"")
         });
         assert!(active && stopped && retained);
+    }
+
+    fn install_during_releasing_module_hook() -> bool {
+        Python::initialize();
+        let setup = Python::attach(|py| {
+            let module = match PyModule::new(py, "_b4_install_hook_test") {
+                Ok(module) => module,
+                Err(_) => return None,
+            };
+            let hooks = match PyModule::from_code(
+                py,
+                pyo3::ffi::c_str!(
+                    "import time\ndef release_gil(name):\n    time.sleep(0.02)\n    raise AttributeError(name)\n"
+                ),
+                pyo3::ffi::c_str!("install_hook.py"),
+                pyo3::ffi::c_str!("_b4_install_hook_support"),
+            ) {
+                Ok(hooks) => hooks,
+                Err(_) => return None,
+            };
+            let hook = match hooks.getattr("release_gil") {
+                Ok(hook) => hook,
+                Err(_) => return None,
+            };
+            if module.dict().set_item("__getattr__", hook).is_err() {
+                return None;
+            }
+            let service = match ServiceName::new("b4-install-hook-test") {
+                Ok(service) => service,
+                Err(_) => return None,
+            };
+            let config = sc_observability::LoggerConfig::default_for(
+                service,
+                std::env::temp_dir().join("sc-observability-b4-install-hook-test"),
+            );
+            let (owner, backend) = match create_core_backend(config) {
+                Ok(pair) => pair,
+                Err(_) => return None,
+            };
+            Some((
+                vec![module.clone().unbind(), module.clone().unbind()],
+                module.unbind(),
+                owner,
+                Arc::new(backend),
+            ))
+        });
+        let Some((modules, hook_module, owner, backend)) = setup else {
+            return false;
+        };
+        let start = Arc::new(Barrier::new(3));
+        let winners = Arc::new(AtomicUsize::new(0));
+        let duplicates = Arc::new(AtomicUsize::new(0));
+        let installers = modules
+            .into_iter()
+            .map(|module| {
+                let start = start.clone();
+                let winners = winners.clone();
+                let duplicates = duplicates.clone();
+                let backend: Arc<dyn HostLoggingBackend> = backend.clone();
+                thread::spawn(move || {
+                    start.wait();
+                    Python::attach(|py| match install_host_logger(&module.bind(py), backend) {
+                        Ok(()) => winners.fetch_add(1, Ordering::SeqCst),
+                        Err(Failure::Unavailable { diagnostic })
+                            if diagnostic.code
+                                == SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED =>
+                        {
+                            duplicates.fetch_add(1, Ordering::SeqCst)
+                        }
+                        Err(_) => 0,
+                    });
+                })
+            })
+            .collect::<Vec<_>>();
+        let hook_start = start.clone();
+        let hook = thread::spawn(move || {
+            hook_start.wait();
+            Python::attach(|py| hook_module.bind(py).getattr("missing_attribute").is_err())
+        });
+        let installed = installers.into_iter().all(|worker| worker.join().is_ok());
+        let hook_finished = hook.join().is_ok_and(|result| result);
+        let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
+        installed
+            && hook_finished
+            && stopped
+            && winners.load(Ordering::SeqCst) == 1
+            && duplicates.load(Ordering::SeqCst) == 1
+    }
+
+    #[test]
+    fn host_install_with_releasing_module_hook_is_bounded() {
+        if std::env::var_os("SC_B4_INSTALL_HOOK_CHILD").is_some() {
+            assert!(install_during_releasing_module_hook());
+            return;
+        }
+        let executable = match std::env::current_exe() {
+            Ok(executable) => executable,
+            Err(_) => {
+                assert!(false, "could not find the binding test executable");
+                return;
+            }
+        };
+        let mut child = match std::process::Command::new(executable)
+            .arg("--exact")
+            .arg("tests::host_install_with_releasing_module_hook_is_bounded")
+            .arg("--nocapture")
+            .env("SC_B4_INSTALL_HOOK_CHILD", "1")
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(_) => {
+                assert!(false, "could not start host-install hook subprocess");
+                return;
+            }
+        };
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    assert!(status.success(), "host-install hook subprocess failed");
+                    return;
+                }
+                Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
+                Ok(None) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    assert!(false, "host-install hook subprocess exceeded five seconds");
+                    return;
+                }
+                Err(_) => {
+                    let _ = child.kill();
+                    assert!(false, "could not observe host-install hook subprocess");
+                    return;
+                }
+            }
+        }
     }
 }
