@@ -76,7 +76,7 @@ class NetworkScopeTests(unittest.TestCase):
             with self.assertRaisesRegex(DistributionError, 'ACL restoration failed'):
                 sandbox.restore_acls()
         self.assertEqual(restore.call_count, 2)
-        self.assertIn('/first.saved', restore.call_args_list[1].args[0])
+        self.assertIn(str(sandbox.acls[0][1]), restore.call_args_list[1].args[0])
         self.assertEqual(restore.call_args_list[1].kwargs['timeout'], 60)
 
     def test_expired_watchdog_rejects_normal_context_return(self):
