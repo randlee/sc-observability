@@ -33,3 +33,5 @@ target
 # Binding tooling build products
 **/__pycache__/
 bindings/schema-generator/target/
+bindings/typescript/node_modules/
+bindings/typescript/dist/

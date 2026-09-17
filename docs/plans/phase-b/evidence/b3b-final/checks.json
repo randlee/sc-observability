@@ -1,0 +1,64 @@
+{
+  "source_commit": "296df34457a8c8abbd976c9ff678aa453fb67526",
+  "checks": [
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "log": "check-0.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "-p",
+        "sc-observability-binding-runtime",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "log": "check-1.log"
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/ci/validate_dependency_bans.sh"
+      ],
+      "exit_code": 0,
+      "log": "check-2.log"
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/ci/validate_repo_boundaries.sh"
+      ],
+      "exit_code": 0,
+      "log": "check-3.log"
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/ci/validate_docs_consistency.sh"
+      ],
+      "exit_code": 0,
+      "log": "check-4.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--workspace"
+      ],
+      "exit_code": 0,
+      "log": "check-5.log"
+    }
+  ]
+}

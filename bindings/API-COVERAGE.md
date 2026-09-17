@@ -10,7 +10,7 @@
 | Tauri request validation, authorization, target allowlist and redaction | `bindings/tauri/src/lib.rs` strict-request, policy, target and recursive-redaction paths/tests |
 | Exact IPC command names and host-owned lifecycle | `bindings/tauri/src/lib.rs`; `examples/tauri-logging/src-tauri/src/main.rs` |
 | Real consumer transport and ergonomic event | `examples/tauri-logging/src/main.ts`; `examples/tauri-logging/README.md` |
-| Installation, package and adapter gates | `scripts/ci/validate_typescript_bindings.sh` (packed tarball installed by an outside-repository consumer; schema, adapter and example locked checks) |
+| Installation, package and adapter gates | `scripts/ci/validate_typescript_bindings.sh` (packed tarball installed outside the checkout, adapter mock-IPC and locked example checks) |
 
 The native backend remains the shared B.3b `HostLoggingBackend`; this layer
 does not duplicate core conversion or logger ownership.

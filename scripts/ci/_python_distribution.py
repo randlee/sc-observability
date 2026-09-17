@@ -20,6 +20,21 @@ class DistributionError(ValueError):
     """A distribution failed an explicit qualification boundary."""
 
 
+def runtime_options(contract: dict) -> tuple[list[str], dict[str, str]]:
+    """Only strengthening interpreter settings are configurable by later suites."""
+    flags, environment = ['-I'], {}
+    for key in ('asyncio_debug', 'warnings_as_errors'):
+        if key in contract and type(contract[key]) is not bool:
+            raise DistributionError(f'{key} must be a boolean')
+    if contract.get('asyncio_debug'):
+        flags += ['-X', 'dev']
+        environment['PYTHONASYNCIODEBUG'] = '1'
+    if contract.get('warnings_as_errors'):
+        flags += ['-W', 'error']
+        environment['PYTHONWARNINGS'] = 'error'
+    return flags, environment
+
+
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -71,7 +86,7 @@ def verify_source(root: Path) -> dict:
         if path.is_symlink() or not path.is_file() or digest(path) != expected:
             raise DistributionError(f'missing or tampered distribution member: {relative}')
     required = ('Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'pyproject.toml',
-                'python/sc_observability/__init__.py', 'python/sc_observability/__init__.pyi',
+                'python/sc_observability/__init__.py', 'python/sc_observability/generated/__init__.pyi',
                 'python/sc_observability/py.typed', 'rust-bundle/manifest.json')
     if not set(required) <= record['files'].keys():
         raise DistributionError('sdist inventory omits required package data')
@@ -85,6 +100,26 @@ def verify_source(root: Path) -> dict:
     return record
 
 
+def verify_native_architecture(data: bytes, tag: str) -> None:
+    """Inspect executable headers independently of the wheel's claimed tag."""
+    if tag.startswith('manylinux_'):
+        expected = 183 if tag.endswith('aarch64') else 62
+        valid = (len(data) >= 20 and data[:6] == b'\x7fELF\x02\x01'
+                 and int.from_bytes(data[18:20], 'little') == expected)
+    elif tag.startswith('macosx_'):
+        expected = 0x100000c if tag.endswith('arm64') else 0x1000007
+        valid = (len(data) >= 8 and data[:4] == b'\xcf\xfa\xed\xfe'
+                 and int.from_bytes(data[4:8], 'little') == expected)
+    elif tag == 'win_amd64':
+        offset = int.from_bytes(data[60:64], 'little') if len(data) >= 64 else len(data)
+        valid = (data[:2] == b'MZ' and data[offset:offset + 4] == b'PE\0\0'
+                 and int.from_bytes(data[offset + 4:offset + 6], 'little') == 0x8664)
+    else:
+        valid = False
+    if not valid:
+        raise DistributionError('native executable architecture differs from wheel platform')
+
+
 def inspect_wheel(wheel: Path, policy: dict, version: str) -> dict:
     from packaging.utils import parse_wheel_filename
     name, actual_version, _, tags = parse_wheel_filename(wheel.name)
@@ -93,7 +128,7 @@ def inspect_wheel(wheel: Path, policy: dict, version: str) -> dict:
     if not tags or any(tag.interpreter != 'cp310' or tag.abi != 'abi3'
                        or tag.platform != policy['wheel_platform'] for tag in tags):
         raise DistributionError(f'wrong wheel ABI/platform tags: {sorted(map(str, tags))}')
-    required = {'sc_observability/__init__.py', 'sc_observability/__init__.pyi',
+    required = {'sc_observability/__init__.py',
                 'sc_observability/py.typed', 'sc_observability/generated/__init__.py',
                 'sc_observability/generated/__init__.pyi'}
     with zipfile.ZipFile(wheel) as archive:
@@ -110,6 +145,7 @@ def inspect_wheel(wheel: Path, policy: dict, version: str) -> dict:
                   and name.endswith(('.so', '.pyd'))]
         if len(native) != 1:
             raise DistributionError('wheel must contain exactly one native extension')
+        verify_native_architecture(archive.read(native[0]), policy['wheel_platform'])
         manifests = [name for name in names if name.endswith('.dist-info/WHEEL')]
         if len(manifests) != 1:
             raise DistributionError('ambiguous wheel metadata')

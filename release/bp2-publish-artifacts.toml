@@ -1,0 +1,34 @@
+schema_version = 1
+
+# ATM baseline publish history:
+# - sc-observability was previously published at 0.45.2
+# - sc-observability-types, sc-observe, and sc-observability-otlp were not
+#   previously published under these names
+
+[[crates]]
+artifact = "sc-observability-types"
+package = "sc-observability-types"
+cargo_toml = "crates/sc-observability-types/Cargo.toml"
+publish_order = 1
+wait_after_publish_seconds = 30
+
+[[crates]]
+artifact = "sc-observability"
+package = "sc-observability"
+cargo_toml = "crates/sc-observability/Cargo.toml"
+publish_order = 2
+wait_after_publish_seconds = 30
+
+[[crates]]
+artifact = "sc-observe"
+package = "sc-observe"
+cargo_toml = "crates/sc-observe/Cargo.toml"
+publish_order = 3
+wait_after_publish_seconds = 30
+
+[[crates]]
+artifact = "sc-observability-otlp"
+package = "sc-observability-otlp"
+cargo_toml = "crates/sc-observability-otlp/Cargo.toml"
+publish_order = 4
+wait_after_publish_seconds = 0

@@ -38,6 +38,15 @@ def main():
     tools=[('generate_typescript_bindings.py','bindings/typescript/src/generated'),('generate_python_bindings.py','bindings/python/sc-observability-py/python/sc_observability/generated')]
     with tempfile.TemporaryDirectory(prefix='binding-generator-check-') as temp:
         temporary=Path(temp)
+        schema_command=['cargo','run','--locked','--manifest-path',str(ROOT/'bindings/schema-generator/Cargo.toml'),'--bin','sc-observability-schema','--']
+        for iteration in ['schema-a','schema-b']:
+            destination=temporary/iteration
+            subprocess.run(schema_command+['--output',str(destination/'v1.json'),'--errors-output',str(destination/'errors-v1.json')],cwd=ROOT,check=True,capture_output=True)
+        for filename in ['v1.json','errors-v1.json']:
+            assert (temporary/'schema-a'/filename).read_bytes()==(temporary/'schema-b'/filename).read_bytes()==(ROOT/'bindings/schema'/filename).read_bytes(),'nondeterministic canonical schema'
+        target=temporary/'schema-a/v1.json';target.write_bytes(target.read_bytes()+b' ');before=target.read_bytes()
+        rejected=subprocess.run(schema_command+['--output',str(target),'--errors-output',str(temporary/'schema-a/errors-v1.json'),'--check'],cwd=ROOT,capture_output=True)
+        assert rejected.returncode!=0 and target.read_bytes()==before,'schema check mode overwrote drift'
         for tool,output in tools:
             command=[sys.executable,str(ROOT/'scripts'/tool),'--schema',str(ROOT/'bindings/schema/v1.json')]
             subprocess.run(command+['--output-dir',str(ROOT/output),'--check'],check=True)
