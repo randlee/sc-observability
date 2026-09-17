@@ -16,7 +16,7 @@ import zipfile
 from pathlib import Path
 
 from _python_distribution import (DistributionError, actual_cell, confined, digest,
-                                  extract_sdist, inspect_wheel, verify_source)
+                                  extract_sdist, inspect_wheel, verify_source, runtime_options)
 from _python_sandbox import Sandbox, registered_checkouts
 
 
@@ -104,7 +104,12 @@ def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) 
         if build_must_fail:
             sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline', '--format-version', '1'],
                         copy, expect_failure=True)
-        results[name] = {'integrity_rejected': True, 'offline_resolution_rejected': build_must_fail}
+            sandbox.run([sys.executable, '-m', 'maturin', 'build', '--locked', '--offline',
+                         '--out', str(scratch / 'rejected-wheels')], copy, expect_failure=True)
+            sandbox.run([sandbox.cargo, 'build', '--locked', '--offline'], copy / 'embedding',
+                        expect_failure=True)
+        results[name] = {'integrity_rejected': True, 'offline_resolution_rejected': build_must_fail,
+                         'wheel_and_embedding_builds_rejected': build_must_fail}
         shutil.rmtree(copy)
     for name, relative, content in (
         ('stale-lock', 'Cargo.lock', b'\n# deliberately stale frozen lock\n'),
@@ -211,10 +216,12 @@ def cell(args) -> None:
                 'assert pathlib.Path(sc_observability.__file__).resolve().is_relative_to(root); '
                 'assert pathlib.Path(n.__file__).resolve().is_relative_to(root); '
                 'print(n.__file__)'], suite)
+            flags, environment = runtime_options(contract)
+            sandbox.env.update(environment)
             sandbox.env['SC_OBSERVABILITY_RUNTIME_TEST'] = '1'
             junit = scratch / 'runtime.xml'
             paths = [str(confined(suite, path)) for path in contract['pytest_paths']]
-            sandbox.run([python, '-I', '-m', 'pytest', *paths, '-ra', '--junitxml', str(junit)], suite)
+            sandbox.run([python, *flags, '-m', 'pytest', *paths, '-ra', '--junitxml', str(junit)], suite)
             tree = ET.parse(junit)
             cases = tree.findall('.//testcase')
             if not cases or tree.findall('.//skipped') or tree.findall('.//failure') or tree.findall('.//error'):
@@ -227,7 +234,8 @@ def cell(args) -> None:
                       'wheel': wheel, 'runtime_suite': contract, 'test_count': len(cases),
                       'test_cases': sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in cases),
                       'installed_extension': imported.strip(), 'isolation': probes,
-                      'typecheck': 'passed', 'commands': sandbox.commands, 'publication': 'pending_B.7'}
+                      'typecheck': 'passed', 'interpreter_flags': flags, 'runtime_environment': environment,
+                      'commands': sandbox.commands, 'publication': 'pending_B.7'}
             shutil.copyfile(junit, output / 'runtime.xml')
         (output / 'cell-result.json').write_text(json.dumps(record, indent=2) + '\n')
 

@@ -20,6 +20,21 @@ class DistributionError(ValueError):
     """A distribution failed an explicit qualification boundary."""
 
 
+def runtime_options(contract: dict) -> tuple[list[str], dict[str, str]]:
+    """Only strengthening interpreter settings are configurable by later suites."""
+    flags, environment = ['-I'], {}
+    for key in ('asyncio_debug', 'warnings_as_errors'):
+        if key in contract and type(contract[key]) is not bool:
+            raise DistributionError(f'{key} must be a boolean')
+    if contract.get('asyncio_debug'):
+        flags += ['-X', 'dev']
+        environment['PYTHONASYNCIODEBUG'] = '1'
+    if contract.get('warnings_as_errors'):
+        flags += ['-W', 'error']
+        environment['PYTHONWARNINGS'] = 'error'
+    return flags, environment
+
+
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 

@@ -37,6 +37,20 @@ class DistributionTests(unittest.TestCase):
             with self.assertRaisesRegex(DistributionError, 'wrong wheel ABI/platform'):
                 inspect_wheel(wheel, {'wheel_platform': 'manylinux_2_28_x86_64'}, '1.4.0')
 
+    def test_debug_contract_reaches_isolated_python_and_rejects_invalid_values(self):
+        import subprocess
+        from _python_distribution import runtime_options
+        flags, environment = runtime_options({'asyncio_debug': True, 'warnings_as_errors': True})
+        proof = subprocess.run([sys.executable, *flags, '-c',
+            'import asyncio,warnings; loop=asyncio.new_event_loop(); '
+            'assert loop.get_debug(); loop.close(); '
+            'warnings.warn("qualification warning", RuntimeWarning)'], capture_output=True, text=True)
+        self.assertNotEqual(proof.returncode, 0)
+        self.assertIn('RuntimeWarning: qualification warning', proof.stderr)
+        self.assertEqual(environment, {'PYTHONASYNCIODEBUG': '1', 'PYTHONWARNINGS': 'error'})
+        with self.assertRaises(DistributionError):
+            runtime_options({'warnings_as_errors': 'false'})
+
     def test_policy_preserves_all_twenty_five_cells(self):
         path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
         policy = json.loads(path.read_text())

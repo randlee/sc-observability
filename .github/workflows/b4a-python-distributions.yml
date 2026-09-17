@@ -1,6 +1,8 @@
 name: B.4a Python distribution qualification
 
 on:
+  push:
+    branches: [feature/phase-b-4a-python-packaging]
   workflow_dispatch:
     inputs:
       development:

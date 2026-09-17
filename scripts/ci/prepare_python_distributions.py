@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 import tomli_w
-from _python_distribution import DistributionError, confined, digest, extract_sdist, tomllib, verify_source
+from _python_distribution import DistributionError, confined, digest, extract_sdist, tomllib, verify_source, runtime_options
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = Path('bindings/python/sc-observability-py')
@@ -79,6 +79,7 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     if (suite.get('schema_version') != 1 or (suite.get('runtime_complete') is not True and not allow_incomplete_runtime)
             or suite.get('pytest_paths') != ['tests'] or not suite.get('typing_paths')):
         raise DistributionError('B.4 full-runtime qualification contract is not complete')
+    runtime_options(suite)
     (staging / 'qualification-suite.json').write_text(json.dumps(suite, indent=2) + '\n')
     embedding = confined(source, suite['embedding_manifest'])
     if not embedding.is_file():
@@ -150,11 +151,25 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     shutil.copyfile(bundle / 'Cargo.lock', staging / 'embedding/Cargo.lock')
     run(['cargo', 'metadata', '--offline', '--format-version', '1', '--manifest-path', str(staging / 'embedding/Cargo.toml')], staging, log)
     run(['cargo', 'metadata', '--locked', '--offline', '--format-version', '1'], staging, log)
+    # The outer extension/host are separate workspaces: Cargo prunes dev-only
+    # dependencies of bundled packages that are no longer workspace members.
+    # Preserve every selected registry identity exactly; the full reviewed closure
+    # remains independently verified and vendored by the unchanged B.3 bundle.
+    from build_binding_source_bundle import registry_identities
+    reviewed = registry_identities(tomllib.loads((bundle / 'reviewed-source.lock').read_text()))
+    registry_selection = {}
+    for name, lock_path in [('extension', staging / 'Cargo.lock'),
+                            ('embedding', staging / 'embedding/Cargo.lock')]:
+        selected = registry_identities(tomllib.loads(lock_path.read_text()))
+        if any(identity not in reviewed for identity in selected):
+            raise DistributionError(f'{name} registry version/source/checksum drift from reviewed lock')
+        registry_selection[name] = selected
     files = {path.relative_to(staging).as_posix(): digest(path)
              for path in sorted(staging.rglob('*')) if path.is_file()}
     record = {'schema_version': 1, 'source_commit': source_sha, 'version': roots[0]['version'],
               'publication': 'pending_B.7', 'development_only': allow_incomplete_runtime, 'bundle_manifest_sha256': digest(bundle / 'manifest.json'),
-              'files': files, 'runtime_suite': suite}
+              'files': files, 'runtime_suite': suite,
+              'registry_selection': registry_selection}
     (staging / 'distribution-manifest.json').write_text(json.dumps(record, indent=2, sort_keys=True) + '\n')
     verify_source(staging)
     run([sys.executable, '-m', 'maturin', 'sdist', '--manifest-path', str(staging / 'Cargo.toml'),
