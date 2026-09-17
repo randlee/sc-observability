@@ -14,7 +14,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-struct OwnerState(Arc<Mutex<sc_observability_binding_runtime::CoreLoggerOwner>>);
+struct OwnerState(Arc<Mutex<sc_observability_log::LogGuard>>);
 
 fn level_envelope(result: Result<LevelChangeDto, Failure>) -> WireEnvelope<LevelChangeDto> {
     match result {
@@ -102,13 +102,17 @@ fn app_observability_level_change<R: tauri::Runtime>(
             )),
         }));
     };
-    let result = match change {
+    let result: Result<LevelChangeDto, Failure> = match change {
         LevelRequestDto::Elevate { level } => owner.elevate_level(
             level.into(),
             sc_observability_types::LevelChangeSource::UserRequest,
-        ),
+        ).map_err(sc_observability_dto::from_level_error)
+            .and_then(sc_observability_dto::from_level_change),
         LevelRequestDto::Reset {} => {
-            owner.reset_level(sc_observability_types::LevelChangeSource::UserRequest)
+            owner
+                .reset_level(sc_observability_types::LevelChangeSource::UserRequest)
+                .map_err(sc_observability_dto::from_level_error)
+                .and_then(sc_observability_dto::from_level_change)
         }
     };
     level_envelope(result)
@@ -123,13 +127,67 @@ fn main() {
         }
     };
     let config = sc_observability::LoggerConfig::default_for(service, PathBuf::from("logs"));
-    let (owner, backend) = match sc_observability_binding_runtime::create_core_backend(config) {
-        Ok(value) => value,
+    let default_action = match sc_observability_types::ActionName::new("log.record") {
+        Ok(action) => action,
+        Err(error) => {
+            eprintln!("could not configure default action: {error}");
+            return;
+        }
+    };
+    let guard = match sc_observability_log::init(
+        config,
+        sc_observability_log::BridgeOptions {
+            default_action,
+            parse_bracket_action: true,
+        },
+    ) {
+        Ok(guard) => guard,
         Err(error) => {
             eprintln!("could not start observability host: {error:?}");
             return;
         }
     };
+    let control = guard.control();
+    let backend = match sc_observability_binding_runtime::bridge_backend(control.clone()) {
+        Ok(backend) => backend,
+        Err(error) => {
+            eprintln!("could not attach observability bridge: {error:?}");
+            return;
+        }
+    };
+    let correlation_id = match sc_observability_log::CorrelationId::new("tauri-example-startup") {
+        Ok(correlation_id) => correlation_id,
+        Err(error) => {
+            eprintln!("could not configure host event correlation: {error}");
+            return;
+        }
+    };
+    let host_event = sc_observability_log::BridgeEvent {
+        level: sc_observability_log::EventLevel::Info,
+        target: match sc_observability_log::TargetCategory::new("tauri-example") {
+            Ok(target) => target,
+            Err(error) => {
+                eprintln!("could not configure host event target: {error}");
+                return;
+            }
+        },
+        action: match sc_observability_log::ActionName::new("startup.rust") {
+            Ok(action) => Some(action),
+            Err(error) => {
+                eprintln!("could not configure host event action: {error}");
+                return;
+            }
+        },
+        message: Some("Rust host initialized".to_owned()),
+        outcome: None,
+        fields: serde_json::Map::new(),
+        request_id: None,
+        correlation_id: Some(correlation_id),
+        trace: None,
+    };
+    if let Err(error) = control.try_log(host_event) {
+        eprintln!("could not submit host startup event: {error}");
+    }
     let policy = AdapterPolicy {
         allowed_window_labels: BTreeSet::from(["main".to_owned()]),
         allowed_targets: BTreeSet::from(["tauri-example".to_owned()]),
@@ -145,7 +203,7 @@ fn main() {
         }
     };
     let result = tauri::Builder::default()
-        .manage(OwnerState(Arc::new(Mutex::new(owner))))
+        .manage(OwnerState(Arc::new(Mutex::new(guard))))
         .plugin(adapter)
         .invoke_handler(tauri::generate_handler![app_observability_level_change])
         .run(tauri::generate_context!());

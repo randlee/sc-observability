@@ -1,12 +1,13 @@
 # B.3a TypeScript/Tauri handoff
 
 Status: in progress on `fix/phase-b-3a-completeness`; parent merge-forwarded
-from `origin/feature/phase-b-4a-python-packaging` at `1e3bc38` (including
-`b3d90dd`).
+from `origin/feature/phase-b-4a-python-packaging` at `e4ad165` (including
+the latest B.4a merge-forward).
 
 The child consumes the B.3 canonical schema and the B.3b native
 `HostLoggingBackend`. The TypeScript package is generated-schema driven and
-exports `createClient`, `encodeValue`, and `encodeEvent`. Operational paths
+exports `createClient`, `createTauriTransport`, `encodeValue`, and `encodeEvent`.
+Operational paths
 resolve tagged `Result` values, with bounded dispatch status and retained
 failure diagnostics. The isolated Tauri adapter validates raw JSON before
 backend admission, authorizes every command by window label, enforces target
@@ -21,8 +22,9 @@ Exact plugin commands are:
 * `plugin:sc-observability|sc_observability_flush`
 
 The application-owned `app_observability_level_change` remains outside the
-plugin and retains owner authority in Rust. The example demonstrates the
-frontend transport and BigInt event conversion; the host composition point is
+plugin and retains owner authority in Rust. The example exports a nonrejecting
+`requestLevelChange` helper, uses the shared Tauri transport, and demonstrates
+BigInt event conversion; the host composition point is
 `examples/tauri-logging/src-tauri/src/main.rs`.
 
 Focused source validation performed:
@@ -31,12 +33,18 @@ Focused source validation performed:
 bash scripts/ci/validate_binding_schema.sh       PASS
 bash scripts/ci/validate_typescript_bindings.sh  PASS (schema/package source checks)
 cargo test --manifest-path bindings/tauri/Cargo.toml --locked --features test  PASS (4 tests)
+node /tmp/b3a-boundary-check.cjs <built-client-dist>  PASS (6/6 exact lead cases)
+cargo check --manifest-path examples/tauri-logging/src-tauri/Cargo.toml --locked  PASS
 ```
 
 The TypeScript tests cover the packaged client’s source-level encoding,
-transport, failure-containment, and lifecycle boundaries. The adapter tests
+transport, failure-containment, version rejection, diagnostic bounds, proxy
+containment, additive output evolution, prototype-safe encoding, and lifecycle
+boundaries. The adapter tests
 exercise strict request policy, redaction, and the Tauri command dispatcher
-through its mock IPC harness. Full installed Rust/npm artifacts, real desktop
+through its mock IPC harness. The source example owns a `LogGuard`, shares its
+control with the adapter backend, and emits correlated Rust/frontend startup
+records. Full installed Rust/npm artifacts, real desktop
 IPC, platform CI, and broad C05 qualification are delegated to
 `bp-tauri-helper` on `feature/phase-b-tauri-qualification`; this handoff does
 not claim those gates. B.3a remains in progress pending that specialist

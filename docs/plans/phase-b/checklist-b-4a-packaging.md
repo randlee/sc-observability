@@ -21,6 +21,8 @@ Lead completeness is required before task closure. No publication.
 | AC4: immutable wheel/sdist source/hashes, exact platform/interpreter/targets and per-cell results | pending | pending |
 | Full required validation, final parent merge, handoff/sprint/project plan | pending | pending |
 | Lead completeness review | pending | pending |
+| Approved production/fault separation: same sdist, separate feature identity/hash/venv, no production hooks | implemented in build/cell/aggregate; companion excluded from publication inventory | release-gate negative regression passes; actual companion proof awaits parent fault file contract |
+| Clean source assembly after runtime tests create ignored Python caches | copy only tracked Python/tests/examples/embedding source; preserve generated local files | tracked-copy regression covers bytecode and optimized caches |
 
 The B.4a plan's phrase “published core packages stay at the B.2 registry
 versions” describes the selected versions, not present registry availability:

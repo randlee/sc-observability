@@ -7,6 +7,7 @@ wheel, so these tests prove the public Python API reaches the real Rust backend.
 from __future__ import annotations
 
 import os
+import json
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from pathlib import Path
@@ -20,7 +21,8 @@ pytestmark = pytest.mark.skipif(
     reason="requires an installed sc-observability wheel",
 )
 
-from sc_observability import Err, LogEvent, Logger, LoggerConfig, LogQuery, Ok, create_logger
+from sc_observability import Err, LogEvent, Logger, LoggerConfig, LogQuery, Ok, create_logger, get_host_logger
+from sc_observability import _native
 
 
 def _owned(root: Path, service: str) -> Logger:
@@ -226,3 +228,90 @@ def test_zero_deadline_shutdown_retains_the_late_completion(tmp_path: Path) -> N
     repeated = logger.shutdown(timeout_ms=2_000)
     assert isinstance(repeated, Ok)
     assert isinstance(logger.health(), Ok)
+
+
+def test_real_factory_filesystem_failure_is_tagged(tmp_path: Path) -> None:
+    root = tmp_path / "sink-fault"
+    service = "python-runtime-sink-fault"
+    # The JSONL sink opens lazily. A directory at the active-file path forces
+    # a real writer failure after public factory construction succeeds.
+    (root / "logs" / f"{service}.log.jsonl").mkdir(parents=True)
+    created = create_logger(
+        LoggerConfig(service=service, log_root=str(root))
+    )
+    assert isinstance(created, Ok)
+    logger = created.value
+    try:
+        assert isinstance(logger.log(_event("filesystem-fault")), Ok)
+        flushed = logger.flush()
+        assert isinstance(flushed, Ok)
+        health = logger.health()
+        assert isinstance(health, Ok)
+        assert health.value.logging.state in ("degraded_dropping", "unavailable")
+        assert health.value.logging.last_error is not None
+    finally:
+        assert isinstance(logger.shutdown(), (Ok, Err))
+
+
+def test_private_ci_fault_hook_preserves_tagged_native_results(tmp_path: Path) -> None:
+    """The source-validation wheel exercises each PyO3 Result boundary."""
+    forced = getattr(_native, "_test_force_failure", None)
+    assert callable(forced), "the source-validation wheel must enable test-hooks"
+
+    forced("create_owned")
+    failed_factory = create_logger(LoggerConfig("python-runtime-forced-factory", str(tmp_path / "factory")))
+    assert isinstance(failed_factory, Err)
+    assert failed_factory.error.kind == "internal"
+    forced("get_installed_host_logger")
+    assert isinstance(get_host_logger(), Err)
+    forced(None)
+
+    logger = _owned(tmp_path / "operations", "python-runtime-forced-operations")
+    operations = (
+        ("log", lambda: logger.log(_event("forced-log"))),
+        ("query", lambda: logger.query(LogQuery())),
+        ("health", logger.health),
+        ("flush", logger.flush),
+        ("wait_stopped", logger.wait_stopped),
+        ("elevate_level", lambda: logger.elevate_level("debug")),
+        ("reset_level", logger.reset_level),
+        ("shutdown", logger.shutdown),
+    )
+    try:
+        for operation, call in operations:
+            forced(operation)
+            result = call()
+            assert isinstance(result, Err), operation
+            assert result.error.kind == "internal"
+    finally:
+        forced(None)
+        assert isinstance(logger.shutdown(), Ok)
+
+
+def test_private_ci_fault_hook_covers_attached_native_results(tmp_path: Path) -> None:
+    """Attached operations share the native fault boundary without ownership."""
+    install_host = getattr(_native, "_test_install_owned_host", None)
+    forced = getattr(_native, "_test_force_failure", None)
+    assert callable(install_host)
+    assert callable(forced)
+    installed = json.loads(install_host(json.dumps({
+        "service": "python-runtime-forced-attached",
+        "log_root": str(tmp_path / "attached"),
+    })))
+    assert installed["kind"] == "ok"
+    attached = get_host_logger()
+    assert isinstance(attached, Ok)
+    operations = (
+        ("log", lambda: attached.value.log(_event("forced-attached-log"))),
+        ("query", lambda: attached.value.query(LogQuery())),
+        ("health", attached.value.health),
+        ("flush", attached.value.flush),
+    )
+    try:
+        for operation, call in operations:
+            forced(operation)
+            result = call()
+            assert isinstance(result, Err), operation
+            assert result.error.kind == "internal"
+    finally:
+        forced(None)
