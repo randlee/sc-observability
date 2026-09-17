@@ -1391,9 +1391,17 @@ mod tests {
         let error = logger.flush().expect_err("flush error should propagate");
         assert_eq!(error.diagnostic().code, error_codes::LOGGER_FLUSH_FAILED);
 
+        let typed_error = logger
+            .flush_typed()
+            .expect_err("typed flush error should propagate");
+        assert_eq!(
+            typed_error.diagnostic().code,
+            error_codes::LOGGER_FLUSH_FAILED
+        );
+
         let health = logger.health();
         assert_eq!(health.dropped_events_total, 0);
-        assert_eq!(health.flush_errors_total, 1);
+        assert_eq!(health.flush_errors_total, 2);
         assert!(health.last_error.is_some());
     }
 
@@ -1828,11 +1836,30 @@ mod tests {
             AdmissionOutcome::Filtered
         );
 
+        let mut invalid_schema = log_event(service_name());
+        invalid_schema.version = SchemaVersion::new("v0").expect("valid test schema value");
+        assert!(matches!(
+            logger.log_typed(invalid_schema),
+            Err(LogFailure::InvalidEvent(_))
+        ));
+
         let wrong_service = ServiceName::new("other-service").expect("valid service");
         assert!(matches!(
             logger.log_typed(log_event(wrong_service)),
             Err(LogFailure::InvalidEvent(_))
         ));
+
+        let root = temp_path("typed-accepted-admission");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let logger = Logger::new_typed(config).expect("typed logger");
+        assert_eq!(
+            logger
+                .try_log_with_outcome_typed(log_event(service_name()))
+                .expect("accepted event"),
+            AdmissionOutcome::Accepted
+        );
     }
 
     #[test]
