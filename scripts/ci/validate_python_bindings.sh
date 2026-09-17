@@ -16,6 +16,13 @@ B4_PYTHON="${B4_PYTHON:-$(uv python find 3.10)}"
 B4_GENERATOR_PYTHON="${B4_GENERATOR_PYTHON:-$(uv python find 3.12.10)}"
 "$B4_GENERATOR_PYTHON" -c 'import sys; assert sys.version_info[:3] == (3, 12, 10), "schema generation requires Python 3.12.10"'
 
+# Rust embedding executables must resolve the selected standalone interpreter's
+# shared library, including when uv's Python is outside the system loader path.
+if [[ "$(uname -s)" == Linux ]]; then
+  B4_PYTHON_LIBDIR="$("$B4_PYTHON" -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
+  export LD_LIBRARY_PATH="$B4_PYTHON_LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
 B4_TEMP_DIR="$(mktemp -d -t sc-observability-b4.XXXXXX)"
 trap 'rm -rf "$B4_TEMP_DIR"' EXIT
 
