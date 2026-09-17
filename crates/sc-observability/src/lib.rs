@@ -1947,6 +1947,17 @@ mod tests {
                 .to_string(),
             "writer degraded; caused by: native writer cause"
         );
+
+        let timeout = ErrorContext::new(
+            error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
+            "writer shutdown timed out",
+            Remediation::recoverable("wait", ["inspect shutdown timing"]),
+        )
+        .source(Box::new(std::io::Error::other("native timeout cause")));
+        let typed: TryLogFailure = TryLogError::ShutdownTimedOut(Box::new(timeout)).into();
+        assert!(matches!(typed, TryLogFailure::ShutdownTimedOut(_)));
+        let legacy: TryLogError = typed.into();
+        assert!(matches!(legacy, TryLogError::ShutdownTimedOut(_)));
     }
 
     #[test]
