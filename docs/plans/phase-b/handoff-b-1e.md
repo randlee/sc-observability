@@ -100,8 +100,10 @@ result, and B.7 alone publishes it.
 
 The implementation correction pass is on
 `feature/phase-b-1e-migration-validation`, based on and merged with the active
-QA1 parent `origin/fix/phase-b-1ab-qa1` at `1e216c7` before validation. The
-child activates all nine wrapper warnings and 20 mapped method warnings at
+QA1 parent `origin/fix/phase-b-1ab-qa1` at `4299e25b7506a6e1d0852a2f3784d954a796329f`
+before final validation. The correction source/fixture commit is `331a0db`;
+the integrated validation merge head at this pass is `f79c4eb`. The child
+activates all nine wrapper warnings and 20 mapped method warnings at
 `since = "1.4.0"`, while retaining the three supported method exemptions and
 `Logger::emit` at its existing `since = "1.2.0"`. Ordinary observation routing
 uses `log_typed` and `flush_typed`; mixed production and compatibility modules
@@ -144,6 +146,8 @@ cargo fmt --all -- --check
 PASS
 cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 PASS
+cargo test --workspace
+PASS; all workspace tests and doctests passed
 ```
 
 The validator runs standalone `legacy`, `migrated` and `partial` Cargo
