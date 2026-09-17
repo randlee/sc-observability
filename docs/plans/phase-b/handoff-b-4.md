@@ -66,9 +66,11 @@ That source-validation wheel alone enables private native test hooks; they force
 a tagged native internal failure before both factories and every owned or
 attached public operation, proving the real PyO3 boundary returns `Err` while
 ordinary package builds expose neither hook nor test host fixture.
-The ordinary locked wheel is also installed independently without that feature:
-its seven production-runtime tests pass and the four source-hook fixtures skip,
-which proves the companion coverage does not become a package API requirement.
+The ordinary locked wheel runs seven production-runtime tests with no private
+fixture imports. Four source-hook fixtures live exclusively in
+`tests/test_runtime_faults.py` and run only in the separately feature-gated
+companion wheel, which proves that companion coverage does not become a package
+API requirement.
 
 The retained B.3b coordinator operation matrix was also run one named process
 case at a time: timer/bootstrap rollback, worker rollback, waiters/callbacks,
