@@ -21,7 +21,8 @@ def run(arguments: list[str], cwd: Path, log: Path) -> None:
     with log.open('a') as output:
         output.write(json.dumps(arguments) + '\n')
         output.flush()
-        result = subprocess.run(arguments, cwd=cwd, stdout=output, stderr=subprocess.STDOUT)
+        result = subprocess.run(arguments, cwd=cwd, stdout=output, stderr=subprocess.STDOUT,
+                                env={**os.environ, 'RUSTUP_TOOLCHAIN': '1.94.1'})
     if result.returncode:
         raise DistributionError(f'command failed ({result.returncode}); see {log}\n' + '\n'.join(log.read_text(errors='replace').splitlines()[-35:]))
 

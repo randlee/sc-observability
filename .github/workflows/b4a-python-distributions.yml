@@ -43,6 +43,7 @@ jobs:
               out.write('cells=' + json.dumps(cells) + '\n')
 
   sdist:
+    timeout-minutes: 20
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -73,6 +74,7 @@ jobs:
           retention-days: 90
 
   wheel:
+    timeout-minutes: 45
     needs: [plan, sdist]
     strategy:
       fail-fast: false
@@ -120,6 +122,7 @@ jobs:
           retention-days: 90
 
   installed-suite:
+    timeout-minutes: 30
     needs: [plan, sdist, wheel]
     strategy:
       fail-fast: false

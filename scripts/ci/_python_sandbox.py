@@ -8,6 +8,8 @@ import shutil
 import socket
 import subprocess
 import sys
+import sysconfig
+import time
 import uuid
 from pathlib import Path
 
@@ -43,6 +45,10 @@ class Sandbox:
                         PATH=str(Path(self.cargo).parent) + os.pathsep + os.environ['PATH'],
                         PYO3_PYTHON=sys.executable, PYTHONDONTWRITEBYTECODE='1')
         self.system = platform.system()
+        if self.system == 'Linux':
+            library_dir = sysconfig.get_config_var('LIBDIR')
+            if library_dir:
+                self.env['LD_LIBRARY_PATH'] = str(library_dir) + os.pathsep + self.env.get('LD_LIBRARY_PATH', '')
         self.cache_probe = Path.home() / '.cargo' / ('sc-observability-probe-' + uuid.uuid4().hex)
         self.network_ip = socket.gethostbyname('index.crates.io')
         with socket.create_connection((self.network_ip, 443), timeout=10):
@@ -105,12 +111,21 @@ class Sandbox:
         self.cache_probe.unlink(missing_ok=True)
 
     def run(self, command: list[str], cwd: Path, *, expect_failure: bool = False) -> str:
-        result = subprocess.run(self.prefix + command, cwd=cwd, env=self.env,
-                                text=True, encoding='utf-8', errors='replace', capture_output=True)
+        print('B4A_COMMAND ' + json.dumps(command), flush=True)
+        started = time.monotonic()
+        try:
+            result = subprocess.run(self.prefix + command, cwd=cwd, env=self.env,
+                                    text=True, encoding='utf-8', errors='replace',
+                                    capture_output=True, timeout=900)
+        except subprocess.TimeoutExpired as error:
+            decode = lambda value: value.decode('utf-8', errors='replace') if isinstance(value, bytes) else (value or '')
+            raise DistributionError(f'qualification command exceeded 900 seconds: {command}\n'
+                                    + decode(error.stdout) + '\n' + decode(error.stderr)) from error
+        print(f'B4A_EXIT {result.returncode} after {time.monotonic() - started:.2f}s', flush=True)
         self.commands.append({'command': command, 'exit_code': result.returncode,
                               'stdout': result.stdout, 'stderr': result.stderr})
         if (result.returncode == 0) == expect_failure:
-            raise DistributionError(f'isolation command had unexpected result: {command}\n{result.stderr}')
+            raise DistributionError(f'isolation command had unexpected result: {command}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}')
         return result.stdout
 
     def prove_denials(self, python: str, checkout: Path) -> dict:
