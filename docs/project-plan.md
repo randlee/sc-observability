@@ -177,6 +177,15 @@ the neutral subscriber/projector adapters through unchanged registration
 boundaries. Full B.1c integration, copied-bridge acceptance, and independent
 QA remain pending.
 
+### B.1d — Typed telemetry preparation
+
+The scoped telemetry preparation layer is tracked in
+[`plans/phase-b/task-b-1d-telemetry-prep.md`](./plans/phase-b/task-b-1d-telemetry-prep.md).
+It adds opt-in typed OTLP configuration, assembly, construction, flush, and
+shutdown operations while retaining existing exporters, telemetry lifecycle,
+projector registration, serialization, and public error surfaces. Copied-bridge
+integration, warning rollout, publication, and independent QA remain separate.
+
 ### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
 
 [`plans/phase-b/task-b-1-provenance-prep.md`](./plans/phase-b/task-b-1-provenance-prep.md)
