@@ -1,29 +1,34 @@
 ---
 id: B.7-publish-bindings-handoff
-status: review_packet_prepared_publication_out_of_phase_scope
+status: review_packet_prepared_publication_pending_owner_review
 branch: feature/phase-b-7-publish-bindings
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-7-publish-bindings
 base: develop
-generated_at: 2026-09-17T16:16:23Z
+generated_at: 2026-09-17T18:49:04Z
 ---
 
 # B.7 binding-release review packet (readiness handoff)
 
-**Owner scope correction (received via aobs): Phase B ends at review
-readiness; no publication.** Installing, wiring, or dispatching any live
-publish pipeline is explicitly outside Phase B. The intended shared
-publishing pipeline is a separate tool, **`sc-publish`**, whose installation
-is a follow-up outside this phase; it is not installed on this branch or in
-`.github/workflows/release.yml`. This supersedes this document's earlier
-framing (and aobs's own prior C04 direction) of `release.yml` as the place
-where binding artifacts would eventually be published from.
+**Owner sequencing correction (via aobs): no mid-phase publication. B.P2/B.2
+are reviewed immutable release candidates, B.3-B.6 (and this branch's
+bindings) consume prepublication bundles, and B.7 is the sole phase-end
+publication step for all of Phase B (core, bridge/macros, and bindings) --
+but only after explicit owner review authorizes it.** Until that review
+happens, no publication workflow is dispatched and no registry credentials
+are sought, from this branch or any other. Installing or upgrading the
+intended shared publishing pipeline, **`sc-publish`**, is a separate
+follow-up outside Phase B; it is not installed on this branch or in
+`.github/workflows/release.yml`. This is a sequencing/authorization
+constraint, not a permanent scope removal: B.7 remains the eventual
+publication authority the sprint doc already assigns it, deferred rather
+than cancelled.
 
 This document records what B.7's *review* machinery proves today, against
 this branch's actual (partial) tree state: manifest structure, rebuildable
 candidate evidence, and isolated consumer-matrix qualification. It is not a
-publication record and never was: nothing described here has been published
-to any registry, no registry credentials are sought here, and no publish
-workflow is installed. See `release/bindings-artifacts.toml` for the
+publication record: nothing described here has been published to any
+registry, no registry credentials have been sought, and no publish workflow
+is dispatched or installed. See `release/bindings-artifacts.toml` for the
 machine-readable source of truth this document summarizes.
 
 ## Registry URLs
@@ -199,7 +204,7 @@ scope; this readiness work does not re-run or duplicate those checks.
   publish-readiness -- the manifest entry stays `pending` and no summary
   line claims otherwise.
 
-## Sprint status (updated after the owner scope correction)
+## Sprint status (updated after the owner sequencing correction)
 
 **aobs rejected the first pass of this readiness machinery as too weak**:
 `validate_binding_registry_consumers.sh` succeeded on missing packages,
@@ -212,9 +217,14 @@ this branch's review packet.
 aobs's C04 direction additionally asked for `release.yml` to install real
 crates.io/PyPI/npm publish jobs for the binding artifacts, gated on the
 manifest, and to block the `release` job on all of them. That work was done,
-verified, and then **reverted**: the actual owner corrected the scope after
-the fact -- Phase B ends at review readiness, not publication, and a shared
-publish pipeline ("sc-publish") is a separate follow-up outside this phase.
+verified, and then **reverted**: the actual owner corrected the sequencing
+after the fact -- there is no mid-phase publication, and B.7 is the sole
+phase-end publication step for all of Phase B (core, bridge/macros, and
+bindings alike), gated on explicit owner review that has not happened yet.
+Until that review authorizes it, no publication workflow is dispatched and
+no registry credentials are sought; a shared publish pipeline ("sc-publish")
+is a separate follow-up outside this phase's installation scope. This is a
+deferral, not a cancellation of B.7's eventual publication role.
 `.github/workflows/release.yml` no longer contains `publish-binding-crates`,
 `precheck-python-wheel-build`, `qualify-python-wheel-matrix`,
 `publish-python-wheel`, or `publish-npm-client`; the `release` job's `needs:`
@@ -275,8 +285,10 @@ before B.7, and does not itself install or wire any new publish pipeline.
 **This is a review packet, not a publication.** Nothing in this branch
 uploads to a registry, creates a release tag beyond what the pre-existing
 6-core-crate `gate-and-tag`/`publish` jobs already did before B.7, dispatches
-a publish workflow, or seeks npm/PyPI credentials. What B.7 hands off for a
-future `sc-publish` follow-up to consume:
+a publish workflow, or seeks npm/PyPI credentials -- that stays true until
+owner review authorizes B.7's actual phase-end publication pass. What B.7
+hands off for that eventual, owner-reviewed pass (via `sc-publish` once it
+is installed, or whatever mechanism the owner review settles on) to consume:
 
 (a) `release/bindings-artifacts.toml`, a readiness manifest naming 4 crates.io
     entries (3 `ready`, 1 `pending`: `sc-observability-tauri`, blocked on
@@ -293,8 +305,8 @@ future `sc-publish` follow-up to consume:
     approvals and gaps a future publish pass will need.
 
 None of (a)-(d) installs, dispatches, or authenticates against a publish
-pipeline; they only prove structural/hash/consumer readiness for `sc-publish`
-to consume once it exists. This sprint is **not** marked complete by this
-review packet -- per the owner's explicit instruction, B.7 does not claim
-publication readiness or phase-end publication, and its sprint doc's
-frontmatter `status` is not set to `complete`.
+pipeline; they only prove structural/hash/consumer readiness for B.7's
+eventual owner-reviewed publication pass. This sprint is **not** marked
+complete by this review packet -- per the owner's explicit instruction, B.7
+does not claim publication has happened or that it is authorized yet, and
+its sprint doc's frontmatter `status` is not set to `complete`.

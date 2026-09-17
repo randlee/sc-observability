@@ -287,15 +287,19 @@ BTIT source was copied, no source approval was granted, and no real
 accepted, and the B.1 copy section above records that this validator's real
 `import-provenance.json` now exists and B.1 has copied the accepted source.
 
-### B.7 — Publish bindings: review-readiness machinery (no publication)
+### B.7 — Publish bindings: review-readiness machinery (publication pending owner review)
 
 The phase-end publication sprint is tracked in
 [`plans/phase-b/sprint-b-7-publish-bindings.md`](./plans/phase-b/sprint-b-7-publish-bindings.md),
-built from `feature/phase-b-6-python-async`. **Owner scope correction: Phase
-B ends at review readiness; no publication.** Installing or wiring a live
-publish pipeline for these binding artifacts is explicitly outside Phase B;
-the intended shared publishing pipeline, `sc-publish`, is a separate
-follow-up and is not installed on this branch.
+built from `feature/phase-b-6-python-async`. **Owner sequencing correction:
+no mid-phase publication.** B.P2/B.2 are reviewed immutable release
+candidates, B.3-B.6 and these bindings consume prepublication bundles, and
+B.7 is the sole phase-end publication step for all of Phase B (core,
+bridge/macros, and bindings) -- but only once explicit owner review
+authorizes it. Until then, no publication workflow is dispatched and no
+registry credentials are sought. Installing or upgrading the intended shared
+publishing pipeline, `sc-publish`, is a separate follow-up outside Phase B
+and is not installed on this branch.
 
 This entry records the review-readiness machinery built instead:
 `release/bindings-artifacts.toml` (manifest for the 4 binding crates.io
@@ -320,8 +324,9 @@ reported as `pending` with named reasons, not treated as failures or given
 fabricated placeholder files. No npm/PyPI registry credentials exist, and
 the crates.io/PyPI/npm name-preflight only proved the 6 target names are
 currently unclaimed, not that namespace control is secured. This sprint is
-not marked complete; producing this review packet is not sprint closure and
-does not itself constitute or require live publication.
+not marked complete; producing this review packet is not sprint closure. It
+prepares B.7 for its actual phase-end publication pass, deferred (not
+cancelled) until owner review authorizes it.
 
 ## Rule
 
