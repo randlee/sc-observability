@@ -138,10 +138,12 @@ claim that the phase is complete.
 
 ### B.P2 — Staged runtime-level package qualification
 
-B.P2 selects the `1.3.0` four-crate candidate, records source/version/tree
-checksums and Cargo package file lists, and validates an isolated staged
-consumer. It does not publish to crates.io: B.7 owns the phase-end live release
-and registry-only consumer proof.
+B.P2 selects the `1.3.0` four-crate candidate, retains deterministic `.crate`
+archive checksums and normalized package inventories, and validates separate
+published-baseline and extracted-candidate consumers. The implementation is
+pending retained macOS/Linux/Windows qualification artifacts; it does not
+publish to crates.io. B.7 owns the phase-end live release and registry-only
+consumer proof.
 
 ## Rule
 

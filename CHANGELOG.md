@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-This release line will become `v1.2.0` when `integrate/phase-a` merges to `develop`.
+Candidate `1.3.0` is staged only; it is not published or approved for release.
+
+### Added
+
+- Candidate-only `LevelOwner`, runtime threshold mutation, filtered admission,
+  query, and shutdown behavior is qualified through the B.P2 extracted-package
+  consumer. The release is pending the retained three-platform evidence and
+  phase-end B.7 publication approval.
 
 ## [1.2.0] - 2026-05-26
 

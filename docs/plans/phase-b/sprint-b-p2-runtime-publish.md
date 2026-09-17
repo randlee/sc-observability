@@ -1,9 +1,9 @@
 ---
 id: B.P2
-status: complete
-branch: feature/B-P2-runtime-publish
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/B-P2-runtime-publish
-target: feature/B-P1-runtime-core
+status: incomplete
+branch: fix/B-P2-package-completeness
+worktree: /Users/randlee/github/sc-observability-worktrees/fix/B-P2-package-completeness
+target: feature/B-P2-runtime-publish
 base: develop
 ---
 
@@ -78,6 +78,11 @@ The new script is implemented in this sprint and rejects version placeholders,
 ambient workspace resolution, missing platform results and skipped assertions.
 Record actual qualification commands and checksums in the handoff. B.7 must
 later run a separate registry-only consumer after real publication.
+
+The fix layer remains **incomplete** until the retained macOS, Linux, and
+Windows workflow artifacts pass the aggregate platform-evidence validator.
+Local output is useful implementation evidence, not a replacement for that
+platform qualification.
 
 ## Paths to delete
 
