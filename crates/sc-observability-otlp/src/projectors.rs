@@ -16,6 +16,10 @@
 use std::sync::Arc;
 
 use crate::{Telemetry, error_codes};
+use sc_observability_types::typed::{
+    TypedLogProjector, TypedMetricProjector, TypedSpanProjector, legacy_log_projector,
+    legacy_metric_projector, legacy_span_projector,
+};
 use sc_observability_types::{
     ErrorContext, LogEvent, LogProjector, MetricProjector, MetricRecord, Observable, Observation,
     ObservationFilter, ProjectionError, ProjectionRegistration, Remediation, SpanProjector,
@@ -59,15 +63,36 @@ where
         self
     }
 
+    /// Attaches a typed log projector through the retained registration adapter.
+    pub fn with_typed_log_projector(mut self, projector: Arc<dyn TypedLogProjector<T>>) -> Self {
+        self.log_projector = Some(legacy_log_projector(projector));
+        self
+    }
+
     /// Attaches a span projector whose output is also forwarded into telemetry.
     pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
         self.span_projector = Some(projector);
         self
     }
 
+    /// Attaches a typed span projector through the retained registration adapter.
+    pub fn with_typed_span_projector(mut self, projector: Arc<dyn TypedSpanProjector<T>>) -> Self {
+        self.span_projector = Some(legacy_span_projector(projector));
+        self
+    }
+
     /// Attaches a metric projector whose output is also forwarded into telemetry.
     pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
         self.metric_projector = Some(projector);
+        self
+    }
+
+    /// Attaches a typed metric projector through the retained registration adapter.
+    pub fn with_typed_metric_projector(
+        mut self,
+        projector: Arc<dyn TypedMetricProjector<T>>,
+    ) -> Self {
+        self.metric_projector = Some(legacy_metric_projector(projector));
         self
     }
 
