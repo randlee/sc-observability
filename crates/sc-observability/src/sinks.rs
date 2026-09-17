@@ -269,7 +269,7 @@ impl JsonlFileSink {
         LogSinkFailure::write(
             "jsonl file sink write failed",
             Remediation::not_recoverable(
-                "file sink write failure handling is owned by the logger runtime",
+                "repair or replace the failed standalone sink before retrying the write",
             ),
         )
         .cause(message)
@@ -456,7 +456,7 @@ impl ConsoleSink {
         LogSinkFailure::write(
             "console sink write failed",
             Remediation::not_recoverable(
-                "console sink write failure handling is owned by the logger runtime",
+                "repair or replace the failed standalone sink before retrying the write",
             ),
         )
         .cause(message)
@@ -609,7 +609,7 @@ pub(crate) fn diagnostic_for_sink_failure(message: impl Into<Cow<'static, str>>)
         message: message.into().into_owned(),
         cause: None,
         remediation: Remediation::not_recoverable(
-            "sink failure handling is owned by the logger runtime",
+            "repair or replace the failed standalone sink before retrying the write",
         ),
         docs: None,
         details: serde_json::Map::new(),
@@ -820,12 +820,24 @@ mod tests {
             error.diagnostic().code,
             error_codes::LOGGER_SINK_WRITE_FAILED
         );
+        assert_eq!(
+            error.diagnostic().remediation,
+            Remediation::not_recoverable(
+                "repair or replace the failed standalone sink before retrying the write"
+            )
+        );
+        assert!(std::error::Error::source(&error).is_some());
         let typed_error = crate::typed::TypedLogSink::write(&sink, &log_event())
             .expect_err("typed write failure");
         assert_eq!(
             typed_error.diagnostic().code,
             error_codes::LOGGER_SINK_WRITE_FAILED
         );
+        assert_eq!(
+            typed_error.diagnostic().remediation,
+            error.diagnostic().remediation
+        );
+        assert!(std::error::Error::source(&typed_error).is_some());
         assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
     }
 }

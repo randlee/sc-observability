@@ -45,7 +45,7 @@ use crate::{
     IdentityError, InitError, LogEvent, LogProjector, LogSinkError, MetricProjector, MetricRecord,
     Observable, Observation, ObservationSubscriber, ProcessIdentity, ProcessIdentityResolver,
     ProjectionError, Remediation, ShutdownError, SpanProjector, SpanSignal, SubscriberError,
-    sealed,
+    error_codes, sealed,
 };
 
 /// A diagnostic error whose family-specific kind is available without parsing
@@ -98,12 +98,21 @@ macro_rules! impl_failure_builders {
     };
 }
 
+macro_rules! failure_error_code {
+    ($canonical:literal) => {
+        ErrorCode::new_static($canonical)
+    };
+    ($canonical:literal => $code:expr) => {
+        $code
+    };
+}
+
 macro_rules! define_failure {
     (
         $(#[$meta:meta])*
         $legacy:ident => $failure:ident, $kind:ident {
             $(
-                $constructor:ident => $variant:ident => [$canonical:literal $(, $alias:literal)*]
+                $constructor:ident => $variant:ident => [$canonical:literal $(=> $code:expr)? $(, $alias:literal)*]
             ),+ $(,)?
         }
     ) => {
@@ -148,7 +157,7 @@ macro_rules! define_failure {
                     Self {
                         kind: $kind::$variant,
                         context: Box::new(ErrorContext::new(
-                            ErrorCode::new_static($canonical),
+                            failure_error_code!($canonical $(=> $code)?),
                             message,
                             remediation,
                         )),
@@ -225,7 +234,10 @@ macro_rules! impl_legacy_classification {
 define_failure! {
     /// Typed process identity resolution failure.
     IdentityError => IdentityFailure, IdentityFailureKind {
-        resolution_failed => ResolutionFailed => ["SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"]
+        resolution_failed => ResolutionFailed => [
+            "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"
+                => error_codes::IDENTITY_RESOLUTION_FAILED
+        ]
     }
 }
 

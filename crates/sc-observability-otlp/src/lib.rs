@@ -426,7 +426,10 @@ impl Telemetry {
         }
 
         if let Some(export_failure) = flush_outcome.export_failure {
-            return Err(shutdown_export_failure_typed(export_failure));
+            return Err(shutdown_export_failure_typed(
+                export_failure,
+                runtime.last_error.clone(),
+            ));
         }
 
         Ok(())
@@ -601,8 +604,14 @@ fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
     ))
 }
 
-fn shutdown_export_failure_typed(error: ExportFailure) -> ShutdownFailure {
-    let summary = DiagnosticSummary::from(error.diagnostic());
+fn shutdown_export_failure_typed(
+    error: ExportFailure,
+    diagnostic_summary: Option<DiagnosticSummary>,
+) -> ShutdownFailure {
+    // The legacy shutdown path selected `runtime.last_error` after incomplete
+    // span accounting. Preserve that diagnostic selection exactly, while the
+    // typed source chain keeps the actual exporter failure available to callers.
+    let summary = diagnostic_summary.unwrap_or_else(|| DiagnosticSummary::from(error.diagnostic()));
     let mut context = ErrorContext::new(
         error_codes::TELEMETRY_FLUSH_FAILED,
         "failed to flush telemetry during shutdown",
@@ -1499,44 +1508,153 @@ mod tests {
     }
 
     #[test]
-    fn shutdown_preserves_custom_export_code_and_native_source() {
-        let telemetry = Telemetry::new_with_exporters_typed(
+    fn shutdown_preserves_custom_export_code_and_native_source_for_both_apis() {
+        fn assert_custom_source<E>(error: &E, telemetry: &Telemetry)
+        where
+            E: DiagnosticInfo + std::error::Error,
+        {
+            assert_eq!(
+                error.diagnostic().details.get("exporter_error_code"),
+                Some(&Value::String("SC_TEST_CUSTOM_EXPORT".to_owned()))
+            );
+            assert_eq!(
+                telemetry
+                    .health()
+                    .last_error
+                    .and_then(|summary| summary.code),
+                Some(ErrorCode::new_static("SC_TEST_CUSTOM_EXPORT"))
+            );
+
+            let shutdown_context =
+                std::error::Error::source(error).expect("shutdown failure preserves its context");
+            let export_failure = shutdown_context
+                .source()
+                .expect("shutdown context preserves export failure");
+            let export_context = export_failure
+                .source()
+                .expect("export failure preserves its context");
+            let native_source = export_context
+                .source()
+                .expect("export context preserves native source");
+            assert_eq!(native_source.to_string(), "custom exporter native source");
+        }
+
+        let legacy = Telemetry::new_with_exporters(
+            telemetry_config(),
+            Arc::new(SourcePreservingLogExporter),
+            Arc::new(RecordingTraceExporter::default()),
+            Arc::new(RecordingMetricExporter::default()),
+        )
+        .expect("legacy telemetry");
+        let typed = Telemetry::new_with_exporters_typed(
             telemetry_config(),
             Arc::new(SourcePreservingLogExporter),
             Arc::new(RecordingTraceExporter::default()),
             Arc::new(RecordingMetricExporter::default()),
         )
         .expect("typed telemetry");
-        telemetry
+        legacy
             .emit_log(&log_event(service_name(), "shutdown-export"))
-            .expect("emit");
+            .expect("legacy emit");
+        typed
+            .emit_log(&log_event(service_name(), "shutdown-export"))
+            .expect("typed emit");
 
-        let error = telemetry
+        let legacy_error = legacy
+            .shutdown()
+            .expect_err("legacy shutdown should retain the exporter failure");
+        let typed_error = typed
             .shutdown_typed()
-            .expect_err("shutdown should retain the exporter failure");
+            .expect_err("typed shutdown should retain the exporter failure");
+        assert_custom_source(&legacy_error, &legacy);
+        assert_custom_source(&typed_error, &typed);
+    }
+
+    #[test]
+    fn combined_export_failure_and_incomplete_span_preserve_baseline_shutdown_summary() {
+        fn assert_baseline_summary<E>(error: &E, telemetry: &Telemetry)
+        where
+            E: DiagnosticInfo,
+        {
+            assert_eq!(error.diagnostic().code, error_codes::TELEMETRY_FLUSH_FAILED);
+            assert_eq!(
+                error.diagnostic().cause.as_deref(),
+                Some("dropped incomplete spans during shutdown")
+            );
+            assert_eq!(
+                error.diagnostic().details.get("exporter_error_code"),
+                Some(&Value::String(
+                    error_codes::TELEMETRY_INCOMPLETE_SPAN_DROPPED
+                        .as_str()
+                        .to_owned(),
+                ))
+            );
+            let health = telemetry.health();
+            assert_eq!(health.state, TelemetryHealthState::Unavailable);
+            assert_eq!(health.dropped_exports_total, 2);
+            assert_eq!(
+                health.last_error.and_then(|summary| summary.code),
+                Some(error_codes::TELEMETRY_INCOMPLETE_SPAN_DROPPED)
+            );
+            assert_eq!(
+                health.exporter_statuses[0].state,
+                ExporterHealthState::Degraded
+            );
+            assert_eq!(
+                health.exporter_statuses[1].state,
+                ExporterHealthState::Degraded
+            );
+        }
+
+        let legacy_exporter = Arc::new(RecordingLogExporter::default());
+        legacy_exporter.fail.store(true, Ordering::SeqCst);
+        let typed_exporter = Arc::new(RecordingLogExporter::default());
+        typed_exporter.fail.store(true, Ordering::SeqCst);
+        let legacy = Telemetry::new_with_exporters(
+            telemetry_config(),
+            legacy_exporter,
+            Arc::new(RecordingTraceExporter::default()),
+            Arc::new(RecordingMetricExporter::default()),
+        )
+        .expect("legacy telemetry");
+        let typed = Telemetry::new_with_exporters_typed(
+            telemetry_config(),
+            typed_exporter,
+            Arc::new(RecordingTraceExporter::default()),
+            Arc::new(RecordingMetricExporter::default()),
+        )
+        .expect("typed telemetry");
+
+        for telemetry in [&legacy, &typed] {
+            telemetry
+                .emit_log(&log_event(service_name(), "shutdown-export"))
+                .expect("emit log");
+            let (started, _) = complete_span_signals();
+            telemetry.emit_span(&started).expect("emit incomplete span");
+        }
+
+        let legacy_error = legacy
+            .shutdown()
+            .expect_err("legacy shutdown should report final export failure");
+        let typed_error = typed
+            .shutdown_typed()
+            .expect_err("typed shutdown should report final export failure");
+        assert_baseline_summary(&legacy_error, &legacy);
+        assert_baseline_summary(&typed_error, &typed);
         assert_eq!(
-            error.diagnostic().details.get("exporter_error_code"),
-            Some(&Value::String("SC_TEST_CUSTOM_EXPORT".to_owned()))
+            legacy_error.diagnostic().code,
+            typed_error.diagnostic().code
         );
         assert_eq!(
-            telemetry
-                .health()
-                .last_error
-                .and_then(|summary| summary.code),
-            Some(ErrorCode::new_static("SC_TEST_CUSTOM_EXPORT"))
+            legacy_error.diagnostic().cause,
+            typed_error.diagnostic().cause
+        );
+        assert_eq!(
+            legacy_error.diagnostic().details,
+            typed_error.diagnostic().details
         );
 
-        let shutdown_context =
-            std::error::Error::source(&error).expect("shutdown failure preserves its context");
-        let export_failure = shutdown_context
-            .source()
-            .expect("shutdown context preserves export failure");
-        let export_context = export_failure
-            .source()
-            .expect("export failure preserves its context");
-        let native_source = export_context
-            .source()
-            .expect("export context preserves native source");
-        assert_eq!(native_source.to_string(), "custom exporter native source");
+        legacy.shutdown().expect("legacy repeated shutdown");
+        typed.shutdown_typed().expect("typed repeated shutdown");
     }
 }

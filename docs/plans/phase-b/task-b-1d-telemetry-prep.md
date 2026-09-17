@@ -1,6 +1,6 @@
 ---
 id: B.1d-telemetry-prep
-status: in_progress
+status: complete
 branch: feature/phase-b-1d-telemetry-prep
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1d-telemetry-prep
 parent: feature/phase-b-1-copy
@@ -48,5 +48,7 @@ repeated shutdown remains successful.
 Copied-bridge integration and independent QA are later-layer work and are not
 claimed by this preparation task.
 
-The final source matrix is recorded in `handoff-b-1d.md`; this task plan stays
-in progress until coordinator completeness review completes.
+The final source matrix is recorded in `handoff-b-1d.md`. Coordinator
+completeness PASS tested frozen revision
+`b76495c05be5e7d59a5c3ed8d383763c9de68aee` (ATM receipt
+`01M2Q5TW66B03B0XH7QTQJKF7A`); this scoped task is complete.
