@@ -422,3 +422,13 @@ local checks and remaining gates. The final B.4/B.5/B.6 combined candidate must
 pass one immutable five-wheel/25-cell matrix, including actual embedded hosts
 per interpreter. Lead completeness, consolidated QA, ordered parent merges and
 B.7 publication remain separate; no intermediate local result closes the matrix.
+
+### B.4 — Owned and host-attached Python runtime
+
+[B.4 Python runtime](plans/phase-b/sprint-b-4-python.md) provides the locked
+`abi3-py310` PyO3 owned and Rust-host-attached logging surface, typed `Ok`/`Err`
+facade, and the Rust `rlib` embedding surface. Its
+[handoff](plans/phase-b/handoff-b-4.md) records the tested implementation,
+source-wheel runtime/conformance gates, private companion-only fault proofs and
+the public API digest. B.4a separately owns wheel/sdist and platform
+qualification; B.7 retains publication.

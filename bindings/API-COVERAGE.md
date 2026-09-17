@@ -103,11 +103,15 @@ transport, and language behavior is covered by the following layers.
 | Fixed in-flight dispatch and failure counters | `bindings/typescript/src/client.ts` (`reserve`, `recordFailure`); client status smoke assertions |
 | Tauri request validation, authorization, target allowlist and redaction | `bindings/tauri/src/lib.rs` strict-request, policy, target and recursive-redaction paths/tests |
 | Exact IPC command names and host-owned lifecycle | `bindings/tauri/src/lib.rs`; `examples/tauri-logging/src-tauri/src/main.rs` |
+| Tauri plugin ACL and app command registration | `bindings/tauri/build.rs`; `bindings/tauri/permissions/default.toml`; `examples/tauri-logging/src-tauri/build.rs`; `examples/tauri-logging/src-tauri/capabilities/default.json` |
+| Exported Tauri invoke transport, application level helper, and ergonomic event | `bindings/typescript/src/client.ts`; `examples/tauri-logging/src/main.ts`; `examples/tauri-logging/README.md` |
+| Source package and adapter gates | `scripts/ci/validate_typescript_bindings.sh`; `bindings/typescript/src/test.ts`; `bindings/tauri/src/lib.rs` focused tests |
 | Real consumer transport and ergonomic event | `examples/tauri-logging/src/main.ts`; `examples/tauri-logging/README.md` |
 | Installation, package and adapter gates | `scripts/ci/validate_typescript_bindings.sh` (packed tarball installed outside the checkout, adapter mock-IPC and locked example checks) |
 
 The native backend remains the shared B.3b `HostLoggingBackend`; this layer
 does not duplicate core conversion or logger ownership.
+Full installed-package, real-IPC, platform, and broad qualification evidence is owned by the `bp-tauri-helper` specialist.
 
 ## Python synchronous and asynchronous surfaces
 

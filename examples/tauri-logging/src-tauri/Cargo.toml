@@ -10,6 +10,7 @@ publish = false
 sc-observability = { path = "../../../crates/sc-observability" }
 sc-observability-binding-runtime = { path = "../../../crates/sc-observability-binding-runtime" }
 sc-observability-dto = { path = "../../../crates/sc-observability-dto" }
+sc-observability-log = { path = "../../../crates/sc-observability-log" }
 sc-observability-tauri = { path = "../../../bindings/tauri", features = ["tauri"] }
 sc-observability-types = { path = "../../../crates/sc-observability-types" }
 serde = { version = "1", features = ["derive"] }

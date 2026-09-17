@@ -810,6 +810,19 @@ impl<State> Logger<State> {
 }
 
 impl LevelOwner {
+    #[cfg(feature = "fault-injection")]
+    /// Sets the actual runtime revision to its terminal value for binding tests.
+    pub fn force_revision_exhaustion_for_test(&mut self) -> bool {
+        let Some(control) = self.control.upgrade() else {
+            return false;
+        };
+        let Ok(mut control) = control.lock() else {
+            return false;
+        };
+        control.state.revision = u64::MAX;
+        true
+    }
+
     /// Changes the logger's effective level without changing its configured baseline.
     pub fn elevate_level(
         &mut self,

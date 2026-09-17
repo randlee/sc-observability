@@ -1,0 +1,151 @@
+    Checking sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability)
+    Checking sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability-log)
+    Checking sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability-binding-runtime)
+    Checking sc-observability-py v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/bindings/python/sc-observability-py)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.00s
+   Compiling sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability)
+   Compiling sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability-log)
+   Compiling sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability-binding-runtime)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.27s
+     Running unittests src/lib.rs (target/debug/deps/sc_observability_binding_runtime-a023d29096b3c5f7)
+
+running 1 test
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/backends.rs (target/debug/deps/backends-3e2d58e1c9a6ff90)
+
+running 2 tests
+test bridge_roundtrip_preserves_host_ownership ... ok
+test core_roundtrip_and_surviving_read_handles ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sc_observability_binding_runtime
+
+running 4 tests
+test crates/sc-observability-binding-runtime/src/lib.rs - CoreLoggerOwner (line 81) - compile fail ... ok
+test crates/sc-observability-binding-runtime/src/lib.rs - CoreLoggerBackend (line 65) - compile fail ... ok
+test crates/sc-observability-binding-runtime/src/lib.rs - CoreLoggerBackend (line 70) - compile fail ... ok
+test crates/sc-observability-binding-runtime/src/lib.rs - BridgeControlBackend (line 91) - compile fail ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+   Compiling once_cell v1.21.4
+   Compiling sc-observability-log-macros v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability-log-macros)
+   Compiling pyo3-ffi v0.29.2
+   Compiling pyo3 v0.29.2
+   Compiling sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability-log)
+   Compiling sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability-binding-runtime)
+   Compiling sc-observability-py v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/bindings/python/sc-observability-py)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.87s
+     Running unittests src/lib.rs (target/debug/deps/_native-06041075b4b9947a)
+
+running 6 tests
+
+running 1 test
+test tests::host_installation_is_immutable_per_module ... ok
+test tests::attached_factory_preserves_host_ownership_and_retained_health ... ok
+test tests::module_collection_keeps_live_attached_handle_nonowning ... ok
+test tests::concurrent_host_installs_have_exactly_one_winner ... ok
+test tests::attached_python_producers_do_not_contend_for_dispatch ... ok
+test tests::host_install_with_releasing_module_hook_is_bounded ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.09s
+
+test tests::host_install_with_releasing_module_hook_is_bounded ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+   Doc-tests _native
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling serde_json v1.0.151
+   Compiling serde v1.0.229
+   Compiling ref-cast v1.0.27
+   Compiling thiserror v2.0.20
+   Compiling memchr v2.8.3
+   Compiling itoa v1.0.18
+   Compiling num-conv v0.2.2
+   Compiling time-core v0.1.9
+   Compiling powerfmt v0.2.0
+   Compiling dyn-clone v1.0.20
+   Compiling syn v3.0.6
+   Compiling serde_derive_internals v0.30.0
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.20
+   Compiling ref-cast-impl v1.0.27
+   Compiling deranged v0.5.8
+   Compiling schemars_derive v1.2.2
+   Compiling time v0.3.55
+   Compiling sc-observability-types v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability-types)
+   Compiling schemars v1.2.2
+   Compiling sc-observability-dto v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability-dto)
+   Compiling sc-observability-schema v0.1.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/bindings/schema-generator)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.56s
+     Running `bindings/schema-generator/target/debug/sc-observability-schema --output bindings/schema/v1.json --errors-output bindings/schema/errors-v1.json --check`
+Success: no issues found in 1 source file
+PYTHON_310_GENERATED_RUNTIME_AND_STUBS_PASSED
+Success: no issues found in 1 source file
+============================= test session starts ==============================
+platform darwin -- Python 3.10.21, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/bindings/python/sc-observability-py
+configfile: pyproject.toml
+collected 10 items
+
+bindings/python/sc-observability-py/tests/test_facade.py ..........      [100%]
+
+============================== 10 passed in 0.05s ==============================
+🍹 Building a mixed python/rust project
+🔗 Found pyo3 bindings with abi3 support
+🐍 Found CPython 3.10 at /Users/randlee/.local/share/uv/python/cpython-3.10-macos-aarch64-none/bin/python3.10
+💻 Using `MACOSX_DEPLOYMENT_TARGET=11.0` for aarch64-apple-darwin by default
+   Compiling pyo3-ffi v0.29.2
+   Compiling sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability)
+   Compiling pyo3 v0.29.2
+   Compiling sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability-log)
+   Compiling sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability-binding-runtime)
+   Compiling sc-observability-py v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/bindings/python/sc-observability-py)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.74s
+📦 Built wheel for abi3 Python ≥ 3.10 to /var/folders/3q/0f7c3v_j6ps28gtz8xfz99km0000gn/T/sc-observability-b4.XXXXXX.tr5h77QN0j/wheels/sc_observability-1.4.0-cp310-abi3-macosx_11_0_arm64.whl
+Using CPython 3.10.21 interpreter at: /Users/randlee/.local/share/uv/python/cpython-3.10-macos-aarch64-none/bin/python3.10
+Creating virtual environment at: /var/folders/3q/0f7c3v_j6ps28gtz8xfz99km0000gn/T/sc-observability-b4.XXXXXX.tr5h77QN0j/venv
+Activate with: source /var/folders/3q/0f7c3v_j6ps28gtz8xfz99km0000gn/T/sc-observability-b4.XXXXXX.tr5h77QN0j/venv/bin/activate
+Using Python 3.10.21 environment at: /var/folders/3q/0f7c3v_j6ps28gtz8xfz99km0000gn/T/sc-observability-b4.XXXXXX.tr5h77QN0j/venv
+Resolved 9 packages in 4ms
+Prepared 1 package in 13ms
+Installed 9 packages in 34ms
+ + exceptiongroup==1.3.1
+ + iniconfig==2.3.0
+ + packaging==26.3
+ + pluggy==1.6.0
+ + pygments==2.21.0
+ + pytest==9.1.1
+ + sc-observability==1.4.0 (from file:///var/folders/3q/0f7c3v_j6ps28gtz8xfz99km0000gn/T/sc-observability-b4.XXXXXX.tr5h77QN0j/wheels/sc_observability-1.4.0-cp310-abi3-macosx_11_0_arm64.whl)
+ + tomli==2.4.1
+ + typing-extensions==4.16.0
+============================= test session starts ==============================
+platform darwin -- Python 3.10.21, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/bindings/python/sc-observability-py
+configfile: pyproject.toml
+collected 11 items
+
+bindings/python/sc-observability-py/tests/test_runtime.py ...........    [100%]
+
+============================== 11 passed in 0.67s ==============================
+   Compiling pyo3-ffi v0.29.2
+   Compiling pyo3 v0.29.2
+   Compiling sc-observability-py v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/bindings/python/sc-observability-py)
+   Compiling rust-python-logging v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/examples/rust-python-logging)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.51s
+     Running `target/debug/rust-python-logging`
+python binding runtime validation passed

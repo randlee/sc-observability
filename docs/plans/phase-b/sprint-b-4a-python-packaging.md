@@ -1,8 +1,8 @@
 ---
 id: B.4a
-status: proposed
+status: in_progress
 branch: feature/phase-b-4a-python-packaging
-base: develop
+base: feature/phase-b-4-python
 ---
 
 # B.4a — Python distributions and platform qualification
@@ -57,6 +57,26 @@ expose the same Result/Failure tags and stubs as a source build; packaging canno
 replace native functionality with a fallback or weaken error handling.
 Distribution name remains proposed `sc-observability`; registry availability
 and publication belong to B.7.
+
+The lead-approved qualification refinement (ATM 01M2QF796PNV7EN3JN445PTD5D)
+keeps one immutable production abi3 wheel per platform. Every cell runs the full
+public runtime suite, including inherited B.5/B.6 tests, and asserts that private
+native test hooks are absent. Fault injection alone uses a separate instrumented
+companion built from the identical sdist with only the additional `test-hooks`
+feature. Its explicit `fault_pytest_paths` files run in a separate installed
+environment on each cell's interpreter. Both suites reject skips. Evidence
+records separate hashes, features and roles; companion results cannot replace
+production behavior, and companions never enter the publication inventory.
+The runner supports interpreter-matched embedded-host execution in every cell
+through `embedding_in_each_cell`; B.6 enables this together with asyncio debug
+and warnings-as-errors for its full owned/attached qualification.
+
+Full qualification is explicitly scheduled for the combined corrected candidate
+through `workflow_dispatch`, or reused by B.7 through `workflow_call` with a full
+immutable source SHA. The reusable call has no development-mode input. Routine
+PRs run the separate cheap packaging boundary and workflow syntax checks; they
+do not launch redundant 25-cell matrices. This scheduling refinement is recorded
+in ATM 01M2QG7VKZJ6XYBK34XXCG786V and preserves all final acceptance gates.
 
 ## Prepublication Rust source bundle
 

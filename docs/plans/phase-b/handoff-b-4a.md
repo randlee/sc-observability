@@ -23,6 +23,28 @@ publication and its separate override-free registry proof.
 
 ## Execution interface
 
+The full workflow accepts explicit dispatch with required `source_commit`
+(full SHA; no branch or HEAD fallback). B.7 may call
+`.github/workflows/b4a-python-distributions.yml` once per workflow run through
+`workflow_call`, supplying required `source_commit`; reusable calls always use
+strict final qualification. Every job checks out that exact source, and the
+aggregate requires all artifact source identities to match it. Successful call
+outputs are `qualified_source_commit`, `inventory_sha256`,
+`production_inventory_artifact_id` and `production_inventory_artifact_name`
+(`b4a-production-inventory`). That artifact contains `production-artifacts.json`
+plus `dist/` with exactly the qualified sdist and five production wheels. It
+contains no companion wheels. B.7 compares the qualified source to its requested
+SHA, verifies the downloaded inventory SHA256 and each artifact digest before
+publication. Reusable calls require no secrets and share the caller run artifact
+scope, so download by the returned artifact ID needs no cross-run token.
+Raw evidence remains in `b4a-sdist`,
+`b4a-wheel-<platform>` and `b4a-cell-<platform>-<python>` artifacts from the same
+Actions run. The inventory authorizes no publication; B.7 controls that gate.
+
+Routine PRs execute `.github/workflows/python-packaging-boundaries.yml` for
+boundary regressions and actionlint. Full qualification has no broad push/PR
+trigger and awaits the lead's combined-candidate scheduling decision.
+
 The existing source gate remains available unchanged:
 
 ```sh
@@ -53,8 +75,11 @@ The `qualification-suite.json` contract belongs to the runtime owner. Its
 installed-package type fixtures. `runtime_complete: true` is required for final
 qualification. Optional boolean `asyncio_debug` and `warnings_as_errors` enable
 `-X dev` and `-W error`, with the corresponding environment flags, without
-removing isolated Python mode. Later runtime suites extend this contract and
-reuse the same runner.
+removing isolated Python mode. Optional boolean `embedding_in_each_cell` runs
+the actual bundled host on every cell interpreter with its own fresh Cargo home
+and target, verifies the metadata and linker features, and requires retained
+interpreter-matched execution in the aggregate. B.4a defaults this option off;
+later runtime suites opt in and reuse the same runner.
 
 Each cell installs into a fresh external venv, verifies that both facade and
 native module come from that venv, denies checkout/cache/network access, and
@@ -66,6 +91,25 @@ linker features. Negative artifacts are disposable copies, never modifications
 to the retained candidate.
 
 ## Current evidence and remaining gates
+
+The approved production/fault-companion split is implemented in the sole runner.
+Production retains one immutable wheel per platform, executes all public tests
+and typing fixtures, and checks private hooks are absent. Explicit fault-only
+files execute against a separately installed companion from the same sdist;
+its recorded feature set adds only `test-hooks`. Both suites reject skips.
+The aggregate verifies distinct hashes, exact source feature identities and
+separate JUnit evidence, then emits `production-artifacts.json` containing only
+the five production wheels. Actual companion qualification awaits the parent
+fault-file contract and the final combined candidate.
+
+Source assembly now copies Git-tracked Python and embedding inputs, so runtime
+tests can leave ignored bytecode without contaminating the sdist inventory.
+Generated files remain untouched. Windows network denial is scoped to each
+artifact subprocess, with bounded execution and firewall cleanup between
+commands; checkout/cache denial remains active for the proof.
+Timed-out artifact commands terminate their process tree, including descendants
+holding captured output pipes; a real child-process regression verifies the
+bounded failure. Windows execution still needs the final combined CI proof.
 
 This handoff is incomplete. Full runtime qualification awaits the active B.4
 owner's completed contract and the final 25-cell execution. Explicit development

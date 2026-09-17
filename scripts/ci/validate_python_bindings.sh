@@ -20,6 +20,7 @@ B4_TEMP_DIR="$(mktemp -d -t sc-observability-b4.XXXXXX)"
 trap 'rm -rf "$B4_TEMP_DIR"' EXIT
 
 cargo fmt --all -- --check
+cargo clippy --locked -p sc-observability-py --all-targets -- -D warnings
 cargo test --locked -p sc-observability-binding-runtime
 PYO3_PYTHON="$B4_PYTHON" PYTHONHOME="$("$B4_PYTHON" -c 'import sys; print(sys.base_prefix)')" \
   cargo test --locked -p sc-observability-py
@@ -42,6 +43,7 @@ uv run --no-project --python "$B4_PYTHON" --with pytest==9.1.1 python -m pytest 
 
 uvx --from maturin==1.10.2 maturin build --locked \
   --manifest-path bindings/python/sc-observability-py/Cargo.toml \
+  --features test-hooks \
   --interpreter "$B4_PYTHON" \
   --out "$B4_TEMP_DIR/wheels"
 uv venv --python "$B4_PYTHON" "$B4_TEMP_DIR/venv"

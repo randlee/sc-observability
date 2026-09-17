@@ -1,24 +1,35 @@
 name: B.4a Python distribution qualification
 
 on:
-  push:
-    branches: [feature/phase-b-4a-python-packaging]
   workflow_dispatch:
     inputs:
+      source_commit:
+        type: string
+        required: true
+        description: 'Full immutable source SHA to qualify'
       development:
         type: boolean
         default: false
         description: 'Exercise platform builds with incomplete runtime; aggregate rejects all development results'
-  pull_request:
-    paths:
-      - 'bindings/python/**'
-      - 'crates/**'
-      - 'examples/rust-python-logging/**'
-      - 'Cargo.*'
-      - 'scripts/ci/*python*'
-      - 'scripts/ci/*binding*bundle*'
-      - 'release/python-platform-policy.json'
-      - '.github/workflows/b4a-python-distributions.yml'
+  workflow_call:
+    inputs:
+      source_commit:
+        type: string
+        required: true
+        description: 'Full immutable source SHA to qualify'
+    outputs:
+      qualified_source_commit:
+        description: 'Exact successfully qualified source SHA'
+        value: ${{ jobs.aggregate.outputs.source_commit }}
+      inventory_sha256:
+        description: 'SHA256 of production-artifacts.json'
+        value: ${{ jobs.aggregate.outputs.inventory_sha256 }}
+      production_inventory_artifact_id:
+        description: 'Actions artifact ID containing production-artifacts.json'
+        value: ${{ jobs.aggregate.outputs.inventory_artifact_id }}
+      production_inventory_artifact_name:
+        description: 'Actions artifact name containing production-artifacts.json'
+        value: b4a-production-inventory
 
 permissions:
   contents: read
@@ -27,10 +38,22 @@ jobs:
   plan:
     runs-on: ubuntu-24.04
     outputs:
+      source_commit: ${{ steps.source.outputs.commit }}
       platforms: ${{ steps.matrix.outputs.platforms }}
       cells: ${{ steps.matrix.outputs.cells }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
+      - id: source
+        shell: bash
+        env:
+          EXPECTED_SOURCE: ${{ inputs.source_commit }}
+        run: |
+          [[ "$EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]]
+          actual=$(git rev-parse HEAD)
+          test "$actual" = "$EXPECTED_SOURCE"
+          echo "commit=$actual" >> "$GITHUB_OUTPUT"
       - id: matrix
         shell: python
         run: |
@@ -43,9 +66,13 @@ jobs:
               out.write('cells=' + json.dumps(cells) + '\n')
 
   sdist:
+    needs: plan
+    timeout-minutes: 20
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -73,6 +100,7 @@ jobs:
           retention-days: 90
 
   wheel:
+    timeout-minutes: 45
     needs: [plan, sdist]
     strategy:
       fail-fast: false
@@ -81,6 +109,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
@@ -120,6 +150,7 @@ jobs:
           retention-days: 90
 
   installed-suite:
+    timeout-minutes: 30
     needs: [plan, sdist, wheel]
     strategy:
       fail-fast: false
@@ -128,6 +159,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -157,6 +190,9 @@ jobs:
           if [[ "$B4A_DEVELOPMENT" == true ]]; then flags+=(--allow-incomplete-runtime); fi
           sdist=( "$RUNNER_TEMP"/b4a-source/dist/*.tar.gz )
           wheel=( "$RUNNER_TEMP"/b4a-wheel/*.whl )
+          shopt -s nullglob
+          companion=( "$RUNNER_TEMP"/b4a-wheel/instrumented/*.whl )
+          if (( ${#companion[@]} == 1 )); then flags+=(--instrumented-wheel "${companion[0]}"); fi
           bash scripts/ci/validate_python_bindings.sh --distribution cell --sdist "${sdist[0]}" --wheel "${wheel[0]}" \
             --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/b4a-cell" "${flags[@]}"
       - uses: actions/upload-artifact@v4
@@ -168,18 +204,45 @@ jobs:
 
   aggregate:
     if: always()
-    needs: [sdist, wheel, installed-suite]
+    needs: [plan, sdist, wheel, installed-suite]
+    outputs:
+      source_commit: ${{ needs.plan.outputs.source_commit }}
+      inventory_sha256: ${{ steps.qualify.outputs.sha256 }}
+      inventory_artifact_id: ${{ steps.inventory.outputs.artifact-id }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r scripts/ci/python-packaging-requirements.txt
       - uses: actions/download-artifact@v4
         with:
           pattern: b4a-*
           path: ${{ runner.temp }}/b4a-evidence
       - name: Require all 25 cells against the same five wheels and sdist
+        id: qualify
         shell: bash
         run: |
           sdist=( "$RUNNER_TEMP"/b4a-evidence/b4a-sdist/dist/*.tar.gz )
           python scripts/ci/validate_python_distribution.py aggregate \
             --policy release/python-platform-policy.json --sdist "${sdist[0]}" \
-            --evidence "$RUNNER_TEMP/b4a-evidence" --source-commit "${{ github.sha }}"
+            --evidence "$RUNNER_TEMP/b4a-evidence" --source-commit "${{ needs.plan.outputs.source_commit }}" \
+            --publication-dir "$RUNNER_TEMP/b4a-production" \
+            --output "$RUNNER_TEMP/b4a-production/production-artifacts.json"
+          python - <<'PYTHON'
+          import hashlib, os
+          from pathlib import Path
+          inventory = Path(os.environ['RUNNER_TEMP']) / 'b4a-production/production-artifacts.json'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('sha256=' + hashlib.sha256(inventory.read_bytes()).hexdigest() + '\n')
+          PYTHON
+      - uses: actions/upload-artifact@v4
+        id: inventory
+        with:
+          name: b4a-production-inventory
+          path: ${{ runner.temp }}/b4a-production/
+          if-no-files-found: error
+          retention-days: 90
