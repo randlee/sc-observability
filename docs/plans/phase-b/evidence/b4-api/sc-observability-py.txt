@@ -1,3 +1,14 @@
+B.4 initial public API evidence
+
+Source commit: ef7027a5f843444a00cfb134c85c1c80c3253b4f
+Command: cargo public-api --manifest-path bindings/python/sc-observability-py/Cargo.toml -sss
+API stdout SHA-256: d4d01640af4a8a7a980fd86df7b4a844ad65c1fa66f5c364a4ce930f91bd12fd
+
+The published rlib surface is the reviewed embedding API. Private test-hook
+methods are feature-gated and excluded from the default-feature digest.
+
+Retained API stdout:
+
 pub mod _native
 pub use _native::BridgeControlBackend
 pub use _native::CoreLoggerBackend
