@@ -23,7 +23,7 @@ entry assumptions. They must complete before the first migration sprint B.1.
 | Sprint | Production deliverable | Authoritative plan |
 | --- | --- | --- |
 | B.P1 | Additive per-logger runtime level state, owner capability and admission outcomes | [Core runtime](sprint-b-p1-runtime-core.md) |
-| B.P2 | Published core capability with registry-consumer proof | [Prerequisite release](sprint-b-p2-runtime-publish.md) |
+| B.P2 | Staged/qualified core capability with two-leg consumer proof; B.7 alone publishes | [Prerequisite qualification](sprint-b-p2-runtime-publish.md) |
 | B.P3 | Accepted BTIT bridge integration and critical-review closure | [BTIT integration](sprint-b-p3-runtime-btit.md) |
 
 ## Migration, error evolution and binding sprints
@@ -171,9 +171,9 @@ BTIT's later switch to the published crates is a separate BTIT change.
 
 | Relation | Rationale |
 | --- | --- |
-| B.P1 must_follow accepted runtime contract | Implement a reviewed additive core surface |
-| B.P2 must_follow B.P1 | Publish the tested core capability |
-| B.P3 must_follow B.P2 and accepted target bridge contract | BTIT integrates released core behavior before source acceptance |
+| B.P1 must_follow the execution-authorized runtime contract (public acceptance owner-deferred to Phase B completion) | Implement a reviewed additive core surface without claiming runtime acceptance |
+| B.P2 must_follow B.P1 | Qualify and stage the tested core capability; B.7 alone publishes |
+| B.P3 must_follow B.P2 and accepted target bridge contract | BTIT integrates B.P2's staged core behavior before source acceptance |
 | B.1 must_follow B.P3 | Copy only the accepted implementation of the sc-observability-owned locked target |
 | B.1a must_follow B.1 | Verify additive core error evolution against the copied bridge contract |
 | B.1b must_follow B.1a | Logger methods consume neutral failures and adapters |
