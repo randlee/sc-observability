@@ -6,7 +6,13 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(transparent)]
-pub struct DecimalDto(String);
+pub struct DecimalDto(
+    #[cfg_attr(
+        feature = "schema-gen",
+        schemars(regex(pattern = r"^(0|[1-9][0-9]*|-[1-9][0-9]*)$"))
+    )]
+    String,
+);
 impl DecimalDto {
     /// Checks canonical spelling and the shared JSON integer domain.
     pub fn new(value: impl Into<String>) -> std::result::Result<Self, String> {
@@ -137,16 +143,13 @@ pub enum LifecycleDto {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum LogOrderDto {
+    #[default]
     OldestFirst,
     NewestFirst,
 }
 
-impl Default for LogOrderDto {
-    fn default() -> Self {
-        Self::OldestFirst
-    }
-}
 fn default_limit() -> usize {
     100
 }
@@ -250,6 +253,7 @@ pub struct StoredDiagnosticDto {
 #[serde(deny_unknown_fields)]
 pub struct LogEventDto {
     /// schema version.
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
     pub schema_version: u32,
     /// level.
     pub level: LevelDto,
@@ -325,6 +329,7 @@ pub struct FieldMatchDto {
 #[serde(deny_unknown_fields)]
 pub struct LogQueryDto {
     /// schema version.
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
     pub schema_version: u32,
     /// service.
     pub service: Option<String>,
@@ -348,6 +353,7 @@ pub struct LogQueryDto {
     pub field_matches: Vec<FieldMatchDto>,
     /// limit.
     #[serde(default = "default_limit")]
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1000)))]
     pub limit: usize,
     /// order.
     #[serde(default)]
@@ -359,6 +365,7 @@ pub struct LogQueryDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 pub struct LogSnapshotDto {
     /// schema version.
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
     pub schema_version: u32,
     /// events.
     pub events: Vec<StoredEventDto>,
@@ -425,8 +432,12 @@ pub struct MaintenanceHealthDto {
     /// last pass at.
     pub last_pass_at: Option<String>,
     /// rotated files total.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub rotated_files_total: DecimalDto,
     /// pruned files total.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub pruned_files_total: DecimalDto,
     /// last error.
     pub last_error: Option<DiagnosticSummaryDto>,
@@ -439,16 +450,28 @@ pub struct LoggingHealthDto {
     /// state.
     pub state: AvailabilityDto,
     /// dropped events total.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub dropped_events_total: DecimalDto,
     /// flush errors total.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub flush_errors_total: DecimalDto,
     /// queue depth.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub queue_depth: DecimalDto,
     /// queue capacity.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub queue_capacity: DecimalDto,
     /// queue high water mark.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub queue_high_water_mark: DecimalDto,
     /// queue full drops total.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub queue_full_drops_total: DecimalDto,
     /// active log path.
     pub active_log_path: PathDto,
@@ -471,18 +494,32 @@ pub struct LoggingHealthDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 pub struct DropCountsDto {
     /// queue full.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub queue_full: DecimalDto,
     /// invalid event.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub invalid_event: DecimalDto,
     /// writer degraded.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub writer_degraded: DecimalDto,
     /// shutdown timed out.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub shutdown_timed_out: DecimalDto,
     /// not installed.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub not_installed: DecimalDto,
     /// logger panicked.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub logger_panicked: DecimalDto,
     /// reentrant emit.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub reentrant_emit: DecimalDto,
 }
 
@@ -495,6 +532,8 @@ pub struct LevelStateDto {
     /// effective level.
     pub effective_level: LevelFilterDto,
     /// level revision.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub level_revision: DecimalDto,
 }
 
@@ -503,6 +542,7 @@ pub struct LevelStateDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 pub struct BridgeHealthDto {
     /// schema version.
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
     pub schema_version: u32,
     /// logging.
     pub logging: LoggingHealthDto,
@@ -517,6 +557,8 @@ pub struct BridgeHealthDto {
     /// effective level.
     pub effective_level: LevelFilterDto,
     /// level revision.
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    #[serde(deserialize_with = "unsigned_decimal")]
     pub level_revision: DecimalDto,
 }
 
@@ -525,6 +567,7 @@ pub struct BridgeHealthDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 pub struct LogHealthDto {
     /// schema version.
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
     pub schema_version: u32,
     /// logging.
     pub logging: LoggingHealthDto,
@@ -600,63 +643,63 @@ pub enum LevelRequestDto {
 pub enum Failure {
     Validation {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
         field: String,
     },
     QueueFull {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
     },
     BelowBaseline {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
         requested: LevelFilterDto,
         configured: LevelFilterDto,
     },
     UnsupportedLevel {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
         requested: LevelFilterDto,
         available: LevelFilterDto,
     },
     PermissionDenied {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
     },
     Closed {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
     },
     Unavailable {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
     },
     Io {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
     },
     Timeout {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
         operation: String,
     },
     Cancelled {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
         operation: String,
     },
     UnsupportedVersion {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
         received: u32,
     },
     Internal {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
     },
     UnknownRemote {
         #[serde(flatten)]
-        diagnostic: Diagnostic,
+        diagnostic: Box<Diagnostic>,
         remote_kind: String,
     },
 }
@@ -705,6 +748,7 @@ pub enum WireEnvelope<T> {
 #[serde(deny_unknown_fields)]
 pub struct TryLogRequest {
     /// schema version.
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
     pub schema_version: u32,
     /// event.
     pub event: LogEventDto,
@@ -716,6 +760,7 @@ pub struct TryLogRequest {
 #[serde(deny_unknown_fields)]
 pub struct QueryRequest {
     /// schema version.
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
     pub schema_version: u32,
     /// query.
     pub query: LogQueryDto,
@@ -727,6 +772,7 @@ pub struct QueryRequest {
 #[serde(deny_unknown_fields)]
 pub struct HealthRequest {
     /// schema version.
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
     pub schema_version: u32,
 }
 
@@ -736,8 +782,10 @@ pub struct HealthRequest {
 #[serde(deny_unknown_fields)]
 pub struct FlushRequest {
     /// schema version.
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
     pub schema_version: u32,
     /// timeout ms.
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 0, max = 60000)))]
     pub timeout_ms: u32,
 }
 
@@ -747,7 +795,124 @@ pub struct FlushRequest {
 #[serde(deny_unknown_fields)]
 pub struct LevelChangeRequest {
     /// schema version.
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
     pub schema_version: u32,
     /// change.
     pub change: LevelRequestDto,
+}
+
+fn unsigned_decimal<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> std::result::Result<DecimalDto, D::Error> {
+    let value = DecimalDto::deserialize(d)?;
+    value.as_u64().map_err(serde::de::Error::custom)?;
+    Ok(value)
+}
+
+/// The log-only operation in a scheduled client outcome.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum LogOperationDto {
+    Log,
+}
+/// Operations returning final logging admission.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum AdmissionOperationDto {
+    Log,
+    TryLog,
+}
+/// Operations returning a completed client observation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum CompletionOperationDto {
+    Query,
+    Health,
+    Flush,
+}
+/// Payload-free client outcome, distinct from host persistence.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ClientOutcome {
+    Idle,
+    Scheduled { operation: LogOperationDto },
+    Accepted { operation: AdmissionOperationDto },
+    Filtered { operation: AdmissionOperationDto },
+    Completed { operation: CompletionOperationDto },
+}
+/// Bounded local client status; no ownership or IPC capability is represented.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
+pub struct ClientStatus {
+    /// Number of outstanding operations, bounded by client admission.
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 0, max = 256)))]
+    pub in_flight: u32,
+    /// Saturating counters for every declared failure kind.
+    pub failures_by_kind: FailureCountsDto,
+    /// Most recent completion-order result.
+    pub last_result: ResultDto<ClientOutcome>,
+    /// Retained failure survives subsequent successful operations.
+    pub last_failure: Option<Failure>,
+}
+
+/// Fixed bounded counters for the declared Failure union.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
+pub struct FailureCountsDto {
+    /// Saturating validation counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub validation: DecimalDto,
+    /// Saturating queue_full counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub queue_full: DecimalDto,
+    /// Saturating below_baseline counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub below_baseline: DecimalDto,
+    /// Saturating unsupported_level counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub unsupported_level: DecimalDto,
+    /// Saturating permission_denied counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub permission_denied: DecimalDto,
+    /// Saturating closed counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub closed: DecimalDto,
+    /// Saturating unavailable counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub unavailable: DecimalDto,
+    /// Saturating io counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub io: DecimalDto,
+    /// Saturating timeout counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub timeout: DecimalDto,
+    /// Saturating cancelled counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub cancelled: DecimalDto,
+    /// Saturating unsupported_version counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub unsupported_version: DecimalDto,
+    /// Saturating internal counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub internal: DecimalDto,
+    /// Saturating unknown_remote counter.
+    #[serde(deserialize_with = "unsigned_decimal")]
+    #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    pub unknown_remote: DecimalDto,
 }
