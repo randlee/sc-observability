@@ -11,6 +11,12 @@
 - Explicitly out of scope: deprecation attributes, ordinary production
   migration, copied crates, workspace/CI changes, publication and removal
 
+Scoped completeness PASS: aobs accepted C01/C02/C03 and the final
+`build_typed` guidance at `a0f7c1f4186e4630b8cc7f70c5c3b63497b9344b`
+(`01M2Q5Y03GC0JHXD57X0M613ND`). This closeout commit records only the scoped
+documentation preparation; full B.1e warning activation and validator/fixture
+work remain pending.
+
 The task plan was missing at dispatch; `task-b-1e-migration-prep.md` now
 records that mismatch and the scoped work. The final telemetry parent removed
 the unplanned `TelemetryProjectors::with_typed_*` builders; the guide uses
@@ -77,8 +83,8 @@ wrapper-warning rows plus 20 mapped method rows, and no
 `TelemetryProjectors::with_typed_*` source symbols. Formatting, the full
 workspace test/doctest suite, docs consistency, and semver validation passed.
 
-The final handoff must append the exact output/commit and the result of the
-second-pass inventory. Full B.1e remains open until the downstream Cargo
+The final handoff records the exact accepted source head and second-pass
+inventory above. Full B.1e remains open until the downstream Cargo
 fixtures, JSON warning validator, all-four-crate checks and independent QA
 pass are delivered by their owners.
 
