@@ -12,6 +12,7 @@ import sys
 import sysconfig
 import time
 import tempfile
+import threading
 import uuid
 from pathlib import Path
 from contextlib import contextmanager
@@ -138,10 +139,32 @@ class Sandbox:
             try:
                 self.remove_firewall()
             finally:
-                for path, saved in reversed(self.acls):
-                    subprocess.run(['icacls', str(path.parent), '/restore', str(saved), '/C'],
-                                   check=True, stdout=subprocess.DEVNULL)
+                self.restore_acls()
         self.cache_probe.unlink(missing_ok=True)
+
+    def restore_acls(self):
+        failures = []
+        for path, saved in reversed(self.acls):
+            try:
+                subprocess.run(['icacls', str(path.parent), '/restore', str(saved), '/C'],
+                               check=True, stdout=subprocess.DEVNULL, timeout=60)
+            except (subprocess.SubprocessError, OSError) as error:
+                failures.append(f'{path}: {error}')
+        if failures:
+            raise DistributionError('ACL restoration failed: ' + '; '.join(failures))
+
+    def abort_windows_proof(self):
+        # A stuck child or capture-pipe cleanup must not leave the ephemeral
+        # runner disconnected. Restoring access is never a successful proof:
+        # terminate the qualification unconditionally with a nonzero status.
+        print('WINDOWS_SANDBOX_WATCHDOG_TIMEOUT: restoring isolation; qualification failed',
+              file=sys.stderr, flush=True)
+        try:
+            self.__exit__(None, None, None)
+        except Exception as error:
+            print(f'WINDOWS_SANDBOX_RESTORATION_ERROR: {error}', file=sys.stderr, flush=True)
+        finally:
+            os._exit(124)
 
     def remove_firewall(self):
         # INetFwRules.Remove is an idempotent exact-name operation, including
@@ -156,12 +179,27 @@ class Sandbox:
         if self.system != 'Windows':
             yield
             return
+        # Longer than the 900-second command bound plus kill and cleanup
+        # allowances. Covers capture cleanup as well as the command itself.
+        expired = threading.Event()
+        def deadline():
+            expired.set()
+            self.abort_windows_proof()
+        watchdog = threading.Timer(1050, deadline)
+        watchdog.daemon = True
+        watchdog.start()
         try:
             self.powershell(f"New-NetFirewallRule -Name '{self.firewall}' -DisplayName '{self.firewall}' "
                             "-Direction Outbound -Action Block -Profile Any | Out-Null")
             yield
         finally:
-            self.remove_firewall()
+            try:
+                self.remove_firewall()
+            finally:
+                watchdog.cancel()
+                watchdog.join(timeout=210)
+                if expired.is_set() or watchdog.is_alive():
+                    raise DistributionError('Windows sandbox watchdog exceeded its bound')
 
     def run(self, command: list[str], cwd: Path, *, expect_failure: bool = False) -> str:
         print('B4A_COMMAND ' + json.dumps(command), flush=True)

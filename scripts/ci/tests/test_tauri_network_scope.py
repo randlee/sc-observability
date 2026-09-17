@@ -1,11 +1,13 @@
 """The real desktop process must retain Windows network denial until exit."""
 import sys
+import subprocess
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from _python_sandbox import Sandbox
+from _python_distribution import DistributionError
 import _tauri_webview
 
 
@@ -43,6 +45,49 @@ class NetworkScopeTests(unittest.TestCase):
         with sandbox.network_denial():
             pass
         self.assertEqual(sandbox.commands, [])
+
+    def test_watchdog_restoration_cannot_turn_timeout_into_success(self):
+        sandbox = self.sandbox()
+        events = []
+        def abort(code):
+            events.append(('exit', code))
+            raise SystemExit(code)
+        with patch.object(sandbox, '__exit__', side_effect=lambda *args: events.append('restore')):
+            with patch('_python_sandbox.os._exit', side_effect=abort):
+                with self.assertRaises(SystemExit) as error:
+                    sandbox.abort_windows_proof()
+        self.assertEqual(error.exception.code, 124)
+        self.assertEqual(events, ['restore', ('exit', 124)])
+
+    def test_watchdog_still_fails_when_restoration_fails(self):
+        sandbox = self.sandbox()
+        with patch.object(sandbox, '__exit__', side_effect=RuntimeError('restore failed')):
+            with patch('_python_sandbox.os._exit', side_effect=SystemExit(124)):
+                with self.assertRaises(SystemExit) as error:
+                    sandbox.abort_windows_proof()
+        self.assertEqual(error.exception.code, 124)
+
+    def test_acl_failure_does_not_skip_other_saved_roots(self):
+        sandbox = self.sandbox()
+        sandbox.acls = [(Path('/first/root'), Path('/first.saved')),
+                        (Path('/second/root'), Path('/second.saved'))]
+        failure = subprocess.TimeoutExpired('icacls', 60)
+        with patch('_python_sandbox.subprocess.run', side_effect=[failure, None]) as restore:
+            with self.assertRaisesRegex(DistributionError, 'ACL restoration failed'):
+                sandbox.restore_acls()
+        self.assertEqual(restore.call_count, 2)
+        self.assertIn('/first.saved', restore.call_args_list[1].args[0])
+        self.assertEqual(restore.call_args_list[1].kwargs['timeout'], 60)
+
+    def test_expired_watchdog_rejects_normal_context_return(self):
+        sandbox = self.sandbox()
+        def timer(seconds, callback):
+            return Mock(start=Mock(side_effect=callback), is_alive=Mock(return_value=False))
+        with patch('_python_sandbox.threading.Timer', side_effect=timer):
+            with patch.object(sandbox, 'abort_windows_proof'):
+                with self.assertRaisesRegex(DistributionError, 'watchdog exceeded'):
+                    with sandbox.network_denial():
+                        pass
 
 
 if __name__ == '__main__':
