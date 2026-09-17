@@ -453,7 +453,9 @@ impl Coordinator {
     }
 }
 
-pub(crate) fn core(config: sc_observability::LoggerConfig) -> Result<Arc<Coordinator>, Failure> {
+pub(crate) fn core(
+    mut config: sc_observability::LoggerConfig,
+) -> Result<Arc<Coordinator>, Failure> {
     Coordinator::create(|| {
         let stamp = dto::EventStamp {
             service: config.service_name.clone(),
@@ -470,6 +472,12 @@ pub(crate) fn core(config: sc_observability::LoggerConfig) -> Result<Arc<Coordin
                     })?
                 }
             },
+        };
+        // Resolve once: native diagnostic events and producer events share the
+        // exact host-selected identity even when a resolver is stateful.
+        config.process_identity = native::ProcessIdentityPolicy::Fixed {
+            hostname: stamp.identity.hostname.clone(),
+            pid: stamp.identity.pid,
         };
         let (logger, level) = Logger::new_with_level_owner_typed(config)
             .map_err(|e| conversion::context(e.diagnostic(), conversion::Kind::Unavailable))?;

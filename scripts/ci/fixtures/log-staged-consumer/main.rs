@@ -1,10 +1,16 @@
-use sc_observability_log::{BridgeOptions, LoggerConfig, ServiceName};
+use sc_observability_log::{ActionName, BridgeOptions, LoggerConfig, ServiceName};
 use std::{path::PathBuf, time::Duration};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let directory = PathBuf::from(std::env::args_os().nth(1).ok_or("missing log directory")?);
     let config = LoggerConfig::default_for(ServiceName::new("b2-staged-consumer")?, directory);
-    let guard = sc_observability_log::init(config, BridgeOptions::default())?;
+    let guard = sc_observability_log::init(
+        config,
+        BridgeOptions {
+            default_action: ActionName::new("qualification.stage")?,
+            parse_bracket_action: true,
+        },
+    )?;
     let path = guard
         .active_log_path()
         .ok_or("missing active log path")?

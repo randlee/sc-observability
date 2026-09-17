@@ -340,9 +340,10 @@ fn observation_adapter_preserves_custom_and_cross_family_context() {
         ErrorCode::new_static("SC_CUSTOM_OBSERVATION_FAILURE"),
         sc_observability::error_codes::LOGGER_FLUSH_FAILED,
     ] {
+        let calls = Arc::new(AtomicUsize::new(0));
         let legacy = legacy_subscriber(Arc::new(FailingSubscriber {
             code: code.clone(),
-            calls: Arc::new(AtomicUsize::new(0)),
+            calls: calls.clone(),
         }));
         let legacy_error =
             sc_observability_types::ObservationSubscriber::observe(legacy.as_ref(), &observation())
@@ -352,6 +353,15 @@ fn observation_adapter_preserves_custom_and_cross_family_context() {
             sc_observability_types::typed::SubscriberFailureKind::Unclassified
         );
         assert_eq!(legacy_error.context().diagnostic().code, code);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            std::error::Error::source(legacy_error.context())
+                .expect("legacy native source")
+                .downcast_ref::<std::io::Error>()
+                .expect("legacy native source type")
+                .to_string(),
+            "subscriber fixture source"
+        );
 
         let typed = typed_subscriber(legacy);
         let typed_error = typed
@@ -362,6 +372,7 @@ fn observation_adapter_preserves_custom_and_cross_family_context() {
             sc_observability_types::typed::SubscriberFailureKind::Unclassified
         );
         assert_eq!(typed_error.context().diagnostic().code, code);
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
         assert_eq!(
             std::error::Error::source(typed_error.context())
                 .expect("source context")
@@ -370,6 +381,134 @@ fn observation_adapter_preserves_custom_and_cross_family_context() {
         );
     }
 }
+
+// Each fixture owns one context: consuming it twice fails, and pointer checks
+// prove the adapters moved the original source/backtrace-bearing allocation.
+struct FailingProjector {
+    context: Mutex<Option<Box<sc_observability_types::ErrorContext>>>,
+    calls: Arc<AtomicUsize>,
+}
+
+impl FailingProjector {
+    fn fail(&self) -> Box<sc_observability_types::ErrorContext> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        self.context
+            .lock()
+            .expect("context lock")
+            .take()
+            .expect("one invocation")
+    }
+}
+
+macro_rules! projector_context_case {
+    ($test:ident, $legacy_trait:ident, $typed_trait:ident, $method:ident, $output:ty,
+     $legacy_adapter:ident, $typed_adapter:ident) => {
+        impl sc_observability_types::$legacy_trait<ObservationPayload> for FailingProjector {
+            fn $method(
+                &self,
+                _: &Observation<ObservationPayload>,
+            ) -> Result<Vec<$output>, sc_observability_types::ProjectionError> {
+                Err(sc_observability_types::ProjectionError(self.fail()))
+            }
+        }
+        impl sc_observability_types::typed::$typed_trait<ObservationPayload> for FailingProjector {
+            fn $method(
+                &self,
+                _: &Observation<ObservationPayload>,
+            ) -> Result<Vec<$output>, ProjectionFailure> {
+                Err(ProjectionFailure::from_context(self.fail()))
+            }
+        }
+        #[test]
+        fn $test() {
+            for code in [
+                ErrorCode::new_static("SC_CUSTOM_PROJECTION_FAILURE"),
+                sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+            ] {
+                for typed_to_legacy in [false, true] {
+                    let context = Box::new(
+                        sc_observability_types::ErrorContext::new(
+                            code.clone(),
+                            "projector fixture failed",
+                            Remediation::not_recoverable("inspect projector fixture"),
+                        )
+                        .cause("fixture cause")
+                        .docs("https://example.test/projector")
+                        .detail("family", json!(stringify!($method)))
+                        .source(Box::new(std::io::Error::other("projector native source"))),
+                    );
+                    let original_context = std::ptr::from_ref(context.as_ref());
+                    let diagnostic = context.diagnostic().clone();
+                    let original_source = std::ptr::from_ref(
+                        std::error::Error::source(context.as_ref())
+                            .expect("native source")
+                            .downcast_ref::<std::io::Error>()
+                            .expect("io source"),
+                    );
+                    let calls = Arc::new(AtomicUsize::new(0));
+                    let fixture = Arc::new(FailingProjector {
+                        context: Mutex::new(Some(context)),
+                        calls: calls.clone(),
+                    });
+                    let failure = if typed_to_legacy {
+                        let adapter = sc_observability_types::typed::$legacy_adapter(fixture);
+                        let error = adapter.$method(&observation()).expect_err("legacy failure");
+                        assert_eq!(
+                            error.kind(),
+                            sc_observability_types::typed::ProjectionFailureKind::Unclassified
+                        );
+                        ProjectionFailure::from(error)
+                    } else {
+                        let adapter = sc_observability_types::typed::$typed_adapter(fixture);
+                        adapter.$method(&observation()).expect_err("typed failure")
+                    };
+                    assert_eq!(calls.load(Ordering::SeqCst), 1);
+                    assert_eq!(
+                        failure.kind(),
+                        sc_observability_types::typed::ProjectionFailureKind::Unclassified
+                    );
+                    assert_eq!(failure.diagnostic().code, code);
+                    assert_eq!(failure.diagnostic(), &diagnostic);
+                    assert_eq!(std::ptr::from_ref(failure.context()), original_context);
+                    let source = std::error::Error::source(failure.context())
+                        .expect("retained native source")
+                        .downcast_ref::<std::io::Error>()
+                        .expect("retained native type");
+                    assert_eq!(std::ptr::from_ref(source), original_source);
+                    assert_eq!(source.to_string(), "projector native source");
+                }
+            }
+        }
+    };
+}
+
+projector_context_case!(
+    log_adapters_retain_custom_and_wrong_family_context,
+    LogProjector,
+    TypedLogProjector,
+    project_logs,
+    LogEvent,
+    legacy_log_projector,
+    typed_log_projector
+);
+projector_context_case!(
+    span_adapters_retain_custom_and_wrong_family_context,
+    SpanProjector,
+    TypedSpanProjector,
+    project_spans,
+    SpanSignal,
+    legacy_span_projector,
+    typed_span_projector
+);
+projector_context_case!(
+    metric_adapters_retain_custom_and_wrong_family_context,
+    MetricProjector,
+    TypedMetricProjector,
+    project_metrics,
+    MetricRecord,
+    legacy_metric_projector,
+    typed_metric_projector
+);
 
 fn trace_context() -> TraceContext {
     TraceContext {
