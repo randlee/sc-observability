@@ -55,3 +55,8 @@ warning activation is part of this task.
 
 The copied-bridge suite remains an explicit B.1 integration dependency; no
 bridge source or behavior is changed by this preparation layer.
+
+The built-in JSONL and console sinks use `TypedLogSink`'s inherited default
+`flush()` no-op: neither exposes a separate fallible built-in flush operation.
+Their write-failure fixtures therefore cover physical built-in error behavior;
+explicit flush-failure parity is covered by the custom adapter fixtures.

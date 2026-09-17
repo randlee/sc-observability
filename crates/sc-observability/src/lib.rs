@@ -757,6 +757,17 @@ mod tests {
         }
     }
 
+    struct FailingConsoleWriter {
+        writes: Arc<AtomicU64>,
+    }
+
+    impl ConsoleWriter for FailingConsoleWriter {
+        fn write_line(&self, _line: &str) -> std::io::Result<()> {
+            self.writes.fetch_add(1, Ordering::SeqCst);
+            Err(std::io::Error::other("injected console write failure"))
+        }
+    }
+
     struct PrefixRedactor;
 
     impl Redactor for PrefixRedactor {
@@ -1293,6 +1304,54 @@ mod tests {
         let lines = lines.lock().expect("lines poisoned");
         assert_eq!(lines.len(), 1);
         assert!(lines[0].contains("logger.core"));
+    }
+
+    #[test]
+    fn console_writer_failures_preserve_legacy_and_typed_write_parity() {
+        let writes = Arc::new(AtomicU64::new(0));
+        let sink = ConsoleSink::from_writer(Box::new(FailingConsoleWriter {
+            writes: writes.clone(),
+        }));
+        let event = log_event(service_name());
+
+        let legacy = LogSink::write(&sink, &event).expect_err("legacy console write fails");
+        assert_eq!(
+            legacy.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        assert_eq!(
+            std::error::Error::source(&legacy)
+                .expect("legacy native source")
+                .to_string(),
+            "console sink write failed: injected console write failure; caused by: injected console write failure"
+        );
+        let health = LogSink::health(&sink);
+        assert_eq!(health.state, SinkHealthState::DegradedDropping);
+        assert_eq!(
+            health.last_error.expect("legacy failure health").code,
+            Some(error_codes::LOGGER_SINK_WRITE_FAILED)
+        );
+        assert_eq!(writes.load(Ordering::SeqCst), 1);
+
+        let typed = crate::typed::TypedLogSink::write(&sink, &event)
+            .expect_err("typed console write fails");
+        assert_eq!(
+            typed.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        assert_eq!(
+            std::error::Error::source(&typed)
+                .expect("typed native source")
+                .to_string(),
+            "console sink write failed: injected console write failure; caused by: injected console write failure"
+        );
+        let health = crate::typed::TypedLogSink::health(&sink);
+        assert_eq!(health.state, SinkHealthState::DegradedDropping);
+        assert_eq!(
+            health.last_error.expect("typed failure health").code,
+            Some(error_codes::LOGGER_SINK_WRITE_FAILED)
+        );
+        assert_eq!(writes.load(Ordering::SeqCst), 2);
     }
 
     #[test]
@@ -2255,55 +2314,68 @@ mod tests {
     fn admission_and_level_mutation_contend_on_one_control_state() {
         use std::sync::{Barrier, mpsc};
 
-        let root = temp_path("level-contention");
-        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
-        config.enable_file_sink = false;
-        config.enable_console_sink = false;
-        let (logger, owner) =
-            Logger::new_with_level_owner(config).expect("construct logger with owner");
-        let logger = Arc::new(logger);
-        let barrier = Arc::new(Barrier::new(3));
-        let (mutation_tx, mutation_rx) = mpsc::channel();
-        let (admission_tx, admission_rx) = mpsc::channel();
-        let held_control = logger.level_control.lock().expect("hold control state");
+        fn assert_contention<F, E>(name: &str, admit: F)
+        where
+            F: Fn(&Logger, LogEvent) -> Result<AdmissionOutcome, E> + Send + Sync + 'static,
+            E: std::fmt::Debug + Send + 'static,
+        {
+            let root = temp_path(name);
+            let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+            config.enable_file_sink = false;
+            config.enable_console_sink = false;
+            let (logger, owner) =
+                Logger::new_with_level_owner(config).expect("construct logger with owner");
+            let logger = Arc::new(logger);
+            let barrier = Arc::new(Barrier::new(3));
+            let (mutation_tx, mutation_rx) = mpsc::channel();
+            let (admission_tx, admission_rx) = mpsc::channel();
+            let held_control = logger.level_control.lock().expect("hold control state");
 
-        let mutation_barrier = barrier.clone();
-        let mutation = std::thread::spawn(move || {
-            let mut owner = owner;
-            mutation_barrier.wait();
-            mutation_tx
-                .send(owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application))
-                .expect("send mutation result");
+            let mutation_barrier = barrier.clone();
+            let mutation = std::thread::spawn(move || {
+                let mut owner = owner;
+                mutation_barrier.wait();
+                mutation_tx
+                    .send(owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application))
+                    .expect("send mutation result");
+            });
+            let admission_barrier = barrier.clone();
+            let admission_logger = logger.clone();
+            let admission = std::thread::spawn(move || {
+                let mut event = log_event(service_name());
+                event.level = Level::Debug;
+                admission_barrier.wait();
+                admission_tx
+                    .send(admit(&admission_logger, event))
+                    .expect("send admission result");
+            });
+
+            barrier.wait();
+            drop(held_control);
+            let mutation_result = mutation_rx.recv().expect("mutation result");
+            let admission_result = admission_rx.recv().expect("admission result");
+            mutation.join().expect("mutation thread");
+            admission.join().expect("admission thread");
+
+            assert!(matches!(mutation_result, Ok(LevelChange::Changed { .. })));
+            assert!(matches!(
+                admission_result,
+                Ok(AdmissionOutcome::Accepted | AdmissionOutcome::Filtered)
+            ));
+            let snapshot = logger.level_state();
+            assert_eq!(snapshot.configured_level, LevelFilter::Info);
+            assert_eq!(snapshot.effective_level, LevelFilter::Debug);
+            assert_eq!(snapshot.revision, 1);
+            let logger = Arc::try_unwrap(logger).unwrap_or_else(|_| panic!("sole logger owner"));
+            let _ = logger.shutdown();
+        }
+
+        assert_contention("legacy-level-contention", |logger, event| {
+            logger.try_log_with_outcome(event)
         });
-        let admission_barrier = barrier.clone();
-        let admission_logger = logger.clone();
-        let admission = std::thread::spawn(move || {
-            let mut event = log_event(service_name());
-            event.level = Level::Debug;
-            admission_barrier.wait();
-            admission_tx
-                .send(admission_logger.try_log_with_outcome(event))
-                .expect("send admission result");
+        assert_contention("typed-level-contention", |logger, event| {
+            logger.try_log_with_outcome_typed(event)
         });
-
-        barrier.wait();
-        drop(held_control);
-        let mutation_result = mutation_rx.recv().expect("mutation result");
-        let admission_result = admission_rx.recv().expect("admission result");
-        mutation.join().expect("mutation thread");
-        admission.join().expect("admission thread");
-
-        assert!(matches!(mutation_result, Ok(LevelChange::Changed { .. })));
-        assert!(matches!(
-            admission_result,
-            Ok(AdmissionOutcome::Accepted | AdmissionOutcome::Filtered)
-        ));
-        let snapshot = logger.level_state();
-        assert_eq!(snapshot.configured_level, LevelFilter::Info);
-        assert_eq!(snapshot.effective_level, LevelFilter::Debug);
-        assert_eq!(snapshot.revision, 1);
-        let logger = Arc::try_unwrap(logger).unwrap_or_else(|_| panic!("sole logger owner"));
-        let _ = logger.shutdown();
     }
 
     #[test]
