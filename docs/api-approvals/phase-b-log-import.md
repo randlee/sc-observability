@@ -89,3 +89,11 @@ owner-deferred per `docs/api-approvals/phase-b-runtime-level.md`).
   `scripts/ci/tests/test_validate_runtime_level_qualification_metadata.py`
   gained focused positive/negative coverage; added in response to
   completeness finding B1-C03).
+- `scripts/ci/prepare_runtime_level_staged_packages.py` (advance the
+  bridge-to-macros exact `=V` version pin to the candidate version when
+  staging B.P2 packages, alongside the plain-pin dependencies already
+  advanced; the staged four-package roster/order and
+  `release/publish-artifacts.toml` are unchanged).
+- `.github/workflows/ci.yml` (the three-platform `test` job now also runs
+  `sc-observability-log`'s `test_hooks` and release-mode
+  `static_level_cap_test` opt-in features).

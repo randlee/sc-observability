@@ -127,12 +127,14 @@ completeness findings B1-C02 (feature-gated regression coverage) and B1-C03
   `log/release_max_level_info`, which only takes effect in the release
   profile. Neither feature was previously exercised in this worktree's
   evidence before this fix round.
-- Three-platform CI proof requirement: this workspace's existing CI matrix
-  runs `cargo test --locked --workspace --all-targets` (default features)
-  across macOS/Linux/Windows per AC2; the two opt-in-feature commands above
-  are not yet wired into that matrix as separate CI steps and remain a
-  locally-verified gap tracked here rather than silently assumed covered by
-  the default-feature workspace run.
+- Three-platform CI proof requirement: `.github/workflows/ci.yml`'s `test`
+  job (matrix `ubuntu-latest`/`macos-latest`/`windows-latest`) now runs two
+  additional steps after `cargo test --workspace`: `cargo test -p
+  sc-observability-log --all-targets --features test_hooks` and `cargo test
+  -p sc-observability-log --release --features static_level_cap_test --test
+  static_level_cap`, so both opt-in features are exercised on all three
+  platforms, not just locally. This closes the previously-open CI-coverage
+  gap for these two commands.
 - Exported API/impl inventory reconciliation against the approved
   `target-bridge-api.md` disposition matrix: see
   `docs/plans/phase-b/log-import-export-report.md`, generated from
@@ -143,6 +145,32 @@ The final parent merge-forward is `0c31d7a133bf85b20be123261b23020722c7ccaf`
 (`feature/phase-b-1c-observation-prep`'s
 closeout of B.1c preparation, itself built on the tested `5530b37` checkpoint
 and the `77d28c7` logger-prep final handoff); no lower layer was edited.
+
+## B.P2 staged package build fix (B1-C03)
+
+PR124 run `35197298387` failed inside `prepare_runtime_level_staged_packages.py`
+at `cargo package --list -p sc-observability-types` (exit 101). Reproduced
+locally: `prepare_runtime_level_staged_packages.py` advances every workspace
+dependency's pinned version to the candidate version by literal
+`version = "1.2.0", path =` text substitution in the copied root
+`Cargo.toml`, but `sc-observability-log-macros`'s dependency is an exact
+`=1.2.0` pin (`version = "=1.2.0", path =`), which that substitution did not
+match. The staged `sc-observability-log-macros` crate itself advanced to the
+candidate version (via `version.workspace = true`), while
+`sc-observability-log`'s dependency on it stayed pinned at exactly `1.2.0`
+-- a version that no longer existed in the staged tree, so Cargo's resolver
+failed with "candidate versions found which didn't match". Fixed by also
+advancing the exact-pin form to `version = "={candidate}", path =`,
+preserving the pin's exactness. Verified locally with
+`--version 1.3.0` (the current `runtime-level-qualification.toml` candidate):
+the stage now builds exactly the four B.P2 roster archives (no unpublished
+companion crate leaks into `archives/`), `verify_stage` passes, and
+`scripts/ci/validate_runtime_level_staged_consumer.py --version 1.3.0
+--stage <dir> --platform macos --result-file <file>` succeeds with all six
+declared assertions and no `sc-observability-otlp`/`sc-observe` staged-patch
+warnings affecting the result. `release/publish-artifacts.toml` and the
+staged four-package roster/order are unchanged; no unpublished companion
+crate is added to that roster.
 
 ## Not in scope here
 

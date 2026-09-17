@@ -200,3 +200,9 @@ jobs:
 
       - name: Run workspace tests
         run: cargo test --workspace
+
+      - name: Run imported log bridge test_hooks feature
+        run: cargo test -p sc-observability-log --all-targets --features test_hooks
+
+      - name: Run imported log bridge release static-level-cap fixture
+        run: cargo test -p sc-observability-log --release --features static_level_cap_test --test static_level_cap
