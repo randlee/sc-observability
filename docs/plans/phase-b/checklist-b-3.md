@@ -22,3 +22,6 @@ Each row requires separate implementation and verification evidence. No row is w
 | Missing member/stale lock/escaping archive and manifest negatives | implemented | verification in progress | |
 | Schema CI deterministic generation, drift and toolchain/hash proof | implemented | verification in progress | |
 | Required validators, Rust sweep, handoff hashes and completeness | implemented | verification in progress | |
+
+| B3-C01: preserve source-lock registry versions/checksums across staging | implemented | passed | reviewed-source.lock closure equals staged Cargo.lock; changed selection regression returns BUNDLE_REGISTRY_DRIFT |
+| B3-C02: mandatory first-party versions and normalized requirement equivalence | implemented | passed | direct/workspace path-only regressions return BUNDLE_MISSING_VERSION; normalized drift returns BUNDLE_REQUIREMENT_DRIFT |
