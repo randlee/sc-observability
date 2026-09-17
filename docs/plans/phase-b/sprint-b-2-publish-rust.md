@@ -41,22 +41,24 @@ documentation and validation artifacts; partial completion leaves the sprint ope
    never-published handling. Require an approval artifact specifically naming
    each affected crate; an unrelated existing approval file must not excuse
    a tool error or semver failure. Exclude the CI-only consumer package.
-3. Package through the existing `main`-based release workflow up to but not
-   including live publication; stop once CI/review passes and candidate
-   packages are produced. Keep the four existing packages' dependency order
+3. Stage the current candidate revision through the existing release preflight
+   up to but not including live publication; this sprint's own branch is
+   sufficient; qualification does not require unimplemented later-phase work
+   to land on `main` first. Keep the four existing packages' dependency order
    and place macros before bridge. The staged set includes the changed core
-   packages from B.1a–B.1e. B.7 later publishes in that same order, waiting
-   for dependency index visibility between publishes; bounded retries must
-   fail visibly rather than claiming completion.
-4. Add `scripts/ci/validate_log_registry_consumer.py --version V` as a staged-
-   consumer check: create a clean temporary Cargo project with only a
-   version+path-pinned bridge dependency against this sprint's candidate
-   packages (no registry resolution, and no other path/git/patch overrides),
-   and run an enabled macro plus explicit flush and shutdown against a
-   temporary log directory. Store version, candidate source commit,
-   checksums, staged package locations, dependency resolution and consumer
-   results in `docs/plans/phase-b/handoff-b-2.md`. B.7 later runs a separate
-   registry-only consumer proof after real publication.
+   packages from B.1a–B.1e. B.7 later publishes in that same order from
+   `main`, waiting for dependency index visibility between publishes; bounded
+   retries must fail visibly rather than claiming completion.
+4. Add `scripts/ci/validate_log_staged_consumer.py --version V`: create a
+   clean temporary Cargo project that pins only the staged bridge/macros
+   candidate archives by exact version+path (no ambient workspace checkout
+   and no `[patch]` override); ordinary third-party dependencies still
+   resolve normally from crates.io. Run an enabled macro plus explicit flush
+   and shutdown against a temporary log directory. Store version, candidate
+   source commit, checksums, staged package locations, dependency resolution
+   and consumer results in `docs/plans/phase-b/handoff-b-2.md`. B.7 alone
+   later runs its own separate registry-only consumer proof after real
+   publication.
 
 ## Consumer contract
 
@@ -67,8 +69,9 @@ The consumer manifest pins the staged candidate version (substitute the staged `
 sc-observability-log = "=V"
 ```
 
-This sprint's staged-consumer check resolves the pin against B.2's immutable
-candidate packages directly, not the registry. The executable fixture uses the
+This sprint's staged-consumer check resolves the first-party pin against B.2's
+immutable candidate packages directly, not the registry; other, ordinary
+dependencies resolve normally from crates.io. The executable fixture uses the
 exact accepted public initialization/lifecycle signatures captured by B.1; it
 checks JSONL content after shutdown and does not copy private bridge support
 code into the consumer.
@@ -102,7 +105,7 @@ bash scripts/ci/validate_public_api_docs.sh
 bash scripts/ci/validate_docs_consistency.sh
 cargo package --list -p sc-observability-log-macros
 cargo package --list -p sc-observability-log
-python3 scripts/ci/validate_log_registry_consumer.py --version "$RELEASE_VERSION"
+python3 scripts/ci/validate_log_staged_consumer.py --version "$RELEASE_VERSION"
 ```
 
 API-diff exit 1 means a diff requiring review, not permission to suppress an
