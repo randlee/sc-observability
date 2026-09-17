@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use sc_observability_types::typed::ClassifiedError;
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, ErrorContext, FileCount, FlushError,
     MaintenanceHealthReport, MaintenanceWorkerState, Remediation, Timestamp, WriterState,
@@ -805,7 +806,7 @@ fn run_maintenance_if_due(
         );
         match file_sink.perform_maintenance(policy) {
             Ok(stats) => tracker.record_pass(stats),
-            Err(error) => tracker.record_failure(error.0.as_ref()),
+            Err(error) => tracker.record_failure(error.context()),
         }
         tracker.mark_pass_active(false);
     } else {

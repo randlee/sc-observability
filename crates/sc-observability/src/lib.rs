@@ -728,6 +728,8 @@ mod tests {
     use super::*;
     use crate::runtime::LevelLifecycle;
     use crate::sinks::ConsoleWriter;
+    use crate::typed::{legacy_sink, typed_sink};
+    use sc_observability_types::typed::{ClassifiedError, InitFailureKind};
     use sc_observability_types::{
         ActionName, Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, Level, LogEvent, LogOrder,
         LogQuery, LogSnapshot, ProcessIdentity, ProcessIdentityPolicy, QueryError,
@@ -1789,6 +1791,117 @@ mod tests {
                 .diagnostic()
                 .message
                 .contains("queue capacity must be greater than zero")
+        );
+    }
+
+    #[test]
+    fn typed_builder_rejects_zero_queue_capacity_with_the_same_diagnostic() {
+        let root = temp_path("typed-zero-queue-capacity");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.queue_capacity = 0;
+
+        let Err(error) = Logger::builder_typed(config) else {
+            panic!("zero queue capacity should fail");
+        };
+
+        assert_eq!(error.kind(), InitFailureKind::LoggerInitialization);
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_INIT_FAILED);
+    }
+
+    #[test]
+    fn typed_logger_admission_preserves_filtering_and_invalid_event_failure() {
+        let root = temp_path("typed-admission");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        config.level = LevelFilter::Off;
+        let logger = Logger::new_typed(config).expect("typed logger");
+
+        assert_eq!(
+            logger
+                .try_log_with_outcome_typed(log_event(service_name()))
+                .expect("filtered event succeeds"),
+            AdmissionOutcome::Filtered
+        );
+
+        let wrong_service = ServiceName::new("other-service").expect("valid service");
+        assert!(matches!(
+            logger.log_typed(log_event(wrong_service)),
+            Err(LogFailure::InvalidEvent(_))
+        ));
+    }
+
+    #[test]
+    fn logger_admission_conversions_keep_the_original_source() {
+        let context = ErrorContext::new(
+            error_codes::LOGGER_WRITER_DEGRADED,
+            "writer degraded",
+            Remediation::recoverable("retry", ["retry later"]),
+        )
+        .source(Box::new(std::io::Error::other("native writer cause")));
+        let typed: LogFailure = LogError::WriterDegraded(Box::new(context)).into();
+        assert_eq!(
+            std::error::Error::source(&typed)
+                .expect("typed source")
+                .to_string(),
+            "writer degraded; caused by: native writer cause"
+        );
+
+        let legacy: LogError = typed.into();
+        assert_eq!(
+            std::error::Error::source(&legacy)
+                .expect("legacy source")
+                .to_string(),
+            "writer degraded; caused by: native writer cause"
+        );
+    }
+
+    #[test]
+    fn typed_sink_adapters_preserve_default_flush_health_and_single_write() {
+        #[derive(Default)]
+        struct TypedRecordingSink {
+            writes: AtomicU64,
+        }
+
+        impl crate::typed::TypedLogSink for TypedRecordingSink {
+            fn write(
+                &self,
+                _event: &LogEvent,
+            ) -> Result<(), sc_observability_types::typed::LogSinkFailure> {
+                self.writes.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }
+
+            fn health(&self) -> SinkHealth {
+                SinkHealth {
+                    name: sink_name("typed-recording"),
+                    state: SinkHealthState::Healthy,
+                    last_error: None,
+                }
+            }
+        }
+
+        let typed = Arc::new(TypedRecordingSink::default());
+        let legacy = legacy_sink(typed.clone());
+        legacy
+            .write(&log_event(service_name()))
+            .expect("legacy write");
+        legacy.flush().expect("default typed flush");
+        assert_eq!(typed.writes.load(Ordering::SeqCst), 1);
+        assert_eq!(legacy.health().state, SinkHealthState::Healthy);
+
+        let legacy = Arc::new(RecordingEventSink::default());
+        let typed = typed_sink(legacy.clone());
+        crate::typed::TypedLogSink::write(typed.as_ref(), &log_event(service_name()))
+            .expect("typed write");
+        crate::typed::TypedLogSink::flush(typed.as_ref()).expect("default legacy flush");
+        assert_eq!(
+            legacy.events.lock().expect("events mutex poisoned").len(),
+            1
+        );
+        assert_eq!(
+            crate::typed::TypedLogSink::health(typed.as_ref()).state,
+            SinkHealthState::Healthy
         );
     }
 
