@@ -3,9 +3,5 @@
   "identifier": "default",
   "description": "Main-window permissions for the observability logging example.",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "sc-observability:default",
-    "allow-app-observability-level-change"
-  ]
+  "permissions": ["core:default"]
 }

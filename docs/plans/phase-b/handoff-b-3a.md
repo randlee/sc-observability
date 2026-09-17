@@ -1,7 +1,7 @@
 # B.3a TypeScript/Tauri handoff
 
 Status: in progress on `fix/phase-b-3a-completeness`; parent merge-forwarded
-from `origin/feature/phase-b-4a-python-packaging` at `e4ad165` (including
+from `origin/feature/phase-b-4a-python-packaging` at `c403bcf` (including
 the latest B.4a merge-forward).
 
 The child consumes the B.3 canonical schema and the B.3b native
@@ -27,8 +27,9 @@ plugin and retains owner authority in Rust. The example exports a nonrejecting
 BigInt event conversion; the host composition point is
 `examples/tauri-logging/src-tauri/src/main.rs`.
 The plugin ships generated Tauri ACL metadata for all four plugin commands;
-the example build registers its application command and its checked-in
-capability scopes both surfaces to the `main` window.
+the example build registers its application command. Its checked-in
+capabilities keep core APIs on `main` while routing only the five observability
+commands through ACL on all windows, allowing handler-level permission denial.
 
 Focused source validation performed:
 
