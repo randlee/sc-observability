@@ -1,0 +1,36 @@
+[package]
+name = "sc-observability-log"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "log facade bridge and tracing-compatible macros for sc-observability structured JSONL logging."
+publish = false
+
+[features]
+# CI-only release fixture; it proves initialization rejects a baseline above
+# log::STATIC_MAX_LEVEL without imposing a production facade cap.
+static_level_cap_test = ["log/release_max_level_info"]
+test_hooks = []
+
+[dependencies]
+sc-observability.workspace = true
+sc-observability-types.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hostname.workspace = true
+# Exact `=` pin (lockstep): macro expansions target the `#[doc(hidden)] __private`
+# module, which is outside semver. Same policy as serde -> serde_core.
+sc-observability-log-macros.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+trybuild.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

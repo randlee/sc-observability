@@ -4,8 +4,8 @@ status: preparation-complete
 branch: feature/phase-b-1c-observation-prep
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1c-observation-prep
 parent: feature/phase-b-1b-logger-prep
-parent_checkpoint: f3792ec35a617b8e1533056eb08974140935c496
-implementation_commits: 7d49ed2, 37bba66
+parent_checkpoint: 77d28c77f4d48b59e40f52b9ef735f68ebbb890e
+implementation_commits: 7d49ed2, 37bba66, 392c1dd, d90fba2, 4327fd3, 5b25b20, 468ec1a, ba677c9
 ---
 
 # B.1c typed observation preparation handoff
@@ -31,23 +31,27 @@ registrations through `legacy_subscriber`, `legacy_log_projector`,
 `legacy_span_projector`, and `legacy_metric_projector`. No duplicate runtime or
 placeholder logger API is present.
 
-## Required parity inventory
+## C02 scenario-to-assertion matrix
 
-The unit and external fixtures cover:
+| Scenario | Legacy assertion | Typed assertion | Evidence |
+| --- | --- | --- | --- |
+| Invalid names/config | Direct constructors reject empty names; deserialized invalid `ToolName` values make legacy and typed `default_for` fail with `SC_OBSERVE_INIT_FAILED` and the native env-prefix source, while invalid tool config makes both service-name paths fail with the native identifier source. | Same paired code, kind, and source checks. | `tests/typed_observation.rs:501` |
+| Empty routes | `Observability::new` returns `InitFailureKind::ObservationInitialization` through the legacy result adapter. | `new_typed` returns the same kind and diagnostic code. | `tests/typed_observation.rs:571`; `src/lib.rs:1142` |
+| Logger startup failure | Legacy builder path reports `LoggerInitialization` with the queue-capacity diagnostic. | Typed builder path reports the same kind, code, and diagnostic message. | `tests/typed_observation.rs:571`; `src/lib.rs:1142` |
+| Eligible/ineligible filtering | Existing registration filter skips the ineligible observation, increments dropped count, and invokes no subscriber. | Paired typed fixture through `legacy_subscriber` has the same result. | `src/lib.rs:906`; `tests/typed_observation.rs:222` |
+| Registration ordering | Two existing registrations invoke in insertion order. | The same typed adapters preserve `first, second` order. | `src/lib.rs:889`; `tests/typed_observation.rs:222` |
+| No matching route | A different payload type returns `ObservationError::RoutingFailure`, dropped count 1, callback count 0. | Paired typed facade has the same error and counts. | `tests/typed_observation.rs:261` |
+| Mixed failure | Failing plus successful registrations return `Ok`, count one subscriber failure, and deliver once to the successful route. | Same exact callback and health counts. | `src/lib.rs:936`; `tests/typed_observation.rs:261` |
+| All failure | A failing route returns `RoutingFailure`, dropped count 1, failure count 1, and the routing diagnostic code. | Same exact result through typed construction and legacy registration. | `src/lib.rs:1017`; `tests/typed_observation.rs:261` |
+| Diagnostic fidelity | Legacy adapter exposes custom and logger-family codes as unclassified without changing the context. | Round-trip typed adapter retains code and attached source. | `tests/typed_observation.rs:333`; neutral type-domain checks at `crates/sc-observability-types/src/typed.rs` |
+| Output families | Existing registration invokes subscriber, log, span, and metric routes exactly once and emits concrete JSONL. | Typed implementations enter those registrations via the four B.1a adapters; paired fixture invokes each exactly once per facade. | `tests/typed_observation.rs:410`; `tests/typed_observation.rs:467` |
+| Flush | Legacy `flush` returns the logger-flush classification and records one health failure for the operation. | `flush_typed` returns the same kind and health result; both paired fixtures wait boundedly for the writer’s second pass and assert exactly two sink flush calls. | `src/lib.rs:1198` |
+| Shutdown/lifecycle | Legacy shutdown blocks later emit and flush-after-stop remains successful. | Typed shutdown is idempotent, including eight concurrent calls, and flush-after-stop remains successful. | `src/lib.rs:1034`; `src/lib.rs:1110`; `src/lib.rs:1170` |
 
-- valid and invalid construction paths, empty routes, and downstream logger
-  initialization failure;
-- typed/legacy construction classification, diagnostics, and source retention;
-- eligible and ineligible filtering, deterministic registration ordering, no
-  matching route, one successful route plus one failing route, and all routes
-  failing;
-- subscriber callbacks and log, span, and metric projector output families;
-- top-level health aggregation, diagnostics, and telemetry health exposure;
-- explicit flush, post-shutdown emit, flush after stop, repeated shutdown, and
-  concurrent shutdown;
-- real external typed-adapter registration in
-  `tests/typed_observation.rs`, with exactly one invocation per route and
-  concrete JSONL output assertions.
+The unchanged producer API is `emit` in both paths; there is intentionally no
+invented `emit_typed` operation. Health and telemetry aggregation remain the
+existing runtime contracts and are covered by `src/lib.rs:1053` and
+`src/lib.rs:1075`.
 
 ## Two-pass validation evidence
 
@@ -65,9 +69,9 @@ Behavior/source-integrity pass:
 
 ```text
 cargo fmt --all -- --check: passed
-cargo test --locked --workspace: 170 unit/integration tests passed; 0 failed; 6 normal doctests passed; 2 compile-fail doctests passed
+cargo test --locked --workspace: 178 unit/integration tests passed; 0 failed; 6 normal doctests passed; 2 compile-fail doctests passed
 cargo clippy --locked --workspace --all-targets -- -D warnings: passed
-python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py': 36 tests, OK
+python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py': 41 tests, OK
 bash scripts/ci/validate_docs_consistency.sh: passed
 bash scripts/ci/validate_dependency_bans.sh: passed
 bash scripts/ci/validate_repo_boundaries.sh: passed
@@ -75,7 +79,8 @@ bash scripts/ci/validate_public_api_docs.sh: passed
 bash scripts/ci/validate_public_api_diff.sh: exit 1 with additive API report, as expected for Phase B typed operations
 ```
 
-The final parent merge-forward was `f3792ec35a617b8e1533056eb08974140935c496`;
-the parent owns its logger/provenance changes and no lower layer was edited.
+The final parent merge-forward is
+`77d28c77f4d48b59e40f52b9ef735f68ebbb890e`; the parent owns its
+logger/provenance changes and no lower layer was edited.
 This is preparation evidence only: copied bridge source import, independent QA,
 and full B.1c integration acceptance remain pending.

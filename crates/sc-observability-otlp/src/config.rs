@@ -529,15 +529,147 @@ mod tests {
 
     #[test]
     fn telemetry_config_builder_build_validates_transport() {
-        let result = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(OtelConfig {
                 enabled: true,
                 endpoint: None,
                 ..OtelConfig::default()
             })
-            .build();
+            .build()
+            .expect_err("legacy missing endpoint");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(OtelConfig {
+                enabled: true,
+                endpoint: None,
+                ..OtelConfig::default()
+            })
+            .build_typed()
+            .expect_err("typed missing endpoint");
 
-        assert!(result.is_err());
+        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
+    }
+
+    #[test]
+    fn public_builder_preserves_typed_validation_for_all_config_rejections() {
+        fn transport() -> OtelConfig {
+            OtelConfig {
+                enabled: true,
+                endpoint: Some(
+                    OtlpEndpoint::new("https://otel.example.internal").expect("endpoint"),
+                ),
+                ..OtelConfig::default()
+            }
+        }
+
+        fn assert_parity(legacy: &InitError, typed: &InitFailure) {
+            assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+            assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
+        }
+
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport())
+            .enable_logs(LogsConfig { batch_size: 0 })
+            .build()
+            .expect_err("legacy zero batch");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport())
+            .enable_logs(LogsConfig { batch_size: 0 })
+            .build_typed()
+            .expect_err("typed zero batch");
+        assert_parity(&legacy, &typed);
+
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport())
+            .enable_metrics(MetricsConfig {
+                batch_size: 1,
+                export_interval_ms: 0_u64.into(),
+            })
+            .build()
+            .expect_err("legacy zero interval");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport())
+            .enable_metrics(MetricsConfig {
+                batch_size: 1,
+                export_interval_ms: 0_u64.into(),
+            })
+            .build_typed()
+            .expect_err("typed zero interval");
+        assert_parity(&legacy, &typed);
+
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(OtelConfig {
+                timeout_ms: 0_u64.into(),
+                ..transport()
+            })
+            .enable_logs(LogsConfig::default())
+            .build()
+            .expect_err("legacy zero timeout");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(OtelConfig {
+                timeout_ms: 0_u64.into(),
+                ..transport()
+            })
+            .enable_logs(LogsConfig::default())
+            .build_typed()
+            .expect_err("typed zero timeout");
+        assert_parity(&legacy, &typed);
+
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(OtelConfig {
+                initial_backoff_ms: 2_000_u64.into(),
+                max_backoff_ms: 1_000_u64.into(),
+                ..transport()
+            })
+            .enable_logs(LogsConfig::default())
+            .build()
+            .expect_err("legacy inverted backoff");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(OtelConfig {
+                initial_backoff_ms: 2_000_u64.into(),
+                max_backoff_ms: 1_000_u64.into(),
+                ..transport()
+            })
+            .enable_logs(LogsConfig::default())
+            .build_typed()
+            .expect_err("typed inverted backoff");
+        assert_parity(&legacy, &typed);
+
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport())
+            .build()
+            .expect_err("legacy missing signal");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport())
+            .build_typed()
+            .expect_err("typed missing signal");
+        assert_parity(&legacy, &typed);
+    }
+
+    #[test]
+    fn public_builder_preserves_existing_protocol_endpoint_acceptance() {
+        // Endpoint validation intentionally admits documented HTTP(S) endpoints for
+        // every protocol. Protocol-specific transport handling is deferred to the
+        // exporter layer, so neither API invents a protocol/endpoint rejection.
+        let transport = OtelConfig {
+            enabled: true,
+            endpoint: Some(OtlpEndpoint::new("https://otel.example.internal").expect("endpoint")),
+            protocol: OtlpProtocol::Grpc,
+            ..OtelConfig::default()
+        };
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport.clone())
+            .enable_logs(LogsConfig::default())
+            .build()
+            .expect("legacy accepts the transport combination");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport)
+            .enable_logs(LogsConfig::default())
+            .build_typed()
+            .expect("typed accepts the transport combination");
+
+        assert_eq!(legacy.transport.protocol, typed.transport.protocol);
+        assert_eq!(legacy.transport.endpoint, typed.transport.endpoint);
     }
 
     #[test]

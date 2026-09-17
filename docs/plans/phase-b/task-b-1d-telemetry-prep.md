@@ -47,3 +47,6 @@ repeated shutdown remains successful.
 
 Copied-bridge integration and independent QA are later-layer work and are not
 claimed by this preparation task.
+
+The final source matrix is recorded in `handoff-b-1d.md`; this task plan stays
+in progress until coordinator completeness review completes.

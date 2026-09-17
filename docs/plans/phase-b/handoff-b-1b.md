@@ -18,13 +18,16 @@ surfaces, admission/filtering semantics, and bridge API are unchanged.
 - Required provenance parent merged: `8aeabb584b3b2d004606591ff80741867ebb9ca7`
 - Merge-forward revision: `44b3f3c5d06e3ab4195984f8141777be5726ae6d`
 - Typed production-site correction: `2d1f207c24268d618f1fda135484cde88f079706`
-- Final parent-merged validation base: `f3792ec35a617b8e1533056eb08974140935c496`
+- Final parent-merged validation base: `453f9e8` (includes provenance
+  completeness PASS at `d6571c1`)
+- Final C03 scenario-evidence revision: `211899ec5c61ff80983c0b730605bbb2a318e9fa`
 
 ## Validation
 
 - PASS: `cargo test --locked -p sc-observability --all-targets`
 - PASS: `cargo test --locked -p sc-observability --all-targets --all-features`
-  (75 unit tests and the logging-only consumer)
+  (79 unit tests and 2 logging-only consumer tests at the final parent-merged
+  C03 tip)
 - PASS: `cargo fmt --all -- --check`
 - PASS: `cargo clippy --locked -p sc-observability --all-targets --all-features -- -D warnings`
 - PASS: `cargo test --locked -p sc-observability --doc`
@@ -42,12 +45,13 @@ The task-plan fixture matrix records the paired legacy/typed and retained
 behavior coverage. The copied bridge regression is pending B.1 source
 integration and is intentionally not represented as a completed local run.
 
-After the final provenance merge, the clean validation base passed
-`cargo test --locked -p sc-observability --all-targets --all-features`
-(76 unit tests and 2 integration-consumer tests),
-`cargo fmt --all -- --check`,
-`cargo clippy --locked -p sc-observability --all-targets --all-features -- -D warnings`,
-and `git diff --check`.
+The final C03 fixtures cover the failure-injectable `ConsoleSink::from_writer`
+seam in both legacy and typed forms, preserving the stable write code, native
+source rendering, degraded health summary, and exactly one physical write per
+call. The existing held-level-control synchronization fixture now exercises
+both legacy and typed admission. Built-in JSONL and console flush uses the
+inherited `TypedLogSink` default no-op; custom adapter fixtures remain the
+explicit-flush failure evidence.
 
 ## Startup ordering and rollback boundary
 

@@ -65,11 +65,38 @@ for path in root.rglob("Cargo.toml"):
     if "agent-team-mail-" in text:
         raise SystemExit(f"agent-team-mail dependency reference found in {path}")
 
+# B.1: the macros crate must never acquire a dependency back to the bridge it
+# expands for, and no existing core crate may gain `log` or a dependency on
+# the copied bridge/macros/consumer-check crates (sprint-b-1-copy.md AC3).
+log_macros_deps = package_deps(root / "crates/sc-observability-log-macros/Cargo.toml")
+if "sc-observability-log" in log_macros_deps:
+    raise SystemExit("sc-observability-log-macros must not depend on sc-observability-log")
+
+copied_crate_names = {
+    "sc-observability-log",
+    "sc-observability-log-macros",
+    "sc-observability-log-consumer-check",
+}
+for crate_path in [
+    root / "crates/sc-observability-types/Cargo.toml",
+    root / "crates/sc-observability/Cargo.toml",
+    root / "crates/sc-observe/Cargo.toml",
+    root / "crates/sc-observability-otlp/Cargo.toml",
+]:
+    core_deps = package_deps(crate_path)
+    if core_deps & copied_crate_names:
+        raise SystemExit(f"{crate_path} must not depend on the copied bridge/macros/consumer-check crates")
+    if "log" in core_deps:
+        raise SystemExit(f"{crate_path} must not depend on the `log` crate")
+
 shared_crate_roots = [
     root / "crates/sc-observability-types",
     root / "crates/sc-observability",
     root / "crates/sc-observe",
     root / "crates/sc-observability-otlp",
+    root / "crates/sc-observability-log",
+    root / "crates/sc-observability-log-macros",
+    root / "crates/sc-observability-log-consumer-check",
 ]
 
 source_files = []
