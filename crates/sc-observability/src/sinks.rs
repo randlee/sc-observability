@@ -798,7 +798,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_write_failures_mark_sink_health() {
+    fn built_in_write_failures_mark_sink_health_for_legacy_and_typed_calls() {
         let root = temp_root("legacy-write-error");
         let file_parent = root.join("logs");
         fs::create_dir_all(root.path_buf()).expect("create root");
@@ -813,6 +813,12 @@ mod tests {
 
         assert_eq!(
             error.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        let typed_error = crate::typed::TypedLogSink::write(&sink, &log_event())
+            .expect_err("typed write failure");
+        assert_eq!(
+            typed_error.diagnostic().code,
             error_codes::LOGGER_SINK_WRITE_FAILED
         );
         assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);

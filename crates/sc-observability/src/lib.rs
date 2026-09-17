@@ -1788,6 +1788,75 @@ mod tests {
     }
 
     #[test]
+    fn disconnected_writer_returns_legacy_and_typed_admission_and_flush_failures() {
+        struct PanicSink {
+            entered: Arc<AtomicBool>,
+        }
+
+        impl LogSink for PanicSink {
+            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+                self.entered.store(true, Ordering::SeqCst);
+                panic!("injected sink panic terminates writer");
+            }
+
+            fn health(&self) -> SinkHealth {
+                SinkHealth {
+                    name: sink_name("panic-sink"),
+                    state: SinkHealthState::Unavailable,
+                    last_error: None,
+                }
+            }
+        }
+
+        let root = temp_path("disconnected-writer");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let entered = Arc::new(AtomicBool::new(false));
+        let mut builder = Logger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::new(Arc::new(PanicSink {
+            entered: entered.clone(),
+        })));
+        let logger = builder.build();
+
+        logger
+            .log(log_event(service_name()))
+            .expect("initial admission");
+        wait_for(
+            || entered.load(Ordering::SeqCst),
+            "writer should enter the injected sink",
+        );
+
+        // A failed flush is the synchronization point: send failure proves the
+        // worker has unwound and dropped its receiver.
+        let legacy_flush = logger.flush().expect_err("legacy flush is disconnected");
+        assert_eq!(
+            legacy_flush.diagnostic().code,
+            error_codes::LOGGER_WRITER_DEGRADED
+        );
+        assert!(matches!(
+            logger.try_log(log_event(service_name())),
+            Err(TryLogError::WriterDegraded(_))
+        ));
+        assert!(matches!(
+            logger.try_log_typed(log_event(service_name())),
+            Err(TryLogFailure::WriterDegraded(_))
+        ));
+        let typed_flush = logger
+            .flush_typed()
+            .expect_err("typed flush is disconnected");
+        assert_eq!(
+            typed_flush.diagnostic().code,
+            error_codes::LOGGER_WRITER_DEGRADED
+        );
+
+        // Consume the runtime after the intentionally panicked worker has
+        // been observed. Its completion channel is already disconnected, so
+        // shutdown joins the terminated worker without an unbounded wait.
+        let _stopped = logger.shutdown();
+    }
+
+    #[test]
     fn logger_builder_rejects_zero_queue_capacity() {
         let root = temp_path("zero-queue-capacity");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
@@ -1885,6 +1954,17 @@ mod tests {
                 .to_string(),
             "writer degraded; caused by: native writer cause"
         );
+
+        let timeout = ErrorContext::new(
+            error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
+            "writer shutdown timed out",
+            Remediation::recoverable("wait", ["inspect shutdown timing"]),
+        )
+        .source(Box::new(std::io::Error::other("native timeout cause")));
+        let typed: TryLogFailure = TryLogError::ShutdownTimedOut(Box::new(timeout)).into();
+        assert!(matches!(typed, TryLogFailure::ShutdownTimedOut(_)));
+        let legacy: TryLogError = typed.into();
+        assert!(matches!(legacy, TryLogError::ShutdownTimedOut(_)));
     }
 
     #[test]
@@ -2151,12 +2231,24 @@ mod tests {
             owner.elevate_level(LevelFilter::Off, LevelChangeSource::Application),
             Err(LevelChangeError::BelowBaseline { .. })
         ));
+        assert!(matches!(
+            owner.reset_level(LevelChangeSource::Application),
+            Ok(LevelChange::Changed { .. })
+        ));
+        let mut filtered_event = log_event(service_name());
+        filtered_event.level = Level::Debug;
+        assert_eq!(
+            logger
+                .try_log_with_outcome_typed(filtered_event)
+                .expect("typed filtered admission"),
+            AdmissionOutcome::Filtered
+        );
         let stopped = logger.shutdown();
         assert!(matches!(
             owner.reset_level(LevelChangeSource::Application),
             Err(LevelChangeError::Stopped)
         ));
-        assert_eq!(stopped.level_state().effective_level, LevelFilter::Debug);
+        assert_eq!(stopped.level_state().effective_level, LevelFilter::Info);
     }
 
     #[test]
@@ -2212,6 +2304,55 @@ mod tests {
         assert_eq!(snapshot.revision, 1);
         let logger = Arc::try_unwrap(logger).unwrap_or_else(|_| panic!("sole logger owner"));
         let _ = logger.shutdown();
+    }
+
+    #[test]
+    fn typed_admission_and_flush_can_run_concurrently() {
+        use std::sync::{Barrier, mpsc};
+
+        let root = temp_path("typed-admission-flush-concurrency");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let logger = Arc::new(Logger::new_typed(config).expect("typed logger"));
+        let barrier = Arc::new(Barrier::new(3));
+        let (flush_tx, flush_rx) = mpsc::channel();
+        let (admission_tx, admission_rx) = mpsc::channel();
+
+        let flush_logger = logger.clone();
+        let flush_barrier = barrier.clone();
+        let flush = std::thread::spawn(move || {
+            flush_barrier.wait();
+            let _ = flush_tx.send(flush_logger.flush_typed());
+        });
+
+        let admission_logger = logger.clone();
+        let admission_barrier = barrier.clone();
+        let admission = std::thread::spawn(move || {
+            admission_barrier.wait();
+            let _ = admission_tx
+                .send(admission_logger.try_log_with_outcome_typed(log_event(service_name())));
+        });
+
+        barrier.wait();
+        flush_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("flush completion must be bounded")
+            .expect("typed flush");
+        assert_eq!(
+            admission_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("admission completion must be bounded")
+                .expect("typed admission"),
+            AdmissionOutcome::Accepted
+        );
+        flush.join().expect("flush thread");
+        admission.join().expect("admission thread");
+
+        let Ok(logger) = Arc::try_unwrap(logger) else {
+            panic!("all concurrent handles dropped");
+        };
+        logger.shutdown();
     }
 
     #[test]
