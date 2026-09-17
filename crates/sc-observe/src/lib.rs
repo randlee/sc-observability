@@ -728,6 +728,10 @@ where
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "routing compatibility tests exercise retained legacy registrations and errors"
+)]
 mod tests {
     use super::*;
     use sc_observability::{

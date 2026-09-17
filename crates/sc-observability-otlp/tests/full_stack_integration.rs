@@ -1,3 +1,8 @@
+#![allow(
+    deprecated,
+    reason = "OTLP integration compatibility fixtures exercise retained projector boundaries"
+)]
+
 use std::sync::Arc;
 
 use sc_observability_otlp::{

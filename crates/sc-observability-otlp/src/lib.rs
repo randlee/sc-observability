@@ -190,6 +190,10 @@ impl Telemetry {
     }
 
     #[cfg(test)]
+    #[allow(
+        deprecated,
+        reason = "test exporter injection retains the legacy InitError comparison boundary"
+    )]
     fn new_with_exporters(
         config: TelemetryConfig,
         log_exporter: Arc<dyn LogExporter>,
@@ -657,6 +661,10 @@ fn shutdown_export_failure_typed(
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "telemetry compatibility tests exercise retained lifecycle and error wrappers"
+)]
 mod tests {
     use super::*;
     use sc_observability_types::{

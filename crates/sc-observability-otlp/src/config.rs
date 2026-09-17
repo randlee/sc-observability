@@ -419,6 +419,10 @@ impl TelemetryConfigBuilder {
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "OTLP config compatibility tests exercise retained constructors and builder"
+)]
 pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
     validate_config_typed(config).map_err(Into::into)
 }
@@ -492,6 +496,10 @@ fn invalid_transport_value_typed(message: &str, remediation: &str) -> InitFailur
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "OTLP config compatibility tests exercise retained constructors and builder"
+)]
 mod tests {
     use super::*;
     use sc_observability_types::{DiagnosticInfo, ServiceName};
