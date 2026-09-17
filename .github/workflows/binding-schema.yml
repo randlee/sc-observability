@@ -1,0 +1,36 @@
+name: Binding schema
+on:
+  pull_request:
+  push:
+    branches: [develop, main, 'integrate/*']
+  workflow_dispatch:
+jobs:
+  binding-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install isolation helper
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Validate DTO, frozen schema, generators and isolated bundle
+        run: bash scripts/ci/validate_binding_schema.sh
+      - name: Enforce neutral dependency boundary
+        run: bash scripts/ci/validate_dependency_bans.sh
+      - name: Retain exact isolated consumer proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: binding-source-bundle-proof
+          path: target/b3-bundle-evidence.json
+          if-no-files-found: error

@@ -2,8 +2,11 @@
 /// One stable diagnostic registry entry.
 #[derive(Debug, Clone, Copy, serde::Serialize)]
 pub struct ErrorEntry {
+    /// Wire code.
     pub code: &'static str,
+    /// Wire kind.
     pub kind: &'static str,
+    /// Wire remediation.
     pub remediation: &'static str,
 }
 /// Correct the named input field and submit a new request.
