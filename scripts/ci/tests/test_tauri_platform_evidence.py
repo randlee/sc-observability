@@ -35,6 +35,9 @@ class EvidenceTests(unittest.TestCase):
                 'ipc_sha256': write('ipc.json', {
                     window: {'passed': True, 'uncaught': [], 'records': cases(required)}
                     for window, required in [('main', gate.REQUIRED_MAIN), ('forbidden', gate.REQUIRED_FORBIDDEN)]}),
+                'capped_ipc_sha256': write('capped/ipc.json', {
+                    window: {'passed': True, 'uncaught': [], 'records': cases(required)}
+                    for window, required in [('main', gate.REQUIRED_CAPPED), ('forbidden', gate.REQUIRED_FORBIDDEN)]}),
                 'policy_results_sha256': write('policy-results.json', {'passed': True, 'records': cases(map(str, range(15)))}),
                 'fault_results_sha256': write('fault-results.json', {'passed': True, 'results': cases('schema-' + case['id'] for case in canonical)}),
                 'conformance_fixture_sha256': gate.digest(fixture),

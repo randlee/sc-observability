@@ -33,6 +33,21 @@ async function run() {
   }
   const transport = value('tauri-transport-factory', createTauriTransport(invoke));
   const client = value('factory', createClient(transport));
+  if (window.qualificationCapped) {
+    const before = value('capped-health-before', await client.health());
+    check('capped-baseline', before.level_state.configured_level === 'info' && before.level_state.effective_level === 'info', before);
+    const changed = await invoke('app_observability_level_change', { request: { ...request, change: { kind: 'elevate', level: 'trace' } } });
+    failure('capped-level-rejected', changed, 'unsupported_level');
+    check('capped-payload-preserved', changed.error.requested === 'trace' && changed.error.available === 'info', changed);
+    const after = value('capped-health-after', await client.health());
+    check('capped-state-preserved', JSON.stringify(after.level_state) === JSON.stringify(before.level_state), after);
+    check('capped-bridge-coherence', JSON.stringify(after.logging) === JSON.stringify(after.bridge.logging) && after.bridge.effective_level === after.level_state.effective_level && after.bridge.level_revision === after.level_state.level_revision, after);
+    check('capped-accepted', value('capped-admit', await client.tryLog(wireEvent())).kind === 'accepted');
+    check('capped-filtered', value('capped-filter', await client.tryLog(wireEvent({ level: 'debug' }))).kind === 'filtered');
+    value('capped-flush', await client.flush(2000));
+    check('capped-no-hidden-rejection', uncaught.length === 0, uncaught);
+    return;
+  }
   const initial = value('initial-local-status', client.client_status());
   check('initial-idle', initial.in_flight === 0 && initial.last_result.value.kind === 'idle', initial);
   const fields = { max: 18446744073709551615n, min: -9223372036854775808n, zero: -0, nil: null, fraction: 1.25, nested: { secret: 'must-not-survive' } };

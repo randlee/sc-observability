@@ -23,6 +23,7 @@ REQUIRED_MAIN = {
     'actual-flush-after-timeout-overlap',
 }
 REQUIRED_FORBIDDEN = {'forbidden-window-' + name for name in ('try_log', 'query', 'health', 'flush', 'level')}
+REQUIRED_CAPPED = {'capped-baseline', 'capped-level-rejected', 'capped-payload-preserved', 'capped-state-preserved', 'capped-bridge-coherence', 'capped-accepted', 'capped-filtered', 'capped-flush', 'capped-no-hidden-rejection'}
 
 
 def digest(path):
@@ -59,6 +60,11 @@ def validate(root, source=None):
                 raise ValueError('failed IPC result: ' + name + '/' + window)
             if not required <= {case['name'] for case in record['records']}:
                 raise ValueError('skipped IPC cases: ' + name + '/' + window)
+        capped = json.loads(hashed('capped/ipc.json', report['capped_ipc_sha256']).read_text(encoding='utf-8'))
+        for window, required in [('main', REQUIRED_CAPPED), ('forbidden', REQUIRED_FORBIDDEN)]:
+            record = capped[window]
+            if not record['passed'] or record['uncaught'] or not all(case['passed'] for case in record['records']) or not required <= {case['name'] for case in record['records']}:
+                raise ValueError('missing or failed capped level IPC: ' + name + '/' + window)
         policies = json.loads(hashed('policy-results.json', report['policy_results_sha256']).read_text(encoding='utf-8'))
         if not policies['passed'] or len(policies['records']) != 15 or not all(case['passed'] for case in policies['records']):
             raise ValueError('host policy fixture missing or failed: ' + name)

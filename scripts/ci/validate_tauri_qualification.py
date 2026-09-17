@@ -212,6 +212,14 @@ def main():
                     executable = Path(sandbox.env['CARGO_TARGET_DIR']) / 'debug' / ('tauri-logging-example.exe' if os.name == 'nt' else 'tauri-logging-example')
                     report['executable_sha256'] = digest(executable)
                     report['output_gate_transitions'] = execute_webview(sandbox, executable, host, external, external)
+                    capped = external / 'capped'
+                    capped.mkdir()
+                    (dist / 'index.html').write_text('<!doctype html><meta charset="utf-8"><title>Capped native host</title><script>window.qualificationCapped=true</script><script src="qualification.js"></script>', encoding='utf-8')
+                    sandbox.run([sandbox.cargo, 'build', '--locked', '--offline', '--release', '--features', 'sc-observability-log/static_level_cap_test'], host)
+                    capped_executable = Path(sandbox.env['CARGO_TARGET_DIR']) / 'release' / executable.name
+                    report['capped_executable_sha256'] = digest(capped_executable)
+                    sandbox.env['SC_TAURI_QUALIFICATION_REPORT'] = str(capped / 'ipc.json')
+                    execute_webview(sandbox, capped_executable, host, capped, capped)
             finally:
                 report['commands'].extend(sandbox.commands)
                 if (external / 'policy-results.json').exists():
@@ -220,11 +228,17 @@ def main():
                     shutil.copyfile(runtime_log, output / runtime_log.name)
                 if raw_report.exists():
                     shutil.copyfile(raw_report, output / 'ipc.json')
+                if (external / 'capped').exists():
+                    shutil.copytree(external / 'capped', output / 'capped', dirs_exist_ok=True)
                 if (host / 'logs').exists():
                     shutil.copytree(host / 'logs', output / 'logs', dirs_exist_ok=True)
             ipc = json.loads(raw_report.read_text(encoding='utf-8'))
             if set(ipc) != {'main', 'forbidden'} or not all(record['passed'] for record in ipc.values()):
                 raise RuntimeError('incomplete or failed actual-webview qualification')
+            capped_ipc = json.loads((output / 'capped/ipc.json').read_text(encoding='utf-8'))
+            if set(capped_ipc) != {'main', 'forbidden'} or not all(record['passed'] for record in capped_ipc.values()):
+                raise RuntimeError('incomplete or failed capped native host qualification')
+            report['capped_ipc_sha256'] = digest(output / 'capped/ipc.json')
             report['policy_results_sha256'] = digest(output / 'policy-results.json')
             report['fault_results_sha256'] = digest(output / 'fault-results.json')
             report['ipc_sha256'] = digest(output / 'ipc.json')
