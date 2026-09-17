@@ -103,9 +103,9 @@ The implementation correction pass is on
 QA1 parent `origin/fix/phase-b-1ab-qa1` at `4299e25b7506a6e1d0852a2f3784d954a796329f`
 before final validation. The initial correction source/fixture commit is
 `331a0db`; the item/span and adapter-failure correction is `dc31ae7`; the
-exact-diagnostic and post-import correction is `9854270`. The integrated
-parent merge head at this pass is `f79c4eb`, and the current validated child
-head is `9854270`. The child
+exact-diagnostic and post-import correction is `9854270`; the final exact
+source-note correction is `1f69cc5`. The integrated parent merge head at this
+pass is `f79c4eb`, and the current validated child head is `1f69cc5`. The child
 activates all nine wrapper warnings and 20 mapped method warnings at
 `since = "1.4.0"`, while retaining the three supported method exemptions and
 `Logger::emit` at its existing `since = "1.2.0"`. Ordinary observation routing
@@ -155,6 +155,8 @@ The implementation evidence is:
 ```text
 python3 scripts/ci/validate_error_migration.py
 B.1e migration validation: PASS (source contract, JSON diagnostics, and all fixtures)
+python3 scripts/ci/validate_error_migration.py (second verification pass)
+B.1e migration validation: PASS (source contract, JSON diagnostics, and all fixtures)
 python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py'
 Ran 51 tests, OK (including post-import warning-adaptation acceptance and
 body/signature/undeclared-change rejection)
@@ -177,3 +179,7 @@ source-chain handling, exercises the full adapter matrix, and rejects broad
 fixture allowances. Every fixture clean/check/run invocation uses `--locked`.
 B.2 still owns qualification/staging and B.7 owns
 publication; no removal schedule or major release is introduced.
+
+Completeness PASS was received from aobs for this implementation layer at
+`1f69cc5239de585e613f7c49bb162b1d1f08066b` (`01M2QA3XBSYF9NY3XXCK6N54TB`).
+Consolidated QA and B.7 publication remain separate follow-on work.
