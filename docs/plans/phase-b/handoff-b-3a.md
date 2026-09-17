@@ -2,7 +2,8 @@
 
 Status: in progress on `fix/phase-b-3a-completeness`; parent merge-forwarded
 from `origin/feature/phase-b-4a-python-packaging` at `c403bcf` (including
-the latest B.4a merge-forward). Current child checkpoint: `5b0e422`.
+the latest B.4a merge-forward). Current child checkpoint: pending owner-path
+checkpoint.
 
 The child consumes the B.3 canonical schema and the B.3b native
 `HostLoggingBackend`. The TypeScript package is generated-schema driven and
@@ -57,10 +58,11 @@ control with the adapter backend, and emits correlated Rust/frontend startup
 records; its ACL build resolves the four plugin commands plus the application
 level command. The isolated example lock is refreshed for the native validator
 dependencies, and its locked build passes. The adapter query observer uses the
-fixed 2000 ms deadline. A consuming shutdown path should use an application-
-owned `Mutex<Option<LogGuard>>` plus retained `LogControl`, so owner commands
-can return `CLOSED` after the sole guard is taken while the control observes the
-retained stopped report.
+fixed 2000 ms deadline. The production owner path uses `OwnerState::shutdown`
+from the host `RunEvent::ExitRequested` callback: it takes the sole
+`Mutex<Option<LogGuard>>` owner with a bounded timeout, while retained
+`LogControl` observes the stopped report and level requests return tagged
+`CLOSED` after ownership is consumed.
 The specialist checkpoint `5a3f380` reports 103 isolated macOS IPC assertions
 and 336 packed-client schema/fault cases PASS, including the exact-size
 correction. Full installed Rust/npm artifacts, platform CI, and broad C05
