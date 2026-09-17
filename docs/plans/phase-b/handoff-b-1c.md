@@ -4,7 +4,7 @@ status: preparation-complete
 branch: feature/phase-b-1c-observation-prep
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1c-observation-prep
 parent: feature/phase-b-1b-logger-prep
-parent_checkpoint: 56a0908b6264624c43545ae40ff7e127bb2b98a9
+parent_checkpoint: ad1aea2
 implementation_commits: 7d49ed2, 37bba66
 ---
 
@@ -65,7 +65,7 @@ Behavior/source-integrity pass:
 
 ```text
 cargo fmt --all -- --check: passed
-cargo test --locked --workspace: 168 unit/integration tests passed; 0 failed; 6 normal doctests passed; 2 compile-fail doctests passed
+cargo test --locked --workspace: 170 unit/integration tests passed; 0 failed; 6 normal doctests passed; 2 compile-fail doctests passed
 cargo clippy --locked --workspace --all-targets -- -D warnings: passed
 python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py': 31 tests, OK
 bash scripts/ci/validate_docs_consistency.sh: passed
@@ -75,7 +75,8 @@ bash scripts/ci/validate_public_api_docs.sh: passed
 bash scripts/ci/validate_public_api_diff.sh: exit 1 with additive API report, as expected for Phase B typed operations
 ```
 
-The final parent merge-forward was `56a0908b6264624c43545ae40ff7e127bb2b98a9`;
+The final parent merge-forward was `ad1aea2` (logger parent checkpoint after
+the `56a0908...` correction);
 the parent owns its logger/provenance changes and no lower layer was edited.
 This is preparation evidence only: copied bridge source import, independent QA,
 and full B.1c integration acceptance remain pending.
