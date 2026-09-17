@@ -42,8 +42,16 @@ pub use builder::LoggerBuilder;
 pub use follow::LogFollowSession;
 #[doc(inline)]
 pub use jsonl_reader::JsonlLogReader;
+#[allow(
+    deprecated,
+    reason = "public re-exports preserve the published legacy error names for compatibility"
+)]
 #[doc(inline)]
 pub use sc_observability_types::typed::{LogFailure, TryLogFailure};
+#[allow(
+    deprecated,
+    reason = "public re-exports preserve the published legacy error names for compatibility"
+)]
 #[doc(inline)]
 pub use sc_observability_types::{
     ActionName, AdmissionOutcome, ChangeDiagnostic, Diagnostic, DiagnosticSummary, ErrorCode,

@@ -163,6 +163,10 @@ impl MetricExporter for NoopMetricExporter {
 
 impl Telemetry {
     /// Creates a telemetry runtime with the default no-op exporters.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Telemetry::new_typed(); see migrate-error-api.md."
+    )]
     pub fn new(config: TelemetryConfig) -> Result<Self, InitError> {
         Self::new_typed(config).map_err(Into::into)
     }
@@ -292,6 +296,10 @@ impl Telemetry {
     /// # Panics
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Telemetry::flush_typed(); see migrate-error-api.md."
+    )]
     pub fn flush(&self) -> Result<(), FlushError> {
         self.flush_typed().map_err(Into::into)
     }
@@ -373,6 +381,10 @@ impl Telemetry {
     /// Panics if the internal telemetry runtime mutex has been poisoned while
     /// flushing, dropping incomplete spans, or constructing the final shutdown
     /// error state.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Telemetry::shutdown_typed(); see migrate-error-api.md."
+    )]
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
         self.shutdown_typed().map_err(Into::into)
     }

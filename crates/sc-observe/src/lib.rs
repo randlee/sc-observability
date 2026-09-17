@@ -83,6 +83,10 @@ impl ObservabilityConfig {
     ///
     /// assert_eq!(config.tool_name.as_str(), "demo-tool");
     /// ```
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use ObservabilityConfig::default_for_typed(); see migrate-error-api.md."
+    )]
     pub fn default_for(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitError> {
         Self::default_for_typed(tool_name, log_root).map_err(Into::into)
     }
@@ -113,6 +117,10 @@ impl ObservabilityConfig {
     }
 
     /// Derives the logging/telemetry service name from the configured tool.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use ObservabilityConfig::service_name_typed(); see migrate-error-api.md."
+    )]
     pub fn service_name(&self) -> Result<ServiceName, InitError> {
         self.service_name_typed().map_err(Into::into)
     }
@@ -219,6 +227,10 @@ fn log_error_summary(error: &LogError) -> DiagnosticSummary {
 
 impl Observability {
     /// Builds a runtime using the documented default logger integration.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Observability::new_typed(); see migrate-error-api.md."
+    )]
     pub fn new(config: ObservabilityConfig) -> Result<Self, InitError> {
         Self::new_typed(config).map_err(Into::into)
     }
@@ -340,6 +352,10 @@ impl Observability {
     ///
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing its registered sinks.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Observability::flush_typed(); see migrate-error-api.md."
+    )]
     pub fn flush(&self) -> Result<(), FlushError> {
         self.flush_typed().map_err(Into::into)
     }
@@ -367,6 +383,10 @@ impl Observability {
     ///
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing sinks or updating query/follow health during shutdown.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Observability::shutdown_typed(); see migrate-error-api.md."
+    )]
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
         self.shutdown_typed().map_err(Into::into)
     }
@@ -586,6 +606,10 @@ impl ObservabilityBuilder {
     }
 
     /// Finalizes registration and constructs the routing runtime.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use ObservabilityBuilder::build_typed(); see migrate-error-api.md."
+    )]
     pub fn build(self) -> Result<Observability, InitError> {
         self.build_typed().map_err(Into::into)
     }

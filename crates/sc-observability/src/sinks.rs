@@ -1,3 +1,8 @@
+#![allow(
+    deprecated,
+    reason = "sink compatibility paths preserve the published LogSinkError contract"
+)]
+
 use std::borrow::Cow;
 use std::fs::{self, OpenOptions};
 use std::io::Write;

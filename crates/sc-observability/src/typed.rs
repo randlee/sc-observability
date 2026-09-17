@@ -4,6 +4,11 @@
 //! These adapters let new sink implementations use neutral typed failures
 //! without changing legacy consumers or introducing root trait ambiguity.
 
+#![allow(
+    deprecated,
+    reason = "typed sink adapters must preserve the published LogSinkError boundary"
+)]
+
 use std::sync::Arc;
 
 use sc_observability_types::typed::LogSinkFailure;

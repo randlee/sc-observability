@@ -46,6 +46,10 @@ impl LoggerBuilder {
     ///
     /// let _logger = builder.build();
     /// ```
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use LoggerBuilder::new_typed(); see migrate-error-api.md."
+    )]
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
         Self::new_typed(config).map_err(Into::into)
     }

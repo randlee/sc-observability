@@ -1,3 +1,8 @@
+#![allow(
+    deprecated,
+    reason = "runtime retains legacy log, flush, and error conversion boundaries alongside typed implementations"
+)]
+
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -336,6 +341,10 @@ impl LoggerRuntime {
 
 impl Logger<Running> {
     /// Starts a construction-time builder for sink registration.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Logger::builder_typed(); see migrate-error-api.md."
+    )]
     pub fn builder(
         config: crate::LoggerConfig,
     ) -> Result<LoggerBuilder, sc_observability_types::InitError> {
@@ -348,6 +357,10 @@ impl Logger<Running> {
     }
 
     /// Creates a logger with the configured built-in sinks and runtime state.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Logger::new_typed(); see migrate-error-api.md."
+    )]
     pub fn new(config: crate::LoggerConfig) -> Result<Self, sc_observability_types::InitError> {
         Self::new_typed(config).map_err(Into::into)
     }
@@ -376,6 +389,10 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Logger::log_typed(); see migrate-error-api.md."
+    )]
     pub fn log(&self, event: LogEvent) -> Result<(), LogError> {
         self.log_typed(event).map_err(Into::into)
     }
@@ -408,6 +425,10 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Logger::try_log_typed(); see migrate-error-api.md."
+    )]
     pub fn try_log(&self, event: LogEvent) -> Result<(), TryLogError> {
         self.try_log_typed(event).map_err(Into::into)
     }
@@ -422,6 +443,10 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Logger::try_log_with_outcome_typed(); see migrate-error-api.md."
+    )]
     pub fn try_log_with_outcome(&self, event: LogEvent) -> Result<AdmissionOutcome, TryLogError> {
         self.try_log_with_outcome_typed(event).map_err(Into::into)
     }
@@ -494,6 +519,10 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Logger::flush_typed(); see migrate-error-api.md."
+    )]
     pub fn flush(&self) -> Result<(), FlushError> {
         self.flush_typed().map_err(Into::into)
     }

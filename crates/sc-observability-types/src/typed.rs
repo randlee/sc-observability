@@ -17,6 +17,11 @@
 //! )));
 //! let _clone = failure.clone();
 //! ```
+
+#![allow(
+    deprecated,
+    reason = "typed conversion and adapter implementations preserve the published legacy wrappers"
+)]
 //!
 //! ```compile_fail
 //! use sc_observability_types::{ErrorCode, ErrorContext, Remediation};

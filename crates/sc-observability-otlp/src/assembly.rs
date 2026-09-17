@@ -55,6 +55,10 @@ impl SpanAssembler {
     }
 
     /// Pushes one lifecycle signal through the assembler.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use SpanAssembler::push_typed(); see migrate-error-api.md."
+    )]
     pub fn push(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventError> {
         self.push_typed(signal).map_err(Into::into)
     }

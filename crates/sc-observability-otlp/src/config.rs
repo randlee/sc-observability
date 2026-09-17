@@ -41,6 +41,10 @@ pub struct OtlpEndpoint(String);
 
 impl OtlpEndpoint {
     /// Creates a validated OTLP endpoint using the documented HTTP(S) schemes.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use OtlpEndpoint::new_typed(); see migrate-error-api.md."
+    )]
     pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
         Self::new_typed(value).map_err(Into::into)
     }
@@ -95,6 +99,10 @@ pub struct AuthHeader(String);
 
 impl AuthHeader {
     /// Creates a validated non-empty authorization header value.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use AuthHeader::new_typed(); see migrate-error-api.md."
+    )]
     pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
         Self::new_typed(value).map_err(Into::into)
     }
@@ -363,6 +371,10 @@ impl TelemetryConfigBuilder {
     ///
     /// assert_eq!(config.service_name.as_str(), "demo");
     /// ```
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use TelemetryConfigBuilder::build_typed(); see migrate-error-api.md."
+    )]
     pub fn build(self) -> Result<TelemetryConfig, InitError> {
         self.build_typed().map_err(Into::into)
     }

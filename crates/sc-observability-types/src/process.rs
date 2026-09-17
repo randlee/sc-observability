@@ -1,3 +1,8 @@
+#![allow(
+    deprecated,
+    reason = "process identity retains its published resolver signature while typed callers use explicit adapters"
+)]
+
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
