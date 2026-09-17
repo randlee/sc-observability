@@ -71,6 +71,28 @@ also passed, but is not the latest retained qualification. QA1 changes package
 contents and therefore requires a new staged source/provenance record and a new
 three-platform run; this historical evidence remains immutable.
 
+### QA1 renewal qualification
+
+The QA1 correction run is the current qualification:
+[run 35179051833](https://github.com/randlee/sc-observability/actions/runs/35179051833)
+passed package staging, macOS, Ubuntu, Windows, and aggregate provenance. The
+review branch validation-code head was
+`701ab188efb7bc5d54a504a73b9968f586af72c5`; GitHub executed its synthetic PR
+merge checkout `a51bc44775e433aee49ab117cad77299a3c33024`, which is also the
+fresh stage-manifest package-source commit. Its source-tree SHA-256 is
+`05a1037e01b6473faaad22cf662fb327c422b6fe968d1832f19d3d94f73d122c`.
+Raw shared-stage and per-platform artifacts are retained under
+`/Users/randlee/.config/atm/share/sc-obs/bp2-evidence/ci-35179051833/`; the
+local `aggregate/` links present those downloaded result bytes to the aggregate
+validator without modifying the raw artifacts.
+
+| QA1 candidate archive | SHA-256 |
+| --- | --- |
+| `sc-observability-types-1.3.0.crate` | `352a993e75e7f0bf4fc2c5349d72eeb5792b1544e220d694e189e784a960aa8f` |
+| `sc-observability-1.3.0.crate` | `e54941f5f8a365a71955561d239e440e2dc704d585f1efc9f2666305fd16e58c` |
+| `sc-observe-1.3.0.crate` | `6834769a32ee2c741a6ee050cc10a9b1a4a20f5cc0284a158b522ca22d6d581b` |
+| `sc-observability-otlp-1.3.0.crate` | `56bfd2a95dca677d4b173559070c17a1cdab6875a57904fe10e329cba4198a59` |
+
 Runtime-contract acceptance is owner-deferred to Phase B completion (ATM
 `01M2PKX8R4J4VJP5V6RRV9JJPB`); see
 [`phase-b-runtime-level.md`](../../api-approvals/phase-b-runtime-level.md).

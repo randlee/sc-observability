@@ -1,9 +1,11 @@
 ---
-status: proposed_for_public_api_review
+status: accepted_target_design_not_source_acceptance
 owner: sc-observability
 implementation_source: beads-task-issue-tracker
 baseline_inspected: 8d8e82ae9f8501dbbf78c76df24d943918d7a6e4
 inspection_status: reconciled_snapshot_not_source_acceptance
+target_design_accepted_revision: 84b32e9d6718418371ffd25a3de52346278725ca
+target_design_qa2: https://github.com/randlee/sc-observability/pull/111#issuecomment-5708115438
 ---
 
 # Target bridge public API contract and disposition matrix
@@ -14,6 +16,17 @@ BTIT can complete its initial implementation against the accepted design.
 must name a committed revision of this contract; BTIT's subsequent implementation
 and critical-review closure must refer to that revision. Only then may B.1 copy
 the resulting accepted crate set. There is no post-copy bridge redesign sprint.
+
+## Scoped target-design acceptance
+
+aobs accepted this target design at
+`84b32e9d6718418371ffd25a3de52346278725ca`, based on the independent QA2 PASS
+recorded at [PR #111](https://github.com/randlee/sc-observability/pull/111#issuecomment-5708115438).
+The current status is `accepted_target_design_not_source_acceptance`: it accepts
+the reviewed target signatures and dispositions for BTIT implementation only.
+It is not runtime public-API acceptance, BTIT source acceptance, merge
+permission, or publication permission; QA-B010 remains owner-deferred. BTIT
+must still supply its immutable implementation and critical-review evidence.
 
 BTIT's current unpublished API creates no backward-compatibility or semver
 obligation for this initial destination API. The preserve decisions below retain
@@ -423,8 +436,8 @@ that prove TypeScript and attached Python route level-change requests through an
 application-owned handler rather than LogControl; this requirement does not
 invent a pre-copy binding implementation.
 
-No reviewer approval, source readiness or contract freeze is asserted by the
-current proposed status.
+The scoped target-design acceptance above does not assert source readiness,
+runtime public-API acceptance, a merge permission, or a publication freeze.
 
 ## Runtime elevation extension required before copy
 
