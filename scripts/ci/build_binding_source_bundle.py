@@ -226,7 +226,8 @@ def build(root_manifest,output):
     patches='\n'.join(f'{p["name"]} = {{ path = "{p["root"]}" }}' for p in entries)
     dependencies='\n'.join(f'{p["name"]} = "={p["version"]}"' for p in entries)
     members=json.dumps([p['root'] for p in entries])
-    (output/'Cargo.toml').write_text('[package]\nname = "binding-source-consumer"\nversion = "0.0.0"\nedition = "2024"\npublish = false\n\n[workspace]\nmembers = '+members+'\n\n[dependencies]\n'+dependencies+'\nserde_json = "1"\n\n[patch.crates-io]\n'+patches+'\n')
+    json_dependency='' if any(p['name']=='serde_json' for p in entries) else 'serde_json = "1"\n'
+    (output/'Cargo.toml').write_text('[package]\nname = "binding-source-consumer"\nversion = "0.0.0"\nedition = "2024"\npublish = false\n\n[workspace]\nmembers = '+members+'\n\n[dependencies]\n'+dependencies+'\n'+json_dependency+'\n[patch.crates-io]\n'+patches+'\n')
     (output/'src').mkdir();(output/'src/main.rs').write_text('fn main() { println!("binding source bundle ready"); }\n')
     # Seed from the reviewed source lock. Cargo may rewrite only local layout identities;
     # every selected third-party identity/checksum must remain byte-for-byte equivalent.

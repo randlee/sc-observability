@@ -35,6 +35,29 @@ class SourceBoundaryTests(unittest.TestCase):
             root=Path(temporary);self.project(root,'[workspace.dependencies]\nlocal={path="local"}\n[dependencies]\nlocal.workspace=true\n')
             local=root/'local';local.mkdir();(local/'Cargo.toml').write_text('[package]\nname="local"\nversion="0.1.0"\nedition="2024"\n')
             result=self.invoke(root);self.assertNotEqual(result.returncode,0);self.assertIn('BUNDLE_MISSING_VERSION',result.stderr);self.assertFalse((root/'bundle').exists())
+    def test_standalone_manifest_closure_preserves_workspace_inheritance(self):
+        import json
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            (root/'Cargo.toml').write_text('[workspace]\nmembers=["shared"]\nexclude=["adapter"]\nresolver="2"\n[workspace.package]\nversion="1.0.149"\nedition="2024"\n')
+            shared=root/'shared';(shared/'src').mkdir(parents=True)
+            (shared/'Cargo.toml').write_text('[package]\nname="serde_json"\nversion.workspace=true\nedition.workspace=true\n')
+            (shared/'src/lib.rs').write_text('pub fn fixture() {}\n')
+            adapter=root/'adapter';(adapter/'src').mkdir(parents=True)
+            (adapter/'Cargo.toml').write_text('[package]\nname="standalone-binding-fixture"\nversion="0.1.0"\nedition="2024"\n[workspace]\n[dependencies]\nserde_json={path="../shared",version="=1.0.149"}\n')
+            (adapter/'src/lib.rs').write_text('pub fn fixture() { serde_json::fixture(); }\n')
+            (root/'.gitignore').write_text('adapter/bundle/\n')
+            def run(*args):subprocess.run(args,cwd=root,check=True,capture_output=True,text=True)
+            run('cargo','generate-lockfile')
+            run('cargo','generate-lockfile','--manifest-path',str(adapter/'Cargo.toml'))
+            run('git','init','-q');run('git','add','.')
+            run('git','-c','user.name=Binding Fixture','-c','user.email=binding-fixture@example.invalid','commit','-qm','reviewed isolated fixture')
+            result=self.invoke(adapter)
+            self.assertEqual(result.returncode,0,result.stderr)
+            record=json.loads((adapter/'bundle/manifest.json').read_text())
+            self.assertEqual({item['name'] for item in record['packages']},{'serde_json','standalone-binding-fixture'})
+            self.assertEqual(len(record['package_commands']),2)
+            self.assertEqual(record['registry_selection'],[])
     def test_target_specific_registry_selection_matches_reviewed_lock(self):
         import json
         with tempfile.TemporaryDirectory() as temporary:
