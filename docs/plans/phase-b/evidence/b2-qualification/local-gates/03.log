@@ -1,0 +1,3 @@
+    Checking sc-observe v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observe)
+    Checking sc-observability-otlp v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability-otlp)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s

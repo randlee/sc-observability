@@ -4,6 +4,7 @@
       "description": "Version-one AdmissionDto wire value.",
       "oneOf": [
         {
+          "description": "Wire accepted.",
           "properties": {
             "kind": {
               "const": "accepted",
@@ -16,6 +17,7 @@
           "type": "object"
         },
         {
+          "description": "Wire filtered.",
           "properties": {
             "kind": {
               "const": "filtered",
@@ -31,20 +33,38 @@
     },
     "InputAdmissionOperationDto": {
       "description": "Operations returning final logging admission.",
-      "enum": [
-        "log",
-        "try_log"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "log",
+          "description": "Wire log.",
+          "type": "string"
+        },
+        {
+          "const": "try_log",
+          "description": "Wire try log.",
+          "type": "string"
+        }
+      ]
     },
     "InputAvailabilityDto": {
       "description": "Version-one AvailabilityDto wire value.",
-      "enum": [
-        "healthy",
-        "degraded_dropping",
-        "unavailable"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "healthy",
+          "description": "Wire healthy.",
+          "type": "string"
+        },
+        {
+          "const": "degraded_dropping",
+          "description": "Wire degraded dropping.",
+          "type": "string"
+        },
+        {
+          "const": "unavailable",
+          "description": "Wire unavailable.",
+          "type": "string"
+        }
+      ]
     },
     "InputBridgeHealthDto": {
       "description": "Version-one BridgeHealthDto wire record.",
@@ -67,7 +87,7 @@
         },
         "level_revision": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "level revision.",
+          "description": "level revision.\nWire level revision.",
           "x-sc-integer-domain": "unsigned"
         },
         "lifecycle": {
@@ -79,7 +99,7 @@
           "description": "logging."
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -102,6 +122,7 @@
       "description": "Version-one ChangeDiagnosticDto wire value.",
       "oneOf": [
         {
+          "description": "Wire accepted.",
           "properties": {
             "kind": {
               "const": "accepted",
@@ -114,9 +135,11 @@
           "type": "object"
         },
         {
+          "description": "Wire not accepted.",
           "properties": {
             "diagnostic": {
-              "$ref": "#/$defs/InputDiagnostic"
+              "$ref": "#/$defs/InputDiagnostic",
+              "description": "Active variant diagnostic."
             },
             "kind": {
               "const": "not_accepted",
@@ -135,6 +158,7 @@
       "description": "Payload-free client outcome, distinct from host persistence.",
       "oneOf": [
         {
+          "description": "Wire idle.",
           "properties": {
             "kind": {
               "const": "idle",
@@ -147,13 +171,15 @@
           "type": "object"
         },
         {
+          "description": "Wire scheduled.",
           "properties": {
             "kind": {
               "const": "scheduled",
               "type": "string"
             },
             "operation": {
-              "$ref": "#/$defs/InputLogOperationDto"
+              "$ref": "#/$defs/InputLogOperationDto",
+              "description": "Active variant operation."
             }
           },
           "required": [
@@ -163,13 +189,15 @@
           "type": "object"
         },
         {
+          "description": "Wire accepted.",
           "properties": {
             "kind": {
               "const": "accepted",
               "type": "string"
             },
             "operation": {
-              "$ref": "#/$defs/InputAdmissionOperationDto"
+              "$ref": "#/$defs/InputAdmissionOperationDto",
+              "description": "Active variant operation."
             }
           },
           "required": [
@@ -179,13 +207,15 @@
           "type": "object"
         },
         {
+          "description": "Wire filtered.",
           "properties": {
             "kind": {
               "const": "filtered",
               "type": "string"
             },
             "operation": {
-              "$ref": "#/$defs/InputAdmissionOperationDto"
+              "$ref": "#/$defs/InputAdmissionOperationDto",
+              "description": "Active variant operation."
             }
           },
           "required": [
@@ -195,13 +225,15 @@
           "type": "object"
         },
         {
+          "description": "Wire completed.",
           "properties": {
             "kind": {
               "const": "completed",
               "type": "string"
             },
             "operation": {
-              "$ref": "#/$defs/InputCompletionOperationDto"
+              "$ref": "#/$defs/InputCompletionOperationDto",
+              "description": "Active variant operation."
             }
           },
           "required": [
@@ -220,7 +252,7 @@
           "description": "Saturating counters for every declared failure kind."
         },
         "in_flight": {
-          "description": "Number of outstanding operations, bounded by client admission.",
+          "description": "Number of outstanding operations, bounded by client admission.\nWire in flight.",
           "format": "uint32",
           "maximum": 256,
           "minimum": 0,
@@ -253,6 +285,7 @@
       "description": "Version-one CompletionDto wire value.",
       "oneOf": [
         {
+          "description": "Wire completed.",
           "properties": {
             "kind": {
               "const": "completed",
@@ -268,12 +301,23 @@
     },
     "InputCompletionOperationDto": {
       "description": "Operations returning a completed client observation.",
-      "enum": [
-        "query",
-        "health",
-        "flush"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "query",
+          "description": "Wire query.",
+          "type": "string"
+        },
+        {
+          "const": "health",
+          "description": "Wire health.",
+          "type": "string"
+        },
+        {
+          "const": "flush",
+          "description": "Wire flush.",
+          "type": "string"
+        }
+      ]
     },
     "InputDecimalDto": {
       "description": "Canonical integer string: signed i64 or unsigned u64; counters additionally reject negatives.",
@@ -337,6 +381,7 @@
       "description": "Version-one DispatchDto wire value.",
       "oneOf": [
         {
+          "description": "Wire scheduled.",
           "properties": {
             "kind": {
               "const": "scheduled",
@@ -355,37 +400,37 @@
       "properties": {
         "invalid_event": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "invalid event.",
+          "description": "invalid event.\nWire invalid event.",
           "x-sc-integer-domain": "unsigned"
         },
         "logger_panicked": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "logger panicked.",
+          "description": "logger panicked.\nWire logger panicked.",
           "x-sc-integer-domain": "unsigned"
         },
         "not_installed": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "not installed.",
+          "description": "not installed.\nWire not installed.",
           "x-sc-integer-domain": "unsigned"
         },
         "queue_full": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "queue full.",
+          "description": "queue full.\nWire queue full.",
           "x-sc-integer-domain": "unsigned"
         },
         "reentrant_emit": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "reentrant emit.",
+          "description": "reentrant emit.\nWire reentrant emit.",
           "x-sc-integer-domain": "unsigned"
         },
         "shutdown_timed_out": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "shutdown timed out.",
+          "description": "shutdown timed out.\nWire shutdown timed out.",
           "x-sc-integer-domain": "unsigned"
         },
         "writer_degraded": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "writer degraded.",
+          "description": "writer degraded.\nWire writer degraded.",
           "x-sc-integer-domain": "unsigned"
         }
       },
@@ -404,7 +449,7 @@
       "description": "Version-one Failure wire value.",
       "oneOf": [
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire validation.",
           "properties": {
             "at": {
               "description": "at.",
@@ -415,6 +460,7 @@
               "type": "string"
             },
             "field": {
+              "description": "Wire field.",
               "type": "string"
             },
             "kind": {
@@ -441,7 +487,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire queue full.",
           "properties": {
             "at": {
               "description": "at.",
@@ -474,7 +520,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire below baseline.",
           "properties": {
             "at": {
               "description": "at.",
@@ -485,7 +531,8 @@
               "type": "string"
             },
             "configured": {
-              "$ref": "#/$defs/InputLevelFilterDto"
+              "$ref": "#/$defs/InputLevelFilterDto",
+              "description": "Wire configured."
             },
             "kind": {
               "const": "below_baseline",
@@ -500,7 +547,8 @@
               "description": "remediation."
             },
             "requested": {
-              "$ref": "#/$defs/InputLevelFilterDto"
+              "$ref": "#/$defs/InputLevelFilterDto",
+              "description": "Wire requested."
             }
           },
           "required": [
@@ -515,14 +563,15 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire unsupported level.",
           "properties": {
             "at": {
               "description": "at.",
               "type": "string"
             },
             "available": {
-              "$ref": "#/$defs/InputLevelFilterDto"
+              "$ref": "#/$defs/InputLevelFilterDto",
+              "description": "Wire available."
             },
             "code": {
               "description": "code.",
@@ -541,7 +590,8 @@
               "description": "remediation."
             },
             "requested": {
-              "$ref": "#/$defs/InputLevelFilterDto"
+              "$ref": "#/$defs/InputLevelFilterDto",
+              "description": "Wire requested."
             }
           },
           "required": [
@@ -556,7 +606,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire permission denied.",
           "properties": {
             "at": {
               "description": "at.",
@@ -589,7 +639,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire closed.",
           "properties": {
             "at": {
               "description": "at.",
@@ -622,7 +672,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire unavailable.",
           "properties": {
             "at": {
               "description": "at.",
@@ -655,7 +705,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire io.",
           "properties": {
             "at": {
               "description": "at.",
@@ -688,7 +738,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire timeout.",
           "properties": {
             "at": {
               "description": "at.",
@@ -707,6 +757,7 @@
               "type": "string"
             },
             "operation": {
+              "description": "Wire operation.",
               "type": "string"
             },
             "remediation": {
@@ -725,7 +776,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire cancelled.",
           "properties": {
             "at": {
               "description": "at.",
@@ -744,6 +795,7 @@
               "type": "string"
             },
             "operation": {
+              "description": "Wire operation.",
               "type": "string"
             },
             "remediation": {
@@ -762,7 +814,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire unsupported version.",
           "properties": {
             "at": {
               "description": "at.",
@@ -781,6 +833,7 @@
               "type": "string"
             },
             "received": {
+              "description": "Wire received.",
               "format": "uint32",
               "minimum": 0,
               "type": "integer"
@@ -801,7 +854,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire internal.",
           "properties": {
             "at": {
               "description": "at.",
@@ -834,7 +887,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire unknown remote.",
           "properties": {
             "at": {
               "description": "at.",
@@ -857,6 +910,7 @@
               "description": "remediation."
             },
             "remote_kind": {
+              "description": "Wire remote kind.",
               "type": "string"
             }
           },
@@ -877,67 +931,67 @@
       "properties": {
         "below_baseline": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating below_baseline counter.",
+          "description": "Saturating below_baseline counter.\nWire below baseline.",
           "x-sc-integer-domain": "unsigned"
         },
         "cancelled": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating cancelled counter.",
+          "description": "Saturating cancelled counter.\nWire cancelled.",
           "x-sc-integer-domain": "unsigned"
         },
         "closed": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating closed counter.",
+          "description": "Saturating closed counter.\nWire closed.",
           "x-sc-integer-domain": "unsigned"
         },
         "internal": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating internal counter.",
+          "description": "Saturating internal counter.\nWire internal.",
           "x-sc-integer-domain": "unsigned"
         },
         "io": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating io counter.",
+          "description": "Saturating io counter.\nWire io.",
           "x-sc-integer-domain": "unsigned"
         },
         "permission_denied": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating permission_denied counter.",
+          "description": "Saturating permission_denied counter.\nWire permission denied.",
           "x-sc-integer-domain": "unsigned"
         },
         "queue_full": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating queue_full counter.",
+          "description": "Saturating queue_full counter.\nWire queue full.",
           "x-sc-integer-domain": "unsigned"
         },
         "timeout": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating timeout counter.",
+          "description": "Saturating timeout counter.\nWire timeout.",
           "x-sc-integer-domain": "unsigned"
         },
         "unavailable": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating unavailable counter.",
+          "description": "Saturating unavailable counter.\nWire unavailable.",
           "x-sc-integer-domain": "unsigned"
         },
         "unknown_remote": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating unknown_remote counter.",
+          "description": "Saturating unknown_remote counter.\nWire unknown remote.",
           "x-sc-integer-domain": "unsigned"
         },
         "unsupported_level": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating unsupported_level counter.",
+          "description": "Saturating unsupported_level counter.\nWire unsupported level.",
           "x-sc-integer-domain": "unsigned"
         },
         "unsupported_version": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating unsupported_version counter.",
+          "description": "Saturating unsupported_version counter.\nWire unsupported version.",
           "x-sc-integer-domain": "unsigned"
         },
         "validation": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "Saturating validation counter.",
+          "description": "Saturating validation counter.\nWire validation.",
           "x-sc-integer-domain": "unsigned"
         }
       },
@@ -982,14 +1036,14 @@
       "description": "Version-one FlushRequest wire record.",
       "properties": {
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
           "type": "integer"
         },
         "timeout_ms": {
-          "description": "timeout ms.",
+          "description": "timeout ms.\nWire timeout ms.",
           "format": "uint32",
           "maximum": 60000,
           "minimum": 0,
@@ -1007,7 +1061,7 @@
       "description": "Version-one HealthRequest wire record.",
       "properties": {
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -1023,22 +1077,27 @@
       "description": "Version-one LevelChangeDto wire value.",
       "oneOf": [
         {
+          "description": "Wire changed.",
           "properties": {
             "current": {
-              "$ref": "#/$defs/InputLevelStateDto"
+              "$ref": "#/$defs/InputLevelStateDto",
+              "description": "Wire current."
             },
             "diagnostic": {
-              "$ref": "#/$defs/InputChangeDiagnosticDto"
+              "$ref": "#/$defs/InputChangeDiagnosticDto",
+              "description": "Wire diagnostic."
             },
             "kind": {
               "const": "changed",
               "type": "string"
             },
             "previous": {
-              "$ref": "#/$defs/InputLevelStateDto"
+              "$ref": "#/$defs/InputLevelStateDto",
+              "description": "Wire previous."
             },
             "source": {
-              "$ref": "#/$defs/InputLevelChangeSourceDto"
+              "$ref": "#/$defs/InputLevelChangeSourceDto",
+              "description": "Wire source."
             }
           },
           "required": [
@@ -1051,13 +1110,15 @@
           "type": "object"
         },
         {
+          "description": "Wire unchanged.",
           "properties": {
             "kind": {
               "const": "unchanged",
               "type": "string"
             },
             "state": {
-              "$ref": "#/$defs/InputLevelStateDto"
+              "$ref": "#/$defs/InputLevelStateDto",
+              "description": "Wire state."
             }
           },
           "required": [
@@ -1077,7 +1138,7 @@
           "description": "change."
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -1092,48 +1153,103 @@
     },
     "InputLevelChangeSourceDto": {
       "description": "Version-one LevelChangeSourceDto wire value.",
-      "enum": [
-        "application",
-        "user_request",
-        "diagnostic_session"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "application",
+          "description": "Wire application.",
+          "type": "string"
+        },
+        {
+          "const": "user_request",
+          "description": "Wire user request.",
+          "type": "string"
+        },
+        {
+          "const": "diagnostic_session",
+          "description": "Wire diagnostic session.",
+          "type": "string"
+        }
+      ]
     },
     "InputLevelDto": {
       "description": "Version-one LevelDto wire value.",
-      "enum": [
-        "trace",
-        "debug",
-        "info",
-        "warn",
-        "error"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "trace",
+          "description": "Wire trace.",
+          "type": "string"
+        },
+        {
+          "const": "debug",
+          "description": "Wire debug.",
+          "type": "string"
+        },
+        {
+          "const": "info",
+          "description": "Wire info.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "Wire warn.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "Wire error.",
+          "type": "string"
+        }
+      ]
     },
     "InputLevelFilterDto": {
       "description": "Version-one LevelFilterDto wire value.",
-      "enum": [
-        "off",
-        "error",
-        "warn",
-        "info",
-        "debug",
-        "trace"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Wire off.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "Wire error.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "Wire warn.",
+          "type": "string"
+        },
+        {
+          "const": "info",
+          "description": "Wire info.",
+          "type": "string"
+        },
+        {
+          "const": "debug",
+          "description": "Wire debug.",
+          "type": "string"
+        },
+        {
+          "const": "trace",
+          "description": "Wire trace.",
+          "type": "string"
+        }
+      ]
     },
     "InputLevelRequestDto": {
       "description": "Version-one LevelRequestDto wire value.",
       "oneOf": [
         {
           "additionalProperties": false,
+          "description": "Wire elevate.",
           "properties": {
             "kind": {
               "const": "elevate",
               "type": "string"
             },
             "level": {
-              "$ref": "#/$defs/InputLevelFilterDto"
+              "$ref": "#/$defs/InputLevelFilterDto",
+              "description": "Active variant level."
             }
           },
           "required": [
@@ -1144,6 +1260,7 @@
         },
         {
           "additionalProperties": false,
+          "description": "Wire reset.",
           "properties": {
             "kind": {
               "const": "reset",
@@ -1170,7 +1287,7 @@
         },
         "level_revision": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "level revision.",
+          "description": "level revision.\nWire level revision.",
           "x-sc-integer-domain": "unsigned"
         }
       },
@@ -1183,13 +1300,28 @@
     },
     "InputLifecycleDto": {
       "description": "Version-one LifecycleDto wire value.",
-      "enum": [
-        "running",
-        "stopping",
-        "stopped",
-        "failed"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "running",
+          "description": "Wire running.",
+          "type": "string"
+        },
+        {
+          "const": "stopping",
+          "description": "Wire stopping.",
+          "type": "string"
+        },
+        {
+          "const": "stopped",
+          "description": "Wire stopped.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "Wire failed.",
+          "type": "string"
+        }
+      ]
     },
     "InputLogEventDto": {
       "additionalProperties": false,
@@ -1211,7 +1343,7 @@
             "$ref": "#/$defs/InputValueDto"
           },
           "default": {},
-          "description": "fields.",
+          "description": "fields.\nWire fields.",
           "type": "object"
         },
         "level": {
@@ -1240,7 +1372,7 @@
           ]
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -1293,7 +1425,7 @@
           "description": "logging."
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -1309,18 +1441,28 @@
     },
     "InputLogOperationDto": {
       "description": "The log-only operation in a scheduled client outcome.",
-      "enum": [
-        "log"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "log",
+          "description": "Wire log.",
+          "type": "string"
+        }
+      ]
     },
     "InputLogOrderDto": {
       "description": "Version-one LogOrderDto wire value.",
-      "enum": [
-        "oldest_first",
-        "newest_first"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "oldest_first",
+          "description": "Wire oldest first.",
+          "type": "string"
+        },
+        {
+          "const": "newest_first",
+          "description": "Wire newest first.",
+          "type": "string"
+        }
+      ]
     },
     "InputLogQueryDto": {
       "additionalProperties": false,
@@ -1342,7 +1484,7 @@
         },
         "field_matches": {
           "default": [],
-          "description": "field matches.",
+          "description": "field matches.\nWire field matches.",
           "items": {
             "$ref": "#/$defs/InputFieldMatchDto"
           },
@@ -1350,7 +1492,7 @@
         },
         "levels": {
           "default": [],
-          "description": "levels.",
+          "description": "levels.\nWire levels.",
           "items": {
             "$ref": "#/$defs/InputLevelDto"
           },
@@ -1358,7 +1500,7 @@
         },
         "limit": {
           "default": 100,
-          "description": "limit.",
+          "description": "limit.\nWire limit.",
           "format": "uint",
           "maximum": 1000,
           "minimum": 1,
@@ -1367,7 +1509,7 @@
         "order": {
           "$ref": "#/$defs/InputLogOrderDto",
           "default": "oldest_first",
-          "description": "order."
+          "description": "order.\nWire order."
         },
         "request_id": {
           "description": "request id.",
@@ -1377,7 +1519,7 @@
           ]
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -1428,7 +1570,7 @@
           "type": "array"
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -1455,12 +1597,12 @@
         },
         "dropped_events_total": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "dropped events total.",
+          "description": "dropped events total.\nWire dropped events total.",
           "x-sc-integer-domain": "unsigned"
         },
         "flush_errors_total": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "flush errors total.",
+          "description": "flush errors total.\nWire flush errors total.",
           "x-sc-integer-domain": "unsigned"
         },
         "last_error": {
@@ -1509,22 +1651,22 @@
         },
         "queue_capacity": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "queue capacity.",
+          "description": "queue capacity.\nWire queue capacity.",
           "x-sc-integer-domain": "unsigned"
         },
         "queue_depth": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "queue depth.",
+          "description": "queue depth.\nWire queue depth.",
           "x-sc-integer-domain": "unsigned"
         },
         "queue_full_drops_total": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "queue full drops total.",
+          "description": "queue full drops total.\nWire queue full drops total.",
           "x-sc-integer-domain": "unsigned"
         },
         "queue_high_water_mark": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "queue high water mark.",
+          "description": "queue high water mark.\nWire queue high water mark.",
           "x-sc-integer-domain": "unsigned"
         },
         "sink_statuses": {
@@ -1580,12 +1722,12 @@
         },
         "pruned_files_total": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "pruned files total.",
+          "description": "pruned files total.\nWire pruned files total.",
           "x-sc-integer-domain": "unsigned"
         },
         "rotated_files_total": {
           "$ref": "#/$defs/InputDecimalDto",
-          "description": "rotated files total.",
+          "description": "rotated files total.\nWire rotated files total.",
           "x-sc-integer-domain": "unsigned"
         },
         "state": {
@@ -1604,12 +1746,14 @@
       "description": "Version-one PathDto wire value.",
       "oneOf": [
         {
+          "description": "Wire utf8.",
           "properties": {
             "kind": {
               "const": "utf8",
               "type": "string"
             },
             "value": {
+              "description": "Active variant value.",
               "type": "string"
             }
           },
@@ -1620,6 +1764,7 @@
           "type": "object"
         },
         {
+          "description": "Wire unrepresentable.",
           "properties": {
             "kind": {
               "const": "unrepresentable",
@@ -1632,6 +1777,7 @@
           "type": "object"
         },
         {
+          "description": "Wire absent.",
           "properties": {
             "kind": {
               "const": "absent",
@@ -1700,7 +1846,7 @@
           "description": "query."
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -1715,23 +1861,36 @@
     },
     "InputQueryStateDto": {
       "description": "Version-one QueryStateDto wire value.",
-      "enum": [
-        "healthy",
-        "degraded",
-        "unavailable"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "healthy",
+          "description": "Wire healthy.",
+          "type": "string"
+        },
+        {
+          "const": "degraded",
+          "description": "Wire degraded.",
+          "type": "string"
+        },
+        {
+          "const": "unavailable",
+          "description": "Wire unavailable.",
+          "type": "string"
+        }
+      ]
     },
     "InputRemediationDto": {
       "description": "Version-one RemediationDto wire value.",
       "oneOf": [
         {
+          "description": "Wire recoverable.",
           "properties": {
             "kind": {
               "const": "recoverable",
               "type": "string"
             },
             "steps": {
+              "description": "Active variant steps.",
               "items": {
                 "type": "string"
               },
@@ -1745,8 +1904,10 @@
           "type": "object"
         },
         {
+          "description": "Wire not recoverable.",
           "properties": {
             "justification": {
+              "description": "Active variant justification.",
               "type": "string"
             },
             "kind": {
@@ -1763,16 +1924,18 @@
       ]
     },
     "InputResultDto": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/InputAdmissionDto"
+              "$ref": "#/$defs/InputAdmissionDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -1782,9 +1945,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -1800,16 +1965,18 @@
       ]
     },
     "InputResultDto2": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/InputCompletionDto"
+              "$ref": "#/$defs/InputCompletionDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -1819,9 +1986,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -1837,16 +2006,18 @@
       ]
     },
     "InputResultDto3": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/InputDispatchDto"
+              "$ref": "#/$defs/InputDispatchDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -1856,9 +2027,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -1874,16 +2047,18 @@
       ]
     },
     "InputResultDto4": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/InputLogSnapshotDto"
+              "$ref": "#/$defs/InputLogSnapshotDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -1893,9 +2068,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -1911,16 +2088,18 @@
       ]
     },
     "InputResultDto5": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/InputLogHealthDto"
+              "$ref": "#/$defs/InputLogHealthDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -1930,9 +2109,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -1948,16 +2129,18 @@
       ]
     },
     "InputResultDto6": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/InputLevelChangeDto"
+              "$ref": "#/$defs/InputLevelChangeDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -1967,9 +2150,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -1985,16 +2170,18 @@
       ]
     },
     "InputResultDto7": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/InputClientOutcome"
+              "$ref": "#/$defs/InputClientOutcome",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -2004,9 +2191,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -2022,16 +2211,18 @@
       ]
     },
     "InputResultDto8": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/InputClientStatus"
+              "$ref": "#/$defs/InputClientStatus",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -2041,9 +2232,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -2328,7 +2521,7 @@
           "description": "event."
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -2346,6 +2539,7 @@
       "oneOf": [
         {
           "additionalProperties": false,
+          "description": "Wire null.",
           "properties": {
             "kind": {
               "const": "null",
@@ -2359,12 +2553,14 @@
         },
         {
           "additionalProperties": false,
+          "description": "Wire boolean.",
           "properties": {
             "kind": {
               "const": "boolean",
               "type": "string"
             },
             "value": {
+              "description": "Active variant value.",
               "type": "boolean"
             }
           },
@@ -2376,12 +2572,14 @@
         },
         {
           "additionalProperties": false,
+          "description": "Wire string.",
           "properties": {
             "kind": {
               "const": "string",
               "type": "string"
             },
             "value": {
+              "description": "Active variant value.",
               "type": "string"
             }
           },
@@ -2393,13 +2591,15 @@
         },
         {
           "additionalProperties": false,
+          "description": "Wire integer.",
           "properties": {
             "kind": {
               "const": "integer",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/InputDecimalDto"
+              "$ref": "#/$defs/InputDecimalDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -2410,12 +2610,14 @@
         },
         {
           "additionalProperties": false,
+          "description": "Wire float.",
           "properties": {
             "kind": {
               "const": "float",
               "type": "string"
             },
             "value": {
+              "description": "Active variant value.",
               "format": "double",
               "type": "number"
             }
@@ -2428,12 +2630,14 @@
         },
         {
           "additionalProperties": false,
+          "description": "Wire array.",
           "properties": {
             "kind": {
               "const": "array",
               "type": "string"
             },
             "value": {
+              "description": "Active variant value.",
               "items": {
                 "$ref": "#/$defs/InputValueDto"
               },
@@ -2448,6 +2652,7 @@
         },
         {
           "additionalProperties": false,
+          "description": "Wire object.",
           "properties": {
             "kind": {
               "const": "object",
@@ -2457,6 +2662,7 @@
               "additionalProperties": {
                 "$ref": "#/$defs/InputValueDto"
               },
+              "description": "Active variant value.",
               "type": "object"
             }
           },
@@ -2469,21 +2675,25 @@
       ]
     },
     "InputWireEnvelope": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/InputAdmissionDto"
+              "$ref": "#/$defs/InputAdmissionDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -2494,17 +2704,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2518,21 +2732,25 @@
       ]
     },
     "InputWireEnvelope2": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/InputCompletionDto"
+              "$ref": "#/$defs/InputCompletionDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -2543,17 +2761,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2567,21 +2789,25 @@
       ]
     },
     "InputWireEnvelope3": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/InputDispatchDto"
+              "$ref": "#/$defs/InputDispatchDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -2592,17 +2818,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2616,21 +2846,25 @@
       ]
     },
     "InputWireEnvelope4": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/InputLogSnapshotDto"
+              "$ref": "#/$defs/InputLogSnapshotDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -2641,17 +2875,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2665,21 +2903,25 @@
       ]
     },
     "InputWireEnvelope5": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/InputLogHealthDto"
+              "$ref": "#/$defs/InputLogHealthDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -2690,17 +2932,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2714,21 +2960,25 @@
       ]
     },
     "InputWireEnvelope6": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/InputLevelChangeDto"
+              "$ref": "#/$defs/InputLevelChangeDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -2739,17 +2989,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2763,21 +3017,25 @@
       ]
     },
     "InputWireEnvelope7": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/InputClientOutcome"
+              "$ref": "#/$defs/InputClientOutcome",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -2788,17 +3046,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2812,21 +3074,25 @@
       ]
     },
     "InputWireEnvelope8": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/InputClientStatus"
+              "$ref": "#/$defs/InputClientStatus",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -2837,17 +3103,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/InputFailure"
+              "$ref": "#/$defs/InputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2862,17 +3132,29 @@
     },
     "InputWorkerStateDto": {
       "description": "Version-one WorkerStateDto wire value.",
-      "enum": [
-        "running",
-        "degraded",
-        "stopped"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "running",
+          "description": "Wire running.",
+          "type": "string"
+        },
+        {
+          "const": "degraded",
+          "description": "Wire degraded.",
+          "type": "string"
+        },
+        {
+          "const": "stopped",
+          "description": "Wire stopped.",
+          "type": "string"
+        }
+      ]
     },
     "OutputAdmissionDto": {
       "description": "Version-one AdmissionDto wire value.",
       "oneOf": [
         {
+          "description": "Wire accepted.",
           "properties": {
             "kind": {
               "const": "accepted",
@@ -2885,6 +3167,7 @@
           "type": "object"
         },
         {
+          "description": "Wire filtered.",
           "properties": {
             "kind": {
               "const": "filtered",
@@ -2900,20 +3183,38 @@
     },
     "OutputAdmissionOperationDto": {
       "description": "Operations returning final logging admission.",
-      "enum": [
-        "log",
-        "try_log"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "log",
+          "description": "Wire log.",
+          "type": "string"
+        },
+        {
+          "const": "try_log",
+          "description": "Wire try log.",
+          "type": "string"
+        }
+      ]
     },
     "OutputAvailabilityDto": {
       "description": "Version-one AvailabilityDto wire value.",
-      "enum": [
-        "healthy",
-        "degraded_dropping",
-        "unavailable"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "healthy",
+          "description": "Wire healthy.",
+          "type": "string"
+        },
+        {
+          "const": "degraded_dropping",
+          "description": "Wire degraded dropping.",
+          "type": "string"
+        },
+        {
+          "const": "unavailable",
+          "description": "Wire unavailable.",
+          "type": "string"
+        }
+      ]
     },
     "OutputBridgeHealthDto": {
       "description": "Version-one BridgeHealthDto wire record.",
@@ -2936,7 +3237,7 @@
         },
         "level_revision": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "level revision.",
+          "description": "level revision.\nWire level revision.",
           "x-sc-integer-domain": "unsigned"
         },
         "lifecycle": {
@@ -2948,7 +3249,7 @@
           "description": "logging."
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -2971,6 +3272,7 @@
       "description": "Version-one ChangeDiagnosticDto wire value.",
       "oneOf": [
         {
+          "description": "Wire accepted.",
           "properties": {
             "kind": {
               "const": "accepted",
@@ -2983,9 +3285,11 @@
           "type": "object"
         },
         {
+          "description": "Wire not accepted.",
           "properties": {
             "diagnostic": {
-              "$ref": "#/$defs/OutputDiagnostic"
+              "$ref": "#/$defs/OutputDiagnostic",
+              "description": "Active variant diagnostic."
             },
             "kind": {
               "const": "not_accepted",
@@ -3004,6 +3308,7 @@
       "description": "Payload-free client outcome, distinct from host persistence.",
       "oneOf": [
         {
+          "description": "Wire idle.",
           "properties": {
             "kind": {
               "const": "idle",
@@ -3016,13 +3321,15 @@
           "type": "object"
         },
         {
+          "description": "Wire scheduled.",
           "properties": {
             "kind": {
               "const": "scheduled",
               "type": "string"
             },
             "operation": {
-              "$ref": "#/$defs/OutputLogOperationDto"
+              "$ref": "#/$defs/OutputLogOperationDto",
+              "description": "Active variant operation."
             }
           },
           "required": [
@@ -3032,13 +3339,15 @@
           "type": "object"
         },
         {
+          "description": "Wire accepted.",
           "properties": {
             "kind": {
               "const": "accepted",
               "type": "string"
             },
             "operation": {
-              "$ref": "#/$defs/OutputAdmissionOperationDto"
+              "$ref": "#/$defs/OutputAdmissionOperationDto",
+              "description": "Active variant operation."
             }
           },
           "required": [
@@ -3048,13 +3357,15 @@
           "type": "object"
         },
         {
+          "description": "Wire filtered.",
           "properties": {
             "kind": {
               "const": "filtered",
               "type": "string"
             },
             "operation": {
-              "$ref": "#/$defs/OutputAdmissionOperationDto"
+              "$ref": "#/$defs/OutputAdmissionOperationDto",
+              "description": "Active variant operation."
             }
           },
           "required": [
@@ -3064,13 +3375,15 @@
           "type": "object"
         },
         {
+          "description": "Wire completed.",
           "properties": {
             "kind": {
               "const": "completed",
               "type": "string"
             },
             "operation": {
-              "$ref": "#/$defs/OutputCompletionOperationDto"
+              "$ref": "#/$defs/OutputCompletionOperationDto",
+              "description": "Active variant operation."
             }
           },
           "required": [
@@ -3089,7 +3402,7 @@
           "description": "Saturating counters for every declared failure kind."
         },
         "in_flight": {
-          "description": "Number of outstanding operations, bounded by client admission.",
+          "description": "Number of outstanding operations, bounded by client admission.\nWire in flight.",
           "format": "uint32",
           "maximum": 256,
           "minimum": 0,
@@ -3123,6 +3436,7 @@
       "description": "Version-one CompletionDto wire value.",
       "oneOf": [
         {
+          "description": "Wire completed.",
           "properties": {
             "kind": {
               "const": "completed",
@@ -3138,12 +3452,23 @@
     },
     "OutputCompletionOperationDto": {
       "description": "Operations returning a completed client observation.",
-      "enum": [
-        "query",
-        "health",
-        "flush"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "query",
+          "description": "Wire query.",
+          "type": "string"
+        },
+        {
+          "const": "health",
+          "description": "Wire health.",
+          "type": "string"
+        },
+        {
+          "const": "flush",
+          "description": "Wire flush.",
+          "type": "string"
+        }
+      ]
     },
     "OutputDecimalDto": {
       "description": "Canonical integer string: signed i64 or unsigned u64; counters additionally reject negatives.",
@@ -3208,6 +3533,7 @@
       "description": "Version-one DispatchDto wire value.",
       "oneOf": [
         {
+          "description": "Wire scheduled.",
           "properties": {
             "kind": {
               "const": "scheduled",
@@ -3226,37 +3552,37 @@
       "properties": {
         "invalid_event": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "invalid event.",
+          "description": "invalid event.\nWire invalid event.",
           "x-sc-integer-domain": "unsigned"
         },
         "logger_panicked": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "logger panicked.",
+          "description": "logger panicked.\nWire logger panicked.",
           "x-sc-integer-domain": "unsigned"
         },
         "not_installed": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "not installed.",
+          "description": "not installed.\nWire not installed.",
           "x-sc-integer-domain": "unsigned"
         },
         "queue_full": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "queue full.",
+          "description": "queue full.\nWire queue full.",
           "x-sc-integer-domain": "unsigned"
         },
         "reentrant_emit": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "reentrant emit.",
+          "description": "reentrant emit.\nWire reentrant emit.",
           "x-sc-integer-domain": "unsigned"
         },
         "shutdown_timed_out": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "shutdown timed out.",
+          "description": "shutdown timed out.\nWire shutdown timed out.",
           "x-sc-integer-domain": "unsigned"
         },
         "writer_degraded": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "writer degraded.",
+          "description": "writer degraded.\nWire writer degraded.",
           "x-sc-integer-domain": "unsigned"
         }
       },
@@ -3275,7 +3601,7 @@
       "description": "Version-one Failure wire value.",
       "oneOf": [
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire validation.",
           "properties": {
             "at": {
               "description": "at.",
@@ -3286,6 +3612,7 @@
               "type": "string"
             },
             "field": {
+              "description": "Wire field.",
               "type": "string"
             },
             "kind": {
@@ -3312,7 +3639,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire queue full.",
           "properties": {
             "at": {
               "description": "at.",
@@ -3345,7 +3672,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire below baseline.",
           "properties": {
             "at": {
               "description": "at.",
@@ -3356,7 +3683,8 @@
               "type": "string"
             },
             "configured": {
-              "$ref": "#/$defs/OutputLevelFilterDto"
+              "$ref": "#/$defs/OutputLevelFilterDto",
+              "description": "Wire configured."
             },
             "kind": {
               "const": "below_baseline",
@@ -3371,7 +3699,8 @@
               "description": "remediation."
             },
             "requested": {
-              "$ref": "#/$defs/OutputLevelFilterDto"
+              "$ref": "#/$defs/OutputLevelFilterDto",
+              "description": "Wire requested."
             }
           },
           "required": [
@@ -3386,14 +3715,15 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire unsupported level.",
           "properties": {
             "at": {
               "description": "at.",
               "type": "string"
             },
             "available": {
-              "$ref": "#/$defs/OutputLevelFilterDto"
+              "$ref": "#/$defs/OutputLevelFilterDto",
+              "description": "Wire available."
             },
             "code": {
               "description": "code.",
@@ -3412,7 +3742,8 @@
               "description": "remediation."
             },
             "requested": {
-              "$ref": "#/$defs/OutputLevelFilterDto"
+              "$ref": "#/$defs/OutputLevelFilterDto",
+              "description": "Wire requested."
             }
           },
           "required": [
@@ -3427,7 +3758,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire permission denied.",
           "properties": {
             "at": {
               "description": "at.",
@@ -3460,7 +3791,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire closed.",
           "properties": {
             "at": {
               "description": "at.",
@@ -3493,7 +3824,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire unavailable.",
           "properties": {
             "at": {
               "description": "at.",
@@ -3526,7 +3857,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire io.",
           "properties": {
             "at": {
               "description": "at.",
@@ -3559,7 +3890,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire timeout.",
           "properties": {
             "at": {
               "description": "at.",
@@ -3578,6 +3909,7 @@
               "type": "string"
             },
             "operation": {
+              "description": "Wire operation.",
               "type": "string"
             },
             "remediation": {
@@ -3596,7 +3928,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire cancelled.",
           "properties": {
             "at": {
               "description": "at.",
@@ -3615,6 +3947,7 @@
               "type": "string"
             },
             "operation": {
+              "description": "Wire operation.",
               "type": "string"
             },
             "remediation": {
@@ -3633,7 +3966,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire unsupported version.",
           "properties": {
             "at": {
               "description": "at.",
@@ -3652,6 +3985,7 @@
               "type": "string"
             },
             "received": {
+              "description": "Wire received.",
               "format": "uint32",
               "minimum": 0,
               "type": "integer"
@@ -3672,7 +4006,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire internal.",
           "properties": {
             "at": {
               "description": "at.",
@@ -3705,7 +4039,7 @@
           "type": "object"
         },
         {
-          "description": "Version-one Diagnostic wire record.",
+          "description": "Wire unknown remote.",
           "properties": {
             "at": {
               "description": "at.",
@@ -3728,6 +4062,7 @@
               "description": "remediation."
             },
             "remote_kind": {
+              "description": "Wire remote kind.",
               "type": "string"
             }
           },
@@ -3748,67 +4083,67 @@
       "properties": {
         "below_baseline": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating below_baseline counter.",
+          "description": "Saturating below_baseline counter.\nWire below baseline.",
           "x-sc-integer-domain": "unsigned"
         },
         "cancelled": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating cancelled counter.",
+          "description": "Saturating cancelled counter.\nWire cancelled.",
           "x-sc-integer-domain": "unsigned"
         },
         "closed": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating closed counter.",
+          "description": "Saturating closed counter.\nWire closed.",
           "x-sc-integer-domain": "unsigned"
         },
         "internal": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating internal counter.",
+          "description": "Saturating internal counter.\nWire internal.",
           "x-sc-integer-domain": "unsigned"
         },
         "io": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating io counter.",
+          "description": "Saturating io counter.\nWire io.",
           "x-sc-integer-domain": "unsigned"
         },
         "permission_denied": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating permission_denied counter.",
+          "description": "Saturating permission_denied counter.\nWire permission denied.",
           "x-sc-integer-domain": "unsigned"
         },
         "queue_full": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating queue_full counter.",
+          "description": "Saturating queue_full counter.\nWire queue full.",
           "x-sc-integer-domain": "unsigned"
         },
         "timeout": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating timeout counter.",
+          "description": "Saturating timeout counter.\nWire timeout.",
           "x-sc-integer-domain": "unsigned"
         },
         "unavailable": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating unavailable counter.",
+          "description": "Saturating unavailable counter.\nWire unavailable.",
           "x-sc-integer-domain": "unsigned"
         },
         "unknown_remote": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating unknown_remote counter.",
+          "description": "Saturating unknown_remote counter.\nWire unknown remote.",
           "x-sc-integer-domain": "unsigned"
         },
         "unsupported_level": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating unsupported_level counter.",
+          "description": "Saturating unsupported_level counter.\nWire unsupported level.",
           "x-sc-integer-domain": "unsigned"
         },
         "unsupported_version": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating unsupported_version counter.",
+          "description": "Saturating unsupported_version counter.\nWire unsupported version.",
           "x-sc-integer-domain": "unsigned"
         },
         "validation": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "Saturating validation counter.",
+          "description": "Saturating validation counter.\nWire validation.",
           "x-sc-integer-domain": "unsigned"
         }
       },
@@ -3853,14 +4188,14 @@
       "description": "Version-one FlushRequest wire record.",
       "properties": {
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
           "type": "integer"
         },
         "timeout_ms": {
-          "description": "timeout ms.",
+          "description": "timeout ms.\nWire timeout ms.",
           "format": "uint32",
           "maximum": 60000,
           "minimum": 0,
@@ -3878,7 +4213,7 @@
       "description": "Version-one HealthRequest wire record.",
       "properties": {
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -3894,22 +4229,27 @@
       "description": "Version-one LevelChangeDto wire value.",
       "oneOf": [
         {
+          "description": "Wire changed.",
           "properties": {
             "current": {
-              "$ref": "#/$defs/OutputLevelStateDto"
+              "$ref": "#/$defs/OutputLevelStateDto",
+              "description": "Wire current."
             },
             "diagnostic": {
-              "$ref": "#/$defs/OutputChangeDiagnosticDto"
+              "$ref": "#/$defs/OutputChangeDiagnosticDto",
+              "description": "Wire diagnostic."
             },
             "kind": {
               "const": "changed",
               "type": "string"
             },
             "previous": {
-              "$ref": "#/$defs/OutputLevelStateDto"
+              "$ref": "#/$defs/OutputLevelStateDto",
+              "description": "Wire previous."
             },
             "source": {
-              "$ref": "#/$defs/OutputLevelChangeSourceDto"
+              "$ref": "#/$defs/OutputLevelChangeSourceDto",
+              "description": "Wire source."
             }
           },
           "required": [
@@ -3922,13 +4262,15 @@
           "type": "object"
         },
         {
+          "description": "Wire unchanged.",
           "properties": {
             "kind": {
               "const": "unchanged",
               "type": "string"
             },
             "state": {
-              "$ref": "#/$defs/OutputLevelStateDto"
+              "$ref": "#/$defs/OutputLevelStateDto",
+              "description": "Wire state."
             }
           },
           "required": [
@@ -3948,7 +4290,7 @@
           "description": "change."
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -3963,48 +4305,103 @@
     },
     "OutputLevelChangeSourceDto": {
       "description": "Version-one LevelChangeSourceDto wire value.",
-      "enum": [
-        "application",
-        "user_request",
-        "diagnostic_session"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "application",
+          "description": "Wire application.",
+          "type": "string"
+        },
+        {
+          "const": "user_request",
+          "description": "Wire user request.",
+          "type": "string"
+        },
+        {
+          "const": "diagnostic_session",
+          "description": "Wire diagnostic session.",
+          "type": "string"
+        }
+      ]
     },
     "OutputLevelDto": {
       "description": "Version-one LevelDto wire value.",
-      "enum": [
-        "trace",
-        "debug",
-        "info",
-        "warn",
-        "error"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "trace",
+          "description": "Wire trace.",
+          "type": "string"
+        },
+        {
+          "const": "debug",
+          "description": "Wire debug.",
+          "type": "string"
+        },
+        {
+          "const": "info",
+          "description": "Wire info.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "Wire warn.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "Wire error.",
+          "type": "string"
+        }
+      ]
     },
     "OutputLevelFilterDto": {
       "description": "Version-one LevelFilterDto wire value.",
-      "enum": [
-        "off",
-        "error",
-        "warn",
-        "info",
-        "debug",
-        "trace"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "Wire off.",
+          "type": "string"
+        },
+        {
+          "const": "error",
+          "description": "Wire error.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "Wire warn.",
+          "type": "string"
+        },
+        {
+          "const": "info",
+          "description": "Wire info.",
+          "type": "string"
+        },
+        {
+          "const": "debug",
+          "description": "Wire debug.",
+          "type": "string"
+        },
+        {
+          "const": "trace",
+          "description": "Wire trace.",
+          "type": "string"
+        }
+      ]
     },
     "OutputLevelRequestDto": {
       "description": "Version-one LevelRequestDto wire value.",
       "oneOf": [
         {
           "additionalProperties": false,
+          "description": "Wire elevate.",
           "properties": {
             "kind": {
               "const": "elevate",
               "type": "string"
             },
             "level": {
-              "$ref": "#/$defs/OutputLevelFilterDto"
+              "$ref": "#/$defs/OutputLevelFilterDto",
+              "description": "Active variant level."
             }
           },
           "required": [
@@ -4015,6 +4412,7 @@
         },
         {
           "additionalProperties": false,
+          "description": "Wire reset.",
           "properties": {
             "kind": {
               "const": "reset",
@@ -4041,7 +4439,7 @@
         },
         "level_revision": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "level revision.",
+          "description": "level revision.\nWire level revision.",
           "x-sc-integer-domain": "unsigned"
         }
       },
@@ -4054,13 +4452,28 @@
     },
     "OutputLifecycleDto": {
       "description": "Version-one LifecycleDto wire value.",
-      "enum": [
-        "running",
-        "stopping",
-        "stopped",
-        "failed"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "running",
+          "description": "Wire running.",
+          "type": "string"
+        },
+        {
+          "const": "stopping",
+          "description": "Wire stopping.",
+          "type": "string"
+        },
+        {
+          "const": "stopped",
+          "description": "Wire stopped.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "Wire failed.",
+          "type": "string"
+        }
+      ]
     },
     "OutputLogEventDto": {
       "additionalProperties": false,
@@ -4082,7 +4495,7 @@
             "$ref": "#/$defs/OutputValueDto"
           },
           "default": {},
-          "description": "fields.",
+          "description": "fields.\nWire fields.",
           "type": "object"
         },
         "level": {
@@ -4111,7 +4524,7 @@
           ]
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -4170,7 +4583,7 @@
           "description": "logging."
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -4187,18 +4600,28 @@
     },
     "OutputLogOperationDto": {
       "description": "The log-only operation in a scheduled client outcome.",
-      "enum": [
-        "log"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "log",
+          "description": "Wire log.",
+          "type": "string"
+        }
+      ]
     },
     "OutputLogOrderDto": {
       "description": "Version-one LogOrderDto wire value.",
-      "enum": [
-        "oldest_first",
-        "newest_first"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "oldest_first",
+          "description": "Wire oldest first.",
+          "type": "string"
+        },
+        {
+          "const": "newest_first",
+          "description": "Wire newest first.",
+          "type": "string"
+        }
+      ]
     },
     "OutputLogQueryDto": {
       "additionalProperties": false,
@@ -4220,7 +4643,7 @@
         },
         "field_matches": {
           "default": [],
-          "description": "field matches.",
+          "description": "field matches.\nWire field matches.",
           "items": {
             "$ref": "#/$defs/OutputFieldMatchDto"
           },
@@ -4228,7 +4651,7 @@
         },
         "levels": {
           "default": [],
-          "description": "levels.",
+          "description": "levels.\nWire levels.",
           "items": {
             "$ref": "#/$defs/OutputLevelDto"
           },
@@ -4236,7 +4659,7 @@
         },
         "limit": {
           "default": 100,
-          "description": "limit.",
+          "description": "limit.\nWire limit.",
           "format": "uint",
           "maximum": 1000,
           "minimum": 1,
@@ -4245,7 +4668,7 @@
         "order": {
           "$ref": "#/$defs/OutputLogOrderDto",
           "default": "oldest_first",
-          "description": "order."
+          "description": "order.\nWire order."
         },
         "request_id": {
           "description": "request id.",
@@ -4255,7 +4678,7 @@
           ]
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -4317,7 +4740,7 @@
           "type": "array"
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -4344,12 +4767,12 @@
         },
         "dropped_events_total": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "dropped events total.",
+          "description": "dropped events total.\nWire dropped events total.",
           "x-sc-integer-domain": "unsigned"
         },
         "flush_errors_total": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "flush errors total.",
+          "description": "flush errors total.\nWire flush errors total.",
           "x-sc-integer-domain": "unsigned"
         },
         "last_error": {
@@ -4398,22 +4821,22 @@
         },
         "queue_capacity": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "queue capacity.",
+          "description": "queue capacity.\nWire queue capacity.",
           "x-sc-integer-domain": "unsigned"
         },
         "queue_depth": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "queue depth.",
+          "description": "queue depth.\nWire queue depth.",
           "x-sc-integer-domain": "unsigned"
         },
         "queue_full_drops_total": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "queue full drops total.",
+          "description": "queue full drops total.\nWire queue full drops total.",
           "x-sc-integer-domain": "unsigned"
         },
         "queue_high_water_mark": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "queue high water mark.",
+          "description": "queue high water mark.\nWire queue high water mark.",
           "x-sc-integer-domain": "unsigned"
         },
         "sink_statuses": {
@@ -4473,12 +4896,12 @@
         },
         "pruned_files_total": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "pruned files total.",
+          "description": "pruned files total.\nWire pruned files total.",
           "x-sc-integer-domain": "unsigned"
         },
         "rotated_files_total": {
           "$ref": "#/$defs/OutputDecimalDto",
-          "description": "rotated files total.",
+          "description": "rotated files total.\nWire rotated files total.",
           "x-sc-integer-domain": "unsigned"
         },
         "state": {
@@ -4499,12 +4922,14 @@
       "description": "Version-one PathDto wire value.",
       "oneOf": [
         {
+          "description": "Wire utf8.",
           "properties": {
             "kind": {
               "const": "utf8",
               "type": "string"
             },
             "value": {
+              "description": "Active variant value.",
               "type": "string"
             }
           },
@@ -4515,6 +4940,7 @@
           "type": "object"
         },
         {
+          "description": "Wire unrepresentable.",
           "properties": {
             "kind": {
               "const": "unrepresentable",
@@ -4527,6 +4953,7 @@
           "type": "object"
         },
         {
+          "description": "Wire absent.",
           "properties": {
             "kind": {
               "const": "absent",
@@ -4600,7 +5027,7 @@
           "description": "query."
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -4615,23 +5042,36 @@
     },
     "OutputQueryStateDto": {
       "description": "Version-one QueryStateDto wire value.",
-      "enum": [
-        "healthy",
-        "degraded",
-        "unavailable"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "healthy",
+          "description": "Wire healthy.",
+          "type": "string"
+        },
+        {
+          "const": "degraded",
+          "description": "Wire degraded.",
+          "type": "string"
+        },
+        {
+          "const": "unavailable",
+          "description": "Wire unavailable.",
+          "type": "string"
+        }
+      ]
     },
     "OutputRemediationDto": {
       "description": "Version-one RemediationDto wire value.",
       "oneOf": [
         {
+          "description": "Wire recoverable.",
           "properties": {
             "kind": {
               "const": "recoverable",
               "type": "string"
             },
             "steps": {
+              "description": "Active variant steps.",
               "items": {
                 "type": "string"
               },
@@ -4645,8 +5085,10 @@
           "type": "object"
         },
         {
+          "description": "Wire not recoverable.",
           "properties": {
             "justification": {
+              "description": "Active variant justification.",
               "type": "string"
             },
             "kind": {
@@ -4663,16 +5105,18 @@
       ]
     },
     "OutputResultDto": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/OutputAdmissionDto"
+              "$ref": "#/$defs/OutputAdmissionDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -4682,9 +5126,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -4700,16 +5146,18 @@
       ]
     },
     "OutputResultDto2": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/OutputCompletionDto"
+              "$ref": "#/$defs/OutputCompletionDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -4719,9 +5167,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -4737,16 +5187,18 @@
       ]
     },
     "OutputResultDto3": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/OutputDispatchDto"
+              "$ref": "#/$defs/OutputDispatchDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -4756,9 +5208,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -4774,16 +5228,18 @@
       ]
     },
     "OutputResultDto4": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/OutputLogSnapshotDto"
+              "$ref": "#/$defs/OutputLogSnapshotDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -4793,9 +5249,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -4811,16 +5269,18 @@
       ]
     },
     "OutputResultDto5": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/OutputLogHealthDto"
+              "$ref": "#/$defs/OutputLogHealthDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -4830,9 +5290,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -4848,16 +5310,18 @@
       ]
     },
     "OutputResultDto6": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/OutputLevelChangeDto"
+              "$ref": "#/$defs/OutputLevelChangeDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -4867,9 +5331,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -4885,16 +5351,18 @@
       ]
     },
     "OutputResultDto7": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/OutputClientOutcome"
+              "$ref": "#/$defs/OutputClientOutcome",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -4904,9 +5372,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -4922,16 +5392,18 @@
       ]
     },
     "OutputResultDto8": {
-      "description": "Version-one ResultDto<T> wire value.",
+      "description": "Version-one `ResultDto<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/OutputClientStatus"
+              "$ref": "#/$defs/OutputClientStatus",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -4941,9 +5413,11 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
@@ -5207,7 +5681,6 @@
       "type": "object"
     },
     "OutputTraceContextDto": {
-      "additionalProperties": false,
       "description": "Version-one TraceContextDto wire record.",
       "properties": {
         "parent_span_id": {
@@ -5242,7 +5715,7 @@
           "description": "event."
         },
         "schema_version": {
-          "description": "schema version.",
+          "description": "schema version.\nWire schema version.",
           "format": "uint32",
           "maximum": 1,
           "minimum": 1,
@@ -5259,7 +5732,7 @@
       "description": "Version-one ValueDto wire value.",
       "oneOf": [
         {
-          "additionalProperties": false,
+          "description": "Wire null.",
           "properties": {
             "kind": {
               "const": "null",
@@ -5272,13 +5745,14 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
+          "description": "Wire boolean.",
           "properties": {
             "kind": {
               "const": "boolean",
               "type": "string"
             },
             "value": {
+              "description": "Active variant value.",
               "type": "boolean"
             }
           },
@@ -5289,13 +5763,14 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
+          "description": "Wire string.",
           "properties": {
             "kind": {
               "const": "string",
               "type": "string"
             },
             "value": {
+              "description": "Active variant value.",
               "type": "string"
             }
           },
@@ -5306,14 +5781,15 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
+          "description": "Wire integer.",
           "properties": {
             "kind": {
               "const": "integer",
               "type": "string"
             },
             "value": {
-              "$ref": "#/$defs/OutputDecimalDto"
+              "$ref": "#/$defs/OutputDecimalDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -5323,13 +5799,14 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
+          "description": "Wire float.",
           "properties": {
             "kind": {
               "const": "float",
               "type": "string"
             },
             "value": {
+              "description": "Active variant value.",
               "format": "double",
               "type": "number"
             }
@@ -5341,13 +5818,14 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
+          "description": "Wire array.",
           "properties": {
             "kind": {
               "const": "array",
               "type": "string"
             },
             "value": {
+              "description": "Active variant value.",
               "items": {
                 "$ref": "#/$defs/OutputValueDto"
               },
@@ -5361,7 +5839,7 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
+          "description": "Wire object.",
           "properties": {
             "kind": {
               "const": "object",
@@ -5371,6 +5849,7 @@
               "additionalProperties": {
                 "$ref": "#/$defs/OutputValueDto"
               },
+              "description": "Active variant value.",
               "type": "object"
             }
           },
@@ -5383,21 +5862,25 @@
       ]
     },
     "OutputWireEnvelope": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/OutputAdmissionDto"
+              "$ref": "#/$defs/OutputAdmissionDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -5408,17 +5891,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5432,21 +5919,25 @@
       ]
     },
     "OutputWireEnvelope2": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/OutputCompletionDto"
+              "$ref": "#/$defs/OutputCompletionDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -5457,17 +5948,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5481,21 +5976,25 @@
       ]
     },
     "OutputWireEnvelope3": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/OutputDispatchDto"
+              "$ref": "#/$defs/OutputDispatchDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -5506,17 +6005,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5530,21 +6033,25 @@
       ]
     },
     "OutputWireEnvelope4": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/OutputLogSnapshotDto"
+              "$ref": "#/$defs/OutputLogSnapshotDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -5555,17 +6062,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5579,21 +6090,25 @@
       ]
     },
     "OutputWireEnvelope5": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/OutputLogHealthDto"
+              "$ref": "#/$defs/OutputLogHealthDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -5604,17 +6119,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5628,21 +6147,25 @@
       ]
     },
     "OutputWireEnvelope6": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/OutputLevelChangeDto"
+              "$ref": "#/$defs/OutputLevelChangeDto",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -5653,17 +6176,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5677,21 +6204,25 @@
       ]
     },
     "OutputWireEnvelope7": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/OutputClientOutcome"
+              "$ref": "#/$defs/OutputClientOutcome",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -5702,17 +6233,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5726,21 +6261,25 @@
       ]
     },
     "OutputWireEnvelope8": {
-      "description": "Version-one WireEnvelope<T> wire value.",
+      "description": "Version-one `WireEnvelope<T>` wire value.",
       "oneOf": [
         {
+          "description": "Wire ok.",
           "properties": {
             "kind": {
               "const": "ok",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
-              "$ref": "#/$defs/OutputClientStatus"
+              "$ref": "#/$defs/OutputClientStatus",
+              "description": "Active variant value."
             }
           },
           "required": [
@@ -5751,17 +6290,21 @@
           "type": "object"
         },
         {
+          "description": "Wire error.",
           "properties": {
             "error": {
-              "$ref": "#/$defs/OutputFailure"
+              "$ref": "#/$defs/OutputFailure",
+              "description": "Active variant error."
             },
             "kind": {
               "const": "error",
               "type": "string"
             },
             "schema_version": {
+              "description": "Active variant schema version.",
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5776,12 +6319,23 @@
     },
     "OutputWorkerStateDto": {
       "description": "Version-one WorkerStateDto wire value.",
-      "enum": [
-        "running",
-        "degraded",
-        "stopped"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "const": "running",
+          "description": "Wire running.",
+          "type": "string"
+        },
+        {
+          "const": "degraded",
+          "description": "Wire degraded.",
+          "type": "string"
+        },
+        {
+          "const": "stopped",
+          "description": "Wire stopped.",
+          "type": "string"
+        }
+      ]
     }
   },
   "$id": "https://sc-observability.dev/bindings/v1.json",

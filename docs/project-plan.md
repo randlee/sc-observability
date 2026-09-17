@@ -250,14 +250,16 @@ still uses the newly-deprecated legacy wrapper types (`IdentityError` in
 compatibility path in `control.rs`/`handle.rs`) and cannot be edited without
 violating `import-provenance.json`'s
 pinned source bytes. A workspace- or bridge-wide clippy `-A deprecated`
-suppression was rejected as too broad; the replacement — narrow, per-call-site
-`#[allow(deprecated, reason = ...)]` annotations recorded as a new documented
-adaptation kind in `import-provenance.json`, coordinated with lobs, who owns
-warning-allowance edits — is in progress and not yet landed.
+suppression was rejected as too broad; the landed replacement is narrow,
+per-call-site `#[allow(deprecated, reason = ...)]` annotations recorded as
+post-import adaptations in a separate `docs/plans/phase-b/
+post-import-adaptations.json` manifest (owned by lobs), validated via
+`validate_log_import.py --post-import-adaptations`, without altering
+`import-provenance.json`'s original pinned import manifest.
 `.github/workflows/ci.yml`'s clippy job remains a single `-D warnings` step.
-Broader AC-by-AC reconciliation, the four handoffs' final integration-status
-update, and independent QA/coordinator completeness review remain in
-progress; this entry does not claim closure.
+Broader AC-by-AC reconciliation and the four handoffs' final integration-status
+update are complete; independent QA/coordinator completeness review remains
+pending. This entry does not itself claim that review.
 
 ### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
 
@@ -365,3 +367,13 @@ that integrate against the shipped public API.
      CLI surface precisely enough for implementation and review
    - `qm-comp` cross-document consistency review passes; all three docs are
      confirmed mutually consistent before merge
+
+### B.2 — Six-package Rust qualification
+
+[B.2 implementation](plans/phase-b/sprint-b-2-publish-rust.md) stages the six
+public Rust packages at `1.4.0`, preserving historical B.P2 artifacts and B.1
+source provenance. The [handoff](plans/phase-b/handoff-b-2.md) pins the final
+candidate source, archives, normalized manifests, isolated platform consumers
+and scoped API approval. The [checklist](plans/phase-b/checklist-b-2-qualification.md)
+separates implementation/verification from lead completeness and independent
+QA. Publication and the later registry-only consumer proof remain B.7 gates.

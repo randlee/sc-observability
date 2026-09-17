@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
 import subprocess
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 
@@ -89,11 +91,12 @@ def cargo_check_json(name: str) -> tuple[subprocess.CompletedProcess[str], list[
     # Force rustc to emit fresh JSON diagnostics. Fixture targets are standalone
     # generated build directories, so cleaning them does not touch workspace
     # artifacts or source state.
-    clean = run("cargo", "clean", "--manifest-path", str(manifest))
+    clean = run("cargo", "clean", "--locked", "--manifest-path", str(manifest))
     assert_true(clean.returncode == 0, f"{name} cargo clean failed:\n{clean.stderr}")
     result = run(
         "cargo",
         "check",
+        "--locked",
         "--manifest-path",
         str(manifest),
         "--message-format=json",
@@ -125,6 +128,15 @@ def rendered(diagnostic: dict) -> str:
     return diagnostic.get("rendered", diagnostic.get("message", ""))
 
 
+def diagnostic_note(diagnostic: dict) -> str | None:
+    """Extract the compiler's complete migration note from its primary message."""
+    message = diagnostic.get("message", "")
+    marker = ": Use "
+    if message.count(marker) != 1:
+        return None
+    return message[message.index(marker) + 2 :]
+
+
 def item_window(source: str, marker: str, note: str) -> str:
     lines = source.splitlines()
     candidates = []
@@ -137,9 +149,36 @@ def item_window(source: str, marker: str, note: str) -> str:
         if matches:
             candidates.append(index)
     for index in candidates:
-        window = "\n".join(lines[max(0, index - 18) : index + 1])
-        if "#[deprecated(" in window and note in window:
-            return window
+        attributes = []
+        attribute_index = index - 1
+        while attribute_index >= 0:
+            stripped = lines[attribute_index].strip()
+            if (
+                stripped.startswith("#[")
+                or stripped in {
+                    ")]",
+                    "deprecated,",
+                    "since = \"1.4.0\",",
+                }
+                or stripped.startswith(("since =", "note =", "reason ="))
+            ):
+                attributes.append(lines[attribute_index])
+                attribute_index -= 1
+                continue
+            break
+        block = "\n".join(reversed(attributes))
+        note_literals = [
+            ast.literal_eval(match.group(1))
+            for match in re.finditer(
+                r'(?m)^\s*note\s*=\s*("(?:\\\\.|[^"\\\\])*")\s*,?\s*$', block
+            )
+        ]
+        if (
+            "#[deprecated(" in block
+            and 'since = "1.4.0"' in block
+            and note_literals == [note]
+        ):
+            return block
     raise AssertionError(f"{marker} has no local deprecation attribute/note")
 
 
@@ -231,7 +270,11 @@ def check_source_contract() -> None:
         "typed_sink",
         "ProjectionFailureKind::Unclassified",
         "std::error::Error::source",
-        "runtime.emit",
+        "CountingTypedProjector",
+        "CountingLegacyProjector",
+        "fetch_add(1",
+        "CUSTOM_FIXTURE_CODE",
+        ".emit(observation",
     ):
         assert_true(required in matrix, f"adapter matrix misses {required}")
 
@@ -244,29 +287,109 @@ def check_source_contract() -> None:
     )
 
 
+def fixture_spans(source: str, expected_notes: tuple[str, ...]) -> dict[str, list[int]]:
+    lines = source.splitlines()
+    spans = {note: [] for note in expected_notes}
+
+    def add(note: str, predicate) -> None:
+        spans[note].extend(index + 1 for index, line in enumerate(lines) if predicate(index, line))
+
+    for legacy, typed in WRAPPERS:
+        note = f"Use sc_observability_types::typed::{typed}; see migrate-error-api.md."
+        if legacy == "InitError":
+            add(note, lambda _index, line: "InitError" in line or "legacy.0." in line)
+        else:
+            add(note, lambda _index, line, name=legacy: f"size_of::<sc_observability_types::{name}>" in line)
+
+    method_markers = {
+        "LoggerBuilder::new": lambda _index, line: "LoggerBuilder::new(" in line,
+        "Logger::builder": lambda _index, line: "Logger::builder(" in line,
+        "Logger::new": lambda _index, line: "Logger::new(" in line,
+        "Logger::log": lambda _index, line: "logger.log(" in line,
+        "Logger::try_log": lambda _index, line: ".try_log(" in line and ".try_log_with_outcome(" not in line,
+        "Logger::try_log_with_outcome": lambda _index, line: ".try_log_with_outcome(" in line,
+        "Logger::flush": lambda _index, line: "logger.flush(" in line,
+        "ObservabilityConfig::default_for": lambda _index, line: "ObservabilityConfig::default_for(" in line,
+        "ObservabilityConfig::service_name": lambda _index, line: "config.service_name(" in line,
+        "Observability::new": lambda _index, line: "Observability::new(" in line,
+        "Observability::flush": lambda _index, line: "routed.flush(" in line,
+        "Observability::shutdown": lambda _index, line: "routed.shutdown(" in line,
+        "OtlpEndpoint::new": lambda _index, line: "OtlpEndpoint::new(" in line,
+        "AuthHeader::new": lambda _index, line: "AuthHeader::new(" in line,
+        "Telemetry::new": lambda _index, line: "Telemetry::new(" in line,
+        "Telemetry::flush": lambda _index, line: "telemetry.flush(" in line,
+        "Telemetry::shutdown": lambda _index, line: "telemetry.shutdown(" in line,
+        "SpanAssembler::push": lambda _index, line: "assembler.push(" in line,
+    }
+    for _source, legacy, typed in METHODS:
+        note = f"Use {typed}(); see migrate-error-api.md."
+        if legacy == "ObservabilityBuilder::build":
+            add(
+                note,
+                lambda index, line: ".build()" in line
+                and "Observability::builder" in "\n".join(lines[max(0, index - 4) : index + 1]),
+            )
+        elif legacy == "TelemetryConfigBuilder::build":
+            add(
+                note,
+                lambda index, line: ".build()" in line
+                and "TelemetryConfigBuilder::new" in "\n".join(lines[max(0, index - 4) : index + 1]),
+            )
+        else:
+            add(note, method_markers[legacy])
+    assert_true(all(spans[note] for note in expected_notes), "fixture contract has an unbound target")
+    return spans
+
+
+def validate_diagnostics(
+    name: str,
+    diagnostics: list[dict],
+    source: str,
+    expected_notes: tuple[str, ...],
+) -> None:
+    expected_spans = fixture_spans(source, expected_notes) if expected_notes else {}
+    if not expected_notes:
+        assert_true(not diagnostics, f"{name} emitted unexpected fixture warnings")
+        return
+    observed_spans = {note: [] for note in expected_notes}
+    for diagnostic in diagnostics:
+        assert_true(diagnostic.get("level") == "warning", f"{name} emitted a non-warning diagnostic")
+        assert_true(
+            diagnostic.get("code", {}).get("code") == "deprecated",
+            f"{name} emitted an unexpected warning code",
+        )
+        spans = diagnostic.get("spans", [])
+        primary = [span for span in spans if span.get("is_primary")]
+        assert_true(len(spans) == 1 and len(primary) == 1, f"{name} diagnostic has unexpected spans")
+        span = primary[0]
+        assert_true(span.get("file_name") == "src/main.rs", f"{name} diagnostic escaped fixture source")
+        note_matches = [note for note in expected_notes if diagnostic_note(diagnostic) == note]
+        assert_true(len(note_matches) == 1, f"{name} diagnostic has an unexpected migration note")
+        note = note_matches[0]
+        line = span.get("line_start")
+        assert_true(line in expected_spans[note], f"{name} diagnostic is bound to the wrong fixture item/span")
+        observed_spans[note].append(line)
+    for note, expected in expected_spans.items():
+        assert_true(
+            sorted(observed_spans[note]) == sorted(expected),
+            f"{name} warning spans for {note} are {sorted(observed_spans[note])}, expected {sorted(expected)}",
+        )
+
+
 def check_fixture(name: str, expected_notes: tuple[str, ...] = ()) -> list[dict]:
     result, diagnostics = cargo_check_json(name)
     assert_true(result.returncode == 0, f"{name} cargo check failed:\n{result.stderr}")
     deprecated = [d for d in diagnostics if d.get("code", {}).get("code") == "deprecated"]
     assert_true(len(deprecated) == len(diagnostics), f"{name} emitted an unexpected non-deprecation warning")
-    for diagnostic in deprecated:
-        primary = [span for span in diagnostic.get("spans", []) if span.get("is_primary")]
-        assert_true(
-            len(diagnostic.get("spans", [])) == 1 and len(primary) == 1,
-            f"{name} deprecation has an unexpected secondary source span",
-        )
-        assert_true(primary[0].get("file_name") == "src/main.rs", f"{name} deprecation span escaped fixture source")
-        diagnostic_notes = [note for note in expected_notes if note in rendered(diagnostic)]
-        assert_true(
-            len(diagnostic_notes) == 1,
-            f"{name} deprecation has an unexpected or ambiguous migration note",
-        )
+    source = (FIXTURE_ROOT / name / "src" / "main.rs").read_text()
+    validate_diagnostics(name, diagnostics, source, expected_notes)
     messages = "\n".join(rendered(d) for d in deprecated)
     for note in expected_notes:
         assert_true(note in messages, f"{name} lacks expected deprecation diagnostic: {note}")
     return_code = run(
         "cargo",
         "run",
+        "--locked",
         "--manifest-path",
         str(FIXTURE_ROOT / name / "Cargo.toml"),
         "--quiet",
@@ -275,8 +398,8 @@ def check_fixture(name: str, expected_notes: tuple[str, ...] = ()) -> list[dict]
     return deprecated
 
 
-def check_partial_allow() -> None:
-    source = (FIXTURE_ROOT / "partial" / "src" / "main.rs").read_text()
+def check_partial_allow(source: str | None = None) -> None:
+    source = source or (FIXTURE_ROOT / "partial" / "src" / "main.rs").read_text()
     assert_true(
         re.search(r"#\[allow\(\s*deprecated\s*,\s*reason\s*=", source, re.S) is not None,
         "partial fixture lacks a reason-bearing local compatibility allow",
@@ -288,25 +411,96 @@ def check_partial_allow() -> None:
 
 
 def check_negative_controls() -> None:
-    source = (FIXTURE_ROOT / "partial" / "src" / "main.rs").read_text()
-    broad = source.replace(
+    partial_source = (FIXTURE_ROOT / "partial" / "src" / "main.rs").read_text()
+    broad = partial_source.replace(
         "#[allow(\n    deprecated,",
         "#![allow(deprecated)]\n\n#[allow(\n    deprecated,",
     )
-    assert_true(
-        re.search(r"#!\[allow\(\s*(deprecated|warnings)", broad, re.S) is not None,
-        "negative broad-allow control did not trigger",
-    )
-    bad_diagnostic = {
-        "code": {"code": "unused_imports"},
-        "spans": [{"is_primary": True, "file_name": "src/main.rs"}],
-        "rendered": "warning: unexpected warning",
-    }
     try:
-        assert_true(bad_diagnostic.get("code", {}).get("code") == "deprecated", "unexpected warning")
+        check_partial_allow(broad)
     except AssertionError:
-        return
-    raise AssertionError("negative unexpected-warning control did not trigger")
+        pass
+    else:
+        raise AssertionError("negative broad-allow control did not trigger the real predicate")
+
+    source = (ROOT / "crates" / "sc-observability-types" / "src" / "errors.rs").read_text()
+    identity_note = "Use sc_observability_types::typed::IdentityFailure; see migrate-error-api.md."
+
+    def rejected(mutated: str, message: str) -> None:
+        try:
+            item_window(mutated, "IdentityError", identity_note)
+        except AssertionError:
+            return
+        raise AssertionError(message)
+
+    rejected(source.replace('since = "1.4.0"', 'since = "1.3.0"', 1), "wrong version negative did not trigger")
+    rejected(source.replace(identity_note, "Use the wrong replacement; see migrate-error-api.md.", 1), "wrong note negative did not trigger")
+    rejected(
+        source.replace(identity_note, identity_note + " EXTRA TEXT", 1),
+        "appended source note negative did not trigger",
+    )
+    identity_attribute = re.search(
+        r"#\[deprecated\(\n    since = \"1\.4\.0\",\n    note = \"Use sc_observability_types::typed::IdentityFailure; see migrate-error-api\.md\.\"\n\)\]\n",
+        source,
+    )
+    assert_true(identity_attribute is not None, "identity attribute fixture is missing")
+    misplaced = source.replace(identity_attribute.group(0), "", 1).replace(
+        "impl sealed::Sealed for IdentityError",
+        identity_attribute.group(0) + "impl sealed::Sealed for IdentityError",
+        1,
+    )
+    rejected(misplaced, "misplaced attribute negative did not trigger")
+
+    legacy_source = (FIXTURE_ROOT / "legacy" / "src" / "main.rs").read_text()
+    notes = migration_notes()
+    result, diagnostics = cargo_check_json("legacy")
+    assert_true(result.returncode == 0, "negative-control legacy fixture could not compile")
+    expected_diagnostics = [d for d in diagnostics if d.get("code", {}).get("code") == "deprecated"]
+    validate_diagnostics("legacy", expected_diagnostics, legacy_source, notes)
+
+    def rejects_diagnostics(mutated: list[dict], message: str) -> None:
+        try:
+            validate_diagnostics("negative", mutated, legacy_source, notes)
+        except AssertionError:
+            return
+        raise AssertionError(message)
+
+    wrong_code = deepcopy(expected_diagnostics)
+    wrong_code[0]["code"]["code"] = "unused_imports"
+    rejects_diagnostics(wrong_code, "wrong diagnostic code negative did not trigger")
+    wrong_note = deepcopy(expected_diagnostics)
+    note_index = next(
+        index for index, diagnostic in enumerate(wrong_note) if diagnostic_note(diagnostic) == notes[0]
+    )
+    wrong_note[note_index]["message"] = wrong_note[note_index]["message"].replace(
+        notes[0], "wrong migration note"
+    )
+    wrong_note[note_index]["rendered"] = wrong_note[note_index]["rendered"].replace(
+        notes[0], "wrong migration note"
+    )
+    rejects_diagnostics(wrong_note, "wrong diagnostic note negative did not trigger")
+    appended_note = deepcopy(expected_diagnostics)
+    appended_index = next(
+        index for index, diagnostic in enumerate(appended_note) if diagnostic_note(diagnostic) == notes[0]
+    )
+    appended_note[appended_index]["message"] += " EXTRA TEXT"
+    appended_note[appended_index]["rendered"] += " EXTRA TEXT"
+    rejects_diagnostics(appended_note, "appended diagnostic note negative did not trigger")
+    duplicate_span = deepcopy(expected_diagnostics)
+    default_note = next(note for note in notes if "ObservabilityConfig::default_for_typed" in note)
+    default_indices = [
+        index for index, diagnostic in enumerate(duplicate_span) if diagnostic_note(diagnostic) == default_note
+    ]
+    assert_true(len(default_indices) >= 2, "default_for diagnostic negative lacks repeated target spans")
+    duplicate_span[default_indices[1]] = deepcopy(duplicate_span[default_indices[0]])
+    rejects_diagnostics(duplicate_span, "duplicate diagnostic span negative did not trigger")
+    missing = expected_diagnostics[:-1]
+    rejects_diagnostics(missing, "missing diagnostic negative did not trigger")
+    extra = expected_diagnostics + [deepcopy(expected_diagnostics[0])]
+    rejects_diagnostics(extra, "extra diagnostic negative did not trigger")
+    wrong_span = deepcopy(expected_diagnostics)
+    wrong_span[0]["spans"][0]["line_start"] += 1
+    rejects_diagnostics(wrong_span, "wrong diagnostic span negative did not trigger")
 
 
 def main() -> int:
@@ -339,6 +533,12 @@ def main() -> int:
                 )
         migrated_result, migrated_diagnostics = cargo_check_json("migrated")
         assert_true(migrated_result.returncode == 0, "migrated fixture cargo check failed")
+        validate_diagnostics(
+            "migrated",
+            migrated_diagnostics,
+            (FIXTURE_ROOT / "migrated" / "src" / "main.rs").read_text(),
+            (),
+        )
         assert_true(
             not any(d.get("code", {}).get("code") == "deprecated" for d in migrated_diagnostics),
             "migrated fixture emitted a deprecated diagnostic",
@@ -347,6 +547,7 @@ def main() -> int:
             run(
                 "cargo",
                 "run",
+                "--locked",
                 "--manifest-path",
                 str(FIXTURE_ROOT / "migrated" / "Cargo.toml"),
                 "--quiet",

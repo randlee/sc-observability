@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "candidate_version": "1.4.0",
+  "source_commit": "6bb5cc126c728bdf10abd449eb292c87b864005b",
+  "crates": {
+    "sc-observability-types": {
+      "status": "approved",
+      "reviewer": "aobs (appointed Phase B lead)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "docs/plans/phase-b/evidence/b2-api/sc-observability-types-diff.log",
+      "api_sha256": "da734e5a4307e2caddc72958e6c48ad72128838234d320c314a4ed479e934237"
+    },
+    "sc-observability": {
+      "status": "approved",
+      "reviewer": "aobs (appointed Phase B lead)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "docs/plans/phase-b/evidence/b2-api/sc-observability-diff.log",
+      "api_sha256": "24863c44bee044c0ecd68b8bab0c478dc001abd9916528def1d4b54d8cc0625e"
+    },
+    "sc-observe": {
+      "status": "approved",
+      "reviewer": "aobs (appointed Phase B lead)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "docs/plans/phase-b/evidence/b2-api/sc-observe-diff.log",
+      "api_sha256": "4d0c1f094b3e125a9e5472cc979fc9ffb36844959ea0baed2193e3fc85ca8d46"
+    },
+    "sc-observability-otlp": {
+      "status": "approved",
+      "reviewer": "aobs (appointed Phase B lead)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "docs/plans/phase-b/evidence/b2-api/sc-observability-otlp-diff.log",
+      "api_sha256": "b9f637f18dc4cc43a5be68b780b8e6f2e0c0374e74ba0dd234fc1ea8913e16ac"
+    },
+    "sc-observability-log-macros": {
+      "status": "approved",
+      "reviewer": "aobs (appointed Phase B lead)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "docs/plans/phase-b/evidence/b2-api/sc-observability-log-macros-diff.log",
+      "api_sha256": "ed78c9311b656f43c26a2697d6ba5c840a824f5c48c96fe8cec30d97bedc1ea3"
+    },
+    "sc-observability-log": {
+      "status": "approved",
+      "reviewer": "aobs (appointed Phase B lead)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "docs/plans/phase-b/evidence/b2-api/sc-observability-log-diff.log",
+      "api_sha256": "b8eea319e1ed8947cc851e834311a1061910405113da96cd4f18bbff109b5ac0"
+    }
+  },
+  "approved_at": "2026-09-17T09:06:54.905317+00:00",
+  "approval_scope": "Appointed Phase B lead approval of the six named candidate API surfaces and exact API digests. Preserves separately deferred owner runtime-contract acceptance and B.7 publication. Does not resolve behavior findings or replace consolidated QA."
+}

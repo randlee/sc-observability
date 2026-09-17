@@ -1,0 +1,120 @@
+{
+  "source_commit": "67e715d5be90aaf60f02289bfc3dbb4255ccd94b",
+  "checks": [
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "log": "target/b2-gates/67e715d5be90aaf60f02289bfc3dbb4255ccd94b/00.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--workspace",
+        "--all-targets"
+      ],
+      "exit_code": 0,
+      "log": "target/b2-gates/67e715d5be90aaf60f02289bfc3dbb4255ccd94b/01.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--workspace",
+        "--doc"
+      ],
+      "exit_code": 0,
+      "log": "target/b2-gates/67e715d5be90aaf60f02289bfc3dbb4255ccd94b/02.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "log": "target/b2-gates/67e715d5be90aaf60f02289bfc3dbb4255ccd94b/03.log"
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/ci/validate_publish_order.sh"
+      ],
+      "exit_code": 0,
+      "log": "target/b2-gates/67e715d5be90aaf60f02289bfc3dbb4255ccd94b/04.log"
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/ci/validate_version_literals.py"
+      ],
+      "exit_code": 0,
+      "log": "target/b2-gates/67e715d5be90aaf60f02289bfc3dbb4255ccd94b/05.log"
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/ci/validate_docs_consistency.sh"
+      ],
+      "exit_code": 0,
+      "log": "target/b2-gates/67e715d5be90aaf60f02289bfc3dbb4255ccd94b/06.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "package",
+        "--list",
+        "-p",
+        "sc-observability-log-macros"
+      ],
+      "exit_code": 0,
+      "log": "target/b2-gates/67e715d5be90aaf60f02289bfc3dbb4255ccd94b/07.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "package",
+        "--list",
+        "-p",
+        "sc-observability-log"
+      ],
+      "exit_code": 0,
+      "log": "target/b2-gates/67e715d5be90aaf60f02289bfc3dbb4255ccd94b/08.log"
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/ci/_log_release_adaptations.py"
+      ],
+      "exit_code": 0,
+      "log": "target/b2-gates/67e715d5be90aaf60f02289bfc3dbb4255ccd94b/09.log"
+    },
+    {
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "scripts/ci/tests",
+        "-p",
+        "test_log_staging.py"
+      ],
+      "exit_code": 0,
+      "log": "target/b2-gates/67e715d5be90aaf60f02289bfc3dbb4255ccd94b/10.log"
+    }
+  ]
+}
