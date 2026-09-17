@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
+import tarfile
 import tempfile
 from pathlib import Path
 
@@ -17,10 +19,47 @@ PLATFORM_ASSERTIONS = (
     "baseline_exact_resolution", "candidate_extracted_archive_resolution",
     "threshold_filtering", "log_and_query", "level_state_and_reset", "stale_owner_after_shutdown",
 )
+EXPECTED_PACKAGES = (
+    "sc-observability-types", "sc-observability", "sc-observe", "sc-observability-otlp",
+)
 
 
 def run(command: list[str], cwd: Path) -> None:
     subprocess.run(command, cwd=cwd, check=True)
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def verified_package(stage: Path, package: dict[str, object], root: Path) -> Path:
+    """Verify immutable archive bytes, then consume only a fresh extraction."""
+    relative = Path(str(package["archive"]))
+    if relative.is_absolute() or ".." in relative.parts:
+        raise SystemExit(f"archive path escapes stage: {relative}")
+    archive = (stage / relative).resolve()
+    if stage not in archive.parents or not archive.is_file() or sha256(archive) != package["archive_sha256"]:
+        raise SystemExit(f"archive checksum mismatch: {archive}")
+    archive_root = str(package["archive_root"])
+    with tarfile.open(archive, "r:gz") as contents:
+        names = sorted(member.name for member in contents.getmembers() if member.isfile())
+        if names != package["checked_contents"] or any(not name.startswith(f"{archive_root}/") for name in names):
+            raise SystemExit(f"archive inventory mismatch: {archive}")
+        contents.extractall(root, filter="data")
+    extracted = root / archive_root
+    declared = stage / str(package["extracted_root"])
+    if not declared.is_dir():
+        raise SystemExit(f"declared extracted content differs from archive: {declared}")
+    for name in names:
+        relative = name.removeprefix(f"{archive_root}/")
+        declared_file, verified_file = declared / relative, extracted / relative
+        if not declared_file.is_file() or declared_file.read_bytes() != verified_file.read_bytes():
+            raise SystemExit(f"declared extracted content differs from archive: {declared_file}")
+    return extracted.resolve()
 
 
 def cargo_project(root: Path, version: str, patches: str, source: str) -> None:
@@ -74,16 +113,18 @@ def main() -> int:
 
     provenance: dict[str, object] = {"candidate": {"version": args.version, "mode": args.mode}, "baseline": {"version": BASELINE_VERSION, "source_commit": BASELINE_SOURCE_SHA}, "assertions": list(PLATFORM_ASSERTIONS)}
     patches = ""
+    verified = None
     if args.stage:
         manifest = args.stage / "stage-manifest.json"
         evidence = json.loads(manifest.read_text())
         if evidence.get("candidate_version") != args.version or evidence.get("schema_version") != 2:
             raise SystemExit("stage manifest does not match candidate version/schema")
+        if tuple(item.get("name") for item in evidence.get("packages", [])) != EXPECTED_PACKAGES or any(item.get("version") != args.version for item in evidence["packages"]):
+            raise SystemExit("stage package identities or versions are incomplete")
+        verified = tempfile.TemporaryDirectory(prefix="bp2-verified-stage-")
         lines = ["[patch.crates-io]"]
         for package in evidence["packages"]:
-            extracted = (args.stage / package["extracted_root"]).resolve()
-            if not extracted.is_dir() or "workspace" in extracted.parts:
-                raise SystemExit(f"candidate package is not an extracted archive: {extracted}")
+            extracted = verified_package(args.stage.resolve(), package, Path(verified.name))
             lines.append(f'{package["name"]} = {{ path = "{extracted.as_posix()}" }}')
         patches = "\n".join(lines)
         provenance["candidate"] = {"version": args.version, "mode": args.mode, "stage_manifest": str(manifest.resolve()), "source_commit": evidence["source_commit"], "archives": {item["name"]: item["archive_sha256"] for item in evidence["packages"]}}
@@ -98,6 +139,8 @@ def main() -> int:
         cargo_project(candidate, args.version, patches, candidate_source())
         run(["cargo", "run"], candidate)
         run(["cargo", "run", "--locked"], candidate)
+    if verified:
+        verified.cleanup()
     if args.result_file:
         args.result_file.parent.mkdir(parents=True, exist_ok=True)
         args.result_file.write_text(json.dumps({"status": "passed", "platform": args.platform, **provenance}, indent=2) + "\n")
