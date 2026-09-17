@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "candidate_version": "1.4.0",
+  "crates": {
+    "sc-observability-types": {"baseline_version": "1.2.0", "kind": "lib"},
+    "sc-observability": {"baseline_version": "1.2.0", "kind": "lib"},
+    "sc-observe": {"baseline_version": "1.2.0", "kind": "lib"},
+    "sc-observability-otlp": {"baseline_version": "1.2.0", "kind": "lib"},
+    "sc-observability-log-macros": {"baseline_version": null, "kind": "proc-macro"},
+    "sc-observability-log": {"baseline_version": null, "kind": "lib"}
+  }
+}
