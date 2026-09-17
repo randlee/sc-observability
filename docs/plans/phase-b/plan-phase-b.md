@@ -176,7 +176,7 @@ BTIT's later switch to the published crates is a separate BTIT change.
 
 | Relation | Rationale |
 | --- | --- |
-| B.P1 must_follow accepted runtime contract | Implement a reviewed additive core surface |
+| B.P1 must_follow the execution-authorized runtime contract (public acceptance owner-deferred to Phase B completion) | Implement a reviewed additive core surface without claiming runtime acceptance |
 | B.P2 must_follow B.P1 | Prepare and qualify the tested core artifact without live publication |
 | B.P3 must_follow B.P2 and accepted target bridge contract | BTIT integrates the exact staged core behavior before source acceptance |
 | B.1 must_follow B.P3 | Copy only the accepted implementation of the sc-observability-owned locked target |
