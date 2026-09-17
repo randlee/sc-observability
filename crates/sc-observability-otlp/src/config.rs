@@ -21,6 +21,10 @@ use std::path::PathBuf;
 
 use crate::{constants, error_codes};
 use sc_observability_types::typed::InitFailure;
+#[allow(
+    deprecated,
+    reason = "OTLP config retains InitError in its published compatibility signatures"
+)]
 use sc_observability_types::{DurationMs, ErrorContext, InitError, Remediation, ServiceName};
 use serde_json::{Map, Value};
 
@@ -41,6 +45,10 @@ pub struct OtlpEndpoint(String);
 
 impl OtlpEndpoint {
     /// Creates a validated OTLP endpoint using the documented HTTP(S) schemes.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use OtlpEndpoint::new_typed(); see migrate-error-api.md."
@@ -86,10 +94,14 @@ impl AsRef<str> for OtlpEndpoint {
 }
 
 impl TryFrom<String> for OtlpEndpoint {
+    #[allow(
+        deprecated,
+        reason = "TryFrom preserves the published InitError compatibility contract"
+    )]
     type Error = InitError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new(value)
+        Self::new_typed(value).map_err(Into::into)
     }
 }
 
@@ -99,6 +111,10 @@ pub struct AuthHeader(String);
 
 impl AuthHeader {
     /// Creates a validated non-empty authorization header value.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use AuthHeader::new_typed(); see migrate-error-api.md."
@@ -138,10 +154,14 @@ impl AsRef<str> for AuthHeader {
 }
 
 impl TryFrom<String> for AuthHeader {
+    #[allow(
+        deprecated,
+        reason = "TryFrom preserves the published InitError compatibility contract"
+    )]
     type Error = InitError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new(value)
+        Self::new_typed(value).map_err(Into::into)
     }
 }
 
@@ -371,6 +391,10 @@ impl TelemetryConfigBuilder {
     ///
     /// assert_eq!(config.service_name.as_str(), "demo");
     /// ```
+    #[allow(
+        deprecated,
+        reason = "retained compatibility builder keeps the published InitError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use TelemetryConfigBuilder::build_typed(); see migrate-error-api.md."

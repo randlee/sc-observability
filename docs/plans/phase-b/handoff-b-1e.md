@@ -95,3 +95,32 @@ release publication, a removal schedule, a major release, or sprint-wide
 completion. B.1e implementation/validation activates the warning path; this
 scoped prep leaves that implementation pending, B.2 qualifies/stages its
 result, and B.7 alone publishes it.
+
+## B.1e implementation handoff
+
+The follow-on implementation is complete on
+`feature/phase-b-1e-migration-validation`, based on and merged with the active
+QA1 parent `origin/fix/phase-b-1ab-qa1` at `1e216c7` before final validation.
+The child activates all nine wrapper warnings and 20 mapped method warnings at
+`since = "1.4.0"`, while retaining the three supported method exemptions and
+`Logger::emit` at its existing `since = "1.2.0"`. Ordinary observation routing
+uses `log_typed` and `flush_typed`; compatibility signatures and adapter
+modules retain only named, reason-bearing local deprecation allowances.
+
+The implementation evidence is:
+
+```text
+python3 scripts/ci/validate_error_migration.py
+B.1e migration validation: PASS (source contract, JSON diagnostics, and all fixtures)
+cargo check --workspace --message-format=short
+PASS; remaining warnings are confined to the copied sc-observability-log bridge
+cargo fmt --all -- --check
+PASS
+```
+
+The validator runs standalone `legacy`, `migrated` and `partial` Cargo
+workspaces, parses `deprecated` JSON diagnostics and source spans, executes
+each fixture, checks the legacy serialized `InitError` golden, verifies typed
+kind fallback handling, and rejects broad fixture allowances. B.2 still owns
+qualification/staging and B.7 owns publication; no removal schedule or major
+release is introduced.

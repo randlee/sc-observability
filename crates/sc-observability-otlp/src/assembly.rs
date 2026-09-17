@@ -12,6 +12,10 @@
     clippy::must_use_candidate,
     reason = "small constructor/accessor methods are intentionally kept free of repetitive must_use decoration"
 )]
+#![allow(
+    deprecated,
+    reason = "span assembly retains its published EventError adapter boundary"
+)]
 
 use std::collections::HashMap;
 
@@ -55,6 +59,10 @@ impl SpanAssembler {
     }
 
     /// Pushes one lifecycle signal through the assembler.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility assembler method keeps the published EventError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use SpanAssembler::push_typed(); see migrate-error-api.md."

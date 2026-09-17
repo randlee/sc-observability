@@ -92,12 +92,11 @@ For consumers that export to OTLP:
 3. Attach OTLP by wrapping projector implementations locally, following the
    pattern used by `examples/atm-adapter-example`.
 
-## Typed Error Adoption (Phase B preparation)
+## Typed Error Adoption (B.1e warning rollout)
 
-The additive typed error methods are implemented in the current B.1b–B.1d
-preparation stack. B.1e implements and validates warning activation; this
-scoped preparation leaves that implementation pending, and B.2 qualifies the
-result before B.7 publication. For exact old/new symbols, nine wrapper families, typed kind matching,
+The additive typed error methods and B.1e warning rollout are implemented and
+validated on the current stack. B.2 qualifies the result before B.7
+publication. For exact old/new symbols, nine wrapper families, typed kind matching,
 source retention, custom-trait adapters, rollback and narrow warning policy,
 use the [typed error migration reference](../.claude/skills/sc-observability-adopting/references/migrate-error-api.md)
 and its [source inventory](plans/phase-b/warning-inventory-b-1e.md).
@@ -113,7 +112,7 @@ unchanged `with_log_projector`, `with_span_projector` and
 `with_metric_projector` methods; no `with_typed_*` builders exist.
 
 This guide does not promise warning-free legacy compilation under
-`-D deprecated`, introduce a removal schedule or claim B.1/B.2/B.7 completion.
+`-D deprecated`, introduce a removal schedule or claim B.2/B.7 completion.
 
 ## Breaking API Renames
 

@@ -62,6 +62,10 @@ pub use sc_observability_types::{
     SchemaVersion, ServiceName, SinkHealth, SinkHealthState, SinkName, TargetCategory, Timestamp,
     WriterState,
 };
+#[allow(
+    deprecated,
+    reason = "the facade retains legacy error names in its public compatibility surface"
+)]
 use sc_observability_types::{LevelFilter, ProcessIdentityPolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
@@ -418,6 +422,10 @@ pub trait LogFilter: Send + Sync {
 /// This trait is intentionally open for downstream implementations. Adding
 /// required methods or tightening object-safety guarantees is therefore a
 /// semver-significant public API change.
+#[allow(
+    deprecated,
+    reason = "LogSink preserves its published LogSinkError trait signature"
+)]
 pub trait LogSink: Send + Sync {
     /// Writes one event to the sink.
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
@@ -571,6 +579,10 @@ impl LevelOwner {
 }
 
 /// Blocking queue-admission error surface for `Logger::log(...)`.
+#[allow(
+    deprecated,
+    reason = "LogError is the retained legacy boundary paired with LogFailure"
+)]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
 pub enum LogError {
     #[error(transparent)]
@@ -585,6 +597,10 @@ pub enum LogError {
 }
 
 /// Non-blocking queue-admission error surface for `Logger::try_log(...)`.
+#[allow(
+    deprecated,
+    reason = "TryLogError is the retained legacy boundary paired with TryLogFailure"
+)]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
 pub enum TryLogError {
     #[error(transparent)]
@@ -684,12 +700,20 @@ mod sealed_emitters {
     dead_code,
     reason = "crate-local emitter trait is intentionally available for logging-only injection"
 )]
+#[allow(
+    deprecated,
+    reason = "the crate-local compatibility emitter preserves its EventError signature"
+)]
 pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
 }
 
 impl sealed_emitters::Sealed for Logger<Running> {}
 
+#[allow(
+    deprecated,
+    reason = "the crate-local compatibility emitter delegates through the retained legacy logger boundary"
+)]
 impl LogEmitter for Logger<Running> {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError> {
         self.log(event).map_err(|error| match error {

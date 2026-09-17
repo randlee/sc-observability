@@ -54,6 +54,10 @@ pub use diagnostic::{
     Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, RecoverableSteps, Remediation,
 };
 #[doc(inline)]
+#[allow(
+    deprecated,
+    reason = "the crate root re-exports the retained legacy wrapper names"
+)]
 pub use errors::{
     EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ObservationError,
     ProjectionError, ShutdownError, SubscriberError, TelemetryError,
