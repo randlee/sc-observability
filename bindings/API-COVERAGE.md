@@ -104,7 +104,7 @@ transport, and language behavior is covered by the following layers.
 | Tauri request validation, authorization, target allowlist and redaction | `bindings/tauri/src/lib.rs` strict-request, policy, target and recursive-redaction paths/tests |
 | Exact IPC command names and host-owned lifecycle | `bindings/tauri/src/lib.rs`; `examples/tauri-logging/src-tauri/src/main.rs` |
 | Real consumer transport and ergonomic event | `examples/tauri-logging/src/main.ts`; `examples/tauri-logging/README.md` |
-| Installation, package and adapter gates | `scripts/ci/validate_typescript_bindings.sh` (packed tarball installed outside the checkout, adapter mock-IPC and locked example checks) |
+| Installation, package and adapter gates | `scripts/ci/validate_typescript_bindings.sh` (packed tarball installed outside the checkout, packaged Rust adapter, actual desktop IPC, and strict platform aggregate) |
 
 The native backend remains the shared B.3b `HostLoggingBackend`; this layer
 does not duplicate core conversion or logger ownership.
@@ -142,9 +142,10 @@ coverage without claiming an unexecuted matrix pass.
 | Supported platform completeness and tamper rejection | `validate_tauri_platform_evidence.py`; `bindings-typescript.yml` matrix and aggregate |
 
 Qualification remains in progress until the final three-platform aggregate and
-lead completeness check. Local checkpoint `ac245df` passes 244 ordinary real IPC
-assertions, 20 capped release-host IPC assertions, 339 installed-client cases and
-15 policy cases. The complete case inventory, including real owner/shutdown
+lead completeness check. Checkpoint `71215ca` passes Linux/macOS CI and local macOS with the
+same canonical npm/Rust artifacts: 258 ordinary real IPC assertions, 20 capped
+release-host IPC assertions, 368 installed-client/helper cases and 15 policy
+cases. Windows remains unresolved. The complete case inventory, including real owner/shutdown
 contention, zero-timeout native diagnostics, late shutdown completion and
 retained post-stop health, is committed in
 `scripts/ci/fixtures/tauri-qualification/required-evidence-cases.json`.
