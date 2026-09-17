@@ -4,8 +4,24 @@
 from __future__ import annotations
 
 import tomllib
+from pathlib import Path
 
 from _runtime_level_common import PUBLISH_ARTIFACTS, QUALIFICATION, ROOT, qualification, release_packages
+
+
+def validate_version_declarations(values: dict[str, str], handoff: Path, baseline_fixture: Path) -> None:
+    """Reject drift in the current handoff or frozen released-baseline fixture."""
+    candidate, baseline = values["candidate_version"], values["baseline_version"]
+    declaration = f"Candidate version: `{candidate}` (the next minor after the current `{baseline}` release)."
+    if declaration not in handoff.read_text():
+        raise SystemExit("B.P2 handoff current candidate/baseline declaration disagrees with qualification metadata")
+    fixture = tomllib.loads(baseline_fixture.read_text())
+    dependencies = fixture.get("dependencies", {})
+    expected = f"={baseline}"
+    if (fixture.get("package", {}).get("version") != baseline
+            or dependencies.get("sc-observability") != expected
+            or dependencies.get("sc-observability-types") != expected):
+        raise SystemExit("frozen released-baseline fixture disagrees with qualification baseline metadata")
 
 
 def main() -> int:
@@ -28,6 +44,12 @@ def main() -> int:
     for forbidden in (values["candidate_version"], values["baseline_version"]):
         if f"--version {forbidden}" in workflow:
             raise SystemExit("B.P2 workflow hard-codes a release version")
+
+    validate_version_declarations(
+        values,
+        ROOT / "docs" / "plans" / "phase-b" / "handoff-b-p2.md",
+        ROOT / "crates" / "sc-observability" / "tests" / "fixtures" / "bp1-published-v1.2.0-baseline" / "Cargo.toml",
+    )
 
     fixtures = ROOT / "scripts" / "ci" / "fixtures" / "runtime-level-consumer"
     for fixture in (fixtures / "baseline.rs", fixtures / "candidate.rs"):

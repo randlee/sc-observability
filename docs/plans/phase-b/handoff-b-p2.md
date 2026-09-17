@@ -102,8 +102,9 @@ Registry publication and release approval remain deferred to B.7.
 For B.7 only, live mode has no `--stage` argument and rejects local overrides:
 
 ```sh
+candidate_version="$(python3 scripts/ci/_runtime_level_common.py --candidate-version)"
 python3 scripts/ci/validate_runtime_level_registry_consumer.py \
-  --mode live --version 1.3.0
+  --mode live --version "$candidate_version"
 ```
 
 Live mode still requires B.7 to retain registry retrieval/index availability and

@@ -24,6 +24,7 @@ jobs:
       - name: Verify qualification metadata and fixture formatting
         run: |
           python3 scripts/ci/validate_runtime_level_qualification_metadata.py
+          python3 scripts/ci/tests/test_validate_runtime_level_qualification_metadata.py
           rustfmt --check scripts/ci/fixtures/runtime-level-consumer/*.rs
           python3 scripts/ci/tests/test_validate_runtime_level_platform_evidence.py
       - name: Build one immutable candidate stage
