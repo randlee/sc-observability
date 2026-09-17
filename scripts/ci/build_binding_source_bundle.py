@@ -111,6 +111,15 @@ def build(root_manifest,output):
         if pid in closure:return
         closure.add(pid)
         for dependency in nodes[pid]['deps']:visit(dependency['pkg'])
+        # Cargo's active resolve graph omits disabled optional first-party edges.
+        # Bundles must also support the root's later feature/target selections.
+        for dependency in by_id[pid]['dependencies']:
+            if dependency.get('path'):
+                target=(Path(dependency['path'])/'Cargo.toml').resolve()
+                if not target.is_relative_to(source):raise BundleError('BUNDLE_ESCAPING_PATH',str(target))
+                matches=[p['id'] for p in by_id.values() if Path(p['manifest_path']).resolve()==target]
+                if len(matches)!=1:raise BundleError('BUNDLE_MISSING_MEMBER',str(target))
+                visit(matches[0])
     visit(root['id'])
     unpublished=sorted((by_id[pid] for pid in closure if by_id[pid]['source'] is None),key=lambda p:p['name'])
     for package in unpublished:
@@ -146,7 +155,8 @@ def build(root_manifest,output):
     shutil.rmtree(build_target)
     patches='\n'.join(f'{p["name"]} = {{ path = "{p["root"]}" }}' for p in entries)
     dependencies='\n'.join(f'{p["name"]} = "={p["version"]}"' for p in entries)
-    (output/'Cargo.toml').write_text('[package]\nname = "binding-source-consumer"\nversion = "0.0.0"\nedition = "2024"\npublish = false\n\n[workspace]\n\n[dependencies]\n'+dependencies+'\nserde_json = "1"\n\n[patch.crates-io]\n'+patches+'\n')
+    members=json.dumps([p['root'] for p in entries])
+    (output/'Cargo.toml').write_text('[package]\nname = "binding-source-consumer"\nversion = "0.0.0"\nedition = "2024"\npublish = false\n\n[workspace]\nmembers = '+members+'\n\n[dependencies]\n'+dependencies+'\nserde_json = "1"\n\n[patch.crates-io]\n'+patches+'\n')
     (output/'src').mkdir();(output/'src/main.rs').write_text('fn main() { println!("binding source bundle ready"); }\n')
     # Resolve the actual staged layout, then vendor the complete registry closure.
     command(['cargo','generate-lockfile'],output)
