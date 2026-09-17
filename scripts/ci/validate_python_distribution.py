@@ -177,10 +177,12 @@ def build(args) -> None:
             metadata = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
                                               '--format-version', '1'], root))
             resolution = verify_resolution(metadata, root)
+            sandbox.env['PYTHONHOME'] = sys.base_prefix
             native_output = sandbox.run([sandbox.cargo, 'test', '--locked', '--offline'], root)
             native_count = sum(map(int, re.findall(r'test result: ok\. (\d+) passed', native_output)))
             if not native_count:
                 raise DistributionError('native runtime suite executed no tests')
+            del sandbox.env['PYTHONHOME']
             command = [sys.executable, '-m', 'maturin', 'build', '--locked', '--offline', '--release',
                        '--out', str(scratch / 'wheels')]
             if args.platform.startswith('linux'):
@@ -192,12 +194,14 @@ def build(args) -> None:
             linked = linkage(wheels[0], selected, sandbox, scratch)
             # Run the same Rust host example with normal rlib linking; never extension flags.
             sandbox.env['PYTHONPATH'] = str(root / 'python')
+            sandbox.env['PYTHONHOME'] = sys.base_prefix
             embedded = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
                                               '--format-version', '1'], root / 'embedding'))
             verify_resolution(embedded, root)
             verify_embedding_features(embedded)
             sandbox.run([sandbox.cargo, 'run', '--locked', '--offline', '--release'], root / 'embedding')
             del sandbox.env['PYTHONPATH']
+            del sandbox.env['PYTHONHOME']
             negatives = negative_cases(root, scratch, sandbox, metadata)
             record = {'schema_version': 1, 'status': 'passed', 'development_only': source.get('development_only', False), 'source_commit': source['source_commit'],
                       'sdist_sha256': digest(args.sdist), 'platform': args.platform,

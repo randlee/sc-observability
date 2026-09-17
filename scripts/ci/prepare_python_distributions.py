@@ -23,7 +23,7 @@ def run(arguments: list[str], cwd: Path, log: Path) -> None:
         output.flush()
         result = subprocess.run(arguments, cwd=cwd, stdout=output, stderr=subprocess.STDOUT)
     if result.returncode:
-        raise DistributionError(f'command failed ({result.returncode}); see {log}')
+        raise DistributionError(f'command failed ({result.returncode}); see {log}\n' + '\n'.join(log.read_text(errors='replace').splitlines()[-35:]))
 
 
 def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) -> dict:
