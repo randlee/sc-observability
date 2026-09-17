@@ -295,11 +295,14 @@ impl Adapter {
     fn try_log_inner(&self, window: &str, value: Value) -> Result<AdmissionDto, Failure> {
         authorize(&self.policy, window)?;
         schema(&value, "request")?;
-        let request: TryLogRequest = parse(value, &self.policy, "request", "try_log")?;
-        let event = decode_event(
-            serde_json::to_value(request.event)
-                .map_err(|_| invalid("event", "event could not be serialized"))?,
-        )?;
+        let event_value = value
+            .get("event")
+            .cloned()
+            .ok_or_else(|| invalid("event", "event is required"))?;
+        let _request: TryLogRequest = parse(value, &self.policy, "request", "try_log")?;
+        // Decode the original nested value so serde's nullable-field defaults
+        // cannot make an exactly-at-limit request appear oversized.
+        let event = decode_event(event_value)?;
         if !self.policy.allowed_targets.contains(&event.target) {
             return Err(invalid("event.target", "target is not allowed"));
         }
@@ -530,6 +533,36 @@ mod tests {
         });
         assert!(strict_request(&request, "try_log").is_err());
         assert!(schema(&serde_json::json!({"schema_version": 2}), "request").is_err());
+    }
+
+    #[test]
+    fn exact_request_limit_does_not_reject_omitted_nullable_event_fields() {
+        let policy = AdapterPolicy {
+            allowed_window_labels: BTreeSet::from(["main".to_owned()]),
+            allowed_targets: BTreeSet::from(["app".to_owned()]),
+            max_request_bytes: MAX_REQUEST_BYTES as u32,
+            max_depth: MAX_DEPTH as u32,
+            redacted_field_keys: BTreeSet::new(),
+        };
+        let adapter = Adapter::new(Arc::new(IpcBackend), policy).unwrap();
+        let mut request = serde_json::json!({
+            "schema_version": 1,
+            "event": {
+                "schema_version": 1,
+                "level": "info",
+                "target": "app",
+                "action": "test",
+                "message": ""
+            }
+        });
+        let overhead = serde_json::to_vec(&request).unwrap().len();
+        request["event"]["message"] = serde_json::json!("x".repeat(MAX_REQUEST_BYTES - overhead));
+        assert_eq!(serde_json::to_vec(&request).unwrap().len(), MAX_REQUEST_BYTES);
+        let result = adapter.try_log("main", request);
+        assert!(matches!(
+            result,
+            WireEnvelope::Error { error: Failure::Internal { .. }, .. }
+        ));
     }
 
     #[test]
