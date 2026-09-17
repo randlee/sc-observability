@@ -456,31 +456,37 @@ impl Coordinator {
 pub(crate) fn core(
     mut config: sc_observability::LoggerConfig,
 ) -> Result<Arc<Coordinator>, Failure> {
-    Coordinator::create(|| {
-        let stamp = dto::EventStamp {
-            service: config.service_name.clone(),
-            timestamp: native::Timestamp::now_utc(),
-            identity: match &config.process_identity {
-                native::ProcessIdentityPolicy::Auto => native::ProcessIdentity::default(),
-                native::ProcessIdentityPolicy::Fixed { hostname, pid } => native::ProcessIdentity {
-                    hostname: hostname.clone(),
-                    pid: *pid,
-                },
-                native::ProcessIdentityPolicy::Resolver(resolver) => {
-                    resolver.resolve().map_err(|e| {
-                        conversion::context(e.diagnostic(), conversion::Kind::Unavailable)
-                    })?
-                }
+    let stamp = dto::EventStamp {
+        service: config.service_name.clone(),
+        timestamp: native::Timestamp::now_utc(),
+        identity: match &config.process_identity {
+            native::ProcessIdentityPolicy::Auto => native::ProcessIdentity::default(),
+            native::ProcessIdentityPolicy::Fixed { hostname, pid } => native::ProcessIdentity {
+                hostname: hostname.clone(),
+                pid: *pid,
             },
-        };
-        // Resolve once: native diagnostic events and producer events share the
-        // exact host-selected identity even when a resolver is stateful.
-        config.process_identity = native::ProcessIdentityPolicy::Fixed {
-            hostname: stamp.identity.hostname.clone(),
-            pid: stamp.identity.pid,
-        };
-        let (logger, level) = Logger::new_with_level_owner_typed(config)
-            .map_err(|e| conversion::context(e.diagnostic(), conversion::Kind::Unavailable))?;
+            native::ProcessIdentityPolicy::Resolver(resolver) => resolver
+                .resolve()
+                .map_err(|e| conversion::context(e.diagnostic(), conversion::Kind::Unavailable))?,
+        },
+    };
+    // Resolve once: native diagnostic events and producer events share the
+    // exact host-selected identity even when a resolver is stateful.
+    config.process_identity = native::ProcessIdentityPolicy::Fixed {
+        hostname: stamp.identity.hostname.clone(),
+        pid: stamp.identity.pid,
+    };
+    let (logger, level) = Logger::new_with_level_owner_typed(config)
+        .map_err(|e| conversion::context(e.diagnostic(), conversion::Kind::Unavailable))?;
+    core_from_parts(stamp, logger, level)
+}
+
+pub(crate) fn core_from_parts(
+    stamp: dto::EventStamp,
+    logger: Logger<Running>,
+    level: LevelOwner,
+) -> Result<Arc<Coordinator>, Failure> {
+    Coordinator::create(|| {
         let health = dto::from_core_health(logger.health(), logger.level_state())?;
         Ok((
             Backend::Core {
