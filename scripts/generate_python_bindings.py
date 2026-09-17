@@ -60,7 +60,7 @@ def generate(schema):
         if name.endswith('DecimalDto'):aliases.append(f'{pname}: TypeAlias = int');continue
         choices=node.get('oneOf',[node])
         if not all(choice.get('type')=='object' and 'properties' in choice for choice in choices):
-            # String aliases avoid forward evaluation while preserving recursive stubs.
+            # Annotations are postponed so recursive records share these aliases.
             aliases.append(f'{pname}: TypeAlias = {typ(node)}');continue
         variant_names=[]
         for i,choice in enumerate(choices):
@@ -70,7 +70,14 @@ def generate(schema):
             declarations.extend(['@dataclass(frozen=True, kw_only=True)',f'class {cname}:'])
             for key,prop in choice['properties'].items():
                 if key=='kind' and 'const' in prop:declarations.append(f'    kind: {typ(prop)} = field(default={prop["const"]!r}, init=False)')
-                else:declarations.append(f'    {key}: {typ(prop)}')
+                else:
+                    suffix=''
+                    if key not in choice.get('required',[]):
+                        default=prop.get('default')
+                        if isinstance(default,dict):suffix=' = field(default_factory=lambda: MappingProxyType({}))'
+                        elif isinstance(default,list):suffix=' = ()'
+                        else:suffix=' = '+repr(default)
+                    declarations.append(f'    {key}: {typ(prop)}'+suffix)
             declarations.append('')
         if 'oneOf' in node:aliases.append(f'{pname}: TypeAlias = '+(' | '.join(variant_names)))
     for name,node in schema['x-sc-entrypoints'].items():

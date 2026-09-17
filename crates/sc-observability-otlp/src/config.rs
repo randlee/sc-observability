@@ -58,6 +58,12 @@ impl OtlpEndpoint {
     }
 
     /// Creates a validated OTLP endpoint with a neutral initialization failure.
+    ///
+    /// Emptiness is checked against the trimmed value, but the original,
+    /// untrimmed `value` is stored: this is intentional retained legacy
+    /// behavior, not an oversight, and both the legacy [`OtlpEndpoint::new`]
+    /// and this typed constructor preserve it identically. Callers that
+    /// require a trimmed endpoint must trim before calling.
     pub fn new_typed(value: impl Into<String>) -> Result<Self, InitFailure> {
         let value = value.into();
         if value.trim().is_empty() {
@@ -106,8 +112,21 @@ impl TryFrom<String> for OtlpEndpoint {
 }
 
 /// Validated authorization header value for OTLP transport.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` redacts the wrapped credential (`AuthHeader("<redacted>")`) so it
+/// never leaks through `{:?}` formatting of this type or any config that
+/// embeds it (for example [`OtelConfig`] and [`TelemetryConfig`]). The raw
+/// value remains reachable only through the explicit, documented
+/// [`AuthHeader::as_str`], `Display`, and `AsRef<str>` accessors — callers
+/// that need the credential must opt in via one of those, not `{:?}`.
+#[derive(Clone, PartialEq, Eq)]
 pub struct AuthHeader(String);
+
+impl fmt::Debug for AuthHeader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("AuthHeader").field(&"<redacted>").finish()
+    }
+}
 
 impl AuthHeader {
     /// Creates a validated non-empty authorization header value.
@@ -124,6 +143,12 @@ impl AuthHeader {
     }
 
     /// Creates a validated authorization header with a neutral initialization failure.
+    ///
+    /// Emptiness is checked against the trimmed value, but the original,
+    /// untrimmed `value` is stored: this is intentional retained legacy
+    /// behavior, not an oversight, and both the legacy [`AuthHeader::new`]
+    /// and this typed constructor preserve it identically. Callers that
+    /// require a trimmed header value must trim before calling.
     pub fn new_typed(value: impl Into<String>) -> Result<Self, InitFailure> {
         let value = value.into();
         if value.trim().is_empty() {
@@ -333,45 +358,15 @@ impl TelemetryConfigBuilder {
         self
     }
 
-    /// Disables log export.
-    #[expect(
-        dead_code,
-        reason = "builder keeps explicit crate-local disable toggles for test and internal composition paths"
-    )]
-    pub(crate) fn disable_logs(mut self) -> Self {
-        self.logs = None;
-        self
-    }
-
     /// Enables trace export with the provided batch policy.
     pub fn enable_traces(mut self, config: TracesConfig) -> Self {
         self.traces = Some(config);
         self
     }
 
-    /// Disables trace export.
-    #[expect(
-        dead_code,
-        reason = "builder keeps explicit crate-local disable toggles for test and internal composition paths"
-    )]
-    pub(crate) fn disable_traces(mut self) -> Self {
-        self.traces = None;
-        self
-    }
-
     /// Enables metric export with the provided batch policy.
     pub fn enable_metrics(mut self, config: MetricsConfig) -> Self {
         self.metrics = Some(config);
-        self
-    }
-
-    /// Disables metric export.
-    #[expect(
-        dead_code,
-        reason = "builder keeps explicit crate-local disable toggles for test and internal composition paths"
-    )]
-    pub(crate) fn disable_metrics(mut self) -> Self {
-        self.metrics = None;
         self
     }
 
@@ -578,6 +573,52 @@ mod tests {
         let header = AuthHeader::try_from("Bearer abc123".to_string()).expect("valid header");
         assert_eq!(header.as_ref(), "Bearer abc123");
         assert_eq!(header.to_string(), "Bearer abc123");
+    }
+
+    #[test]
+    fn endpoint_and_auth_header_legacy_and_typed_constructors_preserve_surrounding_whitespace() {
+        // Leading whitespace before the endpoint's required http(s):// scheme is
+        // rejected by the scheme check itself (unrelated to this finding); this
+        // covers the actually-reachable retained-whitespace case, trailing space.
+        let padded_endpoint = "https://otel.example.internal  ";
+        let legacy = OtlpEndpoint::new(padded_endpoint).expect("legacy endpoint");
+        let typed = OtlpEndpoint::new_typed(padded_endpoint).expect("typed endpoint");
+        assert_eq!(legacy.as_str(), padded_endpoint);
+        assert_eq!(typed.as_str(), padded_endpoint);
+
+        let padded_header = "  Bearer abc123  ";
+        let legacy_header = AuthHeader::new(padded_header).expect("legacy header");
+        let typed_header = AuthHeader::new_typed(padded_header).expect("typed header");
+        assert_eq!(legacy_header.as_str(), padded_header);
+        assert_eq!(typed_header.as_str(), padded_header);
+    }
+
+    #[test]
+    fn auth_header_debug_redacts_but_display_and_as_str_retain_the_raw_credential() {
+        let secret = "Bearer super-secret-token";
+        let header = AuthHeader::try_from(secret.to_string()).expect("valid header");
+
+        let debug_output = format!("{header:?}");
+        assert!(
+            !debug_output.contains(secret),
+            "Debug output must never contain the raw credential: {debug_output}"
+        );
+        assert_eq!(debug_output, "AuthHeader(\"<redacted>\")");
+
+        // Display and as_str remain the documented explicit raw-value accessors.
+        assert_eq!(header.to_string(), secret);
+        assert_eq!(header.as_str(), secret);
+
+        let config = OtelConfig {
+            enabled: true,
+            auth_header: Some(header),
+            ..OtelConfig::default()
+        };
+        let config_debug = format!("{config:?}");
+        assert!(
+            !config_debug.contains(secret),
+            "OtelConfig Debug must not leak the auth header credential: {config_debug}"
+        );
     }
 
     #[test]

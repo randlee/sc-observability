@@ -29,3 +29,13 @@ Validation behavior:
   non-`README.md` approval artifact exists
 - `validate_public_api_docs.sh` fails when any approval artifact is missing one
   or more required headings
+
+## B.2 crate-scoped review records
+
+The current qualification uses JSON records with schema_version 1, the exact
+candidate_version, and a crates map keyed by each reviewed package name. Each
+entry needs status `approved`, an actual reviewer, review evidence, `public-api`
+scope and the exact `api_sha256` from the successful per-crate diff report. A
+pending, unrelated, different-version or different-API record does not pass.
+These records govern API review only: they cannot waive tool execution or
+semver failures and do not grant live publication or runtime owner acceptance.

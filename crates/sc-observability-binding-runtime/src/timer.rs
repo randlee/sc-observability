@@ -109,3 +109,11 @@ impl TimerService {
         lock(&self.heap).len()
     }
 }
+
+#[cfg(test)]
+pub(crate) fn poison_initialization() {
+    let _ = std::panic::catch_unwind(|| {
+        let _guard = TIMER.get_or_init(|| Mutex::new(None)).lock().unwrap();
+        panic!("injected timer initialization poison");
+    });
+}

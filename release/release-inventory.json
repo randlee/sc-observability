@@ -53,5 +53,20 @@
         "cargo search sc-observability-otlp --limit 1 | grep -F 'sc-observability-otlp = \"1.1.0\"'"
       ]
     }
-  ]
+  ],
+  "qualificationCandidate": {
+    "version": "1.4.0",
+    "publication": "pending_B.7",
+    "packages": [
+      "sc-observability-types",
+      "sc-observability",
+      "sc-observe",
+      "sc-observability-otlp",
+      "sc-observability-log-macros",
+      "sc-observability-log"
+    ],
+    "handoff": "docs/plans/phase-b/handoff-b-2.md",
+    "stageManifest": "stage-manifest.json",
+    "qualificationSource": "recorded immutably in each stage manifest; not the final B.7 publication source"
+  }
 }

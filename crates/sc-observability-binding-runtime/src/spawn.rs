@@ -76,4 +76,5 @@ pub(crate) fn wait_live(expected: usize) {
             expected
         );
     }
+    println!("BINDING_HELPERS verified={expected}");
 }

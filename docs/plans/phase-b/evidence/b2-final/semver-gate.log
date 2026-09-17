@@ -1,0 +1,7 @@
+sc-observability-types: passed (baseline=1.2.0, exit=0, log=sc-observability-types-semver.log)
+sc-observability: passed (baseline=1.2.0, exit=0, log=sc-observability-semver.log)
+sc-observe: passed (baseline=1.2.0, exit=0, log=sc-observe-semver.log)
+sc-observability-otlp: passed (baseline=1.2.0, exit=0, log=sc-observability-otlp-semver.log)
+sc-observability-log-macros: initial-release-no-published-baseline (baseline=None, exit=0, log=sc-observability-log-macros-semver.log)
+sc-observability-log: initial-release-no-published-baseline (baseline=None, exit=0, log=sc-observability-log-semver.log)
+public API semver validation passed

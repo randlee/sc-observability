@@ -1,0 +1,140 @@
+Removed items from the public API
+=================================
+(none)
+
+Changed items in the public API
+===============================
+(none)
+
+Added items to the public API
+=============================
++pub use sc_observability::AdmissionOutcome
++pub use sc_observability::ChangeDiagnostic
++pub use sc_observability::LevelChange
++pub use sc_observability::LevelChangeError
++pub use sc_observability::LevelChangeSource
++pub use sc_observability::LevelState
++pub use sc_observability::LogFailure
++pub use sc_observability::OperationDiagnostic
++pub use sc_observability::TryLogFailure
++pub mod sc_observability::typed
++pub trait sc_observability::typed::TypedLogSink: core::marker::Send + core::marker::Sync
++pub fn sc_observability::typed::TypedLogSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
++pub fn sc_observability::typed::TypedLogSink::health(&self) -> sc_observability_types::health::SinkHealth
++pub fn sc_observability::typed::TypedLogSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
++impl sc_observability::typed::TypedLogSink for sc_observability::ConsoleSink
++impl sc_observability::typed::TypedLogSink for sc_observability::ConsoleSink
++pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
++pub fn sc_observability::ConsoleSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
++pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
++pub fn sc_observability::ConsoleSink::health(&self) -> sc_observability_types::health::SinkHealth
++pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
++pub fn sc_observability::ConsoleSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
++impl sc_observability::typed::TypedLogSink for sc_observability::JsonlFileSink
++impl sc_observability::typed::TypedLogSink for sc_observability::JsonlFileSink
++pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
++pub fn sc_observability::JsonlFileSink::flush(&self) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
++pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
++pub fn sc_observability::JsonlFileSink::health(&self) -> sc_observability_types::health::SinkHealth
++pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
++pub fn sc_observability::JsonlFileSink::write(&self, &sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogSinkFailure>
++pub fn sc_observability::typed::legacy_sink(alloc::sync::Arc<dyn sc_observability::typed::TypedLogSink>) -> alloc::sync::Arc<dyn sc_observability::LogSink>
++pub fn sc_observability::typed::typed_sink(alloc::sync::Arc<dyn sc_observability::LogSink>) -> alloc::sync::Arc<dyn sc_observability::typed::TypedLogSink>
++impl core::convert::From<sc_observability::LogError> for sc_observability_types::typed::LogFailure
++pub fn sc_observability_types::typed::LogFailure::from(sc_observability::LogError) -> Self
++impl core::convert::From<sc_observability_types::typed::LogFailure> for sc_observability::LogError
++pub fn sc_observability::LogError::from(sc_observability_types::typed::LogFailure) -> Self
++impl core::convert::From<sc_observability::TryLogError> for sc_observability_types::typed::TryLogFailure
++pub fn sc_observability_types::typed::TryLogFailure::from(sc_observability::TryLogError) -> Self
++impl core::convert::From<sc_observability_types::typed::TryLogFailure> for sc_observability::TryLogError
++pub fn sc_observability::TryLogError::from(sc_observability_types::typed::TryLogFailure) -> Self
++pub struct sc_observability::LevelOwner
++impl sc_observability::LevelOwner
++pub fn sc_observability::LevelOwner::elevate_level(&mut self, sc_observability_types::level::LevelFilter, sc_observability_types::level::LevelChangeSource) -> core::result::Result<sc_observability_types::level::LevelChange, sc_observability_types::level::LevelChangeError>
++pub fn sc_observability::LevelOwner::reset_level(&mut self, sc_observability_types::level::LevelChangeSource) -> core::result::Result<sc_observability_types::level::LevelChange, sc_observability_types::level::LevelChangeError>
++pub fn sc_observability::Logger<sc_observability::Running>::builder_typed(sc_observability::LoggerConfig) -> core::result::Result<sc_observability::LoggerBuilder, sc_observability_types::typed::InitFailure>
++pub fn sc_observability::Logger<sc_observability::Running>::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
++pub fn sc_observability::Logger<sc_observability::Running>::log_typed(&self, sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::LogFailure>
++pub fn sc_observability::Logger<sc_observability::Running>::new_typed(sc_observability::LoggerConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
++pub fn sc_observability::Logger<sc_observability::Running>::new_with_level_owner(sc_observability::LoggerConfig) -> core::result::Result<(Self, sc_observability::LevelOwner), sc_observability_types::errors::InitError>
++pub fn sc_observability::Logger<sc_observability::Running>::new_with_level_owner_typed(sc_observability::LoggerConfig) -> core::result::Result<(Self, sc_observability::LevelOwner), sc_observability_types::typed::InitFailure>
++pub fn sc_observability::Logger<sc_observability::Running>::try_log_typed(&self, sc_observability_types::events::LogEvent) -> core::result::Result<(), sc_observability_types::typed::TryLogFailure>
++pub fn sc_observability::Logger<sc_observability::Running>::try_log_with_outcome(&self, sc_observability_types::events::LogEvent) -> core::result::Result<sc_observability_types::level::AdmissionOutcome, sc_observability::TryLogError>
++pub fn sc_observability::Logger<sc_observability::Running>::try_log_with_outcome_typed(&self, sc_observability_types::events::LogEvent) -> core::result::Result<sc_observability_types::level::AdmissionOutcome, sc_observability_types::typed::TryLogFailure>
++pub fn sc_observability::Logger<State>::level_state(&self) -> sc_observability_types::level::LevelState
++pub fn sc_observability::LoggerBuilder::build_typed(self) -> core::result::Result<sc_observability::Logger<sc_observability::Running>, sc_observability_types::typed::InitFailure>
++pub fn sc_observability::LoggerBuilder::build_with_level_owner(self) -> core::result::Result<(sc_observability::Logger<sc_observability::Running>, sc_observability::LevelOwner), sc_observability_types::errors::InitError>
++pub fn sc_observability::LoggerBuilder::build_with_level_owner_typed(self) -> core::result::Result<(sc_observability::Logger<sc_observability::Running>, sc_observability::LevelOwner), sc_observability_types::typed::InitFailure>
++pub fn sc_observability::LoggerBuilder::new_typed(sc_observability::LoggerConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
+
+ Documenting sc-observability v1.2.0
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.12s
+warning: unused workspace dependency `sc-observability-log`
+  --> Cargo.toml:31:1
+   |
+31 | sc-observability-log = { version = "1.4.0", path = "crates/sc-observability-log" }
+   | ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `cargo::unused_workspace_dependencies` is set to `warn` by default
+help: consider removing the workspace dependency `sc-observability-log`
+warning: unused workspace dependency `sc-observability-log-consumer-check`
+  --> Cargo.toml:33:1
+   |
+33 | sc-observability-log-consumer-check = { version = "1.4.0", path = "crates/sc-observability-log-consumer-check" }
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: consider removing the workspace dependency `sc-observability-log-consumer-check`
+warning: unused workspace dependency `sc-observability-otlp`
+  --> Cargo.toml:30:1
+   |
+30 | sc-observability-otlp = { version = "1.4.0", path = "crates/sc-observability-otlp" }
+   | ^^^^^^^^^^^^^^^^^^^^^
+   |
+help: consider removing the workspace dependency `sc-observability-otlp`
+warning: workspace (manifest) generated 3 warnings
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability-otlp/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability-otlp` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability-types/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability-types` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observe/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observe` (manifest) generated 1 warning
+ Documenting sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.13s
