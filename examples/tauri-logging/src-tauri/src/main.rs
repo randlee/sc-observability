@@ -50,14 +50,42 @@ impl OwnerState {
             return Err(closed_level_change());
         };
         drop(owner);
-        let result = guard.shutdown(timeout).map_err(|error| Failure::Internal {
-            diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
-                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
-                error.to_string(),
-            )),
-        });
+        let result = guard.shutdown(timeout).map_err(shutdown_failure);
         let _ = self.control.wait_stopped(Duration::ZERO);
         result
+    }
+}
+
+fn shutdown_failure(error: sc_observability_log::ShutdownError) -> Failure {
+    use sc_observability_log::ShutdownError;
+
+    match error {
+        ShutdownError::TimedOut { timeout } => {
+            let diagnostic = sc_observability_dto::Diagnostic {
+                at: sc_observability_types::Timestamp::now_utc().to_string(),
+                code: sc_observability_log::ShutdownError::TimedOut { timeout }
+                    .code()
+                    .as_str()
+                    .into(),
+                message: format!("shutdown did not complete within {timeout:?}"),
+                remediation: sc_observability_log::ShutdownError::TimedOut { timeout }
+                    .remediation()
+                    .into(),
+            };
+            Failure::Timeout {
+                diagnostic: Box::new(diagnostic),
+                operation: "shutdown".into(),
+            }
+        }
+        ShutdownError::FinalFlush { diagnostic } => Failure::Io {
+            diagnostic: Box::new(diagnostic.into()),
+        },
+        ShutdownError::HelperSpawn { diagnostic } => Failure::Unavailable {
+            diagnostic: Box::new(diagnostic.into()),
+        },
+        ShutdownError::HelperLost { diagnostic } => Failure::Internal {
+            diagnostic: Box::new(diagnostic.into()),
+        },
     }
 }
 
