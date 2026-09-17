@@ -596,13 +596,14 @@ mod tests {
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .unwrap();
         let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();
+        let url = window.url().unwrap();
         let response = tauri::test::get_ipc_response(
             &window,
             tauri::webview::InvokeRequest {
                 cmd: "sc_observability_health".into(),
                 callback: tauri::ipc::CallbackFn(0),
                 error: tauri::ipc::CallbackFn(1),
-                url: "tauri://localhost".parse().unwrap(),
+                url,
                 body: serde_json::json!({"request": {"schema_version": 1}}).into(),
                 headers: Default::default(),
                 invoke_key: tauri::test::INVOKE_KEY.to_owned(),
