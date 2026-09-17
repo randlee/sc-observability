@@ -25,3 +25,5 @@ Each row requires separate implementation and verification evidence. No row is w
 
 | B3-C01: preserve source-lock registry versions/checksums across staging | implemented | passed | reviewed-source.lock closure equals staged Cargo.lock; changed selection regression returns BUNDLE_REGISTRY_DRIFT |
 | B3-C02: mandatory first-party versions and normalized requirement equivalence | implemented | passed | direct/workspace path-only regressions return BUNDLE_MISSING_VERSION; normalized drift returns BUNDLE_REQUIREMENT_DRIFT |
+
+| B3-C03: generated Python3.10 runtime and strict stub compatibility | implemented | passed | NoReturn, dataclass_field alias; actual CPython3.10.21 import and strict mypy2.3.1 target3.10 |

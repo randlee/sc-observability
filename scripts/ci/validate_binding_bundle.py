@@ -45,6 +45,8 @@ def main():
             if line.startswith('worktree '):deny.add(Path(line[9:]).resolve())
         prefix=isolated_prefix(external,sorted(deny))
         env={k:v for k,v in os.environ.items() if not k.startswith(('CARGO_','RUST'))}
+        (external/'tmp').mkdir()
+        env['TMPDIR']=str(external/'tmp')
         env.update(CARGO_HOME=str(external/'cargo-home'),CARGO_TARGET_DIR=str(external/'target'),RUSTC=str(rustc),RUSTDOC=str(cargo.with_name('rustdoc')),PATH=str(cargo.parent)+os.pathsep+os.environ['PATH'])
         commands=[]
         def execute(command):
