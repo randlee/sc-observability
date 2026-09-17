@@ -1,6 +1,6 @@
 ---
 id: B.1e-migration-prep
-status: in_progress
+status: complete
 branch: feature/phase-b-1e-migration-prep
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1e-migration-prep
 parent: feature/phase-b-1d-telemetry-prep

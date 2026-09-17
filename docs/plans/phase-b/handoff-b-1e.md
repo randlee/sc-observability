@@ -4,12 +4,18 @@
 
 - Branch: `feature/phase-b-1e-migration-prep`
 - Parent: `feature/phase-b-1d-telemetry-prep`
-- Parent merged before final preparation: `4b1df6a8f05875db0bac9e2eac1742f1eb056390`
+- Parent merged before final preparation: `b76495c05be5e7d59a5c3ed8d383763c9de68aee`
 - Authoritative sources: `sprint-b-1e-error-adoption.md` and
   `error-api-contract.md`
 - Scope: exact migration guide, warning inventory and adoption-skill routing
 - Explicitly out of scope: deprecation attributes, ordinary production
   migration, copied crates, workspace/CI changes, publication and removal
+
+Scoped completeness PASS: aobs accepted C01/C02/C03 and the final
+`build_typed` guidance at `a0f7c1f4186e4630b8cc7f70c5c3b63497b9344b`
+(`01M2Q5Y03GC0JHXD57X0M613ND`). This closeout commit records only the scoped
+documentation preparation; full B.1e warning activation and validator/fixture
+work remain pending.
 
 The task plan was missing at dispatch; `task-b-1e-migration-prep.md` now
 records that mismatch and the scoped work. The final telemetry parent removed
@@ -45,6 +51,9 @@ explicit typed-module adapters with unchanged legacy registration methods.
   including `sc_observability::typed::{legacy_sink,typed_sink}`. The guide's
   complete kind-matching, success/failure and projector-adapter examples were
   compiled and run by the temporary downstream consumer below.
+- C02 final fixed: the primary migration reference now states exactly that
+  `LoggerBuilder::build` remains supported and infallible, while
+  `build_typed` is the recommendation for recoverable startup errors.
 
 The guide's current API paths were checked by:
 
@@ -74,8 +83,8 @@ wrapper-warning rows plus 20 mapped method rows, and no
 `TelemetryProjectors::with_typed_*` source symbols. Formatting, the full
 workspace test/doctest suite, docs consistency, and semver validation passed.
 
-The final handoff must append the exact output/commit and the result of the
-second-pass inventory. Full B.1e remains open until the downstream Cargo
+The final handoff records the exact accepted source head and second-pass
+inventory above. Full B.1e remains open until the downstream Cargo
 fixtures, JSON warning validator, all-four-crate checks and independent QA
 pass are delivered by their owners.
 

@@ -57,6 +57,9 @@ blocking admission or `try_log_typed` for nonblocking admission.
 `Telemetry::emit_span`, and `Telemetry::emit_metric` also remain supported
 because no typed counterpart exists for those public boundaries.
 
+`LoggerBuilder::build` remains supported and infallible; use `build_typed` for
+recoverable startup errors.
+
 The corrected telemetry projector helper has no `with_typed_*` builders. Keep
 the unchanged registration methods and adapt typed implementations explicitly:
 
