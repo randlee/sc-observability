@@ -1,7 +1,7 @@
 ---
 id: B.P2
-status: incomplete
-qa_status: not_dispatched
+status: complete
+qa_status: pending_independent_qa
 merge_status: unmerged
 branch: fix/B-P2-consumer-integrity
 worktree: /Users/randlee/github/sc-observability-worktrees/fix/B-P2-consumer-integrity
@@ -81,9 +81,9 @@ ambient workspace resolution, missing platform results and skipped assertions.
 Record actual qualification commands and checksums in the handoff. B.7 must
 later run a separate registry-only consumer after real publication.
 
-The fix layer remains **incomplete** until the retained macOS, Linux, and
-Windows workflow artifacts pass the aggregate platform-evidence validator.
-Local output is useful implementation evidence, not a replacement for that
+Implementation is complete: retained macOS, Linux, and Windows workflow
+artifacts passed the aggregate platform-evidence validator. Independent QA and
+merge remain separate pending states; local output alone was never treated as
 platform qualification.
 
 For all Phase B sprint metadata, `status: complete` means implementation

@@ -49,6 +49,13 @@ passed. The stage is built once, then the exact bytes are downloaded by every
 platform job. This is implementation evidence, not an independent QA approval;
 `quality-mgr` owns that verdict.
 
+Final integrity qualification is retained in
+[run 35175763793](https://github.com/randlee/sc-observability/actions/runs/35175763793):
+the shared stage, macOS/Ubuntu/Windows consumers, and aggregate provenance all
+passed with the consumer verifying fresh archive extraction before Cargo. Raw
+local valid/mutation logs and SHA index are retained at
+`/Users/randlee/.config/atm/share/sc-obs/bp2-evidence/consumer-integrity-862d03c/`.
+
 Runtime-contract acceptance is owner-deferred to Phase B completion (ATM
 `01M2PKX8R4J4VJP5V6RRV9JJPB`); see
 [`phase-b-runtime-level.md`](../../api-approvals/phase-b-runtime-level.md).
