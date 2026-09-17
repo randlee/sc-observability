@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import importlib
 import json
 import math
 from pathlib import Path
-from typing import Generic, Literal, Mapping, TypeAlias, TypeVar
+from typing import Any, Generic, Literal, Mapping, Protocol, TypeAlias, TypeVar, cast
 
 from . import generated
 
@@ -34,6 +35,20 @@ class Err:
 
 
 Result: TypeAlias = Ok[T] | Err
+
+
+class _NativeReadable(Protocol):
+    def log(self, payload: str) -> str: ...
+    def query(self, payload: str) -> str: ...
+    def health(self) -> str: ...
+    def flush(self, timeout: str) -> str: ...
+
+
+class _NativeOwned(_NativeReadable, Protocol):
+    def shutdown(self, timeout: str) -> str: ...
+    def wait_stopped(self, timeout: str) -> str: ...
+    def elevate_level(self, level: str, source: str) -> str: ...
+    def reset_level(self, source: str) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -129,72 +144,95 @@ def _normalised_key(key: str) -> str:
     )
 
 
-def _value(value: object, path: str, seen: set[int], depth: int = 0) -> dict[str, object]:
+def _value(value: object, path: str, seen: set[int], depth: int = 0) -> Result[dict[str, object]]:
     if depth >= 32:
-        raise ValueError(f"{path}: maximum container depth is 32")
+        return Err(_failure(path, "maximum container depth is 32"))
     if value is None:
-        return {"kind": "null"}
+        return Ok({"kind": "null"})
     if type(value) is bool:
-        return {"kind": "boolean", "value": value}
+        return Ok({"kind": "boolean", "value": value})
     if isinstance(value, str):
-        return {"kind": "string", "value": value}
+        return Ok({"kind": "string", "value": value})
     if type(value) is int:
         if not -(2**63) <= value < 2**64:
-            raise ValueError(f"{path}: integer is outside the shared wire range")
-        return {"kind": "integer", "value": str(value)}
+            return Err(_failure(path, "integer is outside the shared wire range"))
+        return Ok({"kind": "integer", "value": str(value)})
     if type(value) is float:
         if not math.isfinite(value):
-            raise ValueError(f"{path}: float must be finite")
-        return {"kind": "float", "value": value}
+            return Err(_failure(path, "float must be finite"))
+        return Ok({"kind": "float", "value": value})
     if isinstance(value, (tuple, list)):
         identity = id(value)
         if identity in seen:
-            raise ValueError(f"{path}: cyclic container")
+            return Err(_failure(path, "cyclic container"))
         seen.add(identity)
         try:
-            return {
-                "kind": "array",
-                "value": [_value(item, f"{path}[{index}]", seen, depth + 1) for index, item in enumerate(value)],
-            }
+            array_values: list[object] = []
+            for index, item in enumerate(value):
+                child = _value(item, f"{path}[{index}]", seen, depth + 1)
+                if isinstance(child, Err):
+                    return child
+                array_values.append(child.value)
+            return Ok({"kind": "array", "value": array_values})
         finally:
             seen.remove(identity)
     if isinstance(value, Mapping):
         identity = id(value)
         if identity in seen:
-            raise ValueError(f"{path}: cyclic container")
+            return Err(_failure(path, "cyclic container"))
         seen.add(identity)
         try:
-            encoded: dict[str, object] = {}
-            for key, item in value.items():
+            object_values: dict[str, object] = {}
+            try:
+                entries = tuple(value.items())
+            except Exception as error:  # foreign Mapping implementation
+                return Err(_internal(f"could not inspect mapping input: {error}"))
+            for key, item in entries:
                 if not isinstance(key, str):
-                    raise ValueError(f"{path}: object keys must be strings")
+                    return Err(_failure(path, "object keys must be strings"))
                 if _normalised_key(key).startswith("sc_observability.binding."):
-                    raise ValueError(f"{path}.{key}: reserved binding provenance field")
-                encoded[key] = _value(item, f"{path}.{key}", seen, depth + 1)
-            return {"kind": "object", "value": encoded}
+                    return Err(_failure(f"{path}.{key}", "reserved binding provenance field"))
+                child = _value(item, f"{path}.{key}", seen, depth + 1)
+                if isinstance(child, Err):
+                    return child
+                object_values[key] = child.value
+            return Ok({"kind": "object", "value": object_values})
         finally:
             seen.remove(identity)
-    raise ValueError(f"{path}: unsupported value type {type(value).__name__}")
+    return Err(_failure(path, f"unsupported value type {type(value).__name__}"))
 
 
-def _event(event: LogEvent) -> dict[str, object]:
+def _event(event: object) -> Result[dict[str, object]]:
+    if not isinstance(event, LogEvent):
+        return Err(_failure("event", "expected LogEvent"))
     if event.level not in ("trace", "debug", "info", "warn", "error"):
-        raise ValueError("level: unsupported level")
+        return Err(_failure("level", "unsupported level"))
     trace = None
     if event.trace is not None:
+        if not isinstance(event.trace, TraceContext):
+            return Err(_failure("trace", "expected TraceContext"))
         trace = {
             "trace_id": event.trace.trace_id,
             "span_id": event.trace.span_id,
             "parent_span_id": event.trace.parent_span_id,
         }
     fields: dict[str, object] = {}
-    for key, value in event.fields.items():
+    if not isinstance(event.fields, Mapping):
+        return Err(_failure("fields", "expected a string-keyed mapping"))
+    try:
+        entries = tuple(event.fields.items())
+    except Exception as error:  # foreign Mapping implementation
+        return Err(_internal(f"could not inspect event fields: {error}"))
+    for key, value in entries:
         if not isinstance(key, str):
-            raise ValueError("fields: object keys must be strings")
+            return Err(_failure("fields", "object keys must be strings"))
         if _normalised_key(key).startswith("sc_observability.binding."):
-            raise ValueError(f"fields.{key}: reserved binding provenance field")
-        fields[key] = _value(value, f"fields.{key}", set())
-    return {
+            return Err(_failure(f"fields.{key}", "reserved binding provenance field"))
+        encoded = _value(value, f"fields.{key}", set())
+        if isinstance(encoded, Err):
+            return encoded
+        fields[key] = encoded.value
+    return Ok({
         "schema_version": 1,
         "level": event.level,
         "target": event.target,
@@ -205,15 +243,25 @@ def _event(event: LogEvent) -> dict[str, object]:
         "correlation_id": event.correlation_id,
         "outcome": event.outcome,
         "fields": fields,
-    }
+    })
 
 
-def _query(query: LogQuery) -> dict[str, object]:
+def _query(query: object) -> Result[dict[str, object]]:
+    if not isinstance(query, LogQuery):
+        return Err(_failure("query", "expected LogQuery"))
     if type(query.limit) is not int or not 1 <= query.limit <= 1000:
-        raise ValueError("limit: expected an integer in 1..1000")
+        return Err(_failure("limit", "expected an integer in 1..1000"))
     if query.order not in ("oldest_first", "newest_first"):
-        raise ValueError("order: unsupported query order")
-    return {
+        return Err(_failure("order", "unsupported query order"))
+    matches: list[dict[str, object]] = []
+    for index, match in enumerate(query.field_matches):
+        if not isinstance(match, FieldMatch):
+            return Err(_failure(f"field_matches[{index}]", "expected FieldMatch"))
+        encoded = _value(match.value, f"field_matches[{index}].value", set())
+        if isinstance(encoded, Err):
+            return encoded
+        matches.append({"field": match.field, "value": encoded.value})
+    return Ok({
         "schema_version": 1,
         "service": query.service,
         "levels": list(query.levels),
@@ -223,19 +271,16 @@ def _query(query: LogQuery) -> dict[str, object]:
         "correlation_id": query.correlation_id,
         "since": query.since,
         "until": query.until,
-        "field_matches": [
-            {"field": match.field, "value": _value(match.value, f"field_matches[{index}].value", set())}
-            for index, match in enumerate(query.field_matches)
-        ],
+        "field_matches": matches,
         "limit": query.limit,
         "order": query.order,
-    }
+    })
 
 
-def _timeout(timeout_ms: object) -> str:
+def _timeout(timeout_ms: object) -> Result[str]:
     if type(timeout_ms) is not int or not 0 <= timeout_ms <= 60_000:
-        raise ValueError("timeout_ms: expected integer milliseconds in 0..60000")
-    return json.dumps(timeout_ms)
+        return Err(_failure("timeout_ms", "expected integer milliseconds in 0..60000"))
+    return Ok(json.dumps(timeout_ms))
 
 
 def _decode(name: str, payload: str) -> Result[object]:
@@ -245,8 +290,8 @@ def _decode(name: str, payload: str) -> Result[object]:
     except (TypeError, ValueError, json.JSONDecodeError) as error:
         return Err(_internal(f"invalid native result: {error}"))
     if getattr(decoded, "kind", None) == "error":
-        return Err(decoded.error)
-    return Ok(decoded.value)
+        return Err(cast(generated.Failure, getattr(decoded, "error")))
+    return Ok(getattr(decoded, "value"))
 
 
 def _decode_control(payload: str) -> Result[None]:
@@ -256,69 +301,94 @@ def _decode_control(payload: str) -> Result[None]:
         if wire.get("kind") == "ok" and wire.get("value") is None:
             return Ok(None)
         if wire.get("kind") == "error":
-            return Err(generated.from_wire("OutputFailure", wire["error"]))
+            return Err(cast(generated.Failure, generated.from_wire("OutputFailure", wire["error"])))
     except (AttributeError, TypeError, ValueError, json.JSONDecodeError) as error:
         return Err(_internal(f"invalid native control result: {error}"))
     return Err(_internal("invalid native control result shape"))
 
 
+def _typed(value: Result[object]) -> Result[T]:
+    if isinstance(value, Err):
+        return value
+    return Ok(cast(T, value.value))
+
+
 class Logger:
     """An independently owned logger; it is never process-global."""
 
-    def __init__(self, native: object) -> None:
+    def __init__(self, native: _NativeOwned) -> None:
         self._native = native
 
     def log(self, event: LogEvent) -> Result[generated.Admission]:
-        try:
-            payload = json.dumps(_event(event), separators=(",", ":"))
-        except (TypeError, ValueError) as error:
-            return Err(_failure("event", str(error)))
-        return _decode("OutputResultDtoAdmissionDto", self._native.log(payload))
+        encoded = _event(event)
+        if isinstance(encoded, Err):
+            return encoded
+        return _typed(_decode("OutputResultDtoAdmissionDto", self._native.log(json.dumps(encoded.value, separators=(",", ":")))))
 
     def query(self, query: LogQuery) -> Result[generated.LogSnapshot]:
-        try:
-            payload = json.dumps(_query(query), separators=(",", ":"))
-        except (TypeError, ValueError) as error:
-            return Err(_failure("query", str(error)))
-        return _decode("OutputResultDtoLogSnapshotDto", self._native.query(payload))
+        encoded = _query(query)
+        if isinstance(encoded, Err):
+            return encoded
+        return _typed(_decode("OutputResultDtoLogSnapshotDto", self._native.query(json.dumps(encoded.value, separators=(",", ":")))))
 
     def health(self) -> Result[generated.LogHealth]:
-        return _decode("OutputResultDtoLogHealthDto", self._native.health())
+        return _typed(_decode("OutputResultDtoLogHealthDto", self._native.health()))
 
     def flush(self, timeout_ms: int = 2000) -> Result[generated.Completion]:
-        try:
-            timeout = _timeout(timeout_ms)
-        except ValueError as error:
-            return Err(_failure("timeout_ms", str(error)))
-        return _decode("OutputResultDtoCompletionDto", self._native.flush(timeout))
+        timeout = _timeout(timeout_ms)
+        if isinstance(timeout, Err):
+            return timeout
+        return _typed(_decode("OutputResultDtoCompletionDto", self._native.flush(timeout.value)))
 
     def shutdown(self, timeout_ms: int = 2000) -> Result[generated.LogHealth]:
-        try:
-            timeout = _timeout(timeout_ms)
-        except ValueError as error:
-            return Err(_failure("timeout_ms", str(error)))
-        return _decode("OutputResultDtoLogHealthDto", self._native.shutdown(timeout))
+        timeout = _timeout(timeout_ms)
+        if isinstance(timeout, Err):
+            return timeout
+        return _typed(_decode("OutputResultDtoLogHealthDto", self._native.shutdown(timeout.value)))
 
     def wait_stopped(self, timeout_ms: int = 2000) -> Result[generated.LogHealth]:
-        try:
-            timeout = _timeout(timeout_ms)
-        except ValueError as error:
-            return Err(_failure("timeout_ms", str(error)))
-        return _decode("OutputResultDtoLogHealthDto", self._native.wait_stopped(timeout))
+        timeout = _timeout(timeout_ms)
+        if isinstance(timeout, Err):
+            return timeout
+        return _typed(_decode("OutputResultDtoLogHealthDto", self._native.wait_stopped(timeout.value)))
 
     def elevate_level(
         self, level: LevelFilter, source: LevelChangeSource = "application"
     ) -> Result[generated.LevelChange]:
-        return _decode("OutputResultDtoLevelChangeDto", self._native.elevate_level(level, source))
+        return _typed(_decode("OutputResultDtoLevelChangeDto", self._native.elevate_level(level, source)))
 
     def reset_level(
         self, source: LevelChangeSource = "application"
     ) -> Result[generated.LevelChange]:
-        return _decode("OutputResultDtoLevelChangeDto", self._native.reset_level(source))
+        return _typed(_decode("OutputResultDtoLevelChangeDto", self._native.reset_level(source)))
 
 
 class AttachedLogger:
     """A non-owning view of a Rust host logger (implemented by the host bridge)."""
+
+    def __init__(self, native: _NativeReadable) -> None:
+        self._native = native
+
+    def log(self, event: LogEvent) -> Result[generated.Admission]:
+        encoded = _event(event)
+        if isinstance(encoded, Err):
+            return encoded
+        return _typed(_decode("OutputResultDtoAdmissionDto", self._native.log(json.dumps(encoded.value, separators=(",", ":")))))
+
+    def query(self, query: LogQuery) -> Result[generated.LogSnapshot]:
+        encoded = _query(query)
+        if isinstance(encoded, Err):
+            return encoded
+        return _typed(_decode("OutputResultDtoLogSnapshotDto", self._native.query(json.dumps(encoded.value, separators=(",", ":")))))
+
+    def health(self) -> Result[generated.LogHealth]:
+        return _typed(_decode("OutputResultDtoLogHealthDto", self._native.health()))
+
+    def flush(self, timeout_ms: int = 2000) -> Result[generated.Completion]:
+        timeout = _timeout(timeout_ms)
+        if isinstance(timeout, Err):
+            return timeout
+        return _typed(_decode("OutputResultDtoCompletionDto", self._native.flush(timeout.value)))
 
 
 def create_logger(config: LoggerConfig) -> Result[Logger]:
@@ -330,8 +400,8 @@ def create_logger(config: LoggerConfig) -> Result[Logger]:
     if not config.log_root or "\x00" in config.log_root:
         return Err(_failure("log_root", "log_root must be nonempty and NUL-free"))
     try:
-        from . import _native
-        native, result = _native.create_owned(
+        native_module = cast(Any, importlib.import_module("sc_observability._native"))
+        native, result = native_module.create_owned(
             json.dumps(
                 {
                     "service": config.service,
@@ -350,18 +420,22 @@ def create_logger(config: LoggerConfig) -> Result[Logger]:
         return decoded
     if native is None:
         return Err(_internal("native factory reported success without a logger"))
-    return Ok(Logger(native))
+    return Ok(Logger(cast(_NativeOwned, native)))
 
 
 def get_host_logger() -> Result[AttachedLogger]:
     """Return a host-attached logger after Rust embedding installs one."""
-    return Err(
-        _unavailable(
-            generated.SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED,
-            "host logger has not been installed in this module",
-            "Install a host backend before requesting an attached logger",
-        )
-    )
+    try:
+        native_module = cast(Any, importlib.import_module("sc_observability._native"))
+        native, result = native_module.get_installed_host_logger()
+    except Exception as error:  # foreign extension import/runtime failure only
+        return Err(_internal(f"native extension unavailable: {error}"))
+    decoded = _decode_control(result)
+    if isinstance(decoded, Err):
+        return decoded
+    if native is None:
+        return Err(_internal("native host factory reported success without a logger"))
+    return Ok(AttachedLogger(cast(_NativeReadable, native)))
 
 
 __all__ = [

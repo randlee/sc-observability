@@ -21,7 +21,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 #[derive(Debug, Deserialize)]
@@ -60,6 +60,12 @@ fn closed_failure(message: impl Into<String>) -> Failure {
             sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
             message,
         )),
+    }
+}
+
+fn unavailable_failure(code: &str, message: impl Into<String>) -> Failure {
+    Failure::Unavailable {
+        diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(code, message)),
     }
 }
 
@@ -144,6 +150,49 @@ struct NativeLogger {
     owned: Mutex<OwnedState>,
 }
 
+/// Module-owned host backend. Its `Arc` survives while any attached Python
+/// handle exists, but it never grants host shutdown or level ownership.
+#[pyclass(frozen)]
+struct HostSlot {
+    backend: Arc<dyn HostLoggingBackend>,
+}
+
+#[pyclass]
+struct NativeAttachedLogger {
+    backend: Arc<dyn HostLoggingBackend>,
+}
+
+fn log_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, event: &str) -> String {
+    let result = parse_value(event, "event")
+        .and_then(sc_observability_dto::decode_event)
+        .and_then(|event: LogEventDto| {
+            py.detach(move || backend.try_log(event, ProducerOrigin::Python))
+        });
+    result_json(result)
+}
+
+fn query_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, query: &str) -> String {
+    let result = parse_value(query, "query")
+        .and_then(sc_observability_dto::decode_query)
+        .and_then(|query: LogQueryDto| {
+            py.detach(move || {
+                let operation = backend.start_query(query)?;
+                operation.wait(Duration::from_millis(2_000))
+            })
+        });
+    result_json(result)
+}
+
+fn flush_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, timeout: &str) -> String {
+    let result = parse_timeout(timeout).and_then(|timeout| {
+        py.detach(move || {
+            let operation = backend.start_flush(timeout)?;
+            operation.wait(timeout)
+        })
+    });
+    result_json(result)
+}
+
 impl NativeLogger {
     fn wait_shutdown(&self, timeout: Duration) -> Result<LogHealthDto, Failure> {
         let operation = {
@@ -176,26 +225,11 @@ impl NativeLogger {
 #[pymethods]
 impl NativeLogger {
     fn log(&self, py: Python<'_>, event: &str) -> String {
-        let result = parse_value(event, "event")
-            .and_then(sc_observability_dto::decode_event)
-            .and_then(|event: LogEventDto| {
-                let backend = self.backend.clone();
-                py.detach(move || backend.try_log(event, ProducerOrigin::Python))
-            });
-        result_json(result)
+        log_backend(Arc::new(self.backend.clone()), py, event)
     }
 
     fn query(&self, py: Python<'_>, query: &str) -> String {
-        let result = parse_value(query, "query")
-            .and_then(sc_observability_dto::decode_query)
-            .and_then(|query: LogQueryDto| {
-                let backend = self.backend.clone();
-                py.detach(move || {
-                    let operation = backend.start_query(query)?;
-                    operation.wait(Duration::from_millis(2_000))
-                })
-            });
-        result_json(result)
+        query_backend(Arc::new(self.backend.clone()), py, query)
     }
 
     fn health(&self) -> String {
@@ -203,14 +237,7 @@ impl NativeLogger {
     }
 
     fn flush(&self, py: Python<'_>, timeout: &str) -> String {
-        let result = parse_timeout(timeout).and_then(|timeout| {
-            let backend = self.backend.clone();
-            py.detach(move || {
-                let operation = backend.start_flush(timeout)?;
-                operation.wait(timeout)
-            })
-        });
-        result_json(result)
+        flush_backend(Arc::new(self.backend.clone()), py, timeout)
     }
 
     fn shutdown(&self, py: Python<'_>, timeout: &str) -> String {
@@ -252,6 +279,25 @@ impl NativeLogger {
     }
 }
 
+#[pymethods]
+impl NativeAttachedLogger {
+    fn log(&self, py: Python<'_>, event: &str) -> String {
+        log_backend(self.backend.clone(), py, event)
+    }
+
+    fn query(&self, py: Python<'_>, query: &str) -> String {
+        query_backend(self.backend.clone(), py, query)
+    }
+
+    fn health(&self) -> String {
+        result_json(self.backend.health())
+    }
+
+    fn flush(&self, py: Python<'_>, timeout: &str) -> String {
+        flush_backend(self.backend.clone(), py, timeout)
+    }
+}
+
 #[pyfunction]
 fn create_owned(py: Python<'_>, config: &str) -> PyResult<(Option<Py<NativeLogger>>, String)> {
     match logger_config(config).and_then(create_core_backend) {
@@ -272,10 +318,83 @@ fn create_owned(py: Python<'_>, config: &str) -> PyResult<(Option<Py<NativeLogge
     }
 }
 
+/// Installs a host-owned backend once for this concrete PyO3 module instance.
+///
+/// The module state owns one `Arc`; each attached handle clones it. Repeated
+/// installation cannot replace the first backend and returns tagged data to
+/// the Rust embedding caller instead of relying on Python exceptions.
+pub fn install_host_logger(
+    module: &Bound<'_, PyModule>,
+    backend: Arc<dyn HostLoggingBackend>,
+) -> Result<(), Failure> {
+    let installed = module
+        .hasattr("_sc_observability_host_backend")
+        .map_err(|error| {
+            internal_failure(format!("could not inspect module host state: {error}"))
+        })?;
+    if installed {
+        return Err(unavailable_failure(
+            sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED,
+            "a host logger is already installed for this module",
+        ));
+    }
+    let slot = Py::new(module.py(), HostSlot { backend }).map_err(|error| {
+        internal_failure(format!("could not allocate module host state: {error}"))
+    })?;
+    module
+        .add("_sc_observability_host_backend", slot)
+        .map_err(|error| internal_failure(format!("could not install module host state: {error}")))
+}
+
+#[pyfunction]
+fn get_installed_host_logger(
+    py: Python<'_>,
+) -> PyResult<(Option<Py<NativeAttachedLogger>>, String)> {
+    let module = match PyModule::import(py, "sc_observability._native") {
+        Ok(module) => module,
+        Err(error) => {
+            return Ok((
+                None,
+                result_json::<()>(Err(internal_failure(format!(
+                    "could not access native module: {error}"
+                )))),
+            ));
+        }
+    };
+    let slot = match module.getattr("_sc_observability_host_backend") {
+        Ok(slot) => slot,
+        Err(_) => {
+            return Ok((
+                None,
+                result_json::<()>(Err(unavailable_failure(
+                    sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED,
+                    "host logger has not been installed in this module",
+                ))),
+            ));
+        }
+    };
+    let slot = match slot.extract::<Py<HostSlot>>() {
+        Ok(slot) => slot,
+        Err(error) => {
+            return Ok((
+                None,
+                result_json::<()>(Err(internal_failure(format!(
+                    "module host state has an invalid type: {error}"
+                )))),
+            ));
+        }
+    };
+    let backend = slot.borrow(py).backend.clone();
+    let logger = Py::new(py, NativeAttachedLogger { backend })?;
+    Ok((Some(logger), result_json::<()>(Ok(()))))
+}
+
 /// Native module used only by the high-level Python facade.
-#[pymodule]
-fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pymodule(gil_used = true)]
+pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeLogger>()?;
+    module.add_class::<NativeAttachedLogger>()?;
     module.add_function(wrap_pyfunction!(create_owned, module)?)?;
+    module.add_function(wrap_pyfunction!(get_installed_host_logger, module)?)?;
     Ok(())
 }
