@@ -398,3 +398,48 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(get_installed_host_logger, module)?)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED;
+
+    #[test]
+    fn host_installation_is_immutable_per_module() {
+        Python::initialize();
+        let passed = Python::attach(|py| {
+            let module = match PyModule::new(py, "_b4_host_install_test") {
+                Ok(module) => module,
+                Err(_) => return false,
+            };
+            let service = match ServiceName::new("b4-host-install-test") {
+                Ok(service) => service,
+                Err(_) => return false,
+            };
+            let mut config = sc_observability::LoggerConfig::default_for(
+                service,
+                std::env::temp_dir().join("sc-observability-b4-host-install-test"),
+            );
+            config.enable_console_sink = false;
+            let (owner, backend) = match create_core_backend(config) {
+                Ok(pair) => pair,
+                Err(_) => return false,
+            };
+            let first: Arc<dyn HostLoggingBackend> = Arc::new(backend.clone());
+            let second: Arc<dyn HostLoggingBackend> = Arc::new(backend);
+            let first_install = install_host_logger(&module, first).is_ok();
+            let duplicate_is_rejected = matches!(
+                install_host_logger(&module, second),
+                Err(Failure::Unavailable { diagnostic })
+                    if diagnostic.code == SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED
+            );
+            let retained_slot = match module.getattr("_sc_observability_host_backend") {
+                Ok(slot) => slot.extract::<Py<HostSlot>>().is_ok(),
+                Err(_) => false,
+            };
+            let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
+            first_install && duplicate_is_rejected && retained_slot && stopped
+        });
+        assert!(passed);
+    }
+}

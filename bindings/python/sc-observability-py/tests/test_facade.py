@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any, cast
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "python"))
 
-from sc_observability import Err, LogEvent, LoggerConfig, Ok, create_logger
+from sc_observability import AttachedLogger, Err, LogEvent, Logger, LoggerConfig, LogQuery, Ok, create_logger
 from sc_observability import _event, _timeout
 
 
@@ -57,3 +58,57 @@ def test_cycle_and_wrong_event_type_are_tagged_validation_results() -> None:
     wrong_type = _event(object())
     assert isinstance(wrong_type, Err)
     assert wrong_type.error.code == "SC_OBSERVABILITY_BINDING_INVALID_INPUT"
+
+
+class _NeverNative:
+    """Makes an unexpected public-wrapper dispatch immediately visible."""
+
+    def log(self, payload: str) -> str:
+        raise AssertionError(f"native log was called with {payload}")
+
+    def query(self, payload: str) -> str:
+        raise AssertionError(f"native query was called with {payload}")
+
+    def health(self) -> str:
+        raise AssertionError("native health was called")
+
+    def flush(self, timeout: str) -> str:
+        raise AssertionError(f"native flush was called with {timeout}")
+
+    def shutdown(self, timeout: str) -> str:
+        raise AssertionError(f"native shutdown was called with {timeout}")
+
+    def wait_stopped(self, timeout: str) -> str:
+        raise AssertionError(f"native wait_stopped was called with {timeout}")
+
+    def elevate_level(self, level: str, source: str) -> str:
+        raise AssertionError(f"native elevate_level was called with {level}/{source}")
+
+    def reset_level(self, source: str) -> str:
+        raise AssertionError(f"native reset_level was called with {source}")
+
+
+def test_public_input_failures_are_tagged_before_native_dispatch() -> None:
+    owned = Logger(_NeverNative())
+    attached = AttachedLogger(_NeverNative())
+    forged_event = LogEvent(
+        level="info",
+        target="python.test",
+        action="emit",
+        fields={"sc_observability::binding::language": "forged"},
+    )
+
+    rejected = (
+        owned.log(forged_event),
+        attached.log(forged_event),
+        owned.query(cast(Any, object())),
+        attached.query(cast(Any, object())),
+        owned.flush(True),
+        attached.flush(True),
+        owned.shutdown(-1),
+        owned.wait_stopped(60_001),
+        owned.elevate_level(cast(Any, "invalid")),
+        owned.elevate_level("info", cast(Any, "invalid")),
+        owned.reset_level(cast(Any, "invalid")),
+    )
+    assert all(isinstance(result, Err) for result in rejected)

@@ -21,6 +21,9 @@ Level: TypeAlias = Literal["trace", "debug", "info", "warn", "error"]
 LevelFilter: TypeAlias = Literal["off", "error", "warn", "info", "debug", "trace"]
 LevelChangeSource: TypeAlias = Literal["application", "user_request", "diagnostic_session"]
 
+_LEVEL_FILTERS = frozenset(("off", "error", "warn", "info", "debug", "trace"))
+_LEVEL_CHANGE_SOURCES = frozenset(("application", "user_request", "diagnostic_session"))
+
 
 @dataclass(frozen=True)
 class Ok(Generic[T]):
@@ -283,6 +286,18 @@ def _timeout(timeout_ms: object) -> Result[str]:
     return Ok(json.dumps(timeout_ms))
 
 
+def _level_filter(level: object) -> Result[str]:
+    if not isinstance(level, str) or level not in _LEVEL_FILTERS:
+        return Err(_failure("level", "unsupported level filter"))
+    return Ok(level)
+
+
+def _level_change_source(source: object) -> Result[str]:
+    if not isinstance(source, str) or source not in _LEVEL_CHANGE_SOURCES:
+        return Err(_failure("source", "unsupported level change source"))
+    return Ok(source)
+
+
 def _decode(name: str, payload: str) -> Result[object]:
     try:
         wire = json.loads(payload)
@@ -355,12 +370,28 @@ class Logger:
     def elevate_level(
         self, level: LevelFilter, source: LevelChangeSource = "application"
     ) -> Result[generated.LevelChange]:
-        return _typed(_decode("OutputResultDtoLevelChangeDto", self._native.elevate_level(level, source)))
+        validated_level = _level_filter(level)
+        if isinstance(validated_level, Err):
+            return validated_level
+        validated_source = _level_change_source(source)
+        if isinstance(validated_source, Err):
+            return validated_source
+        return _typed(
+            _decode(
+                "OutputResultDtoLevelChangeDto",
+                self._native.elevate_level(validated_level.value, validated_source.value),
+            )
+        )
 
     def reset_level(
         self, source: LevelChangeSource = "application"
     ) -> Result[generated.LevelChange]:
-        return _typed(_decode("OutputResultDtoLevelChangeDto", self._native.reset_level(source)))
+        validated_source = _level_change_source(source)
+        if isinstance(validated_source, Err):
+            return validated_source
+        return _typed(
+            _decode("OutputResultDtoLevelChangeDto", self._native.reset_level(validated_source.value))
+        )
 
 
 class AttachedLogger:
