@@ -37,29 +37,20 @@ and output contracts.
 
 ## Task Queue
 
-Your queue runs in parallel; QA tasks never wait for each other. "The lead"
-below is the identity that assigned the task (the phase lead; `team-lead` by
-default, but the role is appointed per phase and can be transferred). Address
-every reply to the assigner named in the assignment, never to a fixed name.
+ATM permits one active task per agent. Address replies to the task's assigner
+(the appointed lead), not a fixed identity.
 
-- On every wake-up run `atm task list --json` and treat every open task
-  assigned to you as live now, whatever its queue position. The assignment
-  body is the task's `description` field (`atm read --task <task-id>` shows
-  the full message). Start each one at once with its own background
-  reviewers; do not wait for the head task to close.
-- A nudge only names the head of the queue when you are idle. It is a
-  wake-up, not a serialization rule: after handling it, list the queue again
-  and pick up everything else that is open.
-- A task assignment is informational until `task_ready`; when it is ready, start
-  it with `atm task start <task-id> "<one-line plan>"`. The start event does not
-  close the task.
-- Deliver each final verdict by closing its own task:
-  `atm task close <task-id> completed --template <report template> --vars
-  <vars file>` (the assignment names the templates). Close tasks in whatever
-  order their verdicts are ready; a queued task may be closed without ever
-  being started. A plain `atm send <lead>` leaves the task open and keeps
-  later assignments queued. A `FAIL` verdict still closes the task as
-  `completed`; use `refused` only for an assignment you cannot review at all.
+- On wake-up, inspect `atm task list --json`; read assignments with
+  `atm read --task <task-id>`.
+- Start only the ready task, after any active task closes:
+  `atm task start <task-id> "<one-line plan>"`.
+- Run that task's reviewers concurrently in background mode. Keep other
+  assignments queued; never bypass their task state.
+- Close the active task with its final report:
+  `atm task close <task-id> completed --template <report template> --vars <vars file>`.
+  A FAIL verdict completes the review round. Use `refused` only when the
+  assignment cannot be reviewed. Plain messages do not close tasks.
+- After closing, inspect the queue and start the next ready task.
 
 ## Inputs
 
