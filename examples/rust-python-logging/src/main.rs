@@ -4,7 +4,11 @@
 //! interpreter initialization. It never loads a wheel or exchanges a Rust
 //! trait object through a dynamic-library boundary.
 
+mod b5_context;
+
 extern crate _native as binding;
+
+mod async_conformance;
 
 use binding::{_native as native_module, install_host_logger};
 use pyo3::prelude::*;
@@ -15,6 +19,17 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 fn main() -> PyResult<()> {
+    if let Some(mode) =
+        std::env::args().find_map(|arg| arg.strip_prefix("--b6-finalize=").map(str::to_owned))
+    {
+        match async_conformance::finalize(&mode) {
+            Ok(()) => std::process::exit(0),
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        }
+    }
     pyo3::append_to_inittab!(native_module);
     Python::initialize();
     Python::attach(|py| {
@@ -65,7 +80,10 @@ fn main() -> PyResult<()> {
                 "Rust host cannot observe attached backend health",
             ));
         }
+        b5_context::verify(py, &backend)?;
         drop(owner);
+        b5_context::after_stop(py)?;
+        async_conformance::run(py)?;
         Ok(())
     })
 }

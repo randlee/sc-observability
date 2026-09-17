@@ -146,6 +146,7 @@ struct OwnedState {
 
 #[pyclass]
 struct NativeLogger {
+    observer_identity: Py<NativeObserverIdentity>,
     backend: CoreLoggerBackend,
     owned: Mutex<OwnedState>,
 }
@@ -154,12 +155,59 @@ struct NativeLogger {
 /// handle exists, but it never grants host shutdown or level ownership.
 #[pyclass(frozen)]
 struct HostSlot {
+    observer_identity: Py<NativeObserverIdentity>,
     backend: Arc<dyn HostLoggingBackend>,
 }
 
 #[pyclass]
 struct NativeAttachedLogger {
+    observer_identity: Py<NativeObserverIdentity>,
     backend: Arc<dyn HostLoggingBackend>,
+}
+
+// Opaque Python-local identity; never a pointer/integer handle or capability.
+// Stored only by Python wrapper/module state, never native workers.
+#[pyclass(frozen, weakref)]
+struct NativeObserverIdentity {
+    count: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[pymethods]
+impl NativeObserverIdentity {
+    fn reserve(&self) -> Option<NativeObserverPermit> {
+        use std::sync::atomic::Ordering;
+        self.count
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                (count < 64).then_some(count + 1)
+            })
+            .ok()?;
+        Some(NativeObserverPermit {
+            count: self.count.clone(),
+            active: std::sync::atomic::AtomicBool::new(true),
+        })
+    }
+}
+
+#[pyclass(frozen)]
+struct NativeObserverPermit {
+    count: Arc<std::sync::atomic::AtomicUsize>,
+    active: std::sync::atomic::AtomicBool,
+}
+
+#[pymethods]
+impl NativeObserverPermit {
+    fn release(&self) {
+        use std::sync::atomic::Ordering;
+        if self.active.swap(false, Ordering::SeqCst) {
+            self.count.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+}
+
+impl Drop for NativeObserverPermit {
+    fn drop(&mut self) {
+        self.release();
+    }
 }
 
 // This transport holds only native shared completion; it never registers a
@@ -184,7 +232,12 @@ fn start_flush_backend(
     py: Python<'_>,
     timeout: &str,
 ) -> (Option<Py<NativeFlushOperation>>, String) {
-    let operation = parse_timeout(timeout).and_then(|timeout| backend.start_flush(timeout));
+    let operation = parse_timeout(timeout).and_then(|timeout| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            backend.start_flush(timeout)
+        }))
+        .unwrap_or_else(|_| Err(internal_failure("native flush start panicked")))
+    });
     match operation {
         Ok(operation) => match Py::new(py, NativeFlushOperation { operation }) {
             Ok(operation) => (Some(operation), result_json::<()>(Ok(()))),
@@ -259,8 +312,8 @@ impl NativeLogger {
 
 #[pymethods]
 impl NativeLogger {
-    fn observer_key(&self) -> usize {
-        std::ptr::from_ref(self) as usize
+    fn observer_key(&self, py: Python<'_>) -> Py<NativeObserverIdentity> {
+        self.observer_identity.clone_ref(py)
     }
 
     fn start_flush(
@@ -328,8 +381,8 @@ impl NativeLogger {
 
 #[pymethods]
 impl NativeAttachedLogger {
-    fn observer_key(&self) -> usize {
-        Arc::as_ptr(&self.backend).cast::<()>() as usize
+    fn observer_key(&self, py: Python<'_>) -> Py<NativeObserverIdentity> {
+        self.observer_identity.clone_ref(py)
     }
 
     fn start_flush(
@@ -364,6 +417,12 @@ fn create_owned(py: Python<'_>, config: &str) -> PyResult<(Option<Py<NativeLogge
             let logger = Py::new(
                 py,
                 NativeLogger {
+                    observer_identity: Py::new(
+                        py,
+                        NativeObserverIdentity {
+                            count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                        },
+                    )?,
                     backend,
                     owned: Mutex::new(OwnedState {
                         owner,
@@ -397,9 +456,21 @@ pub fn install_host_logger(
             "a host logger is already installed for this module",
         ));
     }
-    let slot = Py::new(module.py(), HostSlot { backend }).map_err(|error| {
-        internal_failure(format!("could not allocate module host state: {error}"))
-    })?;
+    let observer_identity = Py::new(
+        module.py(),
+        NativeObserverIdentity {
+            count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        },
+    )
+    .map_err(|error| internal_failure(format!("could not allocate observer identity: {error}")))?;
+    let slot = Py::new(
+        module.py(),
+        HostSlot {
+            observer_identity,
+            backend,
+        },
+    )
+    .map_err(|error| internal_failure(format!("could not allocate module host state: {error}")))?;
     module
         .add("_sc_observability_host_backend", slot)
         .map_err(|error| internal_failure(format!("could not install module host state: {error}")))
@@ -443,9 +514,40 @@ fn get_installed_host_logger(
             ));
         }
     };
-    let backend = slot.borrow(py).backend.clone();
-    let logger = Py::new(py, NativeAttachedLogger { backend })?;
+    let state = slot.borrow(py);
+    let backend = state.backend.clone();
+    let observer_identity = state.observer_identity.clone_ref(py);
+    drop(state);
+    let logger = Py::new(
+        py,
+        NativeAttachedLogger {
+            observer_identity,
+            backend,
+        },
+    )?;
     Ok((Some(logger), result_json::<()>(Ok(()))))
+}
+
+// Validation-only bridge for Python scopes/handler setup. It creates no logger
+// and performs no admission; the shared conversion owns every native constraint.
+#[pyfunction]
+fn _validate_event(payload: &str) -> String {
+    let checked = std::panic::catch_unwind(|| {
+        let value = sc_observability_dto::decode_event(parse_value(payload, "event")?)?;
+        let service = ServiceName::new("python.validation")
+            .map_err(|_| internal_failure("invalid private validation service"))?;
+        sc_observability_dto::to_core_event(
+            value,
+            sc_observability_dto::EventStamp {
+                service,
+                timestamp: sc_observability_types::Timestamp::now_utc(),
+                identity: sc_observability_types::ProcessIdentity::default(),
+            },
+        )
+        .map(|_| ())
+    })
+    .unwrap_or_else(|_| Err(internal_failure("native input validation panicked")));
+    result_json(checked)
 }
 
 /// Native module used only by the high-level Python facade.
@@ -454,6 +556,7 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeLogger>()?;
     module.add_class::<NativeFlushOperation>()?;
     module.add_class::<NativeAttachedLogger>()?;
+    module.add_function(wrap_pyfunction!(_validate_event, module)?)?;
     module.add_function(wrap_pyfunction!(create_owned, module)?)?;
     module.add_function(wrap_pyfunction!(get_installed_host_logger, module)?)?;
     Ok(())

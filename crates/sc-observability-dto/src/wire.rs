@@ -166,7 +166,8 @@ pub enum PathDto {
 /// Version-one ValueDto wire value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-input-strict" = true)))]
 pub enum ValueDto {
     Null {},
     Boolean { value: bool },
@@ -189,7 +190,7 @@ pub enum RemediationDto {
 /// Version-one TraceContextDto wire record.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
-#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-input-strict" = true)))]
 pub struct TraceContextDto {
     /// trace id.
     pub trace_id: String,
@@ -738,8 +739,16 @@ pub enum ResultDto<T> {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum WireEnvelope<T> {
-    Ok { schema_version: u32, value: T },
-    Error { schema_version: u32, error: Failure },
+    Ok {
+        #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+        schema_version: u32,
+        value: T,
+    },
+    Error {
+        #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+        schema_version: u32,
+        error: Failure,
+    },
 }
 
 /// Version-one TryLogRequest wire record.

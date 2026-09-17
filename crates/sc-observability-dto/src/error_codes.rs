@@ -49,8 +49,16 @@ pub const SC_OBSERVABILITY_BINDING_CANCELLED: &str = "SC_OBSERVABILITY_BINDING_C
 pub const SC_OBSERVABILITY_PY_HANDLER_REENTRANT: &str = "SC_OBSERVABILITY_PY_HANDLER_REENTRANT";
 /// Inspect the retained status and restore the affected host or client.
 pub const SC_OBSERVABILITY_BINDING_INTERNAL: &str = "SC_OBSERVABILITY_BINDING_INTERNAL";
+/// Enter and close each scope once in LIFO order on its originating thread and task.
+pub const SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID: &str =
+    "SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID";
 /// Complete ordered binding diagnostic registry.
 pub const REGISTRY: &[ErrorEntry] = &[
+    ErrorEntry {
+        code: SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID,
+        kind: "validation",
+        remediation: "Enter and close each scope once in LIFO order on its originating thread and task",
+    },
     ErrorEntry {
         code: SC_OBSERVABILITY_BINDING_INVALID_INPUT,
         kind: "validation",

@@ -93,7 +93,11 @@ class ContextScope:
             if self._state != "inactive":
                 self._last = _scope_failure("Scope can be entered only once while inactive")
                 return self._last
-            stack = _STACK.get()
+            try:
+                stack = _STACK.get()
+            except Exception:
+                self._last = Err(_internal("Context state could not be read"))
+                return self._last
             if len(stack) >= 64:
                 self._last = _scope_failure("At most 64 context scopes may be active")
                 return self._last
@@ -121,10 +125,15 @@ class ContextScope:
             if self._state == "closed":
                 self._last = Ok(ContextClosed())
                 return self._last
-            stack = _STACK.get()
-            task = _task()
+            try:
+                stack = _STACK.get()
+                task = _task()
+            except Exception:
+                self._last = Err(_internal("Context state could not be read"))
+                return self._last
             expected_task = self._task_ref() if self._task_ref is not None else None
             if (self._state != "active" or self._thread is not threading.current_thread()
+                    or (self._task_ref is not None and expected_task is None)
                     or task is not expected_task or not stack or stack[-1].scope is not self
                     or self._token is None):
                 self._last = _scope_failure("Scope must close in LIFO order on its originating thread and task")
@@ -147,28 +156,39 @@ class ContextScope:
 def bind_context(*, request_id: str | None = None, correlation_id: str | None = None,
                  trace: TraceContext | None = None) -> Result[ContextScope]:
     """Validate without emission; return an inactive scope that must be entered."""
-    checked = _validate_event(LogEvent(level="info", target="python.context", action="context.validate",
-                                     request_id=request_id, correlation_id=correlation_id, trace=trace))
-    if isinstance(checked, Err):
-        return checked
-    # TraceContext is frozen; snapshot subclasses too, so no foreign object is retained.
-    owned_trace = None if trace is None else TraceContext(trace.trace_id, trace.span_id, trace.parent_span_id)
-    return Ok(ContextScope(_Values(request_id, correlation_id, owned_trace)))
+    try:
+        # Snapshot foreign subclasses before validation; retain only owned values.
+        if trace is not None and not isinstance(trace, TraceContext):
+            from . import _failure
+            return Err(_failure("trace", "expected TraceContext"))
+        owned_trace = None if trace is None else TraceContext(trace.trace_id, trace.span_id, trace.parent_span_id)
+        checked = _validate_event(LogEvent(level="info", target="python.context", action="context.validate",
+                                         request_id=request_id, correlation_id=correlation_id, trace=owned_trace))
+        if isinstance(checked, Err):
+            return checked
+        return Ok(ContextScope(_Values(request_id, correlation_id, owned_trace)))
+    except Exception:
+        return Err(_internal("Context input snapshot could not complete"))
+
 
 
 def _inherit_event(event: LogEvent) -> Result[LogEvent]:
     """Called by both facade log methods; explicit non-None fields win."""
-    if not isinstance(event, LogEvent):
-        from . import _failure
-        return Err(_failure("event", "expected LogEvent"))
-    stack = _STACK.get()
-    if not stack:
-        return Ok(event)
-    values = stack[-1].values
-    return Ok(replace(event,
-                      request_id=event.request_id if event.request_id is not None else values.request_id,
-                      correlation_id=event.correlation_id if event.correlation_id is not None else values.correlation_id,
-                      trace=event.trace if event.trace is not None else values.trace))
+    try:
+        if not isinstance(event, LogEvent):
+            from . import _failure
+            return Err(_failure("event", "expected LogEvent"))
+        stack = _STACK.get()
+        if not stack:
+            return Ok(event)
+        values = stack[-1].values
+        return Ok(replace(event,
+                          request_id=event.request_id if event.request_id is not None else values.request_id,
+                          correlation_id=event.correlation_id if event.correlation_id is not None else values.correlation_id,
+                          trace=event.trace if event.trace is not None else values.trace))
+    except Exception:
+        return Err(_internal("Context inheritance could not complete"))
+
 
 
 __all__ = ["ContextIdle", "ContextEntered", "ContextClosed", "ContextOutcome", "ContextScope", "bind_context"]

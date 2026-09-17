@@ -480,6 +480,7 @@ occurs. Capture time is boundary UTC unless an original native timestamp exists.
 | `SC_OBSERVABILITY_BINDING_TRANSPORT_UNAVAILABLE` | unavailable | Restore the host connection before submitting a new request |
 | `SC_OBSERVABILITY_BINDING_TIMEOUT` | timeout | Inspect operation status before deciding whether another operation is needed |
 | `SC_OBSERVABILITY_BINDING_CANCELLED` | cancelled | Inspect the saved operation result if confirmation is still needed |
+| `SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID` | validation | Enter and close each scope once in LIFO order on its originating thread and task |
 | `SC_OBSERVABILITY_PY_HANDLER_REENTRANT` | internal | Remove logging calls from handler formatting and error callbacks |
 | `SC_OBSERVABILITY_BINDING_INTERNAL` | internal | Inspect the retained status and restore the affected host or client |
 

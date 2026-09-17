@@ -1,0 +1,15 @@
+[
+ {"id":"missing-event-level","operation":"event","value":{"schema_version":1,"target":"test","action":"emit"},"kind":"validation","code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT"},
+ {"id":"invalid-event-tag","operation":"event","value":{"schema_version":1,"level":"fatal","target":"test","action":"emit"},"kind":"validation","code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT"},
+ {"id":"unsupported-event-version","operation":"event","value":{"schema_version":2,"level":"info","target":"test","action":"emit"},"kind":"unsupported_version","code":"SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION"},
+ {"id":"unknown-event-input","operation":"event","value":{"schema_version":1,"level":"info","target":"test","action":"emit","source":"python"},"kind":"validation","code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT"},
+ {"id":"invalid-decimal-value","operation":"event","value":{"schema_version":1,"level":"info","target":"test","action":"emit","fields":{"n":{"kind":"integer","value":"-0"}}},"kind":"validation","code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT"},
+ {"id":"spoofed-provenance-alias","operation":"event","value":{"schema_version":1,"level":"info","target":"test","action":"emit","fields":{"sc_observability::binding::language":{"kind":"string","value":"python"}}},"kind":"validation","code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT"},
+ {"id":"zero-query-limit","operation":"query","value":{"schema_version":1,"limit":0},"kind":"validation","code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT"},
+ {"id":"reversed-query-bounds","operation":"query","value":{"schema_version":1,"since":"1970-01-02T00:00:00Z","until":"1970-01-01T00:00:00Z"},"kind":"validation","code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT"},
+ {"id":"unknown-level-request","operation":"level","value":{"kind":"reset","source":"user_request"},"kind":"validation","code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT"},
+ {"id":"boolean-timeout","operation":"timeout","value":true,"kind":"validation","code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT"},
+ {"id":"timeout-overflow","operation":"timeout","value":60001,"kind":"validation","code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT"},
+ {"id":"malformed-envelope","operation":"envelope","value":{"schema_version":1,"kind":"ok"},"kind":"validation","code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT"},
+ {"id":"unsupported-envelope","operation":"envelope","value":{"schema_version":2,"kind":"ok","value":{"kind":"accepted"}},"kind":"unsupported_version","code":"SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION"}
+]

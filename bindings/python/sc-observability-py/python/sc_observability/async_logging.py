@@ -49,8 +49,16 @@ class _Operation(Protocol):
     def state(self) -> str | None: ...
 
 
+class _Permit(Protocol):
+    def release(self) -> None: ...
+
+
+class _Identity(Protocol):
+    def reserve(self) -> _Permit | None: ...
+
+
 class _Native(Protocol):
-    def observer_key(self) -> int: ...
+    def observer_key(self) -> object: ...
     def start_flush(self, timeout: str) -> tuple[_Operation | None, str]: ...
 
 
@@ -65,7 +73,10 @@ def _submit(logger: _Logger, event: LogEvent) -> Result[LogReceipt]:
         result = Ok(receipt)
     except Exception:
         return Err(_internal("could not allocate admission receipt"))
-    admitted = logger.log(event)
+    try:
+        admitted = logger.log(event)
+    except Exception:
+        return Err(_internal("could not submit event through the logging boundary"))
     if isinstance(admitted, Err):
         return admitted
     object.__setattr__(state, "admission", admitted.value)
@@ -106,20 +117,23 @@ class _Pool:
 
     def reserve(self, observer: _Observer) -> bool:
         self.reclaim()
-        if len(self.observers) >= 64:
+        observer.permit = observer.identity.reserve()
+        if observer.permit is None:
             return False
         self.observers[id(observer)] = weakref.ref(observer)
         return True
 
 
-# Weak pools do not retain backend wrappers or event loops. CPython's supported
-# GIL builds serialize these bounded, non-awaiting bookkeeping sections.
-_pools: weakref.WeakValueDictionary[int, _Pool] = weakref.WeakValueDictionary()
+# Weak opaque identities retain no backend or loop. Native atomic permits bound
+# capacity across loop threads; native workers never hold these Python objects.
+_pools: weakref.WeakKeyDictionary[object, _Pool] = weakref.WeakKeyDictionary()
 
 
 class _Observer:
-    def __init__(self, pool: _Pool, loop: asyncio.AbstractEventLoop, deadline: float) -> None:
+    def __init__(self, pool: _Pool, identity: _Identity, loop: asyncio.AbstractEventLoop, deadline: float) -> None:
         self.pool = pool
+        self.identity = identity
+        self.permit: _Permit | None = None
         self.loop = weakref.ref(loop)
         self.deadline = deadline
         self.future: asyncio.Future[Result[generated.Completion]] = loop.create_future()
@@ -129,6 +143,8 @@ class _Observer:
 
     def release(self) -> None:
         self.released = True
+        if self.permit is not None:
+            self.permit.release()
         self.pool.observers.pop(id(self), None)
         if self.timer is not None:
             self.timer.cancel()
@@ -178,11 +194,8 @@ async def _flush_async(native: object, timeout_ms: int = 2000) -> Result[generat
         deadline = loop.time() + timeout_ms / 1000
         backend = cast(_Native, native)
         key = backend.observer_key()
-        pool = _pools.get(key)
-        if pool is None:
-            pool = _Pool()
-            _pools[key] = pool
-        observer = _Observer(pool, loop, deadline)
+        pool = _pools.setdefault(key, _Pool())
+        observer = _Observer(pool, cast(_Identity, key), loop, deadline)
         if not pool.reserve(observer):
             return _boundary("queue_full")
         operation, payload = backend.start_flush(timeout.value)

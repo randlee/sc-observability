@@ -319,8 +319,11 @@ dependencies = [
  "pyo3",
  "sc-observability",
  "sc-observability-binding-runtime",
+ "sc-observability-dto",
+ "sc-observability-log",
  "sc-observability-py",
  "sc-observability-types",
+ "serde_json",
 ]
 
 [[package]]

@@ -9,7 +9,7 @@ import threading
 from types import MappingProxyType
 from typing import Literal, Mapping, Union
 
-from . import AttachedLogger, Err, LogEvent, Logger, Ok, Result, _at, _failure, _internal, generated
+from . import AttachedLogger, Err, Level, LogEvent, Logger, Ok, Result, _at, _failure, _internal, generated
 from .context import _validate_event
 
 
@@ -93,7 +93,7 @@ class ObservabilityHandler(logging.Handler):
     """Create with create_handler. emit/flush/close contain foreign failures."""
 
     def __init__(self, logger: Logger | AttachedLogger, level: int, extra_fields: tuple[str, ...]) -> None:
-        self._logger = logger
+        self._logger: Logger | AttachedLogger | None = logger
         self._extra_fields = extra_fields
         self._state_lock = threading.RLock()
         self._active = threading.local()
@@ -125,13 +125,14 @@ class ObservabilityHandler(logging.Handler):
         try:
             with self._state_lock:
                 closed = self._handler_closed
-            if closed:
+                backend = self._logger
+            if closed or backend is None:
                 self._record(_closed(), event=True)
                 return
             if type(record.levelno) is not int:
                 self._record(Err(_failure("level", "LogRecord level must be an integer")), event=True)
                 return
-            level = ("trace" if record.levelno < logging.DEBUG else
+            level: Level = ("trace" if record.levelno < logging.DEBUG else
                      "debug" if record.levelno < logging.INFO else
                      "info" if record.levelno < logging.WARNING else
                      "warn" if record.levelno < logging.ERROR else "error")
@@ -150,7 +151,7 @@ class ObservabilityHandler(logging.Handler):
                 fields["exception"] = record.exc_text
             if record.stack_info:
                 fields["stack"] = (formatter or logging.Formatter()).formatStack(record.stack_info)
-            result = self._logger.log(LogEvent(level=level, target=record.name, action="python.log",
+            result = backend.log(LogEvent(level=level, target=record.name, action="python.log",
                                               message=message, fields=fields))
             if isinstance(result, Err):
                 self._record(result, event=True)
@@ -167,10 +168,11 @@ class ObservabilityHandler(logging.Handler):
         try:
             with self._state_lock:
                 closed = self._handler_closed
-            if closed:
+                backend = self._logger
+            if closed or backend is None:
                 self._record(_closed())
                 return
-            result = self._logger.flush(timeout_ms=2000)
+            result = backend.flush(timeout_ms=2000)
             if isinstance(result, Err):
                 self._record(result)
             elif isinstance(result, Ok) and getattr(result.value, "kind", None) == "completed":
@@ -184,14 +186,20 @@ class ObservabilityHandler(logging.Handler):
         try:
             with self._state_lock:
                 self._handler_closed = True
+                borrowed = self._logger
+                self._logger = None
+            del borrowed  # release borrowed ownership outside bookkeeping locks
             super().close()
             self._record(Ok(HandlerClosed()))
         except Exception:  # logging framework cleanup; borrowed logger is never closed
             self._record(Err(_internal("Python logging handler close failed")))
 
     def health(self) -> Result[HandlerHealth]:
-        with self._state_lock:
-            return Ok(HandlerHealth(MappingProxyType(dict(self._counts)), self._last))
+        try:
+            with self._state_lock:
+                return Ok(HandlerHealth(MappingProxyType(dict(self._counts)), self._last))
+        except Exception:
+            return Err(_internal("Handler health snapshot could not complete"))
 
     def last_result(self) -> Result[HandlerOutcome]:
         with self._state_lock:
@@ -201,11 +209,13 @@ class ObservabilityHandler(logging.Handler):
 def create_handler(logger: Logger | AttachedLogger, *, level: int = logging.NOTSET,
                    extra_fields: tuple[str, ...] = ()) -> Result[ObservabilityHandler]:
     """Construct explicitly; never attach to or change the Python root logger."""
-    if type(level) is not int:
-        return Err(_failure("level", "expected a Python logging integer level"))
-    if not isinstance(extra_fields, tuple) or any(not isinstance(name, str) or not name for name in extra_fields):
-        return Err(_failure("extra_fields", "expected a tuple of nonempty field names"))
     try:
+        if type(level) is not int:
+            return Err(_failure("level", "expected a Python logging integer level"))
+        if not isinstance(extra_fields, tuple) or any(not isinstance(name, str) or not name for name in extra_fields):
+            return Err(_failure("extra_fields", "expected a tuple of nonempty field names"))
+        # Own the selected names; foreign tuple/string behavior cannot recur at emission.
+        extra_fields = tuple(str(name) for name in extra_fields)
         if not callable(getattr(logger, "log", None)) or not callable(getattr(logger, "flush", None)):
             return Err(_failure("logger", "expected a readable logging backend"))
         checked = _validate_event(LogEvent(level="info", target="python.handler", action="handler.validate",

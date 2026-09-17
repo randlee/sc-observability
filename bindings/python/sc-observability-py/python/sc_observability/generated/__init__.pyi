@@ -547,98 +547,98 @@ class InputValueObject:
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelopeOk:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: InputAdmission
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelopeError:
     error: InputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope2Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: InputCompletion
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope2Error:
     error: InputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope3Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: InputDispatch
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope3Error:
     error: InputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope4Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: InputLogSnapshot
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope4Error:
     error: InputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope5Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: InputLogHealth
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope5Error:
     error: InputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope6Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: InputLevelChange
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope6Error:
     error: InputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope7Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: InputClientOutcome
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope7Error:
     error: InputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope8Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: InputClientStatus
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope8Error:
     error: InputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputAdmissionAccepted:
@@ -1181,98 +1181,98 @@ class OutputValueObject:
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelopeOk:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: OutputAdmission
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelopeError:
     error: OutputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope2Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: OutputCompletion
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope2Error:
     error: OutputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope3Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: OutputDispatch
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope3Error:
     error: OutputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope4Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: OutputLogSnapshot
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope4Error:
     error: OutputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope5Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: OutputLogHealth
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope5Error:
     error: OutputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope6Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: OutputLevelChange
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope6Error:
     error: OutputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope7Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: OutputClientOutcome
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope7Error:
     error: OutputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope8Ok:
     kind: Literal['ok'] = field(default='ok', init=False)
-    schema_version: int
+    schema_version: Literal[1]
     value: OutputClientStatus
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope8Error:
     error: OutputFailure
     kind: Literal['error'] = field(default='error', init=False)
-    schema_version: int
+    schema_version: Literal[1]
 
 InputAdmission: TypeAlias = InputAdmissionAccepted | InputAdmissionFiltered
 InputAdmissionOperation: TypeAlias = Literal['log', 'try_log']
@@ -1455,6 +1455,7 @@ WorkerState: TypeAlias = OutputWorkerState
 
 def validate_wire(name: str, value: object) -> None: ...
 def from_wire(name: str, value: object) -> object: ...
+SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID: str
 SC_OBSERVABILITY_BINDING_INVALID_INPUT: str
 SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION: str
 SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE: str

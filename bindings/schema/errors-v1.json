@@ -1,5 +1,10 @@
 [
   {
+    "code": "SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID",
+    "kind": "validation",
+    "remediation": "Enter and close each scope once in LIFO order on its originating thread and task"
+  },
+  {
     "code": "SC_OBSERVABILITY_BINDING_INVALID_INPUT",
     "kind": "validation",
     "remediation": "Correct the named input field and submit a new request"
