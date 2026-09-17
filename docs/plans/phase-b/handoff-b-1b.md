@@ -27,6 +27,8 @@ surfaces, admission/filtering semantics, and bridge API are unchanged.
 - PASS: `cargo fmt --all -- --check`
 - PASS: `cargo clippy --locked -p sc-observability --all-targets --all-features -- -D warnings`
 - PASS: `cargo test --locked -p sc-observability --doc`
+- PASS: `cargo test --locked --workspace --doc`
+- PASS: `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`
 
 The task-plan fixture matrix records the paired legacy/typed and retained
 behavior coverage. The copied bridge regression is pending B.1 source
