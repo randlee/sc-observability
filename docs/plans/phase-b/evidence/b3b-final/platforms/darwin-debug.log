@@ -1,0 +1,330 @@
+
+running 1 test
+
+running 1 test
+BINDING_HELPERS verified=0
+BINDING_CASE_PASS timer_poison
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS cross_logger_cancellation
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_HELPERS verified=4
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS sync_and_async_waiters
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+BINDING_HELPERS verified=0
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS timer_spawn_retry
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS worker1_rollback
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS worker2_rollback
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS worker3_rollback
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS core_start_rollback
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 1 test
+BINDING_HELPERS verified=25
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS concurrent_timer
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS observer_bounds
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS callback_bounds
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS callback_panic
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS slot_ordering
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS bridge_slot_ordering
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS callback_race
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS level_gate_busy
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS core_sink_and_shutdown
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS admission32
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS admission32_close
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS failed_helper
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+2026-09-17T09:45:08.107387Z INFO binding.contract contract.emit 
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS bridge_native_timeout
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+2026-09-17T09:45:08.115504Z INFO binding.contract contract.emit 
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS bridge_external_overlap
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS bridge_churn
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=4
+BINDING_HELPERS verified=1
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS last_handle_teardown
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_HELPERS verified=1
+BINDING_CASE_PASS bridge_observers_callbacks
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 1 test
+BINDING_CASE_PASS native_diagnostic_fidelity
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+
+running 2 tests
+test core_roundtrip_and_surviving_read_handles ... ok
+test bridge_roundtrip_preserves_host_ownership ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 4 tests
+test crates/sc-observability-binding-runtime/src/lib.rs - CoreLoggerBackend (line 60) - compile fail ... ok
+test crates/sc-observability-binding-runtime/src/lib.rs - BridgeControlBackend (line 86) - compile fail ... ok
+test crates/sc-observability-binding-runtime/src/lib.rs - CoreLoggerBackend (line 65) - compile fail ... ok
+test crates/sc-observability-binding-runtime/src/lib.rs - CoreLoggerOwner (line 76) - compile fail ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+[1m[92m   Compiling[0m proc-macro2 v1.0.107
+[1m[92m   Compiling[0m unicode-ident v1.0.26
+[1m[92m   Compiling[0m quote v1.0.47
+[1m[92m   Compiling[0m serde_core v1.0.229
+[1m[92m   Compiling[0m libc v0.2.189
+[1m[92m   Compiling[0m zmij v1.0.23
+[1m[92m   Compiling[0m syn v3.0.6
+[1m[92m   Compiling[0m thiserror v2.0.20
+[1m[92m   Compiling[0m serde v1.0.229
+[1m[92m   Compiling[0m serde_json v1.0.151
+[1m[92m   Compiling[0m deranged v0.5.8
+[1m[92m   Compiling[0m powerfmt v0.2.0
+[1m[92m   Compiling[0m num-conv v0.2.2
+[1m[92m   Compiling[0m itoa v1.0.18
+[1m[92m   Compiling[0m memchr v2.8.3
+[1m[92m   Compiling[0m thiserror-impl v2.0.20
+[1m[92m   Compiling[0m serde_derive v1.0.229
+[1m[92m   Compiling[0m time-core v0.1.9
+[1m[92m   Compiling[0m time v0.3.55
+[1m[92m   Compiling[0m cfg-if v1.0.5
+[1m[92m   Compiling[0m rustversion v1.0.23
+[1m[92m   Compiling[0m syn v2.0.119
+[1m[92m   Compiling[0m getrandom v0.4.3
+[1m[92m   Compiling[0m rustix v1.1.5
+[1m[92m   Compiling[0m sc-observability-types v1.4.0 (/Users/runner/work/sc-observability/sc-observability/crates/sc-observability-types)
+[1m[92m   Compiling[0m hostname v0.4.2
+[1m[92m   Compiling[0m errno v0.3.14
+[1m[92m   Compiling[0m bitflags v2.13.2
+[1m[92m   Compiling[0m log v0.4.34
+[1m[92m   Compiling[0m sc-observability v1.4.0 (/Users/runner/work/sc-observability/sc-observability/crates/sc-observability)
+[1m[92m   Compiling[0m sc-observability-log-macros v1.4.0 (/Users/runner/work/sc-observability/sc-observability/crates/sc-observability-log-macros)
+[1m[92m   Compiling[0m sc-observability-dto v1.4.0 (/Users/runner/work/sc-observability/sc-observability/crates/sc-observability-dto)
+[1m[92m   Compiling[0m sc-observability-log v1.4.0 (/Users/runner/work/sc-observability/sc-observability/crates/sc-observability-log)
+[1m[92m   Compiling[0m arc-swap v1.9.2
+[1m[92m   Compiling[0m fastrand v2.5.0
+[1m[92m   Compiling[0m once_cell v1.21.4
+[1m[92m   Compiling[0m tempfile v3.27.0
+[1m[92m   Compiling[0m sc-observability-binding-runtime v1.4.0 (/Users/runner/work/sc-observability/sc-observability/crates/sc-observability-binding-runtime)
+[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 25.94s
+[1m[92m     Running[0m unittests src/lib.rs (target/debug/deps/sc_observability_binding_runtime-7394c7d7d1432d2e)
+[1m[92m     Running[0m tests/backends.rs (target/debug/deps/backends-1120e158c0cc2950)
+[1m[92m   Doc-tests[0m sc_observability_binding_runtime
+[1m[91merror[E0599][0m[1m: no method named `start_shutdown` found for struct `CoreLoggerBackend` in the current scope[0m
+  [1m[94m--> [0mcrates/sc-observability-binding-runtime/src/lib.rs:63:13
+   [1m[94m|[0m
+[1m[94m63[0m [1m[94m|[0m     backend.start_shutdown();
+   [1m[94m|[0m             [1m[91m^^^^^^^^^^^^^^[0m [1m[91mmethod not found in `CoreLoggerBackend`[0m
+
+[1m[91merror[0m[1m: aborting due to 1 previous error[0m
+
+[1mFor more information about this error, try `rustc --explain E0599`.[0m
+[1m[91merror[E0599][0m[1m: no method named `start_shutdown` found for struct `BridgeControlBackend` in the current scope[0m
+  [1m[94m--> [0mcrates/sc-observability-binding-runtime/src/lib.rs:89:13
+   [1m[94m|[0m
+[1m[94m89[0m [1m[94m|[0m     backend.start_shutdown();
+   [1m[94m|[0m             [1m[91m^^^^^^^^^^^^^^[0m [1m[91mmethod not found in `BridgeControlBackend`[0m
+
+[1m[91merror[0m[1m: aborting due to 1 previous error[0m
+
+[1mFor more information about this error, try `rustc --explain E0599`.[0m
+[1m[91merror[E0599][0m[1m: no method named `reset_level` found for struct `CoreLoggerBackend` in the current scope[0m
+  [1m[94m--> [0mcrates/sc-observability-binding-runtime/src/lib.rs:68:13
+   [1m[94m|[0m
+[1m[94m68[0m [1m[94m|[0m     backend.reset_level(sc_observability_types::LevelChangeSource::Application);
+   [1m[94m|[0m             [1m[91m^^^^^^^^^^^[0m [1m[91mmethod not found in `CoreLoggerBackend`[0m
+
+[1m[91merror[0m[1m: aborting due to 1 previous error[0m
+
+[1mFor more information about this error, try `rustc --explain E0599`.[0m
+[1m[91merror[E0599][0m[1m: no method named `clone` found for struct `CoreLoggerOwner` in the current scope[0m
+  [1m[94m--> [0mcrates/sc-observability-binding-runtime/src/lib.rs:79:27
+   [1m[94m|[0m
+[1m[94m79[0m [1m[94m|[0m     let duplicate = owner.clone();
+   [1m[94m|[0m                           [1m[91m^^^^^[0m [1m[91mmethod not found in `CoreLoggerOwner`[0m
+
+[1m[91merror[0m[1m: aborting due to 1 previous error[0m
+
+[1mFor more information about this error, try `rustc --explain E0599`.[0m

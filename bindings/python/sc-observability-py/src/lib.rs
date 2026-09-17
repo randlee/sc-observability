@@ -20,6 +20,7 @@ use sc_observability_types::{LevelChangeSource, LevelFilter, ServiceName};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -79,6 +80,14 @@ fn result_json<T: Serialize>(value: Result<T, Failure>) -> String {
         Err(_) => {
             r#"{"kind":"error","error":{"kind":"internal","at":"1970-01-01T00:00:00Z","code":"SC_OBSERVABILITY_BINDING_INTERNAL","message":"failed to serialize binding result","remediation":{"kind":"recoverable","steps":["Inspect the retained status and restore the affected host or client"]}}}"#.into()
         }
+    }
+}
+
+/// No Rust panic may cross a public PyO3 call boundary as `PanicException`.
+fn contained_json(call: impl FnOnce() -> String) -> String {
+    match catch_unwind(AssertUnwindSafe(call)) {
+        Ok(result) => result,
+        Err(_) => result_json::<()>(Err(internal_failure("native Python entrypoint panicked"))),
     }
 }
 
@@ -225,96 +234,112 @@ impl NativeLogger {
 #[pymethods]
 impl NativeLogger {
     fn log(&self, py: Python<'_>, event: &str) -> String {
-        log_backend(Arc::new(self.backend.clone()), py, event)
+        contained_json(|| log_backend(Arc::new(self.backend.clone()), py, event))
     }
 
     fn query(&self, py: Python<'_>, query: &str) -> String {
-        query_backend(Arc::new(self.backend.clone()), py, query)
+        contained_json(|| query_backend(Arc::new(self.backend.clone()), py, query))
     }
 
     fn health(&self) -> String {
-        result_json(self.backend.health())
+        contained_json(|| result_json(self.backend.health()))
     }
 
     fn flush(&self, py: Python<'_>, timeout: &str) -> String {
-        flush_backend(Arc::new(self.backend.clone()), py, timeout)
+        contained_json(|| flush_backend(Arc::new(self.backend.clone()), py, timeout))
     }
 
     fn shutdown(&self, py: Python<'_>, timeout: &str) -> String {
-        let result = parse_timeout(timeout).and_then(|timeout| {
-            let operation = self.start_shutdown()?;
-            py.detach(move || operation.wait(timeout))
-        });
-        result_json(result)
+        contained_json(|| {
+            let result = parse_timeout(timeout).and_then(|timeout| {
+                let operation = self.start_shutdown()?;
+                py.detach(move || operation.wait(timeout))
+            });
+            result_json(result)
+        })
     }
 
     fn wait_stopped(&self, py: Python<'_>, timeout: &str) -> String {
-        let result = parse_timeout(timeout)
-            .and_then(|timeout| py.detach(move || self.wait_shutdown(timeout)));
-        result_json(result)
+        contained_json(|| {
+            let result = parse_timeout(timeout)
+                .and_then(|timeout| py.detach(move || self.wait_shutdown(timeout)));
+            result_json(result)
+        })
     }
 
     fn elevate_level(&self, level_value: &str, source_value: &str) -> String {
-        let result = level(level_value).and_then(|level_value| {
-            source(source_value).and_then(|source_value| {
+        contained_json(|| {
+            let result = level(level_value).and_then(|level_value| {
+                source(source_value).and_then(|source_value| {
+                    let mut state = self
+                        .owned
+                        .lock()
+                        .map_err(|_| internal_failure("owned logger state lock poisoned"))?;
+                    state.owner.elevate_level(level_value, source_value)
+                })
+            });
+            result_json::<LevelChangeDto>(result)
+        })
+    }
+
+    fn reset_level(&self, source_value: &str) -> String {
+        contained_json(|| {
+            let result = source(source_value).and_then(|source_value| {
                 let mut state = self
                     .owned
                     .lock()
                     .map_err(|_| internal_failure("owned logger state lock poisoned"))?;
-                state.owner.elevate_level(level_value, source_value)
-            })
-        });
-        result_json::<LevelChangeDto>(result)
-    }
-
-    fn reset_level(&self, source_value: &str) -> String {
-        let result = source(source_value).and_then(|source_value| {
-            let mut state = self
-                .owned
-                .lock()
-                .map_err(|_| internal_failure("owned logger state lock poisoned"))?;
-            state.owner.reset_level(source_value)
-        });
-        result_json::<LevelChangeDto>(result)
+                state.owner.reset_level(source_value)
+            });
+            result_json::<LevelChangeDto>(result)
+        })
     }
 }
 
 #[pymethods]
 impl NativeAttachedLogger {
     fn log(&self, py: Python<'_>, event: &str) -> String {
-        log_backend(self.backend.clone(), py, event)
+        contained_json(|| log_backend(self.backend.clone(), py, event))
     }
 
     fn query(&self, py: Python<'_>, query: &str) -> String {
-        query_backend(self.backend.clone(), py, query)
+        contained_json(|| query_backend(self.backend.clone(), py, query))
     }
 
     fn health(&self) -> String {
-        result_json(self.backend.health())
+        contained_json(|| result_json(self.backend.health()))
     }
 
     fn flush(&self, py: Python<'_>, timeout: &str) -> String {
-        flush_backend(self.backend.clone(), py, timeout)
+        contained_json(|| flush_backend(self.backend.clone(), py, timeout))
     }
 }
 
 #[pyfunction]
 fn create_owned(py: Python<'_>, config: &str) -> PyResult<(Option<Py<NativeLogger>>, String)> {
-    match logger_config(config).and_then(create_core_backend) {
-        Ok((owner, backend)) => {
-            let logger = Py::new(
-                py,
-                NativeLogger {
-                    backend,
-                    owned: Mutex::new(OwnedState {
-                        owner,
-                        shutdown: None,
-                    }),
-                },
-            )?;
-            Ok((Some(logger), result_json::<()>(Ok(()))))
+    match catch_unwind(AssertUnwindSafe(|| {
+        match logger_config(config).and_then(create_core_backend) {
+            Ok((owner, backend)) => {
+                let logger = Py::new(
+                    py,
+                    NativeLogger {
+                        backend,
+                        owned: Mutex::new(OwnedState {
+                            owner,
+                            shutdown: None,
+                        }),
+                    },
+                )?;
+                Ok((Some(logger), result_json::<()>(Ok(()))))
+            }
+            Err(error) => Ok((None, result_json::<()>(Err(error)))),
         }
-        Err(error) => Ok((None, result_json::<()>(Err(error)))),
+    })) {
+        Ok(result) => result,
+        Err(_) => Ok((
+            None,
+            result_json::<()>(Err(internal_failure("native create_owned panicked"))),
+        )),
     }
 }
 
@@ -350,6 +375,18 @@ pub fn install_host_logger(
 fn get_installed_host_logger(
     py: Python<'_>,
 ) -> PyResult<(Option<Py<NativeAttachedLogger>>, String)> {
+    match catch_unwind(AssertUnwindSafe(|| get_installed_host_logger_inner(py))) {
+        Ok(result) => result,
+        Err(_) => Ok((
+            None,
+            result_json::<()>(Err(internal_failure("native host factory panicked"))),
+        )),
+    }
+}
+
+fn get_installed_host_logger_inner(
+    py: Python<'_>,
+) -> PyResult<(Option<Py<NativeAttachedLogger>>, String)> {
     let module = match PyModule::import(py, "sc_observability._native") {
         Ok(module) => module,
         Err(error) => {
@@ -361,6 +398,14 @@ fn get_installed_host_logger(
             ));
         }
     };
+    attached_logger_from_module(py, &module)
+}
+
+/// Projects a retained module host slot to one non-owning Python handle.
+fn attached_logger_from_module(
+    py: Python<'_>,
+    module: &Bound<'_, PyModule>,
+) -> PyResult<(Option<Py<NativeAttachedLogger>>, String)> {
     let slot = match module.getattr("_sc_observability_host_backend") {
         Ok(slot) => slot,
         Err(_) => {
@@ -402,7 +447,10 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED;
+    use sc_observability_dto::error_codes::{
+        SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED,
+        SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED,
+    };
 
     #[test]
     fn host_installation_is_immutable_per_module() {
@@ -439,6 +487,55 @@ mod tests {
             };
             let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
             first_install && duplicate_is_rejected && retained_slot && stopped
+        });
+        assert!(passed);
+    }
+
+    #[test]
+    fn attached_factory_preserves_host_ownership_and_retained_health() {
+        Python::initialize();
+        let passed = Python::attach(|py| {
+            let module = match PyModule::new(py, "_b4_attached_host_test") {
+                Ok(module) => module,
+                Err(_) => return false,
+            };
+            let missing_is_tagged = matches!(
+                attached_logger_from_module(py, &module),
+                Ok((None, result)) if result.contains(SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED)
+            );
+            let service = match ServiceName::new("b4-attached-host-test") {
+                Ok(service) => service,
+                Err(_) => return false,
+            };
+            let mut config = sc_observability::LoggerConfig::default_for(
+                service,
+                std::env::temp_dir().join("sc-observability-b4-attached-host-test"),
+            );
+            config.enable_console_sink = false;
+            let (owner, backend) = match create_core_backend(config) {
+                Ok(pair) => pair,
+                Err(_) => return false,
+            };
+            let host: Arc<dyn HostLoggingBackend> = Arc::new(backend);
+            if install_host_logger(&module, host).is_err() {
+                return false;
+            }
+            let attached = match attached_logger_from_module(py, &module) {
+                Ok((Some(attached), result)) if result.contains("\"kind\":\"ok\"") => attached,
+                _ => return false,
+            };
+            let event = r#"{"schema_version":1,"level":"info","target":"python.attached","action":"host-owned","fields":{}}"#;
+            let admitted = attached
+                .borrow(py)
+                .log(py, event)
+                .contains("\"kind\":\"ok\"");
+            let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
+            let closed = attached
+                .borrow(py)
+                .log(py, event)
+                .contains(sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED);
+            let retained_health = attached.borrow(py).health().contains("\"kind\":\"ok\"");
+            missing_is_tagged && admitted && stopped && closed && retained_health
         });
         assert!(passed);
     }

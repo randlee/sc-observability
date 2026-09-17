@@ -1,0 +1,27 @@
+docs consistency validation passed
+phase-b publication-claim self-test and doc scan passed
+ Documenting sc-observability-types v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-types)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.36s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability_types/index.html
+ Documenting sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability/index.html
+ Documenting sc-observe v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observe)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observe/index.html
+ Documenting sc-observability-otlp v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-otlp)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability_otlp/index.html
+ Documenting sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-log)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.31s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability_log/index.html
+ Documenting sc-observability-log-macros v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-log-macros)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability_log_macros/index.html
+ Documenting sc-observability-dto v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-dto)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.35s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability_dto/index.html
+ Documenting sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-binding-runtime)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability_binding_runtime/index.html
+rustdoc missing-docs validation passed

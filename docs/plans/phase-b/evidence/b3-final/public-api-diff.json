@@ -1,0 +1,119 @@
+{
+  "source_commit": "8776885a6e6e99dc9e892dae90c8f44eb2edae0a",
+  "candidate_version": "1.4.0",
+  "crates": {
+    "sc-observability-types": {
+      "status": "changed",
+      "baseline_version": "1.2.0",
+      "kind": "lib",
+      "command": [
+        "cargo",
+        "public-api",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3-schema/crates/sc-observability-types/Cargo.toml",
+        "-sss",
+        "diff",
+        "1.2.0"
+      ],
+      "exit_code": 0,
+      "log": "sc-observability-types-diff.log",
+      "api_sha256": "da734e5a4307e2caddc72958e6c48ad72128838234d320c314a4ed479e934237"
+    },
+    "sc-observability": {
+      "status": "changed",
+      "baseline_version": "1.2.0",
+      "kind": "lib",
+      "command": [
+        "cargo",
+        "public-api",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3-schema/crates/sc-observability/Cargo.toml",
+        "-sss",
+        "diff",
+        "1.2.0"
+      ],
+      "exit_code": 0,
+      "log": "sc-observability-diff.log",
+      "api_sha256": "24863c44bee044c0ecd68b8bab0c478dc001abd9916528def1d4b54d8cc0625e"
+    },
+    "sc-observe": {
+      "status": "changed",
+      "baseline_version": "1.2.0",
+      "kind": "lib",
+      "command": [
+        "cargo",
+        "public-api",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3-schema/crates/sc-observe/Cargo.toml",
+        "-sss",
+        "diff",
+        "1.2.0"
+      ],
+      "exit_code": 0,
+      "log": "sc-observe-diff.log",
+      "api_sha256": "4d0c1f094b3e125a9e5472cc979fc9ffb36844959ea0baed2193e3fc85ca8d46"
+    },
+    "sc-observability-otlp": {
+      "status": "changed",
+      "baseline_version": "1.2.0",
+      "kind": "lib",
+      "command": [
+        "cargo",
+        "public-api",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3-schema/crates/sc-observability-otlp/Cargo.toml",
+        "-sss",
+        "diff",
+        "1.2.0"
+      ],
+      "exit_code": 0,
+      "log": "sc-observability-otlp-diff.log",
+      "api_sha256": "b9f637f18dc4cc43a5be68b780b8e6f2e0c0374e74ba0dd234fc1ea8913e16ac"
+    },
+    "sc-observability-log-macros": {
+      "status": "initial-public-api",
+      "baseline_version": null,
+      "kind": "proc-macro",
+      "command": [
+        "cargo",
+        "public-api",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3-schema/crates/sc-observability-log-macros/Cargo.toml",
+        "-sss"
+      ],
+      "exit_code": 0,
+      "log": "sc-observability-log-macros-diff.log",
+      "api_sha256": "ed78c9311b656f43c26a2697d6ba5c840a824f5c48c96fe8cec30d97bedc1ea3"
+    },
+    "sc-observability-log": {
+      "status": "initial-public-api",
+      "baseline_version": null,
+      "kind": "lib",
+      "command": [
+        "cargo",
+        "public-api",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3-schema/crates/sc-observability-log/Cargo.toml",
+        "-sss"
+      ],
+      "exit_code": 0,
+      "log": "sc-observability-log-diff.log",
+      "api_sha256": "b8eea319e1ed8947cc851e834311a1061910405113da96cd4f18bbff109b5ac0"
+    },
+    "sc-observability-dto": {
+      "status": "initial-public-api",
+      "baseline_version": null,
+      "kind": "lib",
+      "command": [
+        "cargo",
+        "public-api",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3-schema/crates/sc-observability-dto/Cargo.toml",
+        "-sss"
+      ],
+      "exit_code": 0,
+      "log": "sc-observability-dto-diff.log",
+      "api_sha256": "c03027422ae3ff9f49e5b425523c9c5eab1909e34bfac5dc39ac54295f89cc9a"
+    }
+  }
+}

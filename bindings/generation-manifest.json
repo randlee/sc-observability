@@ -1,6 +1,5 @@
 {
   "inputs": {
-    "Cargo.lock": "3d39c58624038f74b5f19b9d2067007fc6ee4405b58dc1cfdec97f9756ed516a",
     "bindings/generation-toolchain.toml": "5d8b2341cb3a28e59c44b5f2de6e9636eebcc88807249b2e431ce77a33a0a5db",
     "bindings/schema-generator/Cargo.lock": "7d0b2f103efc6decdc4af926c3e69c453e7faede65eebd8ad1b3e6ca8e36f029",
     "bindings/schema-generator/Cargo.toml": "cb679f7d4a3f14144d7baf64d13278cbdaefecdc56e03312978dde2c9c79d1bf",
@@ -21,7 +20,7 @@
     "bindings/schema/v1.json": "6336e4542cdbf7c642505a18b2eb7dcda9c7aceb41f2ca4183382d63fdd2035c",
     "bindings/typescript/src/generated/index.ts": "c18b6c413777c03a5327df6f323df8aed894bee2aab80f472fdd0f27dd77f909"
   },
-  "source_revision": "4046209085414bca71f64fb2509ab24df8dba204",
+  "source_revision": "745c274b63e0a1884362d647ac6b84429f8acc77",
   "toolchain": {
     "python": "3.12.10",
     "rust": "1.94.1",

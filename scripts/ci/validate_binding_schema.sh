@@ -18,4 +18,5 @@ BINDING_BUNDLE_DIR="$(mktemp -d -t binding-source-bundle.XXXXXX)/artifact"
 trap 'rm -rf "$(dirname "$BINDING_BUNDLE_DIR")"' EXIT
 "$BINDING_PYTHON" scripts/ci/build_binding_source_bundle.py --root-manifest crates/sc-observability-dto/Cargo.toml --output "$BINDING_BUNDLE_DIR"
 "$BINDING_PYTHON" scripts/ci/validate_binding_bundle.py --bundle "$BINDING_BUNDLE_DIR" --evidence target/b3-bundle-evidence.json
+"$BINDING_PYTHON" scripts/generate_typescript_bindings.py --schema bindings/schema/v1.json --output-dir bindings/typescript/src/generated --check
 printf '%s\n' 'binding schema validation passed'
