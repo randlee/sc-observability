@@ -19,6 +19,7 @@ mod projection;
 mod query;
 mod span;
 mod tracing;
+pub mod typed;
 mod validation;
 
 mod sealed {
