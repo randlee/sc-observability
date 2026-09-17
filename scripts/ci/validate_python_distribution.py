@@ -211,6 +211,7 @@ def build(args) -> None:
             sandbox.env['CARGO_HOME'] = extension_home
             sandbox.env['CARGO_TARGET_DIR'] = extension_target
             negatives = negative_cases(root, scratch, sandbox, metadata)
+            verify_source(root)
             record = {'schema_version': 1, 'status': 'passed', 'development_only': source.get('development_only', False), 'source_commit': source['source_commit'],
                       'sdist_sha256': digest(args.sdist), 'platform': args.platform,
                       'build_interpreter': actual, 'wheel': linked, 'resolution': resolution,
