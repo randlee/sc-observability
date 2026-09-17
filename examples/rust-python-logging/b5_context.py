@@ -15,7 +15,7 @@ prior_level, prior_propagate = named.level, named.propagate
 named.setLevel(logging.INFO)
 named.propagate = False
 named.addHandler(handler)
-bound = bind_context(request_id="b5-request", correlation_id="b5-mixed-request")
+bound = bind_context(request_id="b5-request", correlation_id=B5_CORRELATION)
 assert isinstance(bound, Ok)
 entered = bound.value.enter()
 assert isinstance(entered, Ok)
@@ -34,7 +34,7 @@ finally:
     handler.close()
     assert isinstance(closed, Ok)
 assert isinstance(attached.flush(), Ok)
-rows = attached.query(LogQuery(correlation_id="b5-mixed-request"))
+rows = attached.query(LogQuery(correlation_id=B5_CORRELATION))
 assert isinstance(rows, Ok)
 events = rows.value.events
 assert any(row.target == "rust.mixed" for row in events)

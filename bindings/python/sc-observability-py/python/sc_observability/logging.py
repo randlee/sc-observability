@@ -209,11 +209,13 @@ class ObservabilityHandler(logging.Handler):
 def create_handler(logger: Logger | AttachedLogger, *, level: int = logging.NOTSET,
                    extra_fields: tuple[str, ...] = ()) -> Result[ObservabilityHandler]:
     """Construct explicitly; never attach to or change the Python root logger."""
-    if type(level) is not int:
-        return Err(_failure("level", "expected a Python logging integer level"))
-    if not isinstance(extra_fields, tuple) or any(not isinstance(name, str) or not name for name in extra_fields):
-        return Err(_failure("extra_fields", "expected a tuple of nonempty field names"))
     try:
+        if type(level) is not int:
+            return Err(_failure("level", "expected a Python logging integer level"))
+        if not isinstance(extra_fields, tuple) or any(not isinstance(name, str) or not name for name in extra_fields):
+            return Err(_failure("extra_fields", "expected a tuple of nonempty field names"))
+        # Own the selected names; foreign tuple/string behavior cannot recur at emission.
+        extra_fields = tuple(str(name) for name in extra_fields)
         if not callable(getattr(logger, "log", None)) or not callable(getattr(logger, "flush", None)):
             return Err(_failure("logger", "expected a readable logging backend"))
         checked = _validate_event(LogEvent(level="info", target="python.handler", action="handler.validate",
