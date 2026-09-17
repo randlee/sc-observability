@@ -23,7 +23,8 @@ pub mod error_codes;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
-use config::validate_config;
+use config::validate_config_typed;
+use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, ErrorContext, ExportError, FlushError, InitError, LogEvent,
     MetricRecord, ObservabilityHealthProvider, Remediation, ShutdownError, SinkName, SpanSignal,
@@ -164,7 +165,12 @@ impl MetricExporter for NoopMetricExporter {
 impl Telemetry {
     /// Creates a telemetry runtime with the default no-op exporters.
     pub fn new(config: TelemetryConfig) -> Result<Self, InitError> {
-        Self::new_with_exporters(
+        Self::new_typed(config).map_err(Into::into)
+    }
+
+    /// Creates a telemetry runtime with neutral initialization failures.
+    pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure> {
+        Self::new_with_exporters_typed(
             config,
             Arc::new(NoopLogExporter),
             Arc::new(NoopTraceExporter),
@@ -172,13 +178,24 @@ impl Telemetry {
         )
     }
 
+    #[cfg(test)]
     fn new_with_exporters(
         config: TelemetryConfig,
         log_exporter: Arc<dyn LogExporter>,
         trace_exporter: Arc<dyn TraceExporter>,
         metric_exporter: Arc<dyn MetricExporter>,
     ) -> Result<Self, InitError> {
-        validate_config(&config)?;
+        Self::new_with_exporters_typed(config, log_exporter, trace_exporter, metric_exporter)
+            .map_err(Into::into)
+    }
+
+    fn new_with_exporters_typed(
+        config: TelemetryConfig,
+        log_exporter: Arc<dyn LogExporter>,
+        trace_exporter: Arc<dyn TraceExporter>,
+        metric_exporter: Arc<dyn MetricExporter>,
+    ) -> Result<Self, InitFailure> {
+        validate_config_typed(&config)?;
         Ok(Self {
             config,
             shutdown: AtomicBool::new(false),
@@ -277,7 +294,13 @@ impl Telemetry {
     ///
     /// Panics if the internal telemetry runtime mutex has been poisoned.
     pub fn flush(&self) -> Result<(), FlushError> {
-        let _ = self.flush_outcome()?;
+        self.flush_typed().map_err(Into::into)
+    }
+
+    /// Flushes telemetry with a neutral flush failure while retaining fail-open
+    /// exporter semantics.
+    pub fn flush_typed(&self) -> Result<(), FlushFailure> {
+        let _ = self.flush_outcome().map_err(FlushFailure::from)?;
         Ok(())
     }
 
@@ -352,11 +375,25 @@ impl Telemetry {
     /// flushing, dropping incomplete spans, or constructing the final shutdown
     /// error state.
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
+        self.shutdown_typed().map_err(Into::into)
+    }
+
+    /// Flushes buffers and transitions telemetry to shutdown with a neutral
+    /// shutdown failure.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal telemetry runtime mutex has been poisoned while
+    /// flushing, dropping incomplete spans, or constructing final state.
+    pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
 
-        let flush_outcome = self.flush_outcome().map_err(shutdown_flush_error)?;
+        let flush_outcome = self
+            .flush_outcome()
+            .map_err(FlushFailure::from)
+            .map_err(shutdown_flush_failure)?;
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         let dropped = runtime.span_assembler.flush_incomplete() as u64;
         if dropped > 0 {
@@ -378,7 +415,7 @@ impl Telemetry {
         }
 
         if flush_outcome.had_export_failure {
-            return Err(shutdown_export_failure(runtime.last_error.clone()));
+            return Err(shutdown_export_failure_typed(runtime.last_error.clone()));
         }
 
         Ok(())
@@ -534,8 +571,8 @@ fn error_context_from_diagnostic(diagnostic: &sc_observability_types::Diagnostic
     context
 }
 
-fn shutdown_flush_error(error: FlushError) -> ShutdownError {
-    ShutdownError(Box::new(
+fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
+    ShutdownFailure::from_context(Box::new(
         ErrorContext::new(
             error_codes::TELEMETRY_FLUSH_FAILED,
             "failed to flush telemetry during shutdown",
@@ -548,7 +585,7 @@ fn shutdown_flush_error(error: FlushError) -> ShutdownError {
     ))
 }
 
-fn shutdown_export_failure(summary: Option<DiagnosticSummary>) -> ShutdownError {
+fn shutdown_export_failure_typed(summary: Option<DiagnosticSummary>) -> ShutdownFailure {
     let mut context = ErrorContext::new(
         error_codes::TELEMETRY_FLUSH_FAILED,
         "failed to flush telemetry during shutdown",
@@ -566,7 +603,7 @@ fn shutdown_export_failure(summary: Option<DiagnosticSummary>) -> ShutdownError 
             );
         }
     }
-    ShutdownError(Box::new(context))
+    ShutdownFailure::from_context(Box::new(context))
 }
 
 #[cfg(test)]

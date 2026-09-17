@@ -382,6 +382,7 @@ impl TelemetryConfigBuilder {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
     validate_config_typed(config).map_err(Into::into)
 }
