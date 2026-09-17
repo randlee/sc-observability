@@ -108,6 +108,9 @@ cargo test --locked -p sc-observability-log --all-targets \
 cargo test --locked -p sc-observability-log --release \
   --features static_level_cap_test --test static_level_cap         -> 1 passed, 0 failed
   (capped_release_rejects_trace_before_install_then_allows_info)
+cargo test --locked -p sc-observability-log --release \
+  --test runtime_level_bridge                                      -> 1 passed, 0 failed
+  (direct_facade_and_macro_admission_share_the_core_level_owner)
 python3 scripts/ci/validate_runtime_level_qualification_metadata.py -> B.P2 qualification metadata and
                                                                        roster are coherent
 python3 scripts/ci/tests/test_validate_runtime_level_qualification_metadata.py -v
@@ -128,13 +131,15 @@ completeness findings B1-C02 (feature-gated regression coverage) and B1-C03
   profile. Neither feature was previously exercised in this worktree's
   evidence before this fix round.
 - Three-platform CI proof requirement: `.github/workflows/ci.yml`'s `test`
-  job (matrix `ubuntu-latest`/`macos-latest`/`windows-latest`) now runs two
+  job (matrix `ubuntu-latest`/`macos-latest`/`windows-latest`) now runs three
   additional steps after `cargo test --workspace`: `cargo test -p
-  sc-observability-log --all-targets --features test_hooks` and `cargo test
-  -p sc-observability-log --release --features static_level_cap_test --test
-  static_level_cap`, so both opt-in features are exercised on all three
+  sc-observability-log --all-targets --features test_hooks`, `cargo test -p
+  sc-observability-log --release --features static_level_cap_test --test
+  static_level_cap`, and `cargo test --locked -p sc-observability-log
+  --release --test runtime_level_bridge`, so the opt-in features and the
+  release-mode runtime-level fixture are all exercised on all three
   platforms, not just locally. This closes the previously-open CI-coverage
-  gap for these two commands.
+  gap for these commands.
 - Exported API/impl inventory reconciliation against the approved
   `target-bridge-api.md` disposition matrix: see
   `docs/plans/phase-b/log-import-export-report.md`, generated from
@@ -161,16 +166,39 @@ candidate version (via `version.workspace = true`), while
 -- a version that no longer existed in the staged tree, so Cargo's resolver
 failed with "candidate versions found which didn't match". Fixed by also
 advancing the exact-pin form to `version = "={candidate}", path =`,
-preserving the pin's exactness. Verified locally with
-`--version 1.3.0` (the current `runtime-level-qualification.toml` candidate):
-the stage now builds exactly the four B.P2 roster archives (no unpublished
-companion crate leaks into `archives/`), `verify_stage` passes, and
-`scripts/ci/validate_runtime_level_staged_consumer.py --version 1.3.0
---stage <dir> --platform macos --result-file <file>` succeeds with all six
-declared assertions and no `sc-observability-otlp`/`sc-observe` staged-patch
-warnings affecting the result. `release/publish-artifacts.toml` and the
-staged four-package roster/order are unchanged; no unpublished companion
-crate is added to that roster.
+preserving the pin's exactness. `checked_run()` in the same script also
+previously relied on `subprocess.run(check=True)`, whose `CalledProcessError`
+swallows captured stderr in the propagating traceback; it now checks the
+return code explicitly and raises with the command and its stderr attached,
+so this diagnosis did not require re-running cargo by hand.
+
+Raw local evidence at `0d1da6e4ba36b643169067ff60599ed35a7fdd7a` (this fix
+round's final commit before this doc update), candidate version `1.3.0`
+(current `runtime-level-qualification.toml` candidate):
+
+```text
+python3 scripts/ci/prepare_runtime_level_staged_packages.py --version 1.3.0 --output /tmp/bp2-stage-final
+  -> /private/tmp/bp2-stage-final/stage-manifest.json (exit 0)
+  stage-manifest.json source_commit: 0d1da6e4ba36b643169067ff60599ed35a7fdd7a
+  stage-manifest.json packages: sc-observability-types, sc-observability, sc-observe, sc-observability-otlp
+  (exactly the 4 B.P2 roster archives; no unpublished companion crate present)
+
+python3 scripts/ci/validate_runtime_level_staged_consumer.py --version 1.3.0 \
+  --stage /tmp/bp2-stage-final --platform macos --result-file /tmp/bp2-evidence-final/macos.json
+  -> exit 0
+  result: {"assertions": ["baseline_exact_resolution", "candidate_extracted_archive_resolution",
+    "threshold_filtering", "log_and_query", "level_state_and_reset", "stale_owner_after_shutdown"],
+    "baseline": {"source_commit": "dcc52685fd845c8d1bddde29199e799ae921cf5c", "version": "1.2.0"},
+    "candidate": {"mode": "staged", "source_commit": "0d1da6e4ba36b643169067ff60599ed35a7fdd7a",
+    "version": "1.3.0", "stage_manifest": "/private/tmp/bp2-stage-final/stage-manifest.json"}}
+  (all 6 declared assertions present; ubuntu/windows platform runs require
+  their own CI runners and are not reproducible on this macOS worktree, but
+  the underlying staged-consumer logic is platform-independent Rust/cargo
+  invoked identically per platform by the workflow matrix)
+```
+
+`release/publish-artifacts.toml` and the staged four-package roster/order are
+unchanged; no unpublished companion crate is added to that roster.
 
 ## Not in scope here
 
