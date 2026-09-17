@@ -1,7 +1,8 @@
 ---
 id: B.4
-status: proposed
+status: complete
 branch: feature/phase-b-4-python
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4-python
 base: develop
 ---
 

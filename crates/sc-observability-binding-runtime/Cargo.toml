@@ -6,6 +6,9 @@ license.workspace = true
 rust-version.workspace = true
 description = "Bounded native logging backends for language bindings"
 
+[features]
+test-hooks = ["sc-observability/fault-injection"]
+
 [dependencies]
 sc-observability.workspace = true
 sc-observability-types.workspace = true

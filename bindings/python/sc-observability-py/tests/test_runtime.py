@@ -10,6 +10,8 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -103,28 +105,30 @@ def test_owned_level_changes_are_revised_reset_and_retained(tmp_path: Path) -> N
         assert initial.value.level_state.effective_level == "info"
         assert initial.value.level_state.level_revision == 0
 
-        debug = logger.elevate_level("debug")
-        assert isinstance(debug, Ok)
-        assert debug.value.kind == "changed"
-        assert debug.value.current.effective_level == "debug"
-        assert debug.value.current.level_revision == 1
+        for revision, level in enumerate(("debug", "trace"), start=1):
+            changed = logger.elevate_level(level)
+            assert isinstance(changed, Ok)
+            assert changed.value.kind == "changed"
+            assert changed.value.current.effective_level == level
+            assert changed.value.current.level_revision == revision
 
-        repeated = logger.elevate_level("debug", "user_request")
+        repeated = logger.elevate_level("trace", "user_request")
         assert isinstance(repeated, Ok)
         assert repeated.value.kind == "unchanged"
-        assert repeated.value.state.level_revision == 1
+        assert repeated.value.state.level_revision == 2
 
-        below_baseline = logger.elevate_level("off", "diagnostic_session")
-        assert isinstance(below_baseline, Err)
-        assert below_baseline.error.kind == "below_baseline"
-        assert below_baseline.error.requested == "off"
-        assert below_baseline.error.configured == "info"
+        for level in ("warn", "error", "off"):
+            below_baseline = logger.elevate_level(level, "diagnostic_session")
+            assert isinstance(below_baseline, Err)
+            assert below_baseline.error.kind == "below_baseline"
+            assert below_baseline.error.requested == level
+            assert below_baseline.error.configured == "info"
 
         reset = logger.reset_level("application")
         assert isinstance(reset, Ok)
         assert reset.value.kind == "changed"
         assert reset.value.current.effective_level == "info"
-        assert reset.value.current.level_revision == 2
+        assert reset.value.current.level_revision == 3
         assert isinstance(logger.log(_event("accepted-after-reset")), Ok)
         assert isinstance(logger.flush(), Ok)
     finally:
@@ -184,3 +188,65 @@ def test_public_operation_race_keeps_every_result_tagged(tmp_path: Path) -> None
     assert isinstance(logger.wait_stopped(), Ok)
     retained = logger.health()
     assert isinstance(retained, Ok)
+
+
+def test_owned_gc_and_interpreter_teardown_do_not_hang(tmp_path: Path) -> None:
+    """A clean installed interpreter may release an unclosed owned handle."""
+    root = repr(str(tmp_path / "gc"))
+    program = f"""
+import gc
+from sc_observability import LoggerConfig, Ok, create_logger
+created = create_logger(LoggerConfig(service='python-runtime-gc', log_root={root!s}))
+assert isinstance(created, Ok), created
+del created
+gc.collect()
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", program],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_zero_deadline_shutdown_retains_the_late_completion(tmp_path: Path) -> None:
+    logger = _owned(tmp_path / "late-shutdown", "python-runtime-late-shutdown")
+    assert isinstance(logger.log(_event("before-zero-deadline")), Ok)
+    first = logger.shutdown(timeout_ms=0)
+    # An observation deadline does not cancel the one native shutdown. Fast
+    # machines may finish before zero is observed; otherwise its tagged timeout
+    # is resolved by the retained wait operation below.
+    assert isinstance(first, (Ok, Err))
+    if isinstance(first, Err):
+        assert first.error.kind == "timeout"
+    final = logger.wait_stopped(timeout_ms=2_000)
+    assert isinstance(final, Ok)
+    repeated = logger.shutdown(timeout_ms=2_000)
+    assert isinstance(repeated, Ok)
+    assert isinstance(logger.health(), Ok)
+
+
+def test_real_factory_filesystem_failure_is_tagged(tmp_path: Path) -> None:
+    root = tmp_path / "sink-fault"
+    service = "python-runtime-sink-fault"
+    # The JSONL sink opens lazily. A directory at the active-file path forces
+    # a real writer failure after public factory construction succeeds.
+    (root / "logs" / f"{service}.log.jsonl").mkdir(parents=True)
+    created = create_logger(
+        LoggerConfig(service=service, log_root=str(root))
+    )
+    assert isinstance(created, Ok)
+    logger = created.value
+    try:
+        assert isinstance(logger.log(_event("filesystem-fault")), Ok)
+        flushed = logger.flush()
+        assert isinstance(flushed, Ok)
+        health = logger.health()
+        assert isinstance(health, Ok)
+        assert health.value.logging.state in ("degraded_dropping", "unavailable")
+        assert health.value.logging.last_error is not None
+    finally:
+        assert isinstance(logger.shutdown(), (Ok, Err))
+

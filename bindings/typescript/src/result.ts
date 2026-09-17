@@ -1,8 +1,10 @@
 import {
   type Failure,
   type RemediationDto,
+  SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE,
   SC_OBSERVABILITY_BINDING_INTERNAL,
   SC_OBSERVABILITY_BINDING_INVALID_INPUT,
+  SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION,
   validate,
 } from "./generated/index";
 
@@ -39,6 +41,28 @@ export function internal(message: string): Failure {
   };
 }
 
+export function unsupportedVersion(received: number): Failure {
+  return {
+    kind: "unsupported_version",
+    at: new Date().toISOString(),
+    code: SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION,
+    message: `unsupported schema version ${received}`,
+    received,
+    remediation: recoverable("Install client and host packages supporting the same schema"),
+  };
+}
+
+export function diagnosticTooLarge(field: string): Failure {
+  return {
+    kind: "validation",
+    at: new Date().toISOString(),
+    code: SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE,
+    message: "remote diagnostic exceeds the documented size limit",
+    field,
+    remediation: recoverable("Reduce remote diagnostic text or remediation steps to the documented bounds"),
+  };
+}
+
 export function isFailure(value: unknown): value is Failure {
   try {
     return isRecord(value) && validate("OutputFailure", value);
@@ -48,7 +72,11 @@ export function isFailure(value: unknown): value is Failure {
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  try {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  } catch {
+    return false;
+  }
 }
 
 export function safeFailure(error: unknown, context: string): Failure {

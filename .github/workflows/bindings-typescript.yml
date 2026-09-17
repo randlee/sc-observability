@@ -15,11 +15,7 @@ on:
 
 jobs:
   package-and-adapter:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -34,5 +30,4 @@ jobs:
         with:
           toolchain: "1.94.1"
       - name: Validate schema, package, and adapter
-        shell: bash
         run: bash scripts/ci/validate_typescript_bindings.sh

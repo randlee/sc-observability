@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 import tomli_w
-from _python_distribution import DistributionError, confined, digest, extract_sdist, tomllib, verify_source, runtime_options
+from _python_distribution import DistributionError, confined, digest, extract_sdist, tomllib, verify_source, runtime_options, fault_paths
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = Path('bindings/python/sc-observability-py')
@@ -21,9 +21,24 @@ def run(arguments: list[str], cwd: Path, log: Path) -> None:
     with log.open('a') as output:
         output.write(json.dumps(arguments) + '\n')
         output.flush()
-        result = subprocess.run(arguments, cwd=cwd, stdout=output, stderr=subprocess.STDOUT)
+        result = subprocess.run(arguments, cwd=cwd, stdout=output, stderr=subprocess.STDOUT,
+                                env={**os.environ, 'RUSTUP_TOOLCHAIN': '1.94.1'})
     if result.returncode:
         raise DistributionError(f'command failed ({result.returncode}); see {log}\n' + '\n'.join(log.read_text(errors='replace').splitlines()[-35:]))
+
+
+def copy_tracked_tree(source: Path, relative: Path, target: Path) -> None:
+    paths = subprocess.check_output(['git', 'ls-files', '-z', '--', relative.as_posix()], cwd=source).split(b'\0')
+    for raw in paths:
+        if not raw:
+            continue
+        path = Path(os.fsdecode(raw))
+        original = source / path
+        if original.is_symlink() or not original.is_file():
+            raise DistributionError(f'nonregular tracked source input: {path}')
+        destination = target / path.relative_to(relative)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(original, destination)
 
 
 def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) -> dict:
@@ -53,6 +68,12 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
             or suite.get('pytest_paths') != ['tests'] or not suite.get('typing_paths')):
         raise DistributionError('B.4 full-runtime qualification contract is not complete')
     runtime_options(suite)
+    private_tests = fault_paths(suite)
+    if not allow_incomplete_runtime and not private_tests:
+        raise DistributionError('completed qualification requires explicit private fault-suite files')
+    for path in private_tests:
+        if not confined(project, path).is_file():
+            raise DistributionError(f'missing private fault suite: {path}')
     output.mkdir(parents=True)
     staging = output / 'source'
     staging.mkdir()
@@ -66,7 +87,7 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
         raise DistributionError('bundle lacks the Python extension/embedding root')
     packaged = bundle / roots[0]['root']
     for path in packaged.iterdir():
-        if path.name in ('.cargo_vcs_info.json', 'Cargo.toml.orig', 'Cargo.lock'):
+        if path.name in ('.cargo_vcs_info.json', 'Cargo.toml.orig', 'Cargo.lock', 'python', 'tests', 'examples'):
             continue
         target = staging / path.name
         if path.is_dir():
@@ -76,17 +97,13 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     # Python package data and the unchanged runtime tests are explicit sdist inputs.
     for relative in ('python', 'tests', 'examples'):
         if (project / relative).is_dir():
-            if any(path.is_symlink() for path in (project / relative).rglob('*')):
-                raise DistributionError(f'symlink in Python source inputs: {relative}')
-            shutil.copytree(project / relative, staging / relative, dirs_exist_ok=True)
+            copy_tracked_tree(source, PROJECT / relative, staging / relative)
     shutil.copyfile(source / 'LICENSE', staging / 'LICENSE')
     (staging / 'qualification-suite.json').write_text(json.dumps(suite, indent=2) + '\n')
     embedding = confined(source, suite['embedding_manifest'])
     if not embedding.is_file():
         raise DistributionError('missing real Rust embedding fixture')
-    if any(path.is_symlink() for path in embedding.parent.rglob('*')):
-        raise DistributionError('symlink in embedding source inputs')
-    shutil.copytree(embedding.parent, staging / 'embedding', ignore=shutil.ignore_patterns('target'))
+    copy_tracked_tree(source, embedding.parent.relative_to(source), staging / 'embedding')
     workspace = tomllib.loads((source / 'Cargo.toml').read_text())['workspace']
     embedded = tomllib.loads((staging / 'embedding/Cargo.toml').read_text())
     for key, value in list(embedded['package'].items()):
@@ -133,6 +150,8 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     (staging / '.cargo/config.toml').write_text(tomli_w.dumps(config))
     pyproject = tomllib.loads((project / 'pyproject.toml').read_text())
     maturin = pyproject.setdefault('tool', {}).setdefault('maturin', {})
+    if 'test-hooks' in maturin.get('features', []):
+        raise DistributionError('production pyproject must not enable private test hooks')
     maturin['features'] = sorted(set(maturin.get('features', [])) | {'pyo3/extension-module'})
     maturin['include'] = [{'path': item, 'format': 'sdist'} for item in (
         'rust-bundle/**/*', '.cargo/config.toml', 'Cargo.lock', 'LICENSE', 'tests/**/*',

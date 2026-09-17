@@ -44,21 +44,21 @@ impl AdapterPolicy {
         if self
             .allowed_window_labels
             .iter()
-            .any(|label| label.is_empty() || label.contains('\0'))
+            .any(|label| label.is_empty() || !tauri_runtime::window::is_label_valid(label))
         {
             return Err(invalid(
                 "policy.allowed_window_labels",
-                "labels must be nonempty and NUL-free",
+                "labels must be valid Tauri window labels",
             ));
         }
         if self
             .allowed_targets
             .iter()
-            .any(|target| target.is_empty() || target.contains('\0'))
+            .any(|target| sc_observability_types::TargetCategory::new(target).is_err())
         {
             return Err(invalid(
                 "policy.allowed_targets",
-                "targets must be nonempty and NUL-free",
+                "targets must be valid target categories",
             ));
         }
         if self.redacted_field_keys.iter().any(|key| {
@@ -119,16 +119,19 @@ fn normalize_key(value: &str) -> String {
 }
 
 fn inspect(value: &Value, depth: usize, limit: usize) -> Result<(), Failure> {
-    if depth > limit {
-        return Err(invalid("request", "maximum container depth is 32"));
-    }
     match value {
-        Value::Array(values) => values
-            .iter()
-            .try_for_each(|item| inspect(item, depth + 1, limit)),
-        Value::Object(values) => values
-            .values()
-            .try_for_each(|item| inspect(item, depth + 1, limit)),
+        Value::Array(values) => {
+            if depth >= limit {
+                return Err(invalid("request", "maximum container depth is 32"));
+            }
+            values.iter().try_for_each(|item| inspect(item, depth + 1, limit))
+        }
+        Value::Object(values) => {
+            if depth >= limit {
+                return Err(invalid("request", "maximum container depth is 32"));
+            }
+            values.values().try_for_each(|item| inspect(item, depth + 1, limit))
+        }
         _ => Ok(()),
     }
 }
@@ -295,11 +298,14 @@ impl Adapter {
     fn try_log_inner(&self, window: &str, value: Value) -> Result<AdmissionDto, Failure> {
         authorize(&self.policy, window)?;
         schema(&value, "request")?;
-        let request: TryLogRequest = parse(value, &self.policy, "request", "try_log")?;
-        let event = decode_event(
-            serde_json::to_value(request.event)
-                .map_err(|_| invalid("event", "event could not be serialized"))?,
-        )?;
+        let event_value = value
+            .get("event")
+            .cloned()
+            .ok_or_else(|| invalid("event", "event is required"))?;
+        let _request: TryLogRequest = parse(value, &self.policy, "request", "try_log")?;
+        // Decode the original nested value so serde's nullable-field defaults
+        // cannot make an exactly-at-limit request appear oversized.
+        let event = decode_event(event_value)?;
         if !self.policy.allowed_targets.contains(&event.target) {
             return Err(invalid("event.target", "target is not allowed"));
         }
@@ -336,7 +342,7 @@ impl Adapter {
             let mut target_query = query.clone();
             target_query.target = Some(target);
             let operation = self.backend.start_query(target_query)?;
-            let snapshot = operation.completion(Duration::from_secs(60)).await?;
+            let snapshot = operation.completion(Duration::from_millis(2_000)).await?;
             truncated |= snapshot.truncated;
             events.extend(snapshot.events);
         }
@@ -508,6 +514,28 @@ mod tests {
             ..policy
         };
         assert!(policy.validate().is_err());
+        let policy = AdapterPolicy {
+            allowed_window_labels: ["bad\nlabel".into()].into(),
+            ..AdapterPolicy {
+                allowed_window_labels: ["main".into()].into(),
+                allowed_targets: ["app".into()].into(),
+                max_request_bytes: MAX_REQUEST_BYTES as u32,
+                max_depth: MAX_DEPTH as u32,
+                redacted_field_keys: BTreeSet::new(),
+            }
+        };
+        assert!(matches!(policy.validate(), Err(Failure::Validation { ref field, .. }) if field == "policy.allowed_window_labels"));
+        let policy = AdapterPolicy {
+            allowed_targets: ["bad target".into()].into(),
+            ..AdapterPolicy {
+                allowed_window_labels: ["main".into()].into(),
+                allowed_targets: ["app".into()].into(),
+                max_request_bytes: MAX_REQUEST_BYTES as u32,
+                max_depth: MAX_DEPTH as u32,
+                redacted_field_keys: BTreeSet::new(),
+            }
+        };
+        assert!(matches!(policy.validate(), Err(Failure::Validation { ref field, .. }) if field == "policy.allowed_targets"));
     }
 
     #[test]
@@ -530,6 +558,57 @@ mod tests {
         });
         assert!(strict_request(&request, "try_log").is_err());
         assert!(schema(&serde_json::json!({"schema_version": 2}), "request").is_err());
+    }
+
+    #[test]
+    fn boundary_rejects_container_at_limit_but_allows_primitive_leaf() {
+        fn nested_objects(count: usize, leaf: Value) -> Value {
+            (0..count).fold(leaf, |value, _| serde_json::json!({"child": value}))
+        }
+
+        assert!(inspect(
+            &nested_objects(31, Value::Object(Default::default())),
+            0,
+            MAX_DEPTH
+        )
+        .is_ok());
+        assert!(inspect(&nested_objects(32, Value::Null), 0, MAX_DEPTH).is_ok());
+        assert!(inspect(
+            &nested_objects(32, Value::Object(Default::default())),
+            0,
+            MAX_DEPTH
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn exact_request_limit_does_not_reject_omitted_nullable_event_fields() {
+        let policy = AdapterPolicy {
+            allowed_window_labels: BTreeSet::from(["main".to_owned()]),
+            allowed_targets: BTreeSet::from(["app".to_owned()]),
+            max_request_bytes: MAX_REQUEST_BYTES as u32,
+            max_depth: MAX_DEPTH as u32,
+            redacted_field_keys: BTreeSet::new(),
+        };
+        let adapter = Adapter::new(Arc::new(IpcBackend), policy).unwrap();
+        let mut request = serde_json::json!({
+            "schema_version": 1,
+            "event": {
+                "schema_version": 1,
+                "level": "info",
+                "target": "app",
+                "action": "test",
+                "message": ""
+            }
+        });
+        let overhead = serde_json::to_vec(&request).unwrap().len();
+        request["event"]["message"] = serde_json::json!("x".repeat(MAX_REQUEST_BYTES - overhead));
+        assert_eq!(serde_json::to_vec(&request).unwrap().len(), MAX_REQUEST_BYTES);
+        let result = adapter.try_log("main", request);
+        assert!(matches!(
+            result,
+            WireEnvelope::Error { error: Failure::Internal { .. }, .. }
+        ));
     }
 
     #[test]
@@ -563,13 +642,14 @@ mod tests {
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .unwrap();
         let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();
+        let url = window.url().unwrap();
         let response = tauri::test::get_ipc_response(
             &window,
             tauri::webview::InvokeRequest {
                 cmd: "sc_observability_health".into(),
                 callback: tauri::ipc::CallbackFn(0),
                 error: tauri::ipc::CallbackFn(1),
-                url: "tauri://localhost".parse().unwrap(),
+                url,
                 body: serde_json::json!({"request": {"schema_version": 1}}).into(),
                 headers: Default::default(),
                 invoke_key: tauri::test::INVOKE_KEY.to_owned(),

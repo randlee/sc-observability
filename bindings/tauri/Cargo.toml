@@ -2,6 +2,8 @@
 name = "sc-observability-tauri"
 version = "1.4.0"
 edition = "2024"
+build = "build.rs"
+links = "tauri-plugin-sc-observability"
 license = "MIT"
 rust-version = "1.94.1"
 description = "Tauri host adapter for sc-observability language bindings"
@@ -14,11 +16,16 @@ tauri = ["dep:tauri"]
 test = ["tauri/test"]
 
 [dependencies]
-sc-observability-binding-runtime = { path = "../../crates/sc-observability-binding-runtime" }
-sc-observability-dto = { path = "../../crates/sc-observability-dto" }
+sc-observability-binding-runtime = { version = "1.4.0", path = "../../crates/sc-observability-binding-runtime" }
+sc-observability-dto = { version = "1.4.0", path = "../../crates/sc-observability-dto" }
+sc-observability-types = { version = "1.4.0", path = "../../crates/sc-observability-types" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", optional = true, default-features = false }
+tauri-runtime = "2.11"
 
 [dev-dependencies]
 serde_json = "1"
+
+[build-dependencies]
+tauri-plugin = { version = "2.4", features = ["build"] }
