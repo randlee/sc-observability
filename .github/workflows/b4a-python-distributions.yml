@@ -1,0 +1,167 @@
+name: B.4a Python distribution qualification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'bindings/python/**'
+      - 'crates/**'
+      - 'examples/rust-python-logging/**'
+      - 'Cargo.*'
+      - 'scripts/ci/*python*'
+      - 'scripts/ci/*binding*bundle*'
+      - 'release/python-platform-policy.json'
+      - '.github/workflows/b4a-python-distributions.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      platforms: ${{ steps.matrix.outputs.platforms }}
+      cells: ${{ steps.matrix.outputs.cells }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: matrix
+        shell: python
+        run: |
+          import json, os
+          policy = json.load(open('release/python-platform-policy.json'))
+          cells = [{**platform, 'python': version} for platform in policy['platforms'] for version in policy['interpreters']]
+          assert len(cells) == 25
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('platforms=' + json.dumps(policy['platforms']) + '\n')
+              out.write('cells=' + json.dumps(cells) + '\n')
+
+  sdist:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - run: python -m pip install -r scripts/ci/python-packaging-requirements.txt
+      - name: Build sole-helper source bundle and immutable maturin sdist
+        run: python scripts/ci/prepare_python_distributions.py --output target/b4a-sdist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: b4a-sdist
+          path: |
+            target/b4a-sdist/dist/*.tar.gz
+            target/b4a-sdist/sdist-result.json
+            target/b4a-sdist/prepare.log
+          if-no-files-found: error
+          retention-days: 90
+
+  wheel:
+    needs: [plan, sdist]
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.platforms) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - uses: actions/download-artifact@v4
+        with:
+          name: b4a-sdist
+          path: ${{ runner.temp }}/b4a-source
+      - if: runner.os != 'Linux'
+        run: python -m pip install -r scripts/ci/python-packaging-requirements.txt
+      - if: runner.os == 'Linux'
+        name: Provision native manylinux_2_28 build tools before isolation
+        run: docker build --build-arg BASE_IMAGE=${{ matrix.container }} -f scripts/ci/Dockerfile.python-manylinux -t b4a-manylinux .
+      - name: External offline wheel and separate-link embedding proof
+        shell: bash
+        env:
+          B4A_PLATFORM: ${{ matrix.id }}
+        run: |
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            mkdir -p "$RUNNER_TEMP/b4a-result"
+            docker run --rm --cap-add SYS_ADMIN --security-opt seccomp=unconfined --security-opt apparmor=unconfined \
+              -v "$GITHUB_WORKSPACE:/checkout:ro" -v "$RUNNER_TEMP/b4a-source:/artifacts:ro" \
+              -v "$RUNNER_TEMP/b4a-result:/result" -e B4A_PLATFORM b4a-manylinux \
+              bash -c 'set -e; git config --global --add safe.directory /checkout; sdist=(/artifacts/dist/*.tar.gz); python /checkout/scripts/ci/validate_python_distribution.py build --sdist "${sdist[0]}" --platform "$B4A_PLATFORM" --checkout /checkout --output /result/wheel; chmod -R a+rX /result'
+          else
+            sdist=( "$RUNNER_TEMP"/b4a-source/dist/*.tar.gz )
+            python scripts/ci/validate_python_distribution.py build --sdist "${sdist[0]}" \
+              --platform "$B4A_PLATFORM" --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/b4a-result/wheel"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: b4a-wheel-${{ matrix.id }}
+          path: ${{ runner.temp }}/b4a-result/wheel/
+          if-no-files-found: error
+          retention-days: 90
+
+  installed-suite:
+    needs: [plan, sdist, wheel]
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.cells) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - uses: actions/download-artifact@v4
+        with:
+          name: b4a-sdist
+          path: ${{ runner.temp }}/b4a-source
+      - uses: actions/download-artifact@v4
+        with:
+          name: b4a-wheel-${{ matrix.id }}
+          path: ${{ runner.temp }}/b4a-wheel
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0
+      - run: python -m pip install -r scripts/ci/python-packaging-requirements.txt
+      - name: Execute full installed B.4 suite and stubs with checkout/network/cache denied
+        shell: bash
+        run: |
+          sdist=( "$RUNNER_TEMP"/b4a-source/dist/*.tar.gz )
+          wheel=( "$RUNNER_TEMP"/b4a-wheel/*.whl )
+          python scripts/ci/validate_python_distribution.py cell --sdist "${sdist[0]}" --wheel "${wheel[0]}" \
+            --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/b4a-cell"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: b4a-cell-${{ matrix.id }}-${{ matrix.python }}
+          path: ${{ runner.temp }}/b4a-cell/
+          if-no-files-found: error
+          retention-days: 90
+
+  aggregate:
+    if: always()
+    needs: [sdist, wheel, installed-suite]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: b4a-*
+          path: ${{ runner.temp }}/b4a-evidence
+      - name: Require all 25 cells against the same five wheels and sdist
+        shell: bash
+        run: |
+          sdist=( "$RUNNER_TEMP"/b4a-evidence/b4a-sdist/dist/*.tar.gz )
+          python scripts/ci/validate_python_distribution.py aggregate \
+            --policy release/python-platform-policy.json --sdist "${sdist[0]}" \
+            --evidence "$RUNNER_TEMP/b4a-evidence" --source-commit "${{ github.sha }}"

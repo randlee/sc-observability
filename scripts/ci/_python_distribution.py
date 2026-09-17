@@ -75,6 +75,10 @@ def verify_source(root: Path) -> dict:
                 'python/sc_observability/py.typed', 'rust-bundle/manifest.json')
     if not set(required) <= record['files'].keys():
         raise DistributionError('sdist inventory omits required package data')
+    actual = {path.relative_to(root).as_posix() for path in root.rglob('*') if path.is_file()}
+    unexpected = actual - set(record['files']) - {'distribution-manifest.json', 'PKG-INFO'}
+    if unexpected:
+        raise DistributionError(f'unrecorded distribution members: {sorted(unexpected)}')
     for path in root.rglob('*'):
         if path.is_symlink():
             raise DistributionError(f'symlink in unpacked distribution: {path}')

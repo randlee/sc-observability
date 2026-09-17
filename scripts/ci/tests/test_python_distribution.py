@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _python_distribution import DistributionError, extract_sdist, inspect_wheel
+from _python_distribution import DistributionError, extract_sdist, inspect_wheel, digest, verify_source
 
 
 class DistributionTests(unittest.TestCase):
@@ -43,3 +43,27 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual({p['id'] for p in policy['platforms']},
                          {'macos-arm64', 'macos-x86_64', 'linux-x86_64', 'linux-aarch64', 'windows-x86_64'})
         self.assertEqual(len(policy['interpreters']) * len(policy['platforms']), 25)
+
+    def test_frozen_inventory_rejects_tampering_missing_lock_and_extra_files(self):
+        required = ('Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'pyproject.toml',
+                    'python/sc_observability/__init__.py', 'python/sc_observability/__init__.pyi',
+                    'python/sc_observability/py.typed', 'rust-bundle/manifest.json')
+        for mutation in ('tamper', 'missing', 'extra'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                for relative in required:
+                    path = root / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text('fixture')
+                record = {'schema_version': 1, 'publication': 'pending_B.7', 'source_commit': 'a' * 40,
+                          'files': {path: digest(root / path) for path in required}}
+                (root / 'distribution-manifest.json').write_text(json.dumps(record))
+                verify_source(root)
+                if mutation == 'tamper':
+                    (root / 'Cargo.lock').write_text('stale lock')
+                elif mutation == 'missing':
+                    (root / 'Cargo.lock').unlink()
+                else:
+                    (root / 'unrecorded').write_text('extra')
+                with self.assertRaises(DistributionError):
+                    verify_source(root)
