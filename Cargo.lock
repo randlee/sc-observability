@@ -323,6 +323,7 @@ dependencies = [
  "sc-observability-log",
  "sc-observability-py",
  "sc-observability-types",
+ "serde_json",
 ]
 
 [[package]]

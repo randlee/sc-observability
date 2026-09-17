@@ -4,6 +4,8 @@
 //! interpreter initialization. It never loads a wheel or exchanges a Rust
 //! trait object through a dynamic-library boundary.
 
+mod b5_context;
+
 extern crate _native as binding;
 
 mod async_conformance;
@@ -67,8 +69,10 @@ fn main() -> PyResult<()> {
                 "Rust host cannot observe attached backend health",
             ));
         }
-        async_conformance::run(py)?;
+        b5_context::verify(py, &backend)?;
         drop(owner);
+        b5_context::after_stop(py)?;
+        async_conformance::run(py)?;
         Ok(())
     })
 }

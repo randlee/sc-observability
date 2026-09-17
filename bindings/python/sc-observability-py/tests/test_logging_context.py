@@ -297,3 +297,38 @@ print('B5_ATEXIT_OK')
     result=subprocess.run([sys.executable,"-I","-c",script,str(tmp_path)],text=True,capture_output=True,timeout=10)
     assert result.returncode==0,result.stderr
     assert "B5_ATEXIT_OK" in result.stdout
+
+
+def test_factory_foreign_input_inspection_is_contained(logger):
+    class HostileTuple(tuple):
+        def __iter__(self):
+            raise RuntimeError("foreign tuple iterator")
+    class HostileName(str):
+        def __bool__(self):
+            raise RuntimeError("foreign field inspection")
+    class HostileBackend:
+        def __getattribute__(self, name):
+            raise RuntimeError("foreign backend inspection")
+    class HostileTrace(TraceContext):
+        def __getattribute__(self, name):
+            raise RuntimeError("foreign trace snapshot")
+    for result in (create_handler(None, extra_fields=HostileTuple(("x",))),
+                   create_handler(logger, extra_fields=(HostileName("x"),)),
+                   create_handler(HostileBackend()),
+                   bind_context(trace=HostileTrace("1" * 32, "2" * 16))):
+        assert isinstance(result, Err) and result.error.kind == "internal"
+
+
+def test_accounting_failure_preserves_original_result(logger):
+    handler = value(create_handler(logger))
+    original = Err(generated.OutputFailureClosed(
+        at="2025-01-01T00:00:00Z", code=generated.SC_OBSERVABILITY_BINDING_CLOSED,
+        message="original", remediation=generated.OutputRemediationRecoverable(
+            steps=("Stop submitting through the closed backend and inspect its retained health",))))
+    class BrokenCounts(dict):
+        def __setitem__(self, key, value):
+            raise RuntimeError("foreign accounting fault")
+    handler._counts = BrokenCounts(handler._counts)
+    handler._record(original, event=True)
+    assert handler.last_result() is original
+    handler.close()
