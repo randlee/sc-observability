@@ -2271,11 +2271,10 @@ mod tests {
                 .expect("emit");
         }
 
-        let active_path = default_log_path(&root, &service_name());
-        wait_for(
-            || existing_log_paths(&active_path, 4).len() > 1,
-            "expected retained files before parity query",
-        );
+        // `flush` is a writer-thread barrier: all three events and the sink's
+        // synchronous rotations are complete before either reader snapshots.
+        // Do not race snapshots against a merely-observed first rotated file.
+        logger.flush().expect("drain writer before parity query");
 
         let query = LogQuery {
             order: LogOrder::NewestFirst,
@@ -2286,6 +2285,8 @@ mod tests {
         let reader = JsonlLogReader::new(default_log_path(&root, &service_name()));
         let reader_snapshot = reader.query(&query).expect("reader query");
 
+        assert_eq!(request_ids(&logger_snapshot), ["req-c", "req-b"]);
+        assert_eq!(request_ids(&reader_snapshot), ["req-c", "req-b"]);
         assert_eq!(reader_snapshot, logger_snapshot);
     }
 
