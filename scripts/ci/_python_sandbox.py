@@ -90,8 +90,6 @@ class Sandbox:
                         self.acls.append((path, saved))
                         subprocess.run(['icacls', str(path), '/deny', account + ':(OI)(CI)(R)', '/C'],
                                        check=True, stdout=subprocess.DEVNULL)
-                self.powershell(f"New-NetFirewallRule -DisplayName '{self.firewall}' "
-                                "-Direction Outbound -Action Block -Profile Any | Out-Null")
             except BaseException:
                 self.__exit__(None, None, None)
                 raise
@@ -114,6 +112,11 @@ class Sandbox:
         print('B4A_COMMAND ' + json.dumps(command), flush=True)
         started = time.monotonic()
         try:
+            if self.system == 'Windows':
+                # Every artifact command has network denied. Release the rule
+                # between commands so the ephemeral CI agent can report progress.
+                self.powershell(f"New-NetFirewallRule -DisplayName '{self.firewall}' "
+                                "-Direction Outbound -Action Block -Profile Any | Out-Null")
             result = subprocess.run(self.prefix + command, cwd=cwd, env=self.env,
                                     text=True, encoding='utf-8', errors='replace',
                                     capture_output=True, timeout=900)
@@ -121,6 +124,10 @@ class Sandbox:
             decode = lambda value: value.decode('utf-8', errors='replace') if isinstance(value, bytes) else (value or '')
             raise DistributionError(f'qualification command exceeded 900 seconds: {command}\n'
                                     + decode(error.stdout) + '\n' + decode(error.stderr)) from error
+        finally:
+            if self.system == 'Windows':
+                self.powershell(f"Get-NetFirewallRule -DisplayName '{self.firewall}' "
+                                "-ErrorAction SilentlyContinue | Remove-NetFirewallRule")
         print(f'B4A_EXIT {result.returncode} after {time.monotonic() - started:.2f}s', flush=True)
         self.commands.append({'command': command, 'exit_code': result.returncode,
                               'stdout': result.stdout, 'stderr': result.stderr})
