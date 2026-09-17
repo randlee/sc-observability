@@ -1,12 +1,12 @@
 {
   "inputs": {
-    "Cargo.lock": "85a8c75d1f97eb7de7aec67307698f3df60e91d0607dd73e4e288bfb87403331",
+    "Cargo.lock": "b865cdbc07bf0bdb462f5e86d7153ee9982f1fe1792213d67fd715edaa15c229",
     "bindings/generation-toolchain.toml": "5d8b2341cb3a28e59c44b5f2de6e9636eebcc88807249b2e431ce77a33a0a5db",
     "bindings/schema-generator/Cargo.lock": "7d0b2f103efc6decdc4af926c3e69c453e7faede65eebd8ad1b3e6ca8e36f029",
     "bindings/schema-generator/Cargo.toml": "cb679f7d4a3f14144d7baf64d13278cbdaefecdc56e03312978dde2c9c79d1bf",
     "bindings/schema-generator/src/main.rs": "4317aba39382cb45b4d4eb739c37421f805abdae239c2e5dfc3ce9a5ff54fdef",
     "crates/sc-observability-dto/Cargo.toml": "a92dbf6ad5e1716c72965ced77d761f0a3d2af3918a032e2a6ca23235841adc3",
-    "crates/sc-observability-dto/src/error_codes.rs": "ea268ca3dfb2fd151174f8b9258de50bc667057210ed0422de932d1c1c7ca8b2",
+    "crates/sc-observability-dto/src/error_codes.rs": "d528e7ecc927b374947f6afb4cf96ddcb29dd592a0f518c7c7e1cf649bf3e828",
     "crates/sc-observability-dto/src/wire.rs": "2edf78a4e91a539ae7a2adf7ab9a3775d601135a281076d2331c8317db24925c",
     "rust-toolchain.toml": "d52c5633ea77aefd345519d0a6c87e19c2636a1e90178585c30db481b3de9de0",
     "scripts/_binding_schema.py": "c3836adba56705a59bb8bcb3845be90cdac1f433190b2c6c9f47459b8ec8a67d",
@@ -14,14 +14,14 @@
     "scripts/generate_typescript_bindings.py": "4ad56bd38d1949e95c0ac42fa626dd324716706b2861cc2f6d9feaccd1cbd99a"
   },
   "outputs": {
-    "bindings/python/sc-observability-py/python/sc_observability/generated/__init__.py": "969191096e7dbaad3021c45ef53e6841c018061ee0a57526a70365d41abb2415",
-    "bindings/python/sc-observability-py/python/sc_observability/generated/__init__.pyi": "6bc8eee1abd1b263d939e73f92d28ba83d8d90da38cba3a01ba4a6ebb6e65948",
+    "bindings/python/sc-observability-py/python/sc_observability/generated/__init__.py": "6f091daac103f559833f8b3c2852a387a689a0ff069b27fa59f097f1baccea08",
+    "bindings/python/sc-observability-py/python/sc_observability/generated/__init__.pyi": "f93427132f6b6534f0ef51eb1e5159bc664f514a03e31d02555bf4b5f1e62aaf",
     "bindings/python/sc-observability-py/python/sc_observability/generated/py.typed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "bindings/schema/errors-v1.json": "85ba7cc7dc6a7bf9d4bd84091149d025914101a6eb45bafbe758fd67eaf9cf39",
-    "bindings/schema/v1.json": "59ec554f729712d5173fbb222a986ff01204defbe34364efa012dbac0291a261",
-    "bindings/typescript/src/generated/index.ts": "b0b6bf30027f050d7d092e099391840b1d6c80493a1e88afb85e5d0ed091ab50"
+    "bindings/schema/errors-v1.json": "aa7d43390670a6592cb16bc759dc34db4343cdb602b0a43a18cf0e53171e8fd8",
+    "bindings/schema/v1.json": "ea0c9709b02f7b416debda06278ff65cda69bee1e5d839bd1ec4537231f729ee",
+    "bindings/typescript/src/generated/index.ts": "02079b0465cf3f16c91f94b617314b1badf0918f966172675a36965525f6b0c3"
   },
-  "source_revision": "51d90e5",
+  "source_revision": "b15fff9dcf2e1f2234468e3dfbe23e6776ef7386",
   "toolchain": {
     "python": "3.12.10",
     "rust": "1.94.1",
