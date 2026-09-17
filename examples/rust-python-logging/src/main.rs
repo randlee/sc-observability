@@ -6,6 +6,8 @@
 
 extern crate _native as binding;
 
+mod async_conformance;
+
 use binding::{_native as native_module, install_host_logger};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -65,6 +67,7 @@ fn main() -> PyResult<()> {
                 "Rust host cannot observe attached backend health",
             ));
         }
+        async_conformance::run(py)?;
         drop(owner);
         Ok(())
     })

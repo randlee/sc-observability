@@ -65,7 +65,10 @@ def _submit(logger: _Logger, event: LogEvent) -> Result[LogReceipt]:
         result = Ok(receipt)
     except Exception:
         return Err(_internal("could not allocate admission receipt"))
-    admitted = logger.log(event)
+    try:
+        admitted = logger.log(event)
+    except Exception:
+        return Err(_internal("could not submit event through the logging boundary"))
     if isinstance(admitted, Err):
         return admitted
     object.__setattr__(state, "admission", admitted.value)

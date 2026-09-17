@@ -12,6 +12,8 @@ sc-observability.workspace = true
 sc-observability-binding-runtime = { version = "1.4.0", path = "../../crates/sc-observability-binding-runtime" }
 sc-observability-py = { version = "1.4.0", path = "../../bindings/python/sc-observability-py" }
 sc-observability-types.workspace = true
+sc-observability-dto.workspace = true
+sc-observability-log.workspace = true
 
 [lints]
 workspace = true
