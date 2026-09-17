@@ -1,0 +1,7 @@
+{
+  "name": "sc-observability-tauri-qualification",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": { "esbuild": "0.25.10", "typescript": "5.7.3" }
+}

@@ -118,17 +118,28 @@ def command(arguments,cwd,**kwargs):
     if result.returncode:raise BundleError('BUNDLE_COMMAND_FAILED',f'{arguments!r}\n{result.stderr}')
     return result.stdout
 
+def workspace_for(manifest):
+    """Resolve inheritance independently for each manifest in a mixed closure."""
+    for directory in (manifest.parent, *manifest.parent.parents):
+        candidate=directory/'Cargo.toml'
+        if candidate.is_file():
+            document=tomllib.loads(candidate.read_text())
+            if 'workspace' in document:return directory,document['workspace']
+    return manifest.parent,{}
+
 def build(root_manifest,output):
     root_manifest=root_manifest.resolve();output=output.resolve()
     if output.exists():raise BundleError('BUNDLE_OUTPUT_EXISTS',str(output))
-    source_root = next((p for p in [root_manifest.parent, *root_manifest.parent.parents] if (p/'Cargo.toml').is_file() and 'workspace' in tomllib.loads((p/'Cargo.toml').read_text())), root_manifest.parent)
+    workspace_root,_=workspace_for(root_manifest)
+    repository=subprocess.run(['git','rev-parse','--show-toplevel'],cwd=root_manifest.parent,text=True,capture_output=True)
+    source_root=Path(repository.stdout.strip()).resolve() if repository.returncode==0 else workspace_root
     seen=set()
-    workspace=tomllib.loads((source_root/'Cargo.toml').read_text()).get('workspace',{})
     def preflight(manifest):
         if manifest in seen:return
         seen.add(manifest)
         if not manifest.resolve().is_relative_to(source_root):raise BundleError('BUNDLE_ESCAPING_PATH',str(manifest))
         document=tomllib.loads(manifest.read_text())
+        inheritance_root,workspace=workspace_for(manifest)
         tables=[document,*document.get('target',{}).values()]
         for table in tables:
             for section in ('dependencies','build-dependencies','dev-dependencies'):
@@ -137,7 +148,7 @@ def build(root_manifest,output):
                     base=manifest.parent
                     if spec.get('workspace'):
                         spec=workspace.get('dependencies',{}).get(name,{})
-                        base=source_root
+                        base=inheritance_root
                     if not isinstance(spec,dict):continue
                     if 'git' in spec:raise BundleError('BUNDLE_ESCAPING_PATH','git dependency is not bundled')
                     if 'path' in spec:
@@ -147,7 +158,7 @@ def build(root_manifest,output):
                         if not isinstance(spec.get("version"),str) or not spec["version"].strip():raise BundleError("BUNDLE_MISSING_VERSION",f"{name} path dependency needs a publishable version")
                         preflight(child)
     preflight(root_manifest)
-    reviewed_requirements={str(path):dependency_requirements(tomllib.loads(path.read_text()),workspace) for path in seen}
+    reviewed_requirements={str(path):dependency_requirements(tomllib.loads(path.read_text()),workspace_for(path)[1]) for path in seen}
     # --locked rejects a stale source lock before any package staging.
     try:metadata=json.loads(command(['cargo','metadata','--locked','--format-version','1','--manifest-path',str(root_manifest)],root_manifest.parent))
     except BundleError as exc:raise BundleError('BUNDLE_STALE_LOCK',str(exc)) from exc
@@ -166,23 +177,30 @@ def build(root_manifest,output):
         for dependency in by_id[pid]['dependencies']:
             if dependency.get('path'):
                 target=(Path(dependency['path'])/'Cargo.toml').resolve()
-                if not target.is_relative_to(source):raise BundleError('BUNDLE_ESCAPING_PATH',str(target))
+                if not target.is_relative_to(source_root):raise BundleError('BUNDLE_ESCAPING_PATH',str(target))
                 matches=[p['id'] for p in by_id.values() if Path(p['manifest_path']).resolve()==target]
                 if len(matches)!=1:raise BundleError('BUNDLE_MISSING_MEMBER',str(target))
                 visit(matches[0])
     visit(root['id'])
     unpublished=sorted((by_id[pid] for pid in closure if by_id[pid]['source'] is None),key=lambda p:p['name'])
     for package in unpublished:
-        if not Path(package['manifest_path']).resolve().is_relative_to(source):raise BundleError('BUNDLE_ESCAPING_PATH',package['manifest_path'])
+        if not Path(package['manifest_path']).resolve().is_relative_to(source_root):raise BundleError('BUNDLE_ESCAPING_PATH',package['manifest_path'])
         if package.get('publish')==[]:raise BundleError('BUNDLE_INVALID_MANIFEST',f'private package in production closure: {package["name"]}')
     output.mkdir(parents=True)
     build_target=output/'package-build'
-    args=['cargo','package','--locked','--allow-dirty','--no-verify','--target-dir',str(build_target)]
-    for package in unpublished:args+=['-p',package['name']]
-    package_log=command(args,source);(output/'package.log').write_text(package_log)
+    package_commands=[];package_log=[]
+    groups={}
+    for package in unpublished:
+        owner,_=workspace_for(Path(package['manifest_path']).resolve())
+        groups.setdefault(owner,[]).append(package)
+    for owner,packages in sorted(groups.items()):
+        args=['cargo','package','--locked','--allow-dirty','--no-verify','--manifest-path',str(owner/'Cargo.toml'),'--target-dir',str(build_target)]
+        for package in packages:args+=['-p',package['name']]
+        package_log.append(command(args,owner));package_commands.append(args)
+    (output/'package.log').write_text('\n'.join(package_log))
     archives=output/'archives';archives.mkdir();packages_dir=output/'packages';packages_dir.mkdir()
     entries=[]
-    qualified_stage=source/'docs/plans/phase-b/evidence/b2-final/stage'
+    qualified_stage=source_root/'docs/plans/phase-b/evidence/b2-final/stage'
     qualified={}
     qualified_evidence=None
     if qualified_stage.exists():
@@ -223,7 +241,7 @@ def build(root_manifest,output):
     manifests_confined(output)
     files={p.relative_to(output).as_posix():digest(p) for p in sorted(output.rglob('*')) if p.is_file() and p.relative_to(output).parts[0] not in ('src','target')}
     source_sha=command(['git','rev-parse','HEAD'],source).strip()
-    evidence={'registry_selection':registry_selection,'schema_version':1,'source_commit':source_sha,'root_package':root['name'],'root_version':root['version'],'publication':'pending_B.7','packages':entries,'files':files,'lock_sha256':digest(output/'Cargo.lock'),'source_lock_sha256':digest(source/'Cargo.lock'),'package_command':args[:args.index('--target-dir')]+['--target-dir','<bundle>/package-build']+args[args.index('--target-dir')+2:]}
+    evidence={'registry_selection':registry_selection,'schema_version':1,'source_commit':source_sha,'root_package':root['name'],'root_version':root['version'],'publication':'pending_B.7','packages':entries,'files':files,'lock_sha256':digest(output/'Cargo.lock'),'source_lock_sha256':digest(source/'Cargo.lock'),'package_commands':[args[:args.index('--target-dir')]+['--target-dir','<bundle>/package-build']+args[args.index('--target-dir')+2:] for args in package_commands]}
     (output/'manifest.json').write_text(json.dumps(evidence,indent=2,sort_keys=True)+'\n')
     verify_bundle(output)
     return evidence
