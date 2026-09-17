@@ -1,0 +1,9 @@
+pub mod _native
+pub use _native::BridgeControlBackend
+pub use _native::CoreLoggerBackend
+pub use _native::CoreLoggerOwner
+pub use _native::HostLoggingBackend
+pub use _native::Operation
+pub use _native::OperationState
+pub fn _native::_native(&pyo3::instance::Bound<'_, pyo3::types::module::PyModule>) -> pyo3::err::PyResult<()>
+pub fn _native::install_host_logger(&pyo3::instance::Bound<'_, pyo3::types::module::PyModule>, alloc::sync::Arc<dyn sc_observability_binding_runtime::HostLoggingBackend>) -> core::result::Result<(), sc_observability_dto::wire::Failure>
