@@ -99,9 +99,9 @@ jobs:
           set -euo pipefail
           while IFS='|' read -r package wait_secs; do
             cargo publish -p "$package" --locked
-            if [[ "$wait_secs" != "0" ]]; then
-              sleep "$wait_secs"
-            fi
+            version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
+            python3 scripts/ci/wait_for_registry_version.py \
+              --package "$package" --version "$version" --attempts 12 --interval 10
           done < <(python3 scripts/release_artifacts.py list-publish-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")
 
   release:

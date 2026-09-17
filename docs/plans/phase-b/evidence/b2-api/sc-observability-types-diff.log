@@ -506,9 +506,8 @@ Added items to the public API
 +impl core::fmt::Display for sc_observability_types::OperationDiagnostic
 +pub fn sc_observability_types::OperationDiagnostic::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 
-    Blocking waiting for file lock on package cache
  Documenting sc-observability-types v1.2.0
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.26s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
 warning: unused workspace dependency `sc-observability-log`
   --> Cargo.toml:31:1
    |
@@ -577,4 +576,4 @@ warning: `package.homepage` is redundant with `package.repository`
 help: consider removing `package.homepage`
 warning: `sc-observe` (manifest) generated 1 warning
  Documenting sc-observability-types v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability-types)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s

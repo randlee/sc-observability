@@ -5,6 +5,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -12,6 +13,7 @@ from _log_staging import PACKAGES, inspect_archive, sha256, verify_stage
 from validate_log_staged_consumer import validate_resolution
 from validate_public_api import approval_for
 from _log_release_adaptations import apply_release_adaptations, blob
+from wait_for_registry_version import wait
 from prepare_runtime_level_staged_packages import candidate_workspace_manifest, normalized_lock
 
 VERSION = '1.4.0'
@@ -103,6 +105,16 @@ class StageTests(unittest.TestCase):
         packages[0]['manifest_path'] = '/checkout/Cargo.toml'
         with self.assertRaisesRegex(ValueError, 'ambient'):
             validate_resolution({'packages': packages}, paths, VERSION)
+
+    def test_future_publication_visibility_fails_after_bounded_retries(self):
+        with patch('wait_for_registry_version.visible', return_value=False) as probe, patch('wait_for_registry_version.time.sleep') as sleep:
+            with self.assertRaisesRegex(RuntimeError, 'exhausted after 3'):
+                wait('sc-observability', VERSION, 3, 0)
+            self.assertEqual(probe.call_count, 3)
+            self.assertEqual(sleep.call_count, 2)
+        with patch('wait_for_registry_version.visible', side_effect=[False, True]) as probe, patch('wait_for_registry_version.time.sleep'):
+            wait('sc-observability', VERSION, 3, 0)
+            self.assertEqual(probe.call_count, 2)
 
     def test_release_adaptation_rejects_unrelated_manifest_and_license_edits(self):
         import hashlib

@@ -1,12 +1,10 @@
     Building sc-observability v1.4.0 (current)
-       Built [   2.989s] (current)
+       Built [   0.221s] (current)
      Parsing sc-observability v1.4.0 (current)
-      Parsed [   0.002s] (current)
-    Building sc-observability v1.2.0 (baseline)
-       Built [   2.986s] (baseline)
-     Parsing sc-observability v1.2.0 (baseline)
-      Parsed [   0.002s] (baseline)
+      Parsed [   0.003s] (current)
+     Parsing sc-observability v1.2.0 (baseline, cached)
+      Parsed [   0.003s] (baseline)
     Checking sc-observability v1.2.0 -> v1.4.0 (assume minor change)
      Checked [   0.005s] 196 checks: 196 pass, 57 skip
      Summary no semver update required
-    Finished [   6.501s] sc-observability
+    Finished [   0.466s] sc-observability

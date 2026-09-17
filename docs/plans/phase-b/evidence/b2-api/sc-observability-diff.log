@@ -68,7 +68,7 @@ Added items to the public API
 +pub fn sc_observability::LoggerBuilder::new_typed(sc_observability::LoggerConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
 
  Documenting sc-observability v1.2.0
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.12s
 warning: unused workspace dependency `sc-observability-log`
   --> Cargo.toml:31:1
    |
@@ -137,4 +137,4 @@ warning: `package.homepage` is redundant with `package.repository`
 help: consider removing `package.homepage`
 warning: `sc-observe` (manifest) generated 1 warning
  Documenting sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.13s

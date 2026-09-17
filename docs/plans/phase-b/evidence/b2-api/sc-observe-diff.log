@@ -15,9 +15,8 @@ Added items to the public API
 +pub fn sc_observe::ObservabilityConfig::default_for_typed(sc_observability_types::validation::ToolName, std::path::PathBuf) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
 +pub fn sc_observe::ObservabilityConfig::service_name_typed(&self) -> core::result::Result<sc_observability_types::validation::ServiceName, sc_observability_types::typed::InitFailure>
 
-    Blocking waiting for file lock on package cache
  Documenting sc-observe v1.2.0
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.54s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
 warning: unused workspace dependency `sc-observability-log`
   --> Cargo.toml:31:1
    |
@@ -86,4 +85,4 @@ warning: `package.homepage` is redundant with `package.repository`
 help: consider removing `package.homepage`
 warning: `sc-observe` (manifest) generated 1 warning
  Documenting sc-observe v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observe)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s

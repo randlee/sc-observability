@@ -1,5 +1,5 @@
 {
-  "source_commit": "f8c8233a33b3b25c9c82314b31105befb52e344e",
+  "source_commit": "67e715d5be90aaf60f02289bfc3dbb4255ccd94b",
   "candidate_version": "1.4.0",
   "crates": {
     "sc-observability-types": {
@@ -18,7 +18,8 @@
         "--default-features"
       ],
       "exit_code": 0,
-      "log": "sc-observability-types-semver.log"
+      "log": "sc-observability-types-semver.log",
+      "api_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "sc-observability": {
       "status": "passed",
@@ -36,7 +37,8 @@
         "--default-features"
       ],
       "exit_code": 0,
-      "log": "sc-observability-semver.log"
+      "log": "sc-observability-semver.log",
+      "api_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "sc-observe": {
       "status": "passed",
@@ -54,7 +56,8 @@
         "--default-features"
       ],
       "exit_code": 0,
-      "log": "sc-observe-semver.log"
+      "log": "sc-observe-semver.log",
+      "api_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "sc-observability-otlp": {
       "status": "passed",
@@ -72,7 +75,8 @@
         "--default-features"
       ],
       "exit_code": 0,
-      "log": "sc-observability-otlp-semver.log"
+      "log": "sc-observability-otlp-semver.log",
+      "api_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     "sc-observability-log-macros": {
       "status": "initial-release-no-published-baseline",
@@ -86,7 +90,8 @@
         "-sss"
       ],
       "exit_code": 0,
-      "log": "sc-observability-log-macros-semver.log"
+      "log": "sc-observability-log-macros-semver.log",
+      "api_sha256": "ed78c9311b656f43c26a2697d6ba5c840a824f5c48c96fe8cec30d97bedc1ea3"
     },
     "sc-observability-log": {
       "status": "initial-release-no-published-baseline",
@@ -100,7 +105,8 @@
         "-sss"
       ],
       "exit_code": 0,
-      "log": "sc-observability-log-semver.log"
+      "log": "sc-observability-log-semver.log",
+      "api_sha256": "b8eea319e1ed8947cc851e834311a1061910405113da96cd4f18bbff109b5ac0"
     }
   }
 }

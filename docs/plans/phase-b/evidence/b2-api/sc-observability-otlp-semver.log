@@ -1,12 +1,10 @@
     Building sc-observability-otlp v1.4.0 (current)
-       Built [   3.393s] (current)
+       Built [   0.193s] (current)
      Parsing sc-observability-otlp v1.4.0 (current)
       Parsed [   0.002s] (current)
-    Building sc-observability-otlp v1.2.0 (baseline)
-       Built [   3.727s] (baseline)
-     Parsing sc-observability-otlp v1.2.0 (baseline)
+     Parsing sc-observability-otlp v1.2.0 (baseline, cached)
       Parsed [   0.002s] (baseline)
     Checking sc-observability-otlp v1.2.0 -> v1.4.0 (assume minor change)
-     Checked [   0.005s] 196 checks: 196 pass, 57 skip
+     Checked [   0.004s] 196 checks: 196 pass, 57 skip
      Summary no semver update required
-    Finished [   7.655s] sc-observability-otlp
+    Finished [   0.426s] sc-observability-otlp

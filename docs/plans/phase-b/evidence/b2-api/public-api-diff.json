@@ -1,5 +1,5 @@
 {
-  "source_commit": "6bb5cc126c728bdf10abd449eb292c87b864005b",
+  "source_commit": "67e715d5be90aaf60f02289bfc3dbb4255ccd94b",
   "candidate_version": "1.4.0",
   "crates": {
     "sc-observability-types": {

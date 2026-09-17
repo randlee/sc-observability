@@ -289,4 +289,4 @@ warning: `package.homepage` is redundant with `package.repository`
 help: consider removing `package.homepage`
 warning: `sc-observe` (manifest) generated 1 warning
  Documenting sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability-log)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s
