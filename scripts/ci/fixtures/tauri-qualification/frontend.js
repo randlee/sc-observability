@@ -96,13 +96,15 @@ async function run() {
   failure('level-invalid-tag', await level({ kind: 'unknown' }), 'validation');
   failure('direct-denied-target', await command('try_log', { ...request, event: wireEvent({ target: 'forbidden' }) }), 'validation');
   failure('direct-denied-query', await command('query', { ...request, query: { ...request, target: 'forbidden' } }), 'validation');
-  for (const key of ['sc_observability.binding.language', 'sc_observability.binding.future', 'sc_observability::binding::language']) {
+  for (const key of ['sc_observability.binding.language', 'sc_observability.binding.future', 'sc_observability::binding::language', 'sc observability.binding.language']) {
     for (const nested of [false, true]) {
-      const forged = { [key]: { kind: 'string', value: 'rust' } };
+      const forged = { valid: { kind: 'string', value: 'ordinary' }, [key]: { kind: 'string', value: 'rust' } };
       const fields = nested ? { nested: { kind: 'object', value: forged } } : forged;
-      failure(`provenance-${key}-${nested}`, await command('try_log', { ...request, event: wireEvent({ fields }) }), 'validation');
+      failure(`provenance-${key}-${nested}`, await command('try_log', { ...request, event: wireEvent({ action: 'forged-provenance', fields }) }), 'validation');
     }
   }
+  value('flush-after-provenance-rejection', await client.flush(2000));
+  check('provenance-rejected-before-admission', value('query-rejected-provenance', await client.query({ schema_version: 1, action: 'forged-provenance' })).events.length === 0);
   failure('unknown-event-field', await command('try_log', { ...request, event: wireEvent({ authority: true }) }), 'validation');
   failure('unknown-request-field', await command('health', { ...request, authority: true }), 'validation');
   const minimalExact = { ...request, event: wireEvent({ message: '' }) };
@@ -114,6 +116,18 @@ async function run() {
   failure('one-byte-oversize-request', await command('try_log', { ...exactRequest, event: { ...exactRequest.event, message: exactRequest.event.message + 'x' } }), 'validation');
   failure('unknown-wire-version', await command('health', { schema_version: 2 }), 'unsupported_version');
   failure('oversized-request', await command('try_log', { ...request, event: wireEvent({ message: 'x'.repeat(65536) }) }), 'validation');
+  const depthOf = (value) => value !== null && typeof value === 'object' ? 1 + Math.max(0, ...Object.values(value).map(depthOf)) : 0;
+  let exactDepth = { kind: 'null' };
+  let oneOverDepth = { kind: 'object', value: {} };
+  for (let count = 0; count < 14; count++) {
+    exactDepth = { kind: 'array', value: [exactDepth] };
+    oneOverDepth = { kind: 'array', value: [oneOverDepth] };
+  }
+  const atDepth = { ...request, event: wireEvent({ fields: { depth: exactDepth } }) };
+  const overDepth = { ...request, event: wireEvent({ fields: { depth: oneOverDepth } }) };
+  check('raw-depth-boundaries', depthOf(atDepth) === 32 && depthOf(overDepth) === 33, { at: depthOf(atDepth), over: depthOf(overDepth) });
+  value('exact-depth-request', await command('try_log', atDepth));
+  failure('one-level-over-depth-request', await command('try_log', overDepth), 'validation');
   let deep = { kind: 'null' };
   for (let i = 0; i < 33; i++) deep = { kind: 'array', value: [deep] };
   failure('deep-request', await command('try_log', { ...request, event: wireEvent({ fields: { deep } }) }), 'validation');
