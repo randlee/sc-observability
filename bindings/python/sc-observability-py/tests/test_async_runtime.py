@@ -130,3 +130,34 @@ sys.stderr.flush()
             child.stdout.close()
         if child.stderr is not None:
             child.stderr.close()
+
+
+def test_submit_snapshots_context_and_nested_values_at_call_boundary(tmp_path: Path) -> None:
+    from sc_observability.context import bind_context
+    made = create_logger(LoggerConfig(service="async-context", log_root=str(tmp_path)))
+    assert isinstance(made, Ok)
+    logger = made.value
+    async def produce(index: int) -> None:
+        context = bind_context(request_id=f"task-{index}", correlation_id="mixed-async")
+        assert isinstance(context, Ok)
+        assert isinstance(context.value.enter(), Ok)
+        payload = {"nested": [index]}
+        submitted = logger.submit(LogEvent(level="info", target="async.runtime", action=f"snapshot.{index}", fields=payload))
+        assert isinstance(submitted, Ok)
+        payload["nested"].append(999)
+        assert isinstance(context.value.close(), Ok)
+        await asyncio.sleep(0)
+        assert isinstance(await submitted.value.wait(0), Ok)
+    async def run() -> None:
+        await asyncio.gather(*(produce(index) for index in range(32)))
+        assert isinstance(await logger.flush_async(), Ok)
+    asyncio.run(run(), debug=True)
+    records = logger.query(LogQuery(limit=100))
+    assert isinstance(records, Ok) and len(records.value.events) == 32
+    for event in records.value.events:
+        index = int(event.action.split(".")[-1])
+        assert event.request_id == f"task-{index}"
+        assert event.correlation_id == "mixed-async"
+        assert len(event.fields["nested"].value) == 1
+        assert event.fields["nested"].value[0].value == index
+    assert isinstance(logger.shutdown(), Ok)

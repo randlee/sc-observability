@@ -28,10 +28,25 @@ async def run():
     # Cancellation must leave the native slot occupied while writer is held.
     still_held = await logger.flush_async(1)
     assert isinstance(still_held, Err) and still_held.error.code == "SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS", still_held
-    for _ in range(32):
-        submitted = logger.submit(LogEvent(level="info", target="async.embed", action="concurrent"))
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    def synchronized_threads():
+        barrier = threading.Barrier(32)
+        def produce(index):
+            barrier.wait(timeout=10)
+            return logger.submit(LogEvent(level="info", target="async.embed", action=f"thread.{index}"))
+        with ThreadPoolExecutor(max_workers=32) as executor:
+            return tuple(executor.map(produce, range(32)))
+    assert all(isinstance(result, Ok) for result in await asyncio.to_thread(synchronized_threads))
+    ready = asyncio.Event()
+    async def produce(index):
+        await ready.wait()
+        submitted = logger.submit(LogEvent(level="info", target="async.embed", action=f"task.{index}"))
         assert isinstance(submitted, Ok), submitted
         assert isinstance(await submitted.value.wait(0), Ok)
+    producers = [asyncio.create_task(produce(index)) for index in range(32)]
+    ready.set()
+    await asyncio.gather(*producers)
     assert ticks >= 3
     for _ in range(4096):
         saturated = logger.submit(LogEvent(level="info", target="async.embed", action="queue.fill"))
