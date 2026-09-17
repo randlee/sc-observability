@@ -8,6 +8,7 @@ members = [
   "crates/sc-observability-log-macros",
   "crates/sc-observability-log-consumer-check",
   "crates/sc-observability-dto",
+  "crates/sc-observability-binding-runtime",
 ]
 exclude = ["examples/atm-adapter-example"]
 resolver = "2"
@@ -21,6 +22,7 @@ repository = "https://github.com/randlee/sc-observability"
 homepage = "https://github.com/randlee/sc-observability"
 
 [workspace.dependencies]
+sc-observability-dto = { version = "1.4.0", path = "crates/sc-observability-dto" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
