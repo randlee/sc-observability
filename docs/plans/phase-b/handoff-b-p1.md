@@ -35,11 +35,12 @@ QA-B010 as the sole governance-only hold. The retained QA-4 evidence directory
 is `/Users/randlee/.config/atm/share/sc-obs/qa-evidence/phase-b-bp1-qa-4/a8951321e6b1df6044c2ee1f6f41c07a9dad7d99/rust-qa-agent/`;
 its 17 raw files and `SHA256SUMS.txt` are the checksum index.
 
-On 2026-09-16 (America/Los_Angeles), the owner directed: "you task was to
-complete phase-b w/ publish delayed until the end." This resolves the redundant
-manual QA-B010 execution-approval hold. It records owner direction, not an
-independent-review PASS and not an assertion that all of Phase B is complete.
-No registry publication is authorized before the final phase-end release work.
+On 2026-09-16 (America/Los_Angeles), aobs relayed the owner's instruction:
+"you task was to complete phase-b w/ publish delayed until the end."
+Coordinating lead aobs withdraws its additional manual QA-B010 execution stop.
+Public-API status remains proposed. This is neither direct contract acceptance
+nor independent QA PASS; historical verdicts remain unchanged. Final closeout
+QA is pending. Live publication remains reserved for B.7.
 
 ## QA-1 provenance and pending gates
 
@@ -54,8 +55,8 @@ gates. QA-B001 through QA-B010, QA-I001 through QA-I003, and QA-M001 through
 QA-M004 remain subject to quality-mgr's evidence-based disposition in QA-2.
 
 QA-B010 was explicitly open at this point in the historical record because
-`runtime-level-contract.md` was `proposed_for_public_api_review`. The owner
-direction above supersedes that redundant manual stop. No prior critical review
+`runtime-level-contract.md` was `proposed_for_public_api_review`. The coordinator
+withdrawal above supersedes that additional execution stop. No prior critical review
 failure is represented here as a PASS.
 
 ## QA-2 and QA-3 evidence record
@@ -85,8 +86,8 @@ logs; their presence is evidence retention, not a self-certified QA PASS.
 QA-3's tracker denominator is 18 (the original 17 plus QA-B011): 13 findings
 were independently fixed, and QA-B003, QA-B004, QA-B005, QA-B007, and QA-B010
 remained open at that review. QA-4 subsequently independently verified the
-first four at `a8951321`; the owner direction resolved the remaining
-governance-only execution hold. These later dispositions do not rewrite QA-3's
+first four at `a8951321`; aobs withdrew the remaining
+coordinator-imposed execution hold. These later dispositions do not rewrite QA-3's
 FAIL verdict.
 
 ## Compatibility fixture provenance and commands

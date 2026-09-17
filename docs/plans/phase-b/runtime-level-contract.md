@@ -1,5 +1,7 @@
 ---
-status: owner_authorized_for_phase_execution
+status: proposed_for_public_api_review
+execution_status: authorized
+execution_stop_withdrawn_by: aobs
 issue: 97
 owner_direction_date: 2026-09-16 America/Los_Angeles
 ---
@@ -9,12 +11,11 @@ owner_direction_date: 2026-09-16 America/Los_Angeles
 ## Ownership and sequencing
 
 This is an explicit prerequisite to B.1, not a post-copy implementation task.
-On 2026-09-16 (America/Los_Angeles), the owner directed: "you task was to
-complete phase-b w/ publish delayed until the end." That authorizes the Phase B
-completion workflow under the reviewed runtime contract and removes the redundant manual
-owner-approval stop formerly represented by `proposed_for_public_api_review`.
-It is owner execution authorization, not an invented independent-review PASS
-or a claim that a reviewer accepted contract wording.
+On 2026-09-16 (America/Los_Angeles), aobs relayed the owner's instruction:
+"you task was to complete phase-b w/ publish delayed until the end."
+As coordinating lead, aobs withdraws the additional manual execution stop it
+imposed under QA-B010. Execution may continue. Public-API review status remains
+proposed; this records neither direct contract acceptance nor independent QA PASS.
 
 sc-observability implements and qualifies the additive core capability first;
 BTIT implements the corresponding bridge API and behavior against B.P2's exact
@@ -26,7 +27,7 @@ the staged core artifact and accepted BTIT source in the import gate instead.
 
 Execution ownership and closure are defined once in the prerequisite sprints:
 [B.P1 core implementation](sprint-b-p1-runtime-core.md),
-[B.P2 core publication](sprint-b-p2-runtime-publish.md), and
+[B.P2 package qualification](sprint-b-p2-runtime-publish.md), and
 [B.P3 BTIT integration](sprint-b-p3-runtime-btit.md).
 This document is the normative signature/behavior reference, not an additional
 sprint or a separate closure checklist. B.3 owns the shared wire projection; B.3b owns native backends and conversions;
