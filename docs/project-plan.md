@@ -122,6 +122,10 @@ qualification (B.4a), then Python integration/async support and binding release.
 Go remains future scope. The proposal does not reopen the accepted
 Phase A closure or claim that BTIT's currently open review findings are resolved.
 
+B.3a implementation now includes the generated TypeScript package, isolated
+Tauri adapter, IPC consumer example, and binding validation handoff; its sprint
+record remains the source of platform qualification and merge evidence.
+
 ### B.P1 — Per-logger runtime level core
 
 B.P1 implements the additive neutral runtime-level state, weak ownership, and

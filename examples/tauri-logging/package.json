@@ -1,0 +1,9 @@
+{
+  "name": "tauri-logging-example",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@sc-observability/client": "file:../../bindings/typescript",
+    "@tauri-apps/api": "^2.0.0"
+  }
+}
