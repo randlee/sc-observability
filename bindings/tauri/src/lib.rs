@@ -119,16 +119,19 @@ fn normalize_key(value: &str) -> String {
 }
 
 fn inspect(value: &Value, depth: usize, limit: usize) -> Result<(), Failure> {
-    if depth > limit {
-        return Err(invalid("request", "maximum container depth is 32"));
-    }
     match value {
-        Value::Array(values) => values
-            .iter()
-            .try_for_each(|item| inspect(item, depth + 1, limit)),
-        Value::Object(values) => values
-            .values()
-            .try_for_each(|item| inspect(item, depth + 1, limit)),
+        Value::Array(values) => {
+            if depth >= limit {
+                return Err(invalid("request", "maximum container depth is 32"));
+            }
+            values.iter().try_for_each(|item| inspect(item, depth + 1, limit))
+        }
+        Value::Object(values) => {
+            if depth >= limit {
+                return Err(invalid("request", "maximum container depth is 32"));
+            }
+            values.values().try_for_each(|item| inspect(item, depth + 1, limit))
+        }
         _ => Ok(()),
     }
 }
@@ -555,6 +558,27 @@ mod tests {
         });
         assert!(strict_request(&request, "try_log").is_err());
         assert!(schema(&serde_json::json!({"schema_version": 2}), "request").is_err());
+    }
+
+    #[test]
+    fn boundary_rejects_container_at_limit_but_allows_primitive_leaf() {
+        fn nested_objects(count: usize, leaf: Value) -> Value {
+            (0..count).fold(leaf, |value, _| serde_json::json!({"child": value}))
+        }
+
+        assert!(inspect(
+            &nested_objects(31, Value::Object(Default::default())),
+            0,
+            MAX_DEPTH
+        )
+        .is_ok());
+        assert!(inspect(&nested_objects(32, Value::Null), 0, MAX_DEPTH).is_ok());
+        assert!(inspect(
+            &nested_objects(32, Value::Object(Default::default())),
+            0,
+            MAX_DEPTH
+        )
+        .is_err());
     }
 
     #[test]
