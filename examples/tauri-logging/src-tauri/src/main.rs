@@ -8,13 +8,34 @@ use sc_observability_dto::{
     decode_level_request,
 };
 use sc_observability_tauri::{AdapterPolicy, plugin};
+use tauri::Manager;
 use std::{
     collections::BTreeSet,
     path::PathBuf,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
-struct OwnerState(Arc<Mutex<sc_observability_log::LogGuard>>);
+struct OwnerState {
+    guard: Mutex<Option<sc_observability_log::LogGuard>>,
+    control: sc_observability_log::LogControl,
+}
+
+impl OwnerState {
+    /// Consumes the sole lifecycle owner from a host-only, bounded shutdown path.
+    ///
+    /// The retained control remains available for post-stop health and
+    /// `wait_stopped` observation after the guard has been consumed.
+    fn shutdown(&self, timeout: Duration) {
+        let guard = self.guard.lock().ok().and_then(|mut guard| guard.take());
+        if let Some(guard) = guard {
+            if let Err(error) = guard.shutdown(timeout) {
+                eprintln!("observability host shutdown did not complete cleanly: {error}");
+            }
+        }
+        let _ = self.control.wait_stopped(Duration::ZERO);
+    }
+}
 
 fn level_envelope(result: Result<LevelChangeDto, Failure>) -> WireEnvelope<LevelChangeDto> {
     match result {
@@ -36,6 +57,15 @@ fn invalid(field: &str, message: &str) -> Failure {
             message,
         )),
         field: field.to_owned(),
+    }
+}
+
+fn closed_level_change() -> Failure {
+    Failure::Closed {
+        diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+            sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
+            "the host logger is closed",
+        )),
     }
 }
 
@@ -110,13 +140,16 @@ fn app_observability_level_change<R: tauri::Runtime>(
             }));
         }
     };
-    let Ok(mut owner) = state.0.try_lock() else {
+    let Ok(mut owner) = state.guard.try_lock() else {
         return level_envelope(Err(Failure::QueueFull {
             diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
                 sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_DISPATCH_FULL,
                 "level owner is busy",
             )),
         }));
+    };
+    let Some(owner) = owner.as_mut() else {
+        return level_envelope(Err(closed_level_change()));
     };
     let result: Result<LevelChangeDto, Failure> = match change {
         LevelRequestDto::Elevate { level } => owner.elevate_level(
@@ -219,11 +252,25 @@ fn main() {
         }
     };
     let result = tauri::Builder::default()
-        .manage(OwnerState(Arc::new(Mutex::new(guard))))
+        .manage(OwnerState {
+            guard: Mutex::new(Some(guard)),
+            control: control.clone(),
+        })
         .plugin(adapter)
         .invoke_handler(tauri::generate_handler![app_observability_level_change])
-        .run(tauri::generate_context!());
-    if let Err(error) = result {
-        eprintln!("Tauri host exited with an error: {error}");
-    }
+        .build(tauri::generate_context!());
+    let app = match result {
+        Ok(app) => app,
+        Err(error) => {
+            eprintln!("could not build Tauri host: {error}");
+            return;
+        }
+    };
+    app.run(|app, event| {
+        if matches!(event, tauri::RunEvent::ExitRequested { .. })
+            && let Some(owner) = app.try_state::<OwnerState>()
+        {
+            owner.shutdown(Duration::from_secs(2));
+        }
+    });
 }
