@@ -33,6 +33,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use sc_observability::{LogError, Logger, LoggerConfig, RetainedLogPolicy, Running, Stopped};
+use sc_observability_types::typed::{
+    FlushFailure, InitFailure, ShutdownFailure, TypedLogProjector, TypedMetricProjector,
+    TypedObservationSubscriber, TypedSpanProjector, legacy_log_projector, legacy_metric_projector,
+    legacy_span_projector, legacy_subscriber,
+};
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError,
     ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, Remediation,
@@ -83,6 +88,11 @@ impl ObservabilityConfig {
     /// assert_eq!(config.tool_name.as_str(), "demo-tool");
     /// ```
     pub fn default_for(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitError> {
+        Self::default_for_typed(tool_name, log_root).map_err(Into::into)
+    }
+
+    /// Builds the documented defaults with a typed construction failure.
+    pub fn default_for_typed(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitFailure> {
         let env_prefix = EnvPrefix::new(
             tool_name
                 .as_str()
@@ -90,15 +100,12 @@ impl ObservabilityConfig {
                 .to_ascii_uppercase(),
         )
         .map_err(|err| {
-            InitError(Box::new(
-                ErrorContext::new(
-                    error_codes::OBSERVABILITY_INIT_FAILED,
-                    "failed to derive env prefix",
-                    Remediation::not_recoverable("use an explicit valid env prefix"),
-                )
-                .cause(err.to_string())
-                .source(Box::new(err)),
-            ))
+            InitFailure::observation_initialization(
+                "failed to derive env prefix",
+                Remediation::not_recoverable("use an explicit valid env prefix"),
+            )
+            .cause(err.to_string())
+            .source(Box::new(err))
         })?;
         Ok(Self {
             tool_name,
@@ -111,21 +118,24 @@ impl ObservabilityConfig {
 
     /// Derives the logging/telemetry service name from the configured tool.
     pub fn service_name(&self) -> Result<ServiceName, InitError> {
+        self.service_name_typed().map_err(Into::into)
+    }
+
+    /// Derives the logging/telemetry service name with a typed failure.
+    pub fn service_name_typed(&self) -> Result<ServiceName, InitFailure> {
         ServiceName::new(self.tool_name.as_str()).map_err(|err| {
-            InitError(Box::new(
-                ErrorContext::new(
-                    error_codes::OBSERVABILITY_INIT_FAILED,
-                    "failed to derive service name",
-                    Remediation::not_recoverable("use a valid tool name"),
-                )
-                .cause(err.to_string())
-                .source(Box::new(err)),
-            ))
+            InitFailure::observation_initialization(
+                "failed to derive service name",
+                Remediation::not_recoverable("use a valid tool name"),
+            )
+            .cause(err.to_string())
+            .source(Box::new(err))
         })
     }
 
-    fn logger_config(&self) -> Result<LoggerConfig, InitError> {
-        let mut config = LoggerConfig::default_for(self.service_name()?, self.log_root.clone());
+    fn logger_config_typed(&self) -> Result<LoggerConfig, InitFailure> {
+        let mut config =
+            LoggerConfig::default_for(self.service_name_typed()?, self.log_root.clone());
         config.queue_capacity = self.queue_capacity;
         config.retained_log_policy = self.retained_log_policy;
         Ok(config)
@@ -214,7 +224,12 @@ fn log_error_summary(error: &LogError) -> DiagnosticSummary {
 impl Observability {
     /// Builds a runtime using the documented default logger integration.
     pub fn new(config: ObservabilityConfig) -> Result<Self, InitError> {
-        Self::builder(config).build()
+        Self::new_typed(config).map_err(Into::into)
+    }
+
+    /// Builds a runtime using typed construction and initialization failures.
+    pub fn new_typed(config: ObservabilityConfig) -> Result<Self, InitFailure> {
+        Self::builder(config).build_typed()
     }
 
     /// Starts a construction-time builder for subscribers and projections.
@@ -330,12 +345,17 @@ impl Observability {
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing its registered sinks.
     pub fn flush(&self) -> Result<(), FlushError> {
+        self.flush_typed().map_err(Into::into)
+    }
+
+    /// Flushes the attached logger with a typed failure.
+    pub fn flush_typed(&self) -> Result<(), FlushFailure> {
         let logger = self.logger.lock().expect("observability logger poisoned");
         match logger
             .as_ref()
             .expect("observability logger should exist while runtime is alive")
         {
-            LoggerHandle::Running(logger) => logger.flush(),
+            LoggerHandle::Running(logger) => logger.flush_typed(),
             LoggerHandle::Stopped(_) => Ok(()),
         }
     }
@@ -347,6 +367,12 @@ impl Observability {
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing sinks or updating query/follow health during shutdown.
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
+        self.shutdown_typed().map_err(Into::into)
+    }
+
+    /// Shuts down the routing runtime with a typed failure. Repeated calls are
+    /// idempotent and return success, matching the legacy lifecycle contract.
+    pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
@@ -484,6 +510,17 @@ impl ObservabilityBuilder {
         self
     }
 
+    /// Registers a subscriber that reports neutral typed failures.
+    pub fn register_typed_subscriber<T>(
+        self,
+        subscriber: Arc<dyn TypedObservationSubscriber<T>>,
+    ) -> Self
+    where
+        T: Observable,
+    {
+        self.register_subscriber(SubscriberRegistration::new(legacy_subscriber(subscriber)))
+    }
+
     /// Registers one typed observation projection set at construction time.
     ///
     /// # Panics
@@ -553,19 +590,56 @@ impl ObservabilityBuilder {
         self
     }
 
+    /// Registers a typed log projector through the existing legacy route.
+    pub fn register_typed_log_projector<T>(self, projector: Arc<dyn TypedLogProjector<T>>) -> Self
+    where
+        T: Observable,
+    {
+        self.register_projection(
+            ProjectionRegistration::new().with_log_projector(legacy_log_projector(projector)),
+        )
+    }
+
+    /// Registers a typed span projector through the existing legacy route.
+    pub fn register_typed_span_projector<T>(self, projector: Arc<dyn TypedSpanProjector<T>>) -> Self
+    where
+        T: Observable,
+    {
+        self.register_projection(
+            ProjectionRegistration::new().with_span_projector(legacy_span_projector(projector)),
+        )
+    }
+
+    /// Registers a typed metric projector through the existing legacy route.
+    pub fn register_typed_metric_projector<T>(
+        self,
+        projector: Arc<dyn TypedMetricProjector<T>>,
+    ) -> Self
+    where
+        T: Observable,
+    {
+        self.register_projection(
+            ProjectionRegistration::new().with_metric_projector(legacy_metric_projector(projector)),
+        )
+    }
+
     /// Finalizes registration and constructs the routing runtime.
     pub fn build(self) -> Result<Observability, InitError> {
+        self.build_typed().map_err(Into::into)
+    }
+
+    /// Finalizes registration and constructs the runtime with typed failures.
+    pub fn build_typed(self) -> Result<Observability, InitFailure> {
         if self.subscribers.is_empty() && self.projections.is_empty() {
-            return Err(InitError(Box::new(ErrorContext::new(
-                error_codes::OBSERVABILITY_INIT_FAILED,
+            return Err(InitFailure::observation_initialization(
                 "at least one subscriber or projector route must be registered",
                 Remediation::recoverable(
                     "register a subscriber or projector before building observability",
                     ["add at least one route for the observation types you emit"],
                 ),
-            ))));
+            ));
         }
-        let logger = Logger::new(self.config.logger_config()?)?;
+        let logger = Logger::new_typed(self.config.logger_config_typed()?)?;
         Ok(Observability {
             logger: Mutex::new(Some(LoggerHandle::Running(logger))),
             shutdown: AtomicBool::new(false),
@@ -612,6 +686,9 @@ mod tests {
     use sc_observability::{
         LogFilter, LogSink, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
     };
+    use sc_observability_types::typed::{
+        ClassifiedError, InitFailureKind, SubscriberFailure, TypedObservationSubscriber,
+    };
     use sc_observability_types::{
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
         MetricRecord, MetricUnit, ObservationFilter, ObservationSubscriber, ProcessIdentity,
@@ -656,6 +733,17 @@ mod tests {
                 "subscriber failed",
                 Remediation::not_recoverable("test subscriber intentionally fails"),
             ))))
+        }
+    }
+
+    struct TypedRecordingSubscriber {
+        calls: Arc<AtomicU64>,
+    }
+
+    impl TypedObservationSubscriber<AgentEvent> for TypedRecordingSubscriber {
+        fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberFailure> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
         }
     }
 
@@ -1050,9 +1138,94 @@ mod tests {
         let mut config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         config.queue_capacity = 2048;
 
-        let logger_config = config.logger_config().expect("logger config");
+        let logger_config = config.logger_config_typed().expect("logger config");
 
         assert_eq!(logger_config.queue_capacity, 2048);
+    }
+
+    #[test]
+    fn typed_builder_uses_real_adapters_and_preserves_lifecycle_contract() {
+        let root = temp_path("typed-lifecycle");
+        let calls = Arc::new(AtomicU64::new(0));
+        let config =
+            ObservabilityConfig::default_for_typed(tool_name(), root).expect("typed config");
+        assert_eq!(
+            config.service_name_typed().expect("typed service").as_str(),
+            "obs-app"
+        );
+
+        let runtime = Observability::builder(config)
+            .register_typed_subscriber(Arc::new(TypedRecordingSubscriber {
+                calls: calls.clone(),
+            }))
+            .build_typed()
+            .expect("typed runtime");
+
+        runtime.emit(observation(true)).expect("typed emit");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        runtime.flush_typed().expect("typed flush");
+        runtime.shutdown_typed().expect("typed shutdown");
+        runtime.shutdown_typed().expect("repeated typed shutdown");
+        assert!(matches!(
+            runtime.emit(observation(true)),
+            Err(ObservationError::Shutdown)
+        ));
+        runtime.flush_typed().expect("flush after shutdown");
+    }
+
+    #[test]
+    fn typed_builder_reports_empty_routes_and_logger_startup_failures() {
+        let empty = match Observability::builder(
+            ObservabilityConfig::default_for_typed(tool_name(), temp_path("typed-empty"))
+                .expect("typed config"),
+        )
+        .build_typed()
+        {
+            Err(error) => error,
+            Ok(_) => panic!("empty routes must fail"),
+        };
+        assert_eq!(empty.kind(), InitFailureKind::ObservationInitialization);
+
+        let mut config =
+            ObservabilityConfig::default_for_typed(tool_name(), temp_path("typed-init-failure"))
+                .expect("typed config");
+        config.queue_capacity = 0;
+        let error = match Observability::builder(config)
+            .register_typed_subscriber(Arc::new(TypedRecordingSubscriber {
+                calls: Arc::new(AtomicU64::new(0)),
+            }))
+            .build_typed()
+        {
+            Err(error) => error,
+            Ok(_) => panic!("zero queue capacity must fail"),
+        };
+        assert_eq!(error.kind(), InitFailureKind::LoggerInitialization);
+    }
+
+    #[test]
+    fn concurrent_typed_shutdown_is_idempotent() {
+        let runtime = Arc::new(
+            Observability::builder(
+                ObservabilityConfig::default_for_typed(tool_name(), temp_path("typed-concurrent"))
+                    .expect("typed config"),
+            )
+            .register_typed_subscriber(Arc::new(TypedRecordingSubscriber {
+                calls: Arc::new(AtomicU64::new(0)),
+            }))
+            .build_typed()
+            .expect("typed runtime"),
+        );
+
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let runtime = runtime.clone();
+                std::thread::spawn(move || runtime.shutdown_typed())
+            })
+            .collect();
+        for handle in handles {
+            handle.join().expect("shutdown thread").expect("shutdown");
+        }
+        assert_eq!(runtime.health().state, ObservationHealthState::Unavailable);
     }
 
     #[test]

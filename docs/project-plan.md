@@ -167,6 +167,16 @@ while retaining every existing logger entry point and its bridge behavior.
 Warning rollout, copied-bridge integration, observation/telemetry adoption,
 publication, and B.1 closure remain separately gated.
 
+### B.1c — Typed observation preparation
+
+The scoped observation preparation layer is tracked in
+[`plans/phase-b/task-b-1c-observation-prep.md`](./plans/phase-b/task-b-1c-observation-prep.md).
+It adds typed configuration, construction, observation routing, flush, and
+shutdown entry points over the existing `sc-observe` runtime while exercising
+the neutral subscriber/projector adapters through unchanged registration
+boundaries. Full B.1c integration, copied-bridge acceptance, and independent
+QA remain pending.
+
 ### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
 
 [`plans/phase-b/task-b-1-provenance-prep.md`](./plans/phase-b/task-b-1-provenance-prep.md)
