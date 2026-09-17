@@ -377,3 +377,13 @@ candidate source, archives, normalized manifests, isolated platform consumers
 and scoped API approval. The [checklist](plans/phase-b/checklist-b-2-qualification.md)
 separates implementation/verification from lead completeness and independent
 QA. Publication and the later registry-only consumer proof remain B.7 gates.
+
+### B.3 — Shared neutral DTO/schema
+
+B.3 implements `sc-observability-dto`, checked core conversions, the canonical
+input/output schema, schema-only TypeScript/Python projections, frozen conformance
+fixtures and the real isolated source-bundle helper. The implementation handoff
+is [`plans/phase-b/handoff-b-3.md`](./plans/phase-b/handoff-b-3.md), including exact
+qualified B.2 archive provenance and the lead's crate-specific wire API approval.
+Implementation validation passed; consolidated Phase B QA/ordered merges and
+B.7 registry-only publication proof remain separate.

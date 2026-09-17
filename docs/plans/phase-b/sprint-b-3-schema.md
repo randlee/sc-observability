@@ -1,8 +1,9 @@
 ---
 id: B.3
-status: proposed
+status: complete
 branch: feature/phase-b-3-schema
-base: develop
+base: feature/phase-b-2-qualification
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3-schema
 ---
 
 # B.3 — Shared binding DTOs, schema and checked conversions
@@ -255,3 +256,10 @@ No TypeScript runtime package, Tauri host/IPC example (B.3a), Python
 runtime (B.4), platform wheels (B.4a), or registry publication (B.7). This sprint
 closes working neutral conversions and schema; it does not claim language
 runtime behavior from schema-only tests.
+
+## Implementation handoff
+
+The complete implementation, scoped lead API approval, generation hashes and
+actual isolated prepublication package proof are recorded in
+[handoff-b-3.md](handoff-b-3.md). Status denotes implementation completion;
+consolidated Phase B QA, ordered merges and B.7 publication remain separate.
