@@ -434,7 +434,6 @@ async fn sc_observability_query<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     app: tauri::AppHandle<R>,
     request: Value,
-    
 ) -> WireEnvelope<LogSnapshotDto> {
     app.state::<ManagedAdapter>().0.query(window.label(), request).await
 }
@@ -455,7 +454,6 @@ async fn sc_observability_flush<R: tauri::Runtime>(
     window: tauri::WebviewWindow<R>,
     app: tauri::AppHandle<R>,
     request: Value,
-    
 ) -> WireEnvelope<sc_observability_dto::CompletionDto> {
     app.state::<ManagedAdapter>().0.flush(window.label(), request).await
 }
@@ -463,6 +461,37 @@ async fn sc_observability_flush<R: tauri::Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sc_observability_binding_runtime::{Operation, ProducerOrigin};
+    use sc_observability_dto::{CompletionDto, LogQueryDto};
+
+    struct IpcBackend;
+
+    impl HostLoggingBackend for IpcBackend {
+        fn try_log(&self, _: LogEventDto, _: ProducerOrigin) -> Result<AdmissionDto, Failure> {
+            Err(Failure::Internal { diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                "test backend",
+            )) })
+        }
+        fn start_query(&self, _: LogQueryDto) -> Result<Operation<LogSnapshotDto>, Failure> {
+            Err(Failure::Internal { diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                "test backend",
+            )) })
+        }
+        fn health(&self) -> Result<LogHealthDto, Failure> {
+            Err(Failure::Internal { diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                "test backend",
+            )) })
+        }
+        fn start_flush(&self, _: Duration) -> Result<Operation<CompletionDto>, Failure> {
+            Err(Failure::Internal { diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                "test backend",
+            )) })
+        }
+    }
     #[test]
     fn policy_rejects_bad_limits_and_provenance() {
         let policy = AdapterPolicy {
@@ -516,5 +545,38 @@ mod tests {
                 value: REDACTED.to_owned(),
             })].into_iter().collect(),
         });
+    }
+
+    #[cfg(feature = "tauri")]
+    #[test]
+    fn mock_ipc_returns_wire_envelope_from_registered_command() {
+        let policy = AdapterPolicy {
+            allowed_window_labels: BTreeSet::from(["main".to_owned()]),
+            allowed_targets: BTreeSet::from(["app".to_owned()]),
+            max_request_bytes: MAX_REQUEST_BYTES as u32,
+            max_depth: MAX_DEPTH as u32,
+            redacted_field_keys: BTreeSet::new(),
+        };
+        let app = tauri::test::mock_builder()
+            .manage(ManagedAdapter(Adapter::new(Arc::new(IpcBackend), policy).unwrap()))
+            .invoke_handler(tauri::generate_handler![sc_observability_health])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let window = tauri::WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();
+        let response = tauri::test::get_ipc_response(
+            &window,
+            tauri::webview::InvokeRequest {
+                cmd: "sc_observability_health".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: "tauri://localhost".parse().unwrap(),
+                body: serde_json::json!({"request": {"schema_version": 1}}).into(),
+                headers: Default::default(),
+                invoke_key: tauri::test::INVOKE_KEY.to_owned(),
+            },
+        ).unwrap();
+        let value = response.deserialize::<Value>().unwrap();
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["kind"], "error");
     }
 }

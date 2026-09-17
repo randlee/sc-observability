@@ -1,6 +1,7 @@
 # B.3a TypeScript/Tauri handoff
 
-Status: implementation complete on `feature/phase-b-3a-typescript`.
+Status: in progress on `fix/phase-b-3a-completeness`; parent merge-forwarded
+from `origin/feature/phase-b-4a-python-packaging` at `8acf9b6`.
 
 The child consumes the B.3 canonical schema and the B.3b native
 `HostLoggingBackend`. The TypeScript package is generated-schema driven and
@@ -27,10 +28,13 @@ Validation performed:
 
 ```text
 bash scripts/ci/validate_binding_schema.sh       PASS
-bash scripts/ci/validate_typescript_bindings.sh  PASS
-cargo test --manifest-path bindings/tauri/Cargo.toml --locked  PASS
+bash scripts/ci/validate_typescript_bindings.sh  PASS (packed install + adapter IPC test)
+cargo test --manifest-path bindings/tauri/Cargo.toml --locked --features test  PASS (4 tests)
 ```
 
-The package is packed with `npm pack --dry-run`; generated output is checked
-without overwriting drift. A fresh platform IPC matrix remains a CI-host
-responsibility because this workspace has no desktop Tauri runtime installed.
+The package is packed as a real tarball and installed by a temporary consumer
+outside the checkout. Generated output is checked without overwriting drift.
+The workflow covers Ubuntu, macOS, and Windows. Local headless evidence covers
+locked host compilation and the adapter boundary; real desktop IPC evidence is
+still required from those supported CI hosts before this handoff can become
+complete.

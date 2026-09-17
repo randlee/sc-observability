@@ -11,6 +11,7 @@ description = "Tauri host adapter for sc-observability language bindings"
 [features]
 default = ["tauri"]
 tauri = ["dep:tauri"]
+test = ["tauri/test"]
 
 [dependencies]
 sc-observability-binding-runtime = { path = "../../crates/sc-observability-binding-runtime" }
