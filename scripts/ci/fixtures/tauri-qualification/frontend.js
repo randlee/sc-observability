@@ -191,7 +191,14 @@ async function run() {
     const stopping = value('health-during-shutdown', await client.health());
     check('shutdown-level-state-preserved', JSON.stringify(stopping.level_state) === JSON.stringify(beforeShutdown), stopping);
     failure('admission-during-shutdown-closed', await client.tryLog(event), 'closed');
-    check('native-shutdown-pending', (await invoke('qualification_shutdown', { operation: 'status' })).pending === true);
+    let timedOut;
+    const timeoutDeadline = performance.now() + 2000;
+    do {
+      timedOut = await invoke('qualification_shutdown', { operation: 'status' });
+      if (!timedOut.returned) await tick();
+    } while (!timedOut.returned && performance.now() < timeoutDeadline);
+    check('native-shutdown-pending', timedOut.pending === true, timedOut);
+    check('native-shutdown-timeout-payload', timedOut.result?.Err?.kind === 'timeout' && timedOut.result.Err.code === 'SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT' && timedOut.result.Err.operation === 'shutdown' && timedOut.result.Err.remediation.kind === 'recoverable' && timedOut.result.Err.remediation.steps.length > 0, timedOut);
   } finally { await gate(false, 'release-shutdown'); }
   const stopDeadline = performance.now() + 5000;
   let stopped;
@@ -199,7 +206,7 @@ async function run() {
     stopped = await invoke('qualification_shutdown', { operation: 'status' });
     if (stopped.pending) await new Promise((resolve) => setTimeout(resolve, 10));
   } while (stopped.pending && performance.now() < stopDeadline);
-  check('native-shutdown-completed', stopped.pending === false && Object.hasOwn(stopped.result, 'Ok'), stopped);
+  check('native-shutdown-completed', stopped.pending === false && stopped.result?.Err?.kind === 'timeout', stopped);
   failure('level-after-shutdown-closed', await level({ kind: 'elevate', level: 'debug' }), 'closed');
   check('post-shutdown-health-retained', JSON.stringify(value('health-after-shutdown', await client.health()).level_state) === JSON.stringify(beforeShutdown));
   await tick();

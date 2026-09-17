@@ -23,7 +23,7 @@ REQUIRED_MAIN = {
     'actual-flush-after-timeout-overlap',
     'shutdown-contention-queue-full', 'level-during-shutdown-closed',
     'shutdown-level-state-preserved', 'admission-during-shutdown-closed',
-    'native-shutdown-pending', 'native-shutdown-completed',
+    'native-shutdown-pending', 'native-shutdown-timeout-payload', 'native-shutdown-completed',
     'level-after-shutdown-closed', 'post-shutdown-health-retained',
 }
 REQUIRED_FORBIDDEN = {'forbidden-window-' + name for name in ('try_log', 'query', 'health', 'flush', 'level')}

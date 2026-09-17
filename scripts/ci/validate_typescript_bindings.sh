@@ -26,5 +26,5 @@ if [[ -n ${TAURI_RUST_BUNDLE:-} ]]; then
 fi
 python3 scripts/ci/validate_tauri_qualification.py "${qualification_args[@]}"
 if [[ ${1:-} != '--platform' ]]; then
-  python3 scripts/ci/validate_tauri_platform_evidence.py target/tauri-platforms
+  python3 scripts/ci/validate_tauri_platform_evidence.py target/tauri-platforms --source "$(git rev-parse HEAD)"
 fi

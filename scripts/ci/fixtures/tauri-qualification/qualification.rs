@@ -228,8 +228,9 @@ pub fn qualification_shutdown(
         if slot.is_some() { return Err("shutdown already started".into()); }
         let result = Arc::new(Mutex::new(None));
         let completed = Arc::clone(&result);
+        let shutdown_app = app.clone();
         std::thread::Builder::new().name("qualification-host-shutdown".into()).spawn(move || {
-            let result = app.state::<super::OwnerState>().shutdown(Duration::from_secs(60));
+            let result = shutdown_app.state::<super::OwnerState>().shutdown(Duration::ZERO);
             if let Ok(mut completed) = completed.lock() { *completed = Some(result); }
         }).map_err(|error| error.to_string())?;
         *slot = Some(result);
@@ -238,5 +239,7 @@ pub fn qualification_shutdown(
     }
     let result = slot.as_ref().ok_or("shutdown not started")?.lock()
         .map_err(|_| "shutdown completion poisoned")?;
-    Ok(json!({"pending": result.is_none(), "result": &*result}))
+    let health = app.state::<super::OwnerState>().control.health().map_err(|error| error.to_string())?;
+    let pending = health.lifecycle != sc_observability_log::LifecyclePhase::Stopped;
+    Ok(json!({"pending": pending, "returned": result.is_some(), "result": &*result}))
 }
