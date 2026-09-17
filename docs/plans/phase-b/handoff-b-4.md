@@ -23,9 +23,9 @@ malformed native payloads and contained native panics return tagged failures.
 ## Executed gates
 
 `bash scripts/ci/validate_python_bindings.sh` passes with CPython 3.10.21:
-the generated/stub checks and strict Result narrowing fixture pass; eight
+the generated/stub checks and strict Result narrowing fixture pass; nine
 facade adversarial tests pass; a locked wheel is built and installed into a
-clean environment for six owned lifecycle/isolation/synchronized-N=32,
+clean environment for seven owned lifecycle/isolation/synchronized-N=32,
 level-transition, zero-deadline retained-shutdown and lifecycle-race tests;
 native binding tests pass; and
 `cargo run -p rust-python-logging` proves a single writer accepts correlated
@@ -52,6 +52,12 @@ GIL-releasing hook and retains the exact one-winner/one-duplicate outcome.
 The attached fixture mutates the host-owned level through its owner and proves
 the attached Python health payload observes `debug` at revision one without
 gaining any mutation authority.
+
+Facade provenance fixtures reject both exact trusted names, arbitrary reserved
+suffixes, normalized `::` and space aliases, and nested/mixed forged maps before
+owned or attached dispatch. An installed-wheel fixture replaces the active JSONL
+file with a directory before construction, then verifies a real lazy sink write
+fault is retained in tagged health rather than escaping from `log` or `flush`.
 
 This handoff remains an implementation evidence record until coordinator
 completeness review and the sprint closeout update are complete.

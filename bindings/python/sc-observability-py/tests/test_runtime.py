@@ -226,3 +226,26 @@ def test_zero_deadline_shutdown_retains_the_late_completion(tmp_path: Path) -> N
     repeated = logger.shutdown(timeout_ms=2_000)
     assert isinstance(repeated, Ok)
     assert isinstance(logger.health(), Ok)
+
+
+def test_real_factory_filesystem_failure_is_tagged(tmp_path: Path) -> None:
+    root = tmp_path / "sink-fault"
+    service = "python-runtime-sink-fault"
+    # The JSONL sink opens lazily. A directory at the active-file path forces
+    # a real writer failure after public factory construction succeeds.
+    (root / "logs" / f"{service}.log.jsonl").mkdir(parents=True)
+    created = create_logger(
+        LoggerConfig(service=service, log_root=str(root))
+    )
+    assert isinstance(created, Ok)
+    logger = created.value
+    try:
+        assert isinstance(logger.log(_event("filesystem-fault")), Ok)
+        flushed = logger.flush()
+        assert isinstance(flushed, Ok)
+        health = logger.health()
+        assert isinstance(health, Ok)
+        assert health.value.logging.state in ("degraded_dropping", "unavailable")
+        assert health.value.logging.last_error is not None
+    finally:
+        assert isinstance(logger.shutdown(), (Ok, Err))

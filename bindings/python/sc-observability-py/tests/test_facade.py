@@ -53,6 +53,41 @@ def test_forged_provenance_is_rejected_before_native_import() -> None:
     assert "reserved binding provenance" in rejected.error.message
 
 
+def test_every_reserved_provenance_fixture_is_rejected_before_dispatch() -> None:
+    owned = Logger(_NeverNative())
+    attached = AttachedLogger(_NeverNative())
+    keys = (
+        "sc_observability.binding.language",
+        "sc_observability.binding.any_suffix",
+        "sc_observability::binding::language",
+        "sc observability.binding.language",
+    )
+    events = [
+        LogEvent(level="info", target="python.test", action="forged", fields={key: "forged"})
+        for key in keys
+    ]
+    events.extend(
+        (
+            LogEvent(
+                level="info",
+                target="python.test",
+                action="forged-nested",
+                fields={"valid": 1, "nested": {keys[0]: "forged"}},
+            ),
+            LogEvent(
+                level="info",
+                target="python.test",
+                action="forged-mixed",
+                fields={"valid": "retained", keys[1]: "forged"},
+            ),
+        )
+    )
+    for event in events:
+        assert isinstance(_event(event), Err)
+        assert isinstance(owned.log(event), Err)
+        assert isinstance(attached.log(event), Err)
+
+
 def test_wrong_timeout_is_a_tagged_validation_result() -> None:
     rejected = _timeout(True)
     assert isinstance(rejected, Err)
