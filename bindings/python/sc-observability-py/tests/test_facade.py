@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -314,3 +315,50 @@ def test_malformed_native_results_and_factory_failures_are_tagged(monkeypatch: p
     monkeypatch.setattr(sc_observability.importlib, "import_module", lambda _: _BrokenExtension())
     assert isinstance(create_logger(LoggerConfig("service", "/tmp/factory")), Err)
     assert isinstance(get_host_logger(), Err)
+
+
+class _NativeDiagnosticResults:
+    def health(self) -> str:
+        return json.dumps({
+            "schema_version": 1,
+            "kind": "error",
+            "error": {
+                "kind": "unavailable",
+                "at": "2026-01-01T00:00:00Z",
+                "code": "SC_TEST_UNAVAILABLE",
+                "message": "preserved unavailable diagnostic",
+                "remediation": {"kind": "recoverable", "steps": ["retry", "inspect host"]},
+            },
+        })
+
+    def log(self, payload: str) -> str:
+        return json.dumps({
+            "schema_version": 1,
+            "kind": "error",
+            "error": {
+                "kind": "io",
+                "at": "2026-01-01T00:00:00Z",
+                "code": "SC_TEST_IO",
+                "message": "preserved terminal diagnostic",
+                "remediation": {"kind": "not_recoverable", "justification": "storage removed"},
+            },
+        })
+
+
+def test_native_diagnostic_and_both_remediation_variants_round_trip() -> None:
+    logger = AttachedLogger(_NativeDiagnosticResults())
+    unavailable = logger.health()
+    assert isinstance(unavailable, Err)
+    assert unavailable.error.kind == "unavailable"
+    assert unavailable.error.code == "SC_TEST_UNAVAILABLE"
+    assert unavailable.error.message == "preserved unavailable diagnostic"
+    assert unavailable.error.remediation.kind == "recoverable"
+    assert unavailable.error.remediation.steps == ("retry", "inspect host")
+
+    io = logger.log(LogEvent(level="info", target="python.test", action="diagnostic"))
+    assert isinstance(io, Err)
+    assert io.error.kind == "io"
+    assert io.error.code == "SC_TEST_IO"
+    assert io.error.message == "preserved terminal diagnostic"
+    assert io.error.remediation.kind == "not_recoverable"
+    assert io.error.remediation.justification == "storage removed"
