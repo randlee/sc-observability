@@ -1,0 +1,7 @@
+{
+  "kind": "io",
+  "at": "1970-01-01T00:00:00Z",
+  "code": "SC_NATIVE_FIXTURE",
+  "message": "exact native message",
+  "remediation": { "kind": "recoverable", "steps": ["first", "second"] }
+}

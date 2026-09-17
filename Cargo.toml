@@ -35,7 +35,6 @@ sc-observe = { version = "1.4.0", path = "crates/sc-observe" }
 sc-observability-otlp = { version = "1.4.0", path = "crates/sc-observability-otlp" }
 sc-observability-log = { version = "1.4.0", path = "crates/sc-observability-log" }
 sc-observability-log-macros = { version = "=1.4.0", path = "crates/sc-observability-log-macros" }
-sc-observability-log-consumer-check = { version = "1.4.0", path = "crates/sc-observability-log-consumer-check" }
 log = { version = "0.4", features = ["std", "kv"] }
 hostname = "0.4"
 tempfile = "3"

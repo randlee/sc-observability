@@ -1,0 +1,89 @@
+Removed items from the public API
+=================================
+(none)
+
+Changed items in the public API
+===============================
+(none)
+
+Added items to the public API
+=============================
++pub fn sc_observability_otlp::AuthHeader::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
++pub fn sc_observability_otlp::OtlpEndpoint::new_typed(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
++pub fn sc_observability_otlp::SpanAssembler::push_typed(&mut self, sc_observability_types::span::SpanSignal) -> core::result::Result<core::option::Option<sc_observability_otlp::CompleteSpan>, sc_observability_types::typed::EventFailure>
++pub fn sc_observability_otlp::Telemetry::flush_typed(&self) -> core::result::Result<(), sc_observability_types::typed::FlushFailure>
++pub fn sc_observability_otlp::Telemetry::new_typed(sc_observability_otlp::TelemetryConfig) -> core::result::Result<Self, sc_observability_types::typed::InitFailure>
++pub fn sc_observability_otlp::Telemetry::shutdown_typed(&self) -> core::result::Result<(), sc_observability_types::typed::ShutdownFailure>
++pub fn sc_observability_otlp::TelemetryConfigBuilder::build_typed(self) -> core::result::Result<sc_observability_otlp::TelemetryConfig, sc_observability_types::typed::InitFailure>
+
+ Documenting sc-observability-otlp v1.2.0
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
+warning: unused workspace dependency `sc-observability-log`
+  --> Cargo.toml:31:1
+   |
+31 | sc-observability-log = { version = "1.4.0", path = "crates/sc-observability-log" }
+   | ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `cargo::unused_workspace_dependencies` is set to `warn` by default
+help: consider removing the workspace dependency `sc-observability-log`
+warning: unused workspace dependency `sc-observability-log-consumer-check`
+  --> Cargo.toml:33:1
+   |
+33 | sc-observability-log-consumer-check = { version = "1.4.0", path = "crates/sc-observability-log-consumer-check" }
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: consider removing the workspace dependency `sc-observability-log-consumer-check`
+warning: unused workspace dependency `sc-observability-otlp`
+  --> Cargo.toml:30:1
+   |
+30 | sc-observability-otlp = { version = "1.4.0", path = "crates/sc-observability-otlp" }
+   | ^^^^^^^^^^^^^^^^^^^^^
+   |
+help: consider removing the workspace dependency `sc-observability-otlp`
+warning: workspace (manifest) generated 3 warnings
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability-otlp/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability-otlp` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability-types/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability-types` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observe/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observe` (manifest) generated 1 warning
+ Documenting sc-observability-otlp v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability-otlp)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
