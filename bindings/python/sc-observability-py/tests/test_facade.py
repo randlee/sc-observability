@@ -6,7 +6,18 @@ from typing import Any, cast
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "python"))
 
-from sc_observability import AttachedLogger, Err, LogEvent, Logger, LoggerConfig, LogQuery, Ok, create_logger
+import sc_observability
+from sc_observability import (
+    AttachedLogger,
+    Err,
+    LogEvent,
+    Logger,
+    LoggerConfig,
+    LogQuery,
+    Ok,
+    create_logger,
+    get_host_logger,
+)
 from sc_observability import _event, _timeout
 
 
@@ -112,3 +123,133 @@ def test_public_input_failures_are_tagged_before_native_dispatch() -> None:
         owned.reset_level(cast(Any, "invalid")),
     )
     assert all(isinstance(result, Err) for result in rejected)
+
+
+class _UnprintableForeignError(Exception):
+    def __str__(self) -> str:
+        raise RuntimeError("exception rendering must not escape")
+
+
+class _ForeignNative:
+    def log(self, payload: str) -> str:
+        raise _UnprintableForeignError()
+
+    def query(self, payload: str) -> str:
+        raise _UnprintableForeignError()
+
+    def health(self) -> str:
+        raise _UnprintableForeignError()
+
+    def flush(self, timeout: str) -> str:
+        raise _UnprintableForeignError()
+
+    def shutdown(self, timeout: str) -> str:
+        raise _UnprintableForeignError()
+
+    def wait_stopped(self, timeout: str) -> str:
+        raise _UnprintableForeignError()
+
+    def elevate_level(self, level: str, source: str) -> str:
+        raise _UnprintableForeignError()
+
+    def reset_level(self, source: str) -> str:
+        raise _UnprintableForeignError()
+
+
+class _HostileMapping(dict[str, object]):
+    def items(self) -> object:
+        raise _UnprintableForeignError()
+
+
+def test_foreign_native_and_mapping_failures_are_tagged() -> None:
+    owned = Logger(_ForeignNative())
+    attached = AttachedLogger(_ForeignNative())
+    valid_event = LogEvent(level="info", target="python.test", action="emit")
+
+    results = (
+        owned.log(valid_event),
+        attached.log(valid_event),
+        owned.query(LogQuery()),
+        attached.query(LogQuery()),
+        owned.health(),
+        attached.health(),
+        owned.flush(),
+        attached.flush(),
+        owned.shutdown(),
+        owned.wait_stopped(),
+        owned.elevate_level("debug"),
+        owned.reset_level(),
+        _event(LogEvent(level="info", target="python.test", action="emit", fields=_HostileMapping())),
+    )
+    assert all(isinstance(result, Err) for result in results)
+    assert all(result.error.code == "SC_OBSERVABILITY_BINDING_INTERNAL" for result in results)
+
+
+def test_malformed_runtime_dataclass_values_are_tagged() -> None:
+    assert isinstance(create_logger(cast(Any, LoggerConfig("service", cast(Any, 42)))), Err)
+    logger = Logger(_NeverNative())
+    assert isinstance(logger.query(cast(Any, LogQuery(field_matches=cast(Any, None)))), Err)
+    assert isinstance(logger.query(cast(Any, LogQuery(levels=cast(Any, None)))), Err)
+    assert isinstance(
+        logger.log(cast(Any, LogEvent(level="info", target=cast(Any, 42), action="emit"))),
+        Err,
+    )
+
+
+class _MalformedNative:
+    def log(self, payload: str) -> None:
+        return None
+
+    def query(self, payload: str) -> None:
+        return None
+
+    def health(self) -> None:
+        return None
+
+    def flush(self, timeout: str) -> None:
+        return None
+
+    def shutdown(self, timeout: str) -> None:
+        return None
+
+    def wait_stopped(self, timeout: str) -> None:
+        return None
+
+    def elevate_level(self, level: str, source: str) -> None:
+        return None
+
+    def reset_level(self, source: str) -> None:
+        return None
+
+
+class _BrokenExtension:
+    def create_owned(self, payload: str) -> None:
+        raise _UnprintableForeignError()
+
+    def get_installed_host_logger(self) -> None:
+        raise _UnprintableForeignError()
+
+
+def test_malformed_native_results_and_factory_failures_are_tagged(monkeypatch: pytest.MonkeyPatch) -> None:
+    owned = Logger(_MalformedNative())
+    attached = AttachedLogger(_MalformedNative())
+    event = LogEvent(level="info", target="python.test", action="emit")
+    results = (
+        owned.log(event),
+        attached.log(event),
+        owned.query(LogQuery()),
+        attached.query(LogQuery()),
+        owned.health(),
+        attached.health(),
+        owned.flush(),
+        attached.flush(),
+        owned.shutdown(),
+        owned.wait_stopped(),
+        owned.elevate_level("debug"),
+        owned.reset_level(),
+    )
+    assert all(isinstance(result, Err) for result in results)
+
+    monkeypatch.setattr(sc_observability.importlib, "import_module", lambda _: _BrokenExtension())
+    assert isinstance(create_logger(LoggerConfig("service", "/tmp/factory")), Err)
+    assert isinstance(get_host_logger(), Err)
