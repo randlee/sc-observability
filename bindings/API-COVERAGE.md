@@ -126,3 +126,21 @@ Python paths in this section are relative to `bindings/python/sc-observability-p
 except the repository-level Rust embedding example and CI paths. Per-platform
 qualification results are recorded in sprint handoffs; this inventory describes
 coverage without claiming an unexecuted matrix pass.
+
+## TypeScript/Tauri artifact qualification
+
+| Surface | Executable qualification evidence |
+| --- | --- |
+| Installed npm client, all canonical schema fixtures, remote failures and local accounting | `scripts/ci/fixtures/tauri-qualification/faults.mjs`; retained `fault-results.json` |
+| Exhaustive Result/Failure/Value/Remediation/level narrowing | External packed consumer `scripts/ci/fixtures/tauri-qualification/narrowing.ts` |
+| Real command transport, bigint stored/query round trip, correlated Rust/frontend, redaction/provenance | Real desktop webview `scripts/ci/fixtures/tauri-qualification/frontend.js` |
+| Five-command secondary-window denial, direct-invoke policy and exact-size normalization | Same frontend fixture; retained main/forbidden records in `ipc.json` |
+| Bridge level/health coherence, repeat/reduce/reset/Off rejection, owner contention | Same frontend fixture plus bounded owner observation hook in `qualification.rs` |
+| Actual queue saturation, rejected diagnostic with successful level change, retained query/flush slots, responsive blocked I/O | Real console sink held by `_tauri_webview.py`; unchanged supplied native backend and IPC handlers |
+| Packaged Rust adapter, exact normalized dependency requirements/registry checksums, denied checkout/cache/network | `build_binding_source_bundle.py`; `validate_tauri_qualification.py`; retained archive, lock, manifest and raw command evidence |
+| Supported platform completeness and tamper rejection | `validate_tauri_platform_evidence.py`; `bindings-typescript.yml` matrix and aggregate |
+
+Qualification is still in progress. A macOS checkpoint passes 103 real IPC
+assertions and 336 installed-client cases. That checkpoint does not establish
+three-platform completion or every remaining lifecycle fixture; the worktree
+checklist and `handoff-b-3a-qualification.md` record open gates explicitly.

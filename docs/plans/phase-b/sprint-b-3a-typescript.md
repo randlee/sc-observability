@@ -1,8 +1,9 @@
 ---
 id: B.3a
-status: complete
-branch: feature/phase-b-3a-typescript
-base: develop
+status: in_progress
+branch: feature/phase-b-tauri-qualification
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-tauri-qualification
+base: feature/phase-b-7-publish-bindings
 ---
 
 # B.3a — TypeScript bindings for the public logging API
