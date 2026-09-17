@@ -32,11 +32,22 @@ the unchanged registration surface; no exporter or callback API is publicized.
   and retained projectors adapt once at the B.1a registration boundary. The
   full-stack fixture exercises all three through unchanged fluent registration.
 
+## Review correction
+
+The follow-up correction preserves the retained shutdown diagnostic when a
+final exporter failure and incomplete spans occur together: the shutdown
+diagnostic continues to select the post-cleanup incomplete-span summary for
+its cause and `exporter_error_code`, while its source chain retains the actual
+`ExportFailure`. The combined fixture pins that legacy/typed behavior and
+repeated shutdown. It also adds typed parity for both empty and whitespace
+endpoint validation and exercises custom exporter-code/native-source retention
+through both legacy and typed shutdown entry points.
+
 ## Validation
 
 - PASS: `cargo fmt --all -- --check`
 - PASS: `cargo test --locked -p sc-observability-otlp --all-targets`
-  (30 unit tests, 2 full-stack integration tests)
+  (31 unit tests, 2 full-stack integration tests)
 - PASS: `cargo test --locked --workspace --doc`
 - PASS: `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`
 - PASS: `python3 scripts/ci/validate_public_api_semver.py` (223 checks passed
