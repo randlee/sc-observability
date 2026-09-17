@@ -10,11 +10,11 @@
 
 use pyo3::prelude::*;
 use sc_observability_binding_runtime::{
-    CoreLoggerBackend, CoreLoggerOwner, HostLoggingBackend, Operation, ProducerOrigin,
-    create_core_backend,
+    CoreLoggerBackend, CoreLoggerOwner, HostLoggingBackend, Operation, OperationState,
+    ProducerOrigin, create_core_backend,
 };
 use sc_observability_dto::{
-    Failure, LevelChangeDto, LogEventDto, LogHealthDto, LogQueryDto, ResultDto,
+    CompletionDto, Failure, LevelChangeDto, LogEventDto, LogHealthDto, LogQueryDto, ResultDto,
 };
 use sc_observability_types::{LevelChangeSource, LevelFilter, ServiceName};
 use serde::Deserialize;
@@ -162,6 +162,41 @@ struct NativeAttachedLogger {
     backend: Arc<dyn HostLoggingBackend>,
 }
 
+// This transport holds only native shared completion; it never registers a
+// callback or retains a Python loop/Future in native coordinator state.
+#[pyclass(frozen)]
+struct NativeFlushOperation {
+    operation: Operation<CompletionDto>,
+}
+
+#[pymethods]
+impl NativeFlushOperation {
+    fn state(&self) -> Option<String> {
+        match self.operation.state() {
+            OperationState::Pending => None,
+            OperationState::Completed { result } => Some(result_json(result)),
+        }
+    }
+}
+
+fn start_flush_backend(
+    backend: &dyn HostLoggingBackend,
+    py: Python<'_>,
+    timeout: &str,
+) -> (Option<Py<NativeFlushOperation>>, String) {
+    let operation = parse_timeout(timeout).and_then(|timeout| backend.start_flush(timeout));
+    match operation {
+        Ok(operation) => match Py::new(py, NativeFlushOperation { operation }) {
+            Ok(operation) => (Some(operation), result_json::<()>(Ok(()))),
+            Err(_) => (
+                None,
+                result_json::<()>(Err(internal_failure("could not allocate flush observer"))),
+            ),
+        },
+        Err(error) => (None, result_json::<()>(Err(error))),
+    }
+}
+
 fn log_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, event: &str) -> String {
     let result = parse_value(event, "event")
         .and_then(sc_observability_dto::decode_event)
@@ -224,6 +259,18 @@ impl NativeLogger {
 
 #[pymethods]
 impl NativeLogger {
+    fn observer_key(&self) -> usize {
+        std::ptr::from_ref(self) as usize
+    }
+
+    fn start_flush(
+        &self,
+        py: Python<'_>,
+        timeout: &str,
+    ) -> (Option<Py<NativeFlushOperation>>, String) {
+        start_flush_backend(&self.backend, py, timeout)
+    }
+
     fn log(&self, py: Python<'_>, event: &str) -> String {
         log_backend(Arc::new(self.backend.clone()), py, event)
     }
@@ -281,6 +328,18 @@ impl NativeLogger {
 
 #[pymethods]
 impl NativeAttachedLogger {
+    fn observer_key(&self) -> usize {
+        Arc::as_ptr(&self.backend).cast::<()>() as usize
+    }
+
+    fn start_flush(
+        &self,
+        py: Python<'_>,
+        timeout: &str,
+    ) -> (Option<Py<NativeFlushOperation>>, String) {
+        start_flush_backend(self.backend.as_ref(), py, timeout)
+    }
+
     fn log(&self, py: Python<'_>, event: &str) -> String {
         log_backend(self.backend.clone(), py, event)
     }
@@ -393,6 +452,7 @@ fn get_installed_host_logger(
 #[pymodule(gil_used = true)]
 pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeLogger>()?;
+    module.add_class::<NativeFlushOperation>()?;
     module.add_class::<NativeAttachedLogger>()?;
     module.add_function(wrap_pyfunction!(create_owned, module)?)?;
     module.add_function(wrap_pyfunction!(get_installed_host_logger, module)?)?;

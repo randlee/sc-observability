@@ -12,9 +12,12 @@ import importlib
 import json
 import math
 from pathlib import Path
-from typing import Any, Generic, Literal, Mapping, Protocol, TypeAlias, TypeVar, cast
+from typing import Any, Generic, Literal, Mapping, Protocol, TypeAlias, TypeVar, cast, TYPE_CHECKING
 
 from . import generated
+
+if TYPE_CHECKING:
+    from .async_logging import LogReceipt
 
 T = TypeVar("T")
 Level: TypeAlias = Literal["trace", "debug", "info", "warn", "error"]
@@ -325,6 +328,16 @@ class Logger:
             return encoded
         return _typed(_decode("OutputResultDtoAdmissionDto", self._native.log(json.dumps(encoded.value, separators=(",", ":")))))
 
+    def submit(self, event: LogEvent) -> Result[LogReceipt]:
+        """Admit once now, optionally inspect its resolved receipt later."""
+        from .async_logging import _submit
+        return _submit(self, event)
+
+    async def flush_async(self, timeout_ms: int = 2000) -> Result[generated.Completion]:
+        """Observe one native flush without blocking the calling event loop."""
+        from .async_logging import _flush_async
+        return await _flush_async(self._native, timeout_ms)
+
     def query(self, query: LogQuery) -> Result[generated.LogSnapshot]:
         encoded = _query(query)
         if isinstance(encoded, Err):
@@ -374,6 +387,16 @@ class AttachedLogger:
         if isinstance(encoded, Err):
             return encoded
         return _typed(_decode("OutputResultDtoAdmissionDto", self._native.log(json.dumps(encoded.value, separators=(",", ":")))))
+
+    def submit(self, event: LogEvent) -> Result[LogReceipt]:
+        """Admit once now, optionally inspect its resolved receipt later."""
+        from .async_logging import _submit
+        return _submit(self, event)
+
+    async def flush_async(self, timeout_ms: int = 2000) -> Result[generated.Completion]:
+        """Observe one native flush without blocking the calling event loop."""
+        from .async_logging import _flush_async
+        return await _flush_async(self._native, timeout_ms)
 
     def query(self, query: LogQuery) -> Result[generated.LogSnapshot]:
         encoded = _query(query)

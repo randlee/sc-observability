@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import atexit
 from dataclasses import dataclass, field
-from typing import Literal, Protocol, TypeAlias, cast
+from typing import Literal, Mapping, Protocol, TypeAlias, cast
 import weakref
 
 from . import Err, LogEvent, Ok, Result, _at, _decode, _decode_control, _internal, _timeout, _typed, generated
@@ -79,7 +79,8 @@ def _boundary(kind: Literal["timeout", "cancelled", "queue_full"]) -> Err:
         "cancelled": generated.SC_OBSERVABILITY_BINDING_CANCELLED,
         "queue_full": generated.SC_OBSERVABILITY_BINDING_WAITERS_FULL,
     }[kind]
-    entry = next(item for item in generated.ERROR_REGISTRY if item["code"] == code)
+    registry = cast(tuple[Mapping[str, str], ...], getattr(generated, "ERROR_REGISTRY"))
+    entry = next(item for item in registry if item["code"] == code)
     remediation = generated.OutputRemediationRecoverable(steps=(entry["remediation"],))
     if kind == "queue_full":
         return Err(generated.OutputFailureQueueFull(
