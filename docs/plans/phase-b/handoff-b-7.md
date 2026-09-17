@@ -4,7 +4,7 @@ status: readiness_machinery_complete_publication_pending
 branch: feature/phase-b-7-publish-bindings
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-7-publish-bindings
 base: develop
-generated_at: 2026-09-17T10:25:54Z
+generated_at: 2026-09-17T10:33:14Z
 ---
 
 # B.7 binding-release readiness handoff
@@ -50,10 +50,15 @@ same version today, verified live (not hardcoded) by
   literal `version = "1.4.0"`
 
 `sc-observability-tauri` and `@sc-observability/client` are `status = "pending"`
-in the manifest; their versions are not checked (the files do not exist in
-this branch's tree). The frozen reference copy at
-`feature/phase-b-3a-typescript@202e4d0` shows both already pinned to `1.4.0`
-in that lineage.
+in the manifest; their versions are not checked by `verify-versions`. Both
+files now exist in this branch's tree (merged forward from
+`feature/phase-b-6-python-async` after this readiness work was first
+written) and both are already pinned to `1.4.0` -- `bindings/tauri/Cargo.toml`
+literally, `bindings/typescript/package.json` literally -- but neither is
+`status = "ready"`: `sc-observability-tauri` still needs real qualification
+on `feature/phase-b-tauri-qualification` (a separate layer being prepared
+above B.7), and `bindings/typescript/package.json` still sets
+`"private": true`.
 
 ## Source commit / tag
 
@@ -97,9 +102,16 @@ the full 5-platform x 5-interpreter (25-cell) matrix for the `sc-observability`
 PyPI package's sdist/wheels. That pipeline is reused (not reinvented) by the
 new `publish-python-wheel` job added to `.github/workflows/release.yml`.
 
-TypeScript/Tauri platform-matrix evidence is pending: neither
-`bindings/typescript/` nor `bindings/tauri/` exists in this branch's tree
-yet, so there is no platform matrix to report for either.
+`bindings/typescript/` and `bindings/tauri/` now exist in this branch's tree
+(merged forward from `feature/phase-b-6-python-async`). `sc-observability-tauri`
+compiles standalone (`cargo check --locked --no-default-features` inside
+`bindings/tauri/`, verified during this readiness work) but has no IPC/artifact
+platform matrix yet -- that is the explicit scope of `feature/phase-b-tauri-
+qualification`, a separate layer being prepared above B.7. TypeScript has its
+own generation/build/pack validation (`scripts/ci/validate_typescript_bindings.sh`,
+`scripts/ci/validate_binding_schema.sh`, both merged in alongside the package)
+which is a different concern from this document's registry-publish-readiness
+scope; this readiness work does not re-run or duplicate those checks.
 
 ## Adoption examples
 
@@ -118,11 +130,14 @@ yet, so there is no platform matrix to report for either.
   (`pyproject.toml`, `python/sc_observability/`) is the adoption surface;
   B.4a's installed-suite already exercises it against temporary logs across
   all 25 platform/interpreter cells.
-- **TypeScript / Tauri**: pending. Both `bindings/typescript/` (the
-  `@sc-observability/client` npm package) and `bindings/tauri/` (the
-  `sc-observability-tauri` crate) exist only on `feature/phase-b-3a-typescript`
-  at `202e4d0`, not yet merged forward onto this stack. No adoption example
-  can be exercised here until that lands.
+- **Tauri**: `examples/tauri-logging/` now exists in this branch's tree
+  (merged forward alongside `bindings/tauri/`); a registry-only consumer
+  example for it is blocked on the same qualification gate as the crate
+  itself and is not exercised by this readiness work.
+- **TypeScript**: `bindings/typescript/src/test.ts` exercises the client
+  today via `npm test`, but not as a registry consumer (no published
+  package to install) -- pending the `"private": true` / `NPM_TOKEN` gap
+  above.
 
 ## Sprint status
 
@@ -156,14 +171,16 @@ branch's tree today.** Specifically:
 **Live publication and full 4-crate/npm coverage remain genuinely pending**,
 blocked on:
 
-(a) the `fix/phase-b-3a-completeness` parent-checkpoint merge landing on this
-    stack (brings `bindings/tauri/` and `bindings/typescript/` into the tree,
-    and requires flipping `bindings/typescript/package.json`'s
-    `"private": true` before npm publish becomes possible even after that
-    merge);
-(b) npm (`NPM_TOKEN`) and PyPI (`PYPI_API_TOKEN`) registry credentials being
+(a) `feature/phase-b-tauri-qualification` (real Tauri artifact/IPC matrix
+    work, a separate layer being prepared above B.7) landing on this stack
+    before `sc-observability-tauri` can flip to `ready` -- the crate itself
+    already exists in this branch's tree and compiles standalone;
+(b) `bindings/typescript/package.json`'s `"private": true` being cleared
+    upstream before npm publish becomes possible -- the package itself
+    already exists in this branch's tree;
+(c) npm (`NPM_TOKEN`) and PyPI (`PYPI_API_TOKEN`) registry credentials being
     provisioned (only `CARGO_REGISTRY_TOKEN` exists today);
-(c) actual registry-name control verification -- today's preflight only
+(d) actual registry-name control verification -- today's preflight only
     proved absence of the 6 names on their registries, not ownership or
     reserved availability, and must be reverified at real release time.
 

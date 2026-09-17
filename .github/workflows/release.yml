@@ -120,14 +120,16 @@ jobs:
 
   # --- B.7 binding-release jobs (release/bindings-artifacts.toml) ---
   #
-  # These jobs are intentionally kept in the workflow file even though this
-  # branch only has 3 of the 4 target crates.io crates and neither language
-  # package is fully publishable yet (sc-observability-tauri and
-  # bindings/typescript are pending a known, already-tracked
-  # fix/phase-b-3a-completeness parent-checkpoint merge; npm/PyPI registry
-  # credentials are not provisioned). Direction is to keep npm and all four
-  # binding crates in the release machinery now and integrate the real
-  # artifacts as they land, rather than gating them out of the workflow.
+  # These jobs are intentionally kept in the workflow file even though
+  # neither language package is fully publishable yet. bindings/tauri and
+  # bindings/typescript now exist in this branch's tree (merged forward from
+  # feature/phase-b-6-python-async), but sc-observability-tauri still needs
+  # real qualification (feature/phase-b-tauri-qualification, a separate
+  # layer being prepared above B.7) and bindings/typescript/package.json
+  # still sets "private": true; npm/PyPI registry credentials are also not
+  # provisioned. Direction is to keep npm and all four binding crates in the
+  # release machinery now and integrate the real artifacts as they land,
+  # rather than gating them out of the workflow.
 
   publish-binding-crates:
     needs: [gate-and-tag, publish]
@@ -159,12 +161,14 @@ jobs:
             --manifest release/bindings-artifacts.toml --workspace-toml Cargo.toml
 
       # NOTE: this step is expected to fail closed today. sc-observability-tauri
-      # is status = "pending" in release/bindings-artifacts.toml (bindings/tauri
-      # does not exist in this branch's tree yet), so --require-ready refuses to
-      # produce a publish plan. That is correct: this job must never publish a
-      # partial 3-of-4 binding crate set. Once fix/phase-b-3a-completeness
-      # merges forward and sc-observability-tauri flips to "ready", this step
-      # (and the cargo publish loop below) will start succeeding with no
+      # is status = "pending" in release/bindings-artifacts.toml (the crate
+      # exists and builds, but real qualification work is a separate layer,
+      # feature/phase-b-tauri-qualification, being prepared above B.7), so
+      # --require-ready refuses to produce a publish plan. That is correct:
+      # this job must never publish a partial 3-of-4 binding crate set. Once
+      # that qualification layer lands and sc-observability-tauri flips to
+      # "ready", this step (and the cargo publish loop below) will start
+      # succeeding with no
       # further changes to this workflow.
       - name: Publish binding crates in order (fails closed until all are ready)
         env:
@@ -233,7 +237,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ ! -f bindings/typescript/package.json ]]; then
-            echo "bindings/typescript/package.json does not exist yet (pending parent-checkpoint merge from fix/phase-b-3a-completeness); skipping npm publish"
+            echo "bindings/typescript/package.json not found at this ref; skipping npm publish"
             exit 0
           fi
           if python3 -c "import json,sys; sys.exit(0 if json.load(open('bindings/typescript/package.json')).get('private') is True else 1)"; then
