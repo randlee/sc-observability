@@ -2215,6 +2215,47 @@ mod tests {
     }
 
     #[test]
+    fn typed_admission_and_flush_can_run_concurrently() {
+        use std::sync::Barrier;
+
+        let root = temp_path("typed-admission-flush-concurrency");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let logger = Arc::new(Logger::new_typed(config).expect("typed logger"));
+        let barrier = Arc::new(Barrier::new(3));
+
+        let flush_logger = logger.clone();
+        let flush_barrier = barrier.clone();
+        let flush = std::thread::spawn(move || {
+            flush_barrier.wait();
+            flush_logger.flush_typed()
+        });
+
+        let admission_logger = logger.clone();
+        let admission_barrier = barrier.clone();
+        let admission = std::thread::spawn(move || {
+            admission_barrier.wait();
+            admission_logger.try_log_with_outcome_typed(log_event(service_name()))
+        });
+
+        barrier.wait();
+        flush.join().expect("flush thread").expect("typed flush");
+        assert_eq!(
+            admission
+                .join()
+                .expect("admission thread")
+                .expect("typed admission"),
+            AdmissionOutcome::Accepted
+        );
+
+        let Ok(logger) = Arc::try_unwrap(logger) else {
+            panic!("all concurrent handles dropped");
+        };
+        logger.shutdown();
+    }
+
+    #[test]
     fn separate_level_owners_do_not_cross_logger_boundaries() {
         let first_root = temp_path("level-isolation-first");
         let second_root = temp_path("level-isolation-second");
