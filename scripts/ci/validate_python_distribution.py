@@ -156,6 +156,33 @@ def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) 
     return results
 
 
+def run_embedding(root: Path, scratch: Path, sandbox: Sandbox, python: str) -> dict:
+    """Build the real bundled host with this interpreter and an empty Cargo cache."""
+    interpreter = json.loads(sandbox.run([python, '-I', '-c',
+        'import json,sys; print(json.dumps({"python":f"{sys.version_info.major}.{sys.version_info.minor}",'
+        '"python_full":sys.version,"base_prefix":sys.base_prefix}))'], scratch))
+    keys = ('CARGO_HOME', 'CARGO_TARGET_DIR', 'PYTHONPATH', 'PYTHONHOME', 'PYO3_PYTHON')
+    previous = {key: sandbox.env.get(key) for key in keys}
+    sandbox.env.update(CARGO_HOME=str(scratch / 'embedding-cargo-home'),
+                       CARGO_TARGET_DIR=str(scratch / 'embedding-target'),
+                       PYTHONPATH=str(root / 'python'), PYTHONHOME=interpreter['base_prefix'],
+                       PYO3_PYTHON=python)
+    try:
+        metadata = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
+                                          '--format-version', '1'], root / 'embedding'))
+        resolution = verify_resolution(metadata, root)
+        verify_embedding_features(metadata)
+        sandbox.run([sandbox.cargo, 'run', '--locked', '--offline', '--release'], root / 'embedding')
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                sandbox.env.pop(key, None)
+            else:
+                sandbox.env[key] = value
+    verify_source(root)
+    return {'status': 'passed', **interpreter, 'executable': python, 'resolution': resolution}
+
+
 def build(args) -> None:
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -192,30 +219,13 @@ def build(args) -> None:
             if len(wheels) != 1:
                 raise DistributionError('expected exactly one ABI wheel for the platform')
             linked = linkage(wheels[0], selected, sandbox, scratch)
-            # Run the same Rust host example with normal rlib linking; never extension flags.
-            # The host starts with its own empty Cargo home and target directory.
-            # It cannot reuse the extension's compiled artifacts or linker choices.
-            extension_home = sandbox.env['CARGO_HOME']
-            extension_target = sandbox.env['CARGO_TARGET_DIR']
-            sandbox.env['CARGO_HOME'] = str(scratch / 'embedding-cargo-home')
-            sandbox.env['CARGO_TARGET_DIR'] = str(scratch / 'embedding-target')
-            sandbox.env['PYTHONPATH'] = str(root / 'python')
-            sandbox.env['PYTHONHOME'] = sys.base_prefix
-            embedded = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
-                                              '--format-version', '1'], root / 'embedding'))
-            verify_resolution(embedded, root)
-            verify_embedding_features(embedded)
-            sandbox.run([sandbox.cargo, 'run', '--locked', '--offline', '--release'], root / 'embedding')
-            del sandbox.env['PYTHONPATH']
-            del sandbox.env['PYTHONHOME']
-            sandbox.env['CARGO_HOME'] = extension_home
-            sandbox.env['CARGO_TARGET_DIR'] = extension_target
+            embedded = run_embedding(root, scratch, sandbox, sys.executable)
             negatives = negative_cases(root, scratch, sandbox, metadata)
             verify_source(root)
             record = {'schema_version': 1, 'status': 'passed', 'development_only': source.get('development_only', False), 'source_commit': source['source_commit'],
                       'sdist_sha256': digest(args.sdist), 'platform': args.platform,
                       'build_interpreter': actual, 'wheel': linked, 'resolution': resolution,
-                      'isolation': probes, 'native_runtime_tests': 'passed', 'native_test_count': native_count, 'embedding': 'passed', 'negative_results': negatives,
+                      'isolation': probes, 'native_runtime_tests': 'passed', 'native_test_count': native_count, 'embedding': 'passed', 'embedding_interpreter': embedded, 'negative_results': negatives,
                       'commands': sandbox.commands, 'publication': 'pending_B.7'}
             shutil.copyfile(wheels[0], output / wheels[0].name)
         (output / 'build-result.json').write_text(json.dumps(record, indent=2) + '\n')
@@ -272,12 +282,17 @@ def cell(args) -> None:
             typed = [str(confined(suite, path)) for path in contract['typing_paths']]
             sandbox.run([python, '-I', '-m', 'mypy', '--strict', '--no-incremental',
                          '--cache-dir', str(scratch / 'mypy-cache'), *typed], suite)
+            embedded = None
+            if contract.get('embedding_in_each_cell'):
+                embedded = run_embedding(root, scratch, sandbox, python)
+                if embedded['python_full'] != actual['python_full']:
+                    raise DistributionError('embedding interpreter differs from installed cell')
             record = {'schema_version': 1, 'status': 'passed', **actual,
                       'development_only': args.allow_incomplete_runtime or source.get('development_only', False),
                       'source_commit': source['source_commit'], 'sdist_sha256': digest(args.sdist),
                       'wheel': wheel, 'runtime_suite': contract, 'test_count': len(cases),
                       'test_cases': sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in cases),
-                      'installed_extension': imported.strip(), 'isolation': probes,
+                      'installed_extension': imported.strip(), 'isolation': probes, 'embedding': embedded,
                       'typecheck': 'passed', 'interpreter_flags': flags, 'runtime_environment': environment,
                       'commands': sandbox.commands, 'publication': 'pending_B.7'}
             shutil.copyfile(junit, output / 'runtime.xml')
@@ -303,7 +318,24 @@ def aggregate(args) -> None:
                 or item.get('sdist_sha256') != digest(args.sdist)
                 or not all(item['isolation'].get(key) is True for key in ('checkout', 'cargo_cache', 'network'))):
             raise DistributionError('mixed source/artifacts or incomplete isolation evidence')
+    with tempfile.TemporaryDirectory(prefix='b4a-aggregate-') as temporary:
+        root = extract_sdist(args.sdist, Path(temporary) / 'source')
+        source = verify_source(root)
+        contract = source['runtime_suite']
+        if (source.get('development_only') or not contract.get('runtime_complete')
+                or source['source_commit'] != args.source_commit):
+            raise DistributionError('source contract is not a completed qualification candidate')
+        runtime_options(contract)
     for item in cells:
+        if item.get('runtime_suite') != contract:
+            raise DistributionError('cell contract differs from the immutable source contract')
+        if contract.get('embedding_in_each_cell'):
+            embedded = item.get('embedding') or {}
+            if (embedded.get('status') != 'passed' or embedded.get('python_full') != item['python_full']
+                    or embedded.get('python') != item['python']
+                    or not any(command['command'][1:] == ['run', '--locked', '--offline', '--release']
+                               and command['exit_code'] == 0 for command in item['commands'])):
+                raise DistributionError('missing interpreter-matched embedded-host execution')
         if item['wheel']['sha256'] != wheel_hashes[item['platform']] or item.get('typecheck') != 'passed':
             raise DistributionError('interpreter cell did not execute its shared ABI wheel and type suite')
     for path, item in zip(cell_paths, cells):

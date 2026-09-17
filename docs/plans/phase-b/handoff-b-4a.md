@@ -53,8 +53,11 @@ The `qualification-suite.json` contract belongs to the runtime owner. Its
 installed-package type fixtures. `runtime_complete: true` is required for final
 qualification. Optional boolean `asyncio_debug` and `warnings_as_errors` enable
 `-X dev` and `-W error`, with the corresponding environment flags, without
-removing isolated Python mode. Later runtime suites extend this contract and
-reuse the same runner.
+removing isolated Python mode. Optional boolean `embedding_in_each_cell` runs
+the actual bundled host on every cell interpreter with its own fresh Cargo home
+and target, verifies the metadata and linker features, and requires retained
+interpreter-matched execution in the aggregate. B.4a defaults this option off;
+later runtime suites opt in and reuse the same runner.
 
 Each cell installs into a fresh external venv, verifies that both facade and
 native module come from that venv, denies checkout/cache/network access, and
