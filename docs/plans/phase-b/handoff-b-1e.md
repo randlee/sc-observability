@@ -25,12 +25,26 @@ explicit typed-module adapters with unchanged legacy registration methods.
 | Diagnostic/source preservation | Migration reference §Nine wrapper families and §Custom traits | Complete; uses existing `context`/conversion contract |
 | Explicit adapters | Migration reference §Custom traits and corrected projector example | Complete; no `with_typed_*` claim |
 | Owner-method exemptions | Inventory §Explicit method exemptions | Complete |
-| Warning/version policy | Inventory §Version and activation; reference §Prerequisite | Complete; activation pending B.2 |
+| Warning/version policy | Inventory §Version and activation; reference §Prerequisite | Complete for prep; B.1e activation/validation remains pending, B.2 qualifies |
 | Success and failure guide paths | Reference §Success and failure checks; current integration tests | Passed against current APIs |
 | Requirements/API/release consistency | `requirements.md`, `api-design.md`, `migration-guide.md`, release docs updates | Complete for preparation status |
 | Downstream validator and three fixtures | Authoritative B.1e deliverable 4 | Pending team-lead/CI follow-up; not claimed here |
 
 ## Validation commands
+
+### B1E-C01/C02/C03 fix round
+
+- C01 fixed: the docs now state that B.1e implementation selects, activates
+  and validates warnings; this scoped preparation leaves activation pending,
+  B.2 qualifies the B.1e result, and B.7 publishes it.
+- C02 fixed: new migration guidance recommends `log_typed` and
+  `try_log_typed`; the supported infallible `LoggerBuilder::build` and the
+  additive fallible `build_typed` distinction is explicit. OTLP constructors
+  retain their actual `impl Into<String>` signatures.
+- C03 fixed: both `legacy_*` and `typed_*` adapter directions are listed,
+  including `sc_observability::typed::{legacy_sink,typed_sink}`. The guide's
+  complete kind-matching, success/failure and projector-adapter examples were
+  compiled and run by the temporary downstream consumer below.
 
 The guide's current API paths were checked by:
 
@@ -69,4 +83,6 @@ pass are delivered by their owners.
 
 This handoff does not claim deprecation rollout, a warning-free legacy build,
 release publication, a removal schedule, a major release, or sprint-wide
-completion. B.2 qualifies/stages the warning path and B.7 alone publishes it.
+completion. B.1e implementation/validation activates the warning path; this
+scoped prep leaves that implementation pending, B.2 qualifies/stages its
+result, and B.7 alone publishes it.

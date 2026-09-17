@@ -44,10 +44,11 @@ the unplanned `with_typed_*` projector builders.
 
 The guide examples use only APIs present at the merged parent head and cover a
 successful typed path plus an invalid-input failure. Workspace tests verify
-the same typed paths and adapter/source behavior. Warning activation remains a
-separate gate: B.2 selects and qualifies the exact `since` version after the
-B.P2 `1.3.0` staged prerequisite (`1.4.0` is the next-minor candidate), and
-B.7 alone publishes. No release or removal schedule is introduced here.
+the same typed paths and adapter/source behavior. B.1e implementation selects,
+activates and validates the exact warning policy after the B.P2 `1.3.0`
+staged prerequisite (`1.4.0` is the next-minor candidate); this scoped prep
+leaves that implementation pending. B.2 qualifies the B.1e result and B.7
+alone publishes. No release or removal schedule is introduced here.
 
 ## Completion evidence
 

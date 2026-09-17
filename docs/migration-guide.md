@@ -95,8 +95,9 @@ For consumers that export to OTLP:
 ## Typed Error Adoption (Phase B preparation)
 
 The additive typed error methods are implemented in the current B.1b–B.1d
-preparation stack, while warning activation remains a later B.2 qualification
-gate. For exact old/new symbols, nine wrapper families, typed kind matching,
+preparation stack. B.1e implements and validates warning activation; this
+scoped preparation leaves that implementation pending, and B.2 qualifies the
+result before B.7 publication. For exact old/new symbols, nine wrapper families, typed kind matching,
 source retention, custom-trait adapters, rollback and narrow warning policy,
 use the [typed error migration reference](../.claude/skills/sc-observability-adopting/references/migrate-error-api.md)
 and its [source inventory](plans/phase-b/warning-inventory-b-1e.md).
@@ -104,7 +105,9 @@ and its [source inventory](plans/phase-b/warning-inventory-b-1e.md).
 `LoggerBuilder::build`, `Logger::new_with_level_owner` and
 `LoggerBuilder::build_with_level_owner` remain supported without method-level
 deprecation; their `_typed` methods are additive. `Logger::emit` retains its
-existing v1.2.0 warning and behavior. The corrected telemetry projector path
+existing v1.2.0 warning and behavior; new migration guidance uses
+`log_typed()` for blocking admission and `try_log_typed()` for nonblocking
+admission. The corrected telemetry projector path
 uses explicit `sc_observability_types::typed::legacy_*` adapters with the
 unchanged `with_log_projector`, `with_span_projector` and
 `with_metric_projector` methods; no `with_typed_*` builders exist.

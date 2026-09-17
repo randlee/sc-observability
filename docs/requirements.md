@@ -447,8 +447,9 @@ The B.1e preparation record now supplies the exact migration routing and
 warning inventory for PHB-005/PHB-006. The typed methods and failures are
 implemented additively in the merged B.1b–B.1d preparation layers, but warning
 attributes, downstream Cargo fixtures and the JSON diagnostic validator remain
-pending their B.2 qualification gate. This preparation does not change the
-approved baseline status or claim a warning rollout.
+pending B.1e implementation/validation in this scoped preparation. B.2
+qualifies the B.1e result; B.7 alone publishes it. This preparation does not
+change the approved baseline status or claim a warning rollout.
 - PHB-007 Issue #97 shall add one core-owned effective level shared by every
   producer path, with immutable LoggerConfig baseline and owner-only temporary
   elevate/reset operations. Attached handles have read access only. Existing

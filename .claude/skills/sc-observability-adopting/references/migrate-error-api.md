@@ -1,18 +1,20 @@
 # Error API migration
 
 This reference is for an adopter who is ready to move from the retained
-diagnostic wrappers to the additive typed failure APIs. The migration is
-warning-only when B.2 activates it. The current workspace implements the typed
-counterparts, but this preparation branch deliberately does not add new
-deprecation attributes.
+diagnostic wrappers to the additive typed failure APIs. B.1e implements and
+validates the warning-only migration after the B.P2 prerequisite; B.2
+qualifies that result and B.7 publishes it. The current workspace implements
+the typed counterparts, but this preparation branch deliberately does not add
+new deprecation attributes.
 
 ## Prerequisite and release policy
 
 Use the typed APIs only after the consumer has verified the replacement at the
 same version as its existing `sc-observability` dependencies. The B.P2 staged
-prerequisite is `1.3.0`; B.1e's next-minor warning candidate is `1.4.0`.
-That `since` value is pending B.2 qualification and B.7 publication. There is
-no removal schedule and no planned major release. A legacy consumer continues
+prerequisite is `1.3.0`; B.1e selects the next-minor warning candidate
+`1.4.0` and validates it. This scoped preparation leaves activation pending;
+B.2 qualifies the B.1e result and B.7 publishes it. There is no removal
+schedule and no planned major release. A legacy consumer continues
 to build and run with default lints; `-D warnings` or `-D deprecated` may fail
 because deprecation is the explicit upgrade mechanism.
 
@@ -36,8 +38,8 @@ success values, ownership and lifecycle semantics stay the same.
 | `Observability::flush` | `flush_typed` | `FlushFailure` |
 | `Observability::shutdown` | `shutdown_typed` | `ShutdownFailure` |
 | `ObservabilityBuilder::build` | `build_typed` | `InitFailure` |
-| `OtlpEndpoint::new` | `OtlpEndpoint::new_typed` | `InitFailure` |
-| `AuthHeader::new` | `AuthHeader::new_typed` | `InitFailure` |
+| `OtlpEndpoint::new(impl Into<String>)` | `OtlpEndpoint::new_typed(impl Into<String>)` | `InitFailure` |
+| `AuthHeader::new(impl Into<String>)` | `AuthHeader::new_typed(impl Into<String>)` | `InitFailure` |
 | `TelemetryConfigBuilder::build` | `build_typed` | `InitFailure` |
 | `SpanAssembler::push` | `push_typed` | `EventFailure` |
 | `Telemetry::new` | `Telemetry::new_typed` | `InitFailure` |
@@ -49,8 +51,9 @@ The following are intentionally not in this table: `LoggerBuilder::build`,
 They remain supported without method-level deprecation. Their additive typed
 owner counterparts are `new_with_level_owner_typed` and
 `build_with_level_owner_typed`. `Logger::emit` retains its existing 1.2.0
-deprecation and behavior; use `log` for blocking admission or `try_log` for
-nonblocking admission. `Observability::emit`, `Telemetry::emit_log`,
+deprecation and behavior; new migration code should use `log_typed` for
+blocking admission or `try_log_typed` for nonblocking admission.
+`Observability::emit`, `Telemetry::emit_log`,
 `Telemetry::emit_span`, and `Telemetry::emit_metric` also remain supported
 because no typed counterpart exists for those public boundaries.
 
@@ -61,7 +64,7 @@ the unchanged registration methods and adapt typed implementations explicitly:
 use std::sync::Arc;
 
 use sc_observability_types::typed::{ProjectionFailure, TypedLogProjector, legacy_log_projector};
-use sc_observability_types::{LogEvent, Observable, Observation, ProjectionRegistration};
+use sc_observability_types::{LogEvent, Observation, ProjectionRegistration};
 
 struct TypedNoop;
 
@@ -82,8 +85,8 @@ fn main() {
 ```
 
 Use `legacy_span_projector` and `legacy_metric_projector` similarly. The
-`Observable` bound is shown explicitly so this sample is a complete downstream
-consumer. These functions live in the explicit `sc_observability_types::typed` module; do not
+`Observation<String>` supplies the concrete observable payload so this sample
+is a complete downstream consumer. These functions live in the explicit `sc_observability_types::typed` module; do not
 add a root glob import or a new required method to an old open trait.
 
 ## Nine wrapper families
@@ -172,11 +175,16 @@ typed traits:
 - `TypedLogProjector`, `TypedSpanProjector`, `TypedMetricProjector`
 - `sc_observability::typed::TypedLogSink`
 
-At a retained legacy registration boundary, call the matching one-way
+At a retained legacy registration boundary, call the matching
 `legacy_identity`, `legacy_subscriber`, `legacy_log_projector`,
-`legacy_span_projector`, `legacy_metric_projector`, or `legacy_sink` adapter.
-The adapter calls the underlying implementation once and moves the context;
-it does not require new legacy trait methods, registrations or enum variants.
+`legacy_span_projector`, `legacy_metric_projector`, or `legacy_sink` adapter
+when a new typed implementation must be reused by an old caller. Conversely,
+when a new typed caller must reuse an existing legacy implementation, use
+`typed_identity`, `typed_subscriber`, `typed_log_projector`,
+`typed_span_projector`, `typed_metric_projector`, or
+`sc_observability::typed::typed_sink`. Both directions call the underlying
+implementation once and move the context; neither requires new legacy trait
+methods, registrations or enum variants.
 
 ## Incremental rollback
 

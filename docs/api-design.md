@@ -2348,8 +2348,9 @@ B.1e migration preparation records that inventory in
 and routes adopters through
 `.claude/skills/sc-observability-adopting/references/migrate-error-api.md`.
 The record is not a deprecation approval: the current child does not add
-warning attributes, and B.2 must qualify the exact next-minor version after the
-B.P2 staged prerequisite. The two B.P1 owner constructors remain method-level
+warning attributes; B.1e implementation/validation selects the exact
+next-minor version after the B.P2 staged prerequisite, and B.2 qualifies that
+result. The two B.P1 owner constructors remain method-level
 exemptions, while explicit `InitError` wrapper use is documented separately.
 
 ### 21.2 Bridge And Runtime Level Contracts
