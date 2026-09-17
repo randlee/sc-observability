@@ -97,15 +97,36 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # NOTE: the plan is captured into a variable first (not read via
+          # `done < <(...)` process substitution). Under `set -euo pipefail`,
+          # a failure inside `<(...)` does NOT propagate to the enclosing
+          # while loop or this step -- the loop would just silently see
+          # zero/partial lines and the step would exit 0. Capturing via
+          # `plan="$(...)"` does propagate failure under `set -e`, so a
+          # broken manifest/script here now actually fails the job instead
+          # of silently publishing nothing.
+          plan="$(python3 scripts/release_artifacts.py list-publish-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")"
           while IFS='|' read -r package wait_secs; do
             cargo publish -p "$package" --locked
             version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
             python3 scripts/ci/wait_for_registry_version.py \
               --package "$package" --version "$version" --attempts 12 --interval 10
-          done < <(python3 scripts/release_artifacts.py list-publish-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")
+          done <<< "$plan"
 
   release:
-    needs: [gate-and-tag, publish]
+    # Per C04: this now also needs the three B.7 binding-release jobs, not
+    # just the 6 core crates' `publish` job. A GitHub Release must never be
+    # created before all binding artifacts have been attempted/verified.
+    # Today this means `release` cannot run at all: publish-binding-crates,
+    # publish-python-wheel, and publish-npm-client are all designed to fail
+    # closed (sc-observability-tauri is pending qualification, the npm
+    # client is pending "private": true, and PYPI_API_TOKEN/NPM_TOKEN are
+    # not configured). That is intentional, not a bug -- per B.7's AC3, a
+    # staged/partial artifact set is not closure, and that must hold for
+    # the release process itself, not just for documentation. Do not soften
+    # this back to `[gate-and-tag, publish]` to "unblock" releases; the fix
+    # is to actually resolve the pending items, not to bypass the gate.
+    needs: [gate-and-tag, publish, publish-binding-crates, publish-python-wheel, publish-npm-client]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -168,22 +189,43 @@ jobs:
       # this job must never publish a partial 3-of-4 binding crate set. Once
       # that qualification layer lands and sc-observability-tauri flips to
       # "ready", this step (and the cargo publish loop below) will start
-      # succeeding with no
-      # further changes to this workflow.
+      # succeeding with no further changes to this workflow. Because the
+      # `release` job now needs this job (see its own comment), that job is
+      # also blocked until then -- intentional, not a bug.
       - name: Publish binding crates in order (fails closed until all are ready)
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          while IFS='|' read -r kind package wait_secs status; do
-            [[ "$kind" == "crate" ]] || continue
-            cargo publish -p "$package" --locked
+          # Captured into a variable first, then read via a here-string
+          # (`<<<`), not `done < <(...)` process substitution. Under
+          # `set -euo pipefail`, a failure inside `<(...)` process
+          # substitution does NOT propagate to the enclosing while loop or
+          # this step -- the loop would just silently see zero/partial
+          # lines and the step would exit 0. `plan="$(...)"` DOES propagate
+          # failure under `set -e`, so a genuinely-not-ready manifest (e.g.
+          # sc-observability-tauri pending, or an unconfigured registry
+          # secret) now actually fails this step instead of silently
+          # publishing a partial set or nothing at all.
+          plan="$(python3 scripts/release_bindings_artifacts.py list-publish-plan \
+                    --manifest release/bindings-artifacts.toml \
+                    --workspace-toml Cargo.toml \
+                    --require-ready --require-secrets --only-kind crate)"
+          while IFS='|' read -r kind package wait_secs status workspace_member manifest_path; do
+            if [[ "$workspace_member" == "true" ]]; then
+              cargo publish -p "$package" --locked
+            else
+              # A standalone Cargo workspace (e.g. bindings/tauri/Cargo.toml
+              # declares its own empty `[workspace]`, so it is not a root
+              # workspace member) cannot be addressed by `cargo publish -p`
+              # run from the repo root; --manifest-path addresses it directly.
+              cargo publish --manifest-path "$manifest_path" --locked
+            fi
             if [[ "$wait_secs" != "0" ]]; then
               sleep "$wait_secs"
             fi
-          done < <(python3 scripts/release_bindings_artifacts.py list-publish-plan \
-                      --manifest release/bindings-artifacts.toml --require-ready)
+          done <<< "$plan"
 
   publish-python-wheel:
     needs: [gate-and-tag, publish-binding-crates]
@@ -193,34 +235,63 @@ jobs:
         with:
           ref: ${{ needs.gate-and-tag.outputs.release_tag }}
 
-      # This job depends on the wheel/sdist artifacts built by
-      # .github/workflows/b4a-python-distributions.yml's plan -> sdist/wheel
-      # matrix -> installed-suite -> aggregate pipeline. That workflow is not
-      # currently structured as a reusable `workflow_call` target, so it is
-      # not refactored here; this job instead documents the dependency and
-      # performs an honest, credential-gated upload attempt only.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
-      - name: Publish to PyPI if credentials are configured, else report pending
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+
+      # This job's full 5-platform x 5-interpreter release matrix is built by
+      # .github/workflows/b4a-python-distributions.yml's plan -> sdist/wheel
+      # matrix -> installed-suite -> aggregate pipeline. That workflow is not
+      # currently structured as a reusable `workflow_call` target, so it is
+      # not refactored here. This step instead builds and self-verifies a
+      # real host-platform sdist/wheel via the same build-evidence/
+      # verify-evidence machinery scripts/ci/validate_binding_registry_consumers.sh
+      # exercises, so the auth gate and (eventual) upload below act on real,
+      # freshly-built, hash-verified bytes rather than a placeholder.
+      - name: Build and self-verify candidate evidence for the PyPI package
+        run: |
+          python3 scripts/release_bindings_artifacts.py build-evidence \
+            --manifest release/bindings-artifacts.toml --workspace-toml Cargo.toml \
+            --out release/evidence
+          python3 scripts/release_bindings_artifacts.py verify-evidence \
+            --manifest release/bindings-artifacts.toml --workspace-toml Cargo.toml \
+            --evidence release/evidence/bindings-candidate.json
+
+      # Fails closed today (blocked-on-auth): PYPI_API_TOKEN is not yet
+      # configured (registry_secret_configured = false for the pypi package
+      # in release/bindings-artifacts.toml). This must never be softened to
+      # a warning/exit 0 -- a real gate that would legitimately fail today
+      # must say so and fail the job, not silently skip.
+      - name: Require PyPI publish auth to be configured
+        run: |
+          python3 scripts/release_bindings_artifacts.py list-publish-plan \
+            --manifest release/bindings-artifacts.toml --workspace-toml Cargo.toml \
+            --require-ready --require-secrets --only-kind pypi
+
+      - name: Publish to PyPI
         env:
           PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
           if [[ -z "${PYPI_API_TOKEN}" ]]; then
-            echo "PyPI credential (PYPI_API_TOKEN) not configured, skipping live upload"
-            exit 0
+            echo "PYPI_API_TOKEN is not set at the GitHub Actions secrets level even" >&2
+            echo "though the manifest gate above passed (registry_secret_configured" >&2
+            echo "must be flipped to true only once the secret genuinely exists);" >&2
+            echo "refusing to proceed rather than silently skipping." >&2
+            exit 1
           fi
           python3 -m pip install --upgrade twine
-          # Real upload wires in the b4a-sdist/b4a-wheel-* artifacts produced by
-          # .github/workflows/b4a-python-distributions.yml (download-artifact
-          # from that workflow's run for this same release tag) once PyPI
-          # credentials exist; deliberately not fabricated here.
-          echo "PYPI_API_TOKEN is configured, but wiring to b4a artifact download is not yet implemented; not uploading."
-          exit 0
+          sdist=(release/evidence/artifacts/pypi/*.tar.gz)
+          wheel=(release/evidence/artifacts/pypi/*.whl)
+          twine upload --non-interactive -u __token__ -p "${PYPI_API_TOKEN}" \
+            "${sdist[0]}" "${wheel[@]}"
 
   publish-npm-client:
     needs: [gate-and-tag, publish-binding-crates]
@@ -230,22 +301,34 @@ jobs:
         with:
           ref: ${{ needs.gate-and-tag.outputs.release_tag }}
 
-      - name: Publish npm client if present and credentials are configured, else report pending
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      # Fails closed today: @sc-observability/client is status = "pending" in
+      # release/bindings-artifacts.toml (package.json still sets "private":
+      # true, and NPM_TOKEN is also not configured) -- --require-ready
+      # refuses to produce a publish plan. This must never be softened to a
+      # warning/exit 0: per this task's hard constraints, this package
+      # cannot be flipped to "ready" from within B.7 (the private:true flag
+      # must be cleared upstream first).
+      - name: Require the npm client to be ready and its publish auth configured
+        run: |
+          python3 scripts/release_bindings_artifacts.py list-publish-plan \
+            --manifest release/bindings-artifacts.toml --workspace-toml Cargo.toml \
+            --require-ready --require-secrets --only-kind npm
+
+      - name: Publish npm client
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! -f bindings/typescript/package.json ]]; then
-            echo "bindings/typescript/package.json not found at this ref; skipping npm publish"
-            exit 0
-          fi
-          if python3 -c "import json,sys; sys.exit(0 if json.load(open('bindings/typescript/package.json')).get('private') is True else 1)"; then
-            echo "bindings/typescript/package.json is still \"private\": true; must be cleared before publish is possible"
-            exit 0
-          fi
           if [[ -z "${NPM_TOKEN}" ]]; then
-            echo "npm credential (NPM_TOKEN) not configured, skipping live upload"
-            exit 0
+            echo "NPM_TOKEN is not set at the GitHub Actions secrets level even though" >&2
+            echo "the manifest gate above passed; refusing to proceed rather than" >&2
+            echo "silently skipping." >&2
+            exit 1
           fi
           npm publish --workspace bindings/typescript --access public
