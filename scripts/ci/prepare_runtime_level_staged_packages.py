@@ -131,6 +131,15 @@ def verify_stage(output: Path) -> None:
                 raise SystemExit(f"archive has an unnormalized manifest: {archive}")
 
 
+def candidate_workspace_manifest(content: str, version: str) -> str:
+    """Advance plain and exact local pins from the actual source workspace version."""
+    baseline = tomllib.loads(content)["workspace"]["package"]["version"]
+    rendered = re.sub(r'(?m)^version = "' + re.escape(baseline) + r'"$', f'version = "{version}"', content, count=1)
+    for prefix in ("", "="):
+        rendered = rendered.replace(f'version = "{prefix}{baseline}", path =', f'version = "{prefix}{version}", path =')
+    return rendered
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)

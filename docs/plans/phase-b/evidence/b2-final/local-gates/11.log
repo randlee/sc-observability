@@ -1,0 +1,6 @@
+usage: validate_log_import.py [-h] --source-repo SOURCE_REPO
+                              [--destination DESTINATION]
+                              [--doc-repo DOC_REPO] [--provenance PROVENANCE]
+                              [--handoff HANDOFF]
+                              [--post-import-adaptations POST_IMPORT_ADAPTATIONS]
+validate_log_import.py: error: the following arguments are required: --source-repo

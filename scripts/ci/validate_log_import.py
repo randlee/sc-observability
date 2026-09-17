@@ -123,6 +123,24 @@ _CARGO_TOML_ONLY_KINDS = frozenset({"package_metadata", "dependency_path"})
 # proves.
 _TRYBUILD_STDERR_ONLY_KINDS = frozenset({"trybuild_diagnostic_text"})
 
+# These are post-import compatibility annotations on the copied bridge. They
+# are intentionally not folded into import-provenance.json: the historical
+# record proves the accepted copy, while this separate record proves the
+# later warning-only adaptation.
+_POST_IMPORT_WARNING_PATHS = frozenset(
+    {
+        "crates/sc-observability-log/src/control.rs",
+        "crates/sc-observability-log/src/handle.rs",
+        "crates/sc-observability-log/src/mapping.rs",
+    }
+)
+_POST_IMPORT_ALLOW_BLOCK_RE = re.compile(
+    r'^(?P<indent> *)#\[allow\(\n'
+    r'(?P=indent)    deprecated,\n'
+    r'(?P=indent)    reason = "[^"\n]+"\n'
+    r'(?P=indent)\)\]$'
+)
+
 
 def _is_trybuild_stderr_path(path: str) -> bool:
     p = Path(path)
@@ -520,6 +538,95 @@ def validate_adaptations(adaptations: list[dict], recorded_inventory: dict[str, 
     return expected
 
 
+def _git_file_at_commit(repo: Path, commit: str, path: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(repo), "show", f"{commit}:{path}"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"post-import adaptation source file not found: {path}@{commit}")
+    return result.stdout
+
+
+def validate_post_import_adaptations(
+    record: dict,
+    provenance: dict,
+    source_repo: Path,
+    destination: Path,
+    expected_destination: dict[str, str],
+) -> dict[str, str]:
+    """Verify the separately recorded warning-only edits after the accepted copy.
+
+    The historical import record remains authoritative for the accepted source
+    and all mechanical copy adaptations. This record only permits inserting
+    exact, reason-bearing deprecated-warning allowance blocks into the three
+    copied bridge modules. Removing every declared block from the destination
+    must reproduce the accepted source file byte-for-byte; therefore a body,
+    signature, undeclared file, or other warning edit cannot pass by sharing a
+    broad textual pattern.
+    """
+    if record.get("historical_provenance") != "docs/plans/phase-b/import-provenance.json":
+        raise SystemExit("post-import adaptation record does not cite historical import provenance")
+    source_commit = provenance.get("source_commit")
+    if record.get("source_commit") != source_commit:
+        raise SystemExit("post-import adaptation source SHA does not match historical provenance")
+    adaptations = record.get("adaptations")
+    if not isinstance(adaptations, list) or not adaptations:
+        raise SystemExit("post-import adaptation record has no adaptations")
+
+    updated = dict(expected_destination)
+    seen: set[str] = set()
+    for item in adaptations:
+        path = item.get("path")
+        if not isinstance(path, str) or path in seen:
+            raise SystemExit(f"duplicate or missing post-import adaptation path: {path}")
+        seen.add(path)
+        if path not in _POST_IMPORT_WARNING_PATHS:
+            raise SystemExit(f"post-import adaptation path is outside the warning-only bridge allowlist: {path}")
+        if path not in provenance.get("file_inventory", {}):
+            raise SystemExit(f"post-import adaptation path is absent from historical inventory: {path}")
+        if item.get("kind") != "deprecated_warning_allowance":
+            raise SystemExit(f"post-import adaptation for {path} is not a warning-only allowance")
+        if not (item.get("reason") or "").strip():
+            raise SystemExit(f"post-import adaptation for {path} is missing a reason")
+        blocks = item.get("blocks")
+        if not isinstance(blocks, list) or not blocks:
+            raise SystemExit(f"post-import adaptation for {path} has no exact allowance blocks")
+        normalized_blocks: list[str] = []
+        for block in blocks:
+            if not isinstance(block, str) or not _POST_IMPORT_ALLOW_BLOCK_RE.fullmatch(block):
+                raise SystemExit(f"post-import adaptation for {path} contains an invalid allowance block")
+            normalized_blocks.append(block)
+
+        before = _git_file_at_commit(source_repo, source_commit, path)
+        before_blob = blob_id_of_content(before, destination)
+        if before_blob != item.get("before_blob") or before_blob != provenance["file_inventory"][path]:
+            raise SystemExit(f"post-import adaptation before blob for {path} does not match accepted source")
+        destination_path = destination / path
+        if not destination_path.is_file() or destination_path.is_symlink():
+            raise SystemExit(f"post-import adaptation destination is not a regular file: {path}")
+        after = destination_path.read_text()
+        after_blob = blob_id_of_content(after, destination)
+        if after_blob != item.get("after_blob"):
+            raise SystemExit(f"post-import adaptation after blob for {path} does not match the recorded result")
+
+        reconstructed = after
+        for block in normalized_blocks:
+            insertion = block + "\n"
+            if insertion not in reconstructed:
+                raise SystemExit(f"post-import adaptation block missing from destination: {path}")
+            reconstructed = reconstructed.replace(insertion, "", 1)
+        if reconstructed != before:
+            raise SystemExit(
+                f"post-import adaptation for {path} changes content beyond declared warning allowances"
+            )
+        updated[path] = after_blob
+
+    return updated
+
+
 def verify_review_citation(
     source_repo: Path, review_path: str, review_commit: str, source_commit: str, expected_verdict: str,
 ) -> None:
@@ -591,6 +698,8 @@ def validate_import(
     destination: Path,
     handoff_text: str,
     doc_repo: Path = ROOT,
+    post_import_adaptations: dict | None = None,
+    release_adaptations: Path | None = None,
 ) -> None:
     recorded_inventory = provenance.get("file_inventory", {})
     recorded_paths = list(recorded_inventory)
@@ -634,6 +743,19 @@ def validate_import(
     expected_destination_inventory = validate_adaptations(
         provenance.get("adaptations", []), recorded_inventory, doc_repo,
     )
+    if post_import_adaptations is not None:
+        expected_destination_inventory = validate_post_import_adaptations(
+            post_import_adaptations,
+            provenance,
+            source_repo,
+            destination,
+            expected_destination_inventory,
+        )
+    if release_adaptations is not None:
+        from _log_release_adaptations import apply_release_adaptations
+        expected_destination_inventory = apply_release_adaptations(
+            expected_destination_inventory, destination, release_adaptations,
+        )
     destination_inventory = walk_destination_inventory(destination, IMPORT_CRATE_PREFIXES)
     diff_inventory(destination_inventory, expected_destination_inventory, label="the destination tree")
 
@@ -645,17 +767,37 @@ def main() -> int:
     parser.add_argument("--doc-repo", default=ROOT, type=Path)
     parser.add_argument("--provenance", default=DEFAULT_PROVENANCE, type=Path)
     parser.add_argument("--handoff", default=DEFAULT_HANDOFF, type=Path)
+    parser.add_argument("--post-import-adaptations", type=Path)
+    parser.add_argument("--release-adaptations", type=Path)
     args = parser.parse_args()
 
     if not args.provenance.is_file():
         raise SystemExit(f"missing import provenance file: {args.provenance}")
     provenance = json.loads(args.provenance.read_text())
+    post_import_adaptations = None
+    if args.post_import_adaptations is not None:
+        if not args.post_import_adaptations.is_file():
+            raise SystemExit(f"missing post-import adaptation record: {args.post_import_adaptations}")
+        post_import_adaptations = json.loads(args.post_import_adaptations.read_text())
 
     if not args.handoff.is_file():
         raise SystemExit("missing or unaccepted B.P3 handoff")
 
-    validate_import(provenance, args.source_repo, args.destination, args.handoff.read_text(), doc_repo=args.doc_repo)
-    print("B.1 import provenance, BTIT acceptance handoff, and copied inventory are coherent")
+    validate_import(
+        provenance,
+        args.source_repo,
+        args.destination,
+        args.handoff.read_text(),
+        doc_repo=args.doc_repo,
+        post_import_adaptations=post_import_adaptations,
+        release_adaptations=args.release_adaptations,
+    )
+    if args.release_adaptations is not None:
+        print("B.1 historical provenance, declared post-import and B.2 release adaptations are coherent")
+    elif post_import_adaptations is None:
+        print("B.1 import provenance, BTIT acceptance handoff, and copied inventory are coherent")
+    else:
+        print("B.1 import provenance and post-import warning-only adaptations are coherent")
     return 0
 
 
