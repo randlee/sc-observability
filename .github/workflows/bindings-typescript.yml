@@ -176,6 +176,8 @@ jobs:
           export TAURI_NPM_MANIFEST="$PWD/target/tauri-npm/npm-producer.json"
           if [ "$RUNNER_OS" = Linux ]; then
             xvfb-run -a bash scripts/ci/validate_typescript_bindings.sh --platform
+          elif [ "$RUNNER_OS" = Windows ]; then
+            python scripts/ci/supervise_windows_proof.py -- bash scripts/ci/validate_typescript_bindings.sh --platform
           else
             bash scripts/ci/validate_typescript_bindings.sh --platform
           fi

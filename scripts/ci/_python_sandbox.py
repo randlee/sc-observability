@@ -86,6 +86,8 @@ class Sandbox:
                         PATH=str(Path(self.cargo).parent) + os.pathsep + os.environ['PATH'],
                         PYO3_PYTHON=sys.executable, PYTHONDONTWRITEBYTECODE='1')
         self.system = platform.system()
+        recovery = os.environ.get('SC_PROOF_RECOVERY_FILE')
+        self.recovery = Path(recovery) if recovery and self.system == 'Windows' else None
         if self.system == 'Linux':
             library_dir = sysconfig.get_config_var('LIBDIR')
             if library_dir:
@@ -130,6 +132,7 @@ class Sandbox:
                         subprocess.run(['icacls', str(path), '/save', str(saved), '/T', '/C'], check=True,
                                        stdout=subprocess.DEVNULL)
                         self.acls.append((path, saved))
+                        self.record_recovery()
                         subprocess.run(['icacls', str(path), '/deny', account + ':(OI)(CI)(R)', '/C'],
                                        check=True, stdout=subprocess.DEVNULL)
             except BaseException:
@@ -146,6 +149,17 @@ class Sandbox:
             finally:
                 self.restore_acls()
         self.cache_probe.unlink(missing_ok=True)
+        if getattr(self, 'recovery', None):
+            self.recovery.unlink(missing_ok=True)
+
+    def record_recovery(self):
+        if not self.recovery:
+            return
+        pending = self.recovery.with_suffix('.pending')
+        pending.write_text(json.dumps({'schema_version': 1, 'firewall': self.firewall,
+                                      'acls': [[str(root), str(saved)] for root, saved in self.acls]}),
+                           encoding='utf-8')
+        pending.replace(self.recovery)
 
     def restore_acls(self):
         failures = []
