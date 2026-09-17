@@ -1,0 +1,2 @@
+# Retain downloaded platform artifacts byte-for-byte for SHA-256 verification.
+platforms/* -text

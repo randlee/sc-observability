@@ -122,6 +122,17 @@ qualification (B.4a), then Python integration/async support and binding release.
 Go remains future scope. The proposal does not reopen the accepted
 Phase A closure or claim that BTIT's currently open review findings are resolved.
 
+### B.3b — Shared native binding runtime
+
+Implementation and developer qualification are complete on
+`feature/phase-b-3b-native-runtime` (worktree
+`/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime`).
+The [handoff](plans/phase-b/handoff-b-3b.md) records both native backends,
+bounded helpers/operations/observers, all 26 contract cases in debug/release on
+Linux/macOS/Windows, and the isolated packaged consumer. Public API scope is
+independently reviewed; consolidated QA, owner-deferred contract acceptance and
+B.7 publication remain separate gates.
+
 ### B.P1 — Per-logger runtime level core
 
 B.P1 implements the additive neutral runtime-level state, weak ownership, and

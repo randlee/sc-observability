@@ -1,0 +1,708 @@
+   Compiling once_cell v1.21.4
+   Compiling target-tuple v1.0.2
+   Compiling winnow v1.0.4
+   Compiling toml_writer v1.1.2+spec-1.1.0
+   Compiling pin-project-lite v0.2.17
+   Compiling glob v0.3.4
+   Compiling termcolor v1.4.1
+   Compiling parking_lot_core v0.9.12
+   Compiling smallvec v1.16.1
+   Compiling scopeguard v1.2.0
+   Compiling syn v3.0.6
+   Compiling syn v2.0.119
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling serde_spanned v1.1.1
+   Compiling lock_api v0.4.14
+   Compiling tempfile v3.27.0
+   Compiling tracing-core v0.1.36
+   Compiling toml_parser v1.1.3+spec-1.1.0
+   Compiling toml v1.1.6+spec-1.1.0
+   Compiling parking_lot v0.12.5
+   Compiling temp-env v0.3.6
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.20
+   Compiling tokio-macros v2.7.2
+   Compiling tokio v1.53.1
+   Compiling sc-observability-log-macros v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-log-macros)
+   Compiling tracing-attributes v0.1.31
+   Compiling thiserror v2.0.20
+   Compiling tracing v0.1.44
+   Compiling serde v1.0.229
+   Compiling sc-observability-types v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-types)
+   Compiling trybuild v1.0.121
+   Compiling sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability)
+   Compiling sc-observability-dto v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-dto)
+   Compiling sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-log)
+   Compiling sc-observe v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observe)
+   Compiling sc-observability-otlp v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-otlp)
+   Compiling sc-observability-log-consumer-check v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-log-consumer-check)
+   Compiling sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-binding-runtime)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.41s
+     Running unittests src/lib.rs (target/debug/deps/sc_observability-8215c460f62145ed)
+
+running 79 tests
+test query::tests::follow_tracking_marks_missing_state_when_untracked_non_active_file_appears ... ok
+test query::tests::follow_tracking_treats_new_active_file_as_expected_rotation ... ok
+test query::tests::follow_tracking_resets_when_same_path_identity_changes ... ok
+1970-01-01T00:00:00Z INFO logger.core emit Authorization: Bearer abc123
+test query::tests::follow_tracking_treats_active_path_identity_change_as_expected_rotation ... ok
+test query::tests::follow_tracking_marks_truncation_when_offset_exceeds_current_len ... ok
+test query::tests::follow_tracking_preserves_offset_when_rotation_moves_identity_to_new_path ... ok
+test query::tests::query_active_and_rotated_paths_keeps_active_when_max_files_is_zero ... ok
+test tests::default_log_path_uses_service_scoped_layout ... ok
+test query::tests::read_events_from_path_returns_empty_for_missing_file ... ok
+test tests::console_sink_stderr_constructor_is_operational ... ok
+test tests::console_writer_failures_preserve_legacy_and_typed_write_parity ... ok
+test tests::each_changed_level_queues_one_fixed_info_diagnostic ... ok
+test sinks::tests::built_in_write_failures_mark_sink_health_for_legacy_and_typed_calls ... ok
+test query::tests::read_events_from_path_surfaces_decode_errors ... ok
+test tests::flush_failures_propagate_and_are_counted_in_health ... ok
+test tests::logger_admission_conversions_keep_the_original_source ... ok
+test tests::invalid_event_returns_event_error ... ok
+test tests::level_state_recovers_the_last_committed_snapshot_after_poisoning ... ok
+test tests::level_change_diagnostic_uses_configured_context_and_redacts_outside_state_lock ... ok
+test tests::level_owner_changes_only_its_logger_and_filters_with_shared_admission ... ok
+test tests::admission_and_level_mutation_contend_on_one_control_state ... ok
+test tests::logger_builder_rejects_zero_queue_capacity ... ok
+test tests::file_and_console_fan_out_both_receive_event ... ok
+test tests::file_only_logging_writes_jsonl_to_default_path ... ok
+test tests::logger_config_default_for_uses_sc_log_root_when_log_root_is_empty ... ok
+test tests::logger_config_debug_renders_redaction_summary ... ok
+test tests::maintenance_cadence_deserialize_rejects_zero ... ok
+test tests::logger_config_default_for_sets_documented_defaults ... ok
+test tests::maintenance_cadence_deserialize_reports_type_context ... ok
+test tests::maintenance_cadence_new_rejects_zero - should panic ... ok
+test sinks::tests::maintenance_failure_uses_maintenance_error_code ... ok
+test tests::logger_follow_session_becomes_unavailable_after_shutdown ... ok
+test tests::logger_health_reports_unavailable_after_shutdown ... ok
+test tests::logger_config_default_for_prefers_explicit_log_root_over_env ... ok
+test tests::logger_query_and_follow_reject_invalid_queries ... ok
+test tests::retained_log_policy_round_trips_through_serde ... ok
+test tests::owner_construction_returns_the_injected_writer_start_source ... ok
+test tests::retention_max_age_deserialize_reports_type_context ... ok
+test tests::retention_max_age_deserialize_rejects_zero ... ok
+test tests::historical_query_preserves_order_across_multiple_rotated_files ... ok
+test tests::retention_max_age_from_duration_rejects_zero - should panic ... ok
+test tests::query_and_follow_are_unavailable_without_file_sink ... ok
+test tests::rotated_log_paths_keep_the_active_filename_prefix ... ok
+test tests::logger_and_jsonl_reader_query_have_parity ... ok
+test tests::follow_starts_at_tail_and_survives_multiple_rotations ... ok
+test sinks::tests::maintenance_max_work_per_pass_limits_pruning ... ok
+test tests::logger_and_jsonl_reader_follow_have_parity ... ok
+test tests::revision_exhaustion_preserves_state_and_uses_the_dedicated_code ... ok
+test tests::shutdown_blocks_future_emits ... ok
+test tests::shutdown_flushes_registered_sinks_before_marking_shutdown ... ok
+test tests::test_pass_delay_release_guard_unblocks_waiter_on_drop ... ok
+test tests::sink_failures_are_fail_open_and_counted_in_health ... ok
+test tests::follow_recovers_after_active_file_truncate_and_recreate ... ok
+test tests::sink_filter_blocks_event_delivery ... ok
+test tests::redaction_runs_before_sink_fan_out ... ok
+test tests::separate_level_owners_do_not_cross_logger_boundaries ... ok
+test tests::query_health_tracks_decode_and_shutdown_failures ... ok
+test tests::typed_sink_adapters_preserve_default_flush_health_and_single_write ... ok
+test tests::maintenance_prunes_retained_files_by_max_files ... ok
+test tests::writer_shutdown_timeout_deserialize_rejects_zero ... ok
+test tests::typed_sink_adapters_preserve_explicit_failure_source_health_and_call_counts ... ok
+test tests::typed_builder_rejects_zero_queue_capacity_with_the_same_diagnostic ... ok
+test tests::writer_shutdown_timeout_deserialize_reports_type_context ... ok
+test tests::typed_admission_and_flush_can_run_concurrently ... ok
+test tests::writer_shutdown_timeout_new_rejects_zero - should panic ... ok
+test tests::typed_owner_construction_preserves_the_injected_writer_start_source ... ok
+test tests::typed_logger_admission_preserves_filtering_and_invalid_event_failure ... ok
+test tests::test_pass_delay_timeout_is_explicit_and_bounded ... ok
+test tests::disconnected_writer_returns_legacy_and_typed_admission_and_flush_failures ... ok
+test tests::level_owner_rejects_changes_during_an_actual_shutdown_stopping_window ... ok
+test tests::maintenance_prunes_retained_files_by_age ... ok
+test tests::rotation_triggers_when_active_file_exceeds_max_bytes ... ok
+test tests::maintenance_health_reflects_last_pass_and_last_error ... ok
+test tests::saturated_diagnostic_queue_keeps_the_level_change_committed ... ok
+test tests::try_log_reports_queue_full_on_saturated_queue ... ok
+test tests::emit_path_remains_available_during_maintenance_pass ... ok
+test tests::shutdown_joins_maintenance_worker_within_timeout ... ok
+test tests::historical_query_reads_active_and_rotated_files ... ok
+test tests::shutdown_records_join_timeout_but_waits_for_join ... ok
+
+test result: ok. 79 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/logging_only.rs (target/debug/deps/logging_only-374015138c775262)
+
+running 2 tests
+test typed_sink_consumer_explicitly_imports_the_opt_in_trait ... ok
+test logging_only_consumer_can_emit_without_routing_or_otlp ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sc_observability_binding_runtime-25c1ea210d67c81c)
+
+running 1 test
+test tests::contract_matrix ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/backends.rs (target/debug/deps/backends-877f8cc2958b70ad)
+
+running 2 tests
+test bridge_roundtrip_preserves_host_ownership ... ok
+test core_roundtrip_and_surviving_read_handles ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sc_observability_dto-8b37dc7533f9f327)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/conversions.rs (target/debug/deps/conversions-d570fb2dd5a74e96)
+
+running 17 tests
+test paths_keep_absence_and_non_unicode ... ok
+test timeouts_are_bounded_integers ... ok
+test diagnostics_preserve_unknown_codes_order_and_original_time ... ok
+test level_change_errors_and_unsuccessful_diagnostics_preserve_payloads ... ok
+test diagnostic_string_and_step_bounds_are_exact_and_never_truncate ... ok
+test decimal_domains_are_canonical ... ok
+test nested_output_additions_do_not_weaken_strict_inputs ... ok
+test registry_has_unique_literals_and_exact_remediation ... ok
+test inputs_reject_missing_unknown_and_invalid_versions ... ok
+test checked_event_preserves_integer_and_host_stamp ... ok
+test nonfinite_typed_values_cannot_bypass_input_checks ... ok
+test all_stored_event_fields_and_trusted_output_survive ... ok
+test malformed_unknown_and_oversized_remote_errors_differ ... ok
+test complete_health_projection_and_unsigned_wire_counters ... ok
+test query_defaults_and_inclusive_bounds ... ok
+test spoofed_provenance_is_rejected_at_all_depths ... ok
+test exact_request_size_and_depth_boundaries ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/sc_observability_log-bc99f36e8b556791)
+
+running 55 tests
+test callsite::tests::serialize_errors_key_is_reserved ... ok
+test context::tests::call_span_is_send_and_sync ... ok
+test control::tests::control_is_send_and_sync ... ok
+test error::tests::flush_error_codes_and_remediations ... ok
+test error::tests::init_error_codes_and_remediations ... ok
+test context::tests::fields_are_not_recorded_when_every_level_is_disabled ... ok
+test error::tests::drop_cause_all_lists_every_variant_once ... ok
+test error::tests::shutdown_error_codes_and_remediations ... ok
+test context::tests::all_outcome_labels_validate ... ok
+test error_codes::tests::all_codes_are_unique_and_prefixed ... ok
+test callsite::tests::callsite_caches_sanitized_labels ... ok
+test handle::tests::bridge_has_no_independent_level_policy ... ok
+test callsite::tests::dynamic_key_caches_field_key_label ... ok
+test context::tests::current_trace_is_none_on_a_fresh_thread ... ok
+test callsite::tests::static_fields_use_the_same_canonical_key_as_dynamic_fields ... ok
+test callsite::tests::serialize_failures_record_null_and_error ... ok
+test context::tests::nested_spans_link_and_the_stack_unwinds ... ok
+test context::tests::entered_pops_only_its_own_entry ... ok
+test health::tests::unavailable_has_the_target_code_and_remediation ... ok
+test mapping::tests::action_label_rejects_empty ... ok
+test mapping::tests::code_location_rows_present_and_omitted ... ok
+test handle::tests::run_bounded_returns_value ... ok
+test mapping::tests::envelope_rows_filled_by_assemble_event ... ok
+test mapping::tests::field_key_label_rules ... ok
+test mapping::tests::identity_auto_fails_on_an_empty_hostname ... ok
+test mapping::tests::identity_auto_fails_when_the_hostname_lookup_fails ... ok
+test mapping::tests::identity_auto_uses_hostname_and_current_pid ... ok
+test mapping::tests::identity_fixed_is_used_as_given ... ok
+test health::tests::native_shape_round_trips ... ok
+test error::tests::field_key_error_variants_are_cloneable_and_round_trip ... ok
+test handle::tests::emit_core_counts_panics_and_reentry ... ok
+test mapping::tests::identity_resolver_ok_and_err ... ok
+test handle::tests::run_bounded_reports_worker_lost_on_panic ... ok
+test mapping::tests::kv_key_rules_omit_reserved_and_empty_keys_and_shadow_code_keys ... ok
+test context::tests::entered_records_a_panic_while_unwinding ... ok
+test mapping::tests::kv_row_types_json_values ... ok
+test handle::tests::flight_claim_is_exclusive_and_released_on_drop_or_panic ... ok
+test mapping::tests::level_row_maps_every_level ... ok
+test mapping::tests::message_row_formats_args ... ok
+test mapping::tests::sanitizer_rewrites_paths_and_invalid_chars ... ok
+test mapping::tests::otherwise_row_uses_default_action ... ok
+test mapping::tests::tag_row_extracts_valid_tags ... ok
+test mapping::tests::tag_row_leaves_invalid_tags_in_message ... ok
+test mapping::tests::target_label_maps_empty_to_log ... ok
+test mapping::tests::target_row_sanitizes_invalid_and_empty_targets ... ok
+test tests::level_converts_one_to_one ... ok
+test tests::level_serializes_with_the_log_event_spelling ... ok
+test error::tests::every_native_operation_error_variant_is_data_only_and_round_trips ... ok
+test handle::tests::reserved_shutdown_worker_publishes_failure_after_a_waiter_times_out ... ok
+test context::tests::generated_ids_always_validate ... ok
+test handle::tests::run_bounded_counts_a_detached_helper_until_it_finishes ... ok
+test handle::tests::run_bounded_losing_race_returns_the_published_value ... ok
+test handle::tests::run_bounded_uncounts_a_detached_helper_that_panics ... ok
+test handle::tests::take_sole_succeeds_once_clone_is_released ... ok
+test handle::tests::run_bounded_times_out_on_blocked_work ... ok
+
+test result: ok. 55 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/api_freeze.rs (target/debug/deps/api_freeze-72dac25750c484dd)
+
+running 1 test
+test bp3_public_api_is_frozen ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/bridge_guard.rs (target/debug/deps/bridge_guard-520ccbc08d1da4ef)
+
+running 1 test
+test bridge_guard_contains_user_formatting ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/bridge_jsonl.rs (target/debug/deps/bridge_jsonl-168729932242d44e)
+
+running 1 test
+test bridge_writes_mapped_jsonl_and_is_install_once ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/bridge_queue_full.rs (target/debug/deps/bridge_queue_full-4484e56811bf01e3)
+
+running 1 test
+test full_queue_drops_without_blocking ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/compat_events.rs (target/debug/deps/compat_events-44af96d8cfec2563)
+
+running 1 test
+test compat_fixture_matches_tracing_syntax_and_emits_jsonl ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/compat_instrument.rs (target/debug/deps/compat_instrument-3fc6b7363fd3f4e8)
+
+running 1 test
+test compat_fixture_matches_tracing_syntax_and_emits_jsonl ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/flush_single_flight.rs (target/debug/deps/flush_single_flight-0ddf2732e24afc2e)
+
+running 1 test
+test stuck_flush_keeps_one_detached_helper_and_rejects_retries ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
+     Running tests/health_snapshot.rs (target/debug/deps/health_snapshot-9e1d67d009a73554)
+
+running 1 test
+test health_uses_the_core_report_and_retains_it_after_shutdown ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/init_runtime_start.rs (target/debug/deps/init_runtime_start-8c7e3abace45efdb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/instrument_jsonl.rs (target/debug/deps/instrument_jsonl-c385f14693ef7776)
+
+running 1 test
+test instrument_emits_completion_events_with_trace_context ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/macros_jsonl.rs (target/debug/deps/macros_jsonl-c8f34228a0399ddb)
+
+running 1 test
+test event_macros_write_structured_jsonl ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/one_writer.rs (target/debug/deps/one_writer-215ac16438821be0)
+
+running 1 test
+test direct_facade_and_macro_share_guard_accounting_and_envelope ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/reinstall_subprocess.rs (target/debug/deps/reinstall_subprocess-504230e9888583ce)
+
+running 1 test
+test bridge_cannot_be_reinstalled_or_replaced_after_shutdown ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/runtime_level_bridge.rs (target/debug/deps/runtime_level_bridge-028f573ac123fe13)
+
+running 1 test
+test direct_facade_and_macro_admission_share_the_core_level_owner ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/shutdown_snapshot_unavailable.rs (target/debug/deps/shutdown_snapshot_unavailable-2490da8764e92bb2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/shutdown_timeout.rs (target/debug/deps/shutdown_timeout-90b1ab9cd8f98030)
+
+running 1 test
+test timed_out_owner_shutdown_completes_late_for_repeated_control_waiters ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
+     Running tests/static_level_cap.rs (target/debug/deps/static_level_cap-3243911cc25fc66f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/ui.rs (target/debug/deps/ui-1a02bb4b1538a01c)
+
+running 1 test
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling serde_core v1.0.229
+   Compiling libc v0.2.189
+   Compiling zmij v1.0.23
+   Compiling thiserror v2.0.20
+   Compiling serde v1.0.229
+   Compiling serde_json v1.0.151
+    Checking itoa v1.0.18
+    Checking memchr v2.8.3
+    Checking powerfmt v0.2.0
+    Checking time-core v0.1.9
+    Checking cfg-if v1.0.5
+    Checking num-conv v0.2.2
+   Compiling getrandom v0.4.3
+   Compiling rustix v1.1.5
+    Checking once_cell v1.21.4
+    Checking bitflags v2.13.2
+    Checking pin-project-lite v0.2.17
+    Checking log v0.4.34
+    Checking fastrand v2.5.0
+    Checking tracing-core v0.1.36
+   Compiling syn v3.0.6
+   Compiling syn v2.0.119
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.20
+   Compiling tokio-macros v2.7.2
+    Checking tokio v1.53.1
+    Checking deranged v0.5.8
+   Compiling tracing-attributes v0.1.31
+   Compiling sc-observability-log-macros v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-log-macros)
+    Checking errno v0.3.14
+    Checking hostname v0.4.2
+    Checking time v0.3.55
+    Checking tracing v0.1.44
+    Checking tempfile v3.27.0
+    Checking sc-observability-types v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-types)
+    Checking sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability)
+    Checking sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-log)
+    Checking sc-observability-log-tests v0.0.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/tests/trybuild/sc-observability-log)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.27s
+
+
+test tests/ui/event_empty_key.rs ... ok
+test tests/ui/event_field_empty.rs ... ok
+test tests/ui/event_parent.rs ... ok
+test tests/ui/event_reserved_key_dotted.rs ... ok
+test tests/ui/event_reserved_key_string.rs ... ok
+test tests/ui/event_span_macro.rs ... ok
+test tests/ui/event_target_before_name.rs ... ok
+test tests/ui/field_not_serialize_or_debug.rs ... ok
+test tests/ui/instrument_deferred_field.rs ... ok
+test tests/ui/instrument_entered_across_await.rs ... ok
+test tests/ui/instrument_field_empty.rs ... ok
+test tests/ui/instrument_follows_from.rs ... ok
+test tests/ui/instrument_literal_key.rs ... ok
+test tests/ui/instrument_non_fn.rs ... ok
+test tests/ui/instrument_parent.rs ... ok
+test tests/ui/instrument_reserved_key.rs ... ok
+test tests/ui/log_control_cannot_elevate_or_reset.rs ... ok
+test tests/ui/log_control_not_constructible.rs ... ok
+test tests/ui/log_control_not_owner.rs ... ok
+test tests/ui/log_guard_not_clone.rs ... ok
+
+
+test rejected_event_forms_fail_to_compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.24s
+
+     Running unittests src/lib.rs (target/debug/deps/sc_observability_log_consumer_check-01a74dc0f795b37d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/control_consumer.rs (target/debug/deps/control_consumer-05c3127cc4eb8859)
+
+running 1 test
+test consumer_reads_health_and_flushes_through_control_only ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sc_observability_log_macros-009976976f073ccc)
+
+running 5 tests
+test fields::tests::parses_event_level ... ok
+test fields::tests::parses_brace_field_set ... ok
+test fields::tests::parses_prefixes_fields_and_message ... ok
+test fields::tests::rejects_unsupported_forms ... ok
+test fields::tests::instrument_context_rejects_value_less_fields ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sc_observability_otlp-79571561ff112c74)
+
+running 33 tests
+test config::tests::endpoint_and_auth_header_legacy_and_typed_constructors_preserve_surrounding_whitespace ... ok
+test config::tests::auth_header_accepts_non_empty_values ... ok
+test config::tests::otlp_endpoint_accepts_valid_http_and_https_values ... ok
+test config::tests::telemetry_config_builder_build_validates_transport ... ok
+test config::tests::validate_config_rejects_zero_batch_or_interval ... ok
+test config::tests::validate_config_rejects_zero_timeout ... ok
+test config::tests::validate_config_rejects_backoff_inversion ... ok
+test config::tests::otlp_endpoint_rejects_empty_or_scheme_less_values ... ok
+test config::tests::validate_config_rejects_enabled_transport_without_signals ... ok
+test config::tests::auth_header_rejects_empty_values ... ok
+test tests::all_signals_disabled_rejects_at_construction ... ok
+test config::tests::public_builder_preserves_existing_protocol_endpoint_acceptance ... ok
+test config::tests::typed_config_entry_points_preserve_legacy_diagnostics ... ok
+test config::tests::telemetry_config_builder_with_resource_preserves_attributes ... ok
+test config::tests::auth_header_debug_redacts_but_display_and_as_str_retain_the_raw_credential ... ok
+test config::tests::public_builder_preserves_typed_validation_for_all_config_rejections ... ok
+test tests::exporter_failure_accounting_is_tracked ... ok
+test tests::combined_export_failure_and_incomplete_span_preserve_baseline_shutdown_summary ... ok
+test tests::exporter_health_recovers_after_a_successful_flush ... ok
+test tests::incomplete_span_drop_accounting_is_paired_for_legacy_and_typed_shutdown ... ok
+test tests::orphaned_ended_span_returns_export_failure_and_is_counted ... ok
+test tests::repeated_shutdown_is_idempotent ... ok
+test tests::retained_emit_methods_return_shutdown_after_legacy_and_typed_lifecycle ... ok
+test tests::shutdown_flushes_complete_spans_and_counts_incomplete_ones ... ok
+test tests::legacy_and_typed_flush_record_and_recover_all_exporter_families ... ok
+test tests::shutdown_preserves_custom_export_code_and_native_source_for_both_apis ... ok
+test tests::shutdown_propagates_flush_failures_with_legacy_and_typed_parity ... ok
+test tests::span_assembler_emits_complete_span_from_lifecycle ... ok
+test tests::telemetry_config_builder_defaults ... ok
+test tests::span_assembler_typed_and_legacy_errors_preserve_lifecycle_diagnostics ... ok
+test tests::telemetry_constructors_preserve_invalid_configuration_diagnostics ... ok
+test tests::typed_span_assembler_matches_legacy_completion ... ok
+test tests::typed_telemetry_lifecycle_preserves_fail_open_and_repeat_shutdown ... ok
+
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/error_registry_parity.rs (target/debug/deps/error_registry_parity-e4f04097323d4788)
+
+running 9 tests
+test event_failure_matches_owning_registry ... ok
+test export_failure_matches_owning_registry ... ok
+test flush_failure_matches_owning_registry ... ok
+test identity_failure_matches_owning_registry ... ok
+test init_failure_matches_owning_registry ... ok
+test log_sink_failure_matches_owning_registry ... ok
+test projection_failure_matches_owning_registry ... ok
+test shutdown_failure_matches_owning_registry ... ok
+test subscriber_failure_matches_owning_registry ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/full_stack_integration.rs (target/debug/deps/full_stack_integration-9751b184fe575276)
+
+running 2 tests
+test typed_projector_inputs_forward_through_retained_registration ... ok
+test builder_registration_attaches_logs_spans_and_metrics ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sc_observability_types-c92321b5c0fa71bf)
+
+running 48 tests
+test primitives::tests::duration_ms_exposes_raw_millisecond_count ... ok
+test level::tests::level_change_error_uses_stable_code_and_remediation ... ok
+test diagnostic::tests::diagnostic_summary_captures_code_and_message ... ok
+test primitives::tests::duration_ms_displays_in_milliseconds ... ok
+test diagnostic::tests::remediation_construction_helpers_cover_both_variants ... ok
+test events::tests::observation_new_sets_defaults ... ok
+test diagnostic::tests::error_context_display_includes_cause_when_present ... ok
+test errors::tests::wrapper_errors_expose_source_context ... ok
+test diagnostic::tests::error_context_builder_sets_docs_details_and_source ... ok
+test diagnostic::tests::identity_error_exposes_inner_diagnostic ... ok
+test diagnostic::tests::error_context_display_includes_source_chain_when_present ... ok
+test primitives::tests::error_code_displays_as_plain_code ... ok
+test primitives::tests::error_code_new_owned_preserves_owned_value ... ok
+test primitives::tests::timestamp_arithmetic_preserves_utc_normalization ... ok
+test primitives::tests::timestamp_into_inner_and_from_timestamp_preserve_utc_value ... ok
+test process::tests::process_identity_policy_auto_debug_is_descriptive ... ok
+test process::tests::process_identity_policy_fixed_debug_is_descriptive ... ok
+test level::tests::published_level_filter_fixture_retains_its_native_serde_shape ... ok
+test process::tests::process_identity_policy_resolver_debug_is_descriptive ... ok
+test primitives::tests::timestamp_serde_round_trips_as_utc_rfc3339 ... ok
+test events::tests::observation_round_trips_through_serde ... ok
+test query::tests::log_query_validation_rejects_invalid_ranges_and_limits ... ok
+test metric::tests::metric_record_round_trips_through_serde ... ok
+test query::tests::query_health_report_round_trips_through_serde ... ok
+test level::tests::runtime_level_values_use_the_native_contract_shapes ... ok
+test query::tests::log_query_round_trips_through_serde ... ok
+test query::tests::query_shutdown_uses_static_diagnostic ... ok
+test diagnostic::tests::diagnostic_round_trips_through_serde ... ok
+test query::tests::log_snapshot_round_trips_through_serde ... ok
+test events::tests::log_event_round_trips_through_serde ... ok
+test query::tests::query_error_variants_round_trip_and_match_stable_codes ... ok
+test span::tests::span_record_end_transitions_to_span_ended ... ok
+test span::tests::span_record_accessors_preserve_started_values ... ok
+test tracing::tests::trace_and_span_ids_validate_w3c_shapes ... ok
+test health::tests::health_reports_round_trip_through_serde ... ok
+test span::tests::span_signal_round_trips_through_serde ... ok
+test typed::tests::builders_modify_the_existing_context_and_retain_classification ... ok
+test typed::tests::every_contract_mapping_classifies_in_its_own_family ... ok
+test typed::tests::every_family_rejects_custom_and_cross_family_codes ... ok
+test typed::tests::every_family_moves_legacy_context_without_reconstruction ... ok
+test typed::tests::explicit_adapters_preserve_success_and_are_object_safe ... ok
+test typed::tests::every_family_preserves_identity_through_all_builders ... ok
+test typed::tests::legacy_conversion_moves_the_original_context_box ... ok
+test typed::tests::legacy_serialization_remains_available_and_typed_failures_are_not_serializable ... ok
+test typed::tests::named_constructors_store_their_declared_kind_and_code ... ok
+test typed::tests::unknown_and_cross_family_codes_are_unclassified_without_data_loss ... ok
+test validation::tests::validated_name_newtypes_accept_expected_values ... ok
+test validation::tests::validated_name_newtypes_reject_invalid_values ... ok
+
+test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/neutral_contracts.rs (target/debug/deps/neutral_contracts-81f070270950e5ce)
+
+running 4 tests
+test unchanged_root_glob_consumer_compiles_alongside_explicit_typed_imports ... ok
+test typed_to_legacy_adapters_preserve_errors_and_invoke_once ... ok
+test all_ten_adapters_preserve_success_values ... ok
+test legacy_to_typed_adapters_preserve_errors_and_invoke_once ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/sc_observe-02749311510605bc)
+
+running 16 tests
+test tests::queue_capacity_override_propagates_to_logger_config ... ok
+test tests::top_level_health_exposes_attached_telemetry_provider ... ok
+test tests::routing_failure_occurs_when_no_eligible_path_remains ... ok
+test tests::registration_order_routing_is_deterministic ... ok
+test tests::typed_builder_reports_empty_routes_and_logger_startup_failures ... ok
+test tests::top_level_health_aggregates_logging_and_routing_state ... ok
+test tests::subscriber_failures_are_isolated ... ok
+test tests::post_shutdown_emission_returns_shutdown_error ... ok
+test tests::routing_failure_occurs_when_all_projectors_fail ... ok
+test tests::concurrent_typed_shutdown_is_idempotent ... ok
+test tests::filter_acceptance_and_rejection_are_respected ... ok
+test tests::typed_builder_uses_real_adapters_and_preserves_lifecycle_contract ... ok
+test tests::flush_forwards_logger_flush_behavior_directly ... ok
+test tests::projector_failures_are_isolated ... ok
+test tests::shutdown_unwind_releases_condition_waiters ... ok
+test tests::in_flight_shutdown_preserves_flush_health_and_repeated_shutdown ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s
+
+     Running tests/routing_integration.rs (target/debug/deps/routing_integration-a791608b26b65a90)
+
+running 1 test
+test one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/typed_observation.rs (target/debug/deps/typed_observation-67fcd3a426e882b7)
+
+running 10 tests
+test invalid_deserialized_names_fail_paired_facade_checks ... ok
+test log_adapters_retain_custom_and_wrong_family_context ... ok
+test observation_adapter_preserves_custom_and_cross_family_context ... ok
+test metric_adapters_retain_custom_and_wrong_family_context ... ok
+test span_adapters_retain_custom_and_wrong_family_context ... ok
+test typed_and_legacy_construction_failures_classify_consistently ... ok
+test paired_filters_ordering_and_invocation_counts_match ... ok
+test typed_routes_execute_real_subscriber_and_projector_adapters ... ok
+test paired_no_matching_route_and_failure_outcomes_are_classified ... ok
+test paired_projection_routes_preserve_output_family_invocation_counts ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sc_observability
+
+running 1 test
+test crates/sc-observability/src/builder.rs - builder::LoggerBuilder::new (line 40) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+all doctests ran in 0.35s; merged doctests compilation took 0.13s
+   Doc-tests sc_observability_binding_runtime
+
+running 4 tests
+test crates/sc-observability-binding-runtime/src/lib.rs - BridgeControlBackend (line 86) - compile fail ... ok
+test crates/sc-observability-binding-runtime/src/lib.rs - CoreLoggerOwner (line 76) - compile fail ... ok
+test crates/sc-observability-binding-runtime/src/lib.rs - CoreLoggerBackend (line 65) - compile fail ... ok
+test crates/sc-observability-binding-runtime/src/lib.rs - CoreLoggerBackend (line 60) - compile fail ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+   Doc-tests sc_observability_dto
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sc_observability_log
+
+running 1 test
+test crates/sc-observability-log/src/lib.rs - (line 11) - compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.38s; merged doctests compilation took 0.19s
+   Doc-tests sc_observability_log_consumer_check
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sc_observability_log_macros
+
+running 7 tests
+test crates/sc-observability-log-macros/src/lib.rs - debug (line 48) ... ignored
+test crates/sc-observability-log-macros/src/lib.rs - error (line 81) ... ignored
+test crates/sc-observability-log-macros/src/lib.rs - event (line 92) ... ignored
+test crates/sc-observability-log-macros/src/lib.rs - info (line 59) ... ignored
+test crates/sc-observability-log-macros/src/lib.rs - instrument (line 119) ... ignored
+test crates/sc-observability-log-macros/src/lib.rs - trace (line 37) ... ignored
+test crates/sc-observability-log-macros/src/lib.rs - warn (line 70) ... ignored
+
+test result: ok. 0 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.32s; merged doctests compilation took 0.12s
+   Doc-tests sc_observability_otlp
+
+running 1 test
+test crates/sc-observability-otlp/src/config.rs - config::TelemetryConfigBuilder::build (line 377) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.36s; merged doctests compilation took 0.15s
+   Doc-tests sc_observability_types
+
+running 2 tests
+test crates/sc-observability-types/src/span.rs - span::SpanRecord<SpanStarted>::new (line 46) ... ok
+test crates/sc-observability-types/src/events.rs - events::Observation<T>::new (line 49) ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 2 tests
+test crates/sc-observability-types/src/typed.rs - typed (line 21) - compile fail ... ok
+test crates/sc-observability-types/src/typed.rs - typed (line 9) - compile fail ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+all doctests ran in 0.44s; merged doctests compilation took 0.15s
+   Doc-tests sc_observe
+
+running 2 tests
+test crates/sc-observe/src/lib.rs - Observability::builder (line 290) ... ok
+test crates/sc-observe/src/lib.rs - ObservabilityConfig::default_for (line 81) ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.47s; merged doctests compilation took 0.15s
