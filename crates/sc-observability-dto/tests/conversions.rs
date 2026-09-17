@@ -210,7 +210,12 @@ fn paths_keep_absence_and_non_unicode() {
 #[test]
 fn registry_has_unique_literals_and_exact_remediation() {
     let mut codes = std::collections::BTreeSet::new();
-    assert_eq!(error_codes::REGISTRY.len(), 17);
+    assert_eq!(error_codes::REGISTRY.len(), 18);
+    assert!(
+        error_codes::REGISTRY
+            .iter()
+            .any(|entry| { entry.code == error_codes::SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID })
+    );
     for entry in error_codes::REGISTRY {
         assert!(codes.insert(entry.code));
         let diagnostic = boundary_diagnostic(entry.code, "test");
