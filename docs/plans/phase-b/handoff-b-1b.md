@@ -20,12 +20,13 @@ surfaces, admission/filtering semantics, and bridge API are unchanged.
 - Typed production-site correction: `2d1f207c24268d618f1fda135484cde88f079706`
 - Final parent-merged validation base: `453f9e8` (includes provenance
   completeness PASS at `d6571c1`)
+- Final C03 scenario-evidence revision: `211899ec5c61ff80983c0b730605bbb2a318e9fa`
 
 ## Validation
 
 - PASS: `cargo test --locked -p sc-observability --all-targets`
 - PASS: `cargo test --locked -p sc-observability --all-targets --all-features`
-  (78 unit tests and 2 logging-only consumer tests at the final parent-merged
+  (79 unit tests and 2 logging-only consumer tests at the final parent-merged
   C03 tip)
 - PASS: `cargo fmt --all -- --check`
 - PASS: `cargo clippy --locked -p sc-observability --all-targets --all-features -- -D warnings`
@@ -43,6 +44,14 @@ surfaces, admission/filtering semantics, and bridge API are unchanged.
 The task-plan fixture matrix records the paired legacy/typed and retained
 behavior coverage. The copied bridge regression is pending B.1 source
 integration and is intentionally not represented as a completed local run.
+
+The final C03 fixtures cover the failure-injectable `ConsoleSink::from_writer`
+seam in both legacy and typed forms, preserving the stable write code, native
+source rendering, degraded health summary, and exactly one physical write per
+call. The existing held-level-control synchronization fixture now exercises
+both legacy and typed admission. Built-in JSONL and console flush uses the
+inherited `TypedLogSink` default no-op; custom adapter fixtures remain the
+explicit-flush failure evidence.
 
 ## Startup ordering and rollback boundary
 
