@@ -35,11 +35,14 @@ The documented command alone was also run; its retained result SHA-256 is
 `2d8ccb371611872253a1a4264c2a1942b6cc4342e0b5ea398a69c2c34d847690`.
 
 `scripts/ci/validate_runtime_level_platform_evidence.py` requires passing,
-non-skipped `macos.json`, `ubuntu.json`, and `windows.json`. The
-`B.P2 staged consumer` workflow produces and retains these artifacts before the
-aggregate check. They have not yet been produced by that workflow, so this is
-an explicit **platform gate unavailable/pending**, not an implementation or QA
-approval. `quality-mgr` owns independent QA and any PASS verdict.
+non-skipped `macos.json`, `ubuntu.json`, and `windows.json` with identical
+candidate version, source commit, and four archive hashes. The retained shared
+`bp2-candidate-stage` artifact and three platform-result artifacts from
+[run 35174729184](https://github.com/randlee/sc-observability/actions/runs/35174729184)
+passed on macOS, Ubuntu, and Windows; its aggregate-platform-evidence job also
+passed. The stage is built once, then the exact bytes are downloaded by every
+platform job. This is implementation evidence, not an independent QA approval;
+`quality-mgr` owns that verdict.
 
 Contract approval is the `runtime-level-contract.md` blob
 `e566d7eba4947abe935c1a0e1a20f4c4fab35864` from commit

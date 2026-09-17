@@ -1,6 +1,8 @@
 ---
 id: B.P2
 status: incomplete
+qa_status: not_dispatched
+merge_status: unmerged
 branch: fix/B-P2-package-completeness
 worktree: /Users/randlee/github/sc-observability-worktrees/fix/B-P2-package-completeness
 target: feature/B-P2-runtime-publish
@@ -83,6 +85,10 @@ The fix layer remains **incomplete** until the retained macOS, Linux, and
 Windows workflow artifacts pass the aggregate platform-evidence validator.
 Local output is useful implementation evidence, not a replacement for that
 platform qualification.
+
+For all Phase B sprint metadata, `status: complete` means implementation
+completion only; it never asserts a merged branch or QA approval. Those facts
+are separately represented by `merge_status` and `qa_status`.
 
 ## Paths to delete
 
