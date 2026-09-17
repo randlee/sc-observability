@@ -161,6 +161,65 @@ def test_owned_level_changes_are_revised_reset_and_retained(tmp_path: Path) -> N
         assert isinstance(off_logger.shutdown(), Ok)
 
 
+def test_real_revision_exhaustion_retains_the_native_state(tmp_path: Path) -> None:
+    logger = _owned(tmp_path / "revision-exhaustion", "python-runtime-revision-exhaustion")
+    hook = getattr(logger._native, "_test_force_revision_exhaustion", None)
+    if not callable(hook):
+        pytest.skip("normal package wheels deliberately omit B.4 test hooks")
+    try:
+        forced = json.loads(hook())
+        assert forced["kind"] == "ok"
+        overflow = logger.elevate_level("debug")
+        assert isinstance(overflow, Err)
+        assert overflow.error.kind == "unavailable"
+        assert overflow.error.code == "SC_OBSERVABILITY_LEVEL_REVISION_EXHAUSTED"
+        assert overflow.error.remediation.kind == "not_recoverable"
+        retained = logger.health()
+        assert isinstance(retained, Ok)
+        assert retained.value.level_state.level_revision == 2**64 - 1
+        assert retained.value.level_state.effective_level == "info"
+    finally:
+        assert isinstance(logger.shutdown(), Ok)
+
+
+def test_real_retained_sink_blocks_while_python_operations_progress(tmp_path: Path) -> None:
+    factory = getattr(_native, "_test_create_blocking_owned", None)
+    if not callable(factory):
+        pytest.skip("normal package wheels deliberately omit B.4 test hooks")
+    native, created = factory(json.dumps({
+        "service": "python-runtime-held-writer",
+        "log_root": str(tmp_path / "held-writer"),
+        "enable_file_sink": True,
+        "enable_console_sink": False,
+    }))
+    assert json.loads(created)["kind"] == "ok"
+    assert native is not None
+    logger = Logger(native)
+    try:
+        assert isinstance(logger.log(_event("held-sink")), Ok)
+        entered = getattr(native, "_test_blocked_writer_entered")
+        deadline = time.monotonic() + 2
+        while not json.loads(entered())["value"] and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert json.loads(entered())["value"], "real sink writer did not enter the held write"
+
+        # The writer is genuinely retained, yet direct health and an independent
+        # operation remain schema-tagged and responsive from Python.
+        assert isinstance(logger.health(), Ok)
+        query = logger.query(LogQuery(action="held-sink"))
+        assert isinstance(query, (Ok, Err))
+        blocked_flush = logger.flush(timeout_ms=10)
+        assert isinstance(blocked_flush, Err)
+        assert blocked_flush.error.kind == "timeout"
+
+        released = getattr(native, "_test_release_blocked_writer")
+        assert json.loads(released())["kind"] == "ok"
+        assert isinstance(logger.shutdown(timeout_ms=2_000), Ok)
+    finally:
+        # Shutdown retains its completed result if the preceding assertion fails.
+        assert isinstance(logger.shutdown(timeout_ms=2_000), Ok)
+
+
 def test_public_operation_race_keeps_every_result_tagged(tmp_path: Path) -> None:
     logger = _owned(tmp_path / "race", "python-runtime-race")
     start = Barrier(4)
