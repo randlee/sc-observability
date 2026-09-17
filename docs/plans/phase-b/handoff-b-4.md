@@ -14,7 +14,7 @@ owned loggers, and non-owning Rust-host attachments. Owned lifecycle and level
 authority stay with `CoreLoggerOwner`; attached handles retain only a shared
 `HostLoggingBackend` Arc and cannot stop or mutate the host.
 
-Current source evidence is `de0db3d6710e5fefc1d1284fa44d00a01026e234`.
+Current source evidence is `fffff97bba4fd720cf8c38c8117f577fef30df10`.
 It carries frozen B.3, B.3b and telemetry/copy ancestors while retaining the
 direct TypeScript parent. The facade contains no authored validation `raise`:
 malformed Python values, hostile mappings/accessors, foreign native exceptions,
@@ -23,9 +23,10 @@ malformed native payloads and contained native panics return tagged failures.
 ## Executed gates
 
 `bash scripts/ci/validate_python_bindings.sh` passes with CPython 3.10.21:
-the generated/stub checks and strict Result narrowing fixture pass; nine
-facade adversarial tests pass; a locked wheel is built and installed into a
-clean environment for seven owned lifecycle/isolation/synchronized-N=32,
+the generated/stub checks and strict Result narrowing fixture pass; ten
+facade adversarial tests pass; a locked feature-gated source-validation wheel
+is built and installed into a clean environment for nine owned and attached
+lifecycle/isolation/synchronized-N=32,
 level-transition, zero-deadline retained-shutdown and lifecycle-race tests;
 native binding tests pass; and
 `cargo run -p rust-python-logging` proves a single writer accepts correlated
@@ -60,6 +61,10 @@ suffixes, normalized `::` and space aliases, and nested/mixed forged maps before
 owned or attached dispatch. An installed-wheel fixture replaces the active JSONL
 file with a directory before construction, then verifies a real lazy sink write
 fault is retained in tagged health rather than escaping from `log` or `flush`.
+That source-validation wheel alone enables private native test hooks; they force
+a tagged native internal failure before both factories and every owned or
+attached public operation, proving the real PyO3 boundary returns `Err` while
+ordinary package builds expose neither hook nor test host fixture.
 
 The retained B.3b coordinator operation matrix was also run one named process
 case at a time: timer/bootstrap rollback, worker rollback, waiters/callbacks,
@@ -73,13 +78,13 @@ another worker or conversion path.
 | Requirement | Retained evidence | State |
 | --- | --- | --- |
 | Owned and attached lifecycle, N=32 admission, host once-only, surviving handles | Installed wheel tests plus six native PyO3 tests | covered |
-| Python input/result containment and protected provenance | Nine facade tests and strict Failure narrowing fixture | covered |
+| Python input/result containment and protected provenance | Ten facade tests and strict Failure narrowing fixture | covered |
 | Host level authority and attached revision observation | Installed owned-level test and native attached-owner fixture | covered |
 | Embedding correlation/redaction/query/health/stop | `cargo run -p rust-python-logging` | covered |
 | GC/interpreter teardown | Installed owned-handle subprocess and native module-collection fixture | covered |
 | Shared helper rollback, held sink, slot/timeout and late-result mechanics | all named B.3b coordinator cases | covered in supplied backend |
 | Python-bound blocked-sink heartbeat and every detailed operation interleaving | no direct Python fixture yet | active |
-| Native fault injection through every Python public Result method | no test-only PyO3 fault control yet | active |
+| Native fault injection through every Python public Result method | feature-gated source wheel forces tagged faults for both factories and all owned/attached methods | covered |
 | Diagnostic/remediation conversion through Python | exact unavailable/IO messages, codes, recoverable steps and terminal justification | covered |
 | Revision-overflow through Python | no direct Python fixture yet | active |
 
@@ -87,7 +92,7 @@ another worker or conversion path.
 
 | Gate | Result | State |
 | --- | --- | --- |
-| `validate_python_bindings.sh` (CPython 3.10.21) | green: 10 facade, 7 installed runtime, 6 native binding tests, embedding example | covered |
+| `validate_python_bindings.sh` (CPython 3.10.21) | green: 10 facade, 9 installed runtime, 6 native binding tests, embedding example | covered |
 | `cargo clippy --locked -p sc-observability-py --all-targets -- -D warnings` | green; included in the Python validator | covered |
 | `validate_dependency_bans.sh` | green | covered |
 | `validate_docs_consistency.sh` | green | covered |
