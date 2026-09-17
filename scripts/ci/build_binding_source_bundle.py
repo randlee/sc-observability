@@ -33,7 +33,7 @@ def archive_members(archive):
 
 def manifests_confined(root):
     for manifest in root.rglob('Cargo.toml'):
-        document=tomllib.loads(manifest.read_text())
+        document=tomllib.loads(manifest.read_text(encoding='utf-8'))
         def walk(value):
             if isinstance(value,dict):
                 if 'path' in value and isinstance(value['path'],str):
@@ -67,8 +67,8 @@ def reviewed_registry_closure(lock, roots):
     return registry_identities({'package':[p for p in packages if (p['name'],p['version'],p.get('source')) in selected]})
 
 def verify_registry_selection(source_lock, staged_lock, roots):
-    expected=reviewed_registry_closure(tomllib.loads(source_lock.read_text()),roots)
-    actual=registry_identities(tomllib.loads(staged_lock.read_text()))
+    expected=reviewed_registry_closure(tomllib.loads(source_lock.read_text(encoding='utf-8')),roots)
+    actual=registry_identities(tomllib.loads(staged_lock.read_text(encoding='utf-8')))
     if expected!=actual:raise BundleError('BUNDLE_REGISTRY_DRIFT','staged registry name/version/source/checksum closure differs from reviewed source lock')
     return expected
 
@@ -88,7 +88,7 @@ def dependency_requirements(document, workspace=None):
 
 def verify_bundle(root):
     root=root.resolve()
-    try:manifest=json.loads((root/'manifest.json').read_text())
+    try:manifest=json.loads((root/'manifest.json').read_text(encoding='utf-8'))
     except FileNotFoundError as exc:raise BundleError('BUNDLE_MISSING_MEMBER','manifest.json') from exc
     if manifest.get('schema_version')!=1:raise BundleError('BUNDLE_INVALID_MANIFEST','unsupported bundle version')
     # Reject escaping paths before following any archive, manifest or digest pointer.
@@ -107,14 +107,14 @@ def verify_bundle(root):
     expected=verify_registry_selection(root/'reviewed-source.lock',root/'Cargo.lock',[(p['name'],p['version']) for p in manifest['packages']])
     if manifest.get('registry_selection')!=expected:raise BundleError('BUNDLE_REGISTRY_DRIFT','manifest selection differs from frozen locks')
     for entry in manifest['packages']:
-        normalized=tomllib.loads((safe(root,entry['root'])/'Cargo.toml').read_text())
+        normalized=tomllib.loads((safe(root,entry['root'])/'Cargo.toml').read_text(encoding='utf-8'))
         if normalized['package']['name']!=entry['name'] or normalized['package']['version']!=entry['version']:raise BundleError('BUNDLE_INVALID_MANIFEST','extracted package identity drift')
         actual=dependency_requirements(normalized)
         if actual!=entry['reviewed_requirements']:raise BundleError('BUNDLE_REQUIREMENT_DRIFT',entry['name'])
     return manifest
 
 def command(arguments,cwd,**kwargs):
-    result=subprocess.run(arguments,cwd=cwd,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,**kwargs)
+    result=subprocess.run(arguments,cwd=cwd,text=True,encoding='utf-8',stdout=subprocess.PIPE,stderr=subprocess.PIPE,**kwargs)
     if result.returncode:raise BundleError('BUNDLE_COMMAND_FAILED',f'{arguments!r}\n{result.stderr}')
     return result.stdout
 
@@ -123,7 +123,7 @@ def workspace_for(manifest):
     for directory in (manifest.parent, *manifest.parent.parents):
         candidate=directory/'Cargo.toml'
         if candidate.is_file():
-            document=tomllib.loads(candidate.read_text())
+            document=tomllib.loads(candidate.read_text(encoding='utf-8'))
             if 'workspace' in document:return directory,document['workspace']
     return manifest.parent,{}
 
@@ -138,7 +138,7 @@ def build(root_manifest,output):
         if manifest in seen:return
         seen.add(manifest)
         if not manifest.resolve().is_relative_to(source_root):raise BundleError('BUNDLE_ESCAPING_PATH',str(manifest))
-        document=tomllib.loads(manifest.read_text())
+        document=tomllib.loads(manifest.read_text(encoding='utf-8'))
         inheritance_root,workspace=workspace_for(manifest)
         tables=[document,*document.get('target',{}).values()]
         for table in tables:
@@ -158,7 +158,7 @@ def build(root_manifest,output):
                         if not isinstance(spec.get("version"),str) or not spec["version"].strip():raise BundleError("BUNDLE_MISSING_VERSION",f"{name} path dependency needs a publishable version")
                         preflight(child)
     preflight(root_manifest)
-    reviewed_requirements={str(path):dependency_requirements(tomllib.loads(path.read_text()),workspace_for(path)[1]) for path in seen}
+    reviewed_requirements={str(path):dependency_requirements(tomllib.loads(path.read_text(encoding='utf-8')),workspace_for(path)[1]) for path in seen}
     # --locked rejects a stale source lock before any package staging.
     try:metadata=json.loads(command(['cargo','metadata','--locked','--format-version','1','--manifest-path',str(root_manifest)],root_manifest.parent))
     except BundleError as exc:raise BundleError('BUNDLE_STALE_LOCK',str(exc)) from exc
@@ -221,7 +221,7 @@ def build(root_manifest,output):
         members=archive_members(archive)
         if any(not m.name.startswith(stem+'/') for m in members):raise BundleError('BUNDLE_ESCAPING_PATH','archive root identity mismatch')
         with tarfile.open(archive,'r:gz') as stream:stream.extractall(packages_dir,filter='data')
-        normalized=tomllib.loads((packages_dir/stem/'Cargo.toml').read_text())
+        normalized=tomllib.loads((packages_dir/stem/'Cargo.toml').read_text(encoding='utf-8'))
         if normalized['package']['name']!=package['name'] or normalized['package']['version']!=package['version']:raise BundleError('BUNDLE_INVALID_MANIFEST','archive package identity mismatch')
         requirements=reviewed_requirements[str(Path(package['manifest_path']).resolve())]
         if dependency_requirements(normalized)!=requirements:raise BundleError('BUNDLE_REQUIREMENT_DRIFT',package['name'])

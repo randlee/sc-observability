@@ -9,6 +9,7 @@ use tauri::Manager;
 pub struct Reports(Mutex<BTreeMap<String, Value>>);
 
 pub fn seed(backend: &dyn HostLoggingBackend) -> Result<(), String> {
+    policy_matrix()?;
     let event = sc_observability_dto::decode_event(json!({
         "schema_version": 1, "level": "info", "target": "tauri-example",
         "action": "rust-host", "correlation_id": "tauri-qualification",
@@ -146,4 +147,59 @@ pub fn qualification_host_flush(
         sc_observability_binding_runtime::OperationState::Completed { result } =>
             json!({"pending": false, "completed": result.is_ok(), "result": format!("{result:?}")}),
     })
+}
+
+pub fn policy_matrix() -> Result<(), String> {
+    use std::collections::BTreeSet;
+    let base = sc_observability_tauri::AdapterPolicy {
+        allowed_window_labels: BTreeSet::from(["main".into()]),
+        allowed_targets: BTreeSet::from(["tauri-example".into()]),
+        max_request_bytes: 65536,
+        max_depth: 32,
+        redacted_field_keys: BTreeSet::new(),
+    };
+    let mut cases = Vec::new();
+    for (name, labels) in [
+        ("empty-window-set", vec![]), ("empty-window", vec![""]),
+        ("nul-window", vec!["bad\0label"]), ("invalid-window", vec!["bad\nlabel"]),
+    ] {
+        let mut policy = base.clone();
+        policy.allowed_window_labels = labels.into_iter().map(str::to_owned).collect();
+        cases.push((name, policy));
+    }
+    for (name, targets) in [
+        ("empty-target-set", vec![]), ("empty-target", vec![""]),
+        ("nul-target", vec!["bad\0target"]), ("invalid-target", vec!["bad target"]),
+    ] {
+        let mut policy = base.clone();
+        policy.allowed_targets = targets.into_iter().map(str::to_owned).collect();
+        cases.push((name, policy));
+    }
+    for (name, size, depth) in [
+        ("zero-bytes", 0, 32), ("excess-bytes", 65537, 32),
+        ("zero-depth", 65536, 0), ("excess-depth", 65536, 33),
+    ] {
+        let mut policy = base.clone();
+        policy.max_request_bytes = size;
+        policy.max_depth = depth;
+        cases.push((name, policy));
+    }
+    for key in ["sc_observability.binding.language", "sc_observability::binding::future"] {
+        let mut policy = base.clone();
+        policy.redacted_field_keys.insert(key.into());
+        cases.push((key, policy));
+    }
+    let mut records = vec![json!({"name": "valid-policy", "passed": base.validate().is_ok()})];
+    for (name, policy) in cases {
+        let result = policy.validate();
+        let error = result.err().map(serde_json::to_value).transpose().map_err(|error| error.to_string())?;
+        let passed = error.as_ref().is_some_and(|value| value["kind"] == "validation"
+            && value["code"] == sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT);
+        records.push(json!({"name": name, "passed": passed, "error": error}));
+    }
+    let passed = records.iter().all(|record| record["passed"] == true);
+    let path = std::env::var("SC_TAURI_QUALIFICATION_POLICY").map_err(|_| "policy evidence path absent")?;
+    std::fs::write(path, serde_json::to_vec_pretty(&json!({"passed": passed, "records": records})).map_err(|error| error.to_string())?)
+        .map_err(|error| error.to_string())?;
+    if passed { Ok(()) } else { Err("packaged adapter accepted an invalid host policy".into()) }
 }

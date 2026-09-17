@@ -31,7 +31,7 @@ def run(arguments, cwd, log):
     command = [str(arg) for arg in arguments]
     if os.name == 'nt' and command[0] == 'npm':
         command[0] = 'npm.cmd'
-    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True)
+    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, encoding='utf-8')
     log.append({'command': command, 'exit_code': result.returncode,
                 'stdout': result.stdout, 'stderr': result.stderr})
     if result.returncode:
@@ -49,7 +49,7 @@ def stage_host(destination, bundle, report):
     """Preserve command source exactly; add only independent observation hooks."""
     source = ROOT / 'examples/tauri-logging/src-tauri'
     shutil.copytree(source, destination, ignore=shutil.ignore_patterns('target', 'gen'))
-    original = (source / 'src/main.rs').read_text()
+    original = (source / 'src/main.rs').read_text(encoding='utf-8')
     instrumented = 'mod qualification;\n' + original
     # Inner crate attributes must remain at the beginning of the file.
     instrumented = original.replace('#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]',
@@ -68,7 +68,7 @@ def stage_host(destination, bundle, report):
         '.invoke_handler(tauri::generate_handler![app_observability_level_change])',
         '.invoke_handler(tauri::generate_handler![app_observability_level_change, qualification::qualification_report, qualification::qualification_owner_gate, qualification::qualification_output_gate, qualification::qualification_host_flush])\n        .setup(qualification::setup)')
     (destination / 'src/main.rs').write_text(instrumented)
-    build_script = (destination / 'build.rs').read_text()
+    build_script = (destination / 'build.rs').read_text(encoding='utf-8')
     build_script = replace_once(build_script, '.commands(&["app_observability_level_change"])',
         '.commands(&["app_observability_level_change", "qualification_report", "qualification_owner_gate", "qualification_output_gate", "qualification_host_flush"])')
     (destination / 'build.rs').write_text(build_script)
@@ -82,11 +82,11 @@ def stage_host(destination, bundle, report):
     report['host_source_sha256'] = digest(source / 'src/main.rs')
     report['instrumented_host_sha256'] = digest(destination / 'src/main.rs')
     report['observation_module_sha256'] = digest(destination / 'src/qualification.rs')
-    config = json.loads((destination / 'tauri.conf.json').read_text())
+    config = json.loads((destination / 'tauri.conf.json').read_text(encoding='utf-8'))
     config['app']['withGlobalTauri'] = True
     config['bundle']['icon'] = ['icons/icon.png']
     (destination / 'tauri.conf.json').write_text(json.dumps(config, indent=2))
-    manifest = (destination / 'Cargo.toml').read_text()
+    manifest = (destination / 'Cargo.toml').read_text(encoding='utf-8')
     entries = {entry['name']: entry for entry in bundle['packages']}
     for name, entry in entries.items():
         pattern = r'(?m)^' + re.escape(name) + r'\s*=\s*\{[^\n]*\}'
@@ -107,6 +107,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--bundle', type=Path)
+    parser.add_argument('--npm-archive', type=Path)
+    parser.add_argument('--npm-manifest', type=Path)
     args = parser.parse_args()
     output = args.evidence.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -138,7 +140,16 @@ def main():
             run(['npm', 'ci', '--ignore-scripts'], package, commands)
             run(['npm', 'run', 'build'], package, commands)
             run(['npm', 'test'], package, commands)
-            run(['npm', 'pack', '--pack-destination', output], package, commands)
+            if bool(args.npm_archive) != bool(args.npm_manifest):
+                raise RuntimeError('shared npm artifact requires its exact producer manifest')
+            if args.npm_archive:
+                producer = json.loads(args.npm_manifest.read_text(encoding='utf-8'))
+                if producer['source_commit'] != report['source_commit'] or producer['sha256'] != digest(args.npm_archive):
+                    raise RuntimeError('shared npm source revision or archive hash mismatch')
+                shutil.copyfile(args.npm_archive, output / args.npm_archive.name)
+                shutil.copyfile(args.npm_manifest, output / 'npm-producer.json')
+            else:
+                run(['npm', 'pack', '--pack-destination', output], package, commands)
             archives = list(output.glob('*.tgz'))
             if len(archives) != 1:
                 raise RuntimeError('exactly one npm package archive is required')
@@ -167,10 +178,10 @@ def main():
             host = external / 'host'
             stage_host(host, bundle, report)
             # The example's reviewed lock owns its extra OS webview dependencies.
-            reviewed = registry_identities(tomllib.loads((host / 'Cargo.lock').read_text()))
+            reviewed = registry_identities(tomllib.loads((host / 'Cargo.lock').read_text(encoding='utf-8')))
             run(['cargo', 'fetch', '--locked', '--manifest-path', ROOT / 'examples/tauri-logging/src-tauri/Cargo.toml'], ROOT, commands)
             run(['cargo', 'metadata', '--offline', '--format-version', '1'], host, commands)
-            selected = registry_identities(tomllib.loads((host / 'Cargo.lock').read_text()))
+            selected = registry_identities(tomllib.loads((host / 'Cargo.lock').read_text(encoding='utf-8')))
             source_registry = {(entry['name'], entry['version']): entry for entry in reviewed}
             for entry in selected:
                 if source_registry.get((entry['name'], entry['version'])) != entry:
@@ -191,6 +202,7 @@ def main():
                 with sandbox:
                     report['isolation'] = sandbox.prove_denials(sys.executable, ROOT)
                     sandbox.env['SC_TAURI_QUALIFICATION_REPORT'] = str(raw_report)
+                    sandbox.env['SC_TAURI_QUALIFICATION_POLICY'] = str(external / 'policy-results.json')
                     metadata = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline', '--format-version', '1'], host))
                     for item in metadata['packages']:
                         if not Path(item['manifest_path']).resolve().is_relative_to(external):
@@ -202,15 +214,18 @@ def main():
                     report['output_gate_transitions'] = execute_webview(sandbox, executable, host, external, external)
             finally:
                 report['commands'].extend(sandbox.commands)
+                if (external / 'policy-results.json').exists():
+                    shutil.copyfile(external / 'policy-results.json', output / 'policy-results.json')
                 for runtime_log in external.glob('webview-*.log'):
                     shutil.copyfile(runtime_log, output / runtime_log.name)
                 if raw_report.exists():
                     shutil.copyfile(raw_report, output / 'ipc.json')
                 if (host / 'logs').exists():
                     shutil.copytree(host / 'logs', output / 'logs', dirs_exist_ok=True)
-            ipc = json.loads(raw_report.read_text())
+            ipc = json.loads(raw_report.read_text(encoding='utf-8'))
             if set(ipc) != {'main', 'forbidden'} or not all(record['passed'] for record in ipc.values()):
                 raise RuntimeError('incomplete or failed actual-webview qualification')
+            report['policy_results_sha256'] = digest(output / 'policy-results.json')
             report['fault_results_sha256'] = digest(output / 'fault-results.json')
             report['ipc_sha256'] = digest(output / 'ipc.json')
             report['case_count'] = sum(len(item['records']) for item in ipc.values())
@@ -220,6 +235,10 @@ def main():
             report['jsonl'] = {str(path.relative_to(output)): digest(path) for path in jsonl}
             if report.get('fault_error'):
                 raise RuntimeError('packed client fault/conformance cases failed; see fault-results.json')
+            final_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+            report['source_dirty'] |= subprocess.run(['git', 'diff', '--quiet', 'HEAD'], cwd=ROOT).returncode != 0
+            if final_commit != report['source_commit']:
+                raise RuntimeError('qualification source revision changed during execution')
             if report['source_dirty']:
                 raise RuntimeError('qualification source has uncommitted edits; commit and rerun before claiming evidence')
             report['status'] = 'passed'

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export PYTHONUTF8=1
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root"
 if [[ $# -gt 1 || (${1:-} != '' && ${1:-} != '--platform') ]]; then
@@ -13,10 +14,14 @@ if [[ ${1:-} != '--platform' ]]; then
   bash scripts/ci/validate_binding_schema.sh
 fi
 python3 -m unittest discover -s scripts/ci/tests -p test_binding_source_bundle.py
-cargo test --locked -p sc-observability-binding-runtime
-cargo test --locked -p sc-observability-binding-runtime --release
+python3 -m unittest discover -s scripts/ci/tests -p test_tauri_platform_evidence.py
+python3 scripts/ci/validate_binding_runtime.py --platform-only --evidence target/tauri-qualification/native-runtime
 cargo test --locked --manifest-path bindings/tauri/Cargo.toml --features test
-python3 scripts/ci/validate_tauri_qualification.py --evidence target/tauri-qualification
+qualification_args=(--evidence target/tauri-qualification)
+if [[ -n ${TAURI_NPM_ARCHIVE:-} ]]; then
+  qualification_args+=(--npm-archive "$TAURI_NPM_ARCHIVE" --npm-manifest "$TAURI_NPM_MANIFEST")
+fi
+python3 scripts/ci/validate_tauri_qualification.py "${qualification_args[@]}"
 if [[ ${1:-} != '--platform' ]]; then
   python3 scripts/ci/validate_tauri_platform_evidence.py target/tauri-platforms
 fi

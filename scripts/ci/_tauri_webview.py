@@ -37,7 +37,7 @@ def execute(sandbox, executable: Path, host: Path, scratch: Path, output: Path):
                 request_path = Path(str(control) + '.request')
                 if request_path.exists():
                     try:
-                        request = json.loads(request_path.read_text())
+                        request = json.loads(request_path.read_text(encoding='utf-8'))
                     except (ValueError, OSError):
                         request = None
                     if request and request['token'] != last_token:

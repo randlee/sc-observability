@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from validate_binding_runtime import cases as native_cases, source_digest as native_source_digest
 
 REQUIRED_MAIN = {
     'factory', 'try-log', 'log', 'flush', 'query', 'health',
@@ -31,7 +32,7 @@ def digest(path):
 def validate(root, source=None):
     found = {}
     for path in root.rglob('platform.json'):
-        report = json.loads(path.read_text())
+        report = json.loads(path.read_text(encoding='utf-8'))
         name = report['platform']
         if name in found:
             raise ValueError('duplicate platform evidence: ' + name)
@@ -49,7 +50,7 @@ def validate(root, source=None):
         npm = report['npm_archive']
         hashed(npm['filename'], npm['sha256'])
         hashed('host-Cargo.lock', report['host_lock_sha256'])
-        ipc = json.loads(hashed('ipc.json', report['ipc_sha256']).read_text())
+        ipc = json.loads(hashed('ipc.json', report['ipc_sha256']).read_text(encoding='utf-8'))
         if set(ipc) != {'main', 'forbidden'}:
             raise ValueError('missing actual caller windows')
         for window, required in [('main', REQUIRED_MAIN), ('forbidden', REQUIRED_FORBIDDEN)]:
@@ -58,11 +59,14 @@ def validate(root, source=None):
                 raise ValueError('failed IPC result: ' + name + '/' + window)
             if not required <= {case['name'] for case in record['records']}:
                 raise ValueError('skipped IPC cases: ' + name + '/' + window)
-        faults = json.loads(hashed('fault-results.json', report['fault_results_sha256']).read_text())
+        policies = json.loads(hashed('policy-results.json', report['policy_results_sha256']).read_text(encoding='utf-8'))
+        if not policies['passed'] or len(policies['records']) != 15 or not all(case['passed'] for case in policies['records']):
+            raise ValueError('host policy fixture missing or failed: ' + name)
+        faults = json.loads(hashed('fault-results.json', report['fault_results_sha256']).read_text(encoding='utf-8'))
         fixture_path = Path(__file__).resolve().parents[2] / 'bindings/conformance/v1/schema-cases.json'
         if report['conformance_fixture_sha256'] != digest(fixture_path):
             raise ValueError('stale canonical conformance fixtures: ' + name)
-        required_fixtures = {'schema-' + case['id'] for case in json.loads(fixture_path.read_text())}
+        required_fixtures = {'schema-' + case['id'] for case in json.loads(fixture_path.read_text(encoding='utf-8'))}
         if not required_fixtures <= {case['name'] for case in faults['results']}:
             raise ValueError('canonical conformance fixture skipped: ' + name)
         if not faults['passed'] or not faults['results'] or not all(case['passed'] for case in faults['results']):
@@ -73,11 +77,19 @@ def validate(root, source=None):
             raise ValueError('missing real JSONL: ' + name)
         for relative, expected in report['jsonl'].items():
             hashed(relative, expected)
-        bundle = json.loads((directory / 'bundle-manifest.json').read_text())
+        bundle = json.loads((directory / 'bundle-manifest.json').read_text(encoding='utf-8'))
         if bundle['source_commit'] != report['source_commit']:
             raise ValueError('stale source bundle: ' + name)
         for package in bundle['packages']:
             hashed('rust-archives/' + Path(package['archive']).name, package['archive_sha256'])
+        native = json.loads((directory / 'native-runtime' / (name.lower() + '.json')).read_text(encoding='utf-8'))
+        if native['source_commit'] != report['source_commit'] or native['runtime_source_sha256'] != native_source_digest():
+            raise ValueError('stale native runtime evidence: ' + name)
+        for profile in ('debug', 'release'):
+            cell = native['profiles'][profile]
+            if cell['status'] != 'passed' or cell['cases'] != native_cases() or not cell['helper_counts']:
+                raise ValueError('missing native lifecycle/resource fixture: ' + name + '/' + profile)
+            hashed('native-runtime/' + cell['log'], cell['sha256'])
         found[name] = report
     if set(found) != {'Darwin', 'Linux', 'Windows'}:
         raise ValueError('required platforms missing: ' + ', '.join(sorted({'Darwin', 'Linux', 'Windows'} - found.keys())))

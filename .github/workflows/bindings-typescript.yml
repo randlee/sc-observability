@@ -11,6 +11,9 @@ on:
       - ".github/workflows/bindings-typescript.yml"
   workflow_dispatch:
 
+env:
+  PYTHONUTF8: "1"
+
 jobs:
   schema-and-contract:
     runs-on: ubuntu-latest
@@ -45,7 +48,27 @@ jobs:
           bash scripts/ci/validate_dependency_bans.sh
           bash scripts/ci/validate_repo_boundaries.sh
           bash scripts/ci/validate_docs_consistency.sh
+      - name: Pack the one npm artifact consumed on every platform
+        shell: bash
+        run: |
+          mkdir -p target/tauri-npm
+          npm --prefix bindings/typescript ci --ignore-scripts
+          npm --prefix bindings/typescript run build
+          npm --prefix bindings/typescript pack --pack-destination "$PWD/target/tauri-npm"
+          python - <<'PYTHON'
+          import hashlib,json,os
+          from pathlib import Path
+          directory=Path('target/tauri-npm')
+          archive,=directory.glob('*.tgz')
+          (directory/'npm-producer.json').write_text(json.dumps({'source_commit':os.environ['GITHUB_SHA'],'filename':archive.name,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest()},indent=2)+'\n')
+          PYTHON
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tauri-shared-npm
+          path: target/tauri-npm/
+          if-no-files-found: error
   real-ipc-artifacts:
+    needs: schema-and-contract
     strategy:
       fail-fast: false
       matrix:
@@ -75,9 +98,15 @@ jobs:
           if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
+      - uses: actions/download-artifact@v4
+        with:
+          name: tauri-shared-npm
+          path: target/tauri-npm
       - name: Validate real IPC from packaged artifacts
         shell: bash
         run: |
+          export TAURI_NPM_ARCHIVE="$PWD/target/tauri-npm/$(python -c 'import json; print(json.load(open("target/tauri-npm/npm-producer.json"))["filename"])')"
+          export TAURI_NPM_MANIFEST="$PWD/target/tauri-npm/npm-producer.json"
           if [ "$RUNNER_OS" = Linux ]; then
             xvfb-run -a bash scripts/ci/validate_typescript_bindings.sh --platform
           else
