@@ -675,6 +675,9 @@ fn native_diagnostic_fidelity() {
     });
     assert!(matches!(failure, Failure::Io { .. }));
     assert_eq!(failure.diagnostic(), &dto::Diagnostic::from(diagnostic));
+    let golden: serde_json::Value =
+        serde_json::from_str(include_str!("../tests/native-diagnostic.json")).unwrap();
+    assert_eq!(serde_json::to_value(failure).unwrap(), golden);
 }
 
 fn cross_logger_cancellation() {

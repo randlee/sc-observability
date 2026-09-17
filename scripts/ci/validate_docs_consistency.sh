@@ -45,7 +45,7 @@ PY
 
 python3 scripts/ci/check_phase_b_publication_claims.py
 
-for crate in sc-observability-types sc-observability sc-observe sc-observability-otlp sc-observability-log sc-observability-log-macros sc-observability-dto; do
+for crate in sc-observability-types sc-observability sc-observe sc-observability-otlp sc-observability-log sc-observability-log-macros sc-observability-dto sc-observability-binding-runtime; do
   cargo rustdoc -p "$crate" -- -Dmissing-docs >/dev/null
 done
 

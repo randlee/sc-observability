@@ -17,8 +17,13 @@ use std::time::{Duration, Instant};
 /// Immutable observation of one native operation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OperationState<T> {
+    /// The native operation has not published its final result.
     Pending,
-    Completed { result: Result<T, Failure> },
+    /// The native operation has published one immutable final result.
+    Completed {
+        /// Saved success or native/binding failure, independent of observers.
+        result: Result<T, Failure>,
+    },
 }
 struct Published<T> {
     at: Instant,
@@ -222,18 +227,16 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
     }
     pub(crate) fn complete(&self, result: Result<T, Failure>, release: impl FnOnce()) {
         let mut observers = lock(&self.inner.observers);
-        if self
-            .inner
-            .published
-            .set(Published {
-                at: Instant::now(),
-                result,
-            })
-            .is_err()
-        {
+        if self.inner.published.get().is_some() {
             return;
         }
+        // A state() reader can immediately start another request after seeing
+        // Completed; release the native slot before making that state visible.
         release();
+        let _ = self.inner.published.set(Published {
+            at: Instant::now(),
+            result,
+        });
         let ready = std::mem::take(&mut *observers);
         drop(observers);
         for observer in ready.into_values() {
