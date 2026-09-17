@@ -2,7 +2,7 @@
 
 Status: in progress on `fix/phase-b-3a-completeness`; parent merge-forwarded
 from `origin/feature/phase-b-4a-python-packaging` at `c403bcf` (including
-the latest B.4a merge-forward). Current child checkpoint: `27736e5`.
+the latest B.4a merge-forward). Current child checkpoint: `ce5bb92`.
 
 The child consumes the B.3 canonical schema and the B.3b native
 `HostLoggingBackend`. The TypeScript package is generated-schema driven and
@@ -47,17 +47,19 @@ containment, additive output evolution, prototype-safe encoding, lifecycle
 boundaries, response-version mapping, remote remediation preservation, and
 best-effort accounting faults. The adapter tests
 exercise strict request policy, redaction, and the Tauri command dispatcher
-through its mock IPC harness, including a portable platform-origin invocation
-and an exact-64-KiB request with omitted
+through its mock IPC harness, including a portable platform-origin invocation,
+native Tauri window-label and native target-category policy validation, and an
+exact-64-KiB request with omitted
 nullable event fields. Raw request sizing now occurs before DTO defaulting, so
-serde normalization cannot reject an otherwise in-bound request. The source example owns a `LogGuard`, shares its
+serde normalization cannot reject an otherwise in-bound request. The source
+example owns a `LogGuard`, shares its
 control with the adapter backend, and emits correlated Rust/frontend startup
 records; its ACL build resolves the four plugin commands plus the application
 level command. The adapter query observer uses the fixed 2000 ms deadline.
-The specialist checkpoint `5e5c595` reports 83 isolated macOS IPC assertions
-and 336 packed-client schema/fault cases PASS, with the exact-size correction
-pending consumption of `27273ee`. Full installed Rust/npm artifacts, platform
-CI, and broad C05 qualification remain delegated to `bp-tauri-helper` on
+The specialist checkpoint `5a3f380` reports 103 isolated macOS IPC assertions
+and 336 packed-client schema/fault cases PASS, including the exact-size
+correction. Full installed Rust/npm artifacts, platform CI, and broad C05
+qualification remain delegated to `bp-tauri-helper` on
 `feature/phase-b-tauri-qualification`; this handoff does not claim those
 gates. B.3a remains in progress pending specialist retest and explicit lead
 completeness PASS.
