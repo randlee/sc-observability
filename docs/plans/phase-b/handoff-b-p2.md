@@ -25,6 +25,11 @@ commit is `5347c56efb1d1f62ab0253350ea60078b498ccc8`; stage-manifest SHA-256 is
 The preparer rejects dirty Git provenance, writes deterministic archive bytes,
 checks each archive's normalized `Cargo.toml` and full package inventory, and
 the validator rejects any candidate path that is not an extracted archive.
+The integrity fix layer additionally verifies each archive SHA-256 and member
+inventory against the stage manifest, freshly extracts verified bytes to a
+temporary consumer-only directory, and byte-compares the declared extraction
+before Cargo resolves it. It rejects altered archives, altered/missing extracted
+content, and archive paths escaping the stage root.
 `local-macos.json` (SHA-256
 `c05d6d581e5ee582e3262f9c7536369bf9677cf4ee78ee7b3e8138f841fa705c`)
 records separate exact `1.2.0` registry-baseline and `1.3.0` extracted-candidate

@@ -3,9 +3,9 @@ id: B.P2
 status: incomplete
 qa_status: not_dispatched
 merge_status: unmerged
-branch: fix/B-P2-package-completeness
-worktree: /Users/randlee/github/sc-observability-worktrees/fix/B-P2-package-completeness
-target: feature/B-P2-runtime-publish
+branch: fix/B-P2-consumer-integrity
+worktree: /Users/randlee/github/sc-observability-worktrees/fix/B-P2-consumer-integrity
+target: fix/B-P2-package-completeness
 base: develop
 ---
 
