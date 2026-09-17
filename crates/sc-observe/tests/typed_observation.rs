@@ -1,3 +1,8 @@
+#![allow(
+    deprecated,
+    reason = "paired routing fixtures exercise both legacy and typed construction paths"
+)]
+
 use std::path::PathBuf;
 use std::sync::{
     Arc, Mutex,

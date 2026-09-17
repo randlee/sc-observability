@@ -10,6 +10,10 @@
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 use sc_observability_types::typed::InitFailure;
+#[allow(
+    deprecated,
+    reason = "the builder retains InitError in its published compatibility signature"
+)]
 use sc_observability_types::{InitError, Remediation};
 
 use crate::{
@@ -46,6 +50,10 @@ impl LoggerBuilder {
     ///
     /// let _logger = builder.build();
     /// ```
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use LoggerBuilder::new_typed(); see migrate-error-api.md."
@@ -110,6 +118,10 @@ impl LoggerBuilder {
     }
 
     /// Finalizes construction and returns the logger with weak level ownership.
+    #[allow(
+        deprecated,
+        reason = "supported owner-returning method keeps its published InitError signature"
+    )]
     pub fn build_with_level_owner(
         self,
     ) -> Result<(Logger<Running>, LevelOwner), sc_observability_types::InitError> {

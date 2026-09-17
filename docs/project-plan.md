@@ -186,6 +186,16 @@ shutdown operations while retaining existing exporters, telemetry lifecycle,
 projector registration, serialization, and public error surfaces. Copied-bridge
 integration, warning rollout, publication, and independent QA remain separate.
 
+### B.1a/B.1b — QA1 reconciled corrections
+
+The six scoped QA1 corrections are recorded in
+[`plans/phase-b/task-b-1ab-qa1-fixes.md`](./plans/phase-b/task-b-1ab-qa1-fixes.md).
+They harden test-only concurrency controls, preserve standalone sink diagnostic
+remediation/source semantics, and use the canonical typed identity code without
+changing the retained logger configuration, shutdown behavior, or root exports.
+Coordinator completeness passed at
+`57176ba4c263a6cf603ef4d78a7e3be94b5d1568`; independent QA remains separate.
+
 ### B.1 — Copy the corrected generic BTIT crates
 
 The mechanical copy sprint is tracked in
@@ -204,19 +214,21 @@ toolchain-drift `trybuild` `.stderr` fixtures (this workspace pins Rust
 Independent QA and API approval remain pending; publication remains deferred
 to B.7.
 
-### B.1e — Typed error migration preparation
+### B.1e — Typed error migration and warning rollout
 
-The scoped migration-preparation layer is tracked in
+The completed implementation and validation layer is tracked in
 [`plans/phase-b/task-b-1e-migration-prep.md`](./plans/phase-b/task-b-1e-migration-prep.md)
 and is based on the authoritative
 [`sprint-b-1e-error-adoption.md`](./plans/phase-b/sprint-b-1e-error-adoption.md)
 and [error contract](./plans/phase-b/error-api-contract.md). It records the
 exact legacy-wrapper and method replacements, supported owner-constructor
 exemptions, typed matching/source-retention guidance and narrow warning policy
-against the merged B.1d API. This child is docs/inventory-only: B.1e warning
-implementation/validation, ordinary production migration, downstream
-fixtures/validator, CI, qualification and publication remain separately
-gated by their owners; B.7 alone publishes.
+against the merged B.1d API. The implementation activates the nine wrapper
+and 20 method warnings at `1.4.0`, migrates ordinary routing call sites,
+preserves narrow compatibility boundaries, and validates legacy/migrated/
+partial external Cargo consumers with JSON diagnostics and a Serde golden.
+B.2 qualification and B.7 publication remain separately gated; B.7 alone
+publishes and no removal schedule is introduced.
 
 ### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
 

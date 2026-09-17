@@ -99,6 +99,10 @@ impl LogControl {
     /// # Errors
     ///
     /// Returns [`EmitError`] after exact-once accounting for a rejected event.
+    #[allow(
+        deprecated,
+        reason = "the copied bridge retains its legacy logger admission boundary"
+    )]
     pub fn try_log(&self, event: BridgeEvent) -> Result<EmitOutcome, EmitError> {
         handle::submit_guarded(|| {
             if handle::lifecycle() != BridgeLifecycle::Running {

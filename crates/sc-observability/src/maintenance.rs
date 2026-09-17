@@ -839,6 +839,7 @@ pub(crate) struct TestPassDelaySignal {
     active: AtomicBool,
     block_until_released: AtomicBool,
     released: AtomicBool,
+    wait_timed_out: AtomicBool,
     shutdown_timeout_recorded: AtomicBool,
     gate: Mutex<()>,
     changed: Condvar,
@@ -846,6 +847,14 @@ pub(crate) struct TestPassDelaySignal {
 
 #[cfg(test)]
 pub(crate) struct TestPassDelayReleaseGuard(Arc<TestPassDelaySignal>);
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TestPassDelayWait {
+    NotBlocked,
+    Released,
+    TimedOut,
+}
 
 #[cfg(test)]
 impl Drop for TestPassDelayReleaseGuard {
@@ -867,6 +876,7 @@ impl TestPassDelaySignal {
 
     pub(crate) fn block_delay_until_released(&self) {
         self.released.store(false, Ordering::SeqCst);
+        self.wait_timed_out.store(false, Ordering::SeqCst);
         self.block_until_released.store(true, Ordering::SeqCst);
     }
 
@@ -874,25 +884,37 @@ impl TestPassDelaySignal {
         TestPassDelayReleaseGuard(self.clone())
     }
 
-    fn wait_until_released(&self) -> bool {
+    pub(crate) fn wait_until_released(&self) -> TestPassDelayWait {
+        self.wait_until_released_for(Duration::from_secs(1))
+    }
+
+    pub(crate) fn wait_until_released_for(&self, timeout: Duration) -> TestPassDelayWait {
         if !self.block_until_released.load(Ordering::SeqCst) {
-            return false;
+            return TestPassDelayWait::NotBlocked;
         }
 
+        let deadline = Instant::now() + timeout;
         let mut gate = self.gate.lock().expect("test gate poisoned");
         while !self.released.load(Ordering::SeqCst) {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                self.wait_timed_out.store(true, Ordering::SeqCst);
+                self.block_until_released.store(false, Ordering::SeqCst);
+                return TestPassDelayWait::TimedOut;
+            }
             let (next_gate, timeout) = self
                 .changed
-                .wait_timeout(gate, Duration::from_secs(1))
+                .wait_timeout(gate, remaining)
                 .expect("test gate poisoned");
             gate = next_gate;
             if timeout.timed_out() && !self.released.load(Ordering::SeqCst) {
+                self.wait_timed_out.store(true, Ordering::SeqCst);
                 self.block_until_released.store(false, Ordering::SeqCst);
-                return false;
+                return TestPassDelayWait::TimedOut;
             }
         }
         self.block_until_released.store(false, Ordering::SeqCst);
-        true
+        TestPassDelayWait::Released
     }
 
     pub(crate) fn release_delay(&self) {
@@ -907,6 +929,10 @@ impl TestPassDelaySignal {
 
     pub(crate) fn shutdown_timeout_recorded(&self) -> bool {
         self.shutdown_timeout_recorded.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn wait_timed_out(&self) -> bool {
+        self.wait_timed_out.load(Ordering::SeqCst)
     }
 }
 
@@ -924,8 +950,12 @@ fn maybe_run_test_delay(
 
     if let Some(signal) = test_pass_signal {
         signal.set_active(true);
-        if !signal.wait_until_released() {
-            thread::sleep(delay);
+        match signal.wait_until_released() {
+            TestPassDelayWait::NotBlocked => thread::sleep(delay),
+            TestPassDelayWait::Released => {}
+            TestPassDelayWait::TimedOut => {
+                panic!("test maintenance delay release gate timed out")
+            }
         }
         signal.set_active(false);
     } else {

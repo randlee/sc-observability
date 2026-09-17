@@ -4,17 +4,15 @@ This reference is for an adopter who is ready to move from the retained
 diagnostic wrappers to the additive typed failure APIs. B.1e implements and
 validates the warning-only migration after the B.P2 prerequisite; B.2
 qualifies that result and B.7 publishes it. The current workspace implements
-the typed counterparts, but this preparation branch deliberately does not add
-new deprecation attributes.
+the typed counterparts and actionable `1.4.0` warnings.
 
 ## Prerequisite and release policy
 
 Use the typed APIs only after the consumer has verified the replacement at the
 same version as its existing `sc-observability` dependencies. The B.P2 staged
 prerequisite is `1.3.0`; B.1e selects the next-minor warning candidate
-`1.4.0` and validates it. This scoped preparation leaves activation pending;
-B.2 qualifies the B.1e result and B.7 publishes it. There is no removal
-schedule and no planned major release. A legacy consumer continues
+`1.4.0` and validates it. B.2 qualifies the B.1e result and B.7 publishes it.
+There is no removal schedule and no planned major release. A legacy consumer continues
 to build and run with default lints; `-D warnings` or `-D deprecated` may fail
 because deprecation is the explicit upgrade mechanism.
 
@@ -164,7 +162,8 @@ cargo test -p sc-observability-types --test neutral_contracts typed_to_legacy_ad
 
 The integration tests execute success and failure paths rather than merely
 importing symbols. The complete downstream fixture/JSON-diagnostic validator
-is a separate B.1e/CI gate and is recorded as pending in the migration handoff.
+runs from `scripts/ci/validate_error_migration.py` and is recorded in the
+B.1e implementation handoff.
 
 ## Custom traits and adapters
 
