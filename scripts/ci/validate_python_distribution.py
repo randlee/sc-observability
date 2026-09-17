@@ -165,7 +165,7 @@ def build(args) -> None:
             sandbox.run([sandbox.cargo, 'run', '--locked', '--offline', '--release'], root / 'embedding')
             del sandbox.env['PYTHONPATH']
             negatives = negative_cases(root, scratch, sandbox, metadata)
-            record = {'schema_version': 1, 'status': 'passed', 'source_commit': source['source_commit'],
+            record = {'schema_version': 1, 'status': 'passed', 'development_only': source.get('development_only', False), 'source_commit': source['source_commit'],
                       'sdist_sha256': digest(args.sdist), 'platform': args.platform,
                       'build_interpreter': actual, 'wheel': linked, 'resolution': resolution,
                       'isolation': probes, 'embedding': 'passed', 'negative_results': negatives,
@@ -182,6 +182,8 @@ def cell(args) -> None:
         scratch = Path(temporary).resolve()
         root = extract_sdist(args.sdist, scratch / 'unpacked')
         source = verify_source(root)
+        if source.get('development_only') or not source['runtime_suite'].get('runtime_complete'):
+            raise DistributionError('development/incomplete runtime artifact cannot qualify an installed cell')
         actual = actual_cell(policy_at(root))
         selected = next(item for item in policy_at(root)['platforms'] if item['id'] == actual['platform'])
         wheel = inspect_wheel(args.wheel, selected, source['version'])
@@ -245,7 +247,7 @@ def aggregate(args) -> None:
     if len(wheel_hashes) != 5:
         raise DistributionError('missing or duplicate platform wheels')
     for item in builds + cells:
-        if (item.get('status') != 'passed' or item.get('source_commit') != args.source_commit
+        if (item.get('status') != 'passed' or item.get('development_only') or item.get('source_commit') != args.source_commit
                 or item.get('sdist_sha256') != digest(args.sdist)
                 or not all(item['isolation'].get(key) is True for key in ('checkout', 'cargo_cache', 'network'))):
             raise DistributionError('mixed source/artifacts or incomplete isolation evidence')

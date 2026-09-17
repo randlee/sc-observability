@@ -2,6 +2,11 @@ name: B.4a Python distribution qualification
 
 on:
   workflow_dispatch:
+    inputs:
+      development:
+        type: boolean
+        default: false
+        description: 'Exercise platform builds with incomplete runtime; installed cells and aggregate reject these artifacts'
   pull_request:
     paths:
       - 'bindings/python/**'
@@ -47,7 +52,13 @@ jobs:
           toolchain: '1.94.1'
       - run: python -m pip install -r scripts/ci/python-packaging-requirements.txt
       - name: Build sole-helper source bundle and immutable maturin sdist
-        run: python scripts/ci/prepare_python_distributions.py --output target/b4a-sdist
+        shell: bash
+        env:
+          B4A_DEVELOPMENT: ${{ inputs.development }}
+        run: |
+          flags=()
+          if [[ "$B4A_DEVELOPMENT" == true ]]; then flags+=(--allow-incomplete-runtime); fi
+          python scripts/ci/prepare_python_distributions.py --output target/b4a-sdist "${flags[@]}"
       - uses: actions/upload-artifact@v4
         with:
           name: b4a-sdist
