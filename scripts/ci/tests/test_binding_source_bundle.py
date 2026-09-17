@@ -35,4 +35,21 @@ class SourceBoundaryTests(unittest.TestCase):
             root=Path(temporary);self.project(root,'[workspace.dependencies]\nlocal={path="local"}\n[dependencies]\nlocal.workspace=true\n')
             local=root/'local';local.mkdir();(local/'Cargo.toml').write_text('[package]\nname="local"\nversion="0.1.0"\nedition="2024"\n')
             result=self.invoke(root);self.assertNotEqual(result.returncode,0);self.assertIn('BUNDLE_MISSING_VERSION',result.stderr);self.assertFalse((root/'bundle').exists())
+    def test_target_specific_registry_selection_matches_reviewed_lock(self):
+        import json
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            self.project(root,'[dependencies]\nserde_json="=1.0.149"\n[target.\'cfg(windows)\'.dependencies]\nlibc="=0.2.189"\n')
+            (root/'.gitignore').write_text('bundle/\n')
+            def run(*args):subprocess.run(args,cwd=root,check=True,capture_output=True,text=True)
+            run('cargo','generate-lockfile')
+            run('git','init','-q')
+            run('git','add','.')
+            run('git','-c','user.name=Binding Fixture','-c','user.email=binding-fixture@example.invalid','commit','-qm','reviewed fixture')
+            result=self.invoke(root);self.assertEqual(result.returncode,0,result.stderr)
+            record=json.loads((root/'bundle/manifest.json').read_text())
+            selection={(p['name'],p['version']) for p in record['registry_selection']}
+            self.assertIn(('serde_json','1.0.149'),selection)
+            self.assertIn(('libc','0.2.189'),selection)
+            self.assertTrue(all(p['checksum'] for p in record['registry_selection']))
 if __name__=='__main__':unittest.main()

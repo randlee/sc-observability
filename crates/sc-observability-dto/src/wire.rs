@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 pub struct DecimalDto(
     #[cfg_attr(
         feature = "schema-gen",
-        schemars(regex(pattern = r"^(0|[1-9][0-9]*|-[1-9][0-9]*)$"))
+        schemars(regex(pattern = r"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\s\S])"))
     )]
     String,
 );
