@@ -602,4 +602,66 @@ mod tests {
         assert_eq!(winners.load(Ordering::SeqCst), 1);
         assert_eq!(rejects.load(Ordering::SeqCst), 7);
     }
+
+    #[test]
+    fn attached_python_producers_do_not_contend_for_dispatch() {
+        Python::initialize();
+        let setup = Python::attach(|py| {
+            let module = match PyModule::new(py, "_b4_attached_producer_test") {
+                Ok(module) => module,
+                Err(_) => return None,
+            };
+            let service = match ServiceName::new("b4-attached-producer-test") {
+                Ok(service) => service,
+                Err(_) => return None,
+            };
+            let config = sc_observability::LoggerConfig::default_for(
+                service,
+                std::env::temp_dir().join("sc-observability-b4-attached-producer-test"),
+            );
+            let (owner, backend) = match create_core_backend(config) {
+                Ok(pair) => pair,
+                Err(_) => return None,
+            };
+            let host: Arc<dyn HostLoggingBackend> = Arc::new(backend);
+            if install_host_logger(&module, host).is_err() {
+                return None;
+            }
+            let attached = match attached_logger_from_module(py, &module) {
+                Ok((Some(attached), _)) => attached,
+                _ => return None,
+            };
+            Some((
+                (0..32).map(|_| attached.clone_ref(py)).collect::<Vec<_>>(),
+                owner,
+            ))
+        });
+        let Some((attached, owner)) = setup else {
+            assert!(false, "could not create attached producer fixture");
+            return;
+        };
+        let start = Arc::new(Barrier::new(attached.len()));
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let workers = attached
+            .into_iter()
+            .map(|attached| {
+                let start = start.clone();
+                let accepted = accepted.clone();
+                thread::spawn(move || {
+                    start.wait();
+                    Python::attach(|py| {
+                        let event = r#"{"schema_version":1,"level":"info","target":"python.attached","action":"parallel","fields":{}}"#;
+                        let result = attached.bind(py).borrow().log(py, event);
+                        if result.contains("\"kind\":\"ok\"") {
+                            accepted.fetch_add(1, Ordering::SeqCst);
+                        }
+                    });
+                })
+            })
+            .collect::<Vec<_>>();
+        let joined = workers.into_iter().all(|worker| worker.join().is_ok());
+        let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
+        assert!(joined && stopped);
+        assert_eq!(accepted.load(Ordering::SeqCst), 32);
+    }
 }

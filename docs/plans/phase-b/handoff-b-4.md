@@ -29,8 +29,9 @@ clean environment for two owned lifecycle/isolation/N=32 tests; native binding
 tests pass; and `cargo run -p rust-python-logging` proves Rust embedding.
 
 Native attachment tests prove missing-host tagging, immutable duplicate install,
-attached admission, retained health after host shutdown, and eight concurrent
-install callers with one winner and seven exact duplicate-install failures.
+attached admission, retained health after host shutdown, eight concurrent
+install callers with one winner and seven exact duplicate-install failures, and
+32 simultaneous attached PyO3 producer calls with 32 tagged admissions.
 
-This handoff is intentionally not a completion claim: explicit attached N=32
-producer evidence and final sprint/checklist completeness remain active.
+This handoff remains an implementation evidence record until coordinator
+completeness review and the sprint closeout update are complete.
