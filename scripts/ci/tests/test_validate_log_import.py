@@ -50,6 +50,13 @@ class ImportContractFixture:
         ),
         "crates/sc-observability-log-consumer-check/Cargo.toml": '[package]\nname = "consumer-check"\n',
         "crates/sc-observability-log-consumer-check/src/main.rs": "fn main() {}\n",
+        "crates/sc-observability-log/tests/ui/rejected.stderr": (
+            "error[E0308]: mismatched types\n"
+            " --> tests/ui/rejected.rs:3:5\n"
+            "  |\n"
+            "3 |     5\n"
+            "  |     ^ expected `()`, found integer\n"
+        ),
     }
 
     review_path = "docs/reviews/btit-critical-review.md"
@@ -227,6 +234,123 @@ class ValidateLogImportTests(unittest.TestCase):
             }])
             validate_import(provenance, fixture.source_repo, fixture.destination,
                              fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_accepts_declared_package_metadata_workspace_inheritance(self) -> None:
+        """Converting hard-coded [package] fields to `.workspace = true` is a permitted metadata change."""
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/Cargo.toml"
+            before = fixture.FILES[path]
+            after = '[package]\nname = "sc-observability-log"\nversion.workspace = true\nrepository.workspace = true\n'
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path,
+                "reason": "inherit version/repository from this workspace",
+                "kind": "package_metadata",
+                "before": before,
+                "after": after,
+            }])
+            validate_import(provenance, fixture.source_repo, fixture.destination,
+                             fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_accepts_declared_trybuild_diagnostic_text_change(self) -> None:
+        """A toolchain-drift .stderr rewording is permitted when codes/locations are unchanged."""
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/tests/ui/rejected.stderr"
+            before = fixture.FILES[path]
+            after = (
+                "error[E0308]: mismatched types\n"
+                " --> tests/ui/rejected.rs:3:5\n"
+                "  |\n"
+                "3 |     5\n"
+                "  |     ^ expected `()`, found integer value\n"
+            )
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path,
+                "reason": "this workspace pins a different rustc than BTIT's; rustc wording drifted",
+                "kind": "trybuild_diagnostic_text",
+                "before": before,
+                "after": after,
+            }])
+            validate_import(provenance, fixture.source_repo, fixture.destination,
+                             fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_rejects_trybuild_diagnostic_text_kind_on_non_stderr_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/src/lib.rs"
+            before = fixture.FILES[path]
+            after = "pub fn noop() { /* changed */ }\n"
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "not actually a trybuild fixture", "kind": "trybuild_diagnostic_text",
+                "before": before, "after": after,
+            }])
+            with self.assertRaisesRegex(SystemExit, "is not a tests/ui/\\*.stderr file"):
+                validate_import(provenance, fixture.source_repo, fixture.destination,
+                                 fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_rejects_trybuild_diagnostic_text_empty_profile(self) -> None:
+        """A stray non-diagnostic .stderr file must not launder this kind."""
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/tests/ui/rejected.stderr"
+            before = fixture.FILES[path]
+            after = "note: nothing to see here\n"
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "empty it out", "kind": "trybuild_diagnostic_text",
+                "before": before, "after": after,
+            }])
+            with self.assertRaisesRegex(SystemExit, "empty diagnostic error/location profile"):
+                validate_import(provenance, fixture.source_repo, fixture.destination,
+                                 fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_rejects_trybuild_diagnostic_text_changes_error_code(self) -> None:
+        """A kind label must not launder a change to which diagnostic actually fired."""
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/tests/ui/rejected.stderr"
+            before = fixture.FILES[path]
+            after = (
+                "error[E0599]: no method named `foo` found\n"
+                " --> tests/ui/rejected.rs:3:5\n"
+                "  |\n"
+                "3 |     5\n"
+                "  |     ^ expected `()`, found integer\n"
+            )
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "swap the diagnostic", "kind": "trybuild_diagnostic_text",
+                "before": before, "after": after,
+            }])
+            with self.assertRaisesRegex(SystemExit, "changes the diagnostic error codes"):
+                validate_import(provenance, fixture.source_repo, fixture.destination,
+                                 fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_rejects_trybuild_diagnostic_text_changes_location(self) -> None:
+        """A kind label must not launder a change to where the diagnostic points."""
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/tests/ui/rejected.stderr"
+            before = fixture.FILES[path]
+            after = (
+                "error[E0308]: mismatched types\n"
+                " --> tests/ui/rejected.rs:99:1\n"
+                "  |\n"
+                "3 |     5\n"
+                "  |     ^ expected `()`, found integer\n"
+            )
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "move the location", "kind": "trybuild_diagnostic_text",
+                "before": before, "after": after,
+            }])
+            with self.assertRaisesRegex(SystemExit, "changes the diagnostic source locations"):
+                validate_import(provenance, fixture.source_repo, fixture.destination,
+                                 fixture.handoff_text(), doc_repo=fixture.doc_repo)
 
     def test_accepts_when_repo_advances_past_accepted_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

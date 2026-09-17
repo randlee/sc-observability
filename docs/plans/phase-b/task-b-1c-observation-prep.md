@@ -18,9 +18,10 @@ contract remain authoritative for exact behavior and compatibility.
 
 - [x] Add typed configuration defaults and service-name validation.
 - [x] Add typed construction through the existing builder and runtime.
-- [x] Add typed `emit`, flush, and idempotent shutdown paths without changing
-  `ObservationError`, registration methods, filtering, ordering, aggregation,
-  health, or legacy signatures.
+- [x] Preserve the unchanged producer-facing `emit` path and add typed flush
+  and idempotent shutdown paths without changing `ObservationError`,
+  registration methods, filtering, ordering, aggregation, health, or legacy
+  signatures.
 - [x] Register real typed subscriber/projector implementations through the
   existing legacy registration boundaries and preserve one invocation per
   route.
@@ -29,6 +30,20 @@ contract remain authoritative for exact behavior and compatibility.
   source/context retention, and concurrent shutdown.
 - [x] Record the observation inventory and exact validation evidence in
   `handoff-b-1c.md`.
+
+## C02/C03 completion checklist
+
+- [x] Pair legacy and typed construction through the real public facade,
+  including empty-route and downstream logger initialization failures.
+- [x] Pair eligible/ineligible filtering, deterministic ordering, no matching
+  type, mixed success/failure, and all-failure routing assertions through the
+  unchanged registration methods.
+- [x] Pair output-family invocation counts and lifecycle flush/shutdown
+  outcomes, including repeated/concurrent shutdown behavior.
+- [x] Verify custom and wrong-family diagnostic codes retain source/context
+  through the observation adapters.
+- [x] Replace blanket evidence claims with scenario-to-assertion mappings and
+  pin provenance evidence to the merged parent SHA and current test count.
 
 ## Boundaries
 

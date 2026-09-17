@@ -1,0 +1,5 @@
+error[E0451]: field `_private` of struct `LogControl` is private
+ --> tests/ui/log_control_not_constructible.rs:3:40
+  |
+3 |     sc_observability_log::LogControl { _private: () }
+  |                                        ^^^^^^^^ private field

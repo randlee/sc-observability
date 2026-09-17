@@ -186,6 +186,24 @@ shutdown operations while retaining existing exporters, telemetry lifecycle,
 projector registration, serialization, and public error surfaces. Copied-bridge
 integration, warning rollout, publication, and independent QA remain separate.
 
+### B.1 — Copy the corrected generic BTIT crates
+
+The mechanical copy sprint is tracked in
+[`plans/phase-b/sprint-b-1-copy.md`](./plans/phase-b/sprint-b-1-copy.md). It
+copies `crates/sc-observability-log`, `crates/sc-observability-log-macros`,
+and CI-only `crates/sc-observability-log-consumer-check` from the accepted
+BTIT source `396a9d9f77ca1950eeb92d4f88c0eecadb5ef00b` (`docs/plans/phase-b/handoff-b-p3.md`),
+wires them into the workspace with `publish = false`, and records exact
+per-file provenance and permitted mechanical adaptations in
+`docs/plans/phase-b/import-provenance.json`, verified by
+`scripts/ci/validate_log_import.py`. All 85 copied source files are
+byte-identical to the accepted source by Git blob ID; the only content
+adaptations are workspace-inherited `[package]` metadata and four
+toolchain-drift `trybuild` `.stderr` fixtures (this workspace pins Rust
+`1.94.1`, BTIT pins `1.98.1`), recorded as a disposition in the sprint doc.
+Independent QA and API approval remain pending; publication remains deferred
+to B.7.
+
 ### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
 
 [`plans/phase-b/task-b-1-provenance-prep.md`](./plans/phase-b/task-b-1-provenance-prep.md)

@@ -1,7 +1,8 @@
 ---
 id: B.1
-status: proposed
+status: complete
 branch: feature/phase-b-1-copy
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1-copy
 base: develop
 ---
 
@@ -153,6 +154,30 @@ never substitute the previously inspected source or a conventional review path.
 The imported API freeze/consumer fixtures validate the new private packages;
 existing published-core API/semver gates must also remain green in normal CI.
 A pre-existing failure needs recorded disposition; it cannot be silently waived.
+
+### Recorded disposition: trybuild toolchain drift
+
+BTIT's `rust-toolchain.toml` pins channel `1.98.1`; this workspace's
+`rust-toolchain.toml` pins `1.94.1` (matching this repo's own `rust-version`).
+Four `sc-observability-log` `trybuild` `.stderr` fixtures
+(`event_span_macro.stderr`, `field_not_serialize_or_debug.stderr`,
+`instrument_entered_across_await.stderr`, `log_control_not_owner.stderr`) fail
+byte-for-byte against the accepted BTIT blob under this workspace's pinned
+rustc: only pretty-printer wording, path qualification, and surrounding
+source-context lines differ between the two rustc releases; the diagnostic
+code, its `-->` source location, and the rejected operation are unchanged in
+every case (lead-reviewed; see `import-provenance.json`'s
+`trybuild_diagnostic_text` adaptations). Regenerated once with
+`TRYBUILD=overwrite` against the destination's pinned toolchain; the
+underlying `.rs` UI-test sources are unchanged (byte-identical to the accepted
+source blob). `scripts/ci/validate_log_import.py` gained a
+`trybuild_diagnostic_text` adaptation `kind`, restricted to `tests/ui/*.stderr`
+files, requiring the same ordered sequence of diagnostic codes and the same
+ordered sequence of `-->` locations on both sides (both non-empty) -- the
+same structural-equivalence approach already used for `dependency_path` and
+`relocated_doc_or_test_path`. Ordinary CI trybuild runs execute normally
+against the destination-pinned toolchain with no `TRYBUILD=overwrite` in
+effect.
 
 ## Paths to delete
 

@@ -40,7 +40,8 @@ Independent comparisons exist because they catch different failure modes:
   actually used.
 - destination vs provenance: catches a copy step that changed more than the
   declared mechanical adaptations (package metadata, dependency paths,
-  relocated test/doc paths). A blob difference here is only allowed when its
+  relocated test/doc paths, or a `trybuild` fixture's toolchain-specific
+  wording). A blob difference here is only allowed when its
   path is explicitly listed in `adaptations` with a reason, a permitted
   mechanical `kind`, exact approved before/after content, and every changed
   line fully matching (not merely containing) that kind's own narrow syntax
@@ -78,8 +79,13 @@ IMPORT_CRATE_PREFIXES = (
 )
 
 _KIND_LINE_PATTERNS = {
+    # `(\.workspace)?` accepts both a hard-coded literal (`version = "0.1.0"`)
+    # and workspace-inherited form (`version.workspace = true`) -- the actual
+    # mechanical need for B.1's copy, converting a source crate's hard-coded
+    # `[package]` metadata to this workspace's inherited form.
     "package_metadata": re.compile(
-        r"^\s*(publish|version|edition|description|license|repository|readme|keywords|categories|authors|homepage)\s*=\s*.+$"
+        r"^\s*(publish|version|edition|rust-version|description|license|repository|readme|keywords|categories|authors|homepage)"
+        r"(\.workspace)?\s*=\s*.+$"
     ),
     "dependency_path": re.compile(
         r'^\s*(path|version|git|branch|rev)\s*=\s*"[^"]*"\s*,?\s*$'
@@ -98,10 +104,29 @@ _KIND_LINE_PATTERNS = {
         r'|^\s*include!\(\s*"[^"]+"\s*\)\s*;?\s*$'
         r'|^\s*"[\w./-]+\.(md|rs)"\s*,?\s*$'
     ),
+    # A `trybuild` `.stderr` fixture is free-form rustc pretty-printer prose,
+    # not fixed syntax, so no narrow per-line shape can bound it the way the
+    # other kinds are bounded. The real guarantee is the structural check in
+    # `_validate_diagnostic_text_change`: the same diagnostic codes at the
+    # same source locations, in the same order:
+    "trybuild_diagnostic_text": re.compile(r".*"),
 }
 
 # `package_metadata` and `dependency_path` describe Cargo manifest edits only.
 _CARGO_TOML_ONLY_KINDS = frozenset({"package_metadata", "dependency_path"})
+
+# `trybuild_diagnostic_text` describes only a `trybuild` UI-test fixture
+# snapshot, which is compiler-toolchain-version-specific by construction:
+# moving a crate into a workspace pinning a different Rust toolchain than the
+# one that generated the fixture (recorded here, not invented) legitimately
+# changes rustc's pretty-printer wording without changing what the fixture
+# proves.
+_TRYBUILD_STDERR_ONLY_KINDS = frozenset({"trybuild_diagnostic_text"})
+
+
+def _is_trybuild_stderr_path(path: str) -> bool:
+    p = Path(path)
+    return p.suffix == ".stderr" and p.parent.name == "ui" and p.parent.parent.name == "tests"
 
 # Dependency-table structural parsing for `dependency_path`: a full-line regex
 # proves each changed line is syntactically a dependency assignment, but not
@@ -388,6 +413,57 @@ def _validate_relocation_change(before: str, after: str, path: str) -> None:
         )
 
 
+_DIAGNOSTIC_HEADER_RE = re.compile(r"^(error(?:\[E\d+\])?):")
+_DIAGNOSTIC_LOCATION_RE = re.compile(r"^\s*-->\s*(\S+)\s*$")
+
+
+def _diagnostic_profile(content: str) -> tuple[list[str], list[str]]:
+    headers: list[str] = []
+    locations: list[str] = []
+    for line in content.splitlines():
+        header_match = _DIAGNOSTIC_HEADER_RE.match(line)
+        if header_match:
+            headers.append(header_match.group(1))
+            continue
+        location_match = _DIAGNOSTIC_LOCATION_RE.match(line)
+        if location_match:
+            locations.append(location_match.group(1))
+    return headers, locations
+
+
+def _validate_diagnostic_text_change(before: str, after: str, path: str) -> None:
+    """Require a `trybuild_diagnostic_text` change to preserve what failed and where.
+
+    rustc's pretty-printer wording (and how much surrounding source context it
+    prints) is toolchain-version-specific, so no per-line syntax can bound
+    this kind's prose the way the other kinds are bounded. Instead, the same
+    ordered sequence of diagnostic codes (`error[EXXXX]`/bare `error`) and the
+    same ordered sequence of `-->` source locations must appear on both
+    sides -- preserving which error fired and at what source position, while
+    still allowing the surrounding message text to differ. Both sides must
+    carry a nonempty profile: a stray non-diagnostic file mislabeled with this
+    kind (or one whose diagnostics were emptied out) has nothing to prove it
+    still rejects the same thing.
+    """
+    before_headers, before_locations = _diagnostic_profile(before)
+    after_headers, after_locations = _diagnostic_profile(after)
+    if not before_headers or not before_locations or not after_headers or not after_locations:
+        raise SystemExit(
+            f"adaptation for {path} has an empty diagnostic error/location profile on one side, "
+            "not a permitted trybuild_diagnostic_text mechanical change"
+        )
+    if before_headers != after_headers:
+        raise SystemExit(
+            f"adaptation for {path} changes the diagnostic error codes or their order, "
+            "not a permitted trybuild_diagnostic_text mechanical change"
+        )
+    if before_locations != after_locations:
+        raise SystemExit(
+            f"adaptation for {path} changes the diagnostic source locations, "
+            "not a permitted trybuild_diagnostic_text mechanical change"
+        )
+
+
 def validate_adaptations(adaptations: list[dict], recorded_inventory: dict[str, str], cwd: Path) -> dict[str, str]:
     """Verify every declared adaptation and return the expected destination inventory.
 
@@ -422,6 +498,8 @@ def validate_adaptations(adaptations: list[dict], recorded_inventory: dict[str, 
             raise SystemExit(f"adaptation for {path} has a kind that is not a permitted mechanical change: {kind}")
         if kind in _CARGO_TOML_ONLY_KINDS and Path(path).name != "Cargo.toml":
             raise SystemExit(f"adaptation for {path} has kind {kind} but is not a Cargo.toml file")
+        if kind in _TRYBUILD_STDERR_ONLY_KINDS and not _is_trybuild_stderr_path(path):
+            raise SystemExit(f"adaptation for {path} has kind {kind} but is not a tests/ui/*.stderr file")
         before, after = item.get("before"), item.get("after")
         if before is None or after is None:
             raise SystemExit(f"adaptation for {path} is missing exact approved before/after content")
@@ -436,6 +514,8 @@ def validate_adaptations(adaptations: list[dict], recorded_inventory: dict[str, 
             _validate_dependency_path_change(before, after, path)
         elif kind == "relocated_doc_or_test_path":
             _validate_relocation_change(before, after, path)
+        elif kind == "trybuild_diagnostic_text":
+            _validate_diagnostic_text_change(before, after, path)
         expected[path] = blob_id_of_content(after, cwd)
     return expected
 
