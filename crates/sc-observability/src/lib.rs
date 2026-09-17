@@ -1827,6 +1827,13 @@ mod tests {
             "writer should enter the injected sink",
         );
 
+        // A failed flush is the synchronization point: send failure proves the
+        // worker has unwound and dropped its receiver.
+        let legacy_flush = logger.flush().expect_err("legacy flush is disconnected");
+        assert_eq!(
+            legacy_flush.diagnostic().code,
+            error_codes::LOGGER_WRITER_DEGRADED
+        );
         assert!(matches!(
             logger.try_log(log_event(service_name())),
             Err(TryLogError::WriterDegraded(_))
@@ -1835,11 +1842,6 @@ mod tests {
             logger.try_log_typed(log_event(service_name())),
             Err(TryLogFailure::WriterDegraded(_))
         ));
-        let legacy_flush = logger.flush().expect_err("legacy flush is disconnected");
-        assert_eq!(
-            legacy_flush.diagnostic().code,
-            error_codes::LOGGER_WRITER_DEGRADED
-        );
         let typed_flush = logger
             .flush_typed()
             .expect_err("typed flush is disconnected");
@@ -2301,7 +2303,7 @@ mod tests {
 
     #[test]
     fn typed_admission_and_flush_can_run_concurrently() {
-        use std::sync::Barrier;
+        use std::sync::{Barrier, mpsc};
 
         let root = temp_path("typed-admission-flush-concurrency");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
@@ -2309,30 +2311,38 @@ mod tests {
         config.enable_console_sink = false;
         let logger = Arc::new(Logger::new_typed(config).expect("typed logger"));
         let barrier = Arc::new(Barrier::new(3));
+        let (flush_tx, flush_rx) = mpsc::channel();
+        let (admission_tx, admission_rx) = mpsc::channel();
 
         let flush_logger = logger.clone();
         let flush_barrier = barrier.clone();
         let flush = std::thread::spawn(move || {
             flush_barrier.wait();
-            flush_logger.flush_typed()
+            let _ = flush_tx.send(flush_logger.flush_typed());
         });
 
         let admission_logger = logger.clone();
         let admission_barrier = barrier.clone();
         let admission = std::thread::spawn(move || {
             admission_barrier.wait();
-            admission_logger.try_log_with_outcome_typed(log_event(service_name()))
+            let _ = admission_tx
+                .send(admission_logger.try_log_with_outcome_typed(log_event(service_name())));
         });
 
         barrier.wait();
-        flush.join().expect("flush thread").expect("typed flush");
+        flush_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("flush completion must be bounded")
+            .expect("typed flush");
         assert_eq!(
-            admission
-                .join()
-                .expect("admission thread")
+            admission_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("admission completion must be bounded")
                 .expect("typed admission"),
             AdmissionOutcome::Accepted
         );
+        flush.join().expect("flush thread");
+        admission.join().expect("admission thread");
 
         let Ok(logger) = Arc::try_unwrap(logger) else {
             panic!("all concurrent handles dropped");
