@@ -146,9 +146,10 @@ class _Observer:
         if self.permit is not None:
             self.permit.release()
         self.pool.observers.pop(id(self), None)
-        if self.timer is not None:
-            self.timer.cancel()
-            self.timer = None
+        timer = self.timer
+        self.timer = None
+        if timer is not None:
+            timer.cancel()
         self.operation = None
 
     def finish(self, result: Result[generated.Completion]) -> None:

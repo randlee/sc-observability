@@ -178,7 +178,7 @@ impl NativeObserverIdentity {
         use std::sync::atomic::Ordering;
         self.count
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
-                (count < 64).then_some(count + 1)
+                if count < 64 { Some(count + 1) } else { None }
             })
             .ok()?;
         Some(NativeObserverPermit {
