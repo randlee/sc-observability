@@ -186,6 +186,19 @@ shutdown operations while retaining existing exporters, telemetry lifecycle,
 projector registration, serialization, and public error surfaces. Copied-bridge
 integration, warning rollout, publication, and independent QA remain separate.
 
+### B.1e — Typed error migration preparation
+
+The scoped migration-preparation layer is tracked in
+[`plans/phase-b/task-b-1e-migration-prep.md`](./plans/phase-b/task-b-1e-migration-prep.md)
+and is based on the authoritative
+[`sprint-b-1e-error-adoption.md`](./plans/phase-b/sprint-b-1e-error-adoption.md)
+and [error contract](./plans/phase-b/error-api-contract.md). It records the
+exact legacy-wrapper and method replacements, supported owner-constructor
+exemptions, typed matching/source-retention guidance and narrow warning policy
+against the merged B.1d API. This child is docs/inventory-only: deprecation
+activation, ordinary production migration, downstream fixtures/validator, CI,
+publication and removal remain separately gated by B.2/B.7 and their owners.
+
 ### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
 
 [`plans/phase-b/task-b-1-provenance-prep.md`](./plans/phase-b/task-b-1-provenance-prep.md)

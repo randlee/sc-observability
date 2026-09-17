@@ -22,3 +22,6 @@ Phase A: writer-thread optimization and public API governance.
 - `log()` blocks until the entry is enqueued; `try_log()` returns `Err(TryLogError::QueueFull)` on a saturated queue
 - `LoggingHealthReport` now includes queue and writer health fields
 - `LogSink`, `LogFilter`, and `Redactor` traits carry explicit open-contract doc comments
+- The Phase B typed error methods and migration-warning rollout are proposed
+  follow-on work, not part of the v1.2.0 publication; no legacy removal schedule
+  or major-release claim is made.

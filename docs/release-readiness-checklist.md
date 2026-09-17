@@ -21,3 +21,5 @@
 - [x] Migration guide for ATM consumers exists.
 - [x] Performance review is documented.
 - [x] Final pre-publish review reports zero blocking findings.
+- [ ] B.1e typed-error migration warning rollout is separately qualified; the
+  current preparation docs/inventory do not assert publication or removal.
