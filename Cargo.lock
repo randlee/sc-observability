@@ -223,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability"
-version = "1.2.0"
+version = "1.4.0"
 dependencies = [
  "sc-observability-types",
  "serde",
@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-log"
-version = "1.2.0"
+version = "1.4.0"
 dependencies = [
  "hostname",
  "log",
@@ -262,14 +262,14 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-log-consumer-check"
-version = "1.2.0"
+version = "1.4.0"
 dependencies = [
  "sc-observability-log",
 ]
 
 [[package]]
 name = "sc-observability-log-macros"
-version = "1.2.0"
+version = "1.4.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -278,7 +278,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-otlp"
-version = "1.2.0"
+version = "1.4.0"
 dependencies = [
  "sc-observability",
  "sc-observability-types",
@@ -289,7 +289,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-types"
-version = "1.2.0"
+version = "1.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -299,7 +299,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observe"
-version = "1.2.0"
+version = "1.4.0"
 dependencies = [
  "sc-observability",
  "sc-observability-types",

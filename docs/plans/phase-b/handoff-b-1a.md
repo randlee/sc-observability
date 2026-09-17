@@ -94,3 +94,24 @@ python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py
 
 The final parent merge-forward was `b69b8c5d2574e21f94c686d135686d7b42ac6509`
 from `feature/phase-b-1-provenance-prep`; no provenance tooling was edited.
+
+## Integration-layer status addendum (feature/phase-b-1-integration)
+
+Implementation-complete, confirmed against merged source: all nine
+`typed::*Failure` families, `ClassifiedError`, and the adapter traits listed
+above are present and unchanged from this handoff's description. Registry
+parity across all nine families is now proven by an executable test
+(`crates/sc-observability-otlp/tests/error_registry_parity.rs`, 9 tests, all
+passing), superseding the "workspace-level registry parity... remain pending"
+line above. The checked `error-api-inventory.md` (also owned by the
+integration layer) records every production, feature-gated, and copied-bridge
+use of `IdentityError`, the only B.1a-owned family the frozen bridge import
+touches.
+
+Still not established by this addendum: independent QA/coordinator
+completeness PASS for either this preparation layer or the integration layer
+itself, and the copied-bridge `IdentityError` call sites' narrow deprecated-use
+allowance is coordinated with lobs and not yet fully landed (provenance
+manifest side pending as of this writing). This addendum reports evidence
+gathered by the integration layer; it does not itself constitute the
+coordinator's completeness review.

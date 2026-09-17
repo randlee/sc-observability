@@ -12,6 +12,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 QUALIFICATION = ROOT / "release" / "runtime-level-qualification.toml"
 PUBLISH_ARTIFACTS = ROOT / "release" / "publish-artifacts.toml"
+# B.1 companion crates copied alongside the staged/published core: none of them
+# is a publish-artifacts.toml roster member, so they are workspace members
+# that the staged-order check below must tolerate without being treated as
+# staged/publishable packages themselves.
+UNPUBLISHED_COMPANION_PACKAGES = (
+    "sc-observability-log",
+    "sc-observability-log-macros",
+    "sc-observability-log-consumer-check",
+)
+# The consumer-check crate is CI-only and must never be staged/published.
+PRIVATE_ONLY_COMPANION_PACKAGES = ("sc-observability-log-consumer-check",)
 PLATFORMS = ("macos", "ubuntu", "windows")
 PLATFORM_ASSERTIONS = (
     "baseline_exact_resolution",

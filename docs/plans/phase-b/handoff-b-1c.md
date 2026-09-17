@@ -69,7 +69,7 @@ Behavior/source-integrity pass:
 
 ```text
 cargo fmt --all -- --check: passed
-cargo test --locked --workspace: 178 unit/integration tests passed; 0 failed; 6 normal doctests passed; 2 compile-fail doctests passed
+cargo test --locked --workspace: historical preparation command only; this handoff does not retain a raw aggregate count or doctest total
 cargo clippy --locked --workspace --all-targets -- -D warnings: passed
 python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py': 41 tests, OK
 bash scripts/ci/validate_docs_consistency.sh: passed
@@ -84,3 +84,27 @@ The final parent merge-forward is
 logger/provenance changes and no lower layer was edited.
 This is preparation evidence only: copied bridge source import, independent QA,
 and full B.1c integration acceptance remain pending.
+
+## Integration-layer status addendum (feature/phase-b-1-integration)
+
+Implementation-complete, confirmed against merged source: B.1c owns no
+dedicated legacy wrapper family of its own (`sc-observe`'s `InitError`/
+`FlushError`/`ShutdownError`/`ProjectionError`/`SubscriberError` uses are the
+shared core families already covered under B.1b/B.1d's rows); its
+`OBSERVABILITY_INIT_FAILED`, `OBSERVABILITY_FLUSH_FAILED`, and
+`OBSERVATION_ROUTING_FAILURE` registry constants are exercised by
+`error_registry_parity.rs`'s `init_failure_matches_owning_registry`,
+`flush_failure_matches_owning_registry`, and
+`projection_failure_matches_owning_registry`/`subscriber_failure_matches_owning_registry`
+tests, all passing. The frozen bridge import does not call into `sc-observe`
+directly, so this layer has no copied-bridge occurrence of its own in
+`error-api-inventory.md`.
+
+Separately, cobs pushed observation QA fixes on this task's direct parent
+branch (`fix/phase-b-1c-qa1`: shutdown-transition coherence, health-through-
+shutdown retention, and bounded shutdown/flush completion fixes) after this
+handoff was written; those are merged into the integration branch and covered
+by `cargo test --locked --workspace`, which passes. Those are cobs's fixes to
+this layer's runtime behavior, not new evidence produced by this addendum.
+Independent QA/coordinator completeness PASS remains pending for both this
+preparation layer and the integration layer.

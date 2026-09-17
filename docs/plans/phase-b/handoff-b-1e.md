@@ -95,3 +95,87 @@ release publication, a removal schedule, a major release, or sprint-wide
 completion. B.1e implementation/validation activates the warning path; this
 scoped prep leaves that implementation pending, B.2 qualifies/stages its
 result, and B.7 alone publishes it.
+
+## B.1e implementation handoff
+
+The implementation correction pass is on
+`feature/phase-b-1e-migration-validation`, based on and merged with the active
+QA1 parent `origin/fix/phase-b-1ab-qa1` at `4299e25b7506a6e1d0852a2f3784d954a796329f`
+before final validation. The correction source/fixture commit is `331a0db`;
+the integrated validation merge head at this pass is `f79c4eb`. The child
+activates all nine wrapper warnings and 20 mapped method warnings at
+`since = "1.4.0"`, while retaining the three supported method exemptions and
+`Logger::emit` at its existing `since = "1.2.0"`. Ordinary observation routing
+uses `log_typed` and `flush_typed`; mixed production and compatibility modules
+use named, reason-bearing allowances. The copied `sc-observability-log` bridge
+keeps its public signatures unchanged and has only boundary/item allowances
+for its retained legacy identity, logger, lifecycle and sink paths; those
+allowances are recorded here as compatibility evidence, not as provenance
+rewrites.
+
+The M01–M05 correction evidence is:
+
+- M01: the validator inventories exactly 29 targets, checks each local
+  attribute and exact replacement note, requires one `deprecated` code and one
+  `src/main.rs` primary span per JSON diagnostic, rejects secondary spans and
+  unexpected notes, and tests broad-allow/unexpected-warning negatives.
+- M02: the legacy fixture exercises all nine wrapper names, every mapped
+  method, explicit `InitError` tuple/field access, and the exempt owner
+  constructors; the deny-deprecated fixture exercises both owner constructors
+  and both typed counterparts without a blanket allowance, while the validator
+  separates wrapper diagnostics from method diagnostics.
+- M03: the migrated fixture runs root-glob imports, all five legacy/typed
+  adapter directions, both sink directions, mixed subscriber/projector
+  registration, successful and failing observation routes, custom and wrong
+  family kind fallback, source-chain preservation, and the legacy fixture
+  checks the serialized `InitError` golden and span path.
+- M04: ordinary production projection/lifecycle paths call typed APIs; copied
+  bridge signatures remain unchanged and its compatibility allowances are
+  narrow, named and reason-bearing.
+- M05: the local implementation checklist and this handoff record the second
+  verification pass; B.2 qualification and B.7 publication remain pending.
+
+The implementation evidence is:
+
+```text
+python3 scripts/ci/validate_error_migration.py
+B.1e migration validation: PASS (source contract, JSON diagnostics, and all fixtures)
+cargo check --workspace --message-format=short
+PASS; remaining warnings are confined to the copied sc-observability-log bridge
+cargo fmt --all -- --check
+PASS
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+PASS
+cargo test --workspace
+PASS; all workspace tests and doctests passed
+```
+
+The validator runs standalone `legacy`, `migrated` and `partial` Cargo
+workspaces, parses every target warning as JSON, executes each fixture, checks
+the legacy serialized `InitError` golden, verifies typed kind fallback and
+source-chain handling, exercises the full adapter matrix, and rejects broad
+fixture allowances. B.2 still owns qualification/staging and B.7 owns
+publication; no removal schedule or major release is introduced.
+
+## Integration-layer status addendum (feature/phase-b-1-integration)
+
+Confirmed against merged source at `68f1443` (the further-integrated head
+merged into the integration branch): the bridge's narrow, named, reason-
+bearing `#[allow(deprecated, reason = ...)]` annotations are landed in
+`control.rs`, `handle.rs`, and `mapping.rs`, and workspace clippy passes
+clean, single-step, `-D warnings`, with no bridge-wide suppression.
+
+One gap found while verifying this against the actual BTIT provenance proof
+(not just clippy): `python3 scripts/ci/validate_log_import.py --source-repo
+<BTIT repo>` reports "unexplained content difference" for `control.rs`,
+because `import-provenance.json`'s `adaptations` array and
+`validate_log_import.py`'s `_KIND_LINE_PATTERNS` were not extended with a new
+kind covering these lint-attribute lines, so they read as undocumented drift
+against the pinned source bytes rather than a recorded adaptation. This
+addendum's "recorded here as compatibility evidence, not as provenance
+rewrites" line above describes the intent correctly, but the provenance
+manifest itself does not yet reflect that intent. Reported to lobs
+(01M2Q8NKYWG91F234H9PJWSDFF) for the adaptation-kind extension and provenance
+entries; not fixed by the integration layer since it is warning-allowance/
+migration-source scope. B1I-C01 (the integration layer's fix-round finding
+requesting exactly this narrow mechanism) remains open pending that landing.

@@ -62,6 +62,10 @@ pub use sc_observability_types::{
     SchemaVersion, ServiceName, SinkHealth, SinkHealthState, SinkName, TargetCategory, Timestamp,
     WriterState,
 };
+#[allow(
+    deprecated,
+    reason = "the facade retains legacy error names in its public compatibility surface"
+)]
 use sc_observability_types::{LevelFilter, ProcessIdentityPolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
@@ -418,6 +422,10 @@ pub trait LogFilter: Send + Sync {
 /// This trait is intentionally open for downstream implementations. Adding
 /// required methods or tightening object-safety guarantees is therefore a
 /// semver-significant public API change.
+#[allow(
+    deprecated,
+    reason = "LogSink preserves its published LogSinkError trait signature"
+)]
 pub trait LogSink: Send + Sync {
     /// Writes one event to the sink.
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
@@ -571,6 +579,10 @@ impl LevelOwner {
 }
 
 /// Blocking queue-admission error surface for `Logger::log(...)`.
+#[allow(
+    deprecated,
+    reason = "LogError is the retained legacy boundary paired with LogFailure"
+)]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
 pub enum LogError {
     #[error(transparent)]
@@ -585,6 +597,10 @@ pub enum LogError {
 }
 
 /// Non-blocking queue-admission error surface for `Logger::try_log(...)`.
+#[allow(
+    deprecated,
+    reason = "TryLogError is the retained legacy boundary paired with TryLogFailure"
+)]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
 pub enum TryLogError {
     #[error(transparent)]
@@ -684,12 +700,20 @@ mod sealed_emitters {
     dead_code,
     reason = "crate-local emitter trait is intentionally available for logging-only injection"
 )]
+#[allow(
+    deprecated,
+    reason = "the crate-local compatibility emitter preserves its EventError signature"
+)]
 pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
 }
 
 impl sealed_emitters::Sealed for Logger<Running> {}
 
+#[allow(
+    deprecated,
+    reason = "the crate-local compatibility emitter delegates through the retained legacy logger boundary"
+)]
 impl LogEmitter for Logger<Running> {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError> {
         self.log(event).map_err(|error| match error {
@@ -1069,6 +1093,51 @@ mod tests {
         }
 
         panic!("{message}");
+    }
+
+    fn release_test_pass_delay(signal: &Arc<crate::maintenance::TestPassDelaySignal>) {
+        signal.release_delay();
+        wait_for(
+            || !signal.is_active(),
+            "expected maintenance worker to leave the released test gate",
+        );
+        assert!(
+            !signal.wait_timed_out(),
+            "the normal fixture path must not continue after a test-gate timeout"
+        );
+    }
+
+    #[test]
+    fn test_pass_delay_timeout_is_explicit_and_bounded() {
+        let signal = crate::maintenance::TestPassDelaySignal::default();
+        signal.block_delay_until_released();
+
+        let started = Instant::now();
+        assert_eq!(
+            signal.wait_until_released_for(Duration::from_millis(10)),
+            crate::maintenance::TestPassDelayWait::TimedOut
+        );
+        assert!(
+            started.elapsed() < Duration::from_millis(250),
+            "the test-gate timeout must use one bounded deadline"
+        );
+        assert!(signal.wait_timed_out());
+    }
+
+    #[test]
+    fn test_pass_delay_release_guard_unblocks_waiter_on_drop() {
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
+        let release_guard = signal.release_on_drop();
+        let waiting_signal = signal.clone();
+        let waiter = std::thread::spawn(move || waiting_signal.wait_until_released());
+
+        drop(release_guard);
+        assert_eq!(
+            waiter.join().expect("test-gate waiter"),
+            crate::maintenance::TestPassDelayWait::Released
+        );
+        assert!(!signal.wait_timed_out());
     }
 
     fn bytes(value: u64) -> ByteCount {
@@ -1816,7 +1885,7 @@ mod tests {
             !shutdown_finished.load(Ordering::SeqCst),
             "shutdown must remain blocked until the maintenance gate is released"
         );
-        signal.release_delay();
+        release_test_pass_delay(&signal);
         let stopped = shutdown
             .join()
             .expect("shutdown thread should complete after the maintenance gate is released");
@@ -1855,7 +1924,7 @@ mod tests {
             logger.try_log_typed(log_event_with_request(service_name(), "typed-full", 10)),
             Err(TryLogFailure::QueueFull(_))
         ));
-        signal.release_delay();
+        release_test_pass_delay(&signal);
     }
 
     #[test]
@@ -2660,7 +2729,7 @@ mod tests {
                 ..
             } if diagnostic.code == error_codes::LOGGER_QUEUE_FULL
         ));
-        signal.release_delay();
+        release_test_pass_delay(&signal);
         let _ = logger.shutdown();
     }
 
@@ -2703,7 +2772,7 @@ mod tests {
             owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application),
             Err(LevelChangeError::Stopping)
         ));
-        signal.release_delay();
+        release_test_pass_delay(&signal);
         let stopped = shutdown.join().expect("shutdown thread");
         assert_eq!(stopped.level_state(), initial_state);
         assert!(matches!(
@@ -2737,7 +2806,7 @@ mod tests {
             signal.is_active(),
             "maintenance remains gated while the concurrent emit completes"
         );
-        signal.release_delay();
+        release_test_pass_delay(&signal);
     }
 
     #[test]

@@ -1,3 +1,8 @@
+#![allow(
+    deprecated,
+    reason = "routing integration compatibility fixtures exercise the retained trait errors"
+)]
+
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 

@@ -11,6 +11,10 @@
 
 use std::borrow::Cow;
 
+#[allow(
+    deprecated,
+    reason = "the copied log-facade bridge preserves its legacy identity resolver boundary"
+)]
 use sc_observability_types::{
     ActionName, ErrorContext, IdentityError, Level, LogEvent, Observation, ProcessIdentity,
     ProcessIdentityPolicy, Remediation, ServiceName, TargetCategory,
@@ -165,6 +169,10 @@ pub fn field_key_label(raw: &str) -> Result<Cow<'_, str>, LabelError> {
 /// resolves it and stamps every `LogEvent.identity` with the cached value. Every
 /// failure carries the stable code `SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED`
 /// and a remediation for its own path; a resolver's error is kept as the source.
+#[allow(
+    deprecated,
+    reason = "the copied log-facade bridge preserves its legacy identity resolver boundary"
+)]
 pub(crate) fn resolve_identity(
     policy: &ProcessIdentityPolicy,
 ) -> Result<ProcessIdentity, IdentityError> {
@@ -196,6 +204,10 @@ pub(crate) fn resolve_identity(
 /// Resolves `ProcessIdentityPolicy::Auto` with `hostname_of` (production: `hostname::get`).
 ///
 /// A failed or empty hostname lookup is an error; the pid is the current process id.
+#[allow(
+    deprecated,
+    reason = "the copied log-facade bridge preserves its legacy identity resolver boundary"
+)]
 fn resolve_auto_identity(
     hostname_of: impl FnOnce() -> std::io::Result<std::ffi::OsString>,
 ) -> Result<ProcessIdentity, IdentityError> {
@@ -396,6 +408,10 @@ pub(crate) fn assemble_event(
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "legacy identity wrapper assertions cover the copied bridge compatibility contract"
+)]
 mod tests {
     use std::sync::Arc;
 

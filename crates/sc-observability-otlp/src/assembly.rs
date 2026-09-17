@@ -12,11 +12,14 @@
     clippy::must_use_candidate,
     reason = "small constructor/accessor methods are intentionally kept free of repetitive must_use decoration"
 )]
-
 use std::collections::HashMap;
 
 use crate::error_codes;
 use sc_observability_types::typed::EventFailure;
+#[allow(
+    deprecated,
+    reason = "span assembly retains its published EventError adapter boundary"
+)]
 use sc_observability_types::{
     ErrorContext, EventError, Remediation, SpanEnded, SpanEvent, SpanRecord, SpanSignal,
     SpanStarted,
@@ -55,6 +58,10 @@ impl SpanAssembler {
     }
 
     /// Pushes one lifecycle signal through the assembler.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility assembler method keeps the published EventError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use SpanAssembler::push_typed(); see migrate-error-api.md."

@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "log facade bridge and tracing-compatible macros for sc-observability structured JSONL logging."
-publish = false
+publish = true
 
 [features]
 # CI-only release fixture; it proves initialization rejects a baseline above
