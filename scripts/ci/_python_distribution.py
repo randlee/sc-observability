@@ -23,7 +23,7 @@ class DistributionError(ValueError):
 def runtime_options(contract: dict) -> tuple[list[str], dict[str, str]]:
     """Only strengthening interpreter settings are configurable by later suites."""
     flags, environment = ['-I'], {}
-    for key in ('asyncio_debug', 'warnings_as_errors'):
+    for key in ('asyncio_debug', 'warnings_as_errors', 'embedding_in_each_cell'):
         if key in contract and type(contract[key]) is not bool:
             raise DistributionError(f'{key} must be a boolean')
     if contract.get('asyncio_debug'):
