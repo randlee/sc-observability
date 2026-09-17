@@ -14,6 +14,20 @@ from _python_distribution import DistributionError, extract_sdist, inspect_wheel
 
 
 class DistributionTests(unittest.TestCase):
+    def test_timeout_kills_descendants_that_hold_output_pipes(self):
+        import os
+        import time
+        from _python_sandbox import bounded_command
+        with tempfile.TemporaryDirectory() as temporary:
+            started = time.monotonic()
+            with self.assertRaisesRegex(DistributionError, 'exceeded.*child launched'):
+                bounded_command([sys.executable, '-u', '-c',
+                    'import subprocess,sys,time; '
+                    'subprocess.Popen([sys.executable,"-c","import time; time.sleep(30)"]); '
+                    'print("child launched",flush=True); time.sleep(30)'],
+                    Path(temporary), dict(os.environ), timeout=0.5)
+            self.assertLess(time.monotonic() - started, 10)
+
     def test_tracked_source_copy_excludes_generated_caches_without_removing_them(self):
         import subprocess
         from prepare_python_distributions import copy_tracked_tree

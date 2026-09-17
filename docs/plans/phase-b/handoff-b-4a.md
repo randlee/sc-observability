@@ -85,6 +85,9 @@ tests can leave ignored bytecode without contaminating the sdist inventory.
 Generated files remain untouched. Windows network denial is scoped to each
 artifact subprocess, with bounded execution and firewall cleanup between
 commands; checkout/cache denial remains active for the proof.
+Timed-out artifact commands terminate their process tree, including descendants
+holding captured output pipes; a real child-process regression verifies the
+bounded failure. Windows execution still needs the final combined CI proof.
 
 This handoff is incomplete. Full runtime qualification awaits the active B.4
 owner's completed contract and the final 25-cell execution. Explicit development
