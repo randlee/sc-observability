@@ -5,7 +5,7 @@ branch: feature/phase-b-1c-observation-prep
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1c-observation-prep
 parent: feature/phase-b-1b-logger-prep
 parent_checkpoint: 77d28c77f4d48b59e40f52b9ef735f68ebbb890e
-implementation_commits: 7d49ed2, 37bba66, 392c1dd, d90fba2, 4327fd3, 5b25b20, 468ec1a
+implementation_commits: 7d49ed2, 37bba66, 392c1dd, d90fba2, 4327fd3, 5b25b20, 468ec1a, ba677c9
 ---
 
 # B.1c typed observation preparation handoff
