@@ -11,4 +11,4 @@ sc-observability-types = { path = "../../../../../crates/sc-observability-types"
 sc-observability = { path = "../../../../../crates/sc-observability" }
 sc-observe = { path = "../../../../../crates/sc-observe" }
 sc-observability-otlp = { path = "../../../../../crates/sc-observability-otlp" }
-
+serde_json = "1"

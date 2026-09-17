@@ -23,15 +23,15 @@ owning method is exempt.
 
 | Legacy wrapper (source) | Recommended failure | Required note/reason | Activation |
 | --- | --- | --- | --- |
-| `IdentityError` (`crates/sc-observability-types/src/errors.rs:9`) | `IdentityFailure` | Use typed identity resolution and match `IdentityFailureKind`; see guide. | Pending B.1e implementation |
-| `InitError` (`crates/sc-observability-types/src/errors.rs:38`) | `InitFailure` | Use the owning `_typed` constructor and match `InitFailureKind`; owner-constructor method exemptions do not exempt this wrapper. | Pending B.1e implementation |
-| `EventError` (`errors.rs:42`) | `EventFailure` | Use typed logger admission or `SpanAssembler::push_typed`; retain fallback matching. | Pending B.1e implementation |
-| `FlushError` (`errors.rs:46`) | `FlushFailure` | Use `flush_typed` and preserve fail-open lifecycle behavior. | Pending B.1e implementation |
-| `ShutdownError` (`errors.rs:50`) | `ShutdownFailure` | Use `shutdown_typed`; repeated shutdown remains successful where documented. | Pending B.1e implementation |
-| `ProjectionError` (`errors.rs:54`) | `ProjectionFailure` | Use explicit typed projector traits/adapters; preserve source/context. | Pending B.1e implementation |
-| `SubscriberError` (`errors.rs:58`) | `SubscriberFailure` | Use `TypedObservationSubscriber` plus `legacy_subscriber` at old registration boundaries. | Pending B.1e implementation |
-| `LogSinkError` (`errors.rs:62`) | `LogSinkFailure` | Use `TypedLogSink` plus `sc_observability::typed::legacy_sink`. | Pending B.1e implementation |
-| `ExportError` (`errors.rs:66`) | `ExportFailure` | Use typed exporter internals; public `TelemetryError` remains supported. | Pending B.1e implementation |
+| `IdentityError` (`crates/sc-observability-types/src/errors.rs:9`) | `IdentityFailure` | Use typed identity resolution and match `IdentityFailureKind`; see guide. | Implemented and validated |
+| `InitError` (`crates/sc-observability-types/src/errors.rs:38`) | `InitFailure` | Use the owning `_typed` constructor and match `InitFailureKind`; owner-constructor method exemptions do not exempt this wrapper. | Implemented and validated |
+| `EventError` (`errors.rs:42`) | `EventFailure` | Use typed logger admission or `SpanAssembler::push_typed`; retain fallback matching. | Implemented and validated |
+| `FlushError` (`errors.rs:46`) | `FlushFailure` | Use `flush_typed` and preserve fail-open lifecycle behavior. | Implemented and validated |
+| `ShutdownError` (`errors.rs:50`) | `ShutdownFailure` | Use `shutdown_typed`; repeated shutdown remains successful where documented. | Implemented and validated |
+| `ProjectionError` (`errors.rs:54`) | `ProjectionFailure` | Use explicit typed projector traits/adapters; preserve source/context. | Implemented and validated |
+| `SubscriberError` (`errors.rs:58`) | `SubscriberFailure` | Use `TypedObservationSubscriber` plus `legacy_subscriber` at old registration boundaries. | Implemented and validated |
+| `LogSinkError` (`errors.rs:62`) | `LogSinkFailure` | Use `TypedLogSink` plus `sc_observability::typed::legacy_sink`. | Implemented and validated |
+| `ExportError` (`errors.rs:66`) | `ExportFailure` | Use typed exporter internals; public `TelemetryError` remains supported. | Implemented and validated |
 
 ## Mapped method warning candidates
 
@@ -41,26 +41,26 @@ are the only method candidates in the merged B.1b–B.1d surface.
 
 | Owner and source | Old symbol/signature result | Typed replacement | State |
 | --- | --- | --- | --- |
-| `LoggerBuilder` (`sc-observability/src/builder.rs:49`) | `new(LoggerConfig) -> Result<Self, InitError>` | `new_typed(...) -> Result<Self, InitFailure>` | Pending B.1e implementation |
-| `Logger` (`sc-observability/src/runtime.rs:339`) | `builder(LoggerConfig) -> Result<LoggerBuilder, InitError>` | `builder_typed(...) -> Result<LoggerBuilder, InitFailure>` | Pending B.1e implementation |
-| `Logger` (`runtime.rs:351`) | `new(LoggerConfig) -> Result<Self, InitError>` | `new_typed(...) -> Result<Self, InitFailure>` | Pending B.1e implementation |
-| `Logger` (`runtime.rs:379`) | `log(LogEvent) -> Result<(), LogError>` | `log_typed(...) -> Result<(), LogFailure>` | Pending B.1e implementation |
-| `Logger` (`runtime.rs:411`) | `try_log(LogEvent) -> Result<(), TryLogError>` | `try_log_typed(...) -> Result<(), TryLogFailure>` | Pending B.1e implementation |
-| `Logger` (`runtime.rs:425`) | `try_log_with_outcome(LogEvent) -> Result<AdmissionOutcome, TryLogError>` | `try_log_with_outcome_typed(...) -> Result<AdmissionOutcome, TryLogFailure>` | Pending B.1e implementation |
-| `Logger` (`runtime.rs:497`) | `flush() -> Result<(), FlushError>` | `flush_typed() -> Result<(), FlushFailure>` | Pending B.1e implementation |
-| `ObservabilityConfig` (`sc-observe/src/lib.rs:86`) | `default_for(ToolName, PathBuf) -> Result<Self, InitError>` | `default_for_typed(...) -> Result<Self, InitFailure>` | Pending B.1e implementation |
-| `ObservabilityConfig` (`lib.rs:116`) | `service_name() -> Result<ServiceName, InitError>` | `service_name_typed() -> Result<ServiceName, InitFailure>` | Pending B.1e implementation |
-| `Observability` (`lib.rs:222`) | `new(ObservabilityConfig) -> Result<Self, InitError>` | `new_typed(...) -> Result<Self, InitFailure>` | Pending B.1e implementation |
-| `Observability` (`lib.rs:343`) | `flush() -> Result<(), FlushError>` | `flush_typed() -> Result<(), FlushFailure>` | Pending B.1e implementation |
-| `Observability` (`lib.rs:370`) | `shutdown() -> Result<(), ShutdownError>` | `shutdown_typed() -> Result<(), ShutdownFailure>` | Pending B.1e implementation |
-| `ObservabilityBuilder` (`lib.rs:589`) | `build() -> Result<Observability, InitError>` | `build_typed() -> Result<Observability, InitFailure>` | Pending B.1e implementation |
-| `OtlpEndpoint` (`sc-observability-otlp/src/config.rs:44`) | `new(impl Into<String>) -> Result<Self, InitError>` | `new_typed(impl Into<String>) -> Result<Self, InitFailure>` | Pending B.1e implementation |
-| `AuthHeader` (`config.rs:98`) | `new(impl Into<String>) -> Result<Self, InitError>` | `new_typed(impl Into<String>) -> Result<Self, InitFailure>` | Pending B.1e implementation |
-| `TelemetryConfigBuilder` (`config.rs:366`) | `build() -> Result<TelemetryConfig, InitError>` | `build_typed() -> Result<TelemetryConfig, InitFailure>` | Pending B.1e implementation |
-| `SpanAssembler` (`sc-observability-otlp/src/assembly.rs:58`) | `push(SpanSignal) -> Result<Option<CompleteSpan>, EventError>` | `push_typed(...) -> Result<Option<CompleteSpan>, EventFailure>` | Pending B.1e implementation |
-| `Telemetry` (`sc-observability-otlp/src/lib.rs:167`) | `new(TelemetryConfig) -> Result<Self, InitError>` | `new_typed(...) -> Result<Self, InitFailure>` | Pending B.1e implementation |
-| `Telemetry` (`lib.rs:296`) | `flush() -> Result<(), FlushError>` | `flush_typed() -> Result<(), FlushFailure>` | Pending B.1e implementation |
-| `Telemetry` (`lib.rs:377`) | `shutdown() -> Result<(), ShutdownError>` | `shutdown_typed() -> Result<(), ShutdownFailure>` | Pending B.1e implementation |
+| `LoggerBuilder` (`sc-observability/src/builder.rs:49`) | `new(LoggerConfig) -> Result<Self, InitError>` | `new_typed(...) -> Result<Self, InitFailure>` | Implemented and validated |
+| `Logger` (`sc-observability/src/runtime.rs:339`) | `builder(LoggerConfig) -> Result<LoggerBuilder, InitError>` | `builder_typed(...) -> Result<LoggerBuilder, InitFailure>` | Implemented and validated |
+| `Logger` (`runtime.rs:351`) | `new(LoggerConfig) -> Result<Self, InitError>` | `new_typed(...) -> Result<Self, InitFailure>` | Implemented and validated |
+| `Logger` (`runtime.rs:379`) | `log(LogEvent) -> Result<(), LogError>` | `log_typed(...) -> Result<(), LogFailure>` | Implemented and validated |
+| `Logger` (`runtime.rs:411`) | `try_log(LogEvent) -> Result<(), TryLogError>` | `try_log_typed(...) -> Result<(), TryLogFailure>` | Implemented and validated |
+| `Logger` (`runtime.rs:425`) | `try_log_with_outcome(LogEvent) -> Result<AdmissionOutcome, TryLogError>` | `try_log_with_outcome_typed(...) -> Result<AdmissionOutcome, TryLogFailure>` | Implemented and validated |
+| `Logger` (`runtime.rs:497`) | `flush() -> Result<(), FlushError>` | `flush_typed() -> Result<(), FlushFailure>` | Implemented and validated |
+| `ObservabilityConfig` (`sc-observe/src/lib.rs:86`) | `default_for(ToolName, PathBuf) -> Result<Self, InitError>` | `default_for_typed(...) -> Result<Self, InitFailure>` | Implemented and validated |
+| `ObservabilityConfig` (`lib.rs:116`) | `service_name() -> Result<ServiceName, InitError>` | `service_name_typed() -> Result<ServiceName, InitFailure>` | Implemented and validated |
+| `Observability` (`lib.rs:222`) | `new(ObservabilityConfig) -> Result<Self, InitError>` | `new_typed(...) -> Result<Self, InitFailure>` | Implemented and validated |
+| `Observability` (`lib.rs:343`) | `flush() -> Result<(), FlushError>` | `flush_typed() -> Result<(), FlushFailure>` | Implemented and validated |
+| `Observability` (`lib.rs:370`) | `shutdown() -> Result<(), ShutdownError>` | `shutdown_typed() -> Result<(), ShutdownFailure>` | Implemented and validated |
+| `ObservabilityBuilder` (`lib.rs:589`) | `build() -> Result<Observability, InitError>` | `build_typed() -> Result<Observability, InitFailure>` | Implemented and validated |
+| `OtlpEndpoint` (`sc-observability-otlp/src/config.rs:44`) | `new(impl Into<String>) -> Result<Self, InitError>` | `new_typed(impl Into<String>) -> Result<Self, InitFailure>` | Implemented and validated |
+| `AuthHeader` (`config.rs:98`) | `new(impl Into<String>) -> Result<Self, InitError>` | `new_typed(impl Into<String>) -> Result<Self, InitFailure>` | Implemented and validated |
+| `TelemetryConfigBuilder` (`config.rs:366`) | `build() -> Result<TelemetryConfig, InitError>` | `build_typed() -> Result<TelemetryConfig, InitFailure>` | Implemented and validated |
+| `SpanAssembler` (`sc-observability-otlp/src/assembly.rs:58`) | `push(SpanSignal) -> Result<Option<CompleteSpan>, EventError>` | `push_typed(...) -> Result<Option<CompleteSpan>, EventFailure>` | Implemented and validated |
+| `Telemetry` (`sc-observability-otlp/src/lib.rs:167`) | `new(TelemetryConfig) -> Result<Self, InitError>` | `new_typed(...) -> Result<Self, InitFailure>` | Implemented and validated |
+| `Telemetry` (`lib.rs:296`) | `flush() -> Result<(), FlushError>` | `flush_typed() -> Result<(), FlushFailure>` | Implemented and validated |
+| `Telemetry` (`lib.rs:377`) | `shutdown() -> Result<(), ShutdownError>` | `shutdown_typed() -> Result<(), ShutdownFailure>` | Implemented and validated |
 
 ## Explicit method exemptions and retained APIs
 

@@ -12,15 +12,14 @@
     clippy::must_use_candidate,
     reason = "small constructor/accessor methods are intentionally kept free of repetitive must_use decoration"
 )]
-#![allow(
-    deprecated,
-    reason = "span assembly retains its published EventError adapter boundary"
-)]
-
 use std::collections::HashMap;
 
 use crate::error_codes;
 use sc_observability_types::typed::EventFailure;
+#[allow(
+    deprecated,
+    reason = "span assembly retains its published EventError adapter boundary"
+)]
 use sc_observability_types::{
     ErrorContext, EventError, Remediation, SpanEnded, SpanEvent, SpanRecord, SpanSignal,
     SpanStarted,
