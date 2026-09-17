@@ -1,0 +1,1041 @@
+pub mod sc_observability_log
+pub use sc_observability_log::ActionName
+pub use sc_observability_log::AdmissionOutcome
+pub use sc_observability_log::CorrelationId
+pub use sc_observability_log::ErrorCode
+pub use sc_observability_log::EventLevel
+pub use sc_observability_log::LevelChange
+pub use sc_observability_log::LevelChangeError
+pub use sc_observability_log::LevelChangeSource
+pub use sc_observability_log::LevelFilter
+pub use sc_observability_log::LevelState
+pub use sc_observability_log::LogEvent
+pub use sc_observability_log::LogQuery
+pub use sc_observability_log::LogSnapshot
+pub use sc_observability_log::LoggerConfig
+pub use sc_observability_log::LoggingHealthReport
+pub use sc_observability_log::OperationDiagnostic
+pub use sc_observability_log::OutcomeLabel
+pub use sc_observability_log::ProcessIdentityPolicy
+pub use sc_observability_log::Remediation
+pub use sc_observability_log::ServiceName
+pub use sc_observability_log::TargetCategory
+pub use sc_observability_log::Timestamp
+pub use sc_observability_log::TraceContext
+pub use sc_observability_log::debug
+pub use sc_observability_log::error
+pub use sc_observability_log::event
+pub use sc_observability_log::info
+pub use sc_observability_log::instrument
+pub use sc_observability_log::trace
+pub use sc_observability_log::warn
+pub mod sc_observability_log::error_codes
+pub const sc_observability_log::error_codes::ALL: &[sc_observability_types::primitives::ErrorCode]
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_INVALID_FIELD: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_LOGGER_PANICKED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_REENTRANT_EMIT: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_SHUTDOWN_NOT_STARTED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_STATUS_UNAVAILABLE: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL: sc_observability_types::primitives::ErrorCode
+pub enum sc_observability_log::ControlError
+pub sc_observability_log::ControlError::NotRunning
+pub sc_observability_log::ControlError::NotRunning::phase: sc_observability_log::LifecyclePhase
+pub sc_observability_log::ControlError::Query
+pub sc_observability_log::ControlError::Query::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::ControlError::Unavailable
+pub sc_observability_log::ControlError::Unavailable::diagnostic: sc_observability_types::level::OperationDiagnostic
+impl sc_observability_log::ControlError
+pub fn sc_observability_log::ControlError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::ControlError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+impl core::clone::Clone for sc_observability_log::ControlError
+pub fn sc_observability_log::ControlError::clone(&self) -> sc_observability_log::ControlError
+impl core::error::Error for sc_observability_log::ControlError
+impl core::fmt::Debug for sc_observability_log::ControlError
+pub fn sc_observability_log::ControlError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for sc_observability_log::ControlError
+pub fn sc_observability_log::ControlError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for sc_observability_log::ControlError
+pub fn sc_observability_log::ControlError::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::ControlError
+pub fn sc_observability_log::ControlError::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::ControlError
+impl core::marker::Send for sc_observability_log::ControlError
+impl core::marker::Sync for sc_observability_log::ControlError
+impl core::marker::Unpin for sc_observability_log::ControlError
+impl core::marker::UnsafeUnpin for sc_observability_log::ControlError
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::ControlError
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::ControlError
+impl<T, U> core::convert::Into<U> for sc_observability_log::ControlError where U: core::convert::From<T>
+pub fn sc_observability_log::ControlError::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::ControlError where U: core::convert::Into<T>
+pub type sc_observability_log::ControlError::Error = never
+pub fn sc_observability_log::ControlError::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::ControlError where U: core::convert::TryFrom<T>
+pub type sc_observability_log::ControlError::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::ControlError::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::ControlError where T: core::clone::Clone
+pub type sc_observability_log::ControlError::Owned = T
+pub fn sc_observability_log::ControlError::clone_into(&self, &mut T)
+pub fn sc_observability_log::ControlError::to_owned(&self) -> T
+impl<T> alloc::string::ToString for sc_observability_log::ControlError where T: core::fmt::Display + ?core::marker::Sized
+pub fn sc_observability_log::ControlError::to_string(&self) -> alloc::string::String
+impl<T> core::any::Any for sc_observability_log::ControlError where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::ControlError::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::ControlError where T: ?core::marker::Sized
+pub fn sc_observability_log::ControlError::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::ControlError where T: ?core::marker::Sized
+pub fn sc_observability_log::ControlError::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::ControlError where T: core::clone::Clone
+pub unsafe fn sc_observability_log::ControlError::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::ControlError
+pub fn sc_observability_log::ControlError::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::ControlError where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::ControlError::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::ControlError where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::ControlError where T: for<'de> serde_core::de::Deserialize<'de>
+pub enum sc_observability_log::DropCause
+pub sc_observability_log::DropCause::InvalidEvent
+pub sc_observability_log::DropCause::LoggerPanicked
+pub sc_observability_log::DropCause::NotInstalled
+pub sc_observability_log::DropCause::QueueFull
+pub sc_observability_log::DropCause::ReentrantEmit
+pub sc_observability_log::DropCause::ShutdownTimedOut
+pub sc_observability_log::DropCause::WriterDegraded
+impl sc_observability_log::DropCause
+pub const sc_observability_log::DropCause::ALL: [sc_observability_log::DropCause; 7]
+impl core::clone::Clone for sc_observability_log::DropCause
+pub fn sc_observability_log::DropCause::clone(&self) -> sc_observability_log::DropCause
+impl core::cmp::Eq for sc_observability_log::DropCause
+impl core::cmp::PartialEq for sc_observability_log::DropCause
+pub fn sc_observability_log::DropCause::eq(&self, &sc_observability_log::DropCause) -> bool
+impl core::fmt::Debug for sc_observability_log::DropCause
+pub fn sc_observability_log::DropCause::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for sc_observability_log::DropCause
+pub fn sc_observability_log::DropCause::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for sc_observability_log::DropCause
+impl core::marker::StructuralPartialEq for sc_observability_log::DropCause
+impl core::marker::Freeze for sc_observability_log::DropCause
+impl core::marker::Send for sc_observability_log::DropCause
+impl core::marker::Sync for sc_observability_log::DropCause
+impl core::marker::Unpin for sc_observability_log::DropCause
+impl core::marker::UnsafeUnpin for sc_observability_log::DropCause
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::DropCause
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::DropCause
+impl<T, U> core::convert::Into<U> for sc_observability_log::DropCause where U: core::convert::From<T>
+pub fn sc_observability_log::DropCause::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::DropCause where U: core::convert::Into<T>
+pub type sc_observability_log::DropCause::Error = never
+pub fn sc_observability_log::DropCause::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::DropCause where U: core::convert::TryFrom<T>
+pub type sc_observability_log::DropCause::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::DropCause::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::DropCause where T: core::clone::Clone
+pub type sc_observability_log::DropCause::Owned = T
+pub fn sc_observability_log::DropCause::clone_into(&self, &mut T)
+pub fn sc_observability_log::DropCause::to_owned(&self) -> T
+impl<T> core::any::Any for sc_observability_log::DropCause where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::DropCause::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::DropCause where T: ?core::marker::Sized
+pub fn sc_observability_log::DropCause::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::DropCause where T: ?core::marker::Sized
+pub fn sc_observability_log::DropCause::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::DropCause where T: core::clone::Clone
+pub unsafe fn sc_observability_log::DropCause::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::DropCause
+pub fn sc_observability_log::DropCause::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::DropCause where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::DropCause::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::DropCause where T: core::marker::Send + core::marker::Sync + 'static
+pub enum sc_observability_log::EmitError
+pub sc_observability_log::EmitError::InvalidEvent
+pub sc_observability_log::EmitError::InvalidEvent::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::EmitError::InvalidField
+pub sc_observability_log::EmitError::InvalidField::raw_key: alloc::string::String
+pub sc_observability_log::EmitError::InvalidField::reason: sc_observability_log::FieldKeyError
+pub sc_observability_log::EmitError::NotRunning
+pub sc_observability_log::EmitError::NotRunning::phase: sc_observability_log::LifecyclePhase
+pub sc_observability_log::EmitError::Panicked
+pub sc_observability_log::EmitError::QueueFull
+pub sc_observability_log::EmitError::QueueFull::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::EmitError::Reentrant
+pub sc_observability_log::EmitError::ShutdownTimedOut
+pub sc_observability_log::EmitError::ShutdownTimedOut::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::EmitError::WriterDegraded
+pub sc_observability_log::EmitError::WriterDegraded::diagnostic: sc_observability_types::level::OperationDiagnostic
+impl sc_observability_log::EmitError
+pub fn sc_observability_log::EmitError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::EmitError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+impl core::clone::Clone for sc_observability_log::EmitError
+pub fn sc_observability_log::EmitError::clone(&self) -> sc_observability_log::EmitError
+impl core::error::Error for sc_observability_log::EmitError
+impl core::fmt::Debug for sc_observability_log::EmitError
+pub fn sc_observability_log::EmitError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for sc_observability_log::EmitError
+pub fn sc_observability_log::EmitError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for sc_observability_log::EmitError
+pub fn sc_observability_log::EmitError::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::EmitError
+pub fn sc_observability_log::EmitError::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::EmitError
+impl core::marker::Send for sc_observability_log::EmitError
+impl core::marker::Sync for sc_observability_log::EmitError
+impl core::marker::Unpin for sc_observability_log::EmitError
+impl core::marker::UnsafeUnpin for sc_observability_log::EmitError
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::EmitError
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::EmitError
+impl<T, U> core::convert::Into<U> for sc_observability_log::EmitError where U: core::convert::From<T>
+pub fn sc_observability_log::EmitError::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::EmitError where U: core::convert::Into<T>
+pub type sc_observability_log::EmitError::Error = never
+pub fn sc_observability_log::EmitError::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::EmitError where U: core::convert::TryFrom<T>
+pub type sc_observability_log::EmitError::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::EmitError::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::EmitError where T: core::clone::Clone
+pub type sc_observability_log::EmitError::Owned = T
+pub fn sc_observability_log::EmitError::clone_into(&self, &mut T)
+pub fn sc_observability_log::EmitError::to_owned(&self) -> T
+impl<T> alloc::string::ToString for sc_observability_log::EmitError where T: core::fmt::Display + ?core::marker::Sized
+pub fn sc_observability_log::EmitError::to_string(&self) -> alloc::string::String
+impl<T> core::any::Any for sc_observability_log::EmitError where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::EmitError::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::EmitError where T: ?core::marker::Sized
+pub fn sc_observability_log::EmitError::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::EmitError where T: ?core::marker::Sized
+pub fn sc_observability_log::EmitError::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::EmitError where T: core::clone::Clone
+pub unsafe fn sc_observability_log::EmitError::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::EmitError
+pub fn sc_observability_log::EmitError::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::EmitError where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::EmitError::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::EmitError where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::EmitError where T: for<'de> serde_core::de::Deserialize<'de>
+pub enum sc_observability_log::FieldKeyError
+pub sc_observability_log::FieldKeyError::Collision
+pub sc_observability_log::FieldKeyError::Collision::other_raw_key: alloc::string::String
+pub sc_observability_log::FieldKeyError::Empty
+pub sc_observability_log::FieldKeyError::ReservedPrefix
+impl core::clone::Clone for sc_observability_log::FieldKeyError
+pub fn sc_observability_log::FieldKeyError::clone(&self) -> sc_observability_log::FieldKeyError
+impl core::error::Error for sc_observability_log::FieldKeyError
+impl core::fmt::Debug for sc_observability_log::FieldKeyError
+pub fn sc_observability_log::FieldKeyError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for sc_observability_log::FieldKeyError
+pub fn sc_observability_log::FieldKeyError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for sc_observability_log::FieldKeyError
+pub fn sc_observability_log::FieldKeyError::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::FieldKeyError
+pub fn sc_observability_log::FieldKeyError::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::FieldKeyError
+impl core::marker::Send for sc_observability_log::FieldKeyError
+impl core::marker::Sync for sc_observability_log::FieldKeyError
+impl core::marker::Unpin for sc_observability_log::FieldKeyError
+impl core::marker::UnsafeUnpin for sc_observability_log::FieldKeyError
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::FieldKeyError
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::FieldKeyError
+impl<T, U> core::convert::Into<U> for sc_observability_log::FieldKeyError where U: core::convert::From<T>
+pub fn sc_observability_log::FieldKeyError::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::FieldKeyError where U: core::convert::Into<T>
+pub type sc_observability_log::FieldKeyError::Error = never
+pub fn sc_observability_log::FieldKeyError::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::FieldKeyError where U: core::convert::TryFrom<T>
+pub type sc_observability_log::FieldKeyError::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::FieldKeyError::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::FieldKeyError where T: core::clone::Clone
+pub type sc_observability_log::FieldKeyError::Owned = T
+pub fn sc_observability_log::FieldKeyError::clone_into(&self, &mut T)
+pub fn sc_observability_log::FieldKeyError::to_owned(&self) -> T
+impl<T> alloc::string::ToString for sc_observability_log::FieldKeyError where T: core::fmt::Display + ?core::marker::Sized
+pub fn sc_observability_log::FieldKeyError::to_string(&self) -> alloc::string::String
+impl<T> core::any::Any for sc_observability_log::FieldKeyError where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::FieldKeyError::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::FieldKeyError where T: ?core::marker::Sized
+pub fn sc_observability_log::FieldKeyError::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::FieldKeyError where T: ?core::marker::Sized
+pub fn sc_observability_log::FieldKeyError::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::FieldKeyError where T: core::clone::Clone
+pub unsafe fn sc_observability_log::FieldKeyError::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::FieldKeyError
+pub fn sc_observability_log::FieldKeyError::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::FieldKeyError where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::FieldKeyError::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::FieldKeyError where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::FieldKeyError where T: for<'de> serde_core::de::Deserialize<'de>
+pub enum sc_observability_log::FlushError
+pub sc_observability_log::FlushError::HelperLost
+pub sc_observability_log::FlushError::HelperLost::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::FlushError::HelperSpawn
+pub sc_observability_log::FlushError::HelperSpawn::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::FlushError::InProgress
+pub sc_observability_log::FlushError::Logger
+pub sc_observability_log::FlushError::Logger::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::FlushError::NotRunning
+pub sc_observability_log::FlushError::NotRunning::phase: sc_observability_log::LifecyclePhase
+pub sc_observability_log::FlushError::TimedOut
+pub sc_observability_log::FlushError::TimedOut::timeout: core::time::Duration
+impl sc_observability_log::FlushError
+pub fn sc_observability_log::FlushError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::FlushError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+impl core::clone::Clone for sc_observability_log::FlushError
+pub fn sc_observability_log::FlushError::clone(&self) -> sc_observability_log::FlushError
+impl core::error::Error for sc_observability_log::FlushError
+impl core::fmt::Debug for sc_observability_log::FlushError
+pub fn sc_observability_log::FlushError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for sc_observability_log::FlushError
+pub fn sc_observability_log::FlushError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for sc_observability_log::FlushError
+pub fn sc_observability_log::FlushError::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::FlushError
+pub fn sc_observability_log::FlushError::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::FlushError
+impl core::marker::Send for sc_observability_log::FlushError
+impl core::marker::Sync for sc_observability_log::FlushError
+impl core::marker::Unpin for sc_observability_log::FlushError
+impl core::marker::UnsafeUnpin for sc_observability_log::FlushError
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::FlushError
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::FlushError
+impl<T, U> core::convert::Into<U> for sc_observability_log::FlushError where U: core::convert::From<T>
+pub fn sc_observability_log::FlushError::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::FlushError where U: core::convert::Into<T>
+pub type sc_observability_log::FlushError::Error = never
+pub fn sc_observability_log::FlushError::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::FlushError where U: core::convert::TryFrom<T>
+pub type sc_observability_log::FlushError::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::FlushError::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::FlushError where T: core::clone::Clone
+pub type sc_observability_log::FlushError::Owned = T
+pub fn sc_observability_log::FlushError::clone_into(&self, &mut T)
+pub fn sc_observability_log::FlushError::to_owned(&self) -> T
+impl<T> alloc::string::ToString for sc_observability_log::FlushError where T: core::fmt::Display + ?core::marker::Sized
+pub fn sc_observability_log::FlushError::to_string(&self) -> alloc::string::String
+impl<T> core::any::Any for sc_observability_log::FlushError where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::FlushError::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::FlushError where T: ?core::marker::Sized
+pub fn sc_observability_log::FlushError::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::FlushError where T: ?core::marker::Sized
+pub fn sc_observability_log::FlushError::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::FlushError where T: core::clone::Clone
+pub unsafe fn sc_observability_log::FlushError::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::FlushError
+pub fn sc_observability_log::FlushError::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::FlushError where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::FlushError::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::FlushError where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::FlushError where T: for<'de> serde_core::de::Deserialize<'de>
+pub enum sc_observability_log::InitError
+pub sc_observability_log::InitError::AlreadyInitialized
+pub sc_observability_log::InitError::ForeignLoggerInstalled
+pub sc_observability_log::InitError::IdentityResolution
+pub sc_observability_log::InitError::IdentityResolution::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::InitError::Logger
+pub sc_observability_log::InitError::Logger::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::InitError::RuntimeStart
+pub sc_observability_log::InitError::RuntimeStart::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::InitError::UnsupportedLevel
+pub sc_observability_log::InitError::UnsupportedLevel::available: sc_observability_types::level::LevelFilter
+pub sc_observability_log::InitError::UnsupportedLevel::configured: sc_observability_types::level::LevelFilter
+impl sc_observability_log::InitError
+pub fn sc_observability_log::InitError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::InitError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+impl core::clone::Clone for sc_observability_log::InitError
+pub fn sc_observability_log::InitError::clone(&self) -> sc_observability_log::InitError
+impl core::error::Error for sc_observability_log::InitError
+impl core::fmt::Debug for sc_observability_log::InitError
+pub fn sc_observability_log::InitError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for sc_observability_log::InitError
+pub fn sc_observability_log::InitError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for sc_observability_log::InitError
+pub fn sc_observability_log::InitError::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::InitError
+pub fn sc_observability_log::InitError::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::InitError
+impl core::marker::Send for sc_observability_log::InitError
+impl core::marker::Sync for sc_observability_log::InitError
+impl core::marker::Unpin for sc_observability_log::InitError
+impl core::marker::UnsafeUnpin for sc_observability_log::InitError
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::InitError
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::InitError
+impl<T, U> core::convert::Into<U> for sc_observability_log::InitError where U: core::convert::From<T>
+pub fn sc_observability_log::InitError::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::InitError where U: core::convert::Into<T>
+pub type sc_observability_log::InitError::Error = never
+pub fn sc_observability_log::InitError::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::InitError where U: core::convert::TryFrom<T>
+pub type sc_observability_log::InitError::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::InitError::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::InitError where T: core::clone::Clone
+pub type sc_observability_log::InitError::Owned = T
+pub fn sc_observability_log::InitError::clone_into(&self, &mut T)
+pub fn sc_observability_log::InitError::to_owned(&self) -> T
+impl<T> alloc::string::ToString for sc_observability_log::InitError where T: core::fmt::Display + ?core::marker::Sized
+pub fn sc_observability_log::InitError::to_string(&self) -> alloc::string::String
+impl<T> core::any::Any for sc_observability_log::InitError where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::InitError::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::InitError where T: ?core::marker::Sized
+pub fn sc_observability_log::InitError::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::InitError where T: ?core::marker::Sized
+pub fn sc_observability_log::InitError::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::InitError where T: core::clone::Clone
+pub unsafe fn sc_observability_log::InitError::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::InitError
+pub fn sc_observability_log::InitError::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::InitError where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::InitError::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::InitError where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::InitError where T: for<'de> serde_core::de::Deserialize<'de>
+pub enum sc_observability_log::LifecyclePhase
+pub sc_observability_log::LifecyclePhase::Failed
+pub sc_observability_log::LifecyclePhase::Running
+pub sc_observability_log::LifecyclePhase::Stopped
+pub sc_observability_log::LifecyclePhase::Stopping
+impl core::clone::Clone for sc_observability_log::LifecyclePhase
+pub fn sc_observability_log::LifecyclePhase::clone(&self) -> sc_observability_log::LifecyclePhase
+impl core::cmp::Eq for sc_observability_log::LifecyclePhase
+impl core::cmp::PartialEq for sc_observability_log::LifecyclePhase
+pub fn sc_observability_log::LifecyclePhase::eq(&self, &sc_observability_log::LifecyclePhase) -> bool
+impl core::fmt::Debug for sc_observability_log::LifecyclePhase
+pub fn sc_observability_log::LifecyclePhase::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for sc_observability_log::LifecyclePhase
+impl core::marker::StructuralPartialEq for sc_observability_log::LifecyclePhase
+impl serde_core::ser::Serialize for sc_observability_log::LifecyclePhase
+pub fn sc_observability_log::LifecyclePhase::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::LifecyclePhase
+pub fn sc_observability_log::LifecyclePhase::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::LifecyclePhase
+impl core::marker::Send for sc_observability_log::LifecyclePhase
+impl core::marker::Sync for sc_observability_log::LifecyclePhase
+impl core::marker::Unpin for sc_observability_log::LifecyclePhase
+impl core::marker::UnsafeUnpin for sc_observability_log::LifecyclePhase
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::LifecyclePhase
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::LifecyclePhase
+impl<T, U> core::convert::Into<U> for sc_observability_log::LifecyclePhase where U: core::convert::From<T>
+pub fn sc_observability_log::LifecyclePhase::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::LifecyclePhase where U: core::convert::Into<T>
+pub type sc_observability_log::LifecyclePhase::Error = never
+pub fn sc_observability_log::LifecyclePhase::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::LifecyclePhase where U: core::convert::TryFrom<T>
+pub type sc_observability_log::LifecyclePhase::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::LifecyclePhase::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::LifecyclePhase where T: core::clone::Clone
+pub type sc_observability_log::LifecyclePhase::Owned = T
+pub fn sc_observability_log::LifecyclePhase::clone_into(&self, &mut T)
+pub fn sc_observability_log::LifecyclePhase::to_owned(&self) -> T
+impl<T> core::any::Any for sc_observability_log::LifecyclePhase where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::LifecyclePhase::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::LifecyclePhase where T: ?core::marker::Sized
+pub fn sc_observability_log::LifecyclePhase::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::LifecyclePhase where T: ?core::marker::Sized
+pub fn sc_observability_log::LifecyclePhase::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::LifecyclePhase where T: core::clone::Clone
+pub unsafe fn sc_observability_log::LifecyclePhase::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::LifecyclePhase
+pub fn sc_observability_log::LifecyclePhase::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::LifecyclePhase where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::LifecyclePhase::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::LifecyclePhase where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::LifecyclePhase where T: for<'de> serde_core::de::Deserialize<'de>
+pub enum sc_observability_log::ShutdownError
+pub sc_observability_log::ShutdownError::FinalFlush
+pub sc_observability_log::ShutdownError::FinalFlush::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::ShutdownError::HelperLost
+pub sc_observability_log::ShutdownError::HelperLost::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::ShutdownError::HelperSpawn
+pub sc_observability_log::ShutdownError::HelperSpawn::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::ShutdownError::TimedOut
+pub sc_observability_log::ShutdownError::TimedOut::timeout: core::time::Duration
+impl sc_observability_log::ShutdownError
+pub fn sc_observability_log::ShutdownError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::ShutdownError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+impl core::clone::Clone for sc_observability_log::ShutdownError
+pub fn sc_observability_log::ShutdownError::clone(&self) -> sc_observability_log::ShutdownError
+impl core::error::Error for sc_observability_log::ShutdownError
+impl core::fmt::Debug for sc_observability_log::ShutdownError
+pub fn sc_observability_log::ShutdownError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for sc_observability_log::ShutdownError
+pub fn sc_observability_log::ShutdownError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for sc_observability_log::ShutdownError
+pub fn sc_observability_log::ShutdownError::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::ShutdownError
+pub fn sc_observability_log::ShutdownError::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::ShutdownError
+impl core::marker::Send for sc_observability_log::ShutdownError
+impl core::marker::Sync for sc_observability_log::ShutdownError
+impl core::marker::Unpin for sc_observability_log::ShutdownError
+impl core::marker::UnsafeUnpin for sc_observability_log::ShutdownError
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::ShutdownError
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::ShutdownError
+impl<T, U> core::convert::Into<U> for sc_observability_log::ShutdownError where U: core::convert::From<T>
+pub fn sc_observability_log::ShutdownError::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::ShutdownError where U: core::convert::Into<T>
+pub type sc_observability_log::ShutdownError::Error = never
+pub fn sc_observability_log::ShutdownError::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::ShutdownError where U: core::convert::TryFrom<T>
+pub type sc_observability_log::ShutdownError::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::ShutdownError::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::ShutdownError where T: core::clone::Clone
+pub type sc_observability_log::ShutdownError::Owned = T
+pub fn sc_observability_log::ShutdownError::clone_into(&self, &mut T)
+pub fn sc_observability_log::ShutdownError::to_owned(&self) -> T
+impl<T> alloc::string::ToString for sc_observability_log::ShutdownError where T: core::fmt::Display + ?core::marker::Sized
+pub fn sc_observability_log::ShutdownError::to_string(&self) -> alloc::string::String
+impl<T> core::any::Any for sc_observability_log::ShutdownError where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::ShutdownError::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::ShutdownError where T: ?core::marker::Sized
+pub fn sc_observability_log::ShutdownError::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::ShutdownError where T: ?core::marker::Sized
+pub fn sc_observability_log::ShutdownError::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::ShutdownError where T: core::clone::Clone
+pub unsafe fn sc_observability_log::ShutdownError::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::ShutdownError
+pub fn sc_observability_log::ShutdownError::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::ShutdownError where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::ShutdownError::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::ShutdownError where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::ShutdownError where T: for<'de> serde_core::de::Deserialize<'de>
+pub enum sc_observability_log::ShutdownOutcome
+pub sc_observability_log::ShutdownOutcome::Stopped
+pub sc_observability_log::ShutdownOutcome::StoppedWithFlushError
+pub sc_observability_log::ShutdownOutcome::StoppedWithFlushError::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::ShutdownOutcome::Unconfirmed
+pub sc_observability_log::ShutdownOutcome::Unconfirmed::cause: sc_observability_log::UnconfirmedShutdown
+impl core::clone::Clone for sc_observability_log::ShutdownOutcome
+pub fn sc_observability_log::ShutdownOutcome::clone(&self) -> sc_observability_log::ShutdownOutcome
+impl core::fmt::Debug for sc_observability_log::ShutdownOutcome
+pub fn sc_observability_log::ShutdownOutcome::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for sc_observability_log::ShutdownOutcome
+pub fn sc_observability_log::ShutdownOutcome::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::ShutdownOutcome
+pub fn sc_observability_log::ShutdownOutcome::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::ShutdownOutcome
+impl core::marker::Send for sc_observability_log::ShutdownOutcome
+impl core::marker::Sync for sc_observability_log::ShutdownOutcome
+impl core::marker::Unpin for sc_observability_log::ShutdownOutcome
+impl core::marker::UnsafeUnpin for sc_observability_log::ShutdownOutcome
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::ShutdownOutcome
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::ShutdownOutcome
+impl<T, U> core::convert::Into<U> for sc_observability_log::ShutdownOutcome where U: core::convert::From<T>
+pub fn sc_observability_log::ShutdownOutcome::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::ShutdownOutcome where U: core::convert::Into<T>
+pub type sc_observability_log::ShutdownOutcome::Error = never
+pub fn sc_observability_log::ShutdownOutcome::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::ShutdownOutcome where U: core::convert::TryFrom<T>
+pub type sc_observability_log::ShutdownOutcome::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::ShutdownOutcome::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::ShutdownOutcome where T: core::clone::Clone
+pub type sc_observability_log::ShutdownOutcome::Owned = T
+pub fn sc_observability_log::ShutdownOutcome::clone_into(&self, &mut T)
+pub fn sc_observability_log::ShutdownOutcome::to_owned(&self) -> T
+impl<T> core::any::Any for sc_observability_log::ShutdownOutcome where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::ShutdownOutcome::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::ShutdownOutcome where T: ?core::marker::Sized
+pub fn sc_observability_log::ShutdownOutcome::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::ShutdownOutcome where T: ?core::marker::Sized
+pub fn sc_observability_log::ShutdownOutcome::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::ShutdownOutcome where T: core::clone::Clone
+pub unsafe fn sc_observability_log::ShutdownOutcome::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::ShutdownOutcome
+pub fn sc_observability_log::ShutdownOutcome::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::ShutdownOutcome where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::ShutdownOutcome::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::ShutdownOutcome where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::ShutdownOutcome where T: for<'de> serde_core::de::Deserialize<'de>
+pub enum sc_observability_log::UnconfirmedShutdown
+pub sc_observability_log::UnconfirmedShutdown::HelperLost
+pub sc_observability_log::UnconfirmedShutdown::HelperLost::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::UnconfirmedShutdown::HelperSpawn
+pub sc_observability_log::UnconfirmedShutdown::HelperSpawn::diagnostic: sc_observability_types::level::OperationDiagnostic
+impl core::clone::Clone for sc_observability_log::UnconfirmedShutdown
+pub fn sc_observability_log::UnconfirmedShutdown::clone(&self) -> sc_observability_log::UnconfirmedShutdown
+impl core::fmt::Debug for sc_observability_log::UnconfirmedShutdown
+pub fn sc_observability_log::UnconfirmedShutdown::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for sc_observability_log::UnconfirmedShutdown
+pub fn sc_observability_log::UnconfirmedShutdown::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::UnconfirmedShutdown
+pub fn sc_observability_log::UnconfirmedShutdown::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::UnconfirmedShutdown
+impl core::marker::Send for sc_observability_log::UnconfirmedShutdown
+impl core::marker::Sync for sc_observability_log::UnconfirmedShutdown
+impl core::marker::Unpin for sc_observability_log::UnconfirmedShutdown
+impl core::marker::UnsafeUnpin for sc_observability_log::UnconfirmedShutdown
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::UnconfirmedShutdown
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::UnconfirmedShutdown
+impl<T, U> core::convert::Into<U> for sc_observability_log::UnconfirmedShutdown where U: core::convert::From<T>
+pub fn sc_observability_log::UnconfirmedShutdown::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::UnconfirmedShutdown where U: core::convert::Into<T>
+pub type sc_observability_log::UnconfirmedShutdown::Error = never
+pub fn sc_observability_log::UnconfirmedShutdown::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::UnconfirmedShutdown where U: core::convert::TryFrom<T>
+pub type sc_observability_log::UnconfirmedShutdown::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::UnconfirmedShutdown::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::UnconfirmedShutdown where T: core::clone::Clone
+pub type sc_observability_log::UnconfirmedShutdown::Owned = T
+pub fn sc_observability_log::UnconfirmedShutdown::clone_into(&self, &mut T)
+pub fn sc_observability_log::UnconfirmedShutdown::to_owned(&self) -> T
+impl<T> core::any::Any for sc_observability_log::UnconfirmedShutdown where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::UnconfirmedShutdown::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::UnconfirmedShutdown where T: ?core::marker::Sized
+pub fn sc_observability_log::UnconfirmedShutdown::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::UnconfirmedShutdown where T: ?core::marker::Sized
+pub fn sc_observability_log::UnconfirmedShutdown::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::UnconfirmedShutdown where T: core::clone::Clone
+pub unsafe fn sc_observability_log::UnconfirmedShutdown::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::UnconfirmedShutdown
+pub fn sc_observability_log::UnconfirmedShutdown::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::UnconfirmedShutdown where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::UnconfirmedShutdown::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::UnconfirmedShutdown where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::UnconfirmedShutdown where T: for<'de> serde_core::de::Deserialize<'de>
+pub enum sc_observability_log::WaitError
+pub sc_observability_log::WaitError::NotStarted
+pub sc_observability_log::WaitError::TimedOut
+pub sc_observability_log::WaitError::TimedOut::timeout: core::time::Duration
+pub sc_observability_log::WaitError::Unavailable
+pub sc_observability_log::WaitError::Unavailable::diagnostic: sc_observability_types::level::OperationDiagnostic
+impl sc_observability_log::WaitError
+pub fn sc_observability_log::WaitError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::WaitError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+impl core::clone::Clone for sc_observability_log::WaitError
+pub fn sc_observability_log::WaitError::clone(&self) -> sc_observability_log::WaitError
+impl core::error::Error for sc_observability_log::WaitError
+impl core::fmt::Debug for sc_observability_log::WaitError
+pub fn sc_observability_log::WaitError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for sc_observability_log::WaitError
+pub fn sc_observability_log::WaitError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for sc_observability_log::WaitError
+pub fn sc_observability_log::WaitError::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::WaitError
+pub fn sc_observability_log::WaitError::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::WaitError
+impl core::marker::Send for sc_observability_log::WaitError
+impl core::marker::Sync for sc_observability_log::WaitError
+impl core::marker::Unpin for sc_observability_log::WaitError
+impl core::marker::UnsafeUnpin for sc_observability_log::WaitError
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::WaitError
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::WaitError
+impl<T, U> core::convert::Into<U> for sc_observability_log::WaitError where U: core::convert::From<T>
+pub fn sc_observability_log::WaitError::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::WaitError where U: core::convert::Into<T>
+pub type sc_observability_log::WaitError::Error = never
+pub fn sc_observability_log::WaitError::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::WaitError where U: core::convert::TryFrom<T>
+pub type sc_observability_log::WaitError::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::WaitError::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::WaitError where T: core::clone::Clone
+pub type sc_observability_log::WaitError::Owned = T
+pub fn sc_observability_log::WaitError::clone_into(&self, &mut T)
+pub fn sc_observability_log::WaitError::to_owned(&self) -> T
+impl<T> alloc::string::ToString for sc_observability_log::WaitError where T: core::fmt::Display + ?core::marker::Sized
+pub fn sc_observability_log::WaitError::to_string(&self) -> alloc::string::String
+impl<T> core::any::Any for sc_observability_log::WaitError where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::WaitError::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::WaitError where T: ?core::marker::Sized
+pub fn sc_observability_log::WaitError::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::WaitError where T: ?core::marker::Sized
+pub fn sc_observability_log::WaitError::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::WaitError where T: core::clone::Clone
+pub unsafe fn sc_observability_log::WaitError::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::WaitError
+pub fn sc_observability_log::WaitError::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::WaitError where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::WaitError::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::WaitError where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::WaitError where T: for<'de> serde_core::de::Deserialize<'de>
+pub struct sc_observability_log::BridgeEvent
+pub sc_observability_log::BridgeEvent::action: core::option::Option<sc_observability_types::validation::ActionName>
+pub sc_observability_log::BridgeEvent::correlation_id: core::option::Option<sc_observability_types::validation::CorrelationId>
+pub sc_observability_log::BridgeEvent::fields: serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub sc_observability_log::BridgeEvent::level: sc_observability_types::level::Level
+pub sc_observability_log::BridgeEvent::message: core::option::Option<alloc::string::String>
+pub sc_observability_log::BridgeEvent::outcome: core::option::Option<sc_observability_types::validation::OutcomeLabel>
+pub sc_observability_log::BridgeEvent::request_id: core::option::Option<sc_observability_types::validation::CorrelationId>
+pub sc_observability_log::BridgeEvent::target: sc_observability_types::validation::TargetCategory
+pub sc_observability_log::BridgeEvent::trace: core::option::Option<sc_observability_types::tracing::TraceContext>
+impl core::clone::Clone for sc_observability_log::BridgeEvent
+pub fn sc_observability_log::BridgeEvent::clone(&self) -> sc_observability_log::BridgeEvent
+impl core::cmp::PartialEq for sc_observability_log::BridgeEvent
+pub fn sc_observability_log::BridgeEvent::eq(&self, &sc_observability_log::BridgeEvent) -> bool
+impl core::fmt::Debug for sc_observability_log::BridgeEvent
+pub fn sc_observability_log::BridgeEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for sc_observability_log::BridgeEvent
+impl serde_core::ser::Serialize for sc_observability_log::BridgeEvent
+pub fn sc_observability_log::BridgeEvent::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::BridgeEvent
+pub fn sc_observability_log::BridgeEvent::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::BridgeEvent
+impl core::marker::Send for sc_observability_log::BridgeEvent
+impl core::marker::Sync for sc_observability_log::BridgeEvent
+impl core::marker::Unpin for sc_observability_log::BridgeEvent
+impl core::marker::UnsafeUnpin for sc_observability_log::BridgeEvent
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::BridgeEvent
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::BridgeEvent
+impl<T, U> core::convert::Into<U> for sc_observability_log::BridgeEvent where U: core::convert::From<T>
+pub fn sc_observability_log::BridgeEvent::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::BridgeEvent where U: core::convert::Into<T>
+pub type sc_observability_log::BridgeEvent::Error = never
+pub fn sc_observability_log::BridgeEvent::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::BridgeEvent where U: core::convert::TryFrom<T>
+pub type sc_observability_log::BridgeEvent::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::BridgeEvent::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::BridgeEvent where T: core::clone::Clone
+pub type sc_observability_log::BridgeEvent::Owned = T
+pub fn sc_observability_log::BridgeEvent::clone_into(&self, &mut T)
+pub fn sc_observability_log::BridgeEvent::to_owned(&self) -> T
+impl<T> core::any::Any for sc_observability_log::BridgeEvent where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::BridgeEvent::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::BridgeEvent where T: ?core::marker::Sized
+pub fn sc_observability_log::BridgeEvent::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::BridgeEvent where T: ?core::marker::Sized
+pub fn sc_observability_log::BridgeEvent::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::BridgeEvent where T: core::clone::Clone
+pub unsafe fn sc_observability_log::BridgeEvent::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::BridgeEvent
+pub fn sc_observability_log::BridgeEvent::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::BridgeEvent where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::BridgeEvent::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::BridgeEvent where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::BridgeEvent where T: for<'de> serde_core::de::Deserialize<'de>
+pub struct sc_observability_log::BridgeHealthReport
+pub sc_observability_log::BridgeHealthReport::active_log_path: core::option::Option<std::path::PathBuf>
+pub sc_observability_log::BridgeHealthReport::configured_level: sc_observability_types::level::LevelFilter
+pub sc_observability_log::BridgeHealthReport::dropped: sc_observability_log::DroppedEvents
+pub sc_observability_log::BridgeHealthReport::effective_level: sc_observability_types::level::LevelFilter
+pub sc_observability_log::BridgeHealthReport::level_revision: u64
+pub sc_observability_log::BridgeHealthReport::lifecycle: sc_observability_log::LifecyclePhase
+pub sc_observability_log::BridgeHealthReport::logging: sc_observability_types::health::LoggingHealthReport
+pub sc_observability_log::BridgeHealthReport::schema_version: u32
+impl core::clone::Clone for sc_observability_log::BridgeHealthReport
+pub fn sc_observability_log::BridgeHealthReport::clone(&self) -> sc_observability_log::BridgeHealthReport
+impl core::cmp::PartialEq for sc_observability_log::BridgeHealthReport
+pub fn sc_observability_log::BridgeHealthReport::eq(&self, &sc_observability_log::BridgeHealthReport) -> bool
+impl core::fmt::Debug for sc_observability_log::BridgeHealthReport
+pub fn sc_observability_log::BridgeHealthReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for sc_observability_log::BridgeHealthReport
+impl serde_core::ser::Serialize for sc_observability_log::BridgeHealthReport
+pub fn sc_observability_log::BridgeHealthReport::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::BridgeHealthReport
+pub fn sc_observability_log::BridgeHealthReport::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::BridgeHealthReport
+impl core::marker::Send for sc_observability_log::BridgeHealthReport
+impl core::marker::Sync for sc_observability_log::BridgeHealthReport
+impl core::marker::Unpin for sc_observability_log::BridgeHealthReport
+impl core::marker::UnsafeUnpin for sc_observability_log::BridgeHealthReport
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::BridgeHealthReport
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::BridgeHealthReport
+impl<T, U> core::convert::Into<U> for sc_observability_log::BridgeHealthReport where U: core::convert::From<T>
+pub fn sc_observability_log::BridgeHealthReport::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::BridgeHealthReport where U: core::convert::Into<T>
+pub type sc_observability_log::BridgeHealthReport::Error = never
+pub fn sc_observability_log::BridgeHealthReport::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::BridgeHealthReport where U: core::convert::TryFrom<T>
+pub type sc_observability_log::BridgeHealthReport::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::BridgeHealthReport::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::BridgeHealthReport where T: core::clone::Clone
+pub type sc_observability_log::BridgeHealthReport::Owned = T
+pub fn sc_observability_log::BridgeHealthReport::clone_into(&self, &mut T)
+pub fn sc_observability_log::BridgeHealthReport::to_owned(&self) -> T
+impl<T> core::any::Any for sc_observability_log::BridgeHealthReport where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::BridgeHealthReport::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::BridgeHealthReport where T: ?core::marker::Sized
+pub fn sc_observability_log::BridgeHealthReport::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::BridgeHealthReport where T: ?core::marker::Sized
+pub fn sc_observability_log::BridgeHealthReport::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::BridgeHealthReport where T: core::clone::Clone
+pub unsafe fn sc_observability_log::BridgeHealthReport::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::BridgeHealthReport
+pub fn sc_observability_log::BridgeHealthReport::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::BridgeHealthReport where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::BridgeHealthReport::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::BridgeHealthReport where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::BridgeHealthReport where T: for<'de> serde_core::de::Deserialize<'de>
+pub struct sc_observability_log::BridgeOptions
+pub sc_observability_log::BridgeOptions::default_action: sc_observability_types::validation::ActionName
+pub sc_observability_log::BridgeOptions::parse_bracket_action: bool
+impl core::clone::Clone for sc_observability_log::BridgeOptions
+pub fn sc_observability_log::BridgeOptions::clone(&self) -> sc_observability_log::BridgeOptions
+impl core::fmt::Debug for sc_observability_log::BridgeOptions
+pub fn sc_observability_log::BridgeOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for sc_observability_log::BridgeOptions
+impl core::marker::Send for sc_observability_log::BridgeOptions
+impl core::marker::Sync for sc_observability_log::BridgeOptions
+impl core::marker::Unpin for sc_observability_log::BridgeOptions
+impl core::marker::UnsafeUnpin for sc_observability_log::BridgeOptions
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::BridgeOptions
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::BridgeOptions
+impl<T, U> core::convert::Into<U> for sc_observability_log::BridgeOptions where U: core::convert::From<T>
+pub fn sc_observability_log::BridgeOptions::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::BridgeOptions where U: core::convert::Into<T>
+pub type sc_observability_log::BridgeOptions::Error = never
+pub fn sc_observability_log::BridgeOptions::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::BridgeOptions where U: core::convert::TryFrom<T>
+pub type sc_observability_log::BridgeOptions::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::BridgeOptions::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::BridgeOptions where T: core::clone::Clone
+pub type sc_observability_log::BridgeOptions::Owned = T
+pub fn sc_observability_log::BridgeOptions::clone_into(&self, &mut T)
+pub fn sc_observability_log::BridgeOptions::to_owned(&self) -> T
+impl<T> core::any::Any for sc_observability_log::BridgeOptions where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::BridgeOptions::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::BridgeOptions where T: ?core::marker::Sized
+pub fn sc_observability_log::BridgeOptions::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::BridgeOptions where T: ?core::marker::Sized
+pub fn sc_observability_log::BridgeOptions::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::BridgeOptions where T: core::clone::Clone
+pub unsafe fn sc_observability_log::BridgeOptions::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::BridgeOptions
+pub fn sc_observability_log::BridgeOptions::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::BridgeOptions where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::BridgeOptions::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::BridgeOptions where T: core::marker::Send + core::marker::Sync + 'static
+pub struct sc_observability_log::DroppedEvents
+impl sc_observability_log::DroppedEvents
+pub fn sc_observability_log::DroppedEvents::get(&self, sc_observability_log::DropCause) -> u64
+pub fn sc_observability_log::DroppedEvents::total(&self) -> u64
+impl core::clone::Clone for sc_observability_log::DroppedEvents
+pub fn sc_observability_log::DroppedEvents::clone(&self) -> sc_observability_log::DroppedEvents
+impl core::cmp::Eq for sc_observability_log::DroppedEvents
+impl core::cmp::PartialEq for sc_observability_log::DroppedEvents
+pub fn sc_observability_log::DroppedEvents::eq(&self, &sc_observability_log::DroppedEvents) -> bool
+impl core::default::Default for sc_observability_log::DroppedEvents
+pub fn sc_observability_log::DroppedEvents::default() -> sc_observability_log::DroppedEvents
+impl core::fmt::Debug for sc_observability_log::DroppedEvents
+pub fn sc_observability_log::DroppedEvents::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for sc_observability_log::DroppedEvents
+impl core::marker::StructuralPartialEq for sc_observability_log::DroppedEvents
+impl serde_core::ser::Serialize for sc_observability_log::DroppedEvents
+pub fn sc_observability_log::DroppedEvents::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::DroppedEvents
+pub fn sc_observability_log::DroppedEvents::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::DroppedEvents
+impl core::marker::Send for sc_observability_log::DroppedEvents
+impl core::marker::Sync for sc_observability_log::DroppedEvents
+impl core::marker::Unpin for sc_observability_log::DroppedEvents
+impl core::marker::UnsafeUnpin for sc_observability_log::DroppedEvents
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::DroppedEvents
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::DroppedEvents
+impl<T, U> core::convert::Into<U> for sc_observability_log::DroppedEvents where U: core::convert::From<T>
+pub fn sc_observability_log::DroppedEvents::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::DroppedEvents where U: core::convert::Into<T>
+pub type sc_observability_log::DroppedEvents::Error = never
+pub fn sc_observability_log::DroppedEvents::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::DroppedEvents where U: core::convert::TryFrom<T>
+pub type sc_observability_log::DroppedEvents::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::DroppedEvents::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::DroppedEvents where T: core::clone::Clone
+pub type sc_observability_log::DroppedEvents::Owned = T
+pub fn sc_observability_log::DroppedEvents::clone_into(&self, &mut T)
+pub fn sc_observability_log::DroppedEvents::to_owned(&self) -> T
+impl<T> core::any::Any for sc_observability_log::DroppedEvents where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::DroppedEvents::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::DroppedEvents where T: ?core::marker::Sized
+pub fn sc_observability_log::DroppedEvents::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::DroppedEvents where T: ?core::marker::Sized
+pub fn sc_observability_log::DroppedEvents::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::DroppedEvents where T: core::clone::Clone
+pub unsafe fn sc_observability_log::DroppedEvents::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::DroppedEvents
+pub fn sc_observability_log::DroppedEvents::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::DroppedEvents where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::DroppedEvents::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::DroppedEvents where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::DroppedEvents where T: for<'de> serde_core::de::Deserialize<'de>
+pub struct sc_observability_log::Level(_)
+impl sc_observability_log::Level
+pub const sc_observability_log::Level::DEBUG: sc_observability_log::Level
+pub const sc_observability_log::Level::ERROR: sc_observability_log::Level
+pub const sc_observability_log::Level::INFO: sc_observability_log::Level
+pub const sc_observability_log::Level::TRACE: sc_observability_log::Level
+pub const sc_observability_log::Level::WARN: sc_observability_log::Level
+impl core::clone::Clone for sc_observability_log::Level
+pub fn sc_observability_log::Level::clone(&self) -> sc_observability_log::Level
+impl core::cmp::Eq for sc_observability_log::Level
+impl core::cmp::PartialEq for sc_observability_log::Level
+pub fn sc_observability_log::Level::eq(&self, &sc_observability_log::Level) -> bool
+impl core::convert::From<sc_observability_log::Level> for sc_observability_types::level::Level
+pub fn sc_observability_types::level::Level::from(sc_observability_log::Level) -> Self
+impl core::fmt::Debug for sc_observability_log::Level
+pub fn sc_observability_log::Level::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for sc_observability_log::Level
+pub fn sc_observability_log::Level::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for sc_observability_log::Level
+impl core::marker::StructuralPartialEq for sc_observability_log::Level
+impl serde_core::ser::Serialize for sc_observability_log::Level
+pub fn sc_observability_log::Level::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::Level
+pub fn sc_observability_log::Level::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::Level
+impl core::marker::Send for sc_observability_log::Level
+impl core::marker::Sync for sc_observability_log::Level
+impl core::marker::Unpin for sc_observability_log::Level
+impl core::marker::UnsafeUnpin for sc_observability_log::Level
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::Level
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::Level
+impl<T, U> core::convert::Into<U> for sc_observability_log::Level where U: core::convert::From<T>
+pub fn sc_observability_log::Level::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::Level where U: core::convert::Into<T>
+pub type sc_observability_log::Level::Error = never
+pub fn sc_observability_log::Level::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::Level where U: core::convert::TryFrom<T>
+pub type sc_observability_log::Level::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::Level::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::Level where T: core::clone::Clone
+pub type sc_observability_log::Level::Owned = T
+pub fn sc_observability_log::Level::clone_into(&self, &mut T)
+pub fn sc_observability_log::Level::to_owned(&self) -> T
+impl<T> core::any::Any for sc_observability_log::Level where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::Level::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::Level where T: ?core::marker::Sized
+pub fn sc_observability_log::Level::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::Level where T: ?core::marker::Sized
+pub fn sc_observability_log::Level::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::Level where T: core::clone::Clone
+pub unsafe fn sc_observability_log::Level::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::Level
+pub fn sc_observability_log::Level::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::Level where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::Level::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::Level where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::Level where T: for<'de> serde_core::de::Deserialize<'de>
+pub struct sc_observability_log::LogControl
+impl sc_observability_log::LogControl
+pub fn sc_observability_log::LogControl::active_log_path(&self) -> core::result::Result<core::option::Option<std::path::PathBuf>, sc_observability_log::ControlError>
+pub fn sc_observability_log::LogControl::dropped_events(&self) -> sc_observability_log::DroppedEvents
+pub fn sc_observability_log::LogControl::flush(&self, core::time::Duration) -> core::result::Result<(), sc_observability_log::FlushError>
+pub fn sc_observability_log::LogControl::health(&self) -> core::result::Result<sc_observability_log::BridgeHealthReport, sc_observability_log::ControlError>
+pub fn sc_observability_log::LogControl::query(&self, &sc_observability_types::query::LogQuery) -> core::result::Result<sc_observability_types::query::LogSnapshot, sc_observability_log::ControlError>
+pub fn sc_observability_log::LogControl::try_log(&self, sc_observability_log::BridgeEvent) -> core::result::Result<sc_observability_log::EmitOutcome, sc_observability_log::EmitError>
+pub fn sc_observability_log::LogControl::wait_stopped(&self, core::time::Duration) -> core::result::Result<sc_observability_log::ShutdownReport, sc_observability_log::WaitError>
+impl core::clone::Clone for sc_observability_log::LogControl
+pub fn sc_observability_log::LogControl::clone(&self) -> sc_observability_log::LogControl
+impl core::fmt::Debug for sc_observability_log::LogControl
+pub fn sc_observability_log::LogControl::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for sc_observability_log::LogControl
+impl core::marker::Send for sc_observability_log::LogControl
+impl core::marker::Sync for sc_observability_log::LogControl
+impl core::marker::Unpin for sc_observability_log::LogControl
+impl core::marker::UnsafeUnpin for sc_observability_log::LogControl
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::LogControl
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::LogControl
+impl<T, U> core::convert::Into<U> for sc_observability_log::LogControl where U: core::convert::From<T>
+pub fn sc_observability_log::LogControl::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::LogControl where U: core::convert::Into<T>
+pub type sc_observability_log::LogControl::Error = never
+pub fn sc_observability_log::LogControl::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::LogControl where U: core::convert::TryFrom<T>
+pub type sc_observability_log::LogControl::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::LogControl::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::LogControl where T: core::clone::Clone
+pub type sc_observability_log::LogControl::Owned = T
+pub fn sc_observability_log::LogControl::clone_into(&self, &mut T)
+pub fn sc_observability_log::LogControl::to_owned(&self) -> T
+impl<T> core::any::Any for sc_observability_log::LogControl where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::LogControl::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::LogControl where T: ?core::marker::Sized
+pub fn sc_observability_log::LogControl::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::LogControl where T: ?core::marker::Sized
+pub fn sc_observability_log::LogControl::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::LogControl where T: core::clone::Clone
+pub unsafe fn sc_observability_log::LogControl::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::LogControl
+pub fn sc_observability_log::LogControl::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::LogControl where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::LogControl::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::LogControl where T: core::marker::Send + core::marker::Sync + 'static
+pub struct sc_observability_log::LogGuard
+impl sc_observability_log::LogGuard
+pub fn sc_observability_log::LogGuard::active_log_path(&self) -> core::option::Option<&std::path::Path>
+pub fn sc_observability_log::LogGuard::control(&self) -> sc_observability_log::LogControl
+pub fn sc_observability_log::LogGuard::dropped_events(&self) -> sc_observability_log::DroppedEvents
+pub fn sc_observability_log::LogGuard::elevate_level(&mut self, sc_observability_types::level::LevelFilter, sc_observability_types::level::LevelChangeSource) -> core::result::Result<sc_observability_types::level::LevelChange, sc_observability_types::level::LevelChangeError>
+pub fn sc_observability_log::LogGuard::flush(&self, core::time::Duration) -> core::result::Result<(), sc_observability_log::FlushError>
+pub fn sc_observability_log::LogGuard::health(&self) -> core::result::Result<sc_observability_log::BridgeHealthReport, sc_observability_log::ControlError>
+pub fn sc_observability_log::LogGuard::reset_level(&mut self, sc_observability_types::level::LevelChangeSource) -> core::result::Result<sc_observability_types::level::LevelChange, sc_observability_types::level::LevelChangeError>
+pub fn sc_observability_log::LogGuard::shutdown(self, core::time::Duration) -> core::result::Result<(), sc_observability_log::ShutdownError>
+impl core::fmt::Debug for sc_observability_log::LogGuard
+pub fn sc_observability_log::LogGuard::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for sc_observability_log::LogGuard
+pub fn sc_observability_log::LogGuard::drop(&mut self)
+impl core::marker::Freeze for sc_observability_log::LogGuard
+impl core::marker::Send for sc_observability_log::LogGuard
+impl core::marker::Sync for sc_observability_log::LogGuard
+impl core::marker::Unpin for sc_observability_log::LogGuard
+impl core::marker::UnsafeUnpin for sc_observability_log::LogGuard
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::LogGuard
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::LogGuard
+impl<T, U> core::convert::Into<U> for sc_observability_log::LogGuard where U: core::convert::From<T>
+pub fn sc_observability_log::LogGuard::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::LogGuard where U: core::convert::Into<T>
+pub type sc_observability_log::LogGuard::Error = never
+pub fn sc_observability_log::LogGuard::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::LogGuard where U: core::convert::TryFrom<T>
+pub type sc_observability_log::LogGuard::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::LogGuard::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> core::any::Any for sc_observability_log::LogGuard where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::LogGuard::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::LogGuard where T: ?core::marker::Sized
+pub fn sc_observability_log::LogGuard::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::LogGuard where T: ?core::marker::Sized
+pub fn sc_observability_log::LogGuard::borrow_mut(&mut self) -> &mut T
+impl<T> core::convert::From<T> for sc_observability_log::LogGuard
+pub fn sc_observability_log::LogGuard::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::LogGuard where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::LogGuard::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::LogGuard where T: core::marker::Send + core::marker::Sync + 'static
+pub struct sc_observability_log::ShutdownReport
+pub sc_observability_log::ShutdownReport::health: sc_observability_log::BridgeHealthReport
+pub sc_observability_log::ShutdownReport::outcome: sc_observability_log::ShutdownOutcome
+impl core::clone::Clone for sc_observability_log::ShutdownReport
+pub fn sc_observability_log::ShutdownReport::clone(&self) -> sc_observability_log::ShutdownReport
+impl core::fmt::Debug for sc_observability_log::ShutdownReport
+pub fn sc_observability_log::ShutdownReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for sc_observability_log::ShutdownReport
+pub fn sc_observability_log::ShutdownReport::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for sc_observability_log::ShutdownReport
+pub fn sc_observability_log::ShutdownReport::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for sc_observability_log::ShutdownReport
+impl core::marker::Send for sc_observability_log::ShutdownReport
+impl core::marker::Sync for sc_observability_log::ShutdownReport
+impl core::marker::Unpin for sc_observability_log::ShutdownReport
+impl core::marker::UnsafeUnpin for sc_observability_log::ShutdownReport
+impl core::panic::unwind_safe::RefUnwindSafe for sc_observability_log::ShutdownReport
+impl core::panic::unwind_safe::UnwindSafe for sc_observability_log::ShutdownReport
+impl<T, U> core::convert::Into<U> for sc_observability_log::ShutdownReport where U: core::convert::From<T>
+pub fn sc_observability_log::ShutdownReport::into(self) -> U
+impl<T, U> core::convert::TryFrom<U> for sc_observability_log::ShutdownReport where U: core::convert::Into<T>
+pub type sc_observability_log::ShutdownReport::Error = never
+pub fn sc_observability_log::ShutdownReport::try_from(U) -> core::result::Result<T, never>
+impl<T, U> core::convert::TryInto<U> for sc_observability_log::ShutdownReport where U: core::convert::TryFrom<T>
+pub type sc_observability_log::ShutdownReport::Error = <U as core::convert::TryFrom<T>>::Error
+pub fn sc_observability_log::ShutdownReport::try_into(self) -> core::result::Result<U, <U as core::convert::TryFrom<T>>::Error>
+impl<T> alloc::borrow::ToOwned for sc_observability_log::ShutdownReport where T: core::clone::Clone
+pub type sc_observability_log::ShutdownReport::Owned = T
+pub fn sc_observability_log::ShutdownReport::clone_into(&self, &mut T)
+pub fn sc_observability_log::ShutdownReport::to_owned(&self) -> T
+impl<T> core::any::Any for sc_observability_log::ShutdownReport where T: 'static + ?core::marker::Sized
+pub fn sc_observability_log::ShutdownReport::type_id(&self) -> core::any::TypeId
+impl<T> core::borrow::Borrow<T> for sc_observability_log::ShutdownReport where T: ?core::marker::Sized
+pub fn sc_observability_log::ShutdownReport::borrow(&self) -> &T
+impl<T> core::borrow::BorrowMut<T> for sc_observability_log::ShutdownReport where T: ?core::marker::Sized
+pub fn sc_observability_log::ShutdownReport::borrow_mut(&mut self) -> &mut T
+impl<T> core::clone::CloneToUninit for sc_observability_log::ShutdownReport where T: core::clone::Clone
+pub unsafe fn sc_observability_log::ShutdownReport::clone_to_uninit(&self, *mut u8)
+impl<T> core::convert::From<T> for sc_observability_log::ShutdownReport
+pub fn sc_observability_log::ShutdownReport::from(T) -> T
+impl<T> sc_observability_log::callsite::FieldDebug for sc_observability_log::ShutdownReport where T: core::fmt::Debug + ?core::marker::Sized
+pub fn sc_observability_log::ShutdownReport::field_debug(&self) -> alloc::string::String
+impl<T> sc_observability_types::events::Observable for sc_observability_log::ShutdownReport where T: core::marker::Send + core::marker::Sync + 'static
+impl<T> serde_core::de::DeserializeOwned for sc_observability_log::ShutdownReport where T: for<'de> serde_core::de::Deserialize<'de>
+pub const sc_observability_log::BRIDGE_HEALTH_SCHEMA_VERSION: u32
+pub const sc_observability_log::DEFAULT_DROP_SHUTDOWN_TIMEOUT: core::time::Duration
+pub fn sc_observability_log::init(sc_observability::LoggerConfig, sc_observability_log::BridgeOptions) -> core::result::Result<sc_observability_log::LogGuard, sc_observability_log::InitError>
+pub type sc_observability_log::EmitOutcome = sc_observability_types::level::AdmissionOutcome
