@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { createClient, encodeEvent, encodeValue, validate } from '@sc-observability/client';
+import { createClient, createTauriTransport, encodeEvent, encodeValue, validate } from '@sc-observability/client';
 const results = [];
 const escaped = [];
 process.on('unhandledRejection', (error) => escaped.push(String(error)));
@@ -138,8 +138,53 @@ await test('bounded-dispatch-delayed-failure', async () => {
   assert.equal(status.failures_by_kind.queue_full, '1');
   assert.equal(Object.keys(status.failures_by_kind).length, 13);
 });
+// Exercise the unchanged example helper, linked to the installed npm client
+// and the actual locked Tauri JavaScript API. Only foreign IPC is injected here;
+// frontend.js also consumes this same helper through real desktop IPC.
+globalThis.window = { __TAURI_INTERNALS__: { invoke: async () => ({ schema_version: 1, kind: 'ok', value: { kind: 'accepted' } }) } };
+const { requestLevelChange } = await import('./host-client.mjs');
 await tick();
-await test('no-unhandled-rejection', () => assert.deepEqual(escaped, []));
+const levelRequest = { kind: 'reset' };
+for (const fixture of fixtureCases.filter((row) => row.entrypoint === 'OutputFailure' && row.valid)) {
+  await test(`level-helper-payload-${fixture.id}`, async () => {
+    window.__TAURI_INTERNALS__ = { invoke: async () => ({ schema_version: 1, kind: 'error', error: fixture.value }) };
+    assert.deepEqual(err(await requestLevelChange(levelRequest)), fixture.value);
+  });
+}
+for (const mode of ['throw', 'reject', 'getter']) {
+  await test(`level-helper-foreign-${mode}`, async () => {
+    window.__TAURI_INTERNALS__ = mode === 'getter'
+      ? { get invoke() { throw new Error('foreign invoke getter'); } }
+      : { invoke: mode === 'throw' ? () => { throw new Error('foreign invoke'); } : () => Promise.reject(new Error('foreign rejection')) };
+    err(await requestLevelChange(levelRequest), 'internal');
+  });
+  await test(`tauri-transport-foreign-${mode}`, async () => {
+    const callback = mode === 'getter' ? () => ({ get then() { throw new Error('foreign then'); } })
+      : mode === 'throw' ? () => { throw new Error('foreign invoke'); } : () => Promise.reject(new Error('foreign rejection'));
+    err(await ok(createTauriTransport(callback)).request('health', { schema_version: 1 }), 'internal');
+  });
+}
+await test('tauri-transport-invalid-factory', () => err(createTauriTransport(null), 'validation'));
+await test('level-helper-invalid-envelope', async () => {
+  window.__TAURI_INTERNALS__ = { invoke: async () => ({ kind: 'ok', value: {} }) };
+  err(await requestLevelChange(levelRequest), 'validation');
+});
+await test('level-helper-response-schema-version', async () => {
+  window.__TAURI_INTERNALS__ = { invoke: async () => ({ schema_version: 2, kind: 'ok', value: {} }) };
+  err(await requestLevelChange(levelRequest), 'unsupported_version');
+});
+await test('level-helper-unknown-remote', async () => {
+  window.__TAURI_INTERNALS__ = { invoke: async () => ({ schema_version: 1, kind: 'error', error: { kind: 'future_remote', ...diagnostic } }) };
+  const failure = err(await requestLevelChange(levelRequest), 'unknown_remote');
+  assert.equal(failure.remote_kind, 'future_remote');
+  assert.deepEqual(failure.remediation, diagnostic.remediation);
+});
+await test('level-helper-oversized-diagnostic', async () => {
+  window.__TAURI_INTERNALS__ = { invoke: async () => ({ schema_version: 1, kind: 'error', error: { kind: 'closed', ...diagnostic, message: 'x'.repeat(5000) } }) };
+  assert.equal(err(await requestLevelChange(levelRequest), 'validation').code, 'SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE');
+});
+await tick();
+await test('no-unhandled-rejection' , () => assert.deepEqual(escaped, []));
 writeFileSync('fault-results.json', JSON.stringify({ passed: results.every((result) => result.passed), results }, null, 2));
 console.log(JSON.stringify({ cases: results.length, failures: results.filter((result) => !result.passed) }));
 if (results.some((result) => !result.passed)) process.exitCode = 1;

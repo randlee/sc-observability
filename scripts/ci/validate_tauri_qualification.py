@@ -156,10 +156,13 @@ def main():
             report['conformance_fixture_sha256'] = digest(ROOT / 'bindings/conformance/v1/schema-cases.json')
             report['npm_archive'] = {'filename': archive.name, 'sha256': digest(archive)}
             consumer = external / 'frontend'
-            shutil.copytree(FIXTURE, consumer)
+            shutil.copytree(FIXTURE, consumer, ignore=shutil.ignore_patterns('node_modules'))
+            shutil.copyfile(ROOT / 'examples/tauri-logging/src/main.ts', consumer / 'host-client.ts')
+            report['host_client_source_sha256'] = digest(consumer / 'host-client.ts')
             run(['npm', 'ci', '--ignore-scripts'], consumer, commands)
             run(['npm', 'install', '--ignore-scripts', '--no-save', archive], consumer, commands)
             shutil.copyfile(ROOT / 'bindings/conformance/v1/schema-cases.json', consumer / 'schema-cases.json')
+            run(['node', 'node_modules/esbuild/bin/esbuild', 'host-client.ts', '--bundle', '--platform=node', '--format=esm', '--external:@sc-observability/client', '--external:@tauri-apps/api/core', '--outfile=host-client.mjs'], consumer, commands)
             try:
                 run(['node', 'faults.mjs'], consumer, commands)
             except RuntimeError as error:

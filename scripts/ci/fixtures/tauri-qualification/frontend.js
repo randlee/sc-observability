@@ -1,3 +1,4 @@
+import { requestLevelChange } from './host-client.ts';
 import { createClient, createTauriTransport, encodeEvent, encodeValue } from '@sc-observability/client';
 
 // This fixture runs inside the real OS webview. No mockIPC/test runtime is used.
@@ -28,7 +29,7 @@ async function run() {
     for (const [operation, fields] of [['try_log', { event: wireEvent() }], ['query', { query: request }], ['health', {}], ['flush', { timeout_ms: 2000 }]]) {
       failure(`forbidden-window-${operation}`, await command(operation, { ...request, ...fields }), 'permission_denied');
     }
-    failure('forbidden-window-level', await invoke('app_observability_level_change', { request: { ...request, change: { kind: 'reset' } } }), 'permission_denied');
+    failure('forbidden-window-level', await requestLevelChange({ kind: 'reset' }), 'permission_denied');
     return;
   }
   const transport = value('tauri-transport-factory', createTauriTransport(invoke));
@@ -36,7 +37,7 @@ async function run() {
   if (window.qualificationCapped) {
     const before = value('capped-health-before', await client.health());
     check('capped-baseline', before.level_state.configured_level === 'info' && before.level_state.effective_level === 'info', before);
-    const changed = await invoke('app_observability_level_change', { request: { ...request, change: { kind: 'elevate', level: 'trace' } } });
+    const changed = await requestLevelChange({ kind: 'elevate', level: 'trace' });
     failure('capped-level-rejected', changed, 'unsupported_level');
     check('capped-payload-preserved', changed.error.requested === 'trace' && changed.error.available === 'info', changed);
     const after = value('capped-health-after', await client.health());
@@ -70,7 +71,7 @@ async function run() {
   check('bridge-health-coherence', health.bridge !== null && JSON.stringify(health.logging) === JSON.stringify(health.bridge.logging) && health.level_state.configured_level === health.bridge.configured_level && health.level_state.effective_level === health.bridge.effective_level && health.level_state.level_revision === health.bridge.level_revision, health);
   check('baseline-info', health.level_state.configured_level === 'info' && health.level_state.effective_level === 'info', health);
   check('admission-filtered', value('filtered', await client.tryLog({ ...event, level: 'debug' })).kind === 'filtered');
-  const level = (change) => invoke('app_observability_level_change', { request: { ...request, change } });
+  const level = requestLevelChange;
   value('elevate-trace', await level({ kind: 'elevate', level: 'trace' }));
   check('health-trace', value('health-elevated', await client.health()).level_state.effective_level === 'trace');
   check('repeat-unchanged', value('repeat', await level({ kind: 'elevate', level: 'trace' })).kind === 'unchanged');
