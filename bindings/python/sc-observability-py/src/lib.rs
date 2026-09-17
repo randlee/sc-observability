@@ -164,6 +164,8 @@ struct NativeLogger {
 #[pyclass(frozen)]
 struct HostSlot {
     backend: Arc<dyn HostLoggingBackend>,
+    #[cfg(feature = "test-hooks")]
+    _test_owner: Option<CoreLoggerOwner>,
 }
 
 #[pyclass]
@@ -175,6 +177,81 @@ struct NativeAttachedLogger {
 // itself remains retained exclusively by its concrete Python module slot; no
 // process-global backend or ownership capability is introduced.
 static HOST_INSTALLATION_LOCK: Mutex<()> = Mutex::new(());
+
+/// CI-only one-shot boundary fault selector. It is never compiled into the
+/// normal extension and is exercised through the installed source wheel.
+#[cfg(feature = "test-hooks")]
+static TEST_FORCED_FAILURE: Mutex<Option<String>> = Mutex::new(None);
+
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "the normal extension compiles this CI seam as a no-op; test-hooks returns a tagged failure"
+)]
+fn test_fault(operation: &str) -> Result<(), Failure> {
+    #[cfg(feature = "test-hooks")]
+    match TEST_FORCED_FAILURE.lock() {
+        Ok(forced) if forced.as_deref() == Some(operation) => Err(internal_failure(format!(
+            "test hook forced native {operation} failure"
+        ))),
+        Ok(_) => Ok(()),
+        Err(_) => Err(internal_failure("test fault selector lock poisoned")),
+    }
+    #[cfg(not(feature = "test-hooks"))]
+    {
+        let _ = operation;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+#[pyfunction]
+fn _test_force_failure(operation: Option<String>) {
+    if let Ok(mut forced) = TEST_FORCED_FAILURE.lock() {
+        *forced = operation;
+    }
+}
+
+/// Installs one disposable core backend in this extension module for the
+/// source-validation wheel. Normal embeddings must use `install_host_logger`.
+#[cfg(feature = "test-hooks")]
+#[pyfunction]
+fn _test_install_owned_host(py: Python<'_>, config: &str) -> String {
+    contained_json(|| {
+        let result = logger_config(config)
+            .and_then(create_core_backend)
+            .and_then(|(owner, backend)| {
+                let module = PyModule::import(py, "sc_observability._native").map_err(|error| {
+                    internal_failure(format!("could not access test host module: {error}"))
+                })?;
+                let _installation = HOST_INSTALLATION_LOCK
+                    .lock_py_attached(py)
+                    .map_err(|_| internal_failure("host installation lock poisoned"))?;
+                let state = module.dict();
+                if state.contains("_sc_observability_host_backend").map_err(|error| {
+                    internal_failure(format!("could not inspect test host state: {error}"))
+                })? {
+                    return Err(unavailable_failure(
+                        sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED,
+                        "a host logger is already installed for this module",
+                    ));
+                }
+                let slot = Py::new(
+                    py,
+                    HostSlot {
+                        backend: Arc::new(backend),
+                        _test_owner: Some(owner),
+                    },
+                )
+                .map_err(|error| {
+                    internal_failure(format!("could not allocate test host state: {error}"))
+                })?;
+                state.set_item("_sc_observability_host_backend", slot).map_err(|error| {
+                    internal_failure(format!("could not install test host state: {error}"))
+                })
+            });
+        result_json(result)
+    })
+}
 
 fn log_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, event: &str) -> String {
     let result = parse_value(event, "event")
@@ -239,34 +316,49 @@ impl NativeLogger {
 #[pymethods]
 impl NativeLogger {
     fn log(&self, py: Python<'_>, event: &str) -> String {
-        contained_json(|| log_backend(Arc::new(self.backend.clone()), py, event))
+        contained_json(|| match test_fault("log") {
+            Ok(()) => log_backend(Arc::new(self.backend.clone()), py, event),
+            Err(error) => result_json::<()>(Err(error)),
+        })
     }
 
     fn query(&self, py: Python<'_>, query: &str) -> String {
-        contained_json(|| query_backend(Arc::new(self.backend.clone()), py, query))
+        contained_json(|| match test_fault("query") {
+            Ok(()) => query_backend(Arc::new(self.backend.clone()), py, query),
+            Err(error) => result_json::<()>(Err(error)),
+        })
     }
 
     fn health(&self) -> String {
-        contained_json(|| result_json(self.backend.health()))
+        contained_json(|| match test_fault("health") {
+            Ok(()) => result_json(self.backend.health()),
+            Err(error) => result_json::<()>(Err(error)),
+        })
     }
 
     fn flush(&self, py: Python<'_>, timeout: &str) -> String {
-        contained_json(|| flush_backend(Arc::new(self.backend.clone()), py, timeout))
+        contained_json(|| match test_fault("flush") {
+            Ok(()) => flush_backend(Arc::new(self.backend.clone()), py, timeout),
+            Err(error) => result_json::<()>(Err(error)),
+        })
     }
 
     fn shutdown(&self, py: Python<'_>, timeout: &str) -> String {
         contained_json(|| {
-            let result = parse_timeout(timeout).and_then(|timeout| {
-                let operation = self.start_shutdown()?;
-                py.detach(move || operation.wait(timeout))
-            });
+            let result = test_fault("shutdown")
+                .and_then(|()| parse_timeout(timeout))
+                .and_then(|timeout| {
+                    let operation = self.start_shutdown()?;
+                    py.detach(move || operation.wait(timeout))
+                });
             result_json(result)
         })
     }
 
     fn wait_stopped(&self, py: Python<'_>, timeout: &str) -> String {
         contained_json(|| {
-            let result = parse_timeout(timeout)
+            let result = test_fault("wait_stopped")
+                .and_then(|()| parse_timeout(timeout))
                 .and_then(|timeout| py.detach(move || self.wait_shutdown(timeout)));
             result_json(result)
         })
@@ -274,28 +366,32 @@ impl NativeLogger {
 
     fn elevate_level(&self, level_value: &str, source_value: &str) -> String {
         contained_json(|| {
-            let result = level(level_value).and_then(|level_value| {
-                source(source_value).and_then(|source_value| {
-                    let mut state = self
-                        .owned
-                        .lock()
-                        .map_err(|_| internal_failure("owned logger state lock poisoned"))?;
-                    state.owner.elevate_level(level_value, source_value)
-                })
-            });
+            let result = test_fault("elevate_level")
+                .and_then(|()| level(level_value))
+                .and_then(|level_value| {
+                    source(source_value).and_then(|source_value| {
+                        let mut state = self
+                            .owned
+                            .lock()
+                            .map_err(|_| internal_failure("owned logger state lock poisoned"))?;
+                        state.owner.elevate_level(level_value, source_value)
+                    })
+                });
             result_json::<LevelChangeDto>(result)
         })
     }
 
     fn reset_level(&self, source_value: &str) -> String {
         contained_json(|| {
-            let result = source(source_value).and_then(|source_value| {
-                let mut state = self
-                    .owned
-                    .lock()
-                    .map_err(|_| internal_failure("owned logger state lock poisoned"))?;
-                state.owner.reset_level(source_value)
-            });
+            let result = test_fault("reset_level")
+                .and_then(|()| source(source_value))
+                .and_then(|source_value| {
+                    let mut state = self
+                        .owned
+                        .lock()
+                        .map_err(|_| internal_failure("owned logger state lock poisoned"))?;
+                    state.owner.reset_level(source_value)
+                });
             result_json::<LevelChangeDto>(result)
         })
     }
@@ -304,26 +400,41 @@ impl NativeLogger {
 #[pymethods]
 impl NativeAttachedLogger {
     fn log(&self, py: Python<'_>, event: &str) -> String {
-        contained_json(|| log_backend(self.backend.clone(), py, event))
+        contained_json(|| match test_fault("log") {
+            Ok(()) => log_backend(self.backend.clone(), py, event),
+            Err(error) => result_json::<()>(Err(error)),
+        })
     }
 
     fn query(&self, py: Python<'_>, query: &str) -> String {
-        contained_json(|| query_backend(self.backend.clone(), py, query))
+        contained_json(|| match test_fault("query") {
+            Ok(()) => query_backend(self.backend.clone(), py, query),
+            Err(error) => result_json::<()>(Err(error)),
+        })
     }
 
     fn health(&self) -> String {
-        contained_json(|| result_json(self.backend.health()))
+        contained_json(|| match test_fault("health") {
+            Ok(()) => result_json(self.backend.health()),
+            Err(error) => result_json::<()>(Err(error)),
+        })
     }
 
     fn flush(&self, py: Python<'_>, timeout: &str) -> String {
-        contained_json(|| flush_backend(self.backend.clone(), py, timeout))
+        contained_json(|| match test_fault("flush") {
+            Ok(()) => flush_backend(self.backend.clone(), py, timeout),
+            Err(error) => result_json::<()>(Err(error)),
+        })
     }
 }
 
 #[pyfunction]
 fn create_owned(py: Python<'_>, config: &str) -> PyResult<(Option<Py<NativeLogger>>, String)> {
     match catch_unwind(AssertUnwindSafe(|| {
-        match logger_config(config).and_then(create_core_backend) {
+        match test_fault("create_owned")
+            .and_then(|()| logger_config(config))
+            .and_then(create_core_backend)
+        {
             Ok((owner, backend)) => {
                 let logger = Py::new(
                     py,
@@ -381,9 +492,15 @@ pub fn install_host_logger(
             "a host logger is already installed for this module",
         ));
     }
-    let slot = Py::new(py, HostSlot { backend }).map_err(|error| {
-        internal_failure(format!("could not allocate module host state: {error}"))
-    })?;
+    let slot = Py::new(
+        py,
+        HostSlot {
+            backend,
+            #[cfg(feature = "test-hooks")]
+            _test_owner: None,
+        },
+    )
+    .map_err(|error| internal_failure(format!("could not allocate module host state: {error}")))?;
     state
         .set_item("_sc_observability_host_backend", slot)
         .map_err(|error| internal_failure(format!("could not install module host state: {error}")))
@@ -405,6 +522,9 @@ fn get_installed_host_logger(
 fn get_installed_host_logger_inner(
     py: Python<'_>,
 ) -> PyResult<(Option<Py<NativeAttachedLogger>>, String)> {
+    if let Err(error) = test_fault("get_installed_host_logger") {
+        return Ok((None, result_json::<()>(Err(error))));
+    }
     let module = match PyModule::import(py, "sc_observability._native") {
         Ok(module) => module,
         Err(error) => {
@@ -461,6 +581,10 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeAttachedLogger>()?;
     module.add_function(wrap_pyfunction!(create_owned, module)?)?;
     module.add_function(wrap_pyfunction!(get_installed_host_logger, module)?)?;
+    #[cfg(feature = "test-hooks")]
+    module.add_function(wrap_pyfunction!(_test_force_failure, module)?)?;
+    #[cfg(feature = "test-hooks")]
+    module.add_function(wrap_pyfunction!(_test_install_owned_host, module)?)?;
     Ok(())
 }
 
