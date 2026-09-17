@@ -64,3 +64,33 @@ feature-gated, public/custom extension, and internal exporter uses. Runtime
 adoption, copied-bridge reconciliation, workspace-level registry parity, and
 full B.1a closure remain pending in B.1 integration layers; they are not
 claimed as completed evidence by this neutral preparation handoff.
+
+## Fixture correction handoff
+
+The follow-up fixture review reproduced and fixed all four assigned findings:
+
+- N01: `src/typed.rs` now exercises all nine families through all four
+  consuming builders, preserving kind, context-box address, backtrace address,
+  timestamp, and source chain; all nine legacy round trips and family-local
+  custom/cross-family `Unclassified` cases are checked.
+- N02: `tests/neutral_contracts.rs` exercises all ten adapter directions with
+  actual errors, context/source address checks, exactly-one invocation counters,
+  and concrete success-value equality checks.
+- N03: the external test is a root-glob unchanged-consumer proof; the typed
+  module contains separate `compile_fail` doctests proving failures do not
+  implement `Clone` or Serde.
+- N04: the API-doc PASS claim was corrected above. Existing approval-file
+  presence is not treated as approval; independent API acceptance remains
+  pending review.
+
+Second-pass exact output:
+
+```text
+cargo fmt --all -- --check: passed
+cargo test --locked --workspace: 158 unit/integration tests passed; 0 failed; 6 normal doctests passed; 2 compile-fail doctests passed
+cargo clippy --locked --workspace --all-targets -- -D warnings: passed
+python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py': 24 tests, OK
+```
+
+The final parent merge-forward was `b69b8c5d2574e21f94c686d135686d7b42ac6509`
+from `feature/phase-b-1-provenance-prep`; no provenance tooling was edited.
