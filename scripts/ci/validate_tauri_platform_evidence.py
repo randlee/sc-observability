@@ -74,6 +74,8 @@ def validate(root, source=None):
             raise ValueError('missing real JSONL: ' + name)
         for relative, expected in report['jsonl'].items():
             hashed(relative, expected)
+        if not any(json.loads(line).get('target') == 'host-private' for relative in report['jsonl'] for line in (directory / relative).read_text(encoding='utf-8').splitlines() if line.strip()):
+            raise ValueError('private host record absent from retained JSONL: ' + name)
         required_logs = {'webview-stdout.log', 'webview-stderr.log', 'capped/webview-stdout.log', 'capped/webview-stderr.log'}
         if set(report['runtime_logs']) != required_logs:
             raise ValueError('missing raw real-webview logs: ' + name)

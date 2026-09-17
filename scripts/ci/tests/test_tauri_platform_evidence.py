@@ -42,7 +42,7 @@ class EvidenceTests(unittest.TestCase):
                 'fault_results_sha256': write('fault-results.json', {'passed': True, 'results': cases({'schema-' + case['id'] for case in canonical} | gate.REQUIRED_FAULTS)}),
                 'conformance_fixture_sha256': gate.digest(fixture),
                 'runtime_logs': {name: write(name, 'raw runtime log') for name in ('webview-stdout.log', 'webview-stderr.log', 'capped/webview-stdout.log', 'capped/webview-stderr.log')},
-                'jsonl': {'logs/events.jsonl': write('logs/events.jsonl', 'native-event')},
+                'jsonl': {'logs/events.jsonl': write('logs/events.jsonl', {'target': 'host-private'})},
                 'rust_archives': {'adapter': write('rust-archives/adapter.crate', 'packed-adapter')},
             }
             report['bundle_manifest_sha256'] = write('bundle-manifest.json', {
