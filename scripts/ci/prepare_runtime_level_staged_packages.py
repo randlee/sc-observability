@@ -102,6 +102,15 @@ def write_archive(package: str, version: str, workspace: Path, file_list: list[s
                 archive.addfile(info, io.BytesIO(content))
 
 
+def candidate_workspace_manifest(content: str, version: str) -> str:
+    """Advance plain and exact local pins from the actual source workspace version."""
+    baseline = tomllib.loads(content)["workspace"]["package"]["version"]
+    rendered = re.sub(r'(?m)^version = "' + re.escape(baseline) + r'"$', f'version = "{version}"', content, count=1)
+    for prefix in ("", "="):
+        rendered = rendered.replace(f'version = "{prefix}{baseline}", path =', f'version = "{prefix}{version}", path =')
+    return rendered
+
+
 def verify_stage(output: Path) -> None:
     evidence = json.loads((output / "stage-manifest.json").read_text())
     if evidence.get("schema_version") != 2:

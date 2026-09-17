@@ -264,12 +264,13 @@ pending. This entry does not itself claim that review.
 ### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
 
 [`plans/phase-b/task-b-1-provenance-prep.md`](./plans/phase-b/task-b-1-provenance-prep.md)
-builds and proves `scripts/ci/validate_log_import.py` (B.1 deliverable 3) in
-parallel with B.P3's active source corrections, so the tool is ready once B.1
-has an accepted source to copy. It is preparation tooling only: no BTIT
-source is copied, no source approval is granted, and no real
-`import-provenance.json` exists. Full B.1 remains blocked on B.P3's accepted
-source handoff, which QA1 returned FAIL on pending fixes.
+built and proved `scripts/ci/validate_log_import.py` (B.1 deliverable 3) in
+parallel with B.P3's then-active source corrections, ahead of B.1 having an
+accepted source to copy. At the time it was preparation tooling only: no
+BTIT source was copied, no source approval was granted, and no real
+`import-provenance.json` existed. B.P3's source handoff has since been
+accepted, and the B.1 copy section above records that this validator's real
+`import-provenance.json` now exists and B.1 has copied the accepted source.
 
 ## Rule
 

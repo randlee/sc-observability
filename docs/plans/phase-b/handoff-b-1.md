@@ -204,5 +204,6 @@ unchanged; no unpublished companion crate is added to that roster.
 
 No publish, no BTIT dependency switch, no runtime-contract closure (Phase B's
 runtime-level contract remains owner-deferred), and no claim that this copy
-resolves any BTIT-side review finding. Independent QA and API-approval
-reviewer sign-off remain pending.
+resolves any BTIT-side review finding. The API-approval reviewer sign-off is
+now recorded in `docs/api-approvals/phase-b-log-import.md`; independent QA
+against the fix layer that records it remains pending.
