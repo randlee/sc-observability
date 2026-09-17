@@ -478,6 +478,15 @@ mod tests {
         let typed_endpoint = OtlpEndpoint::new_typed("not-a-url").expect_err("typed endpoint");
         assert_stable_diagnostic_parity(legacy_endpoint.diagnostic(), typed_endpoint.diagnostic());
 
+        for value in ["", "   "] {
+            let legacy_endpoint = OtlpEndpoint::new(value).expect_err("legacy empty endpoint");
+            let typed_endpoint = OtlpEndpoint::new_typed(value).expect_err("typed empty endpoint");
+            assert_stable_diagnostic_parity(
+                legacy_endpoint.diagnostic(),
+                typed_endpoint.diagnostic(),
+            );
+        }
+
         let legacy_header = AuthHeader::new(" ").expect_err("legacy header");
         let typed_header = AuthHeader::new_typed(" ").expect_err("typed header");
         assert_stable_diagnostic_parity(legacy_header.diagnostic(), typed_header.diagnostic());
