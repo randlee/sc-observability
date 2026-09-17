@@ -840,4 +840,14 @@ mod tests {
         assert!(std::error::Error::source(&typed_error).is_some());
         assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
     }
+
+    #[cfg(feature = "fault-injection")]
+    #[test]
+    fn fault_injected_failure_matches_owning_registry() {
+        let failure = LogSinkFailure::fault_injected("x", Remediation::not_recoverable("test"));
+        assert_eq!(
+            failure.diagnostic().code,
+            error_codes::LOGGER_SINK_FAULT_INJECTED
+        );
+    }
 }

@@ -53,8 +53,26 @@ jobs:
           path: target
           key: ubuntu-clippy-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Run clippy (active crates)
+        run: |
+          cargo clippy --workspace \
+            --exclude sc-observability-log \
+            --exclude sc-observability-log-macros \
+            --exclude sc-observability-log-consumer-check \
+            --all-targets --all-features -- -D warnings
+
+      - name: Run clippy (frozen B.1 bridge import)
+        # The copied BTIT bridge crates are an immutable historical import
+        # (docs/plans/phase-b/import-provenance.json pins their exact source
+        # bytes) and internally use the legacy wrapper error types that B.1e
+        # now deprecates. `-A deprecated` is the only allowance carved out
+        # here; every other lint stays denied.
+        run: |
+          cargo clippy \
+            -p sc-observability-log \
+            -p sc-observability-log-macros \
+            -p sc-observability-log-consumer-check \
+            --all-targets --all-features -- -D warnings -A deprecated
 
   docs-consistency:
     name: docs-consistency (ubuntu)
