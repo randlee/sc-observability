@@ -42,8 +42,8 @@ class Native:
         self.operations: list[Operation] = []
         self.done = done
 
-    def observer_key(self) -> int:
-        return id(self)
+    def observer_key(self) -> object:
+        return self
 
     def start_flush(self, timeout: str) -> tuple[Operation, str]:
         self.calls += 1
@@ -95,7 +95,7 @@ def test_zero_timeout_inspects_once_without_timer_or_retry() -> None:
         result = await _flush_async(pending, 0)
         assert isinstance(result, Err) and result.error.kind == "timeout"
         assert pending.calls == 1 and pending.operations[0].reads == 1
-        assert not _pools
+        assert all(not pool.observers for pool in _pools.values())
     asyncio.run(run(), debug=True)
 
 
@@ -110,12 +110,12 @@ def test_timeout_cancel_and_success_release_observers_without_resubmission() -> 
         cancelled = await task
         assert isinstance(cancelled, Err) and cancelled.error.kind == "cancelled"
         assert native.calls == 2
-        assert not _pools
+        assert all(not pool.observers for pool in _pools.values())
         task = asyncio.create_task(_flush_async(native))
         await asyncio.sleep(0)
         native.operations[-1].done = True
         assert isinstance(await task, Ok)
-        assert native.calls == 3 and not _pools
+        assert native.calls == 3 and all(not pool.observers for pool in _pools.values())
         before_start = asyncio.create_task(_flush_async(native))
         before_start.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -138,7 +138,7 @@ def test_64_completed_native_calls_still_reserve_until_observed() -> None:
         assert overflow.error.code == generated.SC_OBSERVABILITY_BINDING_WAITERS_FULL
         assert native.calls == 64
         assert all(isinstance(result, Ok) for result in await asyncio.gather(*tasks))
-        assert not _pools
+        assert all(not pool.observers for pool in _pools.values())
     asyncio.run(run(), debug=True)
 
 
@@ -161,3 +161,19 @@ def test_closed_loop_reservations_are_reclaimed_without_retaining_loop() -> None
     gc.collect()
     assert reference() is None
     _teardown()
+
+
+def test_submit_preserves_original_failure_and_never_attempts_accounting() -> None:
+    from test_logging_context import failures
+    for failure in failures():
+        class Rejected:
+            calls = 0
+            def log(self, event: LogEvent) -> object:
+                self.calls += 1
+                return Err(failure)
+            def health(self) -> object:
+                raise RuntimeError("diagnostic accounting is unavailable")
+        logger = Rejected()
+        result = _submit(logger, LogEvent(level="info", target="async.test", action="reject"))
+        assert isinstance(result, Err) and result.error is failure
+        assert logger.calls == 1

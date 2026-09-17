@@ -39,6 +39,23 @@ struct Hold {
 }
 #[pymethods]
 impl Hold {
+    fn hold(&mut self) -> PyResult<()> {
+        self.release();
+        let (release, receive) = mpsc::channel();
+        let (ready, entered) = mpsc::sync_channel(0);
+        std::thread::spawn(move || {
+            let stdout = std::io::stdout();
+            let lock = stdout.lock();
+            let _ = ready.send(());
+            let _ = receive.recv_timeout(Duration::from_secs(20));
+            drop(lock);
+        });
+        entered
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(failure)?;
+        self.release = Some(release);
+        Ok(())
+    }
     fn release(&mut self) {
         if let Some(sender) = self.release.take() {
             let _ = sender.send(());

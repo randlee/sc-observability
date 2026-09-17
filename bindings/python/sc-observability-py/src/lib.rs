@@ -146,6 +146,7 @@ struct OwnedState {
 
 #[pyclass]
 struct NativeLogger {
+    observer_identity: Py<NativeObserverIdentity>,
     backend: CoreLoggerBackend,
     owned: Mutex<OwnedState>,
 }
@@ -154,13 +155,20 @@ struct NativeLogger {
 /// handle exists, but it never grants host shutdown or level ownership.
 #[pyclass(frozen)]
 struct HostSlot {
+    observer_identity: Py<NativeObserverIdentity>,
     backend: Arc<dyn HostLoggingBackend>,
 }
 
 #[pyclass]
 struct NativeAttachedLogger {
+    observer_identity: Py<NativeObserverIdentity>,
     backend: Arc<dyn HostLoggingBackend>,
 }
+
+// Opaque Python-local identity; never a pointer/integer handle or capability.
+// Stored only by Python wrapper/module state, never native workers.
+#[pyclass(frozen, weakref)]
+struct NativeObserverIdentity {}
 
 // This transport holds only native shared completion; it never registers a
 // callback or retains a Python loop/Future in native coordinator state.
@@ -184,7 +192,12 @@ fn start_flush_backend(
     py: Python<'_>,
     timeout: &str,
 ) -> (Option<Py<NativeFlushOperation>>, String) {
-    let operation = parse_timeout(timeout).and_then(|timeout| backend.start_flush(timeout));
+    let operation = parse_timeout(timeout).and_then(|timeout| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            backend.start_flush(timeout)
+        }))
+        .unwrap_or_else(|_| Err(internal_failure("native flush start panicked")))
+    });
     match operation {
         Ok(operation) => match Py::new(py, NativeFlushOperation { operation }) {
             Ok(operation) => (Some(operation), result_json::<()>(Ok(()))),
@@ -259,8 +272,8 @@ impl NativeLogger {
 
 #[pymethods]
 impl NativeLogger {
-    fn observer_key(&self) -> usize {
-        std::ptr::from_ref(self) as usize
+    fn observer_key(&self, py: Python<'_>) -> Py<NativeObserverIdentity> {
+        self.observer_identity.clone_ref(py)
     }
 
     fn start_flush(
@@ -328,8 +341,8 @@ impl NativeLogger {
 
 #[pymethods]
 impl NativeAttachedLogger {
-    fn observer_key(&self) -> usize {
-        Arc::as_ptr(&self.backend).cast::<()>() as usize
+    fn observer_key(&self, py: Python<'_>) -> Py<NativeObserverIdentity> {
+        self.observer_identity.clone_ref(py)
     }
 
     fn start_flush(
@@ -364,6 +377,7 @@ fn create_owned(py: Python<'_>, config: &str) -> PyResult<(Option<Py<NativeLogge
             let logger = Py::new(
                 py,
                 NativeLogger {
+                    observer_identity: Py::new(py, NativeObserverIdentity {})?,
                     backend,
                     owned: Mutex::new(OwnedState {
                         owner,
@@ -397,9 +411,17 @@ pub fn install_host_logger(
             "a host logger is already installed for this module",
         ));
     }
-    let slot = Py::new(module.py(), HostSlot { backend }).map_err(|error| {
-        internal_failure(format!("could not allocate module host state: {error}"))
+    let observer_identity = Py::new(module.py(), NativeObserverIdentity {}).map_err(|error| {
+        internal_failure(format!("could not allocate observer identity: {error}"))
     })?;
+    let slot = Py::new(
+        module.py(),
+        HostSlot {
+            backend,
+            observer_identity,
+        },
+    )
+    .map_err(|error| internal_failure(format!("could not allocate module host state: {error}")))?;
     module
         .add("_sc_observability_host_backend", slot)
         .map_err(|error| internal_failure(format!("could not install module host state: {error}")))
@@ -443,8 +465,17 @@ fn get_installed_host_logger(
             ));
         }
     };
-    let backend = slot.borrow(py).backend.clone();
-    let logger = Py::new(py, NativeAttachedLogger { backend })?;
+    let state = slot.borrow(py);
+    let backend = state.backend.clone();
+    let observer_identity = state.observer_identity.clone_ref(py);
+    drop(state);
+    let logger = Py::new(
+        py,
+        NativeAttachedLogger {
+            backend,
+            observer_identity,
+        },
+    )?;
     Ok((Some(logger), result_json::<()>(Ok(()))))
 }
 

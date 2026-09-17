@@ -469,7 +469,11 @@ def get_host_logger() -> Result[AttachedLogger]:
     return Ok(AttachedLogger(cast(_NativeReadable, native)))
 
 
+from .async_logging import LogReceipt, ReceiptState, Resolved
+
+
 __all__ = [
+    "LogReceipt", "ReceiptState", "Resolved",
     "AttachedLogger", "Err", "FieldMatch", "LogEvent", "Logger", "LoggerConfig",
     "LogQuery", "Ok", "Result", "TraceContext", "create_logger", "get_host_logger",
 ]

@@ -50,7 +50,7 @@ class _Operation(Protocol):
 
 
 class _Native(Protocol):
-    def observer_key(self) -> int: ...
+    def observer_key(self) -> object: ...
     def start_flush(self, timeout: str) -> tuple[_Operation | None, str]: ...
 
 
@@ -115,9 +115,9 @@ class _Pool:
         return True
 
 
-# Weak pools do not retain backend wrappers or event loops. CPython's supported
+# Weak opaque identity keys do not retain backend wrappers or event loops. CPython's supported
 # GIL builds serialize these bounded, non-awaiting bookkeeping sections.
-_pools: weakref.WeakValueDictionary[int, _Pool] = weakref.WeakValueDictionary()
+_pools: weakref.WeakKeyDictionary[object, _Pool] = weakref.WeakKeyDictionary()
 
 
 class _Observer:

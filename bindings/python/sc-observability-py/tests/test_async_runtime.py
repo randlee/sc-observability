@@ -84,3 +84,49 @@ def test_receipt_retention_is_caller_owned_and_invalid_timeout_starts_no_flush(t
     assert held > before
     assert after - before < (held - before) // 2
     assert isinstance(logger.shutdown(), Ok)
+
+
+def test_interpreter_exit_with_native_writer_and_flush_held(tmp_path: Path) -> None:
+    import os
+    import subprocess
+    import sys
+    script = r'''
+import asyncio, sys
+from sc_observability import Err, Ok, LogEvent, LoggerConfig, create_logger
+from sc_observability.async_logging import _pools
+made = create_logger(LoggerConfig(service="async-teardown", log_root=sys.argv[1], enable_console_sink=True))
+assert isinstance(made, Ok), made
+logger = made.value
+# The parent deliberately never drains stdout while this interpreter lives.
+# More than a pipe buffer is admitted, holding the actual native console writer.
+for index in range(200):
+    result = logger.log(LogEvent(level="info", target="async.teardown", action="held", message="x" * 4096))
+    assert isinstance(result, Ok), result
+loop = asyncio.new_event_loop()
+wait = logger.flush_async(60000)
+loop.call_soon(wait.send, None)
+loop.run_until_complete(asyncio.sleep(0))
+assert len(_pools[logger._native.observer_key()].observers) == 1
+loop.close()
+sys.stderr.write("B6_TEARDOWN_HELD\n")
+sys.stderr.flush()
+# Module/observer teardown drops only observation. No native completion calls
+# Python or waits for this closed loop during interpreter finalization.
+'''
+    environment = dict(os.environ, PYTHONASYNCIODEBUG="1", PYTHONWARNINGS="error")
+    child = subprocess.Popen([sys.executable, "-I", "-W", "error", "-c", script, str(tmp_path)],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=environment)
+    try:
+        child.wait(timeout=15)
+        assert child.stderr is not None
+        errors = child.stderr.read().decode()
+        assert child.returncode == 0, errors
+        assert errors == "B6_TEARDOWN_HELD\n", errors
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait()
+        if child.stdout is not None:
+            child.stdout.close()
+        if child.stderr is not None:
+            child.stderr.close()
