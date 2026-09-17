@@ -2,10 +2,6 @@
 //!
 //! Backend handles admit work without owning shutdown. Only `CoreLoggerOwner`
 //! holds core shutdown and level-mutation authority; bridge owners stay with hosts.
-#![allow(
-    clippy::result_large_err,
-    reason = "the shared public binding contract returns the lossless DTO Failure union by value"
-)]
 mod callback;
 mod conversion;
 mod coordinator;
@@ -13,6 +9,8 @@ mod error;
 mod operation;
 mod spawn;
 mod sync;
+#[cfg(test)]
+mod tests;
 mod timer;
 use coordinator::Coordinator;
 pub use operation::{CompletionSubscription, Operation, OperationState};
@@ -34,12 +32,24 @@ pub enum ProducerOrigin {
 /// Read-only lifecycle capability used by host and language clients.
 pub trait HostLoggingBackend: Send + Sync {
     /// Validates and admits one event, returning the final native admission.
+    ///
+    /// # Errors
+    /// Validation, bounded capacity, lifecycle or native diagnostic failure.
     fn try_log(&self, event: LogEventDto, origin: ProducerOrigin) -> Result<AdmissionDto, Failure>;
     /// Reserves the single query slot and starts one native query.
+    ///
+    /// # Errors
+    /// Validation, bounded capacity, lifecycle or native diagnostic failure.
     fn start_query(&self, query: LogQueryDto) -> Result<Operation<LogSnapshotDto>, Failure>;
     /// Reads native health, or the retained snapshot after admission closes.
+    ///
+    /// # Errors
+    /// Validation, bounded capacity, lifecycle or native diagnostic failure.
     fn health(&self) -> Result<LogHealthDto, Failure>;
     /// Reserves one flush slot; observer deadlines never cancel native work.
+    ///
+    /// # Errors
+    /// Validation, bounded capacity, lifecycle or native diagnostic failure.
     fn start_flush(&self, native_timeout: Duration) -> Result<Operation<CompletionDto>, Failure>;
 }
 /// Cloneable core access without shutdown or level-mutation authority.

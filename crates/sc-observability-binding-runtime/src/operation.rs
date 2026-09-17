@@ -86,6 +86,10 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
             }),
         }
     }
+    #[cfg(test)]
+    pub(crate) fn observer_count(&self) -> usize {
+        self.inner.count.load(Ordering::SeqCst)
+    }
     /// Reads saved completion without a lock, waiter registration or blocking.
     pub fn state(&self) -> OperationState<T> {
         self.inner

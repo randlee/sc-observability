@@ -21,7 +21,7 @@ pub(crate) enum Backend {
     Bridge(sc_observability_log::LogControl),
 }
 enum Work {
-    Query(native::LogQuery, Operation<LogSnapshotDto>),
+    Query(Box<native::LogQuery>, Operation<LogSnapshotDto>),
     Flush(Duration, Operation<CompletionDto>),
 }
 struct Queue {
@@ -44,6 +44,8 @@ pub(crate) struct Coordinator {
     timer: Arc<TimerService>,
     pub(crate) shutdown: Operation<LogHealthDto>,
     pub(crate) handles: AtomicUsize,
+    #[cfg(test)]
+    pub(crate) hooks: TestHooks,
 }
 struct Admission<'a>(&'a Coordinator);
 impl Drop for Admission<'_> {
@@ -75,7 +77,7 @@ impl StartGate {
                     state = self
                         .changed
                         .wait(state)
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
                 }
             }
         }
@@ -126,9 +128,9 @@ impl Coordinator {
                 }
             }
         }
-        let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(build))
+        let constructed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(build))
             .unwrap_or_else(|_| Err(error::internal("native constructor panicked")));
-        let (backend, health) = match built {
+        let (backend, health) = match constructed {
             Ok(value) => value,
             Err(error) => {
                 gate.set(Start::Abort);
@@ -156,6 +158,8 @@ impl Coordinator {
             timer,
             shutdown,
             handles: AtomicUsize::new(1),
+            #[cfg(test)]
+            hooks: TestHooks::default(),
         });
         gate.set(Start::Run(shared.clone()));
         Ok(shared)
@@ -166,6 +170,13 @@ impl Coordinator {
         }
         self.active.fetch_add(1, Ordering::SeqCst);
         let admission = Admission(self);
+        #[cfg(test)]
+        {
+            let gate = lock(&self.hooks.admission).clone();
+            if let Some(gate) = gate {
+                gate.arrive();
+            }
+        }
         if self.closed.load(Ordering::SeqCst) {
             drop(admission);
             return Err(error::closed());
@@ -250,7 +261,9 @@ impl Coordinator {
         }
         queue.query = true;
         let operation = Operation::new(&self.dispatcher, &self.timer);
-        queue.items.push_back(Work::Query(query, operation.clone()));
+        queue
+            .items
+            .push_back(Work::Query(Box::new(query), operation.clone()));
         self.changed.notify_all();
         Ok(operation)
     }
@@ -294,11 +307,20 @@ impl Coordinator {
             };
             match work {
                 Work::Query(query, operation) => {
+                    #[cfg(test)]
+                    {
+                        let gate = lock(&self.hooks.query).clone();
+                        if let Some(gate) = gate {
+                            gate.arrive();
+                        }
+                    }
                     let result = self.execute(|| match &self.backend {
                         Backend::Core { logger, .. } => {
                             let logger = logger.load_full().ok_or_else(error::closed)?;
                             dto::from_core_snapshot(
-                                logger.query(&query).map_err(conversion::query)?,
+                                logger
+                                    .query(&query)
+                                    .map_err(|error| conversion::query(&error))?,
                             )
                         }
                         Backend::Bridge(control) => dto::from_core_snapshot(
@@ -312,15 +334,22 @@ impl Coordinator {
                     });
                 }
                 Work::Flush(timeout, operation) => {
+                    #[cfg(test)]
+                    {
+                        let gate = lock(&self.hooks.flush).clone();
+                        if let Some(gate) = gate {
+                            gate.arrive();
+                        }
+                    }
                     let result = self.execute(|| {
                         match &self.backend {
                             Backend::Core { logger, .. } => logger
                                 .load_full()
                                 .ok_or_else(error::closed)?
                                 .flush_typed()
-                                .map_err(conversion::core_flush)?,
+                                .map_err(|error| conversion::core_flush(&error))?,
                             Backend::Bridge(control) => {
-                                control.flush(timeout).map_err(conversion::bridge_flush)?
+                                control.flush(timeout).map_err(conversion::bridge_flush)?;
                             }
                         }
                         Ok(CompletionDto::Completed)
@@ -341,7 +370,15 @@ impl Coordinator {
         if self.failed.load(Ordering::SeqCst) {
             return Err(error::internal("native helper failed"));
         }
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(call)).unwrap_or_else(|_| {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            #[cfg(test)]
+            assert!(
+                !self.hooks.crash.swap(false, Ordering::SeqCst),
+                "injected helper failure"
+            );
+            call()
+        }))
+        .unwrap_or_else(|_| {
             self.failed.store(true, Ordering::SeqCst);
             self.close();
             Err(error::internal("native helper panicked"))
@@ -455,4 +492,13 @@ pub(crate) fn bridge(
             conversion::bridge_health(control.health().map_err(conversion::bridge_control)?)?;
         Ok((Backend::Bridge(control), health))
     })
+}
+
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct TestHooks {
+    pub(crate) admission: Mutex<Option<Arc<crate::tests::Gate>>>,
+    pub(crate) query: Mutex<Option<Arc<crate::tests::Gate>>>,
+    pub(crate) flush: Mutex<Option<Arc<crate::tests::Gate>>>,
+    pub(crate) crash: AtomicBool,
 }
