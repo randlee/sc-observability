@@ -14,7 +14,7 @@ owned loggers, and non-owning Rust-host attachments. Owned lifecycle and level
 authority stay with `CoreLoggerOwner`; attached handles retain only a shared
 `HostLoggingBackend` Arc and cannot stop or mutate the host.
 
-Current source evidence is `94526b66e0b6204ed2abdc53a212d037477fb985`.
+Current source evidence is `de0db3d6710e5fefc1d1284fa44d00a01026e234`.
 It carries frozen B.3, B.3b and telemetry/copy ancestors while retaining the
 direct TypeScript parent. The facade contains no authored validation `raise`:
 malformed Python values, hostile mappings/accessors, foreign native exceptions,
