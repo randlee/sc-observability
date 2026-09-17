@@ -4,7 +4,7 @@
 
 - Branch: `feature/phase-b-1e-migration-prep`
 - Parent: `feature/phase-b-1d-telemetry-prep`
-- Parent merged before final preparation: `4b1df6a8f05875db0bac9e2eac1742f1eb056390`
+- Parent merged before final preparation: `b76495c05be5e7d59a5c3ed8d383763c9de68aee`
 - Authoritative sources: `sprint-b-1e-error-adoption.md` and
   `error-api-contract.md`
 - Scope: exact migration guide, warning inventory and adoption-skill routing
@@ -45,6 +45,9 @@ explicit typed-module adapters with unchanged legacy registration methods.
   including `sc_observability::typed::{legacy_sink,typed_sink}`. The guide's
   complete kind-matching, success/failure and projector-adapter examples were
   compiled and run by the temporary downstream consumer below.
+- C02 final fixed: the primary migration reference now states exactly that
+  `LoggerBuilder::build` remains supported and infallible, while
+  `build_typed` is the recommendation for recoverable startup errors.
 
 The guide's current API paths were checked by:
 
