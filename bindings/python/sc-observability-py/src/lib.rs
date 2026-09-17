@@ -451,6 +451,11 @@ mod tests {
         SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED,
         SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED,
     };
+    use std::sync::{
+        Barrier,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use std::thread;
 
     #[test]
     fn host_installation_is_immutable_per_module() {
@@ -538,5 +543,63 @@ mod tests {
             missing_is_tagged && admitted && stopped && closed && retained_health
         });
         assert!(passed);
+    }
+
+    #[test]
+    fn concurrent_host_installs_have_exactly_one_winner() {
+        Python::initialize();
+        let setup = Python::attach(|py| {
+            let module = match PyModule::new(py, "_b4_concurrent_host_test") {
+                Ok(module) => module,
+                Err(_) => return None,
+            };
+            let module_refs = (0..8).map(|_| module.clone().unbind()).collect::<Vec<_>>();
+            let service = match ServiceName::new("b4-concurrent-host-test") {
+                Ok(service) => service,
+                Err(_) => return None,
+            };
+            let config = sc_observability::LoggerConfig::default_for(
+                service,
+                std::env::temp_dir().join("sc-observability-b4-concurrent-host-test"),
+            );
+            match create_core_backend(config) {
+                Ok((owner, backend)) => Some((module_refs, owner, Arc::new(backend))),
+                Err(_) => None,
+            }
+        });
+        let Some((module_refs, owner, backend)) = setup else {
+            assert!(false, "could not create concurrent host-install fixture");
+            return;
+        };
+        let start = Arc::new(Barrier::new(module_refs.len()));
+        let winners = Arc::new(AtomicUsize::new(0));
+        let rejects = Arc::new(AtomicUsize::new(0));
+        let workers = module_refs
+            .into_iter()
+            .map(|module| {
+                let start = start.clone();
+                let winners = winners.clone();
+                let rejects = rejects.clone();
+                let backend: Arc<dyn HostLoggingBackend> = backend.clone();
+                thread::spawn(move || {
+                    start.wait();
+                    Python::attach(|py| match install_host_logger(&module.bind(py), backend) {
+                        Ok(()) => winners.fetch_add(1, Ordering::SeqCst),
+                        Err(Failure::Unavailable { diagnostic })
+                            if diagnostic.code
+                                == SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED =>
+                        {
+                            rejects.fetch_add(1, Ordering::SeqCst)
+                        }
+                        Err(_) => 0,
+                    });
+                })
+            })
+            .collect::<Vec<_>>();
+        let joined = workers.into_iter().all(|worker| worker.join().is_ok());
+        let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
+        assert!(joined && stopped);
+        assert_eq!(winners.load(Ordering::SeqCst), 1);
+        assert_eq!(rejects.load(Ordering::SeqCst), 7);
     }
 }
