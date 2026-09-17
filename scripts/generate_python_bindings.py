@@ -7,7 +7,7 @@ from _binding_schema import run,name_of,validate
 def pyname(name):return name.replace('Dto','').replace('_for_','')
 def typ(node):
     if node is True:return 'object'
-    if node is False:return 'Never'
+    if node is False:return 'NoReturn'
     if '$ref' in node:return pyname(name_of(node['$ref']))
     if 'const' in node:return 'Literal['+repr(node['const'])+']'
     if 'enum' in node:return 'Literal['+', '.join(repr(x) for x in node['enum'])+']'
@@ -53,14 +53,14 @@ def from_wire(name: str, value: object) -> object:
     return _decode(SCHEMA['x-sc-entrypoints'][name],value)
 '''
 def generate(schema):
-    header=['# Generated from canonical schema. Do not edit.','from __future__ import annotations','from dataclasses import dataclass, field','from typing import Literal, Mapping, Never, TypeAlias','from types import MappingProxyType','import json','import re','']
+    header=['# Generated from canonical schema. Do not edit.','from __future__ import annotations','from dataclasses import dataclass, field as dataclass_field','from typing import Literal, Mapping, NoReturn, TypeAlias','from types import MappingProxyType','import json','import re','']
     declarations=[];aliases=[];classes={}
     for name,node in schema['$defs'].items():
         pname=pyname(name)
         if name.endswith('DecimalDto'):aliases.append(f'{pname}: TypeAlias = int');continue
         choices=node.get('oneOf',[node])
         if not all(choice.get('type')=='object' and 'properties' in choice for choice in choices):
-            # String aliases avoid forward evaluation while preserving recursive stubs.
+            # Annotations are postponed so recursive records share these aliases.
             aliases.append(f'{pname}: TypeAlias = {typ(node)}');continue
         variant_names=[]
         for i,choice in enumerate(choices):
@@ -69,8 +69,15 @@ def generate(schema):
             variant_names.append(cname);classes[name+(f'#{i}' if 'oneOf' in node else '')]=cname
             declarations.extend(['@dataclass(frozen=True, kw_only=True)',f'class {cname}:'])
             for key,prop in choice['properties'].items():
-                if key=='kind' and 'const' in prop:declarations.append(f'    kind: {typ(prop)} = field(default={prop["const"]!r}, init=False)')
-                else:declarations.append(f'    {key}: {typ(prop)}')
+                if key=='kind' and 'const' in prop:declarations.append(f'    kind: {typ(prop)} = dataclass_field(default={prop["const"]!r}, init=False)')
+                else:
+                    suffix=''
+                    if key not in choice.get('required',[]):
+                        default=prop.get('default')
+                        if isinstance(default,dict):suffix=' = dataclass_field(default_factory=lambda: MappingProxyType({}))'
+                        elif isinstance(default,list):suffix=' = ()'
+                        else:suffix=' = '+repr(default)
+                    declarations.append(f'    {key}: {typ(prop)}'+suffix)
             declarations.append('')
         if 'oneOf' in node:aliases.append(f'{pname}: TypeAlias = '+(' | '.join(variant_names)))
     for name,node in schema['x-sc-entrypoints'].items():

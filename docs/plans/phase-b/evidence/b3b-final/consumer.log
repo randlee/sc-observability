@@ -1,0 +1,4 @@
+BUNDLE_VERIFIED: /var/folders/3q/0f7c3v_j6ps28gtz8xfz99km0000gn/T/binding-runtime-package-vd4ewz8_/bundle
+BUNDLE_ISOLATED_CONSUMER_PASSED: positive and six exact-code negatives
+BINDING_RUNTIME_DEPENDENCIES_PASS sc-observability,sc-observability-dto,sc-observability-log,sc-observability-types
+BINDING_BOUNDARY_NEGATIVES_PASS aliases+targets tauri+pyo3

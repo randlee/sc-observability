@@ -39,7 +39,7 @@ contracts define the new companions and adapters at the same level of authority.
 | sc-observability-log-macros | PHB-001/002/011 | ADR-011; target bridge macro inventory | B.P3 BTIT implementation, B.1 mechanical copy |
 | sc-observability-log-consumer-check | PHB-001/014 | ADR-011; B.1 consumer manifest/signatures | B.1 unpublished consumer fixture |
 | sc-observability-dto | PHB-002/010/012/013 | ADR-014; binding contract and B.3 shared signatures | B.3 neutral wire types/conversions |
-| sc-observability-binding-runtime | PHB-002/010–013 | ADR-011/014/015; [native contract](native-binding-runtime.md) | B.3b shared core/bridge backends, coordinator and CI allowlists for core/types/DTO/bridge only; no Tauri/PyO3 dependency |
+| sc-observability-binding-runtime | PHB-002/010–013 | ADR-011/014/015; [native contract](native-binding-runtime.md) | [B.3b handoff](handoff-b-3b.md): implemented shared core/bridge backends, bounded coordinator and resolved CI allowlist for core/types/DTO/bridge only; no Tauri/PyO3 dependency |
 | Schema and language generators | PHB-002/010/012/013 | ADR-014; B.3 canonical schema and generation contract | B.3 both schema-only TS/Python generators; B.3a/B.4 consume generated output |
 | TypeScript client and Tauri adapter | PHB-010–012 | ADR-014; B.3a client and command signatures | B.3a client, host adapter and real IPC example |
 | Python extension and Rust embedding rlib | PHB-010/011/013 | ADR-014/015; B.4 host/lifecycle signatures | B.4 runtime; B.4a platform distributions; B.5 integration; B.6 optional async |

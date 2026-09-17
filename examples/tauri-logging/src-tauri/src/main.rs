@@ -1,4 +1,4 @@
-//! Real host composition used by the packed consumer fixture.
+//! Minimal host composition sketch used by the packed consumer fixture.
 //! The application owns the logger and composes the supplied plugin with its
 //! own `app_observability_level_change` command.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]

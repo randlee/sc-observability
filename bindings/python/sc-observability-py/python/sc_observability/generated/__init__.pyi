@@ -1,18 +1,18 @@
 # Generated from canonical schema. Do not edit.
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Literal, Mapping, Never, TypeAlias
+from dataclasses import dataclass, field as dataclass_field
+from typing import Literal, Mapping, NoReturn, TypeAlias
 from types import MappingProxyType
 import json
 import re
 
 @dataclass(frozen=True, kw_only=True)
 class InputAdmissionAccepted:
-    kind: Literal['accepted'] = field(default='accepted', init=False)
+    kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputAdmissionFiltered:
-    kind: Literal['filtered'] = field(default='filtered', init=False)
+    kind: Literal['filtered'] = dataclass_field(default='filtered', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputBridgeHealth:
@@ -27,47 +27,47 @@ class InputBridgeHealth:
 
 @dataclass(frozen=True, kw_only=True)
 class InputChangeDiagnosticAccepted:
-    kind: Literal['accepted'] = field(default='accepted', init=False)
+    kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputChangeDiagnosticNotAccepted:
     diagnostic: InputDiagnostic
-    kind: Literal['not_accepted'] = field(default='not_accepted', init=False)
+    kind: Literal['not_accepted'] = dataclass_field(default='not_accepted', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputClientOutcomeIdle:
-    kind: Literal['idle'] = field(default='idle', init=False)
+    kind: Literal['idle'] = dataclass_field(default='idle', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputClientOutcomeScheduled:
-    kind: Literal['scheduled'] = field(default='scheduled', init=False)
+    kind: Literal['scheduled'] = dataclass_field(default='scheduled', init=False)
     operation: InputLogOperation
 
 @dataclass(frozen=True, kw_only=True)
 class InputClientOutcomeAccepted:
-    kind: Literal['accepted'] = field(default='accepted', init=False)
+    kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
     operation: InputAdmissionOperation
 
 @dataclass(frozen=True, kw_only=True)
 class InputClientOutcomeFiltered:
-    kind: Literal['filtered'] = field(default='filtered', init=False)
+    kind: Literal['filtered'] = dataclass_field(default='filtered', init=False)
     operation: InputAdmissionOperation
 
 @dataclass(frozen=True, kw_only=True)
 class InputClientOutcomeCompleted:
-    kind: Literal['completed'] = field(default='completed', init=False)
+    kind: Literal['completed'] = dataclass_field(default='completed', init=False)
     operation: InputCompletionOperation
 
 @dataclass(frozen=True, kw_only=True)
 class InputClientStatus:
     failures_by_kind: InputFailureCounts
     in_flight: int
-    last_failure: InputFailure | None
+    last_failure: InputFailure | None = None
     last_result: InputResult7
 
 @dataclass(frozen=True, kw_only=True)
 class InputCompletionCompleted:
-    kind: Literal['completed'] = field(default='completed', init=False)
+    kind: Literal['completed'] = dataclass_field(default='completed', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputDiagnostic:
@@ -79,12 +79,12 @@ class InputDiagnostic:
 @dataclass(frozen=True, kw_only=True)
 class InputDiagnosticSummary:
     at: str
-    code: str | None
+    code: str | None = None
     message: str
 
 @dataclass(frozen=True, kw_only=True)
 class InputDispatchScheduled:
-    kind: Literal['scheduled'] = field(default='scheduled', init=False)
+    kind: Literal['scheduled'] = dataclass_field(default='scheduled', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputDropCounts:
@@ -101,7 +101,7 @@ class InputFailureValidation:
     at: str
     code: str
     field: str
-    kind: Literal['validation'] = field(default='validation', init=False)
+    kind: Literal['validation'] = dataclass_field(default='validation', init=False)
     message: str
     remediation: InputRemediation
 
@@ -109,7 +109,7 @@ class InputFailureValidation:
 class InputFailureQueueFull:
     at: str
     code: str
-    kind: Literal['queue_full'] = field(default='queue_full', init=False)
+    kind: Literal['queue_full'] = dataclass_field(default='queue_full', init=False)
     message: str
     remediation: InputRemediation
 
@@ -118,7 +118,7 @@ class InputFailureBelowBaseline:
     at: str
     code: str
     configured: InputLevelFilter
-    kind: Literal['below_baseline'] = field(default='below_baseline', init=False)
+    kind: Literal['below_baseline'] = dataclass_field(default='below_baseline', init=False)
     message: str
     remediation: InputRemediation
     requested: InputLevelFilter
@@ -128,7 +128,7 @@ class InputFailureUnsupportedLevel:
     at: str
     available: InputLevelFilter
     code: str
-    kind: Literal['unsupported_level'] = field(default='unsupported_level', init=False)
+    kind: Literal['unsupported_level'] = dataclass_field(default='unsupported_level', init=False)
     message: str
     remediation: InputRemediation
     requested: InputLevelFilter
@@ -137,7 +137,7 @@ class InputFailureUnsupportedLevel:
 class InputFailurePermissionDenied:
     at: str
     code: str
-    kind: Literal['permission_denied'] = field(default='permission_denied', init=False)
+    kind: Literal['permission_denied'] = dataclass_field(default='permission_denied', init=False)
     message: str
     remediation: InputRemediation
 
@@ -145,7 +145,7 @@ class InputFailurePermissionDenied:
 class InputFailureClosed:
     at: str
     code: str
-    kind: Literal['closed'] = field(default='closed', init=False)
+    kind: Literal['closed'] = dataclass_field(default='closed', init=False)
     message: str
     remediation: InputRemediation
 
@@ -153,7 +153,7 @@ class InputFailureClosed:
 class InputFailureUnavailable:
     at: str
     code: str
-    kind: Literal['unavailable'] = field(default='unavailable', init=False)
+    kind: Literal['unavailable'] = dataclass_field(default='unavailable', init=False)
     message: str
     remediation: InputRemediation
 
@@ -161,7 +161,7 @@ class InputFailureUnavailable:
 class InputFailureIo:
     at: str
     code: str
-    kind: Literal['io'] = field(default='io', init=False)
+    kind: Literal['io'] = dataclass_field(default='io', init=False)
     message: str
     remediation: InputRemediation
 
@@ -169,7 +169,7 @@ class InputFailureIo:
 class InputFailureTimeout:
     at: str
     code: str
-    kind: Literal['timeout'] = field(default='timeout', init=False)
+    kind: Literal['timeout'] = dataclass_field(default='timeout', init=False)
     message: str
     operation: str
     remediation: InputRemediation
@@ -178,7 +178,7 @@ class InputFailureTimeout:
 class InputFailureCancelled:
     at: str
     code: str
-    kind: Literal['cancelled'] = field(default='cancelled', init=False)
+    kind: Literal['cancelled'] = dataclass_field(default='cancelled', init=False)
     message: str
     operation: str
     remediation: InputRemediation
@@ -187,7 +187,7 @@ class InputFailureCancelled:
 class InputFailureUnsupportedVersion:
     at: str
     code: str
-    kind: Literal['unsupported_version'] = field(default='unsupported_version', init=False)
+    kind: Literal['unsupported_version'] = dataclass_field(default='unsupported_version', init=False)
     message: str
     received: int
     remediation: InputRemediation
@@ -196,7 +196,7 @@ class InputFailureUnsupportedVersion:
 class InputFailureInternal:
     at: str
     code: str
-    kind: Literal['internal'] = field(default='internal', init=False)
+    kind: Literal['internal'] = dataclass_field(default='internal', init=False)
     message: str
     remediation: InputRemediation
 
@@ -204,7 +204,7 @@ class InputFailureInternal:
 class InputFailureUnknownRemote:
     at: str
     code: str
-    kind: Literal['unknown_remote'] = field(default='unknown_remote', init=False)
+    kind: Literal['unknown_remote'] = dataclass_field(default='unknown_remote', init=False)
     message: str
     remediation: InputRemediation
     remote_kind: str
@@ -243,13 +243,13 @@ class InputHealthRequest:
 class InputLevelChangeChanged:
     current: InputLevelState
     diagnostic: InputChangeDiagnostic
-    kind: Literal['changed'] = field(default='changed', init=False)
+    kind: Literal['changed'] = dataclass_field(default='changed', init=False)
     previous: InputLevelState
     source: InputLevelChangeSource
 
 @dataclass(frozen=True, kw_only=True)
 class InputLevelChangeUnchanged:
-    kind: Literal['unchanged'] = field(default='unchanged', init=False)
+    kind: Literal['unchanged'] = dataclass_field(default='unchanged', init=False)
     state: InputLevelState
 
 @dataclass(frozen=True, kw_only=True)
@@ -259,12 +259,12 @@ class InputLevelChangeRequest:
 
 @dataclass(frozen=True, kw_only=True)
 class InputLevelRequestElevate:
-    kind: Literal['elevate'] = field(default='elevate', init=False)
+    kind: Literal['elevate'] = dataclass_field(default='elevate', init=False)
     level: InputLevelFilter
 
 @dataclass(frozen=True, kw_only=True)
 class InputLevelRequestReset:
-    kind: Literal['reset'] = field(default='reset', init=False)
+    kind: Literal['reset'] = dataclass_field(default='reset', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputLevelState:
@@ -275,37 +275,37 @@ class InputLevelState:
 @dataclass(frozen=True, kw_only=True)
 class InputLogEvent:
     action: str
-    correlation_id: str | None
-    fields: Mapping[str, InputValue]
+    correlation_id: str | None = None
+    fields: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
     level: InputLevel
-    message: str | None
-    outcome: str | None
-    request_id: str | None
+    message: str | None = None
+    outcome: str | None = None
+    request_id: str | None = None
     schema_version: Literal[1]
     target: str
-    trace: InputTraceContext | None
+    trace: InputTraceContext | None = None
 
 @dataclass(frozen=True, kw_only=True)
 class InputLogHealth:
-    bridge: InputBridgeHealth | None
+    bridge: InputBridgeHealth | None = None
     level_state: InputLevelState
     logging: InputLoggingHealth
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputLogQuery:
-    action: str | None
-    correlation_id: str | None
-    field_matches: tuple[InputFieldMatch, ...]
-    levels: tuple[InputLevel, ...]
-    limit: int
-    order: InputLogOrder
-    request_id: str | None
+    action: str | None = None
+    correlation_id: str | None = None
+    field_matches: tuple[InputFieldMatch, ...] = ()
+    levels: tuple[InputLevel, ...] = ()
+    limit: int = 100
+    order: InputLogOrder = 'oldest_first'
+    request_id: str | None = None
     schema_version: Literal[1]
-    service: str | None
-    since: str | None
-    target: str | None
-    until: str | None
+    service: str | None = None
+    since: str | None = None
+    target: str | None = None
+    until: str | None = None
 
 @dataclass(frozen=True, kw_only=True)
 class InputLogSnapshot:
@@ -318,10 +318,10 @@ class InputLoggingHealth:
     active_log_path: InputPath
     dropped_events_total: InputDecimal
     flush_errors_total: InputDecimal
-    last_error: InputDiagnosticSummary | None
-    last_writer_error: InputDiagnosticSummary | None
-    maintenance: InputMaintenanceHealth | None
-    query: InputQueryHealth | None
+    last_error: InputDiagnosticSummary | None = None
+    last_writer_error: InputDiagnosticSummary | None = None
+    maintenance: InputMaintenanceHealth | None = None
+    query: InputQueryHealth | None = None
     queue_capacity: InputDecimal
     queue_depth: InputDecimal
     queue_full_drops_total: InputDecimal
@@ -332,33 +332,33 @@ class InputLoggingHealth:
 
 @dataclass(frozen=True, kw_only=True)
 class InputMaintenanceHealth:
-    last_error: InputDiagnosticSummary | None
-    last_pass_at: str | None
+    last_error: InputDiagnosticSummary | None = None
+    last_pass_at: str | None = None
     pruned_files_total: InputDecimal
     rotated_files_total: InputDecimal
     state: InputWorkerState
 
 @dataclass(frozen=True, kw_only=True)
 class InputPathUtf8:
-    kind: Literal['utf8'] = field(default='utf8', init=False)
+    kind: Literal['utf8'] = dataclass_field(default='utf8', init=False)
     value: str
 
 @dataclass(frozen=True, kw_only=True)
 class InputPathUnrepresentable:
-    kind: Literal['unrepresentable'] = field(default='unrepresentable', init=False)
+    kind: Literal['unrepresentable'] = dataclass_field(default='unrepresentable', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputPathAbsent:
-    kind: Literal['absent'] = field(default='absent', init=False)
+    kind: Literal['absent'] = dataclass_field(default='absent', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputProcessIdentity:
-    hostname: str | None
-    pid: int | None
+    hostname: str | None = None
+    pid: int | None = None
 
 @dataclass(frozen=True, kw_only=True)
 class InputQueryHealth:
-    last_error: InputDiagnosticSummary | None
+    last_error: InputDiagnosticSummary | None = None
     state: InputQueryState
 
 @dataclass(frozen=True, kw_only=True)
@@ -368,115 +368,115 @@ class InputQueryRequest:
 
 @dataclass(frozen=True, kw_only=True)
 class InputRemediationRecoverable:
-    kind: Literal['recoverable'] = field(default='recoverable', init=False)
+    kind: Literal['recoverable'] = dataclass_field(default='recoverable', init=False)
     steps: tuple[str, ...]
 
 @dataclass(frozen=True, kw_only=True)
 class InputRemediationNotRecoverable:
     justification: str
-    kind: Literal['not_recoverable'] = field(default='not_recoverable', init=False)
+    kind: Literal['not_recoverable'] = dataclass_field(default='not_recoverable', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResultOk:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputAdmission
 
 @dataclass(frozen=True, kw_only=True)
 class InputResultError:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult2Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputCompletion
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult2Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult3Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputDispatch
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult3Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult4Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputLogSnapshot
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult4Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult5Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputLogHealth
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult5Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult6Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputLevelChange
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult6Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult7Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputClientOutcome
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult7Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult8Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputClientStatus
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult8Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputSinkHealth:
-    last_error: InputDiagnosticSummary | None
+    last_error: InputDiagnosticSummary | None = None
     name: str
     state: InputAvailability
 
 @dataclass(frozen=True, kw_only=True)
 class InputStateTransition:
-    entity_id: str | None
+    entity_id: str | None = None
     entity_kind: str
     from_state: str
-    reason: str | None
+    reason: str | None = None
     to_state: str
-    trigger: str | None
+    trigger: str | None = None
 
 @dataclass(frozen=True, kw_only=True)
 class InputStoredDiagnostic:
-    cause: str | None
+    cause: str | None = None
     code: str
     details: Mapping[str, InputValue]
-    docs: str | None
+    docs: str | None = None
     message: str
     remediation: InputRemediation
     timestamp: str
@@ -484,24 +484,24 @@ class InputStoredDiagnostic:
 @dataclass(frozen=True, kw_only=True)
 class InputStoredEvent:
     action: str
-    correlation_id: str | None
-    diagnostic: InputStoredDiagnostic | None
+    correlation_id: str | None = None
+    diagnostic: InputStoredDiagnostic | None = None
     fields: Mapping[str, InputValue]
     identity: InputProcessIdentity
     level: InputLevel
-    message: str | None
-    outcome: str | None
-    request_id: str | None
+    message: str | None = None
+    outcome: str | None = None
+    request_id: str | None = None
     service: str
-    state_transition: InputStateTransition | None
+    state_transition: InputStateTransition | None = None
     target: str
     timestamp: str
-    trace: InputTraceContext | None
+    trace: InputTraceContext | None = None
     version: str
 
 @dataclass(frozen=True, kw_only=True)
 class InputTraceContext:
-    parent_span_id: str | None
+    parent_span_id: str | None = None
     span_id: str
     trace_id: str
 
@@ -512,141 +512,141 @@ class InputTryLogRequest:
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueNull:
-    kind: Literal['null'] = field(default='null', init=False)
+    kind: Literal['null'] = dataclass_field(default='null', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueBoolean:
-    kind: Literal['boolean'] = field(default='boolean', init=False)
+    kind: Literal['boolean'] = dataclass_field(default='boolean', init=False)
     value: bool
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueString:
-    kind: Literal['string'] = field(default='string', init=False)
+    kind: Literal['string'] = dataclass_field(default='string', init=False)
     value: str
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueInteger:
-    kind: Literal['integer'] = field(default='integer', init=False)
+    kind: Literal['integer'] = dataclass_field(default='integer', init=False)
     value: InputDecimal
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueFloat:
-    kind: Literal['float'] = field(default='float', init=False)
+    kind: Literal['float'] = dataclass_field(default='float', init=False)
     value: float
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueArray:
-    kind: Literal['array'] = field(default='array', init=False)
+    kind: Literal['array'] = dataclass_field(default='array', init=False)
     value: tuple[InputValue, ...]
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueObject:
-    kind: Literal['object'] = field(default='object', init=False)
+    kind: Literal['object'] = dataclass_field(default='object', init=False)
     value: Mapping[str, InputValue]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelopeOk:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputAdmission
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelopeError:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope2Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputCompletion
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope2Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope3Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputDispatch
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope3Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope4Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputLogSnapshot
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope4Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope5Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputLogHealth
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope5Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope6Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputLevelChange
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope6Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope7Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputClientOutcome
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope7Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope8Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputClientStatus
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope8Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputAdmissionAccepted:
-    kind: Literal['accepted'] = field(default='accepted', init=False)
+    kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputAdmissionFiltered:
-    kind: Literal['filtered'] = field(default='filtered', init=False)
+    kind: Literal['filtered'] = dataclass_field(default='filtered', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputBridgeHealth:
@@ -661,35 +661,35 @@ class OutputBridgeHealth:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputChangeDiagnosticAccepted:
-    kind: Literal['accepted'] = field(default='accepted', init=False)
+    kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputChangeDiagnosticNotAccepted:
     diagnostic: OutputDiagnostic
-    kind: Literal['not_accepted'] = field(default='not_accepted', init=False)
+    kind: Literal['not_accepted'] = dataclass_field(default='not_accepted', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputClientOutcomeIdle:
-    kind: Literal['idle'] = field(default='idle', init=False)
+    kind: Literal['idle'] = dataclass_field(default='idle', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputClientOutcomeScheduled:
-    kind: Literal['scheduled'] = field(default='scheduled', init=False)
+    kind: Literal['scheduled'] = dataclass_field(default='scheduled', init=False)
     operation: OutputLogOperation
 
 @dataclass(frozen=True, kw_only=True)
 class OutputClientOutcomeAccepted:
-    kind: Literal['accepted'] = field(default='accepted', init=False)
+    kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
     operation: OutputAdmissionOperation
 
 @dataclass(frozen=True, kw_only=True)
 class OutputClientOutcomeFiltered:
-    kind: Literal['filtered'] = field(default='filtered', init=False)
+    kind: Literal['filtered'] = dataclass_field(default='filtered', init=False)
     operation: OutputAdmissionOperation
 
 @dataclass(frozen=True, kw_only=True)
 class OutputClientOutcomeCompleted:
-    kind: Literal['completed'] = field(default='completed', init=False)
+    kind: Literal['completed'] = dataclass_field(default='completed', init=False)
     operation: OutputCompletionOperation
 
 @dataclass(frozen=True, kw_only=True)
@@ -701,7 +701,7 @@ class OutputClientStatus:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputCompletionCompleted:
-    kind: Literal['completed'] = field(default='completed', init=False)
+    kind: Literal['completed'] = dataclass_field(default='completed', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputDiagnostic:
@@ -718,7 +718,7 @@ class OutputDiagnosticSummary:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputDispatchScheduled:
-    kind: Literal['scheduled'] = field(default='scheduled', init=False)
+    kind: Literal['scheduled'] = dataclass_field(default='scheduled', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputDropCounts:
@@ -735,7 +735,7 @@ class OutputFailureValidation:
     at: str
     code: str
     field: str
-    kind: Literal['validation'] = field(default='validation', init=False)
+    kind: Literal['validation'] = dataclass_field(default='validation', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -743,7 +743,7 @@ class OutputFailureValidation:
 class OutputFailureQueueFull:
     at: str
     code: str
-    kind: Literal['queue_full'] = field(default='queue_full', init=False)
+    kind: Literal['queue_full'] = dataclass_field(default='queue_full', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -752,7 +752,7 @@ class OutputFailureBelowBaseline:
     at: str
     code: str
     configured: OutputLevelFilter
-    kind: Literal['below_baseline'] = field(default='below_baseline', init=False)
+    kind: Literal['below_baseline'] = dataclass_field(default='below_baseline', init=False)
     message: str
     remediation: OutputRemediation
     requested: OutputLevelFilter
@@ -762,7 +762,7 @@ class OutputFailureUnsupportedLevel:
     at: str
     available: OutputLevelFilter
     code: str
-    kind: Literal['unsupported_level'] = field(default='unsupported_level', init=False)
+    kind: Literal['unsupported_level'] = dataclass_field(default='unsupported_level', init=False)
     message: str
     remediation: OutputRemediation
     requested: OutputLevelFilter
@@ -771,7 +771,7 @@ class OutputFailureUnsupportedLevel:
 class OutputFailurePermissionDenied:
     at: str
     code: str
-    kind: Literal['permission_denied'] = field(default='permission_denied', init=False)
+    kind: Literal['permission_denied'] = dataclass_field(default='permission_denied', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -779,7 +779,7 @@ class OutputFailurePermissionDenied:
 class OutputFailureClosed:
     at: str
     code: str
-    kind: Literal['closed'] = field(default='closed', init=False)
+    kind: Literal['closed'] = dataclass_field(default='closed', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -787,7 +787,7 @@ class OutputFailureClosed:
 class OutputFailureUnavailable:
     at: str
     code: str
-    kind: Literal['unavailable'] = field(default='unavailable', init=False)
+    kind: Literal['unavailable'] = dataclass_field(default='unavailable', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -795,7 +795,7 @@ class OutputFailureUnavailable:
 class OutputFailureIo:
     at: str
     code: str
-    kind: Literal['io'] = field(default='io', init=False)
+    kind: Literal['io'] = dataclass_field(default='io', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -803,7 +803,7 @@ class OutputFailureIo:
 class OutputFailureTimeout:
     at: str
     code: str
-    kind: Literal['timeout'] = field(default='timeout', init=False)
+    kind: Literal['timeout'] = dataclass_field(default='timeout', init=False)
     message: str
     operation: str
     remediation: OutputRemediation
@@ -812,7 +812,7 @@ class OutputFailureTimeout:
 class OutputFailureCancelled:
     at: str
     code: str
-    kind: Literal['cancelled'] = field(default='cancelled', init=False)
+    kind: Literal['cancelled'] = dataclass_field(default='cancelled', init=False)
     message: str
     operation: str
     remediation: OutputRemediation
@@ -821,7 +821,7 @@ class OutputFailureCancelled:
 class OutputFailureUnsupportedVersion:
     at: str
     code: str
-    kind: Literal['unsupported_version'] = field(default='unsupported_version', init=False)
+    kind: Literal['unsupported_version'] = dataclass_field(default='unsupported_version', init=False)
     message: str
     received: int
     remediation: OutputRemediation
@@ -830,7 +830,7 @@ class OutputFailureUnsupportedVersion:
 class OutputFailureInternal:
     at: str
     code: str
-    kind: Literal['internal'] = field(default='internal', init=False)
+    kind: Literal['internal'] = dataclass_field(default='internal', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -838,7 +838,7 @@ class OutputFailureInternal:
 class OutputFailureUnknownRemote:
     at: str
     code: str
-    kind: Literal['unknown_remote'] = field(default='unknown_remote', init=False)
+    kind: Literal['unknown_remote'] = dataclass_field(default='unknown_remote', init=False)
     message: str
     remediation: OutputRemediation
     remote_kind: str
@@ -877,13 +877,13 @@ class OutputHealthRequest:
 class OutputLevelChangeChanged:
     current: OutputLevelState
     diagnostic: OutputChangeDiagnostic
-    kind: Literal['changed'] = field(default='changed', init=False)
+    kind: Literal['changed'] = dataclass_field(default='changed', init=False)
     previous: OutputLevelState
     source: OutputLevelChangeSource
 
 @dataclass(frozen=True, kw_only=True)
 class OutputLevelChangeUnchanged:
-    kind: Literal['unchanged'] = field(default='unchanged', init=False)
+    kind: Literal['unchanged'] = dataclass_field(default='unchanged', init=False)
     state: OutputLevelState
 
 @dataclass(frozen=True, kw_only=True)
@@ -893,12 +893,12 @@ class OutputLevelChangeRequest:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputLevelRequestElevate:
-    kind: Literal['elevate'] = field(default='elevate', init=False)
+    kind: Literal['elevate'] = dataclass_field(default='elevate', init=False)
     level: OutputLevelFilter
 
 @dataclass(frozen=True, kw_only=True)
 class OutputLevelRequestReset:
-    kind: Literal['reset'] = field(default='reset', init=False)
+    kind: Literal['reset'] = dataclass_field(default='reset', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputLevelState:
@@ -974,16 +974,16 @@ class OutputMaintenanceHealth:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputPathUtf8:
-    kind: Literal['utf8'] = field(default='utf8', init=False)
+    kind: Literal['utf8'] = dataclass_field(default='utf8', init=False)
     value: str
 
 @dataclass(frozen=True, kw_only=True)
 class OutputPathUnrepresentable:
-    kind: Literal['unrepresentable'] = field(default='unrepresentable', init=False)
+    kind: Literal['unrepresentable'] = dataclass_field(default='unrepresentable', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputPathAbsent:
-    kind: Literal['absent'] = field(default='absent', init=False)
+    kind: Literal['absent'] = dataclass_field(default='absent', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputProcessIdentity:
@@ -1002,93 +1002,93 @@ class OutputQueryRequest:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputRemediationRecoverable:
-    kind: Literal['recoverable'] = field(default='recoverable', init=False)
+    kind: Literal['recoverable'] = dataclass_field(default='recoverable', init=False)
     steps: tuple[str, ...]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputRemediationNotRecoverable:
     justification: str
-    kind: Literal['not_recoverable'] = field(default='not_recoverable', init=False)
+    kind: Literal['not_recoverable'] = dataclass_field(default='not_recoverable', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResultOk:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputAdmission
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResultError:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult2Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputCompletion
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult2Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult3Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputDispatch
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult3Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult4Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputLogSnapshot
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult4Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult5Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputLogHealth
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult5Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult6Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputLevelChange
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult6Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult7Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputClientOutcome
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult7Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult8Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputClientStatus
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult8Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputSinkHealth:
@@ -1146,154 +1146,154 @@ class OutputTryLogRequest:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueNull:
-    kind: Literal['null'] = field(default='null', init=False)
+    kind: Literal['null'] = dataclass_field(default='null', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueBoolean:
-    kind: Literal['boolean'] = field(default='boolean', init=False)
+    kind: Literal['boolean'] = dataclass_field(default='boolean', init=False)
     value: bool
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueString:
-    kind: Literal['string'] = field(default='string', init=False)
+    kind: Literal['string'] = dataclass_field(default='string', init=False)
     value: str
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueInteger:
-    kind: Literal['integer'] = field(default='integer', init=False)
+    kind: Literal['integer'] = dataclass_field(default='integer', init=False)
     value: OutputDecimal
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueFloat:
-    kind: Literal['float'] = field(default='float', init=False)
+    kind: Literal['float'] = dataclass_field(default='float', init=False)
     value: float
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueArray:
-    kind: Literal['array'] = field(default='array', init=False)
+    kind: Literal['array'] = dataclass_field(default='array', init=False)
     value: tuple[OutputValue, ...]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueObject:
-    kind: Literal['object'] = field(default='object', init=False)
+    kind: Literal['object'] = dataclass_field(default='object', init=False)
     value: Mapping[str, OutputValue]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelopeOk:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputAdmission
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelopeError:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope2Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputCompletion
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope2Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope3Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputDispatch
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope3Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope4Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputLogSnapshot
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope4Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope5Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputLogHealth
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope5Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope6Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputLevelChange
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope6Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope7Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputClientOutcome
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope7Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope8Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputClientStatus
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope8Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 InputAdmission: TypeAlias = InputAdmissionAccepted | InputAdmissionFiltered
-InputAdmissionOperation: TypeAlias = Literal['log', 'try_log']
-InputAvailability: TypeAlias = Literal['healthy', 'degraded_dropping', 'unavailable']
+InputAdmissionOperation: TypeAlias = Literal['log'] | Literal['try_log']
+InputAvailability: TypeAlias = Literal['healthy'] | Literal['degraded_dropping'] | Literal['unavailable']
 InputChangeDiagnostic: TypeAlias = InputChangeDiagnosticAccepted | InputChangeDiagnosticNotAccepted
 InputClientOutcome: TypeAlias = InputClientOutcomeIdle | InputClientOutcomeScheduled | InputClientOutcomeAccepted | InputClientOutcomeFiltered | InputClientOutcomeCompleted
 InputCompletion: TypeAlias = InputCompletionCompleted
-InputCompletionOperation: TypeAlias = Literal['query', 'health', 'flush']
+InputCompletionOperation: TypeAlias = Literal['query'] | Literal['health'] | Literal['flush']
 InputDecimal: TypeAlias = int
 InputDispatch: TypeAlias = InputDispatchScheduled
 InputFailure: TypeAlias = InputFailureValidation | InputFailureQueueFull | InputFailureBelowBaseline | InputFailureUnsupportedLevel | InputFailurePermissionDenied | InputFailureClosed | InputFailureUnavailable | InputFailureIo | InputFailureTimeout | InputFailureCancelled | InputFailureUnsupportedVersion | InputFailureInternal | InputFailureUnknownRemote
 InputLevelChange: TypeAlias = InputLevelChangeChanged | InputLevelChangeUnchanged
-InputLevelChangeSource: TypeAlias = Literal['application', 'user_request', 'diagnostic_session']
-InputLevel: TypeAlias = Literal['trace', 'debug', 'info', 'warn', 'error']
-InputLevelFilter: TypeAlias = Literal['off', 'error', 'warn', 'info', 'debug', 'trace']
+InputLevelChangeSource: TypeAlias = Literal['application'] | Literal['user_request'] | Literal['diagnostic_session']
+InputLevel: TypeAlias = Literal['trace'] | Literal['debug'] | Literal['info'] | Literal['warn'] | Literal['error']
+InputLevelFilter: TypeAlias = Literal['off'] | Literal['error'] | Literal['warn'] | Literal['info'] | Literal['debug'] | Literal['trace']
 InputLevelRequest: TypeAlias = InputLevelRequestElevate | InputLevelRequestReset
-InputLifecycle: TypeAlias = Literal['running', 'stopping', 'stopped', 'failed']
+InputLifecycle: TypeAlias = Literal['running'] | Literal['stopping'] | Literal['stopped'] | Literal['failed']
 InputLogOperation: TypeAlias = Literal['log']
-InputLogOrder: TypeAlias = Literal['oldest_first', 'newest_first']
+InputLogOrder: TypeAlias = Literal['oldest_first'] | Literal['newest_first']
 InputPath: TypeAlias = InputPathUtf8 | InputPathUnrepresentable | InputPathAbsent
-InputQueryState: TypeAlias = Literal['healthy', 'degraded', 'unavailable']
+InputQueryState: TypeAlias = Literal['healthy'] | Literal['degraded'] | Literal['unavailable']
 InputRemediation: TypeAlias = InputRemediationRecoverable | InputRemediationNotRecoverable
 InputResult: TypeAlias = InputResultOk | InputResultError
 InputResult2: TypeAlias = InputResult2Ok | InputResult2Error
@@ -1312,27 +1312,27 @@ InputWireEnvelope5: TypeAlias = InputWireEnvelope5Ok | InputWireEnvelope5Error
 InputWireEnvelope6: TypeAlias = InputWireEnvelope6Ok | InputWireEnvelope6Error
 InputWireEnvelope7: TypeAlias = InputWireEnvelope7Ok | InputWireEnvelope7Error
 InputWireEnvelope8: TypeAlias = InputWireEnvelope8Ok | InputWireEnvelope8Error
-InputWorkerState: TypeAlias = Literal['running', 'degraded', 'stopped']
+InputWorkerState: TypeAlias = Literal['running'] | Literal['degraded'] | Literal['stopped']
 OutputAdmission: TypeAlias = OutputAdmissionAccepted | OutputAdmissionFiltered
-OutputAdmissionOperation: TypeAlias = Literal['log', 'try_log']
-OutputAvailability: TypeAlias = Literal['healthy', 'degraded_dropping', 'unavailable']
+OutputAdmissionOperation: TypeAlias = Literal['log'] | Literal['try_log']
+OutputAvailability: TypeAlias = Literal['healthy'] | Literal['degraded_dropping'] | Literal['unavailable']
 OutputChangeDiagnostic: TypeAlias = OutputChangeDiagnosticAccepted | OutputChangeDiagnosticNotAccepted
 OutputClientOutcome: TypeAlias = OutputClientOutcomeIdle | OutputClientOutcomeScheduled | OutputClientOutcomeAccepted | OutputClientOutcomeFiltered | OutputClientOutcomeCompleted
 OutputCompletion: TypeAlias = OutputCompletionCompleted
-OutputCompletionOperation: TypeAlias = Literal['query', 'health', 'flush']
+OutputCompletionOperation: TypeAlias = Literal['query'] | Literal['health'] | Literal['flush']
 OutputDecimal: TypeAlias = int
 OutputDispatch: TypeAlias = OutputDispatchScheduled
 OutputFailure: TypeAlias = OutputFailureValidation | OutputFailureQueueFull | OutputFailureBelowBaseline | OutputFailureUnsupportedLevel | OutputFailurePermissionDenied | OutputFailureClosed | OutputFailureUnavailable | OutputFailureIo | OutputFailureTimeout | OutputFailureCancelled | OutputFailureUnsupportedVersion | OutputFailureInternal | OutputFailureUnknownRemote
 OutputLevelChange: TypeAlias = OutputLevelChangeChanged | OutputLevelChangeUnchanged
-OutputLevelChangeSource: TypeAlias = Literal['application', 'user_request', 'diagnostic_session']
-OutputLevel: TypeAlias = Literal['trace', 'debug', 'info', 'warn', 'error']
-OutputLevelFilter: TypeAlias = Literal['off', 'error', 'warn', 'info', 'debug', 'trace']
+OutputLevelChangeSource: TypeAlias = Literal['application'] | Literal['user_request'] | Literal['diagnostic_session']
+OutputLevel: TypeAlias = Literal['trace'] | Literal['debug'] | Literal['info'] | Literal['warn'] | Literal['error']
+OutputLevelFilter: TypeAlias = Literal['off'] | Literal['error'] | Literal['warn'] | Literal['info'] | Literal['debug'] | Literal['trace']
 OutputLevelRequest: TypeAlias = OutputLevelRequestElevate | OutputLevelRequestReset
-OutputLifecycle: TypeAlias = Literal['running', 'stopping', 'stopped', 'failed']
+OutputLifecycle: TypeAlias = Literal['running'] | Literal['stopping'] | Literal['stopped'] | Literal['failed']
 OutputLogOperation: TypeAlias = Literal['log']
-OutputLogOrder: TypeAlias = Literal['oldest_first', 'newest_first']
+OutputLogOrder: TypeAlias = Literal['oldest_first'] | Literal['newest_first']
 OutputPath: TypeAlias = OutputPathUtf8 | OutputPathUnrepresentable | OutputPathAbsent
-OutputQueryState: TypeAlias = Literal['healthy', 'degraded', 'unavailable']
+OutputQueryState: TypeAlias = Literal['healthy'] | Literal['degraded'] | Literal['unavailable']
 OutputRemediation: TypeAlias = OutputRemediationRecoverable | OutputRemediationNotRecoverable
 OutputResult: TypeAlias = OutputResultOk | OutputResultError
 OutputResult2: TypeAlias = OutputResult2Ok | OutputResult2Error
@@ -1351,7 +1351,7 @@ OutputWireEnvelope5: TypeAlias = OutputWireEnvelope5Ok | OutputWireEnvelope5Erro
 OutputWireEnvelope6: TypeAlias = OutputWireEnvelope6Ok | OutputWireEnvelope6Error
 OutputWireEnvelope7: TypeAlias = OutputWireEnvelope7Ok | OutputWireEnvelope7Error
 OutputWireEnvelope8: TypeAlias = OutputWireEnvelope8Ok | OutputWireEnvelope8Error
-OutputWorkerState: TypeAlias = Literal['running', 'degraded', 'stopped']
+OutputWorkerState: TypeAlias = Literal['running'] | Literal['degraded'] | Literal['stopped']
 InputOperationDiagnostic: TypeAlias = InputDiagnostic
 InputResultAdmission: TypeAlias = InputResult
 InputResultClientOutcome: TypeAlias = InputResult7

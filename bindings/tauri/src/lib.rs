@@ -134,9 +134,7 @@ fn inspect(value: &Value, depth: usize, limit: usize) -> Result<(), Failure> {
 }
 
 fn strict_object(value: &Value, allowed: &[&str], field: &str) -> Result<(), Failure> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| invalid(field, "request must be an object"))?;
+    let object = value.as_object().ok_or_else(|| invalid(field, "request must be an object"))?;
     if object.keys().any(|key| !allowed.contains(&key.as_str())) {
         return Err(invalid(field, "unknown field"));
     }
@@ -144,34 +142,19 @@ fn strict_object(value: &Value, allowed: &[&str], field: &str) -> Result<(), Fai
 }
 
 fn strict_value(value: &Value, field: &str) -> Result<(), Failure> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| invalid(field, "value must be a tagged object"))?;
-    let kind = object
-        .get("kind")
-        .and_then(Value::as_str)
-        .ok_or_else(|| invalid(field, "value kind is required"))?;
+    let object = value.as_object().ok_or_else(|| invalid(field, "value must be a tagged object"))?;
+    let kind = object.get("kind").and_then(Value::as_str).ok_or_else(|| invalid(field, "value kind is required"))?;
     let allowed = match kind {
         "null" => &["kind"][..],
-        "boolean" | "string" | "integer" | "float" => &["kind", "value"][..],
-        "array" | "object" => &["kind", "value"][..],
+        "boolean" | "string" | "integer" | "float" | "array" | "object" => &["kind", "value"][..],
         _ => return Err(invalid(field, "unknown value kind")),
     };
     strict_object(value, allowed, field)?;
     match kind {
-        "array" => value
-            .get("value")
-            .and_then(Value::as_array)
-            .ok_or_else(|| invalid(field, "array value is required"))?
-            .iter()
-            .enumerate()
-            .try_for_each(|(index, child)| strict_value(child, &format!("{field}.value[{index}]")))?,
-        "object" => value
-            .get("value")
-            .and_then(Value::as_object)
-            .ok_or_else(|| invalid(field, "object value is required"))?
-            .iter()
-            .try_for_each(|(key, child)| strict_value(child, &format!("{field}.value.{key}")))?,
+        "array" => object.get("value").and_then(Value::as_array).ok_or_else(|| invalid(field, "array value is required"))?
+            .iter().enumerate().try_for_each(|(index, child)| strict_value(child, &format!("{field}.value[{index}]")))?,
+        "object" => object.get("value").and_then(Value::as_object).ok_or_else(|| invalid(field, "object value is required"))?
+            .iter().try_for_each(|(key, child)| strict_value(child, &format!("{field}.value.{key}")))?,
         _ => {}
     }
     Ok(())
@@ -184,12 +167,8 @@ fn strict_request(value: &Value, operation: &str) -> Result<(), Failure> {
             let event = value.get("event").ok_or_else(|| invalid("event", "event is required"))?;
             strict_object(event, &["schema_version", "level", "target", "action", "message", "trace", "request_id", "correlation_id", "outcome", "fields"], "event")?;
             if let Some(fields) = event.get("fields") {
-                let fields = fields
-                    .as_object()
-                    .ok_or_else(|| invalid("event.fields", "fields must be an object"))?;
-                for (key, value) in fields {
-                    strict_value(value, &format!("event.fields.{key}"))?;
-                }
+                fields.as_object().ok_or_else(|| invalid("event.fields", "fields must be an object"))?
+                    .iter().try_for_each(|(key, value)| strict_value(value, &format!("event.fields.{key}")))?;
             }
         }
         "query" => {
@@ -199,9 +178,7 @@ fn strict_request(value: &Value, operation: &str) -> Result<(), Failure> {
             if let Some(matches) = query.get("field_matches").and_then(Value::as_array) {
                 for (index, entry) in matches.iter().enumerate() {
                     strict_object(entry, &["field", "value"], &format!("query.field_matches[{index}]"))?;
-                    if let Some(value) = entry.get("value") {
-                        strict_value(value, &format!("query.field_matches[{index}].value"))?;
-                    }
+                    if let Some(value) = entry.get("value") { strict_value(value, &format!("query.field_matches[{index}].value"))?; }
                 }
             }
         }
@@ -263,9 +240,7 @@ fn redact_value(value: &mut sc_observability_dto::ValueDto, keys: &BTreeSet<Stri
     if let sc_observability_dto::ValueDto::Object { value: object } = value {
         for (key, child) in object.iter_mut() {
             if keys.contains(key)
-                || keys
-                    .iter()
-                    .any(|configured| normalize_key(configured) == normalize_key(key))
+                || keys.iter().any(|configured| normalize_key(configured) == normalize_key(key))
             {
                 *child = sc_observability_dto::ValueDto::String {
                     value: REDACTED.to_owned(),
@@ -456,11 +431,12 @@ fn sc_observability_try_log<R: tauri::Runtime>(
 #[cfg(feature = "tauri")]
 #[tauri::command]
 async fn sc_observability_query<R: tauri::Runtime>(
-    window: tauri::Window<R>,
+    window: tauri::WebviewWindow<R>,
+    app: tauri::AppHandle<R>,
     request: Value,
-    state: tauri::State<'_, ManagedAdapter>,
-) -> Result<WireEnvelope<LogSnapshotDto>, tauri::Error> {
-    Ok(state.0.query(window.label(), request).await)
+    
+) -> WireEnvelope<LogSnapshotDto> {
+    app.state::<ManagedAdapter>().0.query(window.label(), request).await
 }
 
 #[cfg(feature = "tauri")]
@@ -476,11 +452,12 @@ fn sc_observability_health<R: tauri::Runtime>(
 #[cfg(feature = "tauri")]
 #[tauri::command]
 async fn sc_observability_flush<R: tauri::Runtime>(
-    window: tauri::Window<R>,
+    window: tauri::WebviewWindow<R>,
+    app: tauri::AppHandle<R>,
     request: Value,
-    state: tauri::State<'_, ManagedAdapter>,
-) -> Result<WireEnvelope<sc_observability_dto::CompletionDto>, tauri::Error> {
-    Ok(state.0.flush(window.label(), request).await)
+    
+) -> WireEnvelope<sc_observability_dto::CompletionDto> {
+    app.state::<ManagedAdapter>().0.flush(window.label(), request).await
 }
 
 #[cfg(test)]
@@ -527,29 +504,14 @@ mod tests {
     }
 
     #[test]
-    fn redaction_replaces_nested_and_normalized_keys() {
-        let mut event: LogEventDto = serde_json::from_value(serde_json::json!({
-            "schema_version": 1,
-            "level": "info",
-            "target": "app",
-            "action": "test",
-            "message": null,
-            "trace": null,
-            "request_id": null,
-            "correlation_id": null,
-            "outcome": null,
-            "fields": {
-                "password": {"kind": "string", "value": "secret"},
-                "nested": {"kind": "object", "value": {
-                    "password": {"kind": "string", "value": "nested-secret"}
-                }}
-            }
-        })).unwrap();
-        redact_value(
-            event.fields.get_mut("nested").unwrap(),
-            &BTreeSet::from(["password".to_owned()]),
-        );
-        assert_eq!(event.fields["nested"], sc_observability_dto::ValueDto::Object {
+    fn redaction_replaces_nested_keys() {
+        let mut value = sc_observability_dto::ValueDto::Object {
+            value: [("password".to_owned(), sc_observability_dto::ValueDto::String {
+                value: "secret".to_owned(),
+            })].into_iter().collect(),
+        };
+        redact_value(&mut value, &BTreeSet::from(["password".to_owned()]));
+        assert_eq!(value, sc_observability_dto::ValueDto::Object {
             value: [("password".to_owned(), sc_observability_dto::ValueDto::String {
                 value: REDACTED.to_owned(),
             })].into_iter().collect(),

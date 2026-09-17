@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "candidate_version": "1.4.0",
+  "source_commit": "6481ac7ea4b321cab76f27a246ed84c5ab6af75f",
+  "approved_at": "2026-09-17T09:32:20.983518+00:00",
+  "crates": {
+    "sc-observability-dto": {
+      "status": "approved",
+      "reviewer": "aobs (appointed Phase B lead)",
+      "scope": [
+        "public-api",
+        "TYP-030 wire-only ownership exception"
+      ],
+      "evidence": "docs/plans/phase-b/evidence/b3-api/sc-observability-dto.txt",
+      "api_sha256": "c03027422ae3ff9f49e5b425523c9c5eab1909e34bfac5dc39ac54295f89cc9a"
+    }
+  },
+  "approval_scope": "Initial neutral wire DTO declarations, checked core conversions and binding-owned diagnostic registry reviewed against binding-contract.md and sprint B.3. TYP-030 exception is limited to these neutral projections; native errors, runtime ownership and existing core types stay with their original crates. No behavior/QA verdict, owner runtime-contract acceptance or B.7 publication approval is implied."
+}

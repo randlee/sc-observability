@@ -1,0 +1,20 @@
+docs consistency validation passed
+phase-b publication-claim self-test and doc scan passed
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability_types/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observe/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability_otlp/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability_log/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability_log_macros/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability_dto/index.html
+ Documenting sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/crates/sc-observability-binding-runtime)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime/target/doc/sc_observability_binding_runtime/index.html
+rustdoc missing-docs validation passed

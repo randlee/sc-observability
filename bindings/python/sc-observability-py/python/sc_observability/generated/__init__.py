@@ -1,18 +1,18 @@
 # Generated from canonical schema. Do not edit.
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Literal, Mapping, Never, TypeAlias
+from dataclasses import dataclass, field as dataclass_field
+from typing import Literal, Mapping, NoReturn, TypeAlias
 from types import MappingProxyType
 import json
 import re
 
 @dataclass(frozen=True, kw_only=True)
 class InputAdmissionAccepted:
-    kind: Literal['accepted'] = field(default='accepted', init=False)
+    kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputAdmissionFiltered:
-    kind: Literal['filtered'] = field(default='filtered', init=False)
+    kind: Literal['filtered'] = dataclass_field(default='filtered', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputBridgeHealth:
@@ -27,47 +27,47 @@ class InputBridgeHealth:
 
 @dataclass(frozen=True, kw_only=True)
 class InputChangeDiagnosticAccepted:
-    kind: Literal['accepted'] = field(default='accepted', init=False)
+    kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputChangeDiagnosticNotAccepted:
     diagnostic: InputDiagnostic
-    kind: Literal['not_accepted'] = field(default='not_accepted', init=False)
+    kind: Literal['not_accepted'] = dataclass_field(default='not_accepted', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputClientOutcomeIdle:
-    kind: Literal['idle'] = field(default='idle', init=False)
+    kind: Literal['idle'] = dataclass_field(default='idle', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputClientOutcomeScheduled:
-    kind: Literal['scheduled'] = field(default='scheduled', init=False)
+    kind: Literal['scheduled'] = dataclass_field(default='scheduled', init=False)
     operation: InputLogOperation
 
 @dataclass(frozen=True, kw_only=True)
 class InputClientOutcomeAccepted:
-    kind: Literal['accepted'] = field(default='accepted', init=False)
+    kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
     operation: InputAdmissionOperation
 
 @dataclass(frozen=True, kw_only=True)
 class InputClientOutcomeFiltered:
-    kind: Literal['filtered'] = field(default='filtered', init=False)
+    kind: Literal['filtered'] = dataclass_field(default='filtered', init=False)
     operation: InputAdmissionOperation
 
 @dataclass(frozen=True, kw_only=True)
 class InputClientOutcomeCompleted:
-    kind: Literal['completed'] = field(default='completed', init=False)
+    kind: Literal['completed'] = dataclass_field(default='completed', init=False)
     operation: InputCompletionOperation
 
 @dataclass(frozen=True, kw_only=True)
 class InputClientStatus:
     failures_by_kind: InputFailureCounts
     in_flight: int
-    last_failure: InputFailure | None
+    last_failure: InputFailure | None = None
     last_result: InputResult7
 
 @dataclass(frozen=True, kw_only=True)
 class InputCompletionCompleted:
-    kind: Literal['completed'] = field(default='completed', init=False)
+    kind: Literal['completed'] = dataclass_field(default='completed', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputDiagnostic:
@@ -79,12 +79,12 @@ class InputDiagnostic:
 @dataclass(frozen=True, kw_only=True)
 class InputDiagnosticSummary:
     at: str
-    code: str | None
+    code: str | None = None
     message: str
 
 @dataclass(frozen=True, kw_only=True)
 class InputDispatchScheduled:
-    kind: Literal['scheduled'] = field(default='scheduled', init=False)
+    kind: Literal['scheduled'] = dataclass_field(default='scheduled', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputDropCounts:
@@ -101,7 +101,7 @@ class InputFailureValidation:
     at: str
     code: str
     field: str
-    kind: Literal['validation'] = field(default='validation', init=False)
+    kind: Literal['validation'] = dataclass_field(default='validation', init=False)
     message: str
     remediation: InputRemediation
 
@@ -109,7 +109,7 @@ class InputFailureValidation:
 class InputFailureQueueFull:
     at: str
     code: str
-    kind: Literal['queue_full'] = field(default='queue_full', init=False)
+    kind: Literal['queue_full'] = dataclass_field(default='queue_full', init=False)
     message: str
     remediation: InputRemediation
 
@@ -118,7 +118,7 @@ class InputFailureBelowBaseline:
     at: str
     code: str
     configured: InputLevelFilter
-    kind: Literal['below_baseline'] = field(default='below_baseline', init=False)
+    kind: Literal['below_baseline'] = dataclass_field(default='below_baseline', init=False)
     message: str
     remediation: InputRemediation
     requested: InputLevelFilter
@@ -128,7 +128,7 @@ class InputFailureUnsupportedLevel:
     at: str
     available: InputLevelFilter
     code: str
-    kind: Literal['unsupported_level'] = field(default='unsupported_level', init=False)
+    kind: Literal['unsupported_level'] = dataclass_field(default='unsupported_level', init=False)
     message: str
     remediation: InputRemediation
     requested: InputLevelFilter
@@ -137,7 +137,7 @@ class InputFailureUnsupportedLevel:
 class InputFailurePermissionDenied:
     at: str
     code: str
-    kind: Literal['permission_denied'] = field(default='permission_denied', init=False)
+    kind: Literal['permission_denied'] = dataclass_field(default='permission_denied', init=False)
     message: str
     remediation: InputRemediation
 
@@ -145,7 +145,7 @@ class InputFailurePermissionDenied:
 class InputFailureClosed:
     at: str
     code: str
-    kind: Literal['closed'] = field(default='closed', init=False)
+    kind: Literal['closed'] = dataclass_field(default='closed', init=False)
     message: str
     remediation: InputRemediation
 
@@ -153,7 +153,7 @@ class InputFailureClosed:
 class InputFailureUnavailable:
     at: str
     code: str
-    kind: Literal['unavailable'] = field(default='unavailable', init=False)
+    kind: Literal['unavailable'] = dataclass_field(default='unavailable', init=False)
     message: str
     remediation: InputRemediation
 
@@ -161,7 +161,7 @@ class InputFailureUnavailable:
 class InputFailureIo:
     at: str
     code: str
-    kind: Literal['io'] = field(default='io', init=False)
+    kind: Literal['io'] = dataclass_field(default='io', init=False)
     message: str
     remediation: InputRemediation
 
@@ -169,7 +169,7 @@ class InputFailureIo:
 class InputFailureTimeout:
     at: str
     code: str
-    kind: Literal['timeout'] = field(default='timeout', init=False)
+    kind: Literal['timeout'] = dataclass_field(default='timeout', init=False)
     message: str
     operation: str
     remediation: InputRemediation
@@ -178,7 +178,7 @@ class InputFailureTimeout:
 class InputFailureCancelled:
     at: str
     code: str
-    kind: Literal['cancelled'] = field(default='cancelled', init=False)
+    kind: Literal['cancelled'] = dataclass_field(default='cancelled', init=False)
     message: str
     operation: str
     remediation: InputRemediation
@@ -187,7 +187,7 @@ class InputFailureCancelled:
 class InputFailureUnsupportedVersion:
     at: str
     code: str
-    kind: Literal['unsupported_version'] = field(default='unsupported_version', init=False)
+    kind: Literal['unsupported_version'] = dataclass_field(default='unsupported_version', init=False)
     message: str
     received: int
     remediation: InputRemediation
@@ -196,7 +196,7 @@ class InputFailureUnsupportedVersion:
 class InputFailureInternal:
     at: str
     code: str
-    kind: Literal['internal'] = field(default='internal', init=False)
+    kind: Literal['internal'] = dataclass_field(default='internal', init=False)
     message: str
     remediation: InputRemediation
 
@@ -204,7 +204,7 @@ class InputFailureInternal:
 class InputFailureUnknownRemote:
     at: str
     code: str
-    kind: Literal['unknown_remote'] = field(default='unknown_remote', init=False)
+    kind: Literal['unknown_remote'] = dataclass_field(default='unknown_remote', init=False)
     message: str
     remediation: InputRemediation
     remote_kind: str
@@ -243,13 +243,13 @@ class InputHealthRequest:
 class InputLevelChangeChanged:
     current: InputLevelState
     diagnostic: InputChangeDiagnostic
-    kind: Literal['changed'] = field(default='changed', init=False)
+    kind: Literal['changed'] = dataclass_field(default='changed', init=False)
     previous: InputLevelState
     source: InputLevelChangeSource
 
 @dataclass(frozen=True, kw_only=True)
 class InputLevelChangeUnchanged:
-    kind: Literal['unchanged'] = field(default='unchanged', init=False)
+    kind: Literal['unchanged'] = dataclass_field(default='unchanged', init=False)
     state: InputLevelState
 
 @dataclass(frozen=True, kw_only=True)
@@ -259,12 +259,12 @@ class InputLevelChangeRequest:
 
 @dataclass(frozen=True, kw_only=True)
 class InputLevelRequestElevate:
-    kind: Literal['elevate'] = field(default='elevate', init=False)
+    kind: Literal['elevate'] = dataclass_field(default='elevate', init=False)
     level: InputLevelFilter
 
 @dataclass(frozen=True, kw_only=True)
 class InputLevelRequestReset:
-    kind: Literal['reset'] = field(default='reset', init=False)
+    kind: Literal['reset'] = dataclass_field(default='reset', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputLevelState:
@@ -275,37 +275,37 @@ class InputLevelState:
 @dataclass(frozen=True, kw_only=True)
 class InputLogEvent:
     action: str
-    correlation_id: str | None
-    fields: Mapping[str, InputValue]
+    correlation_id: str | None = None
+    fields: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
     level: InputLevel
-    message: str | None
-    outcome: str | None
-    request_id: str | None
+    message: str | None = None
+    outcome: str | None = None
+    request_id: str | None = None
     schema_version: Literal[1]
     target: str
-    trace: InputTraceContext | None
+    trace: InputTraceContext | None = None
 
 @dataclass(frozen=True, kw_only=True)
 class InputLogHealth:
-    bridge: InputBridgeHealth | None
+    bridge: InputBridgeHealth | None = None
     level_state: InputLevelState
     logging: InputLoggingHealth
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputLogQuery:
-    action: str | None
-    correlation_id: str | None
-    field_matches: tuple[InputFieldMatch, ...]
-    levels: tuple[InputLevel, ...]
-    limit: int
-    order: InputLogOrder
-    request_id: str | None
+    action: str | None = None
+    correlation_id: str | None = None
+    field_matches: tuple[InputFieldMatch, ...] = ()
+    levels: tuple[InputLevel, ...] = ()
+    limit: int = 100
+    order: InputLogOrder = 'oldest_first'
+    request_id: str | None = None
     schema_version: Literal[1]
-    service: str | None
-    since: str | None
-    target: str | None
-    until: str | None
+    service: str | None = None
+    since: str | None = None
+    target: str | None = None
+    until: str | None = None
 
 @dataclass(frozen=True, kw_only=True)
 class InputLogSnapshot:
@@ -318,10 +318,10 @@ class InputLoggingHealth:
     active_log_path: InputPath
     dropped_events_total: InputDecimal
     flush_errors_total: InputDecimal
-    last_error: InputDiagnosticSummary | None
-    last_writer_error: InputDiagnosticSummary | None
-    maintenance: InputMaintenanceHealth | None
-    query: InputQueryHealth | None
+    last_error: InputDiagnosticSummary | None = None
+    last_writer_error: InputDiagnosticSummary | None = None
+    maintenance: InputMaintenanceHealth | None = None
+    query: InputQueryHealth | None = None
     queue_capacity: InputDecimal
     queue_depth: InputDecimal
     queue_full_drops_total: InputDecimal
@@ -332,33 +332,33 @@ class InputLoggingHealth:
 
 @dataclass(frozen=True, kw_only=True)
 class InputMaintenanceHealth:
-    last_error: InputDiagnosticSummary | None
-    last_pass_at: str | None
+    last_error: InputDiagnosticSummary | None = None
+    last_pass_at: str | None = None
     pruned_files_total: InputDecimal
     rotated_files_total: InputDecimal
     state: InputWorkerState
 
 @dataclass(frozen=True, kw_only=True)
 class InputPathUtf8:
-    kind: Literal['utf8'] = field(default='utf8', init=False)
+    kind: Literal['utf8'] = dataclass_field(default='utf8', init=False)
     value: str
 
 @dataclass(frozen=True, kw_only=True)
 class InputPathUnrepresentable:
-    kind: Literal['unrepresentable'] = field(default='unrepresentable', init=False)
+    kind: Literal['unrepresentable'] = dataclass_field(default='unrepresentable', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputPathAbsent:
-    kind: Literal['absent'] = field(default='absent', init=False)
+    kind: Literal['absent'] = dataclass_field(default='absent', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputProcessIdentity:
-    hostname: str | None
-    pid: int | None
+    hostname: str | None = None
+    pid: int | None = None
 
 @dataclass(frozen=True, kw_only=True)
 class InputQueryHealth:
-    last_error: InputDiagnosticSummary | None
+    last_error: InputDiagnosticSummary | None = None
     state: InputQueryState
 
 @dataclass(frozen=True, kw_only=True)
@@ -368,115 +368,115 @@ class InputQueryRequest:
 
 @dataclass(frozen=True, kw_only=True)
 class InputRemediationRecoverable:
-    kind: Literal['recoverable'] = field(default='recoverable', init=False)
+    kind: Literal['recoverable'] = dataclass_field(default='recoverable', init=False)
     steps: tuple[str, ...]
 
 @dataclass(frozen=True, kw_only=True)
 class InputRemediationNotRecoverable:
     justification: str
-    kind: Literal['not_recoverable'] = field(default='not_recoverable', init=False)
+    kind: Literal['not_recoverable'] = dataclass_field(default='not_recoverable', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResultOk:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputAdmission
 
 @dataclass(frozen=True, kw_only=True)
 class InputResultError:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult2Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputCompletion
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult2Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult3Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputDispatch
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult3Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult4Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputLogSnapshot
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult4Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult5Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputLogHealth
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult5Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult6Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputLevelChange
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult6Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult7Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputClientOutcome
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult7Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult8Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: InputClientStatus
 
 @dataclass(frozen=True, kw_only=True)
 class InputResult8Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputSinkHealth:
-    last_error: InputDiagnosticSummary | None
+    last_error: InputDiagnosticSummary | None = None
     name: str
     state: InputAvailability
 
 @dataclass(frozen=True, kw_only=True)
 class InputStateTransition:
-    entity_id: str | None
+    entity_id: str | None = None
     entity_kind: str
     from_state: str
-    reason: str | None
+    reason: str | None = None
     to_state: str
-    trigger: str | None
+    trigger: str | None = None
 
 @dataclass(frozen=True, kw_only=True)
 class InputStoredDiagnostic:
-    cause: str | None
+    cause: str | None = None
     code: str
     details: Mapping[str, InputValue]
-    docs: str | None
+    docs: str | None = None
     message: str
     remediation: InputRemediation
     timestamp: str
@@ -484,24 +484,24 @@ class InputStoredDiagnostic:
 @dataclass(frozen=True, kw_only=True)
 class InputStoredEvent:
     action: str
-    correlation_id: str | None
-    diagnostic: InputStoredDiagnostic | None
+    correlation_id: str | None = None
+    diagnostic: InputStoredDiagnostic | None = None
     fields: Mapping[str, InputValue]
     identity: InputProcessIdentity
     level: InputLevel
-    message: str | None
-    outcome: str | None
-    request_id: str | None
+    message: str | None = None
+    outcome: str | None = None
+    request_id: str | None = None
     service: str
-    state_transition: InputStateTransition | None
+    state_transition: InputStateTransition | None = None
     target: str
     timestamp: str
-    trace: InputTraceContext | None
+    trace: InputTraceContext | None = None
     version: str
 
 @dataclass(frozen=True, kw_only=True)
 class InputTraceContext:
-    parent_span_id: str | None
+    parent_span_id: str | None = None
     span_id: str
     trace_id: str
 
@@ -512,141 +512,141 @@ class InputTryLogRequest:
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueNull:
-    kind: Literal['null'] = field(default='null', init=False)
+    kind: Literal['null'] = dataclass_field(default='null', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueBoolean:
-    kind: Literal['boolean'] = field(default='boolean', init=False)
+    kind: Literal['boolean'] = dataclass_field(default='boolean', init=False)
     value: bool
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueString:
-    kind: Literal['string'] = field(default='string', init=False)
+    kind: Literal['string'] = dataclass_field(default='string', init=False)
     value: str
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueInteger:
-    kind: Literal['integer'] = field(default='integer', init=False)
+    kind: Literal['integer'] = dataclass_field(default='integer', init=False)
     value: InputDecimal
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueFloat:
-    kind: Literal['float'] = field(default='float', init=False)
+    kind: Literal['float'] = dataclass_field(default='float', init=False)
     value: float
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueArray:
-    kind: Literal['array'] = field(default='array', init=False)
+    kind: Literal['array'] = dataclass_field(default='array', init=False)
     value: tuple[InputValue, ...]
 
 @dataclass(frozen=True, kw_only=True)
 class InputValueObject:
-    kind: Literal['object'] = field(default='object', init=False)
+    kind: Literal['object'] = dataclass_field(default='object', init=False)
     value: Mapping[str, InputValue]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelopeOk:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputAdmission
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelopeError:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope2Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputCompletion
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope2Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope3Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputDispatch
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope3Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope4Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputLogSnapshot
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope4Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope5Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputLogHealth
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope5Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope6Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputLevelChange
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope6Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope7Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputClientOutcome
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope7Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope8Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: InputClientStatus
 
 @dataclass(frozen=True, kw_only=True)
 class InputWireEnvelope8Error:
     error: InputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputAdmissionAccepted:
-    kind: Literal['accepted'] = field(default='accepted', init=False)
+    kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputAdmissionFiltered:
-    kind: Literal['filtered'] = field(default='filtered', init=False)
+    kind: Literal['filtered'] = dataclass_field(default='filtered', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputBridgeHealth:
@@ -661,35 +661,35 @@ class OutputBridgeHealth:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputChangeDiagnosticAccepted:
-    kind: Literal['accepted'] = field(default='accepted', init=False)
+    kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputChangeDiagnosticNotAccepted:
     diagnostic: OutputDiagnostic
-    kind: Literal['not_accepted'] = field(default='not_accepted', init=False)
+    kind: Literal['not_accepted'] = dataclass_field(default='not_accepted', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputClientOutcomeIdle:
-    kind: Literal['idle'] = field(default='idle', init=False)
+    kind: Literal['idle'] = dataclass_field(default='idle', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputClientOutcomeScheduled:
-    kind: Literal['scheduled'] = field(default='scheduled', init=False)
+    kind: Literal['scheduled'] = dataclass_field(default='scheduled', init=False)
     operation: OutputLogOperation
 
 @dataclass(frozen=True, kw_only=True)
 class OutputClientOutcomeAccepted:
-    kind: Literal['accepted'] = field(default='accepted', init=False)
+    kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
     operation: OutputAdmissionOperation
 
 @dataclass(frozen=True, kw_only=True)
 class OutputClientOutcomeFiltered:
-    kind: Literal['filtered'] = field(default='filtered', init=False)
+    kind: Literal['filtered'] = dataclass_field(default='filtered', init=False)
     operation: OutputAdmissionOperation
 
 @dataclass(frozen=True, kw_only=True)
 class OutputClientOutcomeCompleted:
-    kind: Literal['completed'] = field(default='completed', init=False)
+    kind: Literal['completed'] = dataclass_field(default='completed', init=False)
     operation: OutputCompletionOperation
 
 @dataclass(frozen=True, kw_only=True)
@@ -701,7 +701,7 @@ class OutputClientStatus:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputCompletionCompleted:
-    kind: Literal['completed'] = field(default='completed', init=False)
+    kind: Literal['completed'] = dataclass_field(default='completed', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputDiagnostic:
@@ -718,7 +718,7 @@ class OutputDiagnosticSummary:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputDispatchScheduled:
-    kind: Literal['scheduled'] = field(default='scheduled', init=False)
+    kind: Literal['scheduled'] = dataclass_field(default='scheduled', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputDropCounts:
@@ -735,7 +735,7 @@ class OutputFailureValidation:
     at: str
     code: str
     field: str
-    kind: Literal['validation'] = field(default='validation', init=False)
+    kind: Literal['validation'] = dataclass_field(default='validation', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -743,7 +743,7 @@ class OutputFailureValidation:
 class OutputFailureQueueFull:
     at: str
     code: str
-    kind: Literal['queue_full'] = field(default='queue_full', init=False)
+    kind: Literal['queue_full'] = dataclass_field(default='queue_full', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -752,7 +752,7 @@ class OutputFailureBelowBaseline:
     at: str
     code: str
     configured: OutputLevelFilter
-    kind: Literal['below_baseline'] = field(default='below_baseline', init=False)
+    kind: Literal['below_baseline'] = dataclass_field(default='below_baseline', init=False)
     message: str
     remediation: OutputRemediation
     requested: OutputLevelFilter
@@ -762,7 +762,7 @@ class OutputFailureUnsupportedLevel:
     at: str
     available: OutputLevelFilter
     code: str
-    kind: Literal['unsupported_level'] = field(default='unsupported_level', init=False)
+    kind: Literal['unsupported_level'] = dataclass_field(default='unsupported_level', init=False)
     message: str
     remediation: OutputRemediation
     requested: OutputLevelFilter
@@ -771,7 +771,7 @@ class OutputFailureUnsupportedLevel:
 class OutputFailurePermissionDenied:
     at: str
     code: str
-    kind: Literal['permission_denied'] = field(default='permission_denied', init=False)
+    kind: Literal['permission_denied'] = dataclass_field(default='permission_denied', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -779,7 +779,7 @@ class OutputFailurePermissionDenied:
 class OutputFailureClosed:
     at: str
     code: str
-    kind: Literal['closed'] = field(default='closed', init=False)
+    kind: Literal['closed'] = dataclass_field(default='closed', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -787,7 +787,7 @@ class OutputFailureClosed:
 class OutputFailureUnavailable:
     at: str
     code: str
-    kind: Literal['unavailable'] = field(default='unavailable', init=False)
+    kind: Literal['unavailable'] = dataclass_field(default='unavailable', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -795,7 +795,7 @@ class OutputFailureUnavailable:
 class OutputFailureIo:
     at: str
     code: str
-    kind: Literal['io'] = field(default='io', init=False)
+    kind: Literal['io'] = dataclass_field(default='io', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -803,7 +803,7 @@ class OutputFailureIo:
 class OutputFailureTimeout:
     at: str
     code: str
-    kind: Literal['timeout'] = field(default='timeout', init=False)
+    kind: Literal['timeout'] = dataclass_field(default='timeout', init=False)
     message: str
     operation: str
     remediation: OutputRemediation
@@ -812,7 +812,7 @@ class OutputFailureTimeout:
 class OutputFailureCancelled:
     at: str
     code: str
-    kind: Literal['cancelled'] = field(default='cancelled', init=False)
+    kind: Literal['cancelled'] = dataclass_field(default='cancelled', init=False)
     message: str
     operation: str
     remediation: OutputRemediation
@@ -821,7 +821,7 @@ class OutputFailureCancelled:
 class OutputFailureUnsupportedVersion:
     at: str
     code: str
-    kind: Literal['unsupported_version'] = field(default='unsupported_version', init=False)
+    kind: Literal['unsupported_version'] = dataclass_field(default='unsupported_version', init=False)
     message: str
     received: int
     remediation: OutputRemediation
@@ -830,7 +830,7 @@ class OutputFailureUnsupportedVersion:
 class OutputFailureInternal:
     at: str
     code: str
-    kind: Literal['internal'] = field(default='internal', init=False)
+    kind: Literal['internal'] = dataclass_field(default='internal', init=False)
     message: str
     remediation: OutputRemediation
 
@@ -838,7 +838,7 @@ class OutputFailureInternal:
 class OutputFailureUnknownRemote:
     at: str
     code: str
-    kind: Literal['unknown_remote'] = field(default='unknown_remote', init=False)
+    kind: Literal['unknown_remote'] = dataclass_field(default='unknown_remote', init=False)
     message: str
     remediation: OutputRemediation
     remote_kind: str
@@ -877,13 +877,13 @@ class OutputHealthRequest:
 class OutputLevelChangeChanged:
     current: OutputLevelState
     diagnostic: OutputChangeDiagnostic
-    kind: Literal['changed'] = field(default='changed', init=False)
+    kind: Literal['changed'] = dataclass_field(default='changed', init=False)
     previous: OutputLevelState
     source: OutputLevelChangeSource
 
 @dataclass(frozen=True, kw_only=True)
 class OutputLevelChangeUnchanged:
-    kind: Literal['unchanged'] = field(default='unchanged', init=False)
+    kind: Literal['unchanged'] = dataclass_field(default='unchanged', init=False)
     state: OutputLevelState
 
 @dataclass(frozen=True, kw_only=True)
@@ -893,12 +893,12 @@ class OutputLevelChangeRequest:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputLevelRequestElevate:
-    kind: Literal['elevate'] = field(default='elevate', init=False)
+    kind: Literal['elevate'] = dataclass_field(default='elevate', init=False)
     level: OutputLevelFilter
 
 @dataclass(frozen=True, kw_only=True)
 class OutputLevelRequestReset:
-    kind: Literal['reset'] = field(default='reset', init=False)
+    kind: Literal['reset'] = dataclass_field(default='reset', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputLevelState:
@@ -974,16 +974,16 @@ class OutputMaintenanceHealth:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputPathUtf8:
-    kind: Literal['utf8'] = field(default='utf8', init=False)
+    kind: Literal['utf8'] = dataclass_field(default='utf8', init=False)
     value: str
 
 @dataclass(frozen=True, kw_only=True)
 class OutputPathUnrepresentable:
-    kind: Literal['unrepresentable'] = field(default='unrepresentable', init=False)
+    kind: Literal['unrepresentable'] = dataclass_field(default='unrepresentable', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputPathAbsent:
-    kind: Literal['absent'] = field(default='absent', init=False)
+    kind: Literal['absent'] = dataclass_field(default='absent', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputProcessIdentity:
@@ -1002,93 +1002,93 @@ class OutputQueryRequest:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputRemediationRecoverable:
-    kind: Literal['recoverable'] = field(default='recoverable', init=False)
+    kind: Literal['recoverable'] = dataclass_field(default='recoverable', init=False)
     steps: tuple[str, ...]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputRemediationNotRecoverable:
     justification: str
-    kind: Literal['not_recoverable'] = field(default='not_recoverable', init=False)
+    kind: Literal['not_recoverable'] = dataclass_field(default='not_recoverable', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResultOk:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputAdmission
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResultError:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult2Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputCompletion
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult2Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult3Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputDispatch
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult3Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult4Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputLogSnapshot
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult4Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult5Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputLogHealth
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult5Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult6Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputLevelChange
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult6Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult7Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputClientOutcome
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult7Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult8Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     value: OutputClientStatus
 
 @dataclass(frozen=True, kw_only=True)
 class OutputResult8Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputSinkHealth:
@@ -1146,154 +1146,154 @@ class OutputTryLogRequest:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueNull:
-    kind: Literal['null'] = field(default='null', init=False)
+    kind: Literal['null'] = dataclass_field(default='null', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueBoolean:
-    kind: Literal['boolean'] = field(default='boolean', init=False)
+    kind: Literal['boolean'] = dataclass_field(default='boolean', init=False)
     value: bool
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueString:
-    kind: Literal['string'] = field(default='string', init=False)
+    kind: Literal['string'] = dataclass_field(default='string', init=False)
     value: str
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueInteger:
-    kind: Literal['integer'] = field(default='integer', init=False)
+    kind: Literal['integer'] = dataclass_field(default='integer', init=False)
     value: OutputDecimal
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueFloat:
-    kind: Literal['float'] = field(default='float', init=False)
+    kind: Literal['float'] = dataclass_field(default='float', init=False)
     value: float
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueArray:
-    kind: Literal['array'] = field(default='array', init=False)
+    kind: Literal['array'] = dataclass_field(default='array', init=False)
     value: tuple[OutputValue, ...]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputValueObject:
-    kind: Literal['object'] = field(default='object', init=False)
+    kind: Literal['object'] = dataclass_field(default='object', init=False)
     value: Mapping[str, OutputValue]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelopeOk:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputAdmission
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelopeError:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope2Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputCompletion
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope2Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope3Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputDispatch
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope3Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope4Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputLogSnapshot
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope4Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope5Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputLogHealth
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope5Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope6Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputLevelChange
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope6Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope7Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputClientOutcome
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope7Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope8Ok:
-    kind: Literal['ok'] = field(default='ok', init=False)
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
     schema_version: Literal[1]
     value: OutputClientStatus
 
 @dataclass(frozen=True, kw_only=True)
 class OutputWireEnvelope8Error:
     error: OutputFailure
-    kind: Literal['error'] = field(default='error', init=False)
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 InputAdmission: TypeAlias = InputAdmissionAccepted | InputAdmissionFiltered
-InputAdmissionOperation: TypeAlias = Literal['log', 'try_log']
-InputAvailability: TypeAlias = Literal['healthy', 'degraded_dropping', 'unavailable']
+InputAdmissionOperation: TypeAlias = Literal['log'] | Literal['try_log']
+InputAvailability: TypeAlias = Literal['healthy'] | Literal['degraded_dropping'] | Literal['unavailable']
 InputChangeDiagnostic: TypeAlias = InputChangeDiagnosticAccepted | InputChangeDiagnosticNotAccepted
 InputClientOutcome: TypeAlias = InputClientOutcomeIdle | InputClientOutcomeScheduled | InputClientOutcomeAccepted | InputClientOutcomeFiltered | InputClientOutcomeCompleted
 InputCompletion: TypeAlias = InputCompletionCompleted
-InputCompletionOperation: TypeAlias = Literal['query', 'health', 'flush']
+InputCompletionOperation: TypeAlias = Literal['query'] | Literal['health'] | Literal['flush']
 InputDecimal: TypeAlias = int
 InputDispatch: TypeAlias = InputDispatchScheduled
 InputFailure: TypeAlias = InputFailureValidation | InputFailureQueueFull | InputFailureBelowBaseline | InputFailureUnsupportedLevel | InputFailurePermissionDenied | InputFailureClosed | InputFailureUnavailable | InputFailureIo | InputFailureTimeout | InputFailureCancelled | InputFailureUnsupportedVersion | InputFailureInternal | InputFailureUnknownRemote
 InputLevelChange: TypeAlias = InputLevelChangeChanged | InputLevelChangeUnchanged
-InputLevelChangeSource: TypeAlias = Literal['application', 'user_request', 'diagnostic_session']
-InputLevel: TypeAlias = Literal['trace', 'debug', 'info', 'warn', 'error']
-InputLevelFilter: TypeAlias = Literal['off', 'error', 'warn', 'info', 'debug', 'trace']
+InputLevelChangeSource: TypeAlias = Literal['application'] | Literal['user_request'] | Literal['diagnostic_session']
+InputLevel: TypeAlias = Literal['trace'] | Literal['debug'] | Literal['info'] | Literal['warn'] | Literal['error']
+InputLevelFilter: TypeAlias = Literal['off'] | Literal['error'] | Literal['warn'] | Literal['info'] | Literal['debug'] | Literal['trace']
 InputLevelRequest: TypeAlias = InputLevelRequestElevate | InputLevelRequestReset
-InputLifecycle: TypeAlias = Literal['running', 'stopping', 'stopped', 'failed']
+InputLifecycle: TypeAlias = Literal['running'] | Literal['stopping'] | Literal['stopped'] | Literal['failed']
 InputLogOperation: TypeAlias = Literal['log']
-InputLogOrder: TypeAlias = Literal['oldest_first', 'newest_first']
+InputLogOrder: TypeAlias = Literal['oldest_first'] | Literal['newest_first']
 InputPath: TypeAlias = InputPathUtf8 | InputPathUnrepresentable | InputPathAbsent
-InputQueryState: TypeAlias = Literal['healthy', 'degraded', 'unavailable']
+InputQueryState: TypeAlias = Literal['healthy'] | Literal['degraded'] | Literal['unavailable']
 InputRemediation: TypeAlias = InputRemediationRecoverable | InputRemediationNotRecoverable
 InputResult: TypeAlias = InputResultOk | InputResultError
 InputResult2: TypeAlias = InputResult2Ok | InputResult2Error
@@ -1312,27 +1312,27 @@ InputWireEnvelope5: TypeAlias = InputWireEnvelope5Ok | InputWireEnvelope5Error
 InputWireEnvelope6: TypeAlias = InputWireEnvelope6Ok | InputWireEnvelope6Error
 InputWireEnvelope7: TypeAlias = InputWireEnvelope7Ok | InputWireEnvelope7Error
 InputWireEnvelope8: TypeAlias = InputWireEnvelope8Ok | InputWireEnvelope8Error
-InputWorkerState: TypeAlias = Literal['running', 'degraded', 'stopped']
+InputWorkerState: TypeAlias = Literal['running'] | Literal['degraded'] | Literal['stopped']
 OutputAdmission: TypeAlias = OutputAdmissionAccepted | OutputAdmissionFiltered
-OutputAdmissionOperation: TypeAlias = Literal['log', 'try_log']
-OutputAvailability: TypeAlias = Literal['healthy', 'degraded_dropping', 'unavailable']
+OutputAdmissionOperation: TypeAlias = Literal['log'] | Literal['try_log']
+OutputAvailability: TypeAlias = Literal['healthy'] | Literal['degraded_dropping'] | Literal['unavailable']
 OutputChangeDiagnostic: TypeAlias = OutputChangeDiagnosticAccepted | OutputChangeDiagnosticNotAccepted
 OutputClientOutcome: TypeAlias = OutputClientOutcomeIdle | OutputClientOutcomeScheduled | OutputClientOutcomeAccepted | OutputClientOutcomeFiltered | OutputClientOutcomeCompleted
 OutputCompletion: TypeAlias = OutputCompletionCompleted
-OutputCompletionOperation: TypeAlias = Literal['query', 'health', 'flush']
+OutputCompletionOperation: TypeAlias = Literal['query'] | Literal['health'] | Literal['flush']
 OutputDecimal: TypeAlias = int
 OutputDispatch: TypeAlias = OutputDispatchScheduled
 OutputFailure: TypeAlias = OutputFailureValidation | OutputFailureQueueFull | OutputFailureBelowBaseline | OutputFailureUnsupportedLevel | OutputFailurePermissionDenied | OutputFailureClosed | OutputFailureUnavailable | OutputFailureIo | OutputFailureTimeout | OutputFailureCancelled | OutputFailureUnsupportedVersion | OutputFailureInternal | OutputFailureUnknownRemote
 OutputLevelChange: TypeAlias = OutputLevelChangeChanged | OutputLevelChangeUnchanged
-OutputLevelChangeSource: TypeAlias = Literal['application', 'user_request', 'diagnostic_session']
-OutputLevel: TypeAlias = Literal['trace', 'debug', 'info', 'warn', 'error']
-OutputLevelFilter: TypeAlias = Literal['off', 'error', 'warn', 'info', 'debug', 'trace']
+OutputLevelChangeSource: TypeAlias = Literal['application'] | Literal['user_request'] | Literal['diagnostic_session']
+OutputLevel: TypeAlias = Literal['trace'] | Literal['debug'] | Literal['info'] | Literal['warn'] | Literal['error']
+OutputLevelFilter: TypeAlias = Literal['off'] | Literal['error'] | Literal['warn'] | Literal['info'] | Literal['debug'] | Literal['trace']
 OutputLevelRequest: TypeAlias = OutputLevelRequestElevate | OutputLevelRequestReset
-OutputLifecycle: TypeAlias = Literal['running', 'stopping', 'stopped', 'failed']
+OutputLifecycle: TypeAlias = Literal['running'] | Literal['stopping'] | Literal['stopped'] | Literal['failed']
 OutputLogOperation: TypeAlias = Literal['log']
-OutputLogOrder: TypeAlias = Literal['oldest_first', 'newest_first']
+OutputLogOrder: TypeAlias = Literal['oldest_first'] | Literal['newest_first']
 OutputPath: TypeAlias = OutputPathUtf8 | OutputPathUnrepresentable | OutputPathAbsent
-OutputQueryState: TypeAlias = Literal['healthy', 'degraded', 'unavailable']
+OutputQueryState: TypeAlias = Literal['healthy'] | Literal['degraded'] | Literal['unavailable']
 OutputRemediation: TypeAlias = OutputRemediationRecoverable | OutputRemediationNotRecoverable
 OutputResult: TypeAlias = OutputResultOk | OutputResultError
 OutputResult2: TypeAlias = OutputResult2Ok | OutputResult2Error
@@ -1351,7 +1351,7 @@ OutputWireEnvelope5: TypeAlias = OutputWireEnvelope5Ok | OutputWireEnvelope5Erro
 OutputWireEnvelope6: TypeAlias = OutputWireEnvelope6Ok | OutputWireEnvelope6Error
 OutputWireEnvelope7: TypeAlias = OutputWireEnvelope7Ok | OutputWireEnvelope7Error
 OutputWireEnvelope8: TypeAlias = OutputWireEnvelope8Ok | OutputWireEnvelope8Error
-OutputWorkerState: TypeAlias = Literal['running', 'degraded', 'stopped']
+OutputWorkerState: TypeAlias = Literal['running'] | Literal['degraded'] | Literal['stopped']
 InputOperationDiagnostic: TypeAlias = InputDiagnostic
 InputResultAdmission: TypeAlias = InputResult
 InputResultClientOutcome: TypeAlias = InputResult7
@@ -1453,7 +1453,7 @@ OutputWireEnvelopeLogSnapshot: TypeAlias = OutputWireEnvelope4
 WireEnvelopeLogSnapshot: TypeAlias = OutputWireEnvelopeLogSnapshot
 WorkerState: TypeAlias = OutputWorkerState
 
-SCHEMA = json.loads('{"$defs":{"InputAdmissionDto":{"description":"Version-one AdmissionDto wire value.","oneOf":[{"properties":{"kind":{"const":"accepted","type":"string"}},"required":["kind"],"type":"object"},{"properties":{"kind":{"const":"filtered","type":"string"}},"required":["kind"],"type":"object"}]},"InputAdmissionOperationDto":{"description":"Operations returning final logging admission.","enum":["log","try_log"],"type":"string"},"InputAvailabilityDto":{"description":"Version-one AvailabilityDto wire value.","enum":["healthy","degraded_dropping","unavailable"],"type":"string"},"InputBridgeHealthDto":{"description":"Version-one BridgeHealthDto wire record.","properties":{"active_log_path":{"$ref":"#/$defs/InputPathDto","description":"active log path."},"configured_level":{"$ref":"#/$defs/InputLevelFilterDto","description":"configured level."},"dropped":{"$ref":"#/$defs/InputDropCountsDto","description":"dropped."},"effective_level":{"$ref":"#/$defs/InputLevelFilterDto","description":"effective level."},"level_revision":{"$ref":"#/$defs/InputDecimalDto","description":"level revision.","x-sc-integer-domain":"unsigned"},"lifecycle":{"$ref":"#/$defs/InputLifecycleDto","description":"lifecycle."},"logging":{"$ref":"#/$defs/InputLoggingHealthDto","description":"logging."},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","logging","dropped","lifecycle","active_log_path","configured_level","effective_level","level_revision"],"type":"object"},"InputChangeDiagnosticDto":{"description":"Version-one ChangeDiagnosticDto wire value.","oneOf":[{"properties":{"kind":{"const":"accepted","type":"string"}},"required":["kind"],"type":"object"},{"properties":{"diagnostic":{"$ref":"#/$defs/InputDiagnostic"},"kind":{"const":"not_accepted","type":"string"}},"required":["kind","diagnostic"],"type":"object"}]},"InputClientOutcome":{"description":"Payload-free client outcome, distinct from host persistence.","oneOf":[{"properties":{"kind":{"const":"idle","type":"string"}},"required":["kind"],"type":"object"},{"properties":{"kind":{"const":"scheduled","type":"string"},"operation":{"$ref":"#/$defs/InputLogOperationDto"}},"required":["kind","operation"],"type":"object"},{"properties":{"kind":{"const":"accepted","type":"string"},"operation":{"$ref":"#/$defs/InputAdmissionOperationDto"}},"required":["kind","operation"],"type":"object"},{"properties":{"kind":{"const":"filtered","type":"string"},"operation":{"$ref":"#/$defs/InputAdmissionOperationDto"}},"required":["kind","operation"],"type":"object"},{"properties":{"kind":{"const":"completed","type":"string"},"operation":{"$ref":"#/$defs/InputCompletionOperationDto"}},"required":["kind","operation"],"type":"object"}]},"InputClientStatus":{"description":"Bounded local client status; no ownership or IPC capability is represented.","properties":{"failures_by_kind":{"$ref":"#/$defs/InputFailureCountsDto","description":"Saturating counters for every declared failure kind."},"in_flight":{"description":"Number of outstanding operations, bounded by client admission.","format":"uint32","maximum":256,"minimum":0,"type":"integer"},"last_failure":{"anyOf":[{"$ref":"#/$defs/InputFailure"},{"type":"null"}],"description":"Retained failure survives subsequent successful operations."},"last_result":{"$ref":"#/$defs/InputResultDto7","description":"Most recent completion-order result."}},"required":["in_flight","failures_by_kind","last_result"],"type":"object"},"InputCompletionDto":{"description":"Version-one CompletionDto wire value.","oneOf":[{"properties":{"kind":{"const":"completed","type":"string"}},"required":["kind"],"type":"object"}]},"InputCompletionOperationDto":{"description":"Operations returning a completed client observation.","enum":["query","health","flush"],"type":"string"},"InputDecimalDto":{"description":"Canonical integer string: signed i64 or unsigned u64; counters additionally reject negatives.","pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)$","type":"string"},"InputDiagnostic":{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["at","code","message","remediation"],"type":"object"},"InputDiagnosticSummaryDto":{"description":"Version-one DiagnosticSummaryDto wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":["string","null"]},"message":{"description":"message.","type":"string"}},"required":["message","at"],"type":"object"},"InputDispatchDto":{"description":"Version-one DispatchDto wire value.","oneOf":[{"properties":{"kind":{"const":"scheduled","type":"string"}},"required":["kind"],"type":"object"}]},"InputDropCountsDto":{"description":"Version-one DropCountsDto wire record.","properties":{"invalid_event":{"$ref":"#/$defs/InputDecimalDto","description":"invalid event.","x-sc-integer-domain":"unsigned"},"logger_panicked":{"$ref":"#/$defs/InputDecimalDto","description":"logger panicked.","x-sc-integer-domain":"unsigned"},"not_installed":{"$ref":"#/$defs/InputDecimalDto","description":"not installed.","x-sc-integer-domain":"unsigned"},"queue_full":{"$ref":"#/$defs/InputDecimalDto","description":"queue full.","x-sc-integer-domain":"unsigned"},"reentrant_emit":{"$ref":"#/$defs/InputDecimalDto","description":"reentrant emit.","x-sc-integer-domain":"unsigned"},"shutdown_timed_out":{"$ref":"#/$defs/InputDecimalDto","description":"shutdown timed out.","x-sc-integer-domain":"unsigned"},"writer_degraded":{"$ref":"#/$defs/InputDecimalDto","description":"writer degraded.","x-sc-integer-domain":"unsigned"}},"required":["queue_full","invalid_event","writer_degraded","shutdown_timed_out","not_installed","logger_panicked","reentrant_emit"],"type":"object"},"InputFailure":{"description":"Version-one Failure wire value.","oneOf":[{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"field":{"type":"string"},"kind":{"const":"validation","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","field"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"queue_full","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"configured":{"$ref":"#/$defs/InputLevelFilterDto"},"kind":{"const":"below_baseline","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."},"requested":{"$ref":"#/$defs/InputLevelFilterDto"}},"required":["kind","at","code","message","remediation","requested","configured"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"available":{"$ref":"#/$defs/InputLevelFilterDto"},"code":{"description":"code.","type":"string"},"kind":{"const":"unsupported_level","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."},"requested":{"$ref":"#/$defs/InputLevelFilterDto"}},"required":["kind","at","code","message","remediation","requested","available"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"permission_denied","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"closed","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"unavailable","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"io","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"timeout","type":"string"},"message":{"description":"message.","type":"string"},"operation":{"type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","operation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"cancelled","type":"string"},"message":{"description":"message.","type":"string"},"operation":{"type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","operation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"unsupported_version","type":"string"},"message":{"description":"message.","type":"string"},"received":{"format":"uint32","minimum":0,"type":"integer"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","received"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"internal","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"unknown_remote","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."},"remote_kind":{"type":"string"}},"required":["kind","at","code","message","remediation","remote_kind"],"type":"object"}]},"InputFailureCountsDto":{"description":"Fixed bounded counters for the declared Failure union.","properties":{"below_baseline":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating below_baseline counter.","x-sc-integer-domain":"unsigned"},"cancelled":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating cancelled counter.","x-sc-integer-domain":"unsigned"},"closed":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating closed counter.","x-sc-integer-domain":"unsigned"},"internal":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating internal counter.","x-sc-integer-domain":"unsigned"},"io":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating io counter.","x-sc-integer-domain":"unsigned"},"permission_denied":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating permission_denied counter.","x-sc-integer-domain":"unsigned"},"queue_full":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating queue_full counter.","x-sc-integer-domain":"unsigned"},"timeout":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating timeout counter.","x-sc-integer-domain":"unsigned"},"unavailable":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating unavailable counter.","x-sc-integer-domain":"unsigned"},"unknown_remote":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating unknown_remote counter.","x-sc-integer-domain":"unsigned"},"unsupported_level":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating unsupported_level counter.","x-sc-integer-domain":"unsigned"},"unsupported_version":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating unsupported_version counter.","x-sc-integer-domain":"unsigned"},"validation":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating validation counter.","x-sc-integer-domain":"unsigned"}},"required":["validation","queue_full","below_baseline","unsupported_level","permission_denied","closed","unavailable","io","timeout","cancelled","unsupported_version","internal","unknown_remote"],"type":"object"},"InputFieldMatchDto":{"additionalProperties":false,"description":"Version-one FieldMatchDto wire record.","properties":{"field":{"description":"field.","type":"string"},"value":{"$ref":"#/$defs/InputValueDto","description":"value."}},"required":["field","value"],"type":"object"},"InputFlushRequest":{"additionalProperties":false,"description":"Version-one FlushRequest wire record.","properties":{"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"timeout_ms":{"description":"timeout ms.","format":"uint32","maximum":60000,"minimum":0,"type":"integer"}},"required":["schema_version","timeout_ms"],"type":"object"},"InputHealthRequest":{"additionalProperties":false,"description":"Version-one HealthRequest wire record.","properties":{"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version"],"type":"object"},"InputLevelChangeDto":{"description":"Version-one LevelChangeDto wire value.","oneOf":[{"properties":{"current":{"$ref":"#/$defs/InputLevelStateDto"},"diagnostic":{"$ref":"#/$defs/InputChangeDiagnosticDto"},"kind":{"const":"changed","type":"string"},"previous":{"$ref":"#/$defs/InputLevelStateDto"},"source":{"$ref":"#/$defs/InputLevelChangeSourceDto"}},"required":["kind","previous","current","source","diagnostic"],"type":"object"},{"properties":{"kind":{"const":"unchanged","type":"string"},"state":{"$ref":"#/$defs/InputLevelStateDto"}},"required":["kind","state"],"type":"object"}]},"InputLevelChangeRequest":{"additionalProperties":false,"description":"Version-one LevelChangeRequest wire record.","properties":{"change":{"$ref":"#/$defs/InputLevelRequestDto","description":"change."},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","change"],"type":"object"},"InputLevelChangeSourceDto":{"description":"Version-one LevelChangeSourceDto wire value.","enum":["application","user_request","diagnostic_session"],"type":"string"},"InputLevelDto":{"description":"Version-one LevelDto wire value.","enum":["trace","debug","info","warn","error"],"type":"string"},"InputLevelFilterDto":{"description":"Version-one LevelFilterDto wire value.","enum":["off","error","warn","info","debug","trace"],"type":"string"},"InputLevelRequestDto":{"description":"Version-one LevelRequestDto wire value.","oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"elevate","type":"string"},"level":{"$ref":"#/$defs/InputLevelFilterDto"}},"required":["kind","level"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"reset","type":"string"}},"required":["kind"],"type":"object"}]},"InputLevelStateDto":{"description":"Version-one LevelStateDto wire record.","properties":{"configured_level":{"$ref":"#/$defs/InputLevelFilterDto","description":"configured level."},"effective_level":{"$ref":"#/$defs/InputLevelFilterDto","description":"effective level."},"level_revision":{"$ref":"#/$defs/InputDecimalDto","description":"level revision.","x-sc-integer-domain":"unsigned"}},"required":["configured_level","effective_level","level_revision"],"type":"object"},"InputLifecycleDto":{"description":"Version-one LifecycleDto wire value.","enum":["running","stopping","stopped","failed"],"type":"string"},"InputLogEventDto":{"additionalProperties":false,"description":"Version-one LogEventDto wire record.","properties":{"action":{"description":"action.","type":"string"},"correlation_id":{"description":"correlation id.","type":["string","null"]},"fields":{"additionalProperties":{"$ref":"#/$defs/InputValueDto"},"default":{},"description":"fields.","type":"object"},"level":{"$ref":"#/$defs/InputLevelDto","description":"level."},"message":{"description":"message.","type":["string","null"]},"outcome":{"description":"outcome.","type":["string","null"]},"request_id":{"description":"request id.","type":["string","null"]},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"target":{"description":"target.","type":"string"},"trace":{"anyOf":[{"$ref":"#/$defs/InputTraceContextDto"},{"type":"null"}],"description":"trace."}},"required":["schema_version","level","target","action"],"type":"object"},"InputLogHealthDto":{"description":"Version-one LogHealthDto wire record.","properties":{"bridge":{"anyOf":[{"$ref":"#/$defs/InputBridgeHealthDto"},{"type":"null"}],"description":"bridge."},"level_state":{"$ref":"#/$defs/InputLevelStateDto","description":"level state."},"logging":{"$ref":"#/$defs/InputLoggingHealthDto","description":"logging."},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","logging","level_state"],"type":"object"},"InputLogOperationDto":{"description":"The log-only operation in a scheduled client outcome.","enum":["log"],"type":"string"},"InputLogOrderDto":{"description":"Version-one LogOrderDto wire value.","enum":["oldest_first","newest_first"],"type":"string"},"InputLogQueryDto":{"additionalProperties":false,"description":"Version-one LogQueryDto wire record.","properties":{"action":{"description":"action.","type":["string","null"]},"correlation_id":{"description":"correlation id.","type":["string","null"]},"field_matches":{"default":[],"description":"field matches.","items":{"$ref":"#/$defs/InputFieldMatchDto"},"type":"array"},"levels":{"default":[],"description":"levels.","items":{"$ref":"#/$defs/InputLevelDto"},"type":"array"},"limit":{"default":100,"description":"limit.","format":"uint","maximum":1000,"minimum":1,"type":"integer"},"order":{"$ref":"#/$defs/InputLogOrderDto","default":"oldest_first","description":"order."},"request_id":{"description":"request id.","type":["string","null"]},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"service":{"description":"service.","type":["string","null"]},"since":{"description":"since.","type":["string","null"]},"target":{"description":"target.","type":["string","null"]},"until":{"description":"until.","type":["string","null"]}},"required":["schema_version"],"type":"object"},"InputLogSnapshotDto":{"description":"Version-one LogSnapshotDto wire record.","properties":{"events":{"description":"events.","items":{"$ref":"#/$defs/InputStoredEventDto"},"type":"array"},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"truncated":{"description":"truncated.","type":"boolean"}},"required":["schema_version","events","truncated"],"type":"object"},"InputLoggingHealthDto":{"description":"Version-one LoggingHealthDto wire record.","properties":{"active_log_path":{"$ref":"#/$defs/InputPathDto","description":"active log path."},"dropped_events_total":{"$ref":"#/$defs/InputDecimalDto","description":"dropped events total.","x-sc-integer-domain":"unsigned"},"flush_errors_total":{"$ref":"#/$defs/InputDecimalDto","description":"flush errors total.","x-sc-integer-domain":"unsigned"},"last_error":{"anyOf":[{"$ref":"#/$defs/InputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"last_writer_error":{"anyOf":[{"$ref":"#/$defs/InputDiagnosticSummaryDto"},{"type":"null"}],"description":"last writer error."},"maintenance":{"anyOf":[{"$ref":"#/$defs/InputMaintenanceHealthDto"},{"type":"null"}],"description":"maintenance."},"query":{"anyOf":[{"$ref":"#/$defs/InputQueryHealthDto"},{"type":"null"}],"description":"query."},"queue_capacity":{"$ref":"#/$defs/InputDecimalDto","description":"queue capacity.","x-sc-integer-domain":"unsigned"},"queue_depth":{"$ref":"#/$defs/InputDecimalDto","description":"queue depth.","x-sc-integer-domain":"unsigned"},"queue_full_drops_total":{"$ref":"#/$defs/InputDecimalDto","description":"queue full drops total.","x-sc-integer-domain":"unsigned"},"queue_high_water_mark":{"$ref":"#/$defs/InputDecimalDto","description":"queue high water mark.","x-sc-integer-domain":"unsigned"},"sink_statuses":{"description":"sink statuses.","items":{"$ref":"#/$defs/InputSinkHealthDto"},"type":"array"},"state":{"$ref":"#/$defs/InputAvailabilityDto","description":"state."},"writer_state":{"$ref":"#/$defs/InputWorkerStateDto","description":"writer state."}},"required":["state","dropped_events_total","flush_errors_total","queue_depth","queue_capacity","queue_high_water_mark","queue_full_drops_total","active_log_path","sink_statuses","writer_state"],"type":"object"},"InputMaintenanceHealthDto":{"description":"Version-one MaintenanceHealthDto wire record.","properties":{"last_error":{"anyOf":[{"$ref":"#/$defs/InputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"last_pass_at":{"description":"last pass at.","type":["string","null"]},"pruned_files_total":{"$ref":"#/$defs/InputDecimalDto","description":"pruned files total.","x-sc-integer-domain":"unsigned"},"rotated_files_total":{"$ref":"#/$defs/InputDecimalDto","description":"rotated files total.","x-sc-integer-domain":"unsigned"},"state":{"$ref":"#/$defs/InputWorkerStateDto","description":"state."}},"required":["state","rotated_files_total","pruned_files_total"],"type":"object"},"InputPathDto":{"description":"Version-one PathDto wire value.","oneOf":[{"properties":{"kind":{"const":"utf8","type":"string"},"value":{"type":"string"}},"required":["kind","value"],"type":"object"},{"properties":{"kind":{"const":"unrepresentable","type":"string"}},"required":["kind"],"type":"object"},{"properties":{"kind":{"const":"absent","type":"string"}},"required":["kind"],"type":"object"}]},"InputProcessIdentityDto":{"description":"Version-one ProcessIdentityDto wire record.","properties":{"hostname":{"description":"hostname.","type":["string","null"]},"pid":{"description":"pid.","format":"uint32","minimum":0,"type":["integer","null"]}},"type":"object"},"InputQueryHealthDto":{"description":"Version-one QueryHealthDto wire record.","properties":{"last_error":{"anyOf":[{"$ref":"#/$defs/InputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"state":{"$ref":"#/$defs/InputQueryStateDto","description":"state."}},"required":["state"],"type":"object"},"InputQueryRequest":{"additionalProperties":false,"description":"Version-one QueryRequest wire record.","properties":{"query":{"$ref":"#/$defs/InputLogQueryDto","description":"query."},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","query"],"type":"object"},"InputQueryStateDto":{"description":"Version-one QueryStateDto wire value.","enum":["healthy","degraded","unavailable"],"type":"string"},"InputRemediationDto":{"description":"Version-one RemediationDto wire value.","oneOf":[{"properties":{"kind":{"const":"recoverable","type":"string"},"steps":{"items":{"type":"string"},"type":"array"}},"required":["kind","steps"],"type":"object"},{"properties":{"justification":{"type":"string"},"kind":{"const":"not_recoverable","type":"string"}},"required":["kind","justification"],"type":"object"}]},"InputResultDto":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputAdmissionDto"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto2":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputCompletionDto"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto3":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputDispatchDto"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto4":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputLogSnapshotDto"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto5":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputLogHealthDto"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto6":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputLevelChangeDto"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto7":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputClientOutcome"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto8":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputClientStatus"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputSinkHealthDto":{"description":"Version-one SinkHealthDto wire record.","properties":{"last_error":{"anyOf":[{"$ref":"#/$defs/InputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"name":{"description":"name.","type":"string"},"state":{"$ref":"#/$defs/InputAvailabilityDto","description":"state."}},"required":["name","state"],"type":"object"},"InputStateTransitionDto":{"description":"Version-one StateTransitionDto wire record.","properties":{"entity_id":{"description":"entity id.","type":["string","null"]},"entity_kind":{"description":"entity kind.","type":"string"},"from_state":{"description":"from state.","type":"string"},"reason":{"description":"reason.","type":["string","null"]},"to_state":{"description":"to state.","type":"string"},"trigger":{"description":"trigger.","type":["string","null"]}},"required":["entity_kind","from_state","to_state"],"type":"object"},"InputStoredDiagnosticDto":{"description":"Version-one StoredDiagnosticDto wire record.","properties":{"cause":{"description":"cause.","type":["string","null"]},"code":{"description":"code.","type":"string"},"details":{"additionalProperties":{"$ref":"#/$defs/InputValueDto"},"description":"details.","type":"object"},"docs":{"description":"docs.","type":["string","null"]},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."},"timestamp":{"description":"timestamp.","type":"string"}},"required":["timestamp","code","message","remediation","details"],"type":"object"},"InputStoredEventDto":{"description":"Version-one StoredEventDto wire record.","properties":{"action":{"description":"action.","type":"string"},"correlation_id":{"description":"correlation id.","type":["string","null"]},"diagnostic":{"anyOf":[{"$ref":"#/$defs/InputStoredDiagnosticDto"},{"type":"null"}],"description":"diagnostic."},"fields":{"additionalProperties":{"$ref":"#/$defs/InputValueDto"},"description":"fields.","type":"object"},"identity":{"$ref":"#/$defs/InputProcessIdentityDto","description":"identity."},"level":{"$ref":"#/$defs/InputLevelDto","description":"level."},"message":{"description":"message.","type":["string","null"]},"outcome":{"description":"outcome.","type":["string","null"]},"request_id":{"description":"request id.","type":["string","null"]},"service":{"description":"service.","type":"string"},"state_transition":{"anyOf":[{"$ref":"#/$defs/InputStateTransitionDto"},{"type":"null"}],"description":"state transition."},"target":{"description":"target.","type":"string"},"timestamp":{"description":"timestamp.","type":"string"},"trace":{"anyOf":[{"$ref":"#/$defs/InputTraceContextDto"},{"type":"null"}],"description":"trace."},"version":{"description":"version.","type":"string"}},"required":["version","timestamp","service","identity","level","target","action","fields"],"type":"object"},"InputTraceContextDto":{"additionalProperties":false,"description":"Version-one TraceContextDto wire record.","properties":{"parent_span_id":{"description":"parent span id.","type":["string","null"]},"span_id":{"description":"span id.","type":"string"},"trace_id":{"description":"trace id.","type":"string"}},"required":["trace_id","span_id"],"type":"object"},"InputTryLogRequest":{"additionalProperties":false,"description":"Version-one TryLogRequest wire record.","properties":{"event":{"$ref":"#/$defs/InputLogEventDto","description":"event."},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","event"],"type":"object"},"InputValueDto":{"description":"Version-one ValueDto wire value.","oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"null","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"boolean","type":"string"},"value":{"type":"boolean"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"string","type":"string"},"value":{"type":"string"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"integer","type":"string"},"value":{"$ref":"#/$defs/InputDecimalDto"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"float","type":"string"},"value":{"format":"double","type":"number"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"array","type":"string"},"value":{"items":{"$ref":"#/$defs/InputValueDto"},"type":"array"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"object","type":"string"},"value":{"additionalProperties":{"$ref":"#/$defs/InputValueDto"},"type":"object"}},"required":["kind","value"],"type":"object"}]},"InputWireEnvelope":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputAdmissionDto"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope2":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputCompletionDto"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope3":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputDispatchDto"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope4":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputLogSnapshotDto"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope5":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputLogHealthDto"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope6":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputLevelChangeDto"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope7":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputClientOutcome"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope8":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputClientStatus"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/InputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWorkerStateDto":{"description":"Version-one WorkerStateDto wire value.","enum":["running","degraded","stopped"],"type":"string"},"OutputAdmissionDto":{"description":"Version-one AdmissionDto wire value.","oneOf":[{"properties":{"kind":{"const":"accepted","type":"string"}},"required":["kind"],"type":"object"},{"properties":{"kind":{"const":"filtered","type":"string"}},"required":["kind"],"type":"object"}]},"OutputAdmissionOperationDto":{"description":"Operations returning final logging admission.","enum":["log","try_log"],"type":"string"},"OutputAvailabilityDto":{"description":"Version-one AvailabilityDto wire value.","enum":["healthy","degraded_dropping","unavailable"],"type":"string"},"OutputBridgeHealthDto":{"description":"Version-one BridgeHealthDto wire record.","properties":{"active_log_path":{"$ref":"#/$defs/OutputPathDto","description":"active log path."},"configured_level":{"$ref":"#/$defs/OutputLevelFilterDto","description":"configured level."},"dropped":{"$ref":"#/$defs/OutputDropCountsDto","description":"dropped."},"effective_level":{"$ref":"#/$defs/OutputLevelFilterDto","description":"effective level."},"level_revision":{"$ref":"#/$defs/OutputDecimalDto","description":"level revision.","x-sc-integer-domain":"unsigned"},"lifecycle":{"$ref":"#/$defs/OutputLifecycleDto","description":"lifecycle."},"logging":{"$ref":"#/$defs/OutputLoggingHealthDto","description":"logging."},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","logging","dropped","lifecycle","active_log_path","configured_level","effective_level","level_revision"],"type":"object"},"OutputChangeDiagnosticDto":{"description":"Version-one ChangeDiagnosticDto wire value.","oneOf":[{"properties":{"kind":{"const":"accepted","type":"string"}},"required":["kind"],"type":"object"},{"properties":{"diagnostic":{"$ref":"#/$defs/OutputDiagnostic"},"kind":{"const":"not_accepted","type":"string"}},"required":["kind","diagnostic"],"type":"object"}]},"OutputClientOutcome":{"description":"Payload-free client outcome, distinct from host persistence.","oneOf":[{"properties":{"kind":{"const":"idle","type":"string"}},"required":["kind"],"type":"object"},{"properties":{"kind":{"const":"scheduled","type":"string"},"operation":{"$ref":"#/$defs/OutputLogOperationDto"}},"required":["kind","operation"],"type":"object"},{"properties":{"kind":{"const":"accepted","type":"string"},"operation":{"$ref":"#/$defs/OutputAdmissionOperationDto"}},"required":["kind","operation"],"type":"object"},{"properties":{"kind":{"const":"filtered","type":"string"},"operation":{"$ref":"#/$defs/OutputAdmissionOperationDto"}},"required":["kind","operation"],"type":"object"},{"properties":{"kind":{"const":"completed","type":"string"},"operation":{"$ref":"#/$defs/OutputCompletionOperationDto"}},"required":["kind","operation"],"type":"object"}]},"OutputClientStatus":{"description":"Bounded local client status; no ownership or IPC capability is represented.","properties":{"failures_by_kind":{"$ref":"#/$defs/OutputFailureCountsDto","description":"Saturating counters for every declared failure kind."},"in_flight":{"description":"Number of outstanding operations, bounded by client admission.","format":"uint32","maximum":256,"minimum":0,"type":"integer"},"last_failure":{"anyOf":[{"$ref":"#/$defs/OutputFailure"},{"type":"null"}],"description":"Retained failure survives subsequent successful operations."},"last_result":{"$ref":"#/$defs/OutputResultDto7","description":"Most recent completion-order result."}},"required":["in_flight","failures_by_kind","last_result","last_failure"],"type":"object"},"OutputCompletionDto":{"description":"Version-one CompletionDto wire value.","oneOf":[{"properties":{"kind":{"const":"completed","type":"string"}},"required":["kind"],"type":"object"}]},"OutputCompletionOperationDto":{"description":"Operations returning a completed client observation.","enum":["query","health","flush"],"type":"string"},"OutputDecimalDto":{"description":"Canonical integer string: signed i64 or unsigned u64; counters additionally reject negatives.","pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)$","type":"string"},"OutputDiagnostic":{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["at","code","message","remediation"],"type":"object"},"OutputDiagnosticSummaryDto":{"description":"Version-one DiagnosticSummaryDto wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":["string","null"]},"message":{"description":"message.","type":"string"}},"required":["code","message","at"],"type":"object"},"OutputDispatchDto":{"description":"Version-one DispatchDto wire value.","oneOf":[{"properties":{"kind":{"const":"scheduled","type":"string"}},"required":["kind"],"type":"object"}]},"OutputDropCountsDto":{"description":"Version-one DropCountsDto wire record.","properties":{"invalid_event":{"$ref":"#/$defs/OutputDecimalDto","description":"invalid event.","x-sc-integer-domain":"unsigned"},"logger_panicked":{"$ref":"#/$defs/OutputDecimalDto","description":"logger panicked.","x-sc-integer-domain":"unsigned"},"not_installed":{"$ref":"#/$defs/OutputDecimalDto","description":"not installed.","x-sc-integer-domain":"unsigned"},"queue_full":{"$ref":"#/$defs/OutputDecimalDto","description":"queue full.","x-sc-integer-domain":"unsigned"},"reentrant_emit":{"$ref":"#/$defs/OutputDecimalDto","description":"reentrant emit.","x-sc-integer-domain":"unsigned"},"shutdown_timed_out":{"$ref":"#/$defs/OutputDecimalDto","description":"shutdown timed out.","x-sc-integer-domain":"unsigned"},"writer_degraded":{"$ref":"#/$defs/OutputDecimalDto","description":"writer degraded.","x-sc-integer-domain":"unsigned"}},"required":["queue_full","invalid_event","writer_degraded","shutdown_timed_out","not_installed","logger_panicked","reentrant_emit"],"type":"object"},"OutputFailure":{"description":"Version-one Failure wire value.","oneOf":[{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"field":{"type":"string"},"kind":{"const":"validation","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","field"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"queue_full","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"configured":{"$ref":"#/$defs/OutputLevelFilterDto"},"kind":{"const":"below_baseline","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."},"requested":{"$ref":"#/$defs/OutputLevelFilterDto"}},"required":["kind","at","code","message","remediation","requested","configured"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"available":{"$ref":"#/$defs/OutputLevelFilterDto"},"code":{"description":"code.","type":"string"},"kind":{"const":"unsupported_level","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."},"requested":{"$ref":"#/$defs/OutputLevelFilterDto"}},"required":["kind","at","code","message","remediation","requested","available"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"permission_denied","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"closed","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"unavailable","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"io","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"timeout","type":"string"},"message":{"description":"message.","type":"string"},"operation":{"type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","operation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"cancelled","type":"string"},"message":{"description":"message.","type":"string"},"operation":{"type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","operation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"unsupported_version","type":"string"},"message":{"description":"message.","type":"string"},"received":{"format":"uint32","minimum":0,"type":"integer"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","received"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"internal","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"unknown_remote","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."},"remote_kind":{"type":"string"}},"required":["kind","at","code","message","remediation","remote_kind"],"type":"object"}]},"OutputFailureCountsDto":{"description":"Fixed bounded counters for the declared Failure union.","properties":{"below_baseline":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating below_baseline counter.","x-sc-integer-domain":"unsigned"},"cancelled":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating cancelled counter.","x-sc-integer-domain":"unsigned"},"closed":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating closed counter.","x-sc-integer-domain":"unsigned"},"internal":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating internal counter.","x-sc-integer-domain":"unsigned"},"io":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating io counter.","x-sc-integer-domain":"unsigned"},"permission_denied":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating permission_denied counter.","x-sc-integer-domain":"unsigned"},"queue_full":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating queue_full counter.","x-sc-integer-domain":"unsigned"},"timeout":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating timeout counter.","x-sc-integer-domain":"unsigned"},"unavailable":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating unavailable counter.","x-sc-integer-domain":"unsigned"},"unknown_remote":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating unknown_remote counter.","x-sc-integer-domain":"unsigned"},"unsupported_level":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating unsupported_level counter.","x-sc-integer-domain":"unsigned"},"unsupported_version":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating unsupported_version counter.","x-sc-integer-domain":"unsigned"},"validation":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating validation counter.","x-sc-integer-domain":"unsigned"}},"required":["validation","queue_full","below_baseline","unsupported_level","permission_denied","closed","unavailable","io","timeout","cancelled","unsupported_version","internal","unknown_remote"],"type":"object"},"OutputFieldMatchDto":{"additionalProperties":false,"description":"Version-one FieldMatchDto wire record.","properties":{"field":{"description":"field.","type":"string"},"value":{"$ref":"#/$defs/OutputValueDto","description":"value."}},"required":["field","value"],"type":"object"},"OutputFlushRequest":{"additionalProperties":false,"description":"Version-one FlushRequest wire record.","properties":{"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"timeout_ms":{"description":"timeout ms.","format":"uint32","maximum":60000,"minimum":0,"type":"integer"}},"required":["schema_version","timeout_ms"],"type":"object"},"OutputHealthRequest":{"additionalProperties":false,"description":"Version-one HealthRequest wire record.","properties":{"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version"],"type":"object"},"OutputLevelChangeDto":{"description":"Version-one LevelChangeDto wire value.","oneOf":[{"properties":{"current":{"$ref":"#/$defs/OutputLevelStateDto"},"diagnostic":{"$ref":"#/$defs/OutputChangeDiagnosticDto"},"kind":{"const":"changed","type":"string"},"previous":{"$ref":"#/$defs/OutputLevelStateDto"},"source":{"$ref":"#/$defs/OutputLevelChangeSourceDto"}},"required":["kind","previous","current","source","diagnostic"],"type":"object"},{"properties":{"kind":{"const":"unchanged","type":"string"},"state":{"$ref":"#/$defs/OutputLevelStateDto"}},"required":["kind","state"],"type":"object"}]},"OutputLevelChangeRequest":{"additionalProperties":false,"description":"Version-one LevelChangeRequest wire record.","properties":{"change":{"$ref":"#/$defs/OutputLevelRequestDto","description":"change."},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","change"],"type":"object"},"OutputLevelChangeSourceDto":{"description":"Version-one LevelChangeSourceDto wire value.","enum":["application","user_request","diagnostic_session"],"type":"string"},"OutputLevelDto":{"description":"Version-one LevelDto wire value.","enum":["trace","debug","info","warn","error"],"type":"string"},"OutputLevelFilterDto":{"description":"Version-one LevelFilterDto wire value.","enum":["off","error","warn","info","debug","trace"],"type":"string"},"OutputLevelRequestDto":{"description":"Version-one LevelRequestDto wire value.","oneOf":[{"additionalProperties":false,"properties":{"kind":{"const":"elevate","type":"string"},"level":{"$ref":"#/$defs/OutputLevelFilterDto"}},"required":["kind","level"],"type":"object"},{"additionalProperties":false,"properties":{"kind":{"const":"reset","type":"string"}},"required":["kind"],"type":"object"}]},"OutputLevelStateDto":{"description":"Version-one LevelStateDto wire record.","properties":{"configured_level":{"$ref":"#/$defs/OutputLevelFilterDto","description":"configured level."},"effective_level":{"$ref":"#/$defs/OutputLevelFilterDto","description":"effective level."},"level_revision":{"$ref":"#/$defs/OutputDecimalDto","description":"level revision.","x-sc-integer-domain":"unsigned"}},"required":["configured_level","effective_level","level_revision"],"type":"object"},"OutputLifecycleDto":{"description":"Version-one LifecycleDto wire value.","enum":["running","stopping","stopped","failed"],"type":"string"},"OutputLogEventDto":{"additionalProperties":false,"description":"Version-one LogEventDto wire record.","properties":{"action":{"description":"action.","type":"string"},"correlation_id":{"description":"correlation id.","type":["string","null"]},"fields":{"additionalProperties":{"$ref":"#/$defs/OutputValueDto"},"default":{},"description":"fields.","type":"object"},"level":{"$ref":"#/$defs/OutputLevelDto","description":"level."},"message":{"description":"message.","type":["string","null"]},"outcome":{"description":"outcome.","type":["string","null"]},"request_id":{"description":"request id.","type":["string","null"]},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"target":{"description":"target.","type":"string"},"trace":{"anyOf":[{"$ref":"#/$defs/OutputTraceContextDto"},{"type":"null"}],"description":"trace."}},"required":["schema_version","level","target","action","message","trace","request_id","correlation_id","outcome","fields"],"type":"object"},"OutputLogHealthDto":{"description":"Version-one LogHealthDto wire record.","properties":{"bridge":{"anyOf":[{"$ref":"#/$defs/OutputBridgeHealthDto"},{"type":"null"}],"description":"bridge."},"level_state":{"$ref":"#/$defs/OutputLevelStateDto","description":"level state."},"logging":{"$ref":"#/$defs/OutputLoggingHealthDto","description":"logging."},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","logging","bridge","level_state"],"type":"object"},"OutputLogOperationDto":{"description":"The log-only operation in a scheduled client outcome.","enum":["log"],"type":"string"},"OutputLogOrderDto":{"description":"Version-one LogOrderDto wire value.","enum":["oldest_first","newest_first"],"type":"string"},"OutputLogQueryDto":{"additionalProperties":false,"description":"Version-one LogQueryDto wire record.","properties":{"action":{"description":"action.","type":["string","null"]},"correlation_id":{"description":"correlation id.","type":["string","null"]},"field_matches":{"default":[],"description":"field matches.","items":{"$ref":"#/$defs/OutputFieldMatchDto"},"type":"array"},"levels":{"default":[],"description":"levels.","items":{"$ref":"#/$defs/OutputLevelDto"},"type":"array"},"limit":{"default":100,"description":"limit.","format":"uint","maximum":1000,"minimum":1,"type":"integer"},"order":{"$ref":"#/$defs/OutputLogOrderDto","default":"oldest_first","description":"order."},"request_id":{"description":"request id.","type":["string","null"]},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"service":{"description":"service.","type":["string","null"]},"since":{"description":"since.","type":["string","null"]},"target":{"description":"target.","type":["string","null"]},"until":{"description":"until.","type":["string","null"]}},"required":["schema_version","service","levels","target","action","request_id","correlation_id","since","until","field_matches","limit","order"],"type":"object"},"OutputLogSnapshotDto":{"description":"Version-one LogSnapshotDto wire record.","properties":{"events":{"description":"events.","items":{"$ref":"#/$defs/OutputStoredEventDto"},"type":"array"},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"truncated":{"description":"truncated.","type":"boolean"}},"required":["schema_version","events","truncated"],"type":"object"},"OutputLoggingHealthDto":{"description":"Version-one LoggingHealthDto wire record.","properties":{"active_log_path":{"$ref":"#/$defs/OutputPathDto","description":"active log path."},"dropped_events_total":{"$ref":"#/$defs/OutputDecimalDto","description":"dropped events total.","x-sc-integer-domain":"unsigned"},"flush_errors_total":{"$ref":"#/$defs/OutputDecimalDto","description":"flush errors total.","x-sc-integer-domain":"unsigned"},"last_error":{"anyOf":[{"$ref":"#/$defs/OutputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"last_writer_error":{"anyOf":[{"$ref":"#/$defs/OutputDiagnosticSummaryDto"},{"type":"null"}],"description":"last writer error."},"maintenance":{"anyOf":[{"$ref":"#/$defs/OutputMaintenanceHealthDto"},{"type":"null"}],"description":"maintenance."},"query":{"anyOf":[{"$ref":"#/$defs/OutputQueryHealthDto"},{"type":"null"}],"description":"query."},"queue_capacity":{"$ref":"#/$defs/OutputDecimalDto","description":"queue capacity.","x-sc-integer-domain":"unsigned"},"queue_depth":{"$ref":"#/$defs/OutputDecimalDto","description":"queue depth.","x-sc-integer-domain":"unsigned"},"queue_full_drops_total":{"$ref":"#/$defs/OutputDecimalDto","description":"queue full drops total.","x-sc-integer-domain":"unsigned"},"queue_high_water_mark":{"$ref":"#/$defs/OutputDecimalDto","description":"queue high water mark.","x-sc-integer-domain":"unsigned"},"sink_statuses":{"description":"sink statuses.","items":{"$ref":"#/$defs/OutputSinkHealthDto"},"type":"array"},"state":{"$ref":"#/$defs/OutputAvailabilityDto","description":"state."},"writer_state":{"$ref":"#/$defs/OutputWorkerStateDto","description":"writer state."}},"required":["state","dropped_events_total","flush_errors_total","queue_depth","queue_capacity","queue_high_water_mark","queue_full_drops_total","active_log_path","sink_statuses","writer_state","last_writer_error","query","maintenance","last_error"],"type":"object"},"OutputMaintenanceHealthDto":{"description":"Version-one MaintenanceHealthDto wire record.","properties":{"last_error":{"anyOf":[{"$ref":"#/$defs/OutputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"last_pass_at":{"description":"last pass at.","type":["string","null"]},"pruned_files_total":{"$ref":"#/$defs/OutputDecimalDto","description":"pruned files total.","x-sc-integer-domain":"unsigned"},"rotated_files_total":{"$ref":"#/$defs/OutputDecimalDto","description":"rotated files total.","x-sc-integer-domain":"unsigned"},"state":{"$ref":"#/$defs/OutputWorkerStateDto","description":"state."}},"required":["state","last_pass_at","rotated_files_total","pruned_files_total","last_error"],"type":"object"},"OutputPathDto":{"description":"Version-one PathDto wire value.","oneOf":[{"properties":{"kind":{"const":"utf8","type":"string"},"value":{"type":"string"}},"required":["kind","value"],"type":"object"},{"properties":{"kind":{"const":"unrepresentable","type":"string"}},"required":["kind"],"type":"object"},{"properties":{"kind":{"const":"absent","type":"string"}},"required":["kind"],"type":"object"}]},"OutputProcessIdentityDto":{"description":"Version-one ProcessIdentityDto wire record.","properties":{"hostname":{"description":"hostname.","type":["string","null"]},"pid":{"description":"pid.","format":"uint32","minimum":0,"type":["integer","null"]}},"required":["hostname","pid"],"type":"object"},"OutputQueryHealthDto":{"description":"Version-one QueryHealthDto wire record.","properties":{"last_error":{"anyOf":[{"$ref":"#/$defs/OutputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"state":{"$ref":"#/$defs/OutputQueryStateDto","description":"state."}},"required":["state","last_error"],"type":"object"},"OutputQueryRequest":{"additionalProperties":false,"description":"Version-one QueryRequest wire record.","properties":{"query":{"$ref":"#/$defs/OutputLogQueryDto","description":"query."},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","query"],"type":"object"},"OutputQueryStateDto":{"description":"Version-one QueryStateDto wire value.","enum":["healthy","degraded","unavailable"],"type":"string"},"OutputRemediationDto":{"description":"Version-one RemediationDto wire value.","oneOf":[{"properties":{"kind":{"const":"recoverable","type":"string"},"steps":{"items":{"type":"string"},"type":"array"}},"required":["kind","steps"],"type":"object"},{"properties":{"justification":{"type":"string"},"kind":{"const":"not_recoverable","type":"string"}},"required":["kind","justification"],"type":"object"}]},"OutputResultDto":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputAdmissionDto"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto2":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputCompletionDto"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto3":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputDispatchDto"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto4":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputLogSnapshotDto"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto5":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputLogHealthDto"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto6":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputLevelChangeDto"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto7":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputClientOutcome"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto8":{"description":"Version-one ResultDto<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputClientStatus"}},"required":["kind","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputSinkHealthDto":{"description":"Version-one SinkHealthDto wire record.","properties":{"last_error":{"anyOf":[{"$ref":"#/$defs/OutputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"name":{"description":"name.","type":"string"},"state":{"$ref":"#/$defs/OutputAvailabilityDto","description":"state."}},"required":["name","state","last_error"],"type":"object"},"OutputStateTransitionDto":{"description":"Version-one StateTransitionDto wire record.","properties":{"entity_id":{"description":"entity id.","type":["string","null"]},"entity_kind":{"description":"entity kind.","type":"string"},"from_state":{"description":"from state.","type":"string"},"reason":{"description":"reason.","type":["string","null"]},"to_state":{"description":"to state.","type":"string"},"trigger":{"description":"trigger.","type":["string","null"]}},"required":["entity_kind","entity_id","from_state","to_state","reason","trigger"],"type":"object"},"OutputStoredDiagnosticDto":{"description":"Version-one StoredDiagnosticDto wire record.","properties":{"cause":{"description":"cause.","type":["string","null"]},"code":{"description":"code.","type":"string"},"details":{"additionalProperties":{"$ref":"#/$defs/OutputValueDto"},"description":"details.","type":"object"},"docs":{"description":"docs.","type":["string","null"]},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."},"timestamp":{"description":"timestamp.","type":"string"}},"required":["timestamp","code","message","cause","remediation","docs","details"],"type":"object"},"OutputStoredEventDto":{"description":"Version-one StoredEventDto wire record.","properties":{"action":{"description":"action.","type":"string"},"correlation_id":{"description":"correlation id.","type":["string","null"]},"diagnostic":{"anyOf":[{"$ref":"#/$defs/OutputStoredDiagnosticDto"},{"type":"null"}],"description":"diagnostic."},"fields":{"additionalProperties":{"$ref":"#/$defs/OutputValueDto"},"description":"fields.","type":"object"},"identity":{"$ref":"#/$defs/OutputProcessIdentityDto","description":"identity."},"level":{"$ref":"#/$defs/OutputLevelDto","description":"level."},"message":{"description":"message.","type":["string","null"]},"outcome":{"description":"outcome.","type":["string","null"]},"request_id":{"description":"request id.","type":["string","null"]},"service":{"description":"service.","type":"string"},"state_transition":{"anyOf":[{"$ref":"#/$defs/OutputStateTransitionDto"},{"type":"null"}],"description":"state transition."},"target":{"description":"target.","type":"string"},"timestamp":{"description":"timestamp.","type":"string"},"trace":{"anyOf":[{"$ref":"#/$defs/OutputTraceContextDto"},{"type":"null"}],"description":"trace."},"version":{"description":"version.","type":"string"}},"required":["version","timestamp","service","identity","level","target","action","message","trace","request_id","correlation_id","outcome","fields","diagnostic","state_transition"],"type":"object"},"OutputTraceContextDto":{"description":"Version-one TraceContextDto wire record.","properties":{"parent_span_id":{"description":"parent span id.","type":["string","null"]},"span_id":{"description":"span id.","type":"string"},"trace_id":{"description":"trace id.","type":"string"}},"required":["trace_id","span_id","parent_span_id"],"type":"object"},"OutputTryLogRequest":{"additionalProperties":false,"description":"Version-one TryLogRequest wire record.","properties":{"event":{"$ref":"#/$defs/OutputLogEventDto","description":"event."},"schema_version":{"description":"schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","event"],"type":"object"},"OutputValueDto":{"description":"Version-one ValueDto wire value.","oneOf":[{"properties":{"kind":{"const":"null","type":"string"}},"required":["kind"],"type":"object"},{"properties":{"kind":{"const":"boolean","type":"string"},"value":{"type":"boolean"}},"required":["kind","value"],"type":"object"},{"properties":{"kind":{"const":"string","type":"string"},"value":{"type":"string"}},"required":["kind","value"],"type":"object"},{"properties":{"kind":{"const":"integer","type":"string"},"value":{"$ref":"#/$defs/OutputDecimalDto"}},"required":["kind","value"],"type":"object"},{"properties":{"kind":{"const":"float","type":"string"},"value":{"format":"double","type":"number"}},"required":["kind","value"],"type":"object"},{"properties":{"kind":{"const":"array","type":"string"},"value":{"items":{"$ref":"#/$defs/OutputValueDto"},"type":"array"}},"required":["kind","value"],"type":"object"},{"properties":{"kind":{"const":"object","type":"string"},"value":{"additionalProperties":{"$ref":"#/$defs/OutputValueDto"},"type":"object"}},"required":["kind","value"],"type":"object"}]},"OutputWireEnvelope":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputAdmissionDto"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope2":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputCompletionDto"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope3":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputDispatchDto"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope4":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputLogSnapshotDto"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope5":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputLogHealthDto"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope6":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputLevelChangeDto"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope7":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputClientOutcome"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope8":{"description":"Version-one WireEnvelope<T> wire value.","oneOf":[{"properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputClientStatus"}},"required":["kind","schema_version","value"],"type":"object"},{"properties":{"error":{"$ref":"#/$defs/OutputFailure"},"kind":{"const":"error","type":"string"},"schema_version":{"format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWorkerStateDto":{"description":"Version-one WorkerStateDto wire value.","enum":["running","degraded","stopped"],"type":"string"}},"$id":"https://sc-observability.dev/bindings/v1.json","$schema":"https://json-schema.org/draft/2020-12/schema","x-sc-bindings":{"defaults":{"query_limit":100,"query_order":"oldest_first"},"generic_projections":[{"name":"Result","parameter_ref":"OutputAdmissionDto","source":"OutputResultDtoAdmissionDto"},{"name":"WireEnvelope","parameter_ref":"OutputAdmissionDto","source":"OutputWireEnvelopeAdmissionDto"}],"integer":{"canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)$","counter_min":"0","event_min":"-9223372036854775808","max":"18446744073709551615"},"limits":{"container_depth":32,"diagnostic_string_bytes":4096,"query_limit":1000,"remediation_steps":32,"request_bytes":65536,"timeout_ms":60000},"operations":{"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"}},"reserved_field_namespace":"sc_observability.binding.","schema_version":1},"x-sc-entrypoints":{"InputAdmissionDto":{"$ref":"#/$defs/InputAdmissionDto"},"InputAdmissionOperationDto":{"$ref":"#/$defs/InputAdmissionOperationDto"},"InputAvailabilityDto":{"$ref":"#/$defs/InputAvailabilityDto"},"InputBridgeHealthDto":{"$ref":"#/$defs/InputBridgeHealthDto"},"InputChangeDiagnosticDto":{"$ref":"#/$defs/InputChangeDiagnosticDto"},"InputClientOutcome":{"$ref":"#/$defs/InputClientOutcome"},"InputClientStatus":{"$ref":"#/$defs/InputClientStatus"},"InputCompletionDto":{"$ref":"#/$defs/InputCompletionDto"},"InputCompletionOperationDto":{"$ref":"#/$defs/InputCompletionOperationDto"},"InputDecimalDto":{"$ref":"#/$defs/InputDecimalDto"},"InputDiagnostic":{"$ref":"#/$defs/InputDiagnostic"},"InputDiagnosticSummaryDto":{"$ref":"#/$defs/InputDiagnosticSummaryDto"},"InputDispatchDto":{"$ref":"#/$defs/InputDispatchDto"},"InputDropCountsDto":{"$ref":"#/$defs/InputDropCountsDto"},"InputFailure":{"$ref":"#/$defs/InputFailure"},"InputFailureCountsDto":{"$ref":"#/$defs/InputFailureCountsDto"},"InputFieldMatchDto":{"$ref":"#/$defs/InputFieldMatchDto"},"InputFlushRequest":{"$ref":"#/$defs/InputFlushRequest"},"InputHealthRequest":{"$ref":"#/$defs/InputHealthRequest"},"InputLevelChangeDto":{"$ref":"#/$defs/InputLevelChangeDto"},"InputLevelChangeRequest":{"$ref":"#/$defs/InputLevelChangeRequest"},"InputLevelChangeSourceDto":{"$ref":"#/$defs/InputLevelChangeSourceDto"},"InputLevelDto":{"$ref":"#/$defs/InputLevelDto"},"InputLevelFilterDto":{"$ref":"#/$defs/InputLevelFilterDto"},"InputLevelRequestDto":{"$ref":"#/$defs/InputLevelRequestDto"},"InputLevelStateDto":{"$ref":"#/$defs/InputLevelStateDto"},"InputLifecycleDto":{"$ref":"#/$defs/InputLifecycleDto"},"InputLogEventDto":{"$ref":"#/$defs/InputLogEventDto"},"InputLogHealthDto":{"$ref":"#/$defs/InputLogHealthDto"},"InputLogOperationDto":{"$ref":"#/$defs/InputLogOperationDto"},"InputLogOrderDto":{"$ref":"#/$defs/InputLogOrderDto"},"InputLogQueryDto":{"$ref":"#/$defs/InputLogQueryDto"},"InputLogSnapshotDto":{"$ref":"#/$defs/InputLogSnapshotDto"},"InputLoggingHealthDto":{"$ref":"#/$defs/InputLoggingHealthDto"},"InputMaintenanceHealthDto":{"$ref":"#/$defs/InputMaintenanceHealthDto"},"InputOperationDiagnosticDto":{"$ref":"#/$defs/InputDiagnostic"},"InputPathDto":{"$ref":"#/$defs/InputPathDto"},"InputProcessIdentityDto":{"$ref":"#/$defs/InputProcessIdentityDto"},"InputQueryHealthDto":{"$ref":"#/$defs/InputQueryHealthDto"},"InputQueryRequest":{"$ref":"#/$defs/InputQueryRequest"},"InputQueryStateDto":{"$ref":"#/$defs/InputQueryStateDto"},"InputRemediationDto":{"$ref":"#/$defs/InputRemediationDto"},"InputResultDtoAdmissionDto":{"$ref":"#/$defs/InputResultDto"},"InputResultDtoClientOutcome":{"$ref":"#/$defs/InputResultDto7"},"InputResultDtoClientStatus":{"$ref":"#/$defs/InputResultDto8"},"InputResultDtoCompletionDto":{"$ref":"#/$defs/InputResultDto2"},"InputResultDtoDispatchDto":{"$ref":"#/$defs/InputResultDto3"},"InputResultDtoLevelChangeDto":{"$ref":"#/$defs/InputResultDto6"},"InputResultDtoLogHealthDto":{"$ref":"#/$defs/InputResultDto5"},"InputResultDtoLogSnapshotDto":{"$ref":"#/$defs/InputResultDto4"},"InputSinkHealthDto":{"$ref":"#/$defs/InputSinkHealthDto"},"InputStateTransitionDto":{"$ref":"#/$defs/InputStateTransitionDto"},"InputStoredDiagnosticDto":{"$ref":"#/$defs/InputStoredDiagnosticDto"},"InputStoredEventDto":{"$ref":"#/$defs/InputStoredEventDto"},"InputTraceContextDto":{"$ref":"#/$defs/InputTraceContextDto"},"InputTryLogRequest":{"$ref":"#/$defs/InputTryLogRequest"},"InputValueDto":{"$ref":"#/$defs/InputValueDto"},"InputWireEnvelopeAdmissionDto":{"$ref":"#/$defs/InputWireEnvelope"},"InputWireEnvelopeClientOutcome":{"$ref":"#/$defs/InputWireEnvelope7"},"InputWireEnvelopeClientStatus":{"$ref":"#/$defs/InputWireEnvelope8"},"InputWireEnvelopeCompletionDto":{"$ref":"#/$defs/InputWireEnvelope2"},"InputWireEnvelopeDispatchDto":{"$ref":"#/$defs/InputWireEnvelope3"},"InputWireEnvelopeLevelChangeDto":{"$ref":"#/$defs/InputWireEnvelope6"},"InputWireEnvelopeLogHealthDto":{"$ref":"#/$defs/InputWireEnvelope5"},"InputWireEnvelopeLogSnapshotDto":{"$ref":"#/$defs/InputWireEnvelope4"},"InputWorkerStateDto":{"$ref":"#/$defs/InputWorkerStateDto"},"OutputAdmissionDto":{"$ref":"#/$defs/OutputAdmissionDto"},"OutputAdmissionOperationDto":{"$ref":"#/$defs/OutputAdmissionOperationDto"},"OutputAvailabilityDto":{"$ref":"#/$defs/OutputAvailabilityDto"},"OutputBridgeHealthDto":{"$ref":"#/$defs/OutputBridgeHealthDto"},"OutputChangeDiagnosticDto":{"$ref":"#/$defs/OutputChangeDiagnosticDto"},"OutputClientOutcome":{"$ref":"#/$defs/OutputClientOutcome"},"OutputClientStatus":{"$ref":"#/$defs/OutputClientStatus"},"OutputCompletionDto":{"$ref":"#/$defs/OutputCompletionDto"},"OutputCompletionOperationDto":{"$ref":"#/$defs/OutputCompletionOperationDto"},"OutputDecimalDto":{"$ref":"#/$defs/OutputDecimalDto"},"OutputDiagnostic":{"$ref":"#/$defs/OutputDiagnostic"},"OutputDiagnosticSummaryDto":{"$ref":"#/$defs/OutputDiagnosticSummaryDto"},"OutputDispatchDto":{"$ref":"#/$defs/OutputDispatchDto"},"OutputDropCountsDto":{"$ref":"#/$defs/OutputDropCountsDto"},"OutputFailure":{"$ref":"#/$defs/OutputFailure"},"OutputFailureCountsDto":{"$ref":"#/$defs/OutputFailureCountsDto"},"OutputFieldMatchDto":{"$ref":"#/$defs/OutputFieldMatchDto"},"OutputFlushRequest":{"$ref":"#/$defs/OutputFlushRequest"},"OutputHealthRequest":{"$ref":"#/$defs/OutputHealthRequest"},"OutputLevelChangeDto":{"$ref":"#/$defs/OutputLevelChangeDto"},"OutputLevelChangeRequest":{"$ref":"#/$defs/OutputLevelChangeRequest"},"OutputLevelChangeSourceDto":{"$ref":"#/$defs/OutputLevelChangeSourceDto"},"OutputLevelDto":{"$ref":"#/$defs/OutputLevelDto"},"OutputLevelFilterDto":{"$ref":"#/$defs/OutputLevelFilterDto"},"OutputLevelRequestDto":{"$ref":"#/$defs/OutputLevelRequestDto"},"OutputLevelStateDto":{"$ref":"#/$defs/OutputLevelStateDto"},"OutputLifecycleDto":{"$ref":"#/$defs/OutputLifecycleDto"},"OutputLogEventDto":{"$ref":"#/$defs/OutputLogEventDto"},"OutputLogHealthDto":{"$ref":"#/$defs/OutputLogHealthDto"},"OutputLogOperationDto":{"$ref":"#/$defs/OutputLogOperationDto"},"OutputLogOrderDto":{"$ref":"#/$defs/OutputLogOrderDto"},"OutputLogQueryDto":{"$ref":"#/$defs/OutputLogQueryDto"},"OutputLogSnapshotDto":{"$ref":"#/$defs/OutputLogSnapshotDto"},"OutputLoggingHealthDto":{"$ref":"#/$defs/OutputLoggingHealthDto"},"OutputMaintenanceHealthDto":{"$ref":"#/$defs/OutputMaintenanceHealthDto"},"OutputOperationDiagnosticDto":{"$ref":"#/$defs/OutputDiagnostic"},"OutputPathDto":{"$ref":"#/$defs/OutputPathDto"},"OutputProcessIdentityDto":{"$ref":"#/$defs/OutputProcessIdentityDto"},"OutputQueryHealthDto":{"$ref":"#/$defs/OutputQueryHealthDto"},"OutputQueryRequest":{"$ref":"#/$defs/OutputQueryRequest"},"OutputQueryStateDto":{"$ref":"#/$defs/OutputQueryStateDto"},"OutputRemediationDto":{"$ref":"#/$defs/OutputRemediationDto"},"OutputResultDtoAdmissionDto":{"$ref":"#/$defs/OutputResultDto"},"OutputResultDtoClientOutcome":{"$ref":"#/$defs/OutputResultDto7"},"OutputResultDtoClientStatus":{"$ref":"#/$defs/OutputResultDto8"},"OutputResultDtoCompletionDto":{"$ref":"#/$defs/OutputResultDto2"},"OutputResultDtoDispatchDto":{"$ref":"#/$defs/OutputResultDto3"},"OutputResultDtoLevelChangeDto":{"$ref":"#/$defs/OutputResultDto6"},"OutputResultDtoLogHealthDto":{"$ref":"#/$defs/OutputResultDto5"},"OutputResultDtoLogSnapshotDto":{"$ref":"#/$defs/OutputResultDto4"},"OutputSinkHealthDto":{"$ref":"#/$defs/OutputSinkHealthDto"},"OutputStateTransitionDto":{"$ref":"#/$defs/OutputStateTransitionDto"},"OutputStoredDiagnosticDto":{"$ref":"#/$defs/OutputStoredDiagnosticDto"},"OutputStoredEventDto":{"$ref":"#/$defs/OutputStoredEventDto"},"OutputTraceContextDto":{"$ref":"#/$defs/OutputTraceContextDto"},"OutputTryLogRequest":{"$ref":"#/$defs/OutputTryLogRequest"},"OutputValueDto":{"$ref":"#/$defs/OutputValueDto"},"OutputWireEnvelopeAdmissionDto":{"$ref":"#/$defs/OutputWireEnvelope"},"OutputWireEnvelopeClientOutcome":{"$ref":"#/$defs/OutputWireEnvelope7"},"OutputWireEnvelopeClientStatus":{"$ref":"#/$defs/OutputWireEnvelope8"},"OutputWireEnvelopeCompletionDto":{"$ref":"#/$defs/OutputWireEnvelope2"},"OutputWireEnvelopeDispatchDto":{"$ref":"#/$defs/OutputWireEnvelope3"},"OutputWireEnvelopeLevelChangeDto":{"$ref":"#/$defs/OutputWireEnvelope6"},"OutputWireEnvelopeLogHealthDto":{"$ref":"#/$defs/OutputWireEnvelope5"},"OutputWireEnvelopeLogSnapshotDto":{"$ref":"#/$defs/OutputWireEnvelope4"},"OutputWorkerStateDto":{"$ref":"#/$defs/OutputWorkerStateDto"}},"x-sc-error-registry":[{"code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT","kind":"validation","remediation":"Correct the named input field and submit a new request"},{"code":"SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION","kind":"unsupported_version","remediation":"Install client and host packages supporting the same schema"},{"code":"SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE","kind":"validation","remediation":"Reduce remote diagnostic text or remediation steps to the documented bounds"},{"code":"SC_OBSERVABILITY_BINDING_CLOSED","kind":"closed","remediation":"Stop submitting through the closed backend and inspect its retained health"},{"code":"SC_OBSERVABILITY_BINDING_DISPATCH_FULL","kind":"queue_full","remediation":"Wait for an outstanding request to complete before submitting again"},{"code":"SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS","kind":"queue_full","remediation":"Wait for the current adapter flush to finish before submitting another"},{"code":"SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED","kind":"unavailable","remediation":"Restore native thread resources before explicitly creating another backend"},{"code":"SC_OBSERVABILITY_BINDING_WAITERS_FULL","kind":"queue_full","remediation":"Wait for an existing operation observer to finish before registering another"},{"code":"SC_OBSERVABILITY_BINDING_QUERY_IN_PROGRESS","kind":"queue_full","remediation":"Wait for the existing query to finish before starting another"},{"code":"SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED","kind":"unavailable","remediation":"Install a host backend before requesting an attached logger"},{"code":"SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED","kind":"unavailable","remediation":"Reuse the module\'s existing backend; replacement is unsupported"},{"code":"SC_OBSERVABILITY_BINDING_PERMISSION_DENIED","kind":"permission_denied","remediation":"Request access through the application\'s authorized window"},{"code":"SC_OBSERVABILITY_BINDING_TRANSPORT_UNAVAILABLE","kind":"unavailable","remediation":"Restore the host connection before submitting a new request"},{"code":"SC_OBSERVABILITY_BINDING_TIMEOUT","kind":"timeout","remediation":"Inspect operation status before deciding whether another operation is needed"},{"code":"SC_OBSERVABILITY_BINDING_CANCELLED","kind":"cancelled","remediation":"Inspect the saved operation result if confirmation is still needed"},{"code":"SC_OBSERVABILITY_PY_HANDLER_REENTRANT","kind":"internal","remediation":"Remove logging calls from handler formatting and error callbacks"},{"code":"SC_OBSERVABILITY_BINDING_INTERNAL","kind":"internal","remediation":"Inspect the retained status and restore the affected host or client"}]}')
+SCHEMA = json.loads('{"$defs":{"InputAdmissionDto":{"description":"Version-one AdmissionDto wire value.","oneOf":[{"description":"Wire accepted.","properties":{"kind":{"const":"accepted","type":"string"}},"required":["kind"],"type":"object"},{"description":"Wire filtered.","properties":{"kind":{"const":"filtered","type":"string"}},"required":["kind"],"type":"object"}]},"InputAdmissionOperationDto":{"description":"Operations returning final logging admission.","oneOf":[{"const":"log","description":"Wire log.","type":"string"},{"const":"try_log","description":"Wire try log.","type":"string"}]},"InputAvailabilityDto":{"description":"Version-one AvailabilityDto wire value.","oneOf":[{"const":"healthy","description":"Wire healthy.","type":"string"},{"const":"degraded_dropping","description":"Wire degraded dropping.","type":"string"},{"const":"unavailable","description":"Wire unavailable.","type":"string"}]},"InputBridgeHealthDto":{"description":"Version-one BridgeHealthDto wire record.","properties":{"active_log_path":{"$ref":"#/$defs/InputPathDto","description":"active log path."},"configured_level":{"$ref":"#/$defs/InputLevelFilterDto","description":"configured level."},"dropped":{"$ref":"#/$defs/InputDropCountsDto","description":"dropped."},"effective_level":{"$ref":"#/$defs/InputLevelFilterDto","description":"effective level."},"level_revision":{"$ref":"#/$defs/InputDecimalDto","description":"level revision.\\nWire level revision.","x-sc-integer-domain":"unsigned"},"lifecycle":{"$ref":"#/$defs/InputLifecycleDto","description":"lifecycle."},"logging":{"$ref":"#/$defs/InputLoggingHealthDto","description":"logging."},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","logging","dropped","lifecycle","active_log_path","configured_level","effective_level","level_revision"],"type":"object"},"InputChangeDiagnosticDto":{"description":"Version-one ChangeDiagnosticDto wire value.","oneOf":[{"description":"Wire accepted.","properties":{"kind":{"const":"accepted","type":"string"}},"required":["kind"],"type":"object"},{"description":"Wire not accepted.","properties":{"diagnostic":{"$ref":"#/$defs/InputDiagnostic","description":"Active variant diagnostic."},"kind":{"const":"not_accepted","type":"string"}},"required":["kind","diagnostic"],"type":"object"}]},"InputClientOutcome":{"description":"Payload-free client outcome, distinct from host persistence.","oneOf":[{"description":"Wire idle.","properties":{"kind":{"const":"idle","type":"string"}},"required":["kind"],"type":"object"},{"description":"Wire scheduled.","properties":{"kind":{"const":"scheduled","type":"string"},"operation":{"$ref":"#/$defs/InputLogOperationDto","description":"Active variant operation."}},"required":["kind","operation"],"type":"object"},{"description":"Wire accepted.","properties":{"kind":{"const":"accepted","type":"string"},"operation":{"$ref":"#/$defs/InputAdmissionOperationDto","description":"Active variant operation."}},"required":["kind","operation"],"type":"object"},{"description":"Wire filtered.","properties":{"kind":{"const":"filtered","type":"string"},"operation":{"$ref":"#/$defs/InputAdmissionOperationDto","description":"Active variant operation."}},"required":["kind","operation"],"type":"object"},{"description":"Wire completed.","properties":{"kind":{"const":"completed","type":"string"},"operation":{"$ref":"#/$defs/InputCompletionOperationDto","description":"Active variant operation."}},"required":["kind","operation"],"type":"object"}]},"InputClientStatus":{"description":"Bounded local client status; no ownership or IPC capability is represented.","properties":{"failures_by_kind":{"$ref":"#/$defs/InputFailureCountsDto","description":"Saturating counters for every declared failure kind."},"in_flight":{"description":"Number of outstanding operations, bounded by client admission.\\nWire in flight.","format":"uint32","maximum":256,"minimum":0,"type":"integer"},"last_failure":{"anyOf":[{"$ref":"#/$defs/InputFailure"},{"type":"null"}],"description":"Retained failure survives subsequent successful operations."},"last_result":{"$ref":"#/$defs/InputResultDto7","description":"Most recent completion-order result."}},"required":["in_flight","failures_by_kind","last_result"],"type":"object"},"InputCompletionDto":{"description":"Version-one CompletionDto wire value.","oneOf":[{"description":"Wire completed.","properties":{"kind":{"const":"completed","type":"string"}},"required":["kind"],"type":"object"}]},"InputCompletionOperationDto":{"description":"Operations returning a completed client observation.","oneOf":[{"const":"query","description":"Wire query.","type":"string"},{"const":"health","description":"Wire health.","type":"string"},{"const":"flush","description":"Wire flush.","type":"string"}]},"InputDecimalDto":{"description":"Canonical integer string: signed i64 or unsigned u64; counters additionally reject negatives.","pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\\\s\\\\S])","type":"string"},"InputDiagnostic":{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["at","code","message","remediation"],"type":"object"},"InputDiagnosticSummaryDto":{"description":"Version-one DiagnosticSummaryDto wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":["string","null"]},"message":{"description":"message.","type":"string"}},"required":["message","at"],"type":"object"},"InputDispatchDto":{"description":"Version-one DispatchDto wire value.","oneOf":[{"description":"Wire scheduled.","properties":{"kind":{"const":"scheduled","type":"string"}},"required":["kind"],"type":"object"}]},"InputDropCountsDto":{"description":"Version-one DropCountsDto wire record.","properties":{"invalid_event":{"$ref":"#/$defs/InputDecimalDto","description":"invalid event.\\nWire invalid event.","x-sc-integer-domain":"unsigned"},"logger_panicked":{"$ref":"#/$defs/InputDecimalDto","description":"logger panicked.\\nWire logger panicked.","x-sc-integer-domain":"unsigned"},"not_installed":{"$ref":"#/$defs/InputDecimalDto","description":"not installed.\\nWire not installed.","x-sc-integer-domain":"unsigned"},"queue_full":{"$ref":"#/$defs/InputDecimalDto","description":"queue full.\\nWire queue full.","x-sc-integer-domain":"unsigned"},"reentrant_emit":{"$ref":"#/$defs/InputDecimalDto","description":"reentrant emit.\\nWire reentrant emit.","x-sc-integer-domain":"unsigned"},"shutdown_timed_out":{"$ref":"#/$defs/InputDecimalDto","description":"shutdown timed out.\\nWire shutdown timed out.","x-sc-integer-domain":"unsigned"},"writer_degraded":{"$ref":"#/$defs/InputDecimalDto","description":"writer degraded.\\nWire writer degraded.","x-sc-integer-domain":"unsigned"}},"required":["queue_full","invalid_event","writer_degraded","shutdown_timed_out","not_installed","logger_panicked","reentrant_emit"],"type":"object"},"InputFailure":{"description":"Version-one Failure wire value.","oneOf":[{"description":"Wire validation.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"field":{"description":"Wire field.","type":"string"},"kind":{"const":"validation","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","field"],"type":"object"},{"description":"Wire queue full.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"queue_full","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Wire below baseline.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"configured":{"$ref":"#/$defs/InputLevelFilterDto","description":"Wire configured."},"kind":{"const":"below_baseline","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."},"requested":{"$ref":"#/$defs/InputLevelFilterDto","description":"Wire requested."}},"required":["kind","at","code","message","remediation","requested","configured"],"type":"object"},{"description":"Wire unsupported level.","properties":{"at":{"description":"at.","type":"string"},"available":{"$ref":"#/$defs/InputLevelFilterDto","description":"Wire available."},"code":{"description":"code.","type":"string"},"kind":{"const":"unsupported_level","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."},"requested":{"$ref":"#/$defs/InputLevelFilterDto","description":"Wire requested."}},"required":["kind","at","code","message","remediation","requested","available"],"type":"object"},{"description":"Wire permission denied.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"permission_denied","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Wire closed.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"closed","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Wire unavailable.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"unavailable","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Wire io.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"io","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Wire timeout.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"timeout","type":"string"},"message":{"description":"message.","type":"string"},"operation":{"description":"Wire operation.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","operation"],"type":"object"},{"description":"Wire cancelled.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"cancelled","type":"string"},"message":{"description":"message.","type":"string"},"operation":{"description":"Wire operation.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","operation"],"type":"object"},{"description":"Wire unsupported version.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"unsupported_version","type":"string"},"message":{"description":"message.","type":"string"},"received":{"description":"Wire received.","format":"uint32","minimum":0,"type":"integer"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","received"],"type":"object"},{"description":"Wire internal.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"internal","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Wire unknown remote.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"unknown_remote","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."},"remote_kind":{"description":"Wire remote kind.","type":"string"}},"required":["kind","at","code","message","remediation","remote_kind"],"type":"object"}]},"InputFailureCountsDto":{"description":"Fixed bounded counters for the declared Failure union.","properties":{"below_baseline":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating below_baseline counter.\\nWire below baseline.","x-sc-integer-domain":"unsigned"},"cancelled":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating cancelled counter.\\nWire cancelled.","x-sc-integer-domain":"unsigned"},"closed":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating closed counter.\\nWire closed.","x-sc-integer-domain":"unsigned"},"internal":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating internal counter.\\nWire internal.","x-sc-integer-domain":"unsigned"},"io":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating io counter.\\nWire io.","x-sc-integer-domain":"unsigned"},"permission_denied":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating permission_denied counter.\\nWire permission denied.","x-sc-integer-domain":"unsigned"},"queue_full":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating queue_full counter.\\nWire queue full.","x-sc-integer-domain":"unsigned"},"timeout":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating timeout counter.\\nWire timeout.","x-sc-integer-domain":"unsigned"},"unavailable":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating unavailable counter.\\nWire unavailable.","x-sc-integer-domain":"unsigned"},"unknown_remote":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating unknown_remote counter.\\nWire unknown remote.","x-sc-integer-domain":"unsigned"},"unsupported_level":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating unsupported_level counter.\\nWire unsupported level.","x-sc-integer-domain":"unsigned"},"unsupported_version":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating unsupported_version counter.\\nWire unsupported version.","x-sc-integer-domain":"unsigned"},"validation":{"$ref":"#/$defs/InputDecimalDto","description":"Saturating validation counter.\\nWire validation.","x-sc-integer-domain":"unsigned"}},"required":["validation","queue_full","below_baseline","unsupported_level","permission_denied","closed","unavailable","io","timeout","cancelled","unsupported_version","internal","unknown_remote"],"type":"object"},"InputFieldMatchDto":{"additionalProperties":false,"description":"Version-one FieldMatchDto wire record.","properties":{"field":{"description":"field.","type":"string"},"value":{"$ref":"#/$defs/InputValueDto","description":"value."}},"required":["field","value"],"type":"object"},"InputFlushRequest":{"additionalProperties":false,"description":"Version-one FlushRequest wire record.","properties":{"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"timeout_ms":{"description":"timeout ms.\\nWire timeout ms.","format":"uint32","maximum":60000,"minimum":0,"type":"integer"}},"required":["schema_version","timeout_ms"],"type":"object"},"InputHealthRequest":{"additionalProperties":false,"description":"Version-one HealthRequest wire record.","properties":{"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version"],"type":"object"},"InputLevelChangeDto":{"description":"Version-one LevelChangeDto wire value.","oneOf":[{"description":"Wire changed.","properties":{"current":{"$ref":"#/$defs/InputLevelStateDto","description":"Wire current."},"diagnostic":{"$ref":"#/$defs/InputChangeDiagnosticDto","description":"Wire diagnostic."},"kind":{"const":"changed","type":"string"},"previous":{"$ref":"#/$defs/InputLevelStateDto","description":"Wire previous."},"source":{"$ref":"#/$defs/InputLevelChangeSourceDto","description":"Wire source."}},"required":["kind","previous","current","source","diagnostic"],"type":"object"},{"description":"Wire unchanged.","properties":{"kind":{"const":"unchanged","type":"string"},"state":{"$ref":"#/$defs/InputLevelStateDto","description":"Wire state."}},"required":["kind","state"],"type":"object"}]},"InputLevelChangeRequest":{"additionalProperties":false,"description":"Version-one LevelChangeRequest wire record.","properties":{"change":{"$ref":"#/$defs/InputLevelRequestDto","description":"change."},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","change"],"type":"object"},"InputLevelChangeSourceDto":{"description":"Version-one LevelChangeSourceDto wire value.","oneOf":[{"const":"application","description":"Wire application.","type":"string"},{"const":"user_request","description":"Wire user request.","type":"string"},{"const":"diagnostic_session","description":"Wire diagnostic session.","type":"string"}]},"InputLevelDto":{"description":"Version-one LevelDto wire value.","oneOf":[{"const":"trace","description":"Wire trace.","type":"string"},{"const":"debug","description":"Wire debug.","type":"string"},{"const":"info","description":"Wire info.","type":"string"},{"const":"warn","description":"Wire warn.","type":"string"},{"const":"error","description":"Wire error.","type":"string"}]},"InputLevelFilterDto":{"description":"Version-one LevelFilterDto wire value.","oneOf":[{"const":"off","description":"Wire off.","type":"string"},{"const":"error","description":"Wire error.","type":"string"},{"const":"warn","description":"Wire warn.","type":"string"},{"const":"info","description":"Wire info.","type":"string"},{"const":"debug","description":"Wire debug.","type":"string"},{"const":"trace","description":"Wire trace.","type":"string"}]},"InputLevelRequestDto":{"description":"Version-one LevelRequestDto wire value.","oneOf":[{"additionalProperties":false,"description":"Wire elevate.","properties":{"kind":{"const":"elevate","type":"string"},"level":{"$ref":"#/$defs/InputLevelFilterDto","description":"Active variant level."}},"required":["kind","level"],"type":"object"},{"additionalProperties":false,"description":"Wire reset.","properties":{"kind":{"const":"reset","type":"string"}},"required":["kind"],"type":"object"}]},"InputLevelStateDto":{"description":"Version-one LevelStateDto wire record.","properties":{"configured_level":{"$ref":"#/$defs/InputLevelFilterDto","description":"configured level."},"effective_level":{"$ref":"#/$defs/InputLevelFilterDto","description":"effective level."},"level_revision":{"$ref":"#/$defs/InputDecimalDto","description":"level revision.\\nWire level revision.","x-sc-integer-domain":"unsigned"}},"required":["configured_level","effective_level","level_revision"],"type":"object"},"InputLifecycleDto":{"description":"Version-one LifecycleDto wire value.","oneOf":[{"const":"running","description":"Wire running.","type":"string"},{"const":"stopping","description":"Wire stopping.","type":"string"},{"const":"stopped","description":"Wire stopped.","type":"string"},{"const":"failed","description":"Wire failed.","type":"string"}]},"InputLogEventDto":{"additionalProperties":false,"description":"Version-one LogEventDto wire record.","properties":{"action":{"description":"action.","type":"string"},"correlation_id":{"description":"correlation id.","type":["string","null"]},"fields":{"additionalProperties":{"$ref":"#/$defs/InputValueDto"},"default":{},"description":"fields.\\nWire fields.","type":"object"},"level":{"$ref":"#/$defs/InputLevelDto","description":"level."},"message":{"description":"message.","type":["string","null"]},"outcome":{"description":"outcome.","type":["string","null"]},"request_id":{"description":"request id.","type":["string","null"]},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"target":{"description":"target.","type":"string"},"trace":{"anyOf":[{"$ref":"#/$defs/InputTraceContextDto"},{"type":"null"}],"description":"trace."}},"required":["schema_version","level","target","action"],"type":"object"},"InputLogHealthDto":{"description":"Version-one LogHealthDto wire record.","properties":{"bridge":{"anyOf":[{"$ref":"#/$defs/InputBridgeHealthDto"},{"type":"null"}],"description":"bridge."},"level_state":{"$ref":"#/$defs/InputLevelStateDto","description":"level state."},"logging":{"$ref":"#/$defs/InputLoggingHealthDto","description":"logging."},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","logging","level_state"],"type":"object"},"InputLogOperationDto":{"description":"The log-only operation in a scheduled client outcome.","oneOf":[{"const":"log","description":"Wire log.","type":"string"}]},"InputLogOrderDto":{"description":"Version-one LogOrderDto wire value.","oneOf":[{"const":"oldest_first","description":"Wire oldest first.","type":"string"},{"const":"newest_first","description":"Wire newest first.","type":"string"}]},"InputLogQueryDto":{"additionalProperties":false,"description":"Version-one LogQueryDto wire record.","properties":{"action":{"description":"action.","type":["string","null"]},"correlation_id":{"description":"correlation id.","type":["string","null"]},"field_matches":{"default":[],"description":"field matches.\\nWire field matches.","items":{"$ref":"#/$defs/InputFieldMatchDto"},"type":"array"},"levels":{"default":[],"description":"levels.\\nWire levels.","items":{"$ref":"#/$defs/InputLevelDto"},"type":"array"},"limit":{"default":100,"description":"limit.\\nWire limit.","format":"uint","maximum":1000,"minimum":1,"type":"integer"},"order":{"$ref":"#/$defs/InputLogOrderDto","default":"oldest_first","description":"order.\\nWire order."},"request_id":{"description":"request id.","type":["string","null"]},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"service":{"description":"service.","type":["string","null"]},"since":{"description":"since.","type":["string","null"]},"target":{"description":"target.","type":["string","null"]},"until":{"description":"until.","type":["string","null"]}},"required":["schema_version"],"type":"object"},"InputLogSnapshotDto":{"description":"Version-one LogSnapshotDto wire record.","properties":{"events":{"description":"events.","items":{"$ref":"#/$defs/InputStoredEventDto"},"type":"array"},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"truncated":{"description":"truncated.","type":"boolean"}},"required":["schema_version","events","truncated"],"type":"object"},"InputLoggingHealthDto":{"description":"Version-one LoggingHealthDto wire record.","properties":{"active_log_path":{"$ref":"#/$defs/InputPathDto","description":"active log path."},"dropped_events_total":{"$ref":"#/$defs/InputDecimalDto","description":"dropped events total.\\nWire dropped events total.","x-sc-integer-domain":"unsigned"},"flush_errors_total":{"$ref":"#/$defs/InputDecimalDto","description":"flush errors total.\\nWire flush errors total.","x-sc-integer-domain":"unsigned"},"last_error":{"anyOf":[{"$ref":"#/$defs/InputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"last_writer_error":{"anyOf":[{"$ref":"#/$defs/InputDiagnosticSummaryDto"},{"type":"null"}],"description":"last writer error."},"maintenance":{"anyOf":[{"$ref":"#/$defs/InputMaintenanceHealthDto"},{"type":"null"}],"description":"maintenance."},"query":{"anyOf":[{"$ref":"#/$defs/InputQueryHealthDto"},{"type":"null"}],"description":"query."},"queue_capacity":{"$ref":"#/$defs/InputDecimalDto","description":"queue capacity.\\nWire queue capacity.","x-sc-integer-domain":"unsigned"},"queue_depth":{"$ref":"#/$defs/InputDecimalDto","description":"queue depth.\\nWire queue depth.","x-sc-integer-domain":"unsigned"},"queue_full_drops_total":{"$ref":"#/$defs/InputDecimalDto","description":"queue full drops total.\\nWire queue full drops total.","x-sc-integer-domain":"unsigned"},"queue_high_water_mark":{"$ref":"#/$defs/InputDecimalDto","description":"queue high water mark.\\nWire queue high water mark.","x-sc-integer-domain":"unsigned"},"sink_statuses":{"description":"sink statuses.","items":{"$ref":"#/$defs/InputSinkHealthDto"},"type":"array"},"state":{"$ref":"#/$defs/InputAvailabilityDto","description":"state."},"writer_state":{"$ref":"#/$defs/InputWorkerStateDto","description":"writer state."}},"required":["state","dropped_events_total","flush_errors_total","queue_depth","queue_capacity","queue_high_water_mark","queue_full_drops_total","active_log_path","sink_statuses","writer_state"],"type":"object"},"InputMaintenanceHealthDto":{"description":"Version-one MaintenanceHealthDto wire record.","properties":{"last_error":{"anyOf":[{"$ref":"#/$defs/InputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"last_pass_at":{"description":"last pass at.","type":["string","null"]},"pruned_files_total":{"$ref":"#/$defs/InputDecimalDto","description":"pruned files total.\\nWire pruned files total.","x-sc-integer-domain":"unsigned"},"rotated_files_total":{"$ref":"#/$defs/InputDecimalDto","description":"rotated files total.\\nWire rotated files total.","x-sc-integer-domain":"unsigned"},"state":{"$ref":"#/$defs/InputWorkerStateDto","description":"state."}},"required":["state","rotated_files_total","pruned_files_total"],"type":"object"},"InputPathDto":{"description":"Version-one PathDto wire value.","oneOf":[{"description":"Wire utf8.","properties":{"kind":{"const":"utf8","type":"string"},"value":{"description":"Active variant value.","type":"string"}},"required":["kind","value"],"type":"object"},{"description":"Wire unrepresentable.","properties":{"kind":{"const":"unrepresentable","type":"string"}},"required":["kind"],"type":"object"},{"description":"Wire absent.","properties":{"kind":{"const":"absent","type":"string"}},"required":["kind"],"type":"object"}]},"InputProcessIdentityDto":{"description":"Version-one ProcessIdentityDto wire record.","properties":{"hostname":{"description":"hostname.","type":["string","null"]},"pid":{"description":"pid.","format":"uint32","minimum":0,"type":["integer","null"]}},"type":"object"},"InputQueryHealthDto":{"description":"Version-one QueryHealthDto wire record.","properties":{"last_error":{"anyOf":[{"$ref":"#/$defs/InputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"state":{"$ref":"#/$defs/InputQueryStateDto","description":"state."}},"required":["state"],"type":"object"},"InputQueryRequest":{"additionalProperties":false,"description":"Version-one QueryRequest wire record.","properties":{"query":{"$ref":"#/$defs/InputLogQueryDto","description":"query."},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","query"],"type":"object"},"InputQueryStateDto":{"description":"Version-one QueryStateDto wire value.","oneOf":[{"const":"healthy","description":"Wire healthy.","type":"string"},{"const":"degraded","description":"Wire degraded.","type":"string"},{"const":"unavailable","description":"Wire unavailable.","type":"string"}]},"InputRemediationDto":{"description":"Version-one RemediationDto wire value.","oneOf":[{"description":"Wire recoverable.","properties":{"kind":{"const":"recoverable","type":"string"},"steps":{"description":"Active variant steps.","items":{"type":"string"},"type":"array"}},"required":["kind","steps"],"type":"object"},{"description":"Wire not recoverable.","properties":{"justification":{"description":"Active variant justification.","type":"string"},"kind":{"const":"not_recoverable","type":"string"}},"required":["kind","justification"],"type":"object"}]},"InputResultDto":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputAdmissionDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto2":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputCompletionDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto3":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputDispatchDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto4":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputLogSnapshotDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto5":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputLogHealthDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto6":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputLevelChangeDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto7":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputClientOutcome","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputResultDto8":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/InputClientStatus","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"InputSinkHealthDto":{"description":"Version-one SinkHealthDto wire record.","properties":{"last_error":{"anyOf":[{"$ref":"#/$defs/InputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"name":{"description":"name.","type":"string"},"state":{"$ref":"#/$defs/InputAvailabilityDto","description":"state."}},"required":["name","state"],"type":"object"},"InputStateTransitionDto":{"description":"Version-one StateTransitionDto wire record.","properties":{"entity_id":{"description":"entity id.","type":["string","null"]},"entity_kind":{"description":"entity kind.","type":"string"},"from_state":{"description":"from state.","type":"string"},"reason":{"description":"reason.","type":["string","null"]},"to_state":{"description":"to state.","type":"string"},"trigger":{"description":"trigger.","type":["string","null"]}},"required":["entity_kind","from_state","to_state"],"type":"object"},"InputStoredDiagnosticDto":{"description":"Version-one StoredDiagnosticDto wire record.","properties":{"cause":{"description":"cause.","type":["string","null"]},"code":{"description":"code.","type":"string"},"details":{"additionalProperties":{"$ref":"#/$defs/InputValueDto"},"description":"details.","type":"object"},"docs":{"description":"docs.","type":["string","null"]},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/InputRemediationDto","description":"remediation."},"timestamp":{"description":"timestamp.","type":"string"}},"required":["timestamp","code","message","remediation","details"],"type":"object"},"InputStoredEventDto":{"description":"Version-one StoredEventDto wire record.","properties":{"action":{"description":"action.","type":"string"},"correlation_id":{"description":"correlation id.","type":["string","null"]},"diagnostic":{"anyOf":[{"$ref":"#/$defs/InputStoredDiagnosticDto"},{"type":"null"}],"description":"diagnostic."},"fields":{"additionalProperties":{"$ref":"#/$defs/InputValueDto"},"description":"fields.","type":"object"},"identity":{"$ref":"#/$defs/InputProcessIdentityDto","description":"identity."},"level":{"$ref":"#/$defs/InputLevelDto","description":"level."},"message":{"description":"message.","type":["string","null"]},"outcome":{"description":"outcome.","type":["string","null"]},"request_id":{"description":"request id.","type":["string","null"]},"service":{"description":"service.","type":"string"},"state_transition":{"anyOf":[{"$ref":"#/$defs/InputStateTransitionDto"},{"type":"null"}],"description":"state transition."},"target":{"description":"target.","type":"string"},"timestamp":{"description":"timestamp.","type":"string"},"trace":{"anyOf":[{"$ref":"#/$defs/InputTraceContextDto"},{"type":"null"}],"description":"trace."},"version":{"description":"version.","type":"string"}},"required":["version","timestamp","service","identity","level","target","action","fields"],"type":"object"},"InputTraceContextDto":{"additionalProperties":false,"description":"Version-one TraceContextDto wire record.","properties":{"parent_span_id":{"description":"parent span id.","type":["string","null"]},"span_id":{"description":"span id.","type":"string"},"trace_id":{"description":"trace id.","type":"string"}},"required":["trace_id","span_id"],"type":"object"},"InputTryLogRequest":{"additionalProperties":false,"description":"Version-one TryLogRequest wire record.","properties":{"event":{"$ref":"#/$defs/InputLogEventDto","description":"event."},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","event"],"type":"object"},"InputValueDto":{"description":"Version-one ValueDto wire value.","oneOf":[{"additionalProperties":false,"description":"Wire null.","properties":{"kind":{"const":"null","type":"string"}},"required":["kind"],"type":"object"},{"additionalProperties":false,"description":"Wire boolean.","properties":{"kind":{"const":"boolean","type":"string"},"value":{"description":"Active variant value.","type":"boolean"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"description":"Wire string.","properties":{"kind":{"const":"string","type":"string"},"value":{"description":"Active variant value.","type":"string"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"description":"Wire integer.","properties":{"kind":{"const":"integer","type":"string"},"value":{"$ref":"#/$defs/InputDecimalDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"description":"Wire float.","properties":{"kind":{"const":"float","type":"string"},"value":{"description":"Active variant value.","format":"double","type":"number"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"description":"Wire array.","properties":{"kind":{"const":"array","type":"string"},"value":{"description":"Active variant value.","items":{"$ref":"#/$defs/InputValueDto"},"type":"array"}},"required":["kind","value"],"type":"object"},{"additionalProperties":false,"description":"Wire object.","properties":{"kind":{"const":"object","type":"string"},"value":{"additionalProperties":{"$ref":"#/$defs/InputValueDto"},"description":"Active variant value.","type":"object"}},"required":["kind","value"],"type":"object"}]},"InputWireEnvelope":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputAdmissionDto","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope2":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputCompletionDto","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope3":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputDispatchDto","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope4":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputLogSnapshotDto","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope5":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputLogHealthDto","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope6":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputLevelChangeDto","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope7":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputClientOutcome","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWireEnvelope8":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/InputClientStatus","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/InputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"InputWorkerStateDto":{"description":"Version-one WorkerStateDto wire value.","oneOf":[{"const":"running","description":"Wire running.","type":"string"},{"const":"degraded","description":"Wire degraded.","type":"string"},{"const":"stopped","description":"Wire stopped.","type":"string"}]},"OutputAdmissionDto":{"description":"Version-one AdmissionDto wire value.","oneOf":[{"description":"Wire accepted.","properties":{"kind":{"const":"accepted","type":"string"}},"required":["kind"],"type":"object"},{"description":"Wire filtered.","properties":{"kind":{"const":"filtered","type":"string"}},"required":["kind"],"type":"object"}]},"OutputAdmissionOperationDto":{"description":"Operations returning final logging admission.","oneOf":[{"const":"log","description":"Wire log.","type":"string"},{"const":"try_log","description":"Wire try log.","type":"string"}]},"OutputAvailabilityDto":{"description":"Version-one AvailabilityDto wire value.","oneOf":[{"const":"healthy","description":"Wire healthy.","type":"string"},{"const":"degraded_dropping","description":"Wire degraded dropping.","type":"string"},{"const":"unavailable","description":"Wire unavailable.","type":"string"}]},"OutputBridgeHealthDto":{"description":"Version-one BridgeHealthDto wire record.","properties":{"active_log_path":{"$ref":"#/$defs/OutputPathDto","description":"active log path."},"configured_level":{"$ref":"#/$defs/OutputLevelFilterDto","description":"configured level."},"dropped":{"$ref":"#/$defs/OutputDropCountsDto","description":"dropped."},"effective_level":{"$ref":"#/$defs/OutputLevelFilterDto","description":"effective level."},"level_revision":{"$ref":"#/$defs/OutputDecimalDto","description":"level revision.\\nWire level revision.","x-sc-integer-domain":"unsigned"},"lifecycle":{"$ref":"#/$defs/OutputLifecycleDto","description":"lifecycle."},"logging":{"$ref":"#/$defs/OutputLoggingHealthDto","description":"logging."},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","logging","dropped","lifecycle","active_log_path","configured_level","effective_level","level_revision"],"type":"object"},"OutputChangeDiagnosticDto":{"description":"Version-one ChangeDiagnosticDto wire value.","oneOf":[{"description":"Wire accepted.","properties":{"kind":{"const":"accepted","type":"string"}},"required":["kind"],"type":"object"},{"description":"Wire not accepted.","properties":{"diagnostic":{"$ref":"#/$defs/OutputDiagnostic","description":"Active variant diagnostic."},"kind":{"const":"not_accepted","type":"string"}},"required":["kind","diagnostic"],"type":"object"}]},"OutputClientOutcome":{"description":"Payload-free client outcome, distinct from host persistence.","oneOf":[{"description":"Wire idle.","properties":{"kind":{"const":"idle","type":"string"}},"required":["kind"],"type":"object"},{"description":"Wire scheduled.","properties":{"kind":{"const":"scheduled","type":"string"},"operation":{"$ref":"#/$defs/OutputLogOperationDto","description":"Active variant operation."}},"required":["kind","operation"],"type":"object"},{"description":"Wire accepted.","properties":{"kind":{"const":"accepted","type":"string"},"operation":{"$ref":"#/$defs/OutputAdmissionOperationDto","description":"Active variant operation."}},"required":["kind","operation"],"type":"object"},{"description":"Wire filtered.","properties":{"kind":{"const":"filtered","type":"string"},"operation":{"$ref":"#/$defs/OutputAdmissionOperationDto","description":"Active variant operation."}},"required":["kind","operation"],"type":"object"},{"description":"Wire completed.","properties":{"kind":{"const":"completed","type":"string"},"operation":{"$ref":"#/$defs/OutputCompletionOperationDto","description":"Active variant operation."}},"required":["kind","operation"],"type":"object"}]},"OutputClientStatus":{"description":"Bounded local client status; no ownership or IPC capability is represented.","properties":{"failures_by_kind":{"$ref":"#/$defs/OutputFailureCountsDto","description":"Saturating counters for every declared failure kind."},"in_flight":{"description":"Number of outstanding operations, bounded by client admission.\\nWire in flight.","format":"uint32","maximum":256,"minimum":0,"type":"integer"},"last_failure":{"anyOf":[{"$ref":"#/$defs/OutputFailure"},{"type":"null"}],"description":"Retained failure survives subsequent successful operations."},"last_result":{"$ref":"#/$defs/OutputResultDto7","description":"Most recent completion-order result."}},"required":["in_flight","failures_by_kind","last_result","last_failure"],"type":"object"},"OutputCompletionDto":{"description":"Version-one CompletionDto wire value.","oneOf":[{"description":"Wire completed.","properties":{"kind":{"const":"completed","type":"string"}},"required":["kind"],"type":"object"}]},"OutputCompletionOperationDto":{"description":"Operations returning a completed client observation.","oneOf":[{"const":"query","description":"Wire query.","type":"string"},{"const":"health","description":"Wire health.","type":"string"},{"const":"flush","description":"Wire flush.","type":"string"}]},"OutputDecimalDto":{"description":"Canonical integer string: signed i64 or unsigned u64; counters additionally reject negatives.","pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\\\s\\\\S])","type":"string"},"OutputDiagnostic":{"description":"Version-one Diagnostic wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["at","code","message","remediation"],"type":"object"},"OutputDiagnosticSummaryDto":{"description":"Version-one DiagnosticSummaryDto wire record.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":["string","null"]},"message":{"description":"message.","type":"string"}},"required":["code","message","at"],"type":"object"},"OutputDispatchDto":{"description":"Version-one DispatchDto wire value.","oneOf":[{"description":"Wire scheduled.","properties":{"kind":{"const":"scheduled","type":"string"}},"required":["kind"],"type":"object"}]},"OutputDropCountsDto":{"description":"Version-one DropCountsDto wire record.","properties":{"invalid_event":{"$ref":"#/$defs/OutputDecimalDto","description":"invalid event.\\nWire invalid event.","x-sc-integer-domain":"unsigned"},"logger_panicked":{"$ref":"#/$defs/OutputDecimalDto","description":"logger panicked.\\nWire logger panicked.","x-sc-integer-domain":"unsigned"},"not_installed":{"$ref":"#/$defs/OutputDecimalDto","description":"not installed.\\nWire not installed.","x-sc-integer-domain":"unsigned"},"queue_full":{"$ref":"#/$defs/OutputDecimalDto","description":"queue full.\\nWire queue full.","x-sc-integer-domain":"unsigned"},"reentrant_emit":{"$ref":"#/$defs/OutputDecimalDto","description":"reentrant emit.\\nWire reentrant emit.","x-sc-integer-domain":"unsigned"},"shutdown_timed_out":{"$ref":"#/$defs/OutputDecimalDto","description":"shutdown timed out.\\nWire shutdown timed out.","x-sc-integer-domain":"unsigned"},"writer_degraded":{"$ref":"#/$defs/OutputDecimalDto","description":"writer degraded.\\nWire writer degraded.","x-sc-integer-domain":"unsigned"}},"required":["queue_full","invalid_event","writer_degraded","shutdown_timed_out","not_installed","logger_panicked","reentrant_emit"],"type":"object"},"OutputFailure":{"description":"Version-one Failure wire value.","oneOf":[{"description":"Wire validation.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"field":{"description":"Wire field.","type":"string"},"kind":{"const":"validation","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","field"],"type":"object"},{"description":"Wire queue full.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"queue_full","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Wire below baseline.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"configured":{"$ref":"#/$defs/OutputLevelFilterDto","description":"Wire configured."},"kind":{"const":"below_baseline","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."},"requested":{"$ref":"#/$defs/OutputLevelFilterDto","description":"Wire requested."}},"required":["kind","at","code","message","remediation","requested","configured"],"type":"object"},{"description":"Wire unsupported level.","properties":{"at":{"description":"at.","type":"string"},"available":{"$ref":"#/$defs/OutputLevelFilterDto","description":"Wire available."},"code":{"description":"code.","type":"string"},"kind":{"const":"unsupported_level","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."},"requested":{"$ref":"#/$defs/OutputLevelFilterDto","description":"Wire requested."}},"required":["kind","at","code","message","remediation","requested","available"],"type":"object"},{"description":"Wire permission denied.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"permission_denied","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Wire closed.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"closed","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Wire unavailable.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"unavailable","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Wire io.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"io","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Wire timeout.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"timeout","type":"string"},"message":{"description":"message.","type":"string"},"operation":{"description":"Wire operation.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","operation"],"type":"object"},{"description":"Wire cancelled.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"cancelled","type":"string"},"message":{"description":"message.","type":"string"},"operation":{"description":"Wire operation.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","operation"],"type":"object"},{"description":"Wire unsupported version.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"unsupported_version","type":"string"},"message":{"description":"message.","type":"string"},"received":{"description":"Wire received.","format":"uint32","minimum":0,"type":"integer"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation","received"],"type":"object"},{"description":"Wire internal.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"internal","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."}},"required":["kind","at","code","message","remediation"],"type":"object"},{"description":"Wire unknown remote.","properties":{"at":{"description":"at.","type":"string"},"code":{"description":"code.","type":"string"},"kind":{"const":"unknown_remote","type":"string"},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."},"remote_kind":{"description":"Wire remote kind.","type":"string"}},"required":["kind","at","code","message","remediation","remote_kind"],"type":"object"}]},"OutputFailureCountsDto":{"description":"Fixed bounded counters for the declared Failure union.","properties":{"below_baseline":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating below_baseline counter.\\nWire below baseline.","x-sc-integer-domain":"unsigned"},"cancelled":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating cancelled counter.\\nWire cancelled.","x-sc-integer-domain":"unsigned"},"closed":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating closed counter.\\nWire closed.","x-sc-integer-domain":"unsigned"},"internal":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating internal counter.\\nWire internal.","x-sc-integer-domain":"unsigned"},"io":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating io counter.\\nWire io.","x-sc-integer-domain":"unsigned"},"permission_denied":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating permission_denied counter.\\nWire permission denied.","x-sc-integer-domain":"unsigned"},"queue_full":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating queue_full counter.\\nWire queue full.","x-sc-integer-domain":"unsigned"},"timeout":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating timeout counter.\\nWire timeout.","x-sc-integer-domain":"unsigned"},"unavailable":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating unavailable counter.\\nWire unavailable.","x-sc-integer-domain":"unsigned"},"unknown_remote":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating unknown_remote counter.\\nWire unknown remote.","x-sc-integer-domain":"unsigned"},"unsupported_level":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating unsupported_level counter.\\nWire unsupported level.","x-sc-integer-domain":"unsigned"},"unsupported_version":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating unsupported_version counter.\\nWire unsupported version.","x-sc-integer-domain":"unsigned"},"validation":{"$ref":"#/$defs/OutputDecimalDto","description":"Saturating validation counter.\\nWire validation.","x-sc-integer-domain":"unsigned"}},"required":["validation","queue_full","below_baseline","unsupported_level","permission_denied","closed","unavailable","io","timeout","cancelled","unsupported_version","internal","unknown_remote"],"type":"object"},"OutputFieldMatchDto":{"additionalProperties":false,"description":"Version-one FieldMatchDto wire record.","properties":{"field":{"description":"field.","type":"string"},"value":{"$ref":"#/$defs/OutputValueDto","description":"value."}},"required":["field","value"],"type":"object"},"OutputFlushRequest":{"additionalProperties":false,"description":"Version-one FlushRequest wire record.","properties":{"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"timeout_ms":{"description":"timeout ms.\\nWire timeout ms.","format":"uint32","maximum":60000,"minimum":0,"type":"integer"}},"required":["schema_version","timeout_ms"],"type":"object"},"OutputHealthRequest":{"additionalProperties":false,"description":"Version-one HealthRequest wire record.","properties":{"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version"],"type":"object"},"OutputLevelChangeDto":{"description":"Version-one LevelChangeDto wire value.","oneOf":[{"description":"Wire changed.","properties":{"current":{"$ref":"#/$defs/OutputLevelStateDto","description":"Wire current."},"diagnostic":{"$ref":"#/$defs/OutputChangeDiagnosticDto","description":"Wire diagnostic."},"kind":{"const":"changed","type":"string"},"previous":{"$ref":"#/$defs/OutputLevelStateDto","description":"Wire previous."},"source":{"$ref":"#/$defs/OutputLevelChangeSourceDto","description":"Wire source."}},"required":["kind","previous","current","source","diagnostic"],"type":"object"},{"description":"Wire unchanged.","properties":{"kind":{"const":"unchanged","type":"string"},"state":{"$ref":"#/$defs/OutputLevelStateDto","description":"Wire state."}},"required":["kind","state"],"type":"object"}]},"OutputLevelChangeRequest":{"additionalProperties":false,"description":"Version-one LevelChangeRequest wire record.","properties":{"change":{"$ref":"#/$defs/OutputLevelRequestDto","description":"change."},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","change"],"type":"object"},"OutputLevelChangeSourceDto":{"description":"Version-one LevelChangeSourceDto wire value.","oneOf":[{"const":"application","description":"Wire application.","type":"string"},{"const":"user_request","description":"Wire user request.","type":"string"},{"const":"diagnostic_session","description":"Wire diagnostic session.","type":"string"}]},"OutputLevelDto":{"description":"Version-one LevelDto wire value.","oneOf":[{"const":"trace","description":"Wire trace.","type":"string"},{"const":"debug","description":"Wire debug.","type":"string"},{"const":"info","description":"Wire info.","type":"string"},{"const":"warn","description":"Wire warn.","type":"string"},{"const":"error","description":"Wire error.","type":"string"}]},"OutputLevelFilterDto":{"description":"Version-one LevelFilterDto wire value.","oneOf":[{"const":"off","description":"Wire off.","type":"string"},{"const":"error","description":"Wire error.","type":"string"},{"const":"warn","description":"Wire warn.","type":"string"},{"const":"info","description":"Wire info.","type":"string"},{"const":"debug","description":"Wire debug.","type":"string"},{"const":"trace","description":"Wire trace.","type":"string"}]},"OutputLevelRequestDto":{"description":"Version-one LevelRequestDto wire value.","oneOf":[{"additionalProperties":false,"description":"Wire elevate.","properties":{"kind":{"const":"elevate","type":"string"},"level":{"$ref":"#/$defs/OutputLevelFilterDto","description":"Active variant level."}},"required":["kind","level"],"type":"object"},{"additionalProperties":false,"description":"Wire reset.","properties":{"kind":{"const":"reset","type":"string"}},"required":["kind"],"type":"object"}]},"OutputLevelStateDto":{"description":"Version-one LevelStateDto wire record.","properties":{"configured_level":{"$ref":"#/$defs/OutputLevelFilterDto","description":"configured level."},"effective_level":{"$ref":"#/$defs/OutputLevelFilterDto","description":"effective level."},"level_revision":{"$ref":"#/$defs/OutputDecimalDto","description":"level revision.\\nWire level revision.","x-sc-integer-domain":"unsigned"}},"required":["configured_level","effective_level","level_revision"],"type":"object"},"OutputLifecycleDto":{"description":"Version-one LifecycleDto wire value.","oneOf":[{"const":"running","description":"Wire running.","type":"string"},{"const":"stopping","description":"Wire stopping.","type":"string"},{"const":"stopped","description":"Wire stopped.","type":"string"},{"const":"failed","description":"Wire failed.","type":"string"}]},"OutputLogEventDto":{"additionalProperties":false,"description":"Version-one LogEventDto wire record.","properties":{"action":{"description":"action.","type":"string"},"correlation_id":{"description":"correlation id.","type":["string","null"]},"fields":{"additionalProperties":{"$ref":"#/$defs/OutputValueDto"},"default":{},"description":"fields.\\nWire fields.","type":"object"},"level":{"$ref":"#/$defs/OutputLevelDto","description":"level."},"message":{"description":"message.","type":["string","null"]},"outcome":{"description":"outcome.","type":["string","null"]},"request_id":{"description":"request id.","type":["string","null"]},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"target":{"description":"target.","type":"string"},"trace":{"anyOf":[{"$ref":"#/$defs/OutputTraceContextDto"},{"type":"null"}],"description":"trace."}},"required":["schema_version","level","target","action","message","trace","request_id","correlation_id","outcome","fields"],"type":"object"},"OutputLogHealthDto":{"description":"Version-one LogHealthDto wire record.","properties":{"bridge":{"anyOf":[{"$ref":"#/$defs/OutputBridgeHealthDto"},{"type":"null"}],"description":"bridge."},"level_state":{"$ref":"#/$defs/OutputLevelStateDto","description":"level state."},"logging":{"$ref":"#/$defs/OutputLoggingHealthDto","description":"logging."},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","logging","bridge","level_state"],"type":"object"},"OutputLogOperationDto":{"description":"The log-only operation in a scheduled client outcome.","oneOf":[{"const":"log","description":"Wire log.","type":"string"}]},"OutputLogOrderDto":{"description":"Version-one LogOrderDto wire value.","oneOf":[{"const":"oldest_first","description":"Wire oldest first.","type":"string"},{"const":"newest_first","description":"Wire newest first.","type":"string"}]},"OutputLogQueryDto":{"additionalProperties":false,"description":"Version-one LogQueryDto wire record.","properties":{"action":{"description":"action.","type":["string","null"]},"correlation_id":{"description":"correlation id.","type":["string","null"]},"field_matches":{"default":[],"description":"field matches.\\nWire field matches.","items":{"$ref":"#/$defs/OutputFieldMatchDto"},"type":"array"},"levels":{"default":[],"description":"levels.\\nWire levels.","items":{"$ref":"#/$defs/OutputLevelDto"},"type":"array"},"limit":{"default":100,"description":"limit.\\nWire limit.","format":"uint","maximum":1000,"minimum":1,"type":"integer"},"order":{"$ref":"#/$defs/OutputLogOrderDto","default":"oldest_first","description":"order.\\nWire order."},"request_id":{"description":"request id.","type":["string","null"]},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"service":{"description":"service.","type":["string","null"]},"since":{"description":"since.","type":["string","null"]},"target":{"description":"target.","type":["string","null"]},"until":{"description":"until.","type":["string","null"]}},"required":["schema_version","service","levels","target","action","request_id","correlation_id","since","until","field_matches","limit","order"],"type":"object"},"OutputLogSnapshotDto":{"description":"Version-one LogSnapshotDto wire record.","properties":{"events":{"description":"events.","items":{"$ref":"#/$defs/OutputStoredEventDto"},"type":"array"},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"truncated":{"description":"truncated.","type":"boolean"}},"required":["schema_version","events","truncated"],"type":"object"},"OutputLoggingHealthDto":{"description":"Version-one LoggingHealthDto wire record.","properties":{"active_log_path":{"$ref":"#/$defs/OutputPathDto","description":"active log path."},"dropped_events_total":{"$ref":"#/$defs/OutputDecimalDto","description":"dropped events total.\\nWire dropped events total.","x-sc-integer-domain":"unsigned"},"flush_errors_total":{"$ref":"#/$defs/OutputDecimalDto","description":"flush errors total.\\nWire flush errors total.","x-sc-integer-domain":"unsigned"},"last_error":{"anyOf":[{"$ref":"#/$defs/OutputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"last_writer_error":{"anyOf":[{"$ref":"#/$defs/OutputDiagnosticSummaryDto"},{"type":"null"}],"description":"last writer error."},"maintenance":{"anyOf":[{"$ref":"#/$defs/OutputMaintenanceHealthDto"},{"type":"null"}],"description":"maintenance."},"query":{"anyOf":[{"$ref":"#/$defs/OutputQueryHealthDto"},{"type":"null"}],"description":"query."},"queue_capacity":{"$ref":"#/$defs/OutputDecimalDto","description":"queue capacity.\\nWire queue capacity.","x-sc-integer-domain":"unsigned"},"queue_depth":{"$ref":"#/$defs/OutputDecimalDto","description":"queue depth.\\nWire queue depth.","x-sc-integer-domain":"unsigned"},"queue_full_drops_total":{"$ref":"#/$defs/OutputDecimalDto","description":"queue full drops total.\\nWire queue full drops total.","x-sc-integer-domain":"unsigned"},"queue_high_water_mark":{"$ref":"#/$defs/OutputDecimalDto","description":"queue high water mark.\\nWire queue high water mark.","x-sc-integer-domain":"unsigned"},"sink_statuses":{"description":"sink statuses.","items":{"$ref":"#/$defs/OutputSinkHealthDto"},"type":"array"},"state":{"$ref":"#/$defs/OutputAvailabilityDto","description":"state."},"writer_state":{"$ref":"#/$defs/OutputWorkerStateDto","description":"writer state."}},"required":["state","dropped_events_total","flush_errors_total","queue_depth","queue_capacity","queue_high_water_mark","queue_full_drops_total","active_log_path","sink_statuses","writer_state","last_writer_error","query","maintenance","last_error"],"type":"object"},"OutputMaintenanceHealthDto":{"description":"Version-one MaintenanceHealthDto wire record.","properties":{"last_error":{"anyOf":[{"$ref":"#/$defs/OutputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"last_pass_at":{"description":"last pass at.","type":["string","null"]},"pruned_files_total":{"$ref":"#/$defs/OutputDecimalDto","description":"pruned files total.\\nWire pruned files total.","x-sc-integer-domain":"unsigned"},"rotated_files_total":{"$ref":"#/$defs/OutputDecimalDto","description":"rotated files total.\\nWire rotated files total.","x-sc-integer-domain":"unsigned"},"state":{"$ref":"#/$defs/OutputWorkerStateDto","description":"state."}},"required":["state","last_pass_at","rotated_files_total","pruned_files_total","last_error"],"type":"object"},"OutputPathDto":{"description":"Version-one PathDto wire value.","oneOf":[{"description":"Wire utf8.","properties":{"kind":{"const":"utf8","type":"string"},"value":{"description":"Active variant value.","type":"string"}},"required":["kind","value"],"type":"object"},{"description":"Wire unrepresentable.","properties":{"kind":{"const":"unrepresentable","type":"string"}},"required":["kind"],"type":"object"},{"description":"Wire absent.","properties":{"kind":{"const":"absent","type":"string"}},"required":["kind"],"type":"object"}]},"OutputProcessIdentityDto":{"description":"Version-one ProcessIdentityDto wire record.","properties":{"hostname":{"description":"hostname.","type":["string","null"]},"pid":{"description":"pid.","format":"uint32","minimum":0,"type":["integer","null"]}},"required":["hostname","pid"],"type":"object"},"OutputQueryHealthDto":{"description":"Version-one QueryHealthDto wire record.","properties":{"last_error":{"anyOf":[{"$ref":"#/$defs/OutputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"state":{"$ref":"#/$defs/OutputQueryStateDto","description":"state."}},"required":["state","last_error"],"type":"object"},"OutputQueryRequest":{"additionalProperties":false,"description":"Version-one QueryRequest wire record.","properties":{"query":{"$ref":"#/$defs/OutputLogQueryDto","description":"query."},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","query"],"type":"object"},"OutputQueryStateDto":{"description":"Version-one QueryStateDto wire value.","oneOf":[{"const":"healthy","description":"Wire healthy.","type":"string"},{"const":"degraded","description":"Wire degraded.","type":"string"},{"const":"unavailable","description":"Wire unavailable.","type":"string"}]},"OutputRemediationDto":{"description":"Version-one RemediationDto wire value.","oneOf":[{"description":"Wire recoverable.","properties":{"kind":{"const":"recoverable","type":"string"},"steps":{"description":"Active variant steps.","items":{"type":"string"},"type":"array"}},"required":["kind","steps"],"type":"object"},{"description":"Wire not recoverable.","properties":{"justification":{"description":"Active variant justification.","type":"string"},"kind":{"const":"not_recoverable","type":"string"}},"required":["kind","justification"],"type":"object"}]},"OutputResultDto":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputAdmissionDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto2":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputCompletionDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto3":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputDispatchDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto4":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputLogSnapshotDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto5":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputLogHealthDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto6":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputLevelChangeDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto7":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputClientOutcome","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputResultDto8":{"description":"Version-one `ResultDto<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"value":{"$ref":"#/$defs/OutputClientStatus","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"}},"required":["kind","error"],"type":"object"}]},"OutputSinkHealthDto":{"description":"Version-one SinkHealthDto wire record.","properties":{"last_error":{"anyOf":[{"$ref":"#/$defs/OutputDiagnosticSummaryDto"},{"type":"null"}],"description":"last error."},"name":{"description":"name.","type":"string"},"state":{"$ref":"#/$defs/OutputAvailabilityDto","description":"state."}},"required":["name","state","last_error"],"type":"object"},"OutputStateTransitionDto":{"description":"Version-one StateTransitionDto wire record.","properties":{"entity_id":{"description":"entity id.","type":["string","null"]},"entity_kind":{"description":"entity kind.","type":"string"},"from_state":{"description":"from state.","type":"string"},"reason":{"description":"reason.","type":["string","null"]},"to_state":{"description":"to state.","type":"string"},"trigger":{"description":"trigger.","type":["string","null"]}},"required":["entity_kind","entity_id","from_state","to_state","reason","trigger"],"type":"object"},"OutputStoredDiagnosticDto":{"description":"Version-one StoredDiagnosticDto wire record.","properties":{"cause":{"description":"cause.","type":["string","null"]},"code":{"description":"code.","type":"string"},"details":{"additionalProperties":{"$ref":"#/$defs/OutputValueDto"},"description":"details.","type":"object"},"docs":{"description":"docs.","type":["string","null"]},"message":{"description":"message.","type":"string"},"remediation":{"$ref":"#/$defs/OutputRemediationDto","description":"remediation."},"timestamp":{"description":"timestamp.","type":"string"}},"required":["timestamp","code","message","cause","remediation","docs","details"],"type":"object"},"OutputStoredEventDto":{"description":"Version-one StoredEventDto wire record.","properties":{"action":{"description":"action.","type":"string"},"correlation_id":{"description":"correlation id.","type":["string","null"]},"diagnostic":{"anyOf":[{"$ref":"#/$defs/OutputStoredDiagnosticDto"},{"type":"null"}],"description":"diagnostic."},"fields":{"additionalProperties":{"$ref":"#/$defs/OutputValueDto"},"description":"fields.","type":"object"},"identity":{"$ref":"#/$defs/OutputProcessIdentityDto","description":"identity."},"level":{"$ref":"#/$defs/OutputLevelDto","description":"level."},"message":{"description":"message.","type":["string","null"]},"outcome":{"description":"outcome.","type":["string","null"]},"request_id":{"description":"request id.","type":["string","null"]},"service":{"description":"service.","type":"string"},"state_transition":{"anyOf":[{"$ref":"#/$defs/OutputStateTransitionDto"},{"type":"null"}],"description":"state transition."},"target":{"description":"target.","type":"string"},"timestamp":{"description":"timestamp.","type":"string"},"trace":{"anyOf":[{"$ref":"#/$defs/OutputTraceContextDto"},{"type":"null"}],"description":"trace."},"version":{"description":"version.","type":"string"}},"required":["version","timestamp","service","identity","level","target","action","message","trace","request_id","correlation_id","outcome","fields","diagnostic","state_transition"],"type":"object"},"OutputTraceContextDto":{"description":"Version-one TraceContextDto wire record.","properties":{"parent_span_id":{"description":"parent span id.","type":["string","null"]},"span_id":{"description":"span id.","type":"string"},"trace_id":{"description":"trace id.","type":"string"}},"required":["trace_id","span_id","parent_span_id"],"type":"object"},"OutputTryLogRequest":{"additionalProperties":false,"description":"Version-one TryLogRequest wire record.","properties":{"event":{"$ref":"#/$defs/OutputLogEventDto","description":"event."},"schema_version":{"description":"schema version.\\nWire schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["schema_version","event"],"type":"object"},"OutputValueDto":{"description":"Version-one ValueDto wire value.","oneOf":[{"description":"Wire null.","properties":{"kind":{"const":"null","type":"string"}},"required":["kind"],"type":"object"},{"description":"Wire boolean.","properties":{"kind":{"const":"boolean","type":"string"},"value":{"description":"Active variant value.","type":"boolean"}},"required":["kind","value"],"type":"object"},{"description":"Wire string.","properties":{"kind":{"const":"string","type":"string"},"value":{"description":"Active variant value.","type":"string"}},"required":["kind","value"],"type":"object"},{"description":"Wire integer.","properties":{"kind":{"const":"integer","type":"string"},"value":{"$ref":"#/$defs/OutputDecimalDto","description":"Active variant value."}},"required":["kind","value"],"type":"object"},{"description":"Wire float.","properties":{"kind":{"const":"float","type":"string"},"value":{"description":"Active variant value.","format":"double","type":"number"}},"required":["kind","value"],"type":"object"},{"description":"Wire array.","properties":{"kind":{"const":"array","type":"string"},"value":{"description":"Active variant value.","items":{"$ref":"#/$defs/OutputValueDto"},"type":"array"}},"required":["kind","value"],"type":"object"},{"description":"Wire object.","properties":{"kind":{"const":"object","type":"string"},"value":{"additionalProperties":{"$ref":"#/$defs/OutputValueDto"},"description":"Active variant value.","type":"object"}},"required":["kind","value"],"type":"object"}]},"OutputWireEnvelope":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputAdmissionDto","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope2":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputCompletionDto","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope3":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputDispatchDto","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope4":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputLogSnapshotDto","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope5":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputLogHealthDto","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope6":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputLevelChangeDto","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope7":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputClientOutcome","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWireEnvelope8":{"description":"Version-one `WireEnvelope<T>` wire value.","oneOf":[{"description":"Wire ok.","properties":{"kind":{"const":"ok","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"},"value":{"$ref":"#/$defs/OutputClientStatus","description":"Active variant value."}},"required":["kind","schema_version","value"],"type":"object"},{"description":"Wire error.","properties":{"error":{"$ref":"#/$defs/OutputFailure","description":"Active variant error."},"kind":{"const":"error","type":"string"},"schema_version":{"description":"Active variant schema version.","format":"uint32","maximum":1,"minimum":1,"type":"integer"}},"required":["kind","schema_version","error"],"type":"object"}]},"OutputWorkerStateDto":{"description":"Version-one WorkerStateDto wire value.","oneOf":[{"const":"running","description":"Wire running.","type":"string"},{"const":"degraded","description":"Wire degraded.","type":"string"},{"const":"stopped","description":"Wire stopped.","type":"string"}]}},"$id":"https://sc-observability.dev/bindings/v1.json","$schema":"https://json-schema.org/draft/2020-12/schema","x-sc-bindings":{"defaults":{"query_limit":100,"query_order":"oldest_first"},"generic_projections":[{"name":"Result","parameter_ref":"OutputAdmissionDto","source":"OutputResultDtoAdmissionDto"},{"name":"WireEnvelope","parameter_ref":"OutputAdmissionDto","source":"OutputWireEnvelopeAdmissionDto"}],"integer":{"canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\\\s\\\\S])","counter_min":"0","event_min":"-9223372036854775808","max":"18446744073709551615"},"limits":{"container_depth":32,"diagnostic_string_bytes":4096,"query_limit":1000,"remediation_steps":32,"request_bytes":65536,"timeout_ms":60000},"operations":{"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"}},"reserved_field_namespace":"sc_observability.binding.","schema_version":1},"x-sc-entrypoints":{"InputAdmissionDto":{"$ref":"#/$defs/InputAdmissionDto"},"InputAdmissionOperationDto":{"$ref":"#/$defs/InputAdmissionOperationDto"},"InputAvailabilityDto":{"$ref":"#/$defs/InputAvailabilityDto"},"InputBridgeHealthDto":{"$ref":"#/$defs/InputBridgeHealthDto"},"InputChangeDiagnosticDto":{"$ref":"#/$defs/InputChangeDiagnosticDto"},"InputClientOutcome":{"$ref":"#/$defs/InputClientOutcome"},"InputClientStatus":{"$ref":"#/$defs/InputClientStatus"},"InputCompletionDto":{"$ref":"#/$defs/InputCompletionDto"},"InputCompletionOperationDto":{"$ref":"#/$defs/InputCompletionOperationDto"},"InputDecimalDto":{"$ref":"#/$defs/InputDecimalDto"},"InputDiagnostic":{"$ref":"#/$defs/InputDiagnostic"},"InputDiagnosticSummaryDto":{"$ref":"#/$defs/InputDiagnosticSummaryDto"},"InputDispatchDto":{"$ref":"#/$defs/InputDispatchDto"},"InputDropCountsDto":{"$ref":"#/$defs/InputDropCountsDto"},"InputFailure":{"$ref":"#/$defs/InputFailure"},"InputFailureCountsDto":{"$ref":"#/$defs/InputFailureCountsDto"},"InputFieldMatchDto":{"$ref":"#/$defs/InputFieldMatchDto"},"InputFlushRequest":{"$ref":"#/$defs/InputFlushRequest"},"InputHealthRequest":{"$ref":"#/$defs/InputHealthRequest"},"InputLevelChangeDto":{"$ref":"#/$defs/InputLevelChangeDto"},"InputLevelChangeRequest":{"$ref":"#/$defs/InputLevelChangeRequest"},"InputLevelChangeSourceDto":{"$ref":"#/$defs/InputLevelChangeSourceDto"},"InputLevelDto":{"$ref":"#/$defs/InputLevelDto"},"InputLevelFilterDto":{"$ref":"#/$defs/InputLevelFilterDto"},"InputLevelRequestDto":{"$ref":"#/$defs/InputLevelRequestDto"},"InputLevelStateDto":{"$ref":"#/$defs/InputLevelStateDto"},"InputLifecycleDto":{"$ref":"#/$defs/InputLifecycleDto"},"InputLogEventDto":{"$ref":"#/$defs/InputLogEventDto"},"InputLogHealthDto":{"$ref":"#/$defs/InputLogHealthDto"},"InputLogOperationDto":{"$ref":"#/$defs/InputLogOperationDto"},"InputLogOrderDto":{"$ref":"#/$defs/InputLogOrderDto"},"InputLogQueryDto":{"$ref":"#/$defs/InputLogQueryDto"},"InputLogSnapshotDto":{"$ref":"#/$defs/InputLogSnapshotDto"},"InputLoggingHealthDto":{"$ref":"#/$defs/InputLoggingHealthDto"},"InputMaintenanceHealthDto":{"$ref":"#/$defs/InputMaintenanceHealthDto"},"InputOperationDiagnosticDto":{"$ref":"#/$defs/InputDiagnostic"},"InputPathDto":{"$ref":"#/$defs/InputPathDto"},"InputProcessIdentityDto":{"$ref":"#/$defs/InputProcessIdentityDto"},"InputQueryHealthDto":{"$ref":"#/$defs/InputQueryHealthDto"},"InputQueryRequest":{"$ref":"#/$defs/InputQueryRequest"},"InputQueryStateDto":{"$ref":"#/$defs/InputQueryStateDto"},"InputRemediationDto":{"$ref":"#/$defs/InputRemediationDto"},"InputResultDtoAdmissionDto":{"$ref":"#/$defs/InputResultDto"},"InputResultDtoClientOutcome":{"$ref":"#/$defs/InputResultDto7"},"InputResultDtoClientStatus":{"$ref":"#/$defs/InputResultDto8"},"InputResultDtoCompletionDto":{"$ref":"#/$defs/InputResultDto2"},"InputResultDtoDispatchDto":{"$ref":"#/$defs/InputResultDto3"},"InputResultDtoLevelChangeDto":{"$ref":"#/$defs/InputResultDto6"},"InputResultDtoLogHealthDto":{"$ref":"#/$defs/InputResultDto5"},"InputResultDtoLogSnapshotDto":{"$ref":"#/$defs/InputResultDto4"},"InputSinkHealthDto":{"$ref":"#/$defs/InputSinkHealthDto"},"InputStateTransitionDto":{"$ref":"#/$defs/InputStateTransitionDto"},"InputStoredDiagnosticDto":{"$ref":"#/$defs/InputStoredDiagnosticDto"},"InputStoredEventDto":{"$ref":"#/$defs/InputStoredEventDto"},"InputTraceContextDto":{"$ref":"#/$defs/InputTraceContextDto"},"InputTryLogRequest":{"$ref":"#/$defs/InputTryLogRequest"},"InputValueDto":{"$ref":"#/$defs/InputValueDto"},"InputWireEnvelopeAdmissionDto":{"$ref":"#/$defs/InputWireEnvelope"},"InputWireEnvelopeClientOutcome":{"$ref":"#/$defs/InputWireEnvelope7"},"InputWireEnvelopeClientStatus":{"$ref":"#/$defs/InputWireEnvelope8"},"InputWireEnvelopeCompletionDto":{"$ref":"#/$defs/InputWireEnvelope2"},"InputWireEnvelopeDispatchDto":{"$ref":"#/$defs/InputWireEnvelope3"},"InputWireEnvelopeLevelChangeDto":{"$ref":"#/$defs/InputWireEnvelope6"},"InputWireEnvelopeLogHealthDto":{"$ref":"#/$defs/InputWireEnvelope5"},"InputWireEnvelopeLogSnapshotDto":{"$ref":"#/$defs/InputWireEnvelope4"},"InputWorkerStateDto":{"$ref":"#/$defs/InputWorkerStateDto"},"OutputAdmissionDto":{"$ref":"#/$defs/OutputAdmissionDto"},"OutputAdmissionOperationDto":{"$ref":"#/$defs/OutputAdmissionOperationDto"},"OutputAvailabilityDto":{"$ref":"#/$defs/OutputAvailabilityDto"},"OutputBridgeHealthDto":{"$ref":"#/$defs/OutputBridgeHealthDto"},"OutputChangeDiagnosticDto":{"$ref":"#/$defs/OutputChangeDiagnosticDto"},"OutputClientOutcome":{"$ref":"#/$defs/OutputClientOutcome"},"OutputClientStatus":{"$ref":"#/$defs/OutputClientStatus"},"OutputCompletionDto":{"$ref":"#/$defs/OutputCompletionDto"},"OutputCompletionOperationDto":{"$ref":"#/$defs/OutputCompletionOperationDto"},"OutputDecimalDto":{"$ref":"#/$defs/OutputDecimalDto"},"OutputDiagnostic":{"$ref":"#/$defs/OutputDiagnostic"},"OutputDiagnosticSummaryDto":{"$ref":"#/$defs/OutputDiagnosticSummaryDto"},"OutputDispatchDto":{"$ref":"#/$defs/OutputDispatchDto"},"OutputDropCountsDto":{"$ref":"#/$defs/OutputDropCountsDto"},"OutputFailure":{"$ref":"#/$defs/OutputFailure"},"OutputFailureCountsDto":{"$ref":"#/$defs/OutputFailureCountsDto"},"OutputFieldMatchDto":{"$ref":"#/$defs/OutputFieldMatchDto"},"OutputFlushRequest":{"$ref":"#/$defs/OutputFlushRequest"},"OutputHealthRequest":{"$ref":"#/$defs/OutputHealthRequest"},"OutputLevelChangeDto":{"$ref":"#/$defs/OutputLevelChangeDto"},"OutputLevelChangeRequest":{"$ref":"#/$defs/OutputLevelChangeRequest"},"OutputLevelChangeSourceDto":{"$ref":"#/$defs/OutputLevelChangeSourceDto"},"OutputLevelDto":{"$ref":"#/$defs/OutputLevelDto"},"OutputLevelFilterDto":{"$ref":"#/$defs/OutputLevelFilterDto"},"OutputLevelRequestDto":{"$ref":"#/$defs/OutputLevelRequestDto"},"OutputLevelStateDto":{"$ref":"#/$defs/OutputLevelStateDto"},"OutputLifecycleDto":{"$ref":"#/$defs/OutputLifecycleDto"},"OutputLogEventDto":{"$ref":"#/$defs/OutputLogEventDto"},"OutputLogHealthDto":{"$ref":"#/$defs/OutputLogHealthDto"},"OutputLogOperationDto":{"$ref":"#/$defs/OutputLogOperationDto"},"OutputLogOrderDto":{"$ref":"#/$defs/OutputLogOrderDto"},"OutputLogQueryDto":{"$ref":"#/$defs/OutputLogQueryDto"},"OutputLogSnapshotDto":{"$ref":"#/$defs/OutputLogSnapshotDto"},"OutputLoggingHealthDto":{"$ref":"#/$defs/OutputLoggingHealthDto"},"OutputMaintenanceHealthDto":{"$ref":"#/$defs/OutputMaintenanceHealthDto"},"OutputOperationDiagnosticDto":{"$ref":"#/$defs/OutputDiagnostic"},"OutputPathDto":{"$ref":"#/$defs/OutputPathDto"},"OutputProcessIdentityDto":{"$ref":"#/$defs/OutputProcessIdentityDto"},"OutputQueryHealthDto":{"$ref":"#/$defs/OutputQueryHealthDto"},"OutputQueryRequest":{"$ref":"#/$defs/OutputQueryRequest"},"OutputQueryStateDto":{"$ref":"#/$defs/OutputQueryStateDto"},"OutputRemediationDto":{"$ref":"#/$defs/OutputRemediationDto"},"OutputResultDtoAdmissionDto":{"$ref":"#/$defs/OutputResultDto"},"OutputResultDtoClientOutcome":{"$ref":"#/$defs/OutputResultDto7"},"OutputResultDtoClientStatus":{"$ref":"#/$defs/OutputResultDto8"},"OutputResultDtoCompletionDto":{"$ref":"#/$defs/OutputResultDto2"},"OutputResultDtoDispatchDto":{"$ref":"#/$defs/OutputResultDto3"},"OutputResultDtoLevelChangeDto":{"$ref":"#/$defs/OutputResultDto6"},"OutputResultDtoLogHealthDto":{"$ref":"#/$defs/OutputResultDto5"},"OutputResultDtoLogSnapshotDto":{"$ref":"#/$defs/OutputResultDto4"},"OutputSinkHealthDto":{"$ref":"#/$defs/OutputSinkHealthDto"},"OutputStateTransitionDto":{"$ref":"#/$defs/OutputStateTransitionDto"},"OutputStoredDiagnosticDto":{"$ref":"#/$defs/OutputStoredDiagnosticDto"},"OutputStoredEventDto":{"$ref":"#/$defs/OutputStoredEventDto"},"OutputTraceContextDto":{"$ref":"#/$defs/OutputTraceContextDto"},"OutputTryLogRequest":{"$ref":"#/$defs/OutputTryLogRequest"},"OutputValueDto":{"$ref":"#/$defs/OutputValueDto"},"OutputWireEnvelopeAdmissionDto":{"$ref":"#/$defs/OutputWireEnvelope"},"OutputWireEnvelopeClientOutcome":{"$ref":"#/$defs/OutputWireEnvelope7"},"OutputWireEnvelopeClientStatus":{"$ref":"#/$defs/OutputWireEnvelope8"},"OutputWireEnvelopeCompletionDto":{"$ref":"#/$defs/OutputWireEnvelope2"},"OutputWireEnvelopeDispatchDto":{"$ref":"#/$defs/OutputWireEnvelope3"},"OutputWireEnvelopeLevelChangeDto":{"$ref":"#/$defs/OutputWireEnvelope6"},"OutputWireEnvelopeLogHealthDto":{"$ref":"#/$defs/OutputWireEnvelope5"},"OutputWireEnvelopeLogSnapshotDto":{"$ref":"#/$defs/OutputWireEnvelope4"},"OutputWorkerStateDto":{"$ref":"#/$defs/OutputWorkerStateDto"}},"x-sc-error-registry":[{"code":"SC_OBSERVABILITY_BINDING_INVALID_INPUT","kind":"validation","remediation":"Correct the named input field and submit a new request"},{"code":"SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION","kind":"unsupported_version","remediation":"Install client and host packages supporting the same schema"},{"code":"SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE","kind":"validation","remediation":"Reduce remote diagnostic text or remediation steps to the documented bounds"},{"code":"SC_OBSERVABILITY_BINDING_CLOSED","kind":"closed","remediation":"Stop submitting through the closed backend and inspect its retained health"},{"code":"SC_OBSERVABILITY_BINDING_DISPATCH_FULL","kind":"queue_full","remediation":"Wait for an outstanding request to complete before submitting again"},{"code":"SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS","kind":"queue_full","remediation":"Wait for the current adapter flush to finish before submitting another"},{"code":"SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED","kind":"unavailable","remediation":"Restore native thread resources before explicitly creating another backend"},{"code":"SC_OBSERVABILITY_BINDING_WAITERS_FULL","kind":"queue_full","remediation":"Wait for an existing operation observer to finish before registering another"},{"code":"SC_OBSERVABILITY_BINDING_QUERY_IN_PROGRESS","kind":"queue_full","remediation":"Wait for the existing query to finish before starting another"},{"code":"SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED","kind":"unavailable","remediation":"Install a host backend before requesting an attached logger"},{"code":"SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED","kind":"unavailable","remediation":"Reuse the module\'s existing backend; replacement is unsupported"},{"code":"SC_OBSERVABILITY_BINDING_PERMISSION_DENIED","kind":"permission_denied","remediation":"Request access through the application\'s authorized window"},{"code":"SC_OBSERVABILITY_BINDING_TRANSPORT_UNAVAILABLE","kind":"unavailable","remediation":"Restore the host connection before submitting a new request"},{"code":"SC_OBSERVABILITY_BINDING_TIMEOUT","kind":"timeout","remediation":"Inspect operation status before deciding whether another operation is needed"},{"code":"SC_OBSERVABILITY_BINDING_CANCELLED","kind":"cancelled","remediation":"Inspect the saved operation result if confirmation is still needed"},{"code":"SC_OBSERVABILITY_PY_HANDLER_REENTRANT","kind":"internal","remediation":"Remove logging calls from handler formatting and error callbacks"},{"code":"SC_OBSERVABILITY_BINDING_INTERNAL","kind":"internal","remediation":"Inspect the retained status and restore the affected host or client"}]}')
 CLASSES = {'InputAdmissionDto#0': InputAdmissionAccepted, 'InputAdmissionDto#1': InputAdmissionFiltered, 'InputBridgeHealthDto': InputBridgeHealth, 'InputChangeDiagnosticDto#0': InputChangeDiagnosticAccepted, 'InputChangeDiagnosticDto#1': InputChangeDiagnosticNotAccepted, 'InputClientOutcome#0': InputClientOutcomeIdle, 'InputClientOutcome#1': InputClientOutcomeScheduled, 'InputClientOutcome#2': InputClientOutcomeAccepted, 'InputClientOutcome#3': InputClientOutcomeFiltered, 'InputClientOutcome#4': InputClientOutcomeCompleted, 'InputClientStatus': InputClientStatus, 'InputCompletionDto#0': InputCompletionCompleted, 'InputDiagnostic': InputDiagnostic, 'InputDiagnosticSummaryDto': InputDiagnosticSummary, 'InputDispatchDto#0': InputDispatchScheduled, 'InputDropCountsDto': InputDropCounts, 'InputFailure#0': InputFailureValidation, 'InputFailure#1': InputFailureQueueFull, 'InputFailure#2': InputFailureBelowBaseline, 'InputFailure#3': InputFailureUnsupportedLevel, 'InputFailure#4': InputFailurePermissionDenied, 'InputFailure#5': InputFailureClosed, 'InputFailure#6': InputFailureUnavailable, 'InputFailure#7': InputFailureIo, 'InputFailure#8': InputFailureTimeout, 'InputFailure#9': InputFailureCancelled, 'InputFailure#10': InputFailureUnsupportedVersion, 'InputFailure#11': InputFailureInternal, 'InputFailure#12': InputFailureUnknownRemote, 'InputFailureCountsDto': InputFailureCounts, 'InputFieldMatchDto': InputFieldMatch, 'InputFlushRequest': InputFlushRequest, 'InputHealthRequest': InputHealthRequest, 'InputLevelChangeDto#0': InputLevelChangeChanged, 'InputLevelChangeDto#1': InputLevelChangeUnchanged, 'InputLevelChangeRequest': InputLevelChangeRequest, 'InputLevelRequestDto#0': InputLevelRequestElevate, 'InputLevelRequestDto#1': InputLevelRequestReset, 'InputLevelStateDto': InputLevelState, 'InputLogEventDto': InputLogEvent, 'InputLogHealthDto': InputLogHealth, 'InputLogQueryDto': InputLogQuery, 'InputLogSnapshotDto': InputLogSnapshot, 'InputLoggingHealthDto': InputLoggingHealth, 'InputMaintenanceHealthDto': InputMaintenanceHealth, 'InputPathDto#0': InputPathUtf8, 'InputPathDto#1': InputPathUnrepresentable, 'InputPathDto#2': InputPathAbsent, 'InputProcessIdentityDto': InputProcessIdentity, 'InputQueryHealthDto': InputQueryHealth, 'InputQueryRequest': InputQueryRequest, 'InputRemediationDto#0': InputRemediationRecoverable, 'InputRemediationDto#1': InputRemediationNotRecoverable, 'InputResultDto#0': InputResultOk, 'InputResultDto#1': InputResultError, 'InputResultDto2#0': InputResult2Ok, 'InputResultDto2#1': InputResult2Error, 'InputResultDto3#0': InputResult3Ok, 'InputResultDto3#1': InputResult3Error, 'InputResultDto4#0': InputResult4Ok, 'InputResultDto4#1': InputResult4Error, 'InputResultDto5#0': InputResult5Ok, 'InputResultDto5#1': InputResult5Error, 'InputResultDto6#0': InputResult6Ok, 'InputResultDto6#1': InputResult6Error, 'InputResultDto7#0': InputResult7Ok, 'InputResultDto7#1': InputResult7Error, 'InputResultDto8#0': InputResult8Ok, 'InputResultDto8#1': InputResult8Error, 'InputSinkHealthDto': InputSinkHealth, 'InputStateTransitionDto': InputStateTransition, 'InputStoredDiagnosticDto': InputStoredDiagnostic, 'InputStoredEventDto': InputStoredEvent, 'InputTraceContextDto': InputTraceContext, 'InputTryLogRequest': InputTryLogRequest, 'InputValueDto#0': InputValueNull, 'InputValueDto#1': InputValueBoolean, 'InputValueDto#2': InputValueString, 'InputValueDto#3': InputValueInteger, 'InputValueDto#4': InputValueFloat, 'InputValueDto#5': InputValueArray, 'InputValueDto#6': InputValueObject, 'InputWireEnvelope#0': InputWireEnvelopeOk, 'InputWireEnvelope#1': InputWireEnvelopeError, 'InputWireEnvelope2#0': InputWireEnvelope2Ok, 'InputWireEnvelope2#1': InputWireEnvelope2Error, 'InputWireEnvelope3#0': InputWireEnvelope3Ok, 'InputWireEnvelope3#1': InputWireEnvelope3Error, 'InputWireEnvelope4#0': InputWireEnvelope4Ok, 'InputWireEnvelope4#1': InputWireEnvelope4Error, 'InputWireEnvelope5#0': InputWireEnvelope5Ok, 'InputWireEnvelope5#1': InputWireEnvelope5Error, 'InputWireEnvelope6#0': InputWireEnvelope6Ok, 'InputWireEnvelope6#1': InputWireEnvelope6Error, 'InputWireEnvelope7#0': InputWireEnvelope7Ok, 'InputWireEnvelope7#1': InputWireEnvelope7Error, 'InputWireEnvelope8#0': InputWireEnvelope8Ok, 'InputWireEnvelope8#1': InputWireEnvelope8Error, 'OutputAdmissionDto#0': OutputAdmissionAccepted, 'OutputAdmissionDto#1': OutputAdmissionFiltered, 'OutputBridgeHealthDto': OutputBridgeHealth, 'OutputChangeDiagnosticDto#0': OutputChangeDiagnosticAccepted, 'OutputChangeDiagnosticDto#1': OutputChangeDiagnosticNotAccepted, 'OutputClientOutcome#0': OutputClientOutcomeIdle, 'OutputClientOutcome#1': OutputClientOutcomeScheduled, 'OutputClientOutcome#2': OutputClientOutcomeAccepted, 'OutputClientOutcome#3': OutputClientOutcomeFiltered, 'OutputClientOutcome#4': OutputClientOutcomeCompleted, 'OutputClientStatus': OutputClientStatus, 'OutputCompletionDto#0': OutputCompletionCompleted, 'OutputDiagnostic': OutputDiagnostic, 'OutputDiagnosticSummaryDto': OutputDiagnosticSummary, 'OutputDispatchDto#0': OutputDispatchScheduled, 'OutputDropCountsDto': OutputDropCounts, 'OutputFailure#0': OutputFailureValidation, 'OutputFailure#1': OutputFailureQueueFull, 'OutputFailure#2': OutputFailureBelowBaseline, 'OutputFailure#3': OutputFailureUnsupportedLevel, 'OutputFailure#4': OutputFailurePermissionDenied, 'OutputFailure#5': OutputFailureClosed, 'OutputFailure#6': OutputFailureUnavailable, 'OutputFailure#7': OutputFailureIo, 'OutputFailure#8': OutputFailureTimeout, 'OutputFailure#9': OutputFailureCancelled, 'OutputFailure#10': OutputFailureUnsupportedVersion, 'OutputFailure#11': OutputFailureInternal, 'OutputFailure#12': OutputFailureUnknownRemote, 'OutputFailureCountsDto': OutputFailureCounts, 'OutputFieldMatchDto': OutputFieldMatch, 'OutputFlushRequest': OutputFlushRequest, 'OutputHealthRequest': OutputHealthRequest, 'OutputLevelChangeDto#0': OutputLevelChangeChanged, 'OutputLevelChangeDto#1': OutputLevelChangeUnchanged, 'OutputLevelChangeRequest': OutputLevelChangeRequest, 'OutputLevelRequestDto#0': OutputLevelRequestElevate, 'OutputLevelRequestDto#1': OutputLevelRequestReset, 'OutputLevelStateDto': OutputLevelState, 'OutputLogEventDto': OutputLogEvent, 'OutputLogHealthDto': OutputLogHealth, 'OutputLogQueryDto': OutputLogQuery, 'OutputLogSnapshotDto': OutputLogSnapshot, 'OutputLoggingHealthDto': OutputLoggingHealth, 'OutputMaintenanceHealthDto': OutputMaintenanceHealth, 'OutputPathDto#0': OutputPathUtf8, 'OutputPathDto#1': OutputPathUnrepresentable, 'OutputPathDto#2': OutputPathAbsent, 'OutputProcessIdentityDto': OutputProcessIdentity, 'OutputQueryHealthDto': OutputQueryHealth, 'OutputQueryRequest': OutputQueryRequest, 'OutputRemediationDto#0': OutputRemediationRecoverable, 'OutputRemediationDto#1': OutputRemediationNotRecoverable, 'OutputResultDto#0': OutputResultOk, 'OutputResultDto#1': OutputResultError, 'OutputResultDto2#0': OutputResult2Ok, 'OutputResultDto2#1': OutputResult2Error, 'OutputResultDto3#0': OutputResult3Ok, 'OutputResultDto3#1': OutputResult3Error, 'OutputResultDto4#0': OutputResult4Ok, 'OutputResultDto4#1': OutputResult4Error, 'OutputResultDto5#0': OutputResult5Ok, 'OutputResultDto5#1': OutputResult5Error, 'OutputResultDto6#0': OutputResult6Ok, 'OutputResultDto6#1': OutputResult6Error, 'OutputResultDto7#0': OutputResult7Ok, 'OutputResultDto7#1': OutputResult7Error, 'OutputResultDto8#0': OutputResult8Ok, 'OutputResultDto8#1': OutputResult8Error, 'OutputSinkHealthDto': OutputSinkHealth, 'OutputStateTransitionDto': OutputStateTransition, 'OutputStoredDiagnosticDto': OutputStoredDiagnostic, 'OutputStoredEventDto': OutputStoredEvent, 'OutputTraceContextDto': OutputTraceContext, 'OutputTryLogRequest': OutputTryLogRequest, 'OutputValueDto#0': OutputValueNull, 'OutputValueDto#1': OutputValueBoolean, 'OutputValueDto#2': OutputValueString, 'OutputValueDto#3': OutputValueInteger, 'OutputValueDto#4': OutputValueFloat, 'OutputValueDto#5': OutputValueArray, 'OutputValueDto#6': OutputValueObject, 'OutputWireEnvelope#0': OutputWireEnvelopeOk, 'OutputWireEnvelope#1': OutputWireEnvelopeError, 'OutputWireEnvelope2#0': OutputWireEnvelope2Ok, 'OutputWireEnvelope2#1': OutputWireEnvelope2Error, 'OutputWireEnvelope3#0': OutputWireEnvelope3Ok, 'OutputWireEnvelope3#1': OutputWireEnvelope3Error, 'OutputWireEnvelope4#0': OutputWireEnvelope4Ok, 'OutputWireEnvelope4#1': OutputWireEnvelope4Error, 'OutputWireEnvelope5#0': OutputWireEnvelope5Ok, 'OutputWireEnvelope5#1': OutputWireEnvelope5Error, 'OutputWireEnvelope6#0': OutputWireEnvelope6Ok, 'OutputWireEnvelope6#1': OutputWireEnvelope6Error, 'OutputWireEnvelope7#0': OutputWireEnvelope7Ok, 'OutputWireEnvelope7#1': OutputWireEnvelope7Error, 'OutputWireEnvelope8#0': OutputWireEnvelope8Ok, 'OutputWireEnvelope8#1': OutputWireEnvelope8Error}
 def name_of(ref):return ref.rsplit('/',1)[-1]
 
@@ -1487,7 +1487,7 @@ def validate(schema, node, value, path='$'):
         if 'pattern' in node and '0|[1-9]' in node['pattern'] and not -(2**63)<=int(value)<2**64:raise ValueError(f'{path}: integer range')
         if not node.get('minLength',0)<=len(value)<=node.get('maxLength',float('inf')):raise ValueError(f'{path}: string length')
     if typ in ('integer','number'):
-        if type(value) not in (int,float) or not math.isfinite(value) or (typ=='integer' and type(value) is not int):raise ValueError(f'{path}: number')
+        if type(value) not in (int,float) or (type(value) is float and not math.isfinite(value)) or (typ=='integer' and type(value) is not int):raise ValueError(f'{path}: number')
         if not node.get('minimum',-float('inf'))<=value<=node.get('maximum',float('inf')):raise ValueError(f'{path}: range')
     if typ=='array':
         if not isinstance(value,list):raise ValueError(f'{path}: array')

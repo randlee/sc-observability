@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "candidate_version": "1.4.0",
+  "source_commit": "1939ff2713b527532b79d5d6a51240208403489c",
+  "approved_at": "2026-09-17T09:37:52.613482+00:00",
+  "crates": {
+    "sc-observability-binding-runtime": {
+      "status": "approved",
+      "reviewer": "aobs (appointed Phase B lead)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "docs/plans/phase-b/evidence/b3b-api/sc-observability-binding-runtime.txt",
+      "api_sha256": "4b3e55fcc66c721dabb43298f5a7948bdb326330190e45a75a443c93d0e9d99b"
+    }
+  },
+  "approval_scope": "Initial public runtime API reviewed against native-binding-runtime.md: readonly cloneable backend handles, unique non-Clone owner, required operations/subscriptions and supplied core/bridge factories. Third-party arc-swap support reviewed separately for nonblocking snapshots, with no additional workspace runtime edge. Does not grant behavior QA, deferred owner runtime-contract acceptance, or publication approval."
+}

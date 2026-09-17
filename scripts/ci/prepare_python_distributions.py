@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 import tomli_w
-from _python_distribution import DistributionError, digest, extract_sdist, tomllib, verify_source
+from _python_distribution import DistributionError, confined, digest, extract_sdist, tomllib, verify_source, runtime_options
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = Path('bindings/python/sc-observability-py')
@@ -23,10 +23,10 @@ def run(arguments: list[str], cwd: Path, log: Path) -> None:
         output.flush()
         result = subprocess.run(arguments, cwd=cwd, stdout=output, stderr=subprocess.STDOUT)
     if result.returncode:
-        raise DistributionError(f'command failed ({result.returncode}); see {log}')
+        raise DistributionError(f'command failed ({result.returncode}); see {log}\n' + '\n'.join(log.read_text(errors='replace').splitlines()[-35:]))
 
 
-def prepare(source: Path, output: Path) -> dict:
+def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) -> dict:
     source, output = source.resolve(), output.resolve()
     if output.exists():
         raise DistributionError('refusing to overwrite an immutable distribution stage')
@@ -37,10 +37,22 @@ def prepare(source: Path, output: Path) -> dict:
     helper = source / 'scripts/ci/build_binding_source_bundle.py'
     if not helper.is_file():
         raise DistributionError('shared B.3 bundle helper must be inherited before packaging')
-    for relative in ('python/sc_observability/__init__.pyi', 'python/sc_observability/py.typed',
-                     'tests', 'qualification-suite.json'):
+    for relative in ('python/sc_observability/generated/__init__.pyi', 'python/sc_observability/py.typed', 'tests'):
         if not (project / relative).exists():
             raise DistributionError(f'full B.4 runtime package is not ready: {relative}')
+    suite_path = project / 'qualification-suite.json'
+    if suite_path.is_file():
+        suite = json.loads(suite_path.read_text())
+    elif allow_incomplete_runtime:
+        suite = {'schema_version': 1, 'runtime_complete': False, 'pytest_paths': ['tests'],
+                 'typing_paths': ['tests/typing/test_result_narrowing.py'],
+                 'embedding_manifest': 'examples/rust-python-logging/Cargo.toml'}
+    else:
+        raise DistributionError('missing B.4 runtime qualification contract')
+    if (suite.get('schema_version') != 1 or (suite.get('runtime_complete') is not True and not allow_incomplete_runtime)
+            or suite.get('pytest_paths') != ['tests'] or not suite.get('typing_paths')):
+        raise DistributionError('B.4 full-runtime qualification contract is not complete')
+    runtime_options(suite)
     output.mkdir(parents=True)
     staging = output / 'source'
     staging.mkdir()
@@ -64,15 +76,16 @@ def prepare(source: Path, output: Path) -> dict:
     # Python package data and the unchanged runtime tests are explicit sdist inputs.
     for relative in ('python', 'tests', 'examples'):
         if (project / relative).is_dir():
+            if any(path.is_symlink() for path in (project / relative).rglob('*')):
+                raise DistributionError(f'symlink in Python source inputs: {relative}')
             shutil.copytree(project / relative, staging / relative, dirs_exist_ok=True)
     shutil.copyfile(source / 'LICENSE', staging / 'LICENSE')
-    suite = json.loads((project / 'qualification-suite.json').read_text())
-    if suite.get('schema_version') != 1 or suite.get('runtime_complete') is not True:
-        raise DistributionError('B.4 full-runtime qualification contract is not complete')
-    shutil.copyfile(project / 'qualification-suite.json', staging / 'qualification-suite.json')
-    embedding = source / suite['embedding_manifest']
+    (staging / 'qualification-suite.json').write_text(json.dumps(suite, indent=2) + '\n')
+    embedding = confined(source, suite['embedding_manifest'])
     if not embedding.is_file():
         raise DistributionError('missing real Rust embedding fixture')
+    if any(path.is_symlink() for path in embedding.parent.rglob('*')):
+        raise DistributionError('symlink in embedding source inputs')
     shutil.copytree(embedding.parent, staging / 'embedding', ignore=shutil.ignore_patterns('target'))
     workspace = tomllib.loads((source / 'Cargo.toml').read_text())['workspace']
     embedded = tomllib.loads((staging / 'embedding/Cargo.toml').read_text())
@@ -83,7 +96,11 @@ def prepare(source: Path, output: Path) -> dict:
         for section in ('dependencies', 'dev-dependencies', 'build-dependencies'):
             for name, spec in list(table.get(section, {}).items()):
                 if isinstance(spec, dict) and spec.get('workspace'):
-                    spec = dict(workspace['dependencies'][name]) if isinstance(workspace['dependencies'][name], dict) else {'version': workspace['dependencies'][name]}
+                    inherited = workspace['dependencies'][name]
+                    combined = dict(inherited) if isinstance(inherited, dict) else {'version': inherited}
+                    combined['features'] = sorted(set(combined.get('features', [])) | set(spec.get('features', [])))
+                    combined.update({key: value for key, value in spec.items() if key not in ('workspace', 'features')})
+                    spec = combined
                 if isinstance(spec, dict):
                     if 'path' in spec and 'version' not in spec:
                         raise DistributionError(f'embedding dependency lacks version: {name}')
@@ -97,6 +114,10 @@ def prepare(source: Path, output: Path) -> dict:
     (staging / 'embedding/Cargo.toml').write_text(tomli_w.dumps(embedded))
     manifest = tomllib.loads((staging / 'Cargo.toml').read_text())
     manifest['workspace'] = {}
+    # Cargo's own source listing must not recursively package bundled .crate metadata.
+    # Maturin's explicit sdist includes below retain the complete bundle unchanged.
+    manifest['package']['exclude'] = sorted(set(manifest['package'].get('exclude', [])) | {
+        'rust-bundle/**', 'embedding/**', 'qualification/**', 'distribution-manifest.json'})
     manifest.setdefault('patch', {})['crates-io'] = {
         entry['name']: {'path': f"rust-bundle/{entry['root']}"}
         for entry in evidence['packages'] if entry['name'] != 'sc-observability-py'
@@ -130,11 +151,25 @@ def prepare(source: Path, output: Path) -> dict:
     shutil.copyfile(bundle / 'Cargo.lock', staging / 'embedding/Cargo.lock')
     run(['cargo', 'metadata', '--offline', '--format-version', '1', '--manifest-path', str(staging / 'embedding/Cargo.toml')], staging, log)
     run(['cargo', 'metadata', '--locked', '--offline', '--format-version', '1'], staging, log)
+    # The outer extension/host are separate workspaces: Cargo prunes dev-only
+    # dependencies of bundled packages that are no longer workspace members.
+    # Preserve every selected registry identity exactly; the full reviewed closure
+    # remains independently verified and vendored by the unchanged B.3 bundle.
+    from build_binding_source_bundle import registry_identities
+    reviewed = registry_identities(tomllib.loads((bundle / 'reviewed-source.lock').read_text()))
+    registry_selection = {}
+    for name, lock_path in [('extension', staging / 'Cargo.lock'),
+                            ('embedding', staging / 'embedding/Cargo.lock')]:
+        selected = registry_identities(tomllib.loads(lock_path.read_text()))
+        if any(identity not in reviewed for identity in selected):
+            raise DistributionError(f'{name} registry version/source/checksum drift from reviewed lock')
+        registry_selection[name] = selected
     files = {path.relative_to(staging).as_posix(): digest(path)
              for path in sorted(staging.rglob('*')) if path.is_file()}
     record = {'schema_version': 1, 'source_commit': source_sha, 'version': roots[0]['version'],
-              'publication': 'pending_B.7', 'bundle_manifest_sha256': digest(bundle / 'manifest.json'),
-              'files': files, 'runtime_suite': suite}
+              'publication': 'pending_B.7', 'development_only': allow_incomplete_runtime, 'bundle_manifest_sha256': digest(bundle / 'manifest.json'),
+              'files': files, 'runtime_suite': suite,
+              'registry_selection': registry_selection}
     (staging / 'distribution-manifest.json').write_text(json.dumps(record, indent=2, sort_keys=True) + '\n')
     verify_source(staging)
     run([sys.executable, '-m', 'maturin', 'sdist', '--manifest-path', str(staging / 'Cargo.toml'),
@@ -145,7 +180,7 @@ def prepare(source: Path, output: Path) -> dict:
     extracted = extract_sdist(sdists[0], output / 'verification')
     verify_source(extracted)
     result = {'schema_version': 1, 'source_commit': source_sha, 'version': roots[0]['version'],
-              'sdist': sdists[0].name, 'sdist_sha256': digest(sdists[0]),
+              'development_only': allow_incomplete_runtime, 'sdist': sdists[0].name, 'sdist_sha256': digest(sdists[0]),
               'distribution_manifest_sha256': digest(staging / 'distribution-manifest.json'),
               'prepare_log_sha256': digest(log), 'publication': 'pending_B.7'}
     (output / 'sdist-result.json').write_text(json.dumps(result, indent=2) + '\n')
@@ -156,8 +191,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, default=ROOT)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--allow-incomplete-runtime', action='store_true',
+                        help='development artifacts only; never accepted by final matrix qualification')
     args = parser.parse_args()
-    print(json.dumps(prepare(args.source, args.output), indent=2))
+    print(json.dumps(prepare(args.source, args.output, args.allow_incomplete_runtime), indent=2))
 
 
 if __name__ == '__main__':

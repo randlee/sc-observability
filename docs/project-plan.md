@@ -122,17 +122,20 @@ qualification (B.4a), then Python integration/async support and binding release.
 Go remains future scope. The proposal does not reopen the accepted
 Phase A closure or claim that BTIT's currently open review findings are resolved.
 
-### B.3a — TypeScript/Tauri bindings
+B.3a implementation now includes the generated TypeScript package, isolated
+Tauri adapter, IPC consumer example, and binding validation handoff; its sprint
+record remains the source of platform qualification and merge evidence.
 
-The TypeScript/Tauri binding sprint is tracked in
-[`plans/phase-b/sprint-b-3a-typescript.md`](./plans/phase-b/sprint-b-3a-typescript.md)
-and its completion handoff is
-[`plans/phase-b/handoff-b-3a.md`](./plans/phase-b/handoff-b-3a.md). The
-correction branch consumes the canonical B.3 schema and shared B.3b runtime,
-provides a generated nonthrowing TypeScript client, and keeps Tauri host
-ownership of lifecycle, policy, provenance and level changes. Locked schema,
-package, adapter and example checks are run by the three-platform workflow;
-publication and downstream B.4 integration remain separately gated.
+### B.3b — Shared native binding runtime
+
+Implementation and developer qualification are complete on
+`feature/phase-b-3b-native-runtime` (worktree
+`/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime`).
+The [handoff](plans/phase-b/handoff-b-3b.md) records both native backends,
+bounded helpers/operations/observers, all 26 contract cases in debug/release on
+Linux/macOS/Windows, and the isolated packaged consumer. Public API scope is
+independently reviewed; consolidated QA, owner-deferred contract acceptance and
+B.7 publication remain separate gates.
 
 ### B.P1 — Per-logger runtime level core
 
@@ -262,24 +265,27 @@ still uses the newly-deprecated legacy wrapper types (`IdentityError` in
 compatibility path in `control.rs`/`handle.rs`) and cannot be edited without
 violating `import-provenance.json`'s
 pinned source bytes. A workspace- or bridge-wide clippy `-A deprecated`
-suppression was rejected as too broad; the replacement — narrow, per-call-site
-`#[allow(deprecated, reason = ...)]` annotations recorded as a new documented
-adaptation kind in `import-provenance.json`, coordinated with lobs, who owns
-warning-allowance edits — is in progress and not yet landed.
+suppression was rejected as too broad; the landed replacement is narrow,
+per-call-site `#[allow(deprecated, reason = ...)]` annotations recorded as
+post-import adaptations in a separate `docs/plans/phase-b/
+post-import-adaptations.json` manifest (owned by lobs), validated via
+`validate_log_import.py --post-import-adaptations`, without altering
+`import-provenance.json`'s original pinned import manifest.
 `.github/workflows/ci.yml`'s clippy job remains a single `-D warnings` step.
-Broader AC-by-AC reconciliation, the four handoffs' final integration-status
-update, and independent QA/coordinator completeness review remain in
-progress; this entry does not claim closure.
+Broader AC-by-AC reconciliation and the four handoffs' final integration-status
+update are complete; independent QA/coordinator completeness review remains
+pending. This entry does not itself claim that review.
 
 ### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
 
 [`plans/phase-b/task-b-1-provenance-prep.md`](./plans/phase-b/task-b-1-provenance-prep.md)
-builds and proves `scripts/ci/validate_log_import.py` (B.1 deliverable 3) in
-parallel with B.P3's active source corrections, so the tool is ready once B.1
-has an accepted source to copy. It is preparation tooling only: no BTIT
-source is copied, no source approval is granted, and no real
-`import-provenance.json` exists. Full B.1 remains blocked on B.P3's accepted
-source handoff, which QA1 returned FAIL on pending fixes.
+built and proved `scripts/ci/validate_log_import.py` (B.1 deliverable 3) in
+parallel with B.P3's then-active source corrections, ahead of B.1 having an
+accepted source to copy. At the time it was preparation tooling only: no
+BTIT source was copied, no source approval was granted, and no real
+`import-provenance.json` existed. B.P3's source handoff has since been
+accepted, and the B.1 copy section above records that this validator's real
+`import-provenance.json` now exists and B.1 has copied the accepted source.
 
 ## Rule
 
@@ -377,3 +383,23 @@ that integrate against the shipped public API.
      CLI surface precisely enough for implementation and review
    - `qm-comp` cross-document consistency review passes; all three docs are
      confirmed mutually consistent before merge
+
+### B.2 — Six-package Rust qualification
+
+[B.2 implementation](plans/phase-b/sprint-b-2-publish-rust.md) stages the six
+public Rust packages at `1.4.0`, preserving historical B.P2 artifacts and B.1
+source provenance. The [handoff](plans/phase-b/handoff-b-2.md) pins the final
+candidate source, archives, normalized manifests, isolated platform consumers
+and scoped API approval. The [checklist](plans/phase-b/checklist-b-2-qualification.md)
+separates implementation/verification from lead completeness and independent
+QA. Publication and the later registry-only consumer proof remain B.7 gates.
+
+### B.3 — Shared neutral DTO/schema
+
+B.3 implements `sc-observability-dto`, checked core conversions, the canonical
+input/output schema, schema-only TypeScript/Python projections, frozen conformance
+fixtures and the real isolated source-bundle helper. The implementation handoff
+is [`plans/phase-b/handoff-b-3.md`](./plans/phase-b/handoff-b-3.md), including exact
+qualified B.2 archive provenance and the lead's crate-specific wire API approval.
+Implementation validation passed; consolidated Phase B QA/ordered merges and
+B.7 registry-only publication proof remain separate.

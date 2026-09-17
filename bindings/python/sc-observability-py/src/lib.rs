@@ -20,6 +20,7 @@ use sc_observability_types::{LevelChangeSource, LevelFilter, ServiceName};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -79,6 +80,14 @@ fn result_json<T: Serialize>(value: Result<T, Failure>) -> String {
         Err(_) => {
             r#"{"kind":"error","error":{"kind":"internal","at":"1970-01-01T00:00:00Z","code":"SC_OBSERVABILITY_BINDING_INTERNAL","message":"failed to serialize binding result","remediation":{"kind":"recoverable","steps":["Inspect the retained status and restore the affected host or client"]}}}"#.into()
         }
+    }
+}
+
+/// No Rust panic may cross a public PyO3 call boundary as `PanicException`.
+fn contained_json(call: impl FnOnce() -> String) -> String {
+    match catch_unwind(AssertUnwindSafe(call)) {
+        Ok(result) => result,
+        Err(_) => result_json::<()>(Err(internal_failure("native Python entrypoint panicked"))),
     }
 }
 
@@ -162,6 +171,11 @@ struct NativeAttachedLogger {
     backend: Arc<dyn HostLoggingBackend>,
 }
 
+// This serializes only the check-and-install transition.  The host backend
+// itself remains retained exclusively by its concrete Python module slot; no
+// process-global backend or ownership capability is introduced.
+static HOST_INSTALLATION_LOCK: Mutex<()> = Mutex::new(());
+
 fn log_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, event: &str) -> String {
     let result = parse_value(event, "event")
         .and_then(sc_observability_dto::decode_event)
@@ -225,96 +239,112 @@ impl NativeLogger {
 #[pymethods]
 impl NativeLogger {
     fn log(&self, py: Python<'_>, event: &str) -> String {
-        log_backend(Arc::new(self.backend.clone()), py, event)
+        contained_json(|| log_backend(Arc::new(self.backend.clone()), py, event))
     }
 
     fn query(&self, py: Python<'_>, query: &str) -> String {
-        query_backend(Arc::new(self.backend.clone()), py, query)
+        contained_json(|| query_backend(Arc::new(self.backend.clone()), py, query))
     }
 
     fn health(&self) -> String {
-        result_json(self.backend.health())
+        contained_json(|| result_json(self.backend.health()))
     }
 
     fn flush(&self, py: Python<'_>, timeout: &str) -> String {
-        flush_backend(Arc::new(self.backend.clone()), py, timeout)
+        contained_json(|| flush_backend(Arc::new(self.backend.clone()), py, timeout))
     }
 
     fn shutdown(&self, py: Python<'_>, timeout: &str) -> String {
-        let result = parse_timeout(timeout).and_then(|timeout| {
-            let operation = self.start_shutdown()?;
-            py.detach(move || operation.wait(timeout))
-        });
-        result_json(result)
+        contained_json(|| {
+            let result = parse_timeout(timeout).and_then(|timeout| {
+                let operation = self.start_shutdown()?;
+                py.detach(move || operation.wait(timeout))
+            });
+            result_json(result)
+        })
     }
 
     fn wait_stopped(&self, py: Python<'_>, timeout: &str) -> String {
-        let result = parse_timeout(timeout)
-            .and_then(|timeout| py.detach(move || self.wait_shutdown(timeout)));
-        result_json(result)
+        contained_json(|| {
+            let result = parse_timeout(timeout)
+                .and_then(|timeout| py.detach(move || self.wait_shutdown(timeout)));
+            result_json(result)
+        })
     }
 
     fn elevate_level(&self, level_value: &str, source_value: &str) -> String {
-        let result = level(level_value).and_then(|level_value| {
-            source(source_value).and_then(|source_value| {
+        contained_json(|| {
+            let result = level(level_value).and_then(|level_value| {
+                source(source_value).and_then(|source_value| {
+                    let mut state = self
+                        .owned
+                        .lock()
+                        .map_err(|_| internal_failure("owned logger state lock poisoned"))?;
+                    state.owner.elevate_level(level_value, source_value)
+                })
+            });
+            result_json::<LevelChangeDto>(result)
+        })
+    }
+
+    fn reset_level(&self, source_value: &str) -> String {
+        contained_json(|| {
+            let result = source(source_value).and_then(|source_value| {
                 let mut state = self
                     .owned
                     .lock()
                     .map_err(|_| internal_failure("owned logger state lock poisoned"))?;
-                state.owner.elevate_level(level_value, source_value)
-            })
-        });
-        result_json::<LevelChangeDto>(result)
-    }
-
-    fn reset_level(&self, source_value: &str) -> String {
-        let result = source(source_value).and_then(|source_value| {
-            let mut state = self
-                .owned
-                .lock()
-                .map_err(|_| internal_failure("owned logger state lock poisoned"))?;
-            state.owner.reset_level(source_value)
-        });
-        result_json::<LevelChangeDto>(result)
+                state.owner.reset_level(source_value)
+            });
+            result_json::<LevelChangeDto>(result)
+        })
     }
 }
 
 #[pymethods]
 impl NativeAttachedLogger {
     fn log(&self, py: Python<'_>, event: &str) -> String {
-        log_backend(self.backend.clone(), py, event)
+        contained_json(|| log_backend(self.backend.clone(), py, event))
     }
 
     fn query(&self, py: Python<'_>, query: &str) -> String {
-        query_backend(self.backend.clone(), py, query)
+        contained_json(|| query_backend(self.backend.clone(), py, query))
     }
 
     fn health(&self) -> String {
-        result_json(self.backend.health())
+        contained_json(|| result_json(self.backend.health()))
     }
 
     fn flush(&self, py: Python<'_>, timeout: &str) -> String {
-        flush_backend(self.backend.clone(), py, timeout)
+        contained_json(|| flush_backend(self.backend.clone(), py, timeout))
     }
 }
 
 #[pyfunction]
 fn create_owned(py: Python<'_>, config: &str) -> PyResult<(Option<Py<NativeLogger>>, String)> {
-    match logger_config(config).and_then(create_core_backend) {
-        Ok((owner, backend)) => {
-            let logger = Py::new(
-                py,
-                NativeLogger {
-                    backend,
-                    owned: Mutex::new(OwnedState {
-                        owner,
-                        shutdown: None,
-                    }),
-                },
-            )?;
-            Ok((Some(logger), result_json::<()>(Ok(()))))
+    match catch_unwind(AssertUnwindSafe(|| {
+        match logger_config(config).and_then(create_core_backend) {
+            Ok((owner, backend)) => {
+                let logger = Py::new(
+                    py,
+                    NativeLogger {
+                        backend,
+                        owned: Mutex::new(OwnedState {
+                            owner,
+                            shutdown: None,
+                        }),
+                    },
+                )?;
+                Ok((Some(logger), result_json::<()>(Ok(()))))
+            }
+            Err(error) => Ok((None, result_json::<()>(Err(error)))),
         }
-        Err(error) => Ok((None, result_json::<()>(Err(error)))),
+    })) {
+        Ok(result) => result,
+        Err(_) => Ok((
+            None,
+            result_json::<()>(Err(internal_failure("native create_owned panicked"))),
+        )),
     }
 }
 
@@ -327,6 +357,9 @@ pub fn install_host_logger(
     module: &Bound<'_, PyModule>,
     backend: Arc<dyn HostLoggingBackend>,
 ) -> Result<(), Failure> {
+    let _installation = HOST_INSTALLATION_LOCK
+        .lock()
+        .map_err(|_| internal_failure("host installation lock poisoned"))?;
     let installed = module
         .hasattr("_sc_observability_host_backend")
         .map_err(|error| {
@@ -350,6 +383,18 @@ pub fn install_host_logger(
 fn get_installed_host_logger(
     py: Python<'_>,
 ) -> PyResult<(Option<Py<NativeAttachedLogger>>, String)> {
+    match catch_unwind(AssertUnwindSafe(|| get_installed_host_logger_inner(py))) {
+        Ok(result) => result,
+        Err(_) => Ok((
+            None,
+            result_json::<()>(Err(internal_failure("native host factory panicked"))),
+        )),
+    }
+}
+
+fn get_installed_host_logger_inner(
+    py: Python<'_>,
+) -> PyResult<(Option<Py<NativeAttachedLogger>>, String)> {
     let module = match PyModule::import(py, "sc_observability._native") {
         Ok(module) => module,
         Err(error) => {
@@ -361,6 +406,14 @@ fn get_installed_host_logger(
             ));
         }
     };
+    attached_logger_from_module(py, &module)
+}
+
+/// Projects a retained module host slot to one non-owning Python handle.
+fn attached_logger_from_module(
+    py: Python<'_>,
+    module: &Bound<'_, PyModule>,
+) -> PyResult<(Option<Py<NativeAttachedLogger>>, String)> {
     let slot = match module.getattr("_sc_observability_host_backend") {
         Ok(slot) => slot,
         Err(_) => {
@@ -397,4 +450,226 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(create_owned, module)?)?;
     module.add_function(wrap_pyfunction!(get_installed_host_logger, module)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sc_observability_dto::error_codes::{
+        SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED,
+        SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED,
+    };
+    use std::sync::{
+        Barrier,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use std::thread;
+
+    #[test]
+    fn host_installation_is_immutable_per_module() {
+        Python::initialize();
+        let passed = Python::attach(|py| {
+            let module = match PyModule::new(py, "_b4_host_install_test") {
+                Ok(module) => module,
+                Err(_) => return false,
+            };
+            let service = match ServiceName::new("b4-host-install-test") {
+                Ok(service) => service,
+                Err(_) => return false,
+            };
+            let mut config = sc_observability::LoggerConfig::default_for(
+                service,
+                std::env::temp_dir().join("sc-observability-b4-host-install-test"),
+            );
+            config.enable_console_sink = false;
+            let (owner, backend) = match create_core_backend(config) {
+                Ok(pair) => pair,
+                Err(_) => return false,
+            };
+            let first: Arc<dyn HostLoggingBackend> = Arc::new(backend.clone());
+            let second: Arc<dyn HostLoggingBackend> = Arc::new(backend);
+            let first_install = install_host_logger(&module, first).is_ok();
+            let duplicate_is_rejected = matches!(
+                install_host_logger(&module, second),
+                Err(Failure::Unavailable { diagnostic })
+                    if diagnostic.code == SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED
+            );
+            let retained_slot = match module.getattr("_sc_observability_host_backend") {
+                Ok(slot) => slot.extract::<Py<HostSlot>>().is_ok(),
+                Err(_) => false,
+            };
+            let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
+            first_install && duplicate_is_rejected && retained_slot && stopped
+        });
+        assert!(passed);
+    }
+
+    #[test]
+    fn attached_factory_preserves_host_ownership_and_retained_health() {
+        Python::initialize();
+        let passed = Python::attach(|py| {
+            let module = match PyModule::new(py, "_b4_attached_host_test") {
+                Ok(module) => module,
+                Err(_) => return false,
+            };
+            let missing_is_tagged = matches!(
+                attached_logger_from_module(py, &module),
+                Ok((None, result)) if result.contains(SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED)
+            );
+            let service = match ServiceName::new("b4-attached-host-test") {
+                Ok(service) => service,
+                Err(_) => return false,
+            };
+            let mut config = sc_observability::LoggerConfig::default_for(
+                service,
+                std::env::temp_dir().join("sc-observability-b4-attached-host-test"),
+            );
+            config.enable_console_sink = false;
+            let (owner, backend) = match create_core_backend(config) {
+                Ok(pair) => pair,
+                Err(_) => return false,
+            };
+            let host: Arc<dyn HostLoggingBackend> = Arc::new(backend);
+            if install_host_logger(&module, host).is_err() {
+                return false;
+            }
+            let attached = match attached_logger_from_module(py, &module) {
+                Ok((Some(attached), result)) if result.contains("\"kind\":\"ok\"") => attached,
+                _ => return false,
+            };
+            let event = r#"{"schema_version":1,"level":"info","target":"python.attached","action":"host-owned","fields":{}}"#;
+            let admitted = attached
+                .borrow(py)
+                .log(py, event)
+                .contains("\"kind\":\"ok\"");
+            let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
+            let closed = attached
+                .borrow(py)
+                .log(py, event)
+                .contains(sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED);
+            let retained_health = attached.borrow(py).health().contains("\"kind\":\"ok\"");
+            missing_is_tagged && admitted && stopped && closed && retained_health
+        });
+        assert!(passed);
+    }
+
+    #[test]
+    fn concurrent_host_installs_have_exactly_one_winner() {
+        Python::initialize();
+        let setup = Python::attach(|py| {
+            let module = match PyModule::new(py, "_b4_concurrent_host_test") {
+                Ok(module) => module,
+                Err(_) => return None,
+            };
+            let module_refs = (0..8).map(|_| module.clone().unbind()).collect::<Vec<_>>();
+            let service = match ServiceName::new("b4-concurrent-host-test") {
+                Ok(service) => service,
+                Err(_) => return None,
+            };
+            let config = sc_observability::LoggerConfig::default_for(
+                service,
+                std::env::temp_dir().join("sc-observability-b4-concurrent-host-test"),
+            );
+            match create_core_backend(config) {
+                Ok((owner, backend)) => Some((module_refs, owner, Arc::new(backend))),
+                Err(_) => None,
+            }
+        });
+        let Some((module_refs, owner, backend)) = setup else {
+            assert!(false, "could not create concurrent host-install fixture");
+            return;
+        };
+        let start = Arc::new(Barrier::new(module_refs.len()));
+        let winners = Arc::new(AtomicUsize::new(0));
+        let rejects = Arc::new(AtomicUsize::new(0));
+        let workers = module_refs
+            .into_iter()
+            .map(|module| {
+                let start = start.clone();
+                let winners = winners.clone();
+                let rejects = rejects.clone();
+                let backend: Arc<dyn HostLoggingBackend> = backend.clone();
+                thread::spawn(move || {
+                    start.wait();
+                    Python::attach(|py| match install_host_logger(&module.bind(py), backend) {
+                        Ok(()) => winners.fetch_add(1, Ordering::SeqCst),
+                        Err(Failure::Unavailable { diagnostic })
+                            if diagnostic.code
+                                == SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED =>
+                        {
+                            rejects.fetch_add(1, Ordering::SeqCst)
+                        }
+                        Err(_) => 0,
+                    });
+                })
+            })
+            .collect::<Vec<_>>();
+        let joined = workers.into_iter().all(|worker| worker.join().is_ok());
+        let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
+        assert!(joined && stopped);
+        assert_eq!(winners.load(Ordering::SeqCst), 1);
+        assert_eq!(rejects.load(Ordering::SeqCst), 7);
+    }
+
+    #[test]
+    fn attached_python_producers_do_not_contend_for_dispatch() {
+        Python::initialize();
+        let setup = Python::attach(|py| {
+            let module = match PyModule::new(py, "_b4_attached_producer_test") {
+                Ok(module) => module,
+                Err(_) => return None,
+            };
+            let service = match ServiceName::new("b4-attached-producer-test") {
+                Ok(service) => service,
+                Err(_) => return None,
+            };
+            let config = sc_observability::LoggerConfig::default_for(
+                service,
+                std::env::temp_dir().join("sc-observability-b4-attached-producer-test"),
+            );
+            let (owner, backend) = match create_core_backend(config) {
+                Ok(pair) => pair,
+                Err(_) => return None,
+            };
+            let host: Arc<dyn HostLoggingBackend> = Arc::new(backend);
+            if install_host_logger(&module, host).is_err() {
+                return None;
+            }
+            let attached = match attached_logger_from_module(py, &module) {
+                Ok((Some(attached), _)) => attached,
+                _ => return None,
+            };
+            Some((
+                (0..32).map(|_| attached.clone_ref(py)).collect::<Vec<_>>(),
+                owner,
+            ))
+        });
+        let Some((attached, owner)) = setup else {
+            assert!(false, "could not create attached producer fixture");
+            return;
+        };
+        let start = Arc::new(Barrier::new(attached.len()));
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let workers = attached
+            .into_iter()
+            .map(|attached| {
+                let start = start.clone();
+                let accepted = accepted.clone();
+                thread::spawn(move || {
+                    start.wait();
+                    Python::attach(|py| {
+                        let event = r#"{"schema_version":1,"level":"info","target":"python.attached","action":"parallel","fields":{}}"#;
+                        let result = attached.bind(py).borrow().log(py, event);
+                        if result.contains("\"kind\":\"ok\"") {
+                            accepted.fetch_add(1, Ordering::SeqCst);
+                        }
+                    });
+                })
+            })
+            .collect::<Vec<_>>();
+        let joined = workers.into_iter().all(|worker| worker.join().is_ok());
+        let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
+        assert!(joined && stopped);
+        assert_eq!(accepted.load(Ordering::SeqCst), 32);
+    }
 }

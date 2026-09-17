@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "candidate_version": "1.4.0",
+  "root_license_sha256": "61a1220e34ad99947642e5ad0aa633df3a194191fbfb94caa5687ab105316d64",
+  "license_copies": {
+    "crates/sc-observability-types/LICENSE": "7f44270f2acab888767923afbaa7d6267cb893c6",
+    "crates/sc-observability/LICENSE": "7f44270f2acab888767923afbaa7d6267cb893c6",
+    "crates/sc-observe/LICENSE": "7f44270f2acab888767923afbaa7d6267cb893c6",
+    "crates/sc-observability-otlp/LICENSE": "7f44270f2acab888767923afbaa7d6267cb893c6",
+    "crates/sc-observability-log-macros/LICENSE": "7f44270f2acab888767923afbaa7d6267cb893c6",
+    "crates/sc-observability-log/LICENSE": "7f44270f2acab888767923afbaa7d6267cb893c6"
+  },
+  "publish_flags": {
+    "crates/sc-observability-log/Cargo.toml": {
+      "before_blob": "421abe537fc8e475a5d48f44c9167c2492bc5607",
+      "after_blob": "b83cdb8585569662f9c20fe53379eb075f06f6f3"
+    },
+    "crates/sc-observability-log-macros/Cargo.toml": {
+      "before_blob": "e0c3453d625f90a16d8860c577f4f1dfda2ee058",
+      "after_blob": "38ccc81fdc54c0ed68e375606ab75ddb36cfa5a2"
+    }
+  },
+  "reason": "Package MIT license bytes and qualify the initially public bridge/macros; no runtime source changes or publication approval."
+}
