@@ -39,7 +39,12 @@ def source_tree_sha256(root: Path) -> str:
 
 
 def checked_run(command: list[str], cwd: Path) -> str:
-    return subprocess.run(command, cwd=cwd, check=True, text=True, capture_output=True).stdout
+    result = subprocess.run(command, cwd=cwd, text=True, capture_output=True)
+    if result.returncode != 0:
+        raise SystemExit(
+            f"command failed ({result.returncode}): {' '.join(command)}\n{result.stderr}"
+        )
+    return result.stdout
 
 
 def normalized_manifest(path: Path, version: str) -> bytes:
