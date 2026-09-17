@@ -672,4 +672,59 @@ mod tests {
         assert!(joined && stopped);
         assert_eq!(accepted.load(Ordering::SeqCst), 32);
     }
+
+    #[test]
+    fn module_collection_keeps_live_attached_handle_nonowning() {
+        Python::initialize();
+        let setup = Python::attach(|py| {
+            let module = match PyModule::new(py, "_b4_module_collection_test") {
+                Ok(module) => module,
+                Err(_) => return None,
+            };
+            let service = match ServiceName::new("b4-module-collection-test") {
+                Ok(service) => service,
+                Err(_) => return None,
+            };
+            let config = sc_observability::LoggerConfig::default_for(
+                service,
+                std::env::temp_dir().join("sc-observability-b4-module-collection-test"),
+            );
+            let (owner, backend) = match create_core_backend(config) {
+                Ok(pair) => pair,
+                Err(_) => return None,
+            };
+            if install_host_logger(&module, Arc::new(backend)).is_err() {
+                return None;
+            }
+            let attached = match attached_logger_from_module(py, &module) {
+                Ok((Some(attached), _)) => attached,
+                _ => return None,
+            };
+            // The attached handle must keep the backend Arc, not the module or
+            // the host owner. Dropping this module therefore cannot stop it.
+            drop(module);
+            Some((owner, attached))
+        });
+        let Some((owner, attached)) = setup else {
+            assert!(false, "could not create module collection fixture");
+            return;
+        };
+        let active = Python::attach(|py| {
+            let event = r#"{"schema_version":1,"level":"info","target":"python.attached","action":"module-collected","fields":{}}"#;
+            attached
+                .bind(py)
+                .borrow()
+                .log(py, event)
+                .contains("\"kind\":\"ok\"")
+        });
+        let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
+        let retained = Python::attach(|py| {
+            attached
+                .bind(py)
+                .borrow()
+                .health()
+                .contains("\"kind\":\"ok\"")
+        });
+        assert!(active && stopped && retained);
+    }
 }

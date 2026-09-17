@@ -10,6 +10,8 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -184,3 +186,24 @@ def test_public_operation_race_keeps_every_result_tagged(tmp_path: Path) -> None
     assert isinstance(logger.wait_stopped(), Ok)
     retained = logger.health()
     assert isinstance(retained, Ok)
+
+
+def test_owned_gc_and_interpreter_teardown_do_not_hang(tmp_path: Path) -> None:
+    """A clean installed interpreter may release an unclosed owned handle."""
+    root = repr(str(tmp_path / "gc"))
+    program = f"""
+import gc
+from sc_observability import LoggerConfig, Ok, create_logger
+created = create_logger(LoggerConfig(service='python-runtime-gc', log_root={root!s}))
+assert isinstance(created, Ok), created
+del created
+gc.collect()
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", program],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert completed.returncode == 0, completed.stderr

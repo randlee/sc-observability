@@ -25,7 +25,7 @@ malformed native payloads and contained native panics return tagged failures.
 `bash scripts/ci/validate_python_bindings.sh` passes with CPython 3.10.21:
 the generated/stub checks and strict Result narrowing fixture pass; eight
 facade adversarial tests pass; a locked wheel is built and installed into a
-clean environment for four owned lifecycle/isolation/synchronized-N=32,
+clean environment for five owned lifecycle/isolation/synchronized-N=32,
 level-transition and lifecycle-race tests; native binding tests pass; and
 `cargo run -p rust-python-logging` proves a single writer accepts correlated
 Rust and Python records, redacts both bearer values, supports querying and
@@ -37,6 +37,10 @@ install callers with one winner and seven exact duplicate-install failures, and
 32 simultaneous attached PyO3 producer calls with 32 tagged admissions. The
 host install check-and-install transition is serialized without storing a global
 backend, so free-threaded interpreter contenders cannot replace a module slot.
+An owned-handle subprocess verifies GC/interpreter teardown exits without a
+hang, while the module-collection fixture proves a live attached handle retains
+only the backend: it remains usable after module collection, does not transfer
+host ownership, and retains health after the host closes.
 
 This handoff remains an implementation evidence record until coordinator
 completeness review and the sprint closeout update are complete.
