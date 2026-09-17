@@ -84,7 +84,6 @@ def stage_host(destination, bundle, report):
     report['observation_module_sha256'] = digest(destination / 'src/qualification.rs')
     config = json.loads((destination / 'tauri.conf.json').read_text(encoding='utf-8'))
     config['app']['withGlobalTauri'] = True
-    config['bundle']['icon'] = ['icons/icon.png']
     (destination / 'tauri.conf.json').write_text(json.dumps(config, indent=2))
     manifest = (destination / 'Cargo.toml').read_text(encoding='utf-8')
     entries = {entry['name']: entry for entry in bundle['packages']}

@@ -8,6 +8,13 @@ from pathlib import Path
 
 
 def execute(sandbox, executable: Path, host: Path, scratch: Path, output: Path):
+    # Windows firewall policy is per-command; retain it for the whole webview
+    # lifetime just as sandbox.run does for Cargo and denial probes.
+    with sandbox.network_denial():
+        return _execute(sandbox, executable, host, scratch, output)
+
+
+def _execute(sandbox, executable: Path, host: Path, scratch: Path, output: Path):
     control = scratch / 'output-control'
     sandbox.env['SC_TAURI_QUALIFICATION_CONTROL'] = str(control)
     drained = threading.Event()

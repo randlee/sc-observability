@@ -13,6 +13,7 @@ import sysconfig
 import time
 import uuid
 from pathlib import Path
+from contextlib import contextmanager
 
 from _python_distribution import DistributionError
 
@@ -133,28 +134,37 @@ class Sandbox:
     def __exit__(self, *_):
         if self.system == 'Windows':
             try:
-                self.powershell(f"Get-NetFirewallRule -DisplayName '{self.firewall}' "
-                                "-ErrorAction SilentlyContinue | Remove-NetFirewallRule")
+                self.remove_firewall()
             finally:
                 for path, saved in reversed(self.acls):
                     subprocess.run(['icacls', str(path.parent), '/restore', str(saved), '/C'],
                                    check=True, stdout=subprocess.DEVNULL)
         self.cache_probe.unlink(missing_ok=True)
 
+    def remove_firewall(self):
+        # Filtering the existing collection also succeeds when our rule is
+        # already absent. Never remove another process's qualification rule.
+        self.powershell("Get-NetFirewallRule | Where-Object { $_.DisplayName -eq "
+                        f"'{self.firewall}' }} | Remove-NetFirewallRule")
+
+    @contextmanager
+    def network_denial(self):
+        """Cover one complete command or real-webview process lifetime."""
+        if self.system != 'Windows':
+            yield
+            return
+        try:
+            self.powershell(f"New-NetFirewallRule -DisplayName '{self.firewall}' "
+                            "-Direction Outbound -Action Block -Profile Any | Out-Null")
+            yield
+        finally:
+            self.remove_firewall()
+
     def run(self, command: list[str], cwd: Path, *, expect_failure: bool = False) -> str:
         print('B4A_COMMAND ' + json.dumps(command), flush=True)
         started = time.monotonic()
-        try:
-            if self.system == 'Windows':
-                # Every artifact command has network denied. Release the rule
-                # between commands so the ephemeral CI agent can report progress.
-                self.powershell(f"New-NetFirewallRule -DisplayName '{self.firewall}' "
-                                "-Direction Outbound -Action Block -Profile Any | Out-Null")
+        with self.network_denial():
             result = bounded_command(self.prefix + command, cwd, self.env)
-        finally:
-            if self.system == 'Windows':
-                self.powershell(f"Get-NetFirewallRule -DisplayName '{self.firewall}' "
-                                "-ErrorAction SilentlyContinue | Remove-NetFirewallRule")
         print(f'B4A_EXIT {result.returncode} after {time.monotonic() - started:.2f}s', flush=True)
         self.commands.append({'command': command, 'exit_code': result.returncode,
                               'stdout': result.stdout, 'stderr': result.stderr})

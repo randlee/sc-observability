@@ -15,6 +15,7 @@ if [[ ${1:-} != '--platform' ]]; then
 fi
 python3 -m unittest discover -s scripts/ci/tests -p test_binding_source_bundle.py
 python3 -m unittest discover -s scripts/ci/tests -p test_tauri_platform_evidence.py
+python3 -m unittest discover -s scripts/ci/tests -p test_tauri_network_scope.py
 python3 scripts/ci/validate_binding_runtime.py --platform-only --evidence target/tauri-qualification/native-runtime
 cargo test --locked --manifest-path bindings/tauri/Cargo.toml --features test
 qualification_args=(--evidence target/tauri-qualification)
