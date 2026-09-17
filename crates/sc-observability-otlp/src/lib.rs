@@ -845,6 +845,36 @@ mod tests {
     }
 
     #[test]
+    fn typed_span_assembler_matches_legacy_completion() {
+        let trace = trace_context();
+        let started = SpanRecord::<SpanStarted>::new(
+            Timestamp::UNIX_EPOCH,
+            service_name(),
+            ActionName::new("agent.run").expect("valid action"),
+            trace.clone(),
+            Map::new(),
+        );
+        let ended = started
+            .clone()
+            .end(sc_observability_types::SpanStatus::Ok, DurationMs::from(42));
+        let mut assembler = SpanAssembler::new();
+
+        assert!(
+            assembler
+                .push_typed(SpanSignal::Started(started))
+                .expect("typed started")
+                .is_none()
+        );
+        let complete = assembler
+            .push_typed(SpanSignal::Ended(ended))
+            .expect("typed ended")
+            .expect("complete span");
+
+        assert!(complete.events.is_empty());
+        assert_eq!(complete.record.duration_ms(), Some(DurationMs::from(42)));
+    }
+
+    #[test]
     fn span_assembler_reports_missing_event_buffer_explicitly() {
         let trace = trace_context();
         let started = SpanRecord::<SpanStarted>::new(
@@ -1091,6 +1121,17 @@ mod tests {
 
         telemetry.shutdown().expect("first shutdown");
         telemetry.shutdown().expect("second shutdown");
+    }
+
+    #[test]
+    fn typed_telemetry_lifecycle_preserves_fail_open_and_repeat_shutdown() {
+        let telemetry = Telemetry::new_typed(telemetry_config()).expect("typed telemetry");
+
+        telemetry
+            .flush_typed()
+            .expect("typed flush remains fail-open");
+        telemetry.shutdown_typed().expect("typed first shutdown");
+        telemetry.shutdown_typed().expect("typed repeated shutdown");
     }
 
     #[test]

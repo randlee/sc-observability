@@ -458,7 +458,45 @@ fn invalid_transport_value_typed(message: &str, remediation: &str) -> InitFailur
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sc_observability_types::ServiceName;
+    use sc_observability_types::{DiagnosticInfo, ServiceName};
+
+    #[test]
+    fn typed_config_entry_points_preserve_legacy_diagnostics() {
+        fn assert_stable_diagnostic_parity(
+            legacy: &sc_observability_types::Diagnostic,
+            typed: &sc_observability_types::Diagnostic,
+        ) {
+            assert_eq!(legacy.code, typed.code);
+            assert_eq!(legacy.message, typed.message);
+            assert_eq!(legacy.cause, typed.cause);
+            assert_eq!(legacy.remediation, typed.remediation);
+            assert_eq!(legacy.docs, typed.docs);
+            assert_eq!(legacy.details, typed.details);
+        }
+
+        let legacy_endpoint = OtlpEndpoint::new("not-a-url").expect_err("legacy endpoint");
+        let typed_endpoint = OtlpEndpoint::new_typed("not-a-url").expect_err("typed endpoint");
+        assert_stable_diagnostic_parity(legacy_endpoint.diagnostic(), typed_endpoint.diagnostic());
+
+        let legacy_header = AuthHeader::new(" ").expect_err("legacy header");
+        let typed_header = AuthHeader::new_typed(" ").expect_err("typed header");
+        assert_stable_diagnostic_parity(legacy_header.diagnostic(), typed_header.diagnostic());
+
+        let transport = OtelConfig {
+            enabled: true,
+            endpoint: None,
+            ..OtelConfig::default()
+        };
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport.clone())
+            .build()
+            .expect_err("legacy configuration");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport)
+            .build_typed()
+            .expect_err("typed configuration");
+        assert_stable_diagnostic_parity(legacy.diagnostic(), typed.diagnostic());
+    }
 
     #[test]
     fn otlp_endpoint_accepts_valid_http_and_https_values() {
