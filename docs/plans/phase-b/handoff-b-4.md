@@ -99,7 +99,7 @@ another worker or conversion path.
 | `cargo clippy --locked -p sc-observability-py --all-targets -- -D warnings` | green; included in the Python validator | covered |
 | `validate_dependency_bans.sh` | green | covered |
 | `validate_docs_consistency.sh` | green | covered |
-| Linux x86_64 source CI | [run 35212052668](https://github.com/randlee/sc-observability/actions/runs/35212052668) passed at `8bdae14` | covered |
+| Linux x86_64 source CI | [run 35212196675](https://github.com/randlee/sc-observability/actions/runs/35212196675) passed at `f5975f9` | covered |
 | B.4a wheel/sdist matrix | owned by B.4a and not a B.4 completion substitute | external qualification |
 
 This handoff remains an implementation evidence record until coordinator
