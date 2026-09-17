@@ -10,10 +10,11 @@
 
 use pyo3::prelude::*;
 use pyo3::sync::MutexExt;
-use sc_observability_binding_runtime::{
-    CoreLoggerBackend, CoreLoggerOwner, HostLoggingBackend, Operation, ProducerOrigin,
-    create_core_backend,
+pub use sc_observability_binding_runtime::{
+    BridgeControlBackend, CoreLoggerBackend, CoreLoggerOwner, HostLoggingBackend, Operation,
+    OperationState,
 };
+use sc_observability_binding_runtime::{ProducerOrigin, create_core_backend};
 use sc_observability_dto::{
     Failure, LevelChangeDto, LogEventDto, LogHealthDto, LogQueryDto, ResultDto,
 };
@@ -23,6 +24,11 @@ use serde::Serialize;
 use serde_json::Value;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex};
+#[cfg(feature = "test-hooks")]
+use std::sync::{
+    Condvar,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 #[derive(Debug, Deserialize)]
@@ -166,6 +172,8 @@ struct HostSlot {
     backend: Arc<dyn HostLoggingBackend>,
     #[cfg(feature = "test-hooks")]
     _test_owner: Option<CoreLoggerOwner>,
+    #[cfg(feature = "test-hooks")]
+    test_block: Option<Arc<TestBlockState>>,
 }
 
 #[pyclass]
@@ -182,6 +190,62 @@ static HOST_INSTALLATION_LOCK: Mutex<()> = Mutex::new(());
 /// normal extension and is exercised through the installed source wheel.
 #[cfg(feature = "test-hooks")]
 static TEST_FORCED_FAILURE: Mutex<Option<String>> = Mutex::new(None);
+
+#[cfg(feature = "test-hooks")]
+struct TestBlockState {
+    entered: AtomicBool,
+    released: Mutex<bool>,
+    wake: Condvar,
+}
+
+#[cfg(feature = "test-hooks")]
+struct TestBlockedBackend {
+    inner: CoreLoggerBackend,
+    block: Arc<TestBlockState>,
+}
+
+#[cfg(feature = "test-hooks")]
+impl HostLoggingBackend for TestBlockedBackend {
+    fn try_log(
+        &self,
+        event: LogEventDto,
+        origin: ProducerOrigin,
+    ) -> Result<sc_observability_dto::AdmissionDto, Failure> {
+        self.block.entered.store(true, Ordering::SeqCst);
+        let mut released = self
+            .block
+            .released
+            .lock()
+            .map_err(|_| internal_failure("test blocked-host state lock poisoned"))?;
+        while !*released {
+            released = self
+                .block
+                .wake
+                .wait(released)
+                .map_err(|_| internal_failure("test blocked-host state lock poisoned"))?;
+        }
+        drop(released);
+        self.inner.try_log(event, origin)
+    }
+
+    fn start_query(
+        &self,
+        query: LogQueryDto,
+    ) -> Result<Operation<sc_observability_dto::LogSnapshotDto>, Failure> {
+        self.inner.start_query(query)
+    }
+
+    fn health(&self) -> Result<LogHealthDto, Failure> {
+        self.inner.health()
+    }
+
+    fn start_flush(
+        &self,
+        timeout: Duration,
+    ) -> Result<Operation<sc_observability_dto::CompletionDto>, Failure> {
+        self.inner.start_flush(timeout)
+    }
+}
 
 #[allow(
     clippy::unnecessary_wraps,
@@ -215,11 +279,25 @@ fn _test_force_failure(operation: Option<String>) {
 /// source-validation wheel. Normal embeddings must use `install_host_logger`.
 #[cfg(feature = "test-hooks")]
 #[pyfunction]
-fn _test_install_owned_host(py: Python<'_>, config: &str) -> String {
+fn _test_install_owned_host(py: Python<'_>, config: &str, block_log: bool) -> String {
     contained_json(|| {
         let result = logger_config(config)
             .and_then(create_core_backend)
             .and_then(|(owner, backend)| {
+                let test_block = block_log.then(|| {
+                    Arc::new(TestBlockState {
+                        entered: AtomicBool::new(false),
+                        released: Mutex::new(false),
+                        wake: Condvar::new(),
+                    })
+                });
+                let host_backend: Arc<dyn HostLoggingBackend> = match test_block.clone() {
+                    Some(block) => Arc::new(TestBlockedBackend {
+                        inner: backend,
+                        block,
+                    }),
+                    None => Arc::new(backend),
+                };
                 let module = PyModule::import(py, "sc_observability._native").map_err(|error| {
                     internal_failure(format!("could not access test host module: {error}"))
                 })?;
@@ -238,8 +316,9 @@ fn _test_install_owned_host(py: Python<'_>, config: &str) -> String {
                 let slot = Py::new(
                     py,
                     HostSlot {
-                        backend: Arc::new(backend),
+                        backend: host_backend,
                         _test_owner: Some(owner),
+                        test_block,
                     },
                 )
                 .map_err(|error| {
@@ -251,6 +330,34 @@ fn _test_install_owned_host(py: Python<'_>, config: &str) -> String {
             });
         result_json(result)
     })
+}
+
+#[cfg(feature = "test-hooks")]
+fn test_host_block(py: Python<'_>) -> Option<Arc<TestBlockState>> {
+    let module = PyModule::import(py, "sc_observability._native").ok()?;
+    let slot = module
+        .getattr("_sc_observability_host_backend")
+        .ok()?
+        .extract::<Py<HostSlot>>()
+        .ok()?;
+    slot.borrow(py).test_block.clone()
+}
+
+#[cfg(feature = "test-hooks")]
+#[pyfunction]
+fn _test_blocked_host_entered(py: Python<'_>) -> bool {
+    test_host_block(py).is_some_and(|block| block.entered.load(Ordering::SeqCst))
+}
+
+#[cfg(feature = "test-hooks")]
+#[pyfunction]
+fn _test_release_blocked_host(py: Python<'_>) {
+    if let Some(block) = test_host_block(py)
+        && let Ok(mut released) = block.released.lock()
+    {
+        *released = true;
+        block.wake.notify_all();
+    }
 }
 
 fn log_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, event: &str) -> String {
@@ -498,6 +605,8 @@ pub fn install_host_logger(
             backend,
             #[cfg(feature = "test-hooks")]
             _test_owner: None,
+            #[cfg(feature = "test-hooks")]
+            test_block: None,
         },
     )
     .map_err(|error| internal_failure(format!("could not allocate module host state: {error}")))?;
@@ -585,6 +694,10 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(_test_force_failure, module)?)?;
     #[cfg(feature = "test-hooks")]
     module.add_function(wrap_pyfunction!(_test_install_owned_host, module)?)?;
+    #[cfg(feature = "test-hooks")]
+    module.add_function(wrap_pyfunction!(_test_blocked_host_entered, module)?)?;
+    #[cfg(feature = "test-hooks")]
+    module.add_function(wrap_pyfunction!(_test_release_blocked_host, module)?)?;
     Ok(())
 }
 
