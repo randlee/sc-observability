@@ -25,7 +25,7 @@ on `sc-observability-types` itself; they do not depend on `sc-observability`,
 | `sc-observability-types/src/lib.rs`: root re-export | Named compatibility: re-exported unchanged, `#[allow(deprecated)]` scoped to the re-export | n/a |
 | `sc-observability-types/src/diagnostic.rs` tests | Named compatibility: exercises retained wrapper's `DiagnosticInfo` impl directly | n/a (test) |
 | `sc-observability-types/tests/neutral_contracts.rs` | Typed production: exercises `typed::IdentityFailure::resolution_failed` and both adapter directions | `sc_observability_types::error_codes::IDENTITY_RESOLUTION_FAILED` |
-| `sc-observability-log/src/mapping.rs` (frozen bridge import) | Named compatibility: copied BTIT source constructs `IdentityError` directly; immutable per `import-provenance.json`; CI allows `deprecated` only for this crate (`.github/workflows/ci.yml`) | n/a (bridge-owned) |
+| `sc-observability-log/src/mapping.rs` (frozen bridge import): constructors, `resolve()` implementations, and test helpers referencing the `.0` field and downcasting to `IdentityError` (18 clippy diagnostic sites as of this writing; exact locations in the `cargo clippy --all-targets --all-features` output) | Named compatibility: copied BTIT source constructs `IdentityError` directly; immutable per `import-provenance.json`; per-call-site `#[allow(deprecated, reason = ...)]` annotations are being coordinated with lobs as a new documented adaptation kind in `import-provenance.json` rather than a workspace- or bridge-wide clippy suppression (in progress; not yet landed) | n/a (bridge-owned) |
 
 Typed production constructor: `IdentityFailure::resolution_failed`. Verified
 by `error_registry_parity.rs::identity_failure_matches_owning_registry`.
@@ -37,7 +37,7 @@ by `error_registry_parity.rs::identity_failure_matches_owning_registry`.
 | `sc-observability/src/builder.rs`, `runtime.rs`: `Logger::new`, `LoggerBuilder::build*` legacy constructors | Named compatibility: retained; typed counterparts are `Logger::new_typed`, `LoggerBuilder::build_typed`/`build_with_level_owner_typed` | `sc_observability::error_codes::LOGGER_INIT_FAILED` |
 | `sc-observe/src/lib.rs`: `ObservabilityConfig::default_for`/`service_name`, `Observability::new`, `ObservabilityBuilder::build` | Named compatibility: retained; typed counterparts are the `*_typed` methods on the same types | `sc_observe::error_codes::OBSERVABILITY_INIT_FAILED` (and `sc_observability_types::error_codes::IDENTITY_RESOLUTION_FAILED` for the identity-resolution path) |
 | `sc-observability-otlp/src/config.rs`, `lib.rs`: `TelemetryConfigBuilder::build`, `OtlpEndpoint::new`, `AuthHeader::new`, `Telemetry::new` | Named compatibility: retained; typed counterparts are `build_typed`/`new_typed` | `sc_observability_otlp::error_codes::TELEMETRY_INVALID_CONFIG`, `TELEMETRY_INVALID_PROTOCOL`, `TELEMETRY_EXPORTER_INIT_FAILED` |
-| `sc-observability-log/src/handle.rs` (frozen bridge import) | Named compatibility: copied BTIT source calls `sc_observability::Logger::new` directly; immutable; CI-allowed `deprecated` for this crate only | n/a (bridge-owned) |
+| `sc-observability-log/src/handle.rs:903` (frozen bridge import) | Named compatibility: copied BTIT source calls `sc_observability::Logger::new` directly; immutable; per-call-site allowance coordinated with lobs (in progress; not yet landed), same mechanism as the `IdentityError` bridge row above | n/a (bridge-owned) |
 
 Typed production constructors: `InitFailure::logger_initialization`,
 `observation_initialization`, `invalid_telemetry_config`,
@@ -50,6 +50,7 @@ Verified by `error_registry_parity.rs::init_failure_matches_owning_registry`.
 | --- | --- | --- |
 | `sc-observability/src/runtime.rs`: event validation/admission; `src/lib.rs`: `LogError`/`TryLogError` compatibility surface | Named compatibility: retained; typed counterparts are `Logger::log_typed`/`try_log_typed` returning `LogFailure`/`TryLogFailure` | `sc_observability::error_codes::LOGGER_INVALID_EVENT`, `LOGGER_SHUTDOWN`, `LOGGER_QUEUE_FULL`, `LOGGER_WRITER_DEGRADED`, `LOGGER_SHUTDOWN_TIMED_OUT` |
 | `sc-observability-otlp/src/assembly.rs`: `SpanAssembler::push` | Named compatibility: retained; typed counterpart is `push_typed` | `sc_observability_otlp::error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED` |
+| `sc-observability-log/src/control.rs:111`, `handle.rs:504` (frozen bridge import): `.try_log_with_outcome(event)` calls the deprecated `Logger::try_log_with_outcome`, returning `TryLogError` (`TryLogError::InvalidEvent` wraps core `EventError` directly, per `sc-observability/src/lib.rs`'s `From<TryLogError> for TryLogFailure` impl) | Named compatibility: copied BTIT source calls the legacy admission method directly; immutable; per-call-site allowance coordinated with lobs (in progress; not yet landed), same mechanism as the other bridge rows in this inventory | n/a (bridge-owned) |
 
 Typed production constructors: `EventFailure::invalid_event`, `closed`,
 `queue_full`, `writer_degraded`, `shutdown_timed_out`, `span_assembly`.
@@ -62,6 +63,7 @@ Verified by `error_registry_parity.rs::event_failure_matches_owning_registry`.
 | `sc-observability/src/maintenance.rs`, `runtime.rs`: `Logger::flush` | Named compatibility: retained; typed counterpart is `flush_typed` | `sc_observability::error_codes::LOGGER_FLUSH_FAILED`, `LOGGER_WRITER_DEGRADED` |
 | `sc-observe/src/lib.rs`: `Observability::flush` | Named compatibility: retained; typed counterpart is `flush_typed` | `sc_observe::error_codes::OBSERVABILITY_FLUSH_FAILED` |
 | `sc-observability-otlp/src/lib.rs`: `Telemetry::flush` | Named compatibility: retained; typed counterpart is `flush_typed` | `sc_observability_otlp::error_codes::TELEMETRY_FLUSH_FAILED`, `TELEMETRY_SHUTDOWN` |
+| `sc-observability-log/src/handle.rs:716,847` (frozen bridge import): `.logger.flush()` calls the deprecated `sc_observability::Logger::flush`, returning core `sc_observability_types::FlushError` (the type also appears at `handle.rs:689` as the `Completed` variant's field type) | Named compatibility: copied BTIT source calls the legacy `Logger::flush` directly; immutable; per-call-site allowance coordinated with lobs (in progress; not yet landed), same mechanism as the `IdentityError`/`InitError` bridge rows above | n/a (bridge-owned) |
 
 Typed production constructors: `FlushFailure::logger_flush`,
 `writer_degraded`, `observation_flush`, `telemetry_flush`, `closed`.
@@ -122,18 +124,23 @@ adding a dev-only feature edge to `sc-observability-otlp` that would drift
 
 | Occurrence | Disposition | Owning registry constant |
 | --- | --- | --- |
-| `sc-observability-otlp/src/lib.rs`: open, crate-private `Exporter` trait; built-in log/trace/metric exporters; export/health/shutdown paths | Named compatibility: private exporter trait retained unchanged; internal exporter methods convert to `ExportFailure` at the production site; no public exporter API is added | `sc_observability_otlp::error_codes::TELEMETRY_EXPORT_FAILED` |
+| `sc-observability-otlp/src/lib.rs`: crate-private `Exporter` trait (`export_logs`/`export_spans`/`export_metrics`); built-in log/trace/metric exporters; export/health/shutdown paths | Typed production: the private `Exporter` trait was authored directly against `Result<(), ExportFailure>` from inception (there is no legacy `ExportError`-returning form of this trait to be compatible with); no public exporter API is added | `sc_observability_otlp::error_codes::TELEMETRY_EXPORT_FAILED` |
 
 Typed production constructor: `ExportFailure::export`. Verified by
 `error_registry_parity.rs::export_failure_matches_owning_registry`.
 
-## Frozen bridge import (informational, not a disposition target)
-
 `sc-observability-log`, `sc-observability-log-macros`, and
 `sc-observability-log-consumer-check` are the B.1 immutable BTIT import
 (`docs/plans/phase-b/import-provenance.json` pins their exact source bytes).
-They use `IdentityError` and legacy `Logger::new`/`log`/`flush` directly and
-are not migrated to typed call sites; `.github/workflows/ci.yml` runs their
-clippy pass with `-A deprecated` (and every other lint still denied) instead
-of editing their frozen source, per the copy's own acceptance record in
-`docs/api-approvals/phase-b-log-import.md`.
+Of the nine legacy families, the bridge only touches `IdentityError`,
+`InitError`, `EventError` (via `TryLogError`'s `.try_log_with_outcome`
+compatibility path), and `FlushError` — each occurrence is listed as an
+explicit disposition row in that family's table above, not excluded here. The
+bridge also defines its own crate-local `InitError`/`FlushError`/
+`ShutdownError` enums in `sc-observability-log/src/error.rs` (distinct types,
+same names as the deprecated core wrappers); those are bridge-domain types,
+not occurrences of the nine legacy families, and are out of this inventory's
+scope. There is no bridge call site using the deprecated `Logger::log` or
+`Logger::log_with_outcome` methods. `ShutdownError`, `ProjectionError`,
+`SubscriberError`, `LogSinkError`, and `ExportError` have no bridge
+occurrences at all.

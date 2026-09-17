@@ -232,15 +232,22 @@ copied-bridge use, each with an explicit typed-production or named-
 compatibility disposition) backed by an executable workspace parity test
 (`crates/sc-observability-otlp/tests/error_registry_parity.rs`) that asserts
 every typed constructor's diagnostic code against its owning crate's
-`error_codes` registry constant. It also fixes a genuine gap the B.1e warning
-activation exposed: the frozen B.1 BTIT bridge import legitimately still uses
-the newly-deprecated legacy wrapper types and cannot be edited without
-violating `import-provenance.json`'s pinned source bytes, so
-`.github/workflows/ci.yml`'s clippy job is split into an active-crates pass
-(still `-D warnings`) and a separate frozen-bridge pass that allows only
-`deprecated`. Broader AC-by-AC reconciliation, the four handoffs' final
-integration-status update, and independent QA/coordinator completeness review
-remain in progress; this entry does not claim closure.
+`error_codes` registry constant. It also addresses a genuine gap the B.1e
+warning activation exposed: the frozen B.1 BTIT bridge import legitimately
+still uses the newly-deprecated legacy wrapper types (`IdentityError` in
+`mapping.rs`; `InitError`/`FlushError` via `Logger::new`/`Logger::flush` in
+`handle.rs`; `EventError` via `Logger::try_log_with_outcome`'s `TryLogError`
+compatibility path in `control.rs`/`handle.rs`) and cannot be edited without
+violating `import-provenance.json`'s
+pinned source bytes. A workspace- or bridge-wide clippy `-A deprecated`
+suppression was rejected as too broad; the replacement — narrow, per-call-site
+`#[allow(deprecated, reason = ...)]` annotations recorded as a new documented
+adaptation kind in `import-provenance.json`, coordinated with lobs, who owns
+warning-allowance edits — is in progress and not yet landed.
+`.github/workflows/ci.yml`'s clippy job remains a single `-D warnings` step.
+Broader AC-by-AC reconciliation, the four handoffs' final integration-status
+update, and independent QA/coordinator completeness review remain in
+progress; this entry does not claim closure.
 
 ### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
 
