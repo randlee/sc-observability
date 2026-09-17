@@ -50,7 +50,8 @@ warning activation is part of this task.
 | queue, owner, and level concurrency | `try_log_reports_queue_full_on_saturated_queue` (legacy and typed assertions), `level_owner_changes_only_its_logger_and_filters_with_shared_admission`, `admission_and_level_mutation_contend_on_one_control_state` |
 | flush, timeout, and shutdown | `flush_failures_propagate_and_are_counted_in_health` (legacy and typed assertions), `shutdown_records_join_timeout_but_waits_for_join`, `emit_path_remains_available_during_maintenance_pass` |
 | built-in sink, maintenance, and fault behavior | `file_and_console_fan_out_both_receive_event`, sink maintenance/write tests, retained fault-injector tests under `--all-features` |
-| adapters and source preservation | `typed_sink_adapters_preserve_default_flush_health_and_single_write`, `logger_admission_conversions_keep_the_original_source` |
+| adapters and source preservation | `typed_sink_adapters_preserve_default_flush_health_and_single_write`, `typed_sink_adapters_preserve_explicit_failure_source_health_and_call_counts`, `logger_admission_conversions_keep_the_original_source` |
+| typed admission with concurrent control work | `typed_admission_and_flush_can_run_concurrently`, plus the retained shutdown timeout fixture; post-shutdown admission is not externally constructible because `Logger::shutdown(self)` consumes the sole running handle into `Logger<Stopped>` |
 
 The copied-bridge suite remains an explicit B.1 integration dependency; no
 bridge source or behavior is changed by this preparation layer.
