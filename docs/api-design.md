@@ -2310,13 +2310,17 @@ This draft is ready for review against these questions:
   implementation test case?
 
 
-## 21. Phase B API Evolution — Proposed for Review
+## 21. Phase B API Evolution — Scoped Runtime Implementation Accepted
 
 [PHB-001–014](requirements.md#10-phase-b-additions--proposed-for-review) and
 [ADR-011–015](architecture.md#adr-011-companion-boundaries-and-pre-copy-contract)
 record the requested scope and proposed architecture. The [Phase B index](plans/phase-b/plan-phase-b.md)
 routes authoritative sprint signatures, deliverables and validation. This section
-is a compatibility boundary, not a second competing signature inventory.
+is a compatibility boundary, not a second competing signature inventory. The
+B.P1 runtime-level core is accepted for scoped implementation by aobs at
+`12991c6521d064b733501b9b49a3188e3ce71e1c`; all other Phase B API evolution
+remains proposed unless its own contract says otherwise. This does not approve a
+registry publication, an owner signature, or an independent QA PASS.
 
 ### 21.1 Published API Preservation And Issue #92
 
@@ -2350,6 +2354,8 @@ scoped TYP-030 exception in proposed ADR-011; core shared types remain neutral.
 The [runtime-level contract](plans/phase-b/runtime-level-contract.md) specifies
 additive core owner construction, read-only level snapshots and typed elevate/
 reset outcomes. Existing LoggerConfig and LoggingHealthReport remain unchanged.
+Its scoped approval is recorded in
+[`api-approvals/phase-b-runtime-level.md`](api-approvals/phase-b-runtime-level.md).
 The new OperationDiagnostic provides required code, message, remediation and
 timestamp for operation outcomes; existing DiagnosticSummary remains an optional
 code plus message/time summary. Conversions preserve available original data
