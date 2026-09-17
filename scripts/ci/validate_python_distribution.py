@@ -193,6 +193,12 @@ def build(args) -> None:
                 raise DistributionError('expected exactly one ABI wheel for the platform')
             linked = linkage(wheels[0], selected, sandbox, scratch)
             # Run the same Rust host example with normal rlib linking; never extension flags.
+            # The host starts with its own empty Cargo home and target directory.
+            # It cannot reuse the extension's compiled artifacts or linker choices.
+            extension_home = sandbox.env['CARGO_HOME']
+            extension_target = sandbox.env['CARGO_TARGET_DIR']
+            sandbox.env['CARGO_HOME'] = str(scratch / 'embedding-cargo-home')
+            sandbox.env['CARGO_TARGET_DIR'] = str(scratch / 'embedding-target')
             sandbox.env['PYTHONPATH'] = str(root / 'python')
             sandbox.env['PYTHONHOME'] = sys.base_prefix
             embedded = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
@@ -202,6 +208,8 @@ def build(args) -> None:
             sandbox.run([sandbox.cargo, 'run', '--locked', '--offline', '--release'], root / 'embedding')
             del sandbox.env['PYTHONPATH']
             del sandbox.env['PYTHONHOME']
+            sandbox.env['CARGO_HOME'] = extension_home
+            sandbox.env['CARGO_TARGET_DIR'] = extension_target
             negatives = negative_cases(root, scratch, sandbox, metadata)
             record = {'schema_version': 1, 'status': 'passed', 'development_only': source.get('development_only', False), 'source_commit': source['source_commit'],
                       'sdist_sha256': digest(args.sdist), 'platform': args.platform,

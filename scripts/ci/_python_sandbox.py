@@ -8,6 +8,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import sysconfig
 import time
 import uuid
 from pathlib import Path
@@ -44,6 +45,10 @@ class Sandbox:
                         PATH=str(Path(self.cargo).parent) + os.pathsep + os.environ['PATH'],
                         PYO3_PYTHON=sys.executable, PYTHONDONTWRITEBYTECODE='1')
         self.system = platform.system()
+        if self.system == 'Linux':
+            library_dir = sysconfig.get_config_var('LIBDIR')
+            if library_dir:
+                self.env['LD_LIBRARY_PATH'] = str(library_dir) + os.pathsep + self.env.get('LD_LIBRARY_PATH', '')
         self.cache_probe = Path.home() / '.cargo' / ('sc-observability-probe-' + uuid.uuid4().hex)
         self.network_ip = socket.gethostbyname('index.crates.io')
         with socket.create_connection((self.network_ip, 443), timeout=10):
