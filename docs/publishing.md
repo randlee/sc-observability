@@ -7,6 +7,8 @@ This repo becomes the publishing source of truth for:
 - `sc-observability`
 - `sc-observe`
 - `sc-observability-otlp`
+- `sc-observability-log-macros`
+- `sc-observability-log`
 
 These crates currently exist inside the `agent-team-mail` workspace. After
 cutover, new releases of these crate names must come from this repo instead.
@@ -21,14 +23,36 @@ cutover, new releases of these crate names must come from this repo instead.
 - Release workflows verify that the requested release version matches:
   - workspace version
   - each crate package version
-- Release preflight uses two modes:
-  - if `sc-observability-types` already exists on crates.io, preflight runs the
-    normal dependency-aware `cargo package --locked --allow-dirty` checks in
-    publish order
-  - if `sc-observability-types` is not yet on crates.io, preflight treats the
-    run as the initial standalone publish and uses
-    `cargo publish --dry-run --locked --no-verify` for each crate in publish
-    order so downstream path dependencies do not fail crates.io resolution
+- Prepublication qualification is available from a candidate branch and does
+  not require publisher impersonation, registry credentials, tags or `main`.
+- `prepare_log_staged_packages.py` invokes Cargo's full workspace packaging
+  and verification, excluding the private consumer fixture. Cargo uses its
+  temporary package registry to verify unpublished chained dependencies.
+  Every package is verified; none is skipped and `--no-verify` is forbidden.
+- The release manifest preserves the core order (types, logging, observation,
+  OTLP), followed by macros then bridge. The later live B.7 workflow uses this
+  same manifest, waiting for index visibility before dependent publication.
+- `.github/workflows/b2-staged-consumer.yml` distributes a single immutable
+  stage to macOS, Linux and Windows; all three must attest the same candidate
+  source SHA and archive checksums. Third-party dependencies can use crates.io;
+  all first-party dependencies resolve only from freshly verified extractions.
+- B.P2's historical four-package stage uses `release/bp2-publish-artifacts.toml`.
+  Its existing artifacts and evidence are not regenerated as B.2 evidence.
+
+### B.2 candidate workflow (no publication)
+
+```sh
+python3 scripts/ci/prepare_log_staged_packages.py --version 1.4.0 --output target/b2-stage/<source-sha>
+python3 scripts/ci/validate_log_staged_consumer.py --version 1.4.0 --stage target/b2-stage/<source-sha> --source-commit <source-sha> --result-file target/b2-evidence/macos.json
+```
+
+The source must be clean and committed. Existing stage directories are immutable
+and never overwritten. `stage-manifest.json` records each real Cargo archive,
+its normalized manifest, all file hashes, its checksum and the source SHA.
+The shared consumer checks an enabled macro, explicit flush and shutdown, and
+persisted JSONL fields. `handoff-b-2.md` records results and adoption instructions.
+B.7 alone rebuilds the final publication source and performs live publication
+and separate registry-only consumer verification.
 
 ## Replacement/Cutover Rule
 
