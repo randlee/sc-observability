@@ -25,8 +25,9 @@ malformed native payloads and contained native panics return tagged failures.
 `bash scripts/ci/validate_python_bindings.sh` passes with CPython 3.10.21:
 the generated/stub checks and strict Result narrowing fixture pass; eight
 facade adversarial tests pass; a locked wheel is built and installed into a
-clean environment for five owned lifecycle/isolation/synchronized-N=32,
-level-transition and lifecycle-race tests; native binding tests pass; and
+clean environment for six owned lifecycle/isolation/synchronized-N=32,
+level-transition, zero-deadline retained-shutdown and lifecycle-race tests;
+native binding tests pass; and
 `cargo run -p rust-python-logging` proves a single writer accepts correlated
 Rust and Python records, redacts both bearer values, supports querying and
 retains attached health after host shutdown.
@@ -48,6 +49,9 @@ the concrete module dictionary directly rather than calling `hasattr`, so a
 user-defined module `__getattr__` cannot run while the once-only lock is held.
 A five-second subprocess regression races two installers with such a
 GIL-releasing hook and retains the exact one-winner/one-duplicate outcome.
+The attached fixture mutates the host-owned level through its owner and proves
+the attached Python health payload observes `debug` at revision one without
+gaining any mutation authority.
 
 This handoff remains an implementation evidence record until coordinator
 completeness review and the sprint closeout update are complete.

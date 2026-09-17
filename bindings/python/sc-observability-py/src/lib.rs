@@ -532,7 +532,7 @@ mod tests {
                 std::env::temp_dir().join("sc-observability-b4-attached-host-test"),
             );
             config.enable_console_sink = false;
-            let (owner, backend) = match create_core_backend(config) {
+            let (mut owner, backend) = match create_core_backend(config) {
                 Ok(pair) => pair,
                 Err(_) => return false,
             };
@@ -549,13 +549,30 @@ mod tests {
                 .borrow(py)
                 .log(py, event)
                 .contains("\"kind\":\"ok\"");
+            let level_changed = owner
+                .elevate_level(LevelFilter::Debug, LevelChangeSource::Application)
+                .is_ok();
+            let attached_revision = attached
+                .borrow(py)
+                .health()
+                .contains("\"effective_level\":\"debug\"")
+                && attached
+                    .borrow(py)
+                    .health()
+                    .contains("\"level_revision\":\"1\"");
             let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
             let closed = attached
                 .borrow(py)
                 .log(py, event)
                 .contains(sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED);
             let retained_health = attached.borrow(py).health().contains("\"kind\":\"ok\"");
-            missing_is_tagged && admitted && stopped && closed && retained_health
+            missing_is_tagged
+                && admitted
+                && level_changed
+                && attached_revision
+                && stopped
+                && closed
+                && retained_health
         });
         assert!(passed);
     }
