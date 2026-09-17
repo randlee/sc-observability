@@ -1,0 +1,5 @@
+error: deferred fields (`field::Empty`) are not supported
+ --> tests/ui/event_field_empty.rs:5:15
+  |
+5 |     info!(k = tracing::field::Empty, "message");
+  |               ^^^^^^^^^^^^^^^^^^^^^
