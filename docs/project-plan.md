@@ -410,3 +410,13 @@ is [`plans/phase-b/handoff-b-3.md`](./plans/phase-b/handoff-b-3.md), including e
 qualified B.2 archive provenance and the lead's crate-specific wire API approval.
 Implementation validation passed; consolidated Phase B QA/ordered merges and
 B.7 registry-only publication proof remain separate.
+
+### B.4 — Owned and host-attached Python runtime
+
+[B.4 Python runtime](plans/phase-b/sprint-b-4-python.md) provides the locked
+`abi3-py310` PyO3 owned and Rust-host-attached logging surface, typed `Ok`/`Err`
+facade, and the Rust `rlib` embedding surface. Its
+[handoff](plans/phase-b/handoff-b-4.md) records the tested implementation,
+source-wheel runtime/conformance gates, private companion-only fault proofs and
+the public API digest. B.4a separately owns wheel/sdist and platform
+qualification; B.7 retains publication.

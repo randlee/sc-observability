@@ -8,16 +8,19 @@ The frontend uses `@sc-observability/client` with a Tauri `invoke` transport:
 
 ```ts
 import { invoke } from "@tauri-apps/api/core";
-import { createClient, encodeEvent } from "@sc-observability/client";
+import { createClient, createTauriTransport, encodeEvent } from "@sc-observability/client";
 
-const transport = {
-  request: (operation: "try_log" | "query" | "health" | "flush", request: unknown) =>
-    invoke(`plugin:sc-observability|sc_observability_${operation}`, { request }),
-};
-const client = createClient(transport);
+const transport = createTauriTransport(invoke);
+const client = transport.kind === "ok" ? createClient(transport.value) : transport;
 const event = encodeEvent({ level: "info", target: "tauri-example", action: "startup", fields: { attempt: 1n } });
 if (client.kind === "ok" && event.kind === "ok") void client.value.tryLog(event.value);
 ```
+
+The checked-in Tauri capabilities keep core APIs on `main` while routing the
+four plugin commands and application level command through ACL for all windows.
+The adapter and application handler still apply their own window and target
+policies before backend admission, returning tagged permission denial for
+forbidden windows.
 
 The application also registers `app_observability_level_change` itself. It
 uses the authorized main window and a host-selected `user_request` source;

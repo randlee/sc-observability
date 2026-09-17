@@ -1,6 +1,6 @@
 //! Real Rust-host embedding example for the B.4 binding rlib.
 //!
-//! This executable links the binding rlib and installs the PyO3 module before
+//! This executable links the binding rlib and installs the `PyO3` module before
 //! interpreter initialization. It never loads a wheel or exchanges a Rust
 //! trait object through a dynamic-library boundary.
 
@@ -8,10 +8,13 @@ mod b5_context;
 
 extern crate _native as binding;
 
-use binding::{_native as native_module, install_host_logger};
+use binding::{
+    _native as native_module, BridgeControlBackend, CoreLoggerBackend, CoreLoggerOwner,
+    HostLoggingBackend, Operation, OperationState, install_host_logger,
+};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use sc_observability_binding_runtime::{HostLoggingBackend, ProducerOrigin, create_core_backend};
+use sc_observability_binding_runtime::{ProducerOrigin, create_core_backend};
 use sc_observability_dto::{LevelDto, LogEventDto, LogOrderDto, LogQueryDto, ValueDto};
 use sc_observability_types::ServiceName;
 use std::collections::BTreeMap;
@@ -20,6 +23,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const CORRELATION_ID: &str = "rust-python-shared-writer";
+
+// Compile-only external-consumer proof for B.4's documented rlib surface.
+type PublicRlibSurface = (
+    Option<BridgeControlBackend>,
+    Option<CoreLoggerBackend>,
+    Option<CoreLoggerOwner>,
+    Option<Operation<sc_observability_dto::CompletionDto>>,
+    Option<OperationState<sc_observability_dto::CompletionDto>>,
+);
+
+fn accepts_public_backend(_: Arc<dyn HostLoggingBackend>) {}
 
 fn runtime_error(message: impl Into<String>) -> PyErr {
     pyo3::exceptions::PyRuntimeError::new_err(message.into())
@@ -73,6 +87,8 @@ fn has_record(
 }
 
 fn main() -> PyResult<()> {
+    let _: Option<PublicRlibSurface> = None;
+    let _: fn(Arc<dyn HostLoggingBackend>) = accepts_public_backend;
     pyo3::append_to_inittab!(native_module);
     Python::initialize();
     Python::attach(|py| {

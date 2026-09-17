@@ -95,7 +95,7 @@ function encode(value: EventValueInput, depth: number, field: string): Result<Va
   } catch {
     return err(validation(field, "object keys could not be inspected"));
   }
-  const output: Record<string, ValueDto> = {};
+  const output: Record<string, ValueDto> = Object.create(null) as Record<string, ValueDto>;
   const object = value as { readonly [key: string]: EventValueInput };
   for (const key of keys) {
     const reserved = rejectReserved(key, `${field}.${key}`);
@@ -152,7 +152,7 @@ export function encodeEvent(event: LogEventInput): Result<LogEventDto> {
     if (typeof level !== "string" || typeof target !== "string" || typeof action !== "string") {
       return err(validation("event", "level, target and action are required strings"));
     }
-    const fields: Record<string, ValueDto> = {};
+    const fields: Record<string, ValueDto> = Object.create(null) as Record<string, ValueDto>;
     const inputFields = event.fields ?? {};
     if (!isRecord(inputFields)) return err(validation("event.fields", "fields must be an object"));
     if (Object.getOwnPropertySymbols(inputFields).length > 0) return err(validation("event.fields", "symbol keys are not supported"));

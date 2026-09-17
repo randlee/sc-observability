@@ -5,13 +5,48 @@ import json
 import os
 import platform
 import shutil
+import signal
 import socket
 import subprocess
 import sys
+import sysconfig
+import time
 import uuid
 from pathlib import Path
 
 from _python_distribution import DistributionError
+
+
+def bounded_command(command: list[str], cwd: Path, environment: dict, timeout: float = 900) -> subprocess.CompletedProcess:
+    """Kill the entire timed-out build tree, including children holding log pipes."""
+    process = subprocess.Popen(command, cwd=cwd, env=environment, text=True,
+                               encoding='utf-8', errors='replace', stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, start_new_session=os.name != 'nt')
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        if os.name == 'nt':
+            try:
+                subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
+                               capture_output=True, timeout=20)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        else:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        try:
+            stdout, stderr = process.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = error.stdout, error.stderr
+            process.kill()
+            process.stdout.close()
+            process.stderr.close()
+        decode = lambda value: value.decode('utf-8', errors='replace') if isinstance(value, bytes) else (value or '')
+        raise DistributionError(f'qualification command exceeded {timeout:g} seconds: {command}\n'
+                                + decode(stdout) + '\n' + decode(stderr)) from error
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
 
 
 def registered_checkouts(checkout: Path) -> list[Path]:
@@ -43,6 +78,10 @@ class Sandbox:
                         PATH=str(Path(self.cargo).parent) + os.pathsep + os.environ['PATH'],
                         PYO3_PYTHON=sys.executable, PYTHONDONTWRITEBYTECODE='1')
         self.system = platform.system()
+        if self.system == 'Linux':
+            library_dir = sysconfig.get_config_var('LIBDIR')
+            if library_dir:
+                self.env['LD_LIBRARY_PATH'] = str(library_dir) + os.pathsep + self.env.get('LD_LIBRARY_PATH', '')
         self.cache_probe = Path.home() / '.cargo' / ('sc-observability-probe-' + uuid.uuid4().hex)
         self.network_ip = socket.gethostbyname('index.crates.io')
         with socket.create_connection((self.network_ip, 443), timeout=10):
@@ -84,8 +123,6 @@ class Sandbox:
                         self.acls.append((path, saved))
                         subprocess.run(['icacls', str(path), '/deny', account + ':(OI)(CI)(R)', '/C'],
                                        check=True, stdout=subprocess.DEVNULL)
-                self.powershell(f"New-NetFirewallRule -DisplayName '{self.firewall}' "
-                                "-Direction Outbound -Action Block -Profile Any | Out-Null")
             except BaseException:
                 self.__exit__(None, None, None)
                 raise
@@ -105,12 +142,24 @@ class Sandbox:
         self.cache_probe.unlink(missing_ok=True)
 
     def run(self, command: list[str], cwd: Path, *, expect_failure: bool = False) -> str:
-        result = subprocess.run(self.prefix + command, cwd=cwd, env=self.env,
-                                text=True, encoding='utf-8', errors='replace', capture_output=True)
+        print('B4A_COMMAND ' + json.dumps(command), flush=True)
+        started = time.monotonic()
+        try:
+            if self.system == 'Windows':
+                # Every artifact command has network denied. Release the rule
+                # between commands so the ephemeral CI agent can report progress.
+                self.powershell(f"New-NetFirewallRule -DisplayName '{self.firewall}' "
+                                "-Direction Outbound -Action Block -Profile Any | Out-Null")
+            result = bounded_command(self.prefix + command, cwd, self.env)
+        finally:
+            if self.system == 'Windows':
+                self.powershell(f"Get-NetFirewallRule -DisplayName '{self.firewall}' "
+                                "-ErrorAction SilentlyContinue | Remove-NetFirewallRule")
+        print(f'B4A_EXIT {result.returncode} after {time.monotonic() - started:.2f}s', flush=True)
         self.commands.append({'command': command, 'exit_code': result.returncode,
                               'stdout': result.stdout, 'stderr': result.stderr})
         if (result.returncode == 0) == expect_failure:
-            raise DistributionError(f'isolation command had unexpected result: {command}\n{result.stderr}')
+            raise DistributionError(f'isolation command had unexpected result: {command}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}')
         return result.stdout
 
     def prove_denials(self, python: str, checkout: Path) -> dict:
