@@ -41,6 +41,8 @@ def main(root: Path) -> bool:
             closed = bound.value.close()  # preserves any application exception
             if isinstance(closed, Err):
                 print(closed.error.code)
+        if isinstance(closed, Err):
+            return False
         result = handler.last_result()
         if isinstance(result, Err):
             print(result.error.code)
