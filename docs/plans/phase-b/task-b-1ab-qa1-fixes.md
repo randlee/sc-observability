@@ -19,7 +19,8 @@ changing the frozen telemetry implementation branch.
 ## Required outcomes
 
 - Bound fixture waits/receives and ensure failure/timeout cleanup cannot park a
-  worker.
+  worker. The test-only maintenance wait uses one absolute deadline, reports a
+  timeout explicitly, and normal fixtures assert that it did not time out.
 - Replace sleep-based concurrency ordering with explicit gates and prove the
   active state during the concurrent operation.
 - Correct standalone sink remediation without changing diagnostic codes or
