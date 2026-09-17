@@ -133,7 +133,7 @@ the API remain caller code.
 
 `OperationDiagnostic` is the additive neutral code/message/remediation/timestamp
 value defined by the [runtime-level contract](runtime-level-contract.md) and
-published by B.P2. The existing DiagnosticSummary has only optional code, message
+qualified as a staged artifact by B.P2. The existing DiagnosticSummary has only optional code, message
 and timestamp; it cannot preserve remediation and remains unchanged. Convert
 from an original Diagnostic/ErrorContext before reducing to a summary. Where a
 core API exposes only summary data, use the explicit operation-specific fallback
@@ -390,5 +390,7 @@ BridgeHealthReport gains configured_level, effective_level and level_revision.
 LogControl gains no mutation authority. The contract specifies the shared core
 filter, concurrency, typed outcomes, diagnostic submission and compile-time
 ceiling behavior. This extends the export disposition matrix for these methods,
-re-exported level values/errors and health fields. Review/accept it and publish
-the core prerequisite before BTIT completes the working reference.
+re-exported level values/errors and health fields. Review/accept it and qualify
+the B.P2 staged core prerequisite before BTIT completes the working reference.
+B.P3 integrates against those immutable staged artifacts; B.7 alone owns live
+publication and registry-only proof.

@@ -481,7 +481,9 @@ record the proposed architecture. No item below asserts implementation closure.
   results are observable; timed-out flush has no prior-result retrieval API,
   and bridge-native timeout follows the documented separate adapter/native slots.
 - PHB-014 Release closure shall require downloadable immutable artifacts and
-  registry-only consumer evidence. Core runtime-level support shall be published
-  before BTIT integration; migrated Rust companions and subsequent language
-  artifacts have their own release gates. Go, Node.js and sc-runtime process/
-  interpreter topology remain deferred. #96 configuration loading is independent.
+  registry-only consumer evidence. B.P2 shall qualify immutable staged
+  runtime-level artifacts before B.P3 BTIT integration; B.7 alone publishes
+  those artifacts and runs registry-only consumer proof. Migrated Rust companions
+  and subsequent language artifacts have their own release gates. Go, Node.js
+  and sc-runtime process/interpreter topology remain deferred. #96 configuration
+  loading is independent.
