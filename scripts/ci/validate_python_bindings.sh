@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validates B.4 source-built Python runtime behavior on CPython 3.10.
+# Validates the installed B.4/B.5 Python runtime on CPython 3.10.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
@@ -43,12 +43,18 @@ uvx --from maturin==1.10.2 maturin build --locked \
   --interpreter "$B4_PYTHON" \
   --out "$B4_TEMP_DIR/wheels"
 uv venv --python "$B4_PYTHON" "$B4_TEMP_DIR/venv"
-uv pip install --python "$B4_TEMP_DIR/venv/bin/python" pytest==9.1.1 "$B4_TEMP_DIR"/wheels/*.whl
-SC_OBSERVABILITY_RUNTIME_TEST=1 "$B4_TEMP_DIR/venv/bin/python" -m pytest \
-  bindings/python/sc-observability-py/tests/test_runtime.py
-cargo run --locked -p rust-python-logging
+uv pip install --python "$B4_TEMP_DIR/venv/bin/python" pytest==9.1.1 mypy==2.3.1 "$B4_TEMP_DIR"/wheels/*.whl
+cp -R bindings/python/sc-observability-py/tests "$B4_TEMP_DIR/tests"
+cp -R bindings/python/sc-observability-py/examples "$B4_TEMP_DIR/examples"
+SC_OBSERVABILITY_RUNTIME_TEST=1 "$B4_TEMP_DIR/venv/bin/python" -I -m pytest \
+  "$B4_TEMP_DIR/tests" -ra
+"$B4_TEMP_DIR/venv/bin/python" -I -m mypy --strict --python-version 3.10 \
+  "$B4_TEMP_DIR/tests/typing/test_result_narrowing.py" "$B4_TEMP_DIR/examples/standard_logging.py"
+"$B4_TEMP_DIR/venv/bin/python" -I "$B4_TEMP_DIR/examples/standard_logging.py"
+PYO3_PYTHON="$B4_PYTHON" PYTHONHOME="$("$B4_PYTHON" -c 'import sys; print(sys.base_prefix)')" \
+  cargo run --locked -p rust-python-logging
 
-if rg -n '\braise\b' bindings/python/sc-observability-py/python/sc_observability/__init__.py; then
+if rg -n '\braise\b' bindings/python/sc-observability-py/python/sc_observability/{__init__,logging,context}.py; then
   exit 1
 fi
 if rg -n 'panic!|\.unwrap\(' bindings/python/sc-observability-py/src; then

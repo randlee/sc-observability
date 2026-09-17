@@ -57,7 +57,11 @@ fn correlated_query() -> LogQueryDto {
     }
 }
 
-fn has_record(snapshot: &sc_observability_dto::LogSnapshotDto, action: &str, language: &str) -> bool {
+fn has_record(
+    snapshot: &sc_observability_dto::LogSnapshotDto,
+    action: &str,
+    language: &str,
+) -> bool {
     snapshot.events.iter().any(|event| {
         event.action == action
             && event.message.as_deref() == Some("Bearer [REDACTED]")
@@ -79,8 +83,8 @@ fn main() -> PyResult<()> {
             std::env::temp_dir().join("sc-observability-rust-python-example"),
         );
         config.enable_console_sink = false;
-        let (owner, backend) = create_core_backend(config)
-            .map_err(|error| runtime_error(format!("{error:?}")))?;
+        let (owner, backend) =
+            create_core_backend(config).map_err(|error| runtime_error(format!("{error:?}")))?;
         let module = PyModule::import(py, "_native")?;
         let shared: Arc<dyn HostLoggingBackend> = Arc::new(backend.clone());
         install_host_logger(&module, shared)
@@ -127,7 +131,9 @@ fn main() -> PyResult<()> {
         let query = api.getattr("LogQuery")?.call((), Some(&query_kwargs))?;
         let python_snapshot = attached_logger.call_method1("query", (query,))?;
         if python_snapshot.getattr("kind")?.extract::<String>()? != "ok" {
-            return Err(runtime_error("attached Python query did not return tagged Ok"));
+            return Err(runtime_error(
+                "attached Python query did not return tagged Ok",
+            ));
         }
         let native_snapshot = backend
             .start_query(correlated_query())
@@ -141,17 +147,29 @@ fn main() -> PyResult<()> {
             ));
         }
         if backend.health().is_err() {
-            return Err(runtime_error("Rust host cannot observe attached backend health"));
+            return Err(runtime_error(
+                "Rust host cannot observe attached backend health",
+            ));
         }
         b5_context::verify(py, &backend)?;
         owner
             .shutdown(Duration::from_secs(2))
             .map_err(|error| runtime_error(format!("host shutdown failed: {error:?}")))?;
-        if backend.try_log(rust_event(), ProducerOrigin::RustHost).is_ok() {
+        if backend
+            .try_log(rust_event(), ProducerOrigin::RustHost)
+            .is_ok()
+        {
             return Err(runtime_error("host admitted a record after shutdown"));
         }
-        if attached_logger.call_method0("health")?.getattr("kind")?.extract::<String>()? != "ok" {
-            return Err(runtime_error("attached health was not retained after host shutdown"));
+        if attached_logger
+            .call_method0("health")?
+            .getattr("kind")?
+            .extract::<String>()?
+            != "ok"
+        {
+            return Err(runtime_error(
+                "attached health was not retained after host shutdown",
+            ));
         }
         b5_context::after_stop(py)?;
         Ok(())

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "runtime_complete": true,
+  "pytest_paths": [
+    "tests"
+  ],
+  "typing_paths": [
+    "tests/typing/test_result_narrowing.py",
+    "examples/standard_logging.py"
+  ],
+  "embedding_manifest": "examples/rust-python-logging/Cargo.toml"
+}

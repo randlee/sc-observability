@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 from typing import Any, cast
 
-sys.path.insert(0, str(Path(__file__).parents[1] / "python"))
+if os.environ.get("SC_OBSERVABILITY_RUNTIME_TEST") != "1":
+    sys.path.insert(0, str(Path(__file__).parents[1] / "python"))
 
 import sc_observability
 from sc_observability import (
