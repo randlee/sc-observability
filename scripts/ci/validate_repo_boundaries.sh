@@ -26,13 +26,10 @@ def section_deps(path: Path, section: str):
 
 workspace = load_toml(root / "Cargo.toml")
 members = set(workspace["workspace"]["members"])
-
-required_members = {
-    "crates/sc-observability-types",
-    "crates/sc-observability",
-    "crates/sc-observe",
-    "crates/sc-observability-otlp",
-}
+artifacts = load_toml(root / "release/publish-artifacts.toml")
+required_members = {f"crates/{crate['package']}" for crate in artifacts["crates"]}
+if len(required_members) != len(artifacts["crates"]):
+    raise SystemExit("publish artifact roster contains duplicate package names")
 missing = required_members - members
 if missing:
     raise SystemExit(f"missing workspace members: {sorted(missing)}")

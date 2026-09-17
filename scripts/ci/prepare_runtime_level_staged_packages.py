@@ -14,13 +14,10 @@ import subprocess
 import tarfile
 from pathlib import Path
 
+from _runtime_level_common import release_packages, sha256, validate_version
 
-PACKAGES = (
-    "sc-observability-types",
-    "sc-observability",
-    "sc-observe",
-    "sc-observability-otlp",
-)
+
+PACKAGES = release_packages()
 WORKSPACE_VALUES = {
     "edition": '"2024"', "license": '"MIT"', "rust-version": '"1.94.1"',
     "repository": '"https://github.com/randlee/sc-observability"',
@@ -30,14 +27,6 @@ EXTERNAL_DEPENDENCIES = {
     "serde": '{ version = "1", features = ["derive"] }', "serde_json": '"1"',
     "thiserror": '"2"', "time": '{ version = "0.3", features = ["formatting", "parsing", "serde"] }',
 }
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for block in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def source_tree_sha256(root: Path) -> str:
@@ -134,8 +123,7 @@ def main() -> int:
     parser.add_argument("--source", type=Path, default=Path.cwd())
     parser.add_argument("--verify-existing", action="store_true")
     args = parser.parse_args()
-    if not re.fullmatch(r"\d+\.\d+\.\d+", args.version):
-        raise SystemExit("--version must be an exact X.Y.Z candidate")
+    validate_version(args.version)
     source, output = args.source.resolve(), args.output.resolve()
     if args.verify_existing:
         verify_stage(output)

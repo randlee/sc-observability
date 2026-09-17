@@ -7,7 +7,8 @@ publish, or PyPI upload is authorized before B.7 phase-end release work.
 ## Immutable package inventory and consumer evidence
 
 ```sh
-python3 scripts/ci/validate_runtime_level_staged_consumer.py --version 1.3.0
+candidate_version="$(python3 scripts/ci/_runtime_level_common.py --candidate-version)"
+python3 scripts/ci/validate_runtime_level_staged_consumer.py --version "$candidate_version"
 ```
 
 On 2026-09-16 (America/Los_Angeles), implementation retained an actual stage at
@@ -49,12 +50,26 @@ passed. The stage is built once, then the exact bytes are downloaded by every
 platform job. This is implementation evidence, not an independent QA approval;
 `quality-mgr` owns that verdict.
 
-Final integrity qualification is retained in
-[run 35175763793](https://github.com/randlee/sc-observability/actions/runs/35175763793):
-the shared stage, macOS/Ubuntu/Windows consumers, and aggregate provenance all
-passed with the consumer verifying fresh archive extraction before Cargo. Raw
-local valid/mutation logs and SHA index are retained at
-`/Users/randlee/.config/atm/share/sc-obs/bp2-evidence/consumer-integrity-862d03c/`.
+### Provenance distinction for retained evidence
+
+The local valid and mutation logs at
+`/Users/randlee/.config/atm/share/sc-obs/bp2-evidence/consumer-integrity-862d03c/`
+are local reproduction evidence only: `valid-consumer.log` identifies package
+source `6497efae7039b9963d18f435f6566fb379544908` and the stage from run
+`35174729184`. They do not prove the later platform run.
+
+Before the QA1 corrections, the latest retained three-platform qualification was
+[run 35175971141](https://github.com/randlee/sc-observability/actions/runs/35175971141).
+Its validation-code checkout was `ef8331ed685a16b16a0ddc3c834a2f293cbfdd9a`;
+the one shared candidate stage was built from package source
+`f6cd318067f6cb59becf838a538a399b2c849d32` (source-tree SHA-256
+`8f26ca867f1c31dbef2569a7b92863841341c207022c0c52a714f60886ca22e5`),
+then macOS, Ubuntu, and Windows all consumed those same archive hashes and the
+aggregate job passed. The earlier integrity run
+[35175763793](https://github.com/randlee/sc-observability/actions/runs/35175763793)
+also passed, but is not the latest retained qualification. QA1 changes package
+contents and therefore requires a new staged source/provenance record and a new
+three-platform run; this historical evidence remains immutable.
 
 Runtime-contract acceptance is owner-deferred to Phase B completion (ATM
 `01M2PKX8R4J4VJP5V6RRV9JJPB`); see

@@ -4,36 +4,31 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import re
 import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
 
+from _runtime_level_common import (
+    PLATFORM_ASSERTIONS,
+    ROOT,
+    qualification,
+    release_packages,
+    sha256,
+    validate_version,
+)
 
-BASELINE_VERSION = "1.2.0"
-BASELINE_SOURCE_SHA = "dcc52685fd845c8d1bddde29199e799ae921cf5c"
-PLATFORM_ASSERTIONS = (
-    "baseline_exact_resolution", "candidate_extracted_archive_resolution",
-    "threshold_filtering", "log_and_query", "level_state_and_reset", "stale_owner_after_shutdown",
-)
-EXPECTED_PACKAGES = (
-    "sc-observability-types", "sc-observability", "sc-observe", "sc-observability-otlp",
-)
+
+METADATA = qualification()
+BASELINE_VERSION = METADATA["baseline_version"]
+BASELINE_SOURCE_SHA = METADATA["baseline_source_commit"]
+EXPECTED_PACKAGES = release_packages()
+FIXTURES = ROOT / "scripts" / "ci" / "fixtures" / "runtime-level-consumer"
 
 
 def run(command: list[str], cwd: Path) -> None:
     subprocess.run(command, cwd=cwd, check=True)
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for block in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def verified_package(stage: Path, package: dict[str, object], root: Path) -> Path:
@@ -76,27 +71,11 @@ def cargo_project(root: Path, version: str, patches: str, source: str) -> None:
 
 
 def baseline_source() -> str:
-    return (
-        "use std::path::PathBuf;\nuse sc_observability::{Logger, LoggerConfig};\n"
-        "use sc_observability_types::ServiceName;\nfn main() {\n"
-        " let config = LoggerConfig::default_for(ServiceName::new(\"bp2-baseline\").unwrap(), PathBuf::from(\"logs\"));\n"
-        " let logger = Logger::new(config).unwrap(); let _ = logger.shutdown();\n}\n"
-    )
+    return (FIXTURES / "baseline.rs").read_text()
 
 
 def candidate_source() -> str:
-    return (
-        "use std::path::PathBuf;\nuse sc_observability::{Logger, LoggerConfig};\n"
-        "use sc_observability_types::{ActionName, AdmissionOutcome, Level, LevelChange, LevelChangeError, LevelChangeSource, LevelFilter, LogEvent, LogFieldMatch, LogQuery, ProcessIdentity, SchemaVersion, ServiceName, TargetCategory, Timestamp};\n"
-        "use serde_json::json;\n"
-        "fn event(service: ServiceName, level: Level, request: &str) -> LogEvent { LogEvent { version: SchemaVersion::new(\"v1\").unwrap(), timestamp: Timestamp::now_utc(), level, service, target: TargetCategory::new(\"bp2.consumer\").unwrap(), action: ActionName::new(\"exercise\").unwrap(), message: Some(request.into()), identity: ProcessIdentity::default(), trace: None, request_id: None, correlation_id: None, outcome: None, diagnostic: None, state_transition: None, fields: serde_json::Map::from_iter([(\"request\".into(), json!(request))]) } }\n"
-        "fn main() { let _ = std::fs::remove_dir_all(\"logs\"); let service = ServiceName::new(\"bp2-candidate\").unwrap(); let config = LoggerConfig::default_for(service.clone(), PathBuf::from(\"logs\")); let (logger, mut owner) = Logger::new_with_level_owner(config).unwrap();\n"
-        " assert_eq!(logger.try_log_with_outcome(event(service.clone(), Level::Debug, \"filtered\")).unwrap(), AdmissionOutcome::Filtered);\n"
-        " assert!(matches!(owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application).unwrap(), LevelChange::Changed { .. })); assert_eq!(logger.level_state().effective_level, LevelFilter::Debug);\n"
-        " assert_eq!(logger.try_log_with_outcome(event(service.clone(), Level::Debug, \"accepted\")).unwrap(), AdmissionOutcome::Accepted); logger.flush().unwrap();\n"
-        " let snapshot = logger.query(&LogQuery { field_matches: vec![LogFieldMatch::equals(\"request\", json!(\"accepted\"))], ..LogQuery::default() }).unwrap(); assert_eq!(snapshot.events.len(), 1);\n"
-        " owner.reset_level(LevelChangeSource::Application).unwrap(); assert_eq!(logger.level_state().effective_level, LevelFilter::Info); let stopped = logger.shutdown(); assert_eq!(stopped.level_state().revision, 2); assert!(matches!(owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application), Err(LevelChangeError::Stopped))); }\n"
-    )
+    return (FIXTURES / "candidate.rs").read_text()
 
 
 def main() -> int:
@@ -107,8 +86,7 @@ def main() -> int:
     parser.add_argument("--result-file", type=Path)
     parser.add_argument("--platform", choices=("macos", "ubuntu", "windows"))
     args = parser.parse_args()
-    if not re.fullmatch(r"\d+\.\d+\.\d+", args.version):
-        raise SystemExit("--version must be exact; placeholders are rejected")
+    validate_version(args.version)
     if args.mode == "live" and args.stage:
         raise SystemExit("live mode rejects local stage overrides")
     if args.mode == "staged" and not args.stage:

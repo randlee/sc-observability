@@ -13,10 +13,11 @@ base: develop
 
 ## Goal and dependencies
 
-Owner: sc-observability release owner. `must_follow` B.P1's merged,
-independently verified implementation; B.P3 `must_follow` this sprint's exact
-staged artifacts, not a registry release. Apply parent-to-child merge-forward
-on pushed development before every child round and merge the parent PR first.
+Owner: sc-observability release owner. Child development `must_follow` B.P1's
+pushed, independently verified implementation; the parent PR merges before the
+child can complete. B.P3 `must_follow` this sprint's exact staged artifacts,
+not a registry release. Apply parent-to-child merge-forward on pushed development
+before every child round and merge the parent PR first.
 Shared artifacts/version metadata prevent parallel-safe work. B.1 remains the
 first migration sprint; no bridge is imported or published here. Live crates.io
 publication and registry-only proof are reserved for B.7 at phase end.
@@ -76,8 +77,9 @@ Run the staged two-leg consumer:
 python3 scripts/ci/validate_runtime_level_staged_consumer.py --version "$RELEASE_VERSION"
 ```
 
-The new script is implemented in this sprint and rejects version placeholders,
-ambient workspace resolution, missing platform results and skipped assertions.
+The staged consumer script rejects version placeholders and ambient workspace
+resolution. `validate_runtime_level_platform_evidence.py` rejects missing
+platform results, skipped/failed assertions, and mismatched candidate provenance.
 Record actual qualification commands and checksums in the handoff. B.7 must
 later run a separate registry-only consumer after real publication.
 

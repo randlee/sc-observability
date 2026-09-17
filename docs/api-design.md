@@ -2310,7 +2310,7 @@ This draft is ready for review against these questions:
   implementation test case?
 
 
-## 21. Phase B API Evolution — Scoped Runtime Implementation Accepted
+## 21. Phase B API Evolution — Scoped Runtime Implementation Proposed
 
 [PHB-001–014](requirements.md#10-phase-b-additions--proposed-for-review) and
 [ADR-011–015](architecture.md#adr-011-companion-boundaries-and-pre-copy-contract)

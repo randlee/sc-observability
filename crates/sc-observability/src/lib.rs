@@ -2271,9 +2271,10 @@ mod tests {
                 .expect("emit");
         }
 
-        // `flush` is a writer-thread barrier: all three events and the sink's
-        // synchronous rotations are complete before either reader snapshots.
-        // Do not race snapshots against a merely-observed first rotated file.
+        // `flush` is a writer-thread barrier for writes, not for the separately
+        // scheduled maintenance/rotation pass. Retry both readers until one
+        // stable view covers the same expected records; do not change public
+        // flush semantics merely to make this parity fixture deterministic.
         logger.flush().expect("drain writer before parity query");
 
         let query = LogQuery {
@@ -2281,10 +2282,23 @@ mod tests {
             limit: Some(2),
             ..LogQuery::default()
         };
-        let logger_snapshot = logger.query(&query).expect("logger query");
         let reader = JsonlLogReader::new(default_log_path(&root, &service_name()));
-        let reader_snapshot = reader.query(&query).expect("reader query");
-
+        let mut settled = None;
+        wait_for(
+            || match (logger.query(&query), reader.query(&query)) {
+                (Ok(logger_snapshot), Ok(reader_snapshot))
+                    if request_ids(&logger_snapshot) == ["req-c", "req-b"]
+                        && request_ids(&reader_snapshot) == ["req-c", "req-b"]
+                        && reader_snapshot == logger_snapshot =>
+                {
+                    settled = Some((logger_snapshot, reader_snapshot));
+                    true
+                }
+                _ => false,
+            },
+            "expected logger and reader parity after asynchronous maintenance settles",
+        );
+        let (logger_snapshot, reader_snapshot) = settled.expect("captured parity snapshots");
         assert_eq!(request_ids(&logger_snapshot), ["req-c", "req-b"]);
         assert_eq!(request_ids(&reader_snapshot), ["req-c", "req-b"]);
         assert_eq!(reader_snapshot, logger_snapshot);

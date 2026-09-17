@@ -4,6 +4,10 @@ on:
   pull_request:
     paths:
       - 'crates/**'
+      - 'release/publish-artifacts.toml'
+      - 'release/runtime-level-qualification.toml'
+      - 'scripts/ci/_runtime_level_common.py'
+      - 'scripts/ci/fixtures/runtime-level-consumer/**'
       - 'scripts/ci/prepare_runtime_level_staged_packages.py'
       - 'scripts/ci/validate_runtime_level_*'
       - '.github/workflows/bp2-staged-consumer.yml'
@@ -15,11 +19,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Verify qualification metadata and fixture formatting
+        run: |
+          python3 scripts/ci/validate_runtime_level_qualification_metadata.py
+          rustfmt --check scripts/ci/fixtures/runtime-level-consumer/*.rs
+          python3 scripts/ci/tests/test_validate_runtime_level_platform_evidence.py
       - name: Build one immutable candidate stage
         env:
           STAGE_DIR: ${{ runner.temp }}/bp2-stage
         shell: bash
-        run: python3 scripts/ci/prepare_runtime_level_staged_packages.py --version 1.3.0 --output "$STAGE_DIR"
+        run: |
+          candidate_version="$(python3 scripts/ci/_runtime_level_common.py --candidate-version)"
+          python3 scripts/ci/prepare_runtime_level_staged_packages.py --version "$candidate_version" --output "$STAGE_DIR"
       - name: Retain immutable candidate bytes
         uses: actions/upload-artifact@v4
         with:
@@ -51,7 +62,9 @@ jobs:
         env:
           STAGE_DIR: ${{ runner.temp }}/bp2-stage
         shell: bash
-        run: python3 scripts/ci/validate_runtime_level_staged_consumer.py --version 1.3.0 --stage "$STAGE_DIR" --platform ${{ matrix.evidence }} --result-file bp2-evidence/${{ matrix.evidence }}.json
+        run: |
+          candidate_version="$(python3 scripts/ci/_runtime_level_common.py --candidate-version)"
+          python3 scripts/ci/validate_runtime_level_staged_consumer.py --version "$candidate_version" --stage "$STAGE_DIR" --platform ${{ matrix.evidence }} --result-file bp2-evidence/${{ matrix.evidence }}.json
       - name: Retain platform qualification output
         if: always()
         uses: actions/upload-artifact@v4

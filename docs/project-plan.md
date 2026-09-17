@@ -143,10 +143,11 @@ implementation completion, with QA and merge state tracked separately.
 
 B.P2 selects the `1.3.0` four-crate candidate, retains deterministic `.crate`
 archive checksums and normalized package inventories, and validates separate
-published-baseline and extracted-candidate consumers. The implementation is
-pending retained macOS/Linux/Windows qualification artifacts; it does not
-publish to crates.io. B.7 owns the phase-end live release and registry-only
-consumer proof.
+published-baseline and extracted-candidate consumers. Retained macOS/Linux/Windows
+qualification artifacts passed for the recorded staged candidate; independent QA,
+merge, live publication, and B.7 registry-only re-proof remain pending. B.P2
+does not publish to crates.io. B.7 owns the phase-end live release and
+registry-only consumer proof.
 
 ## Rule
 
