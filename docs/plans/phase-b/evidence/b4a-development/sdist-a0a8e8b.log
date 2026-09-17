@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source_commit": "a0a8e8bece1940a6dbb1055ba965357a1239123e",
+  "version": "1.4.0",
+  "development_only": true,
+  "sdist": "sc_observability-1.4.0.tar.gz",
+  "sdist_sha256": "e3ec7001073bcd9db7e683d72279abc728770dc4ae853001a0ea3c9877c1150d",
+  "distribution_manifest_sha256": "ecd22b595fc3ea92162f0f63544a61da1a3e0a19ed98012f989f0cf7d051c2dc",
+  "prepare_log_sha256": "0e0c85fe483d993ad4fc52d41f1b8ca34ac3faab565ac1662754269bb5d1a6fc",
+  "publication": "pending_B.7"
+}

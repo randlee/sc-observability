@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
 from pathlib import Path
@@ -160,6 +161,65 @@ def test_owned_level_changes_are_revised_reset_and_retained(tmp_path: Path) -> N
         assert isinstance(off_logger.shutdown(), Ok)
 
 
+def test_real_revision_exhaustion_retains_the_native_state(tmp_path: Path) -> None:
+    logger = _owned(tmp_path / "revision-exhaustion", "python-runtime-revision-exhaustion")
+    hook = getattr(logger._native, "_test_force_revision_exhaustion", None)
+    if not callable(hook):
+        pytest.skip("normal package wheels deliberately omit B.4 test hooks")
+    try:
+        forced = json.loads(hook())
+        assert forced["kind"] == "ok"
+        overflow = logger.elevate_level("debug")
+        assert isinstance(overflow, Err)
+        assert overflow.error.kind == "unavailable"
+        assert overflow.error.code == "SC_OBSERVABILITY_LEVEL_REVISION_EXHAUSTED"
+        assert overflow.error.remediation.kind == "not_recoverable"
+        retained = logger.health()
+        assert isinstance(retained, Ok)
+        assert retained.value.level_state.level_revision == 2**64 - 1
+        assert retained.value.level_state.effective_level == "info"
+    finally:
+        assert isinstance(logger.shutdown(), Ok)
+
+
+def test_real_retained_sink_blocks_while_python_operations_progress(tmp_path: Path) -> None:
+    factory = getattr(_native, "_test_create_blocking_owned", None)
+    if not callable(factory):
+        pytest.skip("normal package wheels deliberately omit B.4 test hooks")
+    native, created = factory(json.dumps({
+        "service": "python-runtime-held-writer",
+        "log_root": str(tmp_path / "held-writer"),
+        "enable_file_sink": True,
+        "enable_console_sink": False,
+    }))
+    assert json.loads(created)["kind"] == "ok"
+    assert native is not None
+    logger = Logger(native)
+    try:
+        assert isinstance(logger.log(_event("held-sink")), Ok)
+        entered = getattr(native, "_test_blocked_writer_entered")
+        deadline = time.monotonic() + 2
+        while not json.loads(entered())["value"] and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert json.loads(entered())["value"], "real sink writer did not enter the held write"
+
+        # The writer is genuinely retained, yet direct health and an independent
+        # operation remain schema-tagged and responsive from Python.
+        assert isinstance(logger.health(), Ok)
+        query = logger.query(LogQuery(action="held-sink"))
+        assert isinstance(query, (Ok, Err))
+        blocked_flush = logger.flush(timeout_ms=10)
+        assert isinstance(blocked_flush, Err)
+        assert blocked_flush.error.kind == "timeout"
+
+        released = getattr(native, "_test_release_blocked_writer")
+        assert json.loads(released())["kind"] == "ok"
+        assert isinstance(logger.shutdown(timeout_ms=2_000), Ok)
+    finally:
+        # Shutdown retains its completed result if the preceding assertion fails.
+        assert isinstance(logger.shutdown(timeout_ms=2_000), Ok)
+
+
 def test_public_operation_race_keeps_every_result_tagged(tmp_path: Path) -> None:
     logger = _owned(tmp_path / "race", "python-runtime-race")
     start = Barrier(4)
@@ -256,7 +316,8 @@ def test_real_factory_filesystem_failure_is_tagged(tmp_path: Path) -> None:
 def test_private_ci_fault_hook_preserves_tagged_native_results(tmp_path: Path) -> None:
     """The source-validation wheel exercises each PyO3 Result boundary."""
     forced = getattr(_native, "_test_force_failure", None)
-    assert callable(forced), "the source-validation wheel must enable test-hooks"
+    if not callable(forced):
+        pytest.skip("normal package wheels deliberately omit B.4 test hooks")
 
     forced("create_owned")
     failed_factory = create_logger(LoggerConfig("python-runtime-forced-factory", str(tmp_path / "factory")))
@@ -292,12 +353,14 @@ def test_private_ci_fault_hook_covers_attached_native_results(tmp_path: Path) ->
     """Attached operations share the native fault boundary without ownership."""
     install_host = getattr(_native, "_test_install_owned_host", None)
     forced = getattr(_native, "_test_force_failure", None)
-    assert callable(install_host)
-    assert callable(forced)
+    entered = getattr(_native, "_test_blocked_host_entered", None)
+    release = getattr(_native, "_test_release_blocked_host", None)
+    if not all(callable(hook) for hook in (install_host, forced, entered, release)):
+        pytest.skip("normal package wheels deliberately omit B.4 test hooks")
     installed = json.loads(install_host(json.dumps({
         "service": "python-runtime-forced-attached",
         "log_root": str(tmp_path / "attached"),
-    })))
+    }), True))
     assert installed["kind"] == "ok"
     attached = get_host_logger()
     assert isinstance(attached, Ok)
@@ -315,3 +378,17 @@ def test_private_ci_fault_hook_covers_attached_native_results(tmp_path: Path) ->
             assert result.error.kind == "internal"
     finally:
         forced(None)
+
+    with ThreadPoolExecutor(max_workers=1) as workers:
+        blocked_log = workers.submit(attached.value.log, _event("blocked-attached-log"))
+        deadline = time.monotonic() + 2
+        while not entered():
+            assert time.monotonic() < deadline, "native blocked host did not observe log admission"
+            time.sleep(0.005)
+        # `NativeAttachedLogger.log` releases the interpreter while a host
+        # operation is held; health/query/flush remain independently tagged.
+        assert isinstance(attached.value.health(), Ok)
+        assert isinstance(attached.value.query(LogQuery()), (Ok, Err))
+        assert isinstance(attached.value.flush(), (Ok, Err))
+        release()
+        assert isinstance(blocked_log.result(timeout=2), Ok)

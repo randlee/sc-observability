@@ -71,6 +71,13 @@ The runner supports interpreter-matched embedded-host execution in every cell
 through `embedding_in_each_cell`; B.6 enables this together with asyncio debug
 and warnings-as-errors for its full owned/attached qualification.
 
+Full qualification is explicitly scheduled for the combined corrected candidate
+through `workflow_dispatch`, or reused by B.7 through `workflow_call` with a full
+immutable source SHA. The reusable call has no development-mode input. Routine
+PRs run the separate cheap packaging boundary and workflow syntax checks; they
+do not launch redundant 25-cell matrices. This scheduling refinement is recorded
+in ATM 01M2QG7VKZJ6XYBK34XXCG786V and preserves all final acceptance gates.
+
 ## Prepublication Rust source bundle
 
 B.3/B.3b/B.4 artifacts are not on crates.io until B.7. Therefore B.4a cannot
