@@ -87,7 +87,7 @@ async function run() {
   }
   failure('unknown-event-field', await command('try_log', { ...request, event: wireEvent({ authority: true }) }), 'validation');
   failure('unknown-request-field', await command('health', { ...request, authority: true }), 'validation');
-  const exactRequest = { ...request, event: wireEvent({ message: '' }) };
+  const exactRequest = { ...request, event: { ...event, fields: {}, message: '' } };
   exactRequest.event.message = 'x'.repeat(65536 - new TextEncoder().encode(JSON.stringify(exactRequest)).length);
   value('exact-64k-request', await command('try_log', exactRequest));
   failure('one-byte-oversize-request', await command('try_log', { ...exactRequest, event: { ...exactRequest.event, message: exactRequest.event.message + 'x' } }), 'validation');

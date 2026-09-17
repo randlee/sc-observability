@@ -13,7 +13,7 @@ const ok = (result) => { assert.equal(result.kind, 'ok'); return result.value; }
 const err = (result, kind) => { assert.equal(result.kind, 'error'); if (kind) assert.equal(result.error.kind, kind); return result.error; };
 const event = ok(encodeEvent({ level: 'info', target: 'tauri-example', action: 'fault' }));
 const diagnostic = { at: '2026-09-17T00:00:00.000Z', code: 'REMOTE', message: 'retained', remediation: { kind: 'recoverable', steps: ['first', 'second'] } };
-const clientFor = (response) => ok(createClient({ request: async () => response }));
+const clientFor = (response) => ok(createClient({ request: async () => ({ kind: 'ok', value: response }) }));
 const fixtureCases = JSON.parse(readFileSync('schema-cases.json', 'utf8'));
 for (const fixture of fixtureCases) {
   await test(`schema-${fixture.id}`, () => assert.equal(validate(fixture.entrypoint, fixture.value), fixture.valid));
