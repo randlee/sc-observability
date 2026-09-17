@@ -133,7 +133,8 @@ artifacts. QA-4 independently verified 17/18 tracked B.P1 findings at
 `a8951321e6b1df6044c2ee1f6f41c07a9dad7d99`; the remaining manual governance
 hold was withdrawn by coordinating lead aobs following the owner's direction
 to complete Phase B with publication delayed until the end. Public-API review
-status is accepted for scoped implementation, historical QA verdicts remain
+status remains proposed for public API review and is owner-deferred to Phase B
+completion; historical QA verdicts remain
 unchanged (QA-5 scoped checks satisfied; overall historical verdict FAIL), and
 B.P1 remains unmerged and not live-published. Sprint `status: complete` denotes
 implementation completion, with QA and merge state tracked separately.

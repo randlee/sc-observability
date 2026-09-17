@@ -1,8 +1,7 @@
 ---
-status: accepted_for_implementation
-approved_by: aobs
-approval_date: 2026-09-16 America/Los_Angeles
-approval_revision: 12991c6521d064b733501b9b49a3188e3ce71e1c
+status: proposed_for_public_api_review
+owner_deferral_date: 2026-09-17T02:41:50Z
+owner_deferral_message: 01M2PKX8R4J4VJP5V6RRV9JJPB
 execution_status: authorized
 execution_stop_withdrawn_by: aobs
 issue: 97
@@ -17,9 +16,10 @@ This is an explicit prerequisite to B.1, not a post-copy implementation task.
 On 2026-09-16 (America/Los_Angeles), aobs relayed the owner's instruction:
 "you task was to complete phase-b w/ publish delayed until the end."
 As coordinating lead, aobs withdraws the additional manual execution stop it
-imposed under QA-B010. Execution may continue. The scoped aobs approval accepts
-this contract for implementation at the frontmatter revision; it is neither a
-personal owner signature, registry-publication approval, nor independent QA PASS.
+imposed under QA-B010. The owner subsequently deferred contract acceptance to
+Phase B completion (ATM `01M2PKX8R4J4VJP5V6RRV9JJPB`, 2026-09-17T02:41:50Z).
+This contract remains proposed for public API review; QA-B010 is owner-deferred,
+not resolved and not a development blocker.
 
 sc-observability implements and qualifies the additive core capability first;
 BTIT implements the corresponding bridge API and behavior against B.P2's exact
@@ -37,9 +37,9 @@ This document is the normative signature/behavior reference, not an additional
 sprint or a separate closure checklist. B.3 owns the shared wire projection; B.3b owns native backends and conversions;
 B.3a and B.4 own TypeScript/Tauri and Python runtime projections.
 
-## Accepted implementation API and values
+## Proposed API and values
 
-The following is accepted for scoped implementation, not a registry-release or
+The following remains proposed for review and is not a registry-release or
 cross-project API-freeze approval.
 Core types live in the neutral types crate; owner/state implementation lives in
 sc-observability. Bridge re-exports these values rather than duplicating enums.

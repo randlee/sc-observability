@@ -49,10 +49,9 @@ passed. The stage is built once, then the exact bytes are downloaded by every
 platform job. This is implementation evidence, not an independent QA approval;
 `quality-mgr` owns that verdict.
 
-Contract approval is the `runtime-level-contract.md` blob
-`e566d7eba4947abe935c1a0e1a20f4c4fab35864` from commit
-`12991c6521d064b733501b9b49a3188e3ce71e1c`, scoped to implementation by aobs
-in [`phase-b-runtime-level.md`](../../api-approvals/phase-b-runtime-level.md).
+Runtime-contract acceptance is owner-deferred to Phase B completion (ATM
+`01M2PKX8R4J4VJP5V6RRV9JJPB`); see
+[`phase-b-runtime-level.md`](../../api-approvals/phase-b-runtime-level.md).
 The fixture's state revision `2` is behavior evidence, not a contract revision.
 Registry publication and release approval remain deferred to B.7.
 

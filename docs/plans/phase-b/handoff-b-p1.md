@@ -37,8 +37,9 @@ its 17 raw files and `SHA256SUMS.txt` are the checksum index.
 
 On 2026-09-16 (America/Los_Angeles), aobs relayed the owner's instruction:
 "you task was to complete phase-b w/ publish delayed until the end."
-Coordinating lead aobs withdraws its additional manual QA-B010 execution stop
-and records scoped implementation approval in
+Coordinating lead aobs withdraws its additional manual QA-B010 execution stop.
+The owner defers runtime-contract acceptance to Phase B completion; the deferral
+record is in
 [`phase-b-runtime-level.md`](../../api-approvals/phase-b-runtime-level.md).
 This is neither a personal owner signature nor independent QA PASS; historical
 verdicts remain unchanged. QA-5's scoped checks are satisfied while its overall

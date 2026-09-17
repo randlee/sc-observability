@@ -1,7 +1,6 @@
 # SC-Observability Public API Checklist
 
-**Status**: Approved released baseline; the scoped runtime-level implementation
-below is accepted for implementation, while other Phase B additions remain proposed.
+**Status**: Approved released baseline; all Phase B additions below remain proposed.
 **Purpose**: Track the intended public API so implementation does not invent or
 change the public surface opportunistically.
 
@@ -294,8 +293,8 @@ The [phase index](plans/phase-b/plan-phase-b.md) routes authoritative sprint
 contracts. Except where explicitly marked implemented below, these pending
 entries do not alter the finalized items above.
 
-- [x] Neutral runtime level state/results and an opaque core mutation capability,
-  accepted for scoped implementation by aobs; see the
+- [ ] Neutral runtime level state/results and an opaque core mutation capability,
+  owner-deferred to Phase B completion; see the
   [runtime contract](plans/phase-b/runtime-level-contract.md) and
   [approval record](api-approvals/phase-b-runtime-level.md). Preserve
   existing LoggerConfig and health struct shapes and constructor signatures.

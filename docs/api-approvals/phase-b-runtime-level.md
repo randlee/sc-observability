@@ -1,7 +1,7 @@
-# Phase B runtime-level scoped approval
+# Phase B runtime-level owner deferral
 
 Date: 2026-09-16 (America/Los_Angeles)  
-Approver: `aobs`, appointed Phase B lead under owner-authorized execution
+Owner ruling: 2026-09-17T02:41:50Z, ATM `01M2PKX8R4J4VJP5V6RRV9JJPB`
 
 ## Scope
 
@@ -11,9 +11,10 @@ Approver: `aobs`, appointed Phase B lead under owner-authorized execution
 
 ## Approval
 
-aobs approves this scoped contract for implementation based on independently
-verified code/evidence and green gates. This is not a personal owner signature,
-registry-publication approval, or an independent QA PASS.
+The owner defers runtime-contract acceptance to Phase B completion. No current
+approval is granted: QA-B010 remains owner-deferred, neither resolved nor a
+development blocker. This is not a personal signature, publication approval, or
+independent QA PASS.
 
 ## Affected Artifacts
 

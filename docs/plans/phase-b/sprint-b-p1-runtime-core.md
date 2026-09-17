@@ -1,7 +1,7 @@
 ---
 id: B.P1
 status: complete
-qa_status: historical_fail_scoped_checks_satisfied
+qa_status: owner_deferred_to_phase_b_completion
 merge_status: unmerged
 branch: feature/B-P1-runtime-core
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/B-P1-runtime-core
@@ -16,10 +16,9 @@ through QA-3 remain historical FAIL records. QA-4 independently verified 17 of
 18 tracked findings at `a8951321e6b1df6044c2ee1f6f41c07a9dad7d99`; the one
 remaining item was QA-B010's manual execution stop. Coordinating lead aobs
 withdraws that added stop, following the owner's instruction relayed in the
-[runtime contract](runtime-level-contract.md). The scoped implementation
-approval is recorded in
+[runtime contract](runtime-level-contract.md). The owner deferral is recorded in
 [`api-approvals/phase-b-runtime-level.md`](../../api-approvals/phase-b-runtime-level.md).
-Historical QA verdicts remain unchanged: QA-5 scoped checks are satisfied, but
+QA-B010 is owner-deferred rather than resolved. Historical QA verdicts remain unchanged: QA-5 scoped checks are satisfied, but
 its overall verdict at the reviewed head remains FAIL. `status: complete` means
 implementation completion only; `qa_status` and `merge_status` carry the
 separate review and merge state.
