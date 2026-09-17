@@ -1,11 +1,12 @@
 ---
-status: accepted_target_design_not_source_acceptance
+status: conditionally_accepted_target_design_not_source_acceptance
 owner: sc-observability
 implementation_source: beads-task-issue-tracker
 baseline_inspected: 8d8e82ae9f8501dbbf78c76df24d943918d7a6e4
 inspection_status: reconciled_snapshot_not_source_acceptance
 target_design_accepted_revision: 84b32e9d6718418371ffd25a3de52346278725ca
 target_design_qa2: https://github.com/randlee/sc-observability/pull/111#issuecomment-5708115438
+service_hardening_coverage: pending_phase-b-bp3-service-addendum
 ---
 
 # Target bridge public API contract and disposition matrix
@@ -19,14 +20,19 @@ the resulting accepted crate set. There is no post-copy bridge redesign sprint.
 
 ## Scoped target-design acceptance
 
-aobs accepted this target design at
+aobs conditionally accepted this target design at
 `84b32e9d6718418371ffd25a3de52346278725ca`, based on the independent QA2 PASS
 recorded at [PR #111](https://github.com/randlee/sc-observability/pull/111#issuecomment-5708115438).
-The current status is `accepted_target_design_not_source_acceptance`: it accepts
+The current status is `conditionally_accepted_target_design_not_source_acceptance`:
+it accepts
 the reviewed target signatures and dispositions for BTIT implementation only.
 It is not runtime public-API acceptance, BTIT source acceptance, merge
 permission, or publication permission; QA-B010 remains owner-deferred. BTIT
 must still supply its immutable implementation and critical-review evidence.
+The decision is conditional on `phase-b-bp3-service-addendum` passing or
+recording a documented scope skip. Mandatory service-hardening coverage remains
+pending; the four completed scoped reviews are unchanged and do not claim that
+all mandatory coverage has run.
 
 BTIT's current unpublished API creates no backward-compatibility or semver
 obligation for this initial destination API. The preserve decisions below retain
