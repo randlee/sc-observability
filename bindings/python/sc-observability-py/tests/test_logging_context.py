@@ -373,3 +373,55 @@ def test_stack_redaction_and_foreign_stack_formatter(logger):
     handler.setFormatter(BrokenFormatter()); handler.emit(item)
     assert value(handler.health()).dropped_by_cause[HandlerDropCause.INTERNAL] == 1
     handler.close()
+
+
+def test_scope_transition_failures_have_exact_stable_diagnostic():
+    def invalid(result):
+        assert isinstance(result, Err) and result.error.kind == "validation"
+        assert result.error.code == generated.SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID
+        assert result.error.remediation.steps == (
+            "Enter and close each scope once in LIFO order on its originating thread and task",)
+    outer = value(bind_context()); inner = value(bind_context())
+    invalid(outer.close())
+    value(outer.enter())
+    try:
+        invalid(outer.enter())
+        value(inner.enter())
+        try: invalid(outer.close())
+        finally: value(inner.close())
+        invalid(inner.enter())
+    finally: value(outer.close())
+    invalid(outer.enter())
+    assert value(outer.close()).kind == "closed"
+
+
+def test_foreign_context_activation_failure_preserves_inactive_scope(monkeypatch):
+    import sc_observability.context as context
+    original = context._STACK
+    class BrokenStack:
+        def get(self): return original.get()
+        def set(self, value): raise RuntimeError("foreign context set")
+    scope = value(bind_context(request_id="retry-after-foreign-fault"))
+    monkeypatch.setattr(context, "_STACK", BrokenStack())
+    result = scope.enter()
+    assert isinstance(result, Err) and result.error.kind == "internal"
+    assert original.get() == ()
+    monkeypatch.setattr(context, "_STACK", original)
+    value(scope.enter()); value(scope.close())
+
+
+def test_first_import_does_not_change_root_logger():
+    script = """
+import logging
+root = logging.getLogger()
+original = (tuple(root.handlers), root.level)
+import sc_observability
+import sc_observability.logging
+import sc_observability.context
+assert (tuple(root.handlers), root.level) == original
+print('B5_IMPORT_OPT_IN_OK')
+"""
+    result = subprocess.run([sys.executable, "-I", "-c", script], text=True,
+                            capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert "B5_IMPORT_OPT_IN_OK" in result.stdout
