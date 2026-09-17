@@ -70,6 +70,22 @@ to the retained candidate.
 
 ## Current evidence and remaining gates
 
+The approved production/fault-companion split is implemented in the sole runner.
+Production retains one immutable wheel per platform, executes all public tests
+and typing fixtures, and checks private hooks are absent. Explicit fault-only
+files execute against a separately installed companion from the same sdist;
+its recorded feature set adds only `test-hooks`. Both suites reject skips.
+The aggregate verifies distinct hashes, exact source feature identities and
+separate JUnit evidence, then emits `production-artifacts.json` containing only
+the five production wheels. Actual companion qualification awaits the parent
+fault-file contract and the final combined candidate.
+
+Source assembly now copies Git-tracked Python and embedding inputs, so runtime
+tests can leave ignored bytecode without contaminating the sdist inventory.
+Generated files remain untouched. Windows network denial is scoped to each
+artifact subprocess, with bounded execution and firewall cleanup between
+commands; checkout/cache denial remains active for the proof.
+
 This handoff is incomplete. Full runtime qualification awaits the active B.4
 owner's completed contract and the final 25-cell execution. Explicit development
 runs label every result `development_only`; final aggregation rejects those

@@ -58,6 +58,19 @@ replace native functionality with a fallback or weaken error handling.
 Distribution name remains proposed `sc-observability`; registry availability
 and publication belong to B.7.
 
+The lead-approved qualification refinement (ATM 01M2QF796PNV7EN3JN445PTD5D)
+keeps one immutable production abi3 wheel per platform. Every cell runs the full
+public runtime suite, including inherited B.5/B.6 tests, and asserts that private
+native test hooks are absent. Fault injection alone uses a separate instrumented
+companion built from the identical sdist with only the additional `test-hooks`
+feature. Its explicit `fault_pytest_paths` files run in a separate installed
+environment on each cell's interpreter. Both suites reject skips. Evidence
+records separate hashes, features and roles; companion results cannot replace
+production behavior, and companions never enter the publication inventory.
+The runner supports interpreter-matched embedded-host execution in every cell
+through `embedding_in_each_cell`; B.6 enables this together with asyncio debug
+and warnings-as-errors for its full owned/attached qualification.
+
 ## Prepublication Rust source bundle
 
 B.3/B.3b/B.4 artifacts are not on crates.io until B.7. Therefore B.4a cannot
