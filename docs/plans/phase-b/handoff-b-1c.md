@@ -69,7 +69,7 @@ Behavior/source-integrity pass:
 
 ```text
 cargo fmt --all -- --check: passed
-cargo test --locked --workspace: 178 unit/integration tests passed; 0 failed; 6 normal doctests passed; 2 compile-fail doctests passed
+cargo test --locked --workspace: historical preparation command only; this handoff does not retain a raw aggregate count or doctest total
 cargo clippy --locked --workspace --all-targets -- -D warnings: passed
 python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py': 41 tests, OK
 bash scripts/ci/validate_docs_consistency.sh: passed
