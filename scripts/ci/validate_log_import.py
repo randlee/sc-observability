@@ -4,13 +4,17 @@
 `docs/plans/phase-b/import-provenance.json` pins the exact accepted BTIT
 commit, its accepted B.P3 review handoff, and a per-file Git blob inventory
 for the three copied crates. This script re-derives the same facts from a
-live `--source-repo` checkout, from immutable Git objects in `--doc-repo`
-(the repo holding the review document and the target-contract commit; this
-repo's own history in real use), and from the already-copied `--destination`
-tree, and fails whenever they disagree.
+live `--source-repo` (BTIT) checkout, from immutable Git objects, and from
+the already-copied `--destination` tree, and fails whenever they disagree.
 
-Three independent comparisons exist because they catch different failure
-modes:
+Citations resolve in different repositories depending on who owns the
+document: the BTIT source review is BTIT's own acceptance record, so it
+resolves in `--source-repo`; the target-contract commit and the handoff
+revision are sc-observability's own documents, so they resolve in
+`--doc-repo` (this repo's own history in real use). Conflating the two would
+let a fabricated citation in the wrong repository pass unnoticed.
+
+Independent comparisons exist because they catch different failure modes:
 
 - source vs provenance: catches a provenance file that was authored against
   the wrong commit, or hand-edited/stale relative to BTIT's real history.
@@ -19,26 +23,38 @@ modes:
   looked up directly by SHA, not via the source repo's current `HEAD`, so a
   checkout that has advanced since acceptance does not invalidate a
   still-present immutable source.
-- review/target citations vs doc-repo Git objects: catches a handoff or
-  provenance record that cites a review document or target-contract commit
-  that does not exist, does not cover the accepted source, or does not carry
-  the recorded verdict -- rather than trusting free-text citations at face
-  value.
+- review citation vs BTIT Git objects: catches a handoff that cites a review
+  document that does not exist, does not cover the accepted source, or does
+  not carry an actual "accepted" verdict -- rather than trusting free-text
+  citations, or a provenance-declared verdict, at face value. A rejected
+  review document is refused even if the provenance record's own
+  `review_verdict` field consistently claims "rejected": the contract
+  requires an accepted review, not merely internal self-consistency.
+- target-contract/handoff-revision vs sc-observability Git objects: catches
+  a fabricated or stale citation of either document; the handoff revision's
+  cited content must byte-match the `--handoff` document actually used.
 - destination vs provenance: catches a copy step that changed more than the
   declared mechanical adaptations (package metadata, dependency paths,
   relocated test/doc paths). A blob difference here is only allowed when its
   path is explicitly listed in `adaptations` with a reason, a permitted
-  mechanical `kind`, and the exact approved before/after content -- not a
-  bare path allowlist. The destination tree is enumerated independently by
-  walking the filesystem (not just looking up recorded paths), so an
-  unrecorded extra file cannot silently pass, and symlinks/non-regular files
-  are rejected before their content is ever read.
+  mechanical `kind`, exact approved before/after content, and a line-level
+  diff confined to that kind's own pattern -- a kind label alone proves
+  nothing about what actually changed, so a runtime rewrite mislabeled
+  `dependency_path` is rejected on content, not accepted on label. The
+  destination tree is enumerated by walking the filesystem without
+  following symlinked directories (`os.walk(followlinks=False)`), and every
+  directory and file entry encountered is checked for symlink/regular-file
+  status and path confinement before anything is read -- a leaf-only
+  symlink check would miss an entire extra directory reached only through a
+  symlinked parent.
 """
 
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -53,7 +69,15 @@ IMPORT_CRATE_PREFIXES = (
     "crates/sc-observability-log-consumer-check",
 )
 
-ALLOWED_ADAPTATION_KINDS = {"package_metadata", "dependency_path", "relocated_doc_or_test_path"}
+_KIND_LINE_PATTERNS = {
+    "package_metadata": re.compile(
+        r"^\s*(publish|version|edition|description|license|repository|readme|keywords|categories|authors|homepage)\s*="
+    ),
+    "dependency_path": re.compile(
+        r"^\s*(path|version|git|branch|rev)\s*=|^\s*[\w.-]+\s*=\s*\{|^\s*\[[\w.-]*dependencies[\w.-]*\]\s*$"
+    ),
+    "relocated_doc_or_test_path": re.compile(r"^\s*(mod|include!|path)\b|\.(md|rs)\b"),
+}
 
 _FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _ACCEPTED_SHA_RE = re.compile(r"Accepted source SHA:\s*`([0-9a-f]{40})`")
@@ -61,6 +85,7 @@ _REVIEW_DOC_RE = re.compile(r"Review document:\s*`([^`]+)`\s*at commit\s*`([0-9a
 _VERDICT_RE = re.compile(r"Verdict:\s*(\S+)")
 _ACCEPTANCE_RE = re.compile(r"sc-observability acceptance:\s*(\S+)")
 _REVIEWED_COMMIT_RE = re.compile(r"Reviewed commit:\s*([0-9a-f]{40})")
+_HANDOFF_REVISION_RE = re.compile(r"^([^@]+)@([0-9a-f]{40})$")
 
 
 def parse_handoff(text: str) -> dict[str, str]:
@@ -120,27 +145,41 @@ def git_blob_inventory(repo: Path, commit: str, prefixes: tuple[str, ...]) -> di
 
 
 def walk_destination_inventory(destination: Path, prefixes: tuple[str, ...]) -> dict[str, str]:
-    """Independently enumerate the destination tree, rejecting anything unsafe to read."""
+    """Independently enumerate the destination tree, rejecting anything unsafe to read.
+
+    Uses `os.walk(followlinks=False)` so a symlinked directory is never
+    descended into, and every directory and file entry is explicitly
+    checked for symlink status -- a leaf-only symlink check would miss an
+    entire extra directory reached only via a symlinked parent.
+    """
     dest_resolved = destination.resolve()
     inventory: dict[str, str] = {}
     for prefix in prefixes:
         base = destination / prefix
-        if not base.is_dir():
+        if not base.exists():
             continue
-        for path in sorted(base.rglob("*")):
-            if path.is_dir():
-                continue
-            rel = path.relative_to(destination).as_posix()
-            if path.is_symlink():
-                raise SystemExit(f"symlink not permitted in destination tree: {rel}")
-            if not path.is_file():
-                raise SystemExit(f"non-regular file not permitted in destination tree: {rel}")
-            resolved = path.resolve()
-            if resolved != dest_resolved and dest_resolved not in resolved.parents:
-                raise SystemExit(f"path escapes destination tree: {rel}")
-            inventory[rel] = subprocess.run(
-                ["git", "hash-object", str(path)], check=True, capture_output=True, text=True,
-            ).stdout.strip()
+        if base.is_symlink():
+            raise SystemExit(f"symlink not permitted in destination tree: {prefix}")
+        for dirpath, dirnames, filenames in os.walk(base, followlinks=False):
+            dirpath_p = Path(dirpath)
+            for dirname in dirnames:
+                dpath = dirpath_p / dirname
+                if dpath.is_symlink():
+                    rel = dpath.relative_to(destination).as_posix()
+                    raise SystemExit(f"symlink not permitted in destination tree: {rel}")
+            for filename in filenames:
+                fpath = dirpath_p / filename
+                rel = fpath.relative_to(destination).as_posix()
+                if fpath.is_symlink():
+                    raise SystemExit(f"symlink not permitted in destination tree: {rel}")
+                if not fpath.is_file():
+                    raise SystemExit(f"non-regular file not permitted in destination tree: {rel}")
+                resolved = fpath.resolve()
+                if resolved != dest_resolved and dest_resolved not in resolved.parents:
+                    raise SystemExit(f"path escapes destination tree: {rel}")
+                inventory[rel] = subprocess.run(
+                    ["git", "hash-object", str(fpath)], check=True, capture_output=True, text=True,
+                ).stdout.strip()
     return inventory
 
 
@@ -180,13 +219,22 @@ def blob_id_of_content(content: str, cwd: Path) -> str:
     ).stdout.strip()
 
 
+def _changed_lines(before: str, after: str) -> list[str]:
+    diff = difflib.ndiff(before.splitlines(), after.splitlines())
+    return [
+        line[2:] for line in diff
+        if (line.startswith("+ ") or line.startswith("- ")) and line[2:].strip()
+    ]
+
+
 def validate_adaptations(adaptations: list[dict], recorded_inventory: dict[str, str], cwd: Path) -> dict[str, str]:
     """Verify every declared adaptation and return the expected destination inventory.
 
-    Each adaptation must carry a reason, a permitted mechanical `kind`, and
-    the exact approved `before`/`after` content -- a bare path allowlist is
-    not enough, since that would let an arbitrary content change hide behind
-    a declared path.
+    Each adaptation must carry a reason, a permitted mechanical `kind`, exact
+    approved `before`/`after` content, and every changed line between them
+    must match that kind's own pattern -- a kind label alone does not prove
+    the change is actually mechanical, so declaring `dependency_path` over an
+    arbitrary runtime rewrite is rejected here, not accepted on label alone.
     """
     expected = dict(recorded_inventory)
     seen: set[str] = set()
@@ -201,25 +249,35 @@ def validate_adaptations(adaptations: list[dict], recorded_inventory: dict[str, 
         if not reason:
             raise SystemExit(f"adaptation for {path} is missing a reason")
         kind = item.get("kind")
-        if kind not in ALLOWED_ADAPTATION_KINDS:
+        pattern = _KIND_LINE_PATTERNS.get(kind)
+        if pattern is None:
             raise SystemExit(f"adaptation for {path} has a kind that is not a permitted mechanical change: {kind}")
         before, after = item.get("before"), item.get("after")
         if before is None or after is None:
             raise SystemExit(f"adaptation for {path} is missing exact approved before/after content")
         if blob_id_of_content(before, cwd) != recorded_inventory[path]:
             raise SystemExit(f"adaptation 'before' content for {path} does not match the recorded source blob")
+        for line in _changed_lines(before, after):
+            if not pattern.search(line):
+                raise SystemExit(
+                    f"adaptation for {path} changes content that is not a permitted {kind} mechanical change: {line!r}"
+                )
         expected[path] = blob_id_of_content(after, cwd)
     return expected
 
 
 def verify_review_citation(
-    doc_repo: Path, review_path: str, review_commit: str, source_commit: str, expected_verdict: str,
+    source_repo: Path, review_path: str, review_commit: str, source_commit: str, expected_verdict: str,
 ) -> None:
-    """Resolve the handoff's review citation against a real Git object and its content."""
-    if not git_commit_exists(doc_repo, review_commit):
-        raise SystemExit("review document commit not found in doc repository")
+    """Resolve the handoff's review citation against BTIT's own Git history.
+
+    The review is BTIT's own acceptance record of its own commit, so it must
+    resolve in the source repo, never in sc-observability's own doc history.
+    """
+    if not git_commit_exists(source_repo, review_commit):
+        raise SystemExit("review document commit not found in source repository")
     result = subprocess.run(
-        ["git", "-C", str(doc_repo), "show", f"{review_commit}:{review_path}"],
+        ["git", "-C", str(source_repo), "show", f"{review_commit}:{review_path}"],
         capture_output=True, text=True,
     )
     if result.returncode != 0:
@@ -234,8 +292,32 @@ def verify_review_citation(
 
 
 def verify_target_contract_commit(doc_repo: Path, target_commit: str) -> None:
+    """Resolve the target-contract citation against sc-observability's own Git history."""
     if not _FULL_SHA_RE.match(target_commit) or not git_commit_exists(doc_repo, target_commit):
         raise SystemExit("target contract commit not found in doc repository")
+
+
+def verify_handoff_revision(doc_repo: Path, handoff_revision: str, handoff_text: str) -> None:
+    """Resolve the handoff-revision citation against sc-observability's own Git history.
+
+    The cited commit's content must byte-match the `--handoff` document
+    actually used for validation, so a synthetic or stale revision string
+    cannot stand in for the real committed handoff.
+    """
+    match = _HANDOFF_REVISION_RE.match(handoff_revision or "")
+    if not match:
+        raise SystemExit("import-provenance.json handoff_revision must be '<path>@<full-40-character-commit-sha>'")
+    path, commit = match.group(1), match.group(2)
+    if not git_commit_exists(doc_repo, commit):
+        raise SystemExit("handoff_revision commit not found in doc repository")
+    result = subprocess.run(
+        ["git", "-C", str(doc_repo), "show", f"{commit}:{path}"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"handoff document not found at cited handoff_revision: {path}@{commit}")
+    if result.stdout != handoff_text:
+        raise SystemExit("handoff_revision content does not match the provided --handoff document")
 
 
 def validate_import(
@@ -263,6 +345,10 @@ def validate_import(
     if handoff["accepted_sha"] != source_commit:
         raise SystemExit("handoff and provenance source SHA mismatch")
 
+    review_verdict = provenance.get("review_verdict", "")
+    if review_verdict.lower() != "accepted":
+        raise SystemExit("import-provenance.json review_verdict must be accepted")
+
     if not git_commit_exists(source_repo, source_commit):
         raise SystemExit("accepted source commit not found in source repository")
 
@@ -271,11 +357,9 @@ def validate_import(
     source_inventory = git_blob_inventory(source_repo, source_commit, IMPORT_CRATE_PREFIXES)
     diff_inventory(source_inventory, recorded_inventory, label="the source repository")
 
-    verify_review_citation(
-        doc_repo, handoff["review_path"], handoff["review_commit"], source_commit,
-        provenance.get("review_verdict", ""),
-    )
+    verify_review_citation(source_repo, handoff["review_path"], handoff["review_commit"], source_commit, review_verdict)
     verify_target_contract_commit(doc_repo, provenance.get("target_contract_commit", ""))
+    verify_handoff_revision(doc_repo, provenance.get("handoff_revision", ""), handoff_text)
 
     # Destination comparison tolerates only the explicitly declared, verified adaptations.
     expected_destination_inventory = validate_adaptations(
