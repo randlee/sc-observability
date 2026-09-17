@@ -1,6 +1,6 @@
 //! Real Rust-host embedding example for the B.4 binding rlib.
 //!
-//! This executable links the binding rlib and installs the PyO3 module before
+//! This executable links the binding rlib and installs the `PyO3` module before
 //! interpreter initialization. It never loads a wheel or exchanges a Rust
 //! trait object through a dynamic-library boundary.
 
@@ -75,17 +75,7 @@ fn has_record(
 }
 
 fn main() -> PyResult<()> {
-    if let Some(mode) =
-        std::env::args().find_map(|arg| arg.strip_prefix("--b6-finalize=").map(str::to_owned))
-    {
-        match async_conformance::finalize(&mode) {
-            Ok(()) => std::process::exit(0),
-            Err(error) => {
-                eprintln!("{error}");
-                std::process::exit(1);
-            }
-        }
-    }
+    async_conformance::finalize_if_requested();
     pyo3::append_to_inittab!(native_module);
     Python::initialize();
     Python::attach(|py| {

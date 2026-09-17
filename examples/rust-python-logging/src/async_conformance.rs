@@ -80,6 +80,21 @@ fn failure(error: impl std::fmt::Debug) -> PyErr {
     pyo3::exceptions::PyRuntimeError::new_err(format!("{error:?}"))
 }
 
+/// Run an explicitly requested finalization child before normal initialization.
+pub fn finalize_if_requested() {
+    if let Some(mode) =
+        std::env::args().find_map(|arg| arg.strip_prefix("--b6-finalize=").map(str::to_owned))
+    {
+        match finalize(&mode) {
+            Ok(()) => std::process::exit(0),
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
 /// Run real owned/core-attached/bridge-attached asyncio tests in this interpreter.
 ///
 /// # Errors

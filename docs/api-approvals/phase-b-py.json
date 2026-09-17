@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "candidate_version": "1.4.0",
+  "source_commit": "a69a54a5abb750f07f21ad79bcb9cdb5562f6b01",
+  "approved_at": "2026-09-17T11:00:48.841465+00:00",
+  "crates": {
+    "sc-observability-py": {
+      "status": "approved",
+      "reviewer": "aobs (appointed Phase B lead)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "docs/plans/phase-b/evidence/b4-api/sc-observability-py.txt",
+      "api_sha256": "d4d01640af4a8a7a980fd86df7b4a844ad65c1fa66f5c364a4ce930f91bd12fd"
+    }
+  },
+  "approval_scope": "Default-feature Rust embedding surface: six required native type re-exports, install_host_logger Result API and PyO3 module initializer. Generated independently from pinned git archive. No runtime behavior/QA verdict, deferred owner runtime-contract acceptance or publication approval."
+}

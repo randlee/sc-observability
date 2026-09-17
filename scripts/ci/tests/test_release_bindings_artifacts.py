@@ -283,5 +283,108 @@ class ListPublishPlanTests(unittest.TestCase):
         self.assertEqual(result, 0)
 
 
+class PlatformMatrixTests(unittest.TestCase):
+    """Covers the C05 'missing-platform' fail-closed rejection."""
+
+    def setUp(self) -> None:
+        self.repo = FixtureRepo()
+
+    def tearDown(self) -> None:
+        self.repo.cleanup()
+
+    def _manifest_with_platform_refs(self, matrix_ref_exists: bool, policy: dict | None) -> str:
+        if matrix_ref_exists:
+            (self.repo.root / "pkg/matrix-workflow.yml").write_text("placeholder\n", encoding="utf-8")
+        if policy is not None:
+            (self.repo.root / "pkg/platform-policy.json").write_text(json.dumps(policy), encoding="utf-8")
+        return VALID_MANIFEST.replace(
+            'manifest_path = "pkg/pyproject.toml"\npublish_order = 4',
+            'manifest_path = "pkg/pyproject.toml"\n'
+            'platform_matrix_ref = "pkg/matrix-workflow.yml"\n'
+            'platform_policy_ref = "pkg/platform-policy.json"\n'
+            'publish_order = 4',
+        )
+
+    def test_nonempty_platform_matrix_passes(self) -> None:
+        manifest = self._manifest_with_platform_refs(
+            True, {"platforms": [{"id": "linux-x86_64"}], "interpreters": ["3.10"]}
+        )
+        result = _cd_and_run(self.repo, manifest, rba.cmd_validate_manifest)
+        self.assertEqual(result, 0)
+
+    def test_empty_platform_matrix_fails(self) -> None:
+        manifest = self._manifest_with_platform_refs(True, {"platforms": [], "interpreters": []})
+        with self.assertRaisesRegex(SystemExit, "missing-platform"):
+            _cd_and_run(self.repo, manifest, rba.cmd_validate_manifest)
+
+    def test_missing_platform_policy_file_fails(self) -> None:
+        manifest = self._manifest_with_platform_refs(True, None)
+        with self.assertRaisesRegex(SystemExit, "missing-platform"):
+            _cd_and_run(self.repo, manifest, rba.cmd_validate_manifest)
+
+    def test_missing_platform_matrix_ref_file_fails(self) -> None:
+        manifest = self._manifest_with_platform_refs(
+            False, {"platforms": [{"id": "linux-x86_64"}], "interpreters": ["3.10"]}
+        )
+        with self.assertRaisesRegex(SystemExit, "missing-platform"):
+            _cd_and_run(self.repo, manifest, rba.cmd_validate_manifest)
+
+
+class RequireSecretsTests(unittest.TestCase):
+    """Covers the C05 'unavailable-auth' fail-closed rejection."""
+
+    def setUp(self) -> None:
+        self.repo = FixtureRepo()
+
+    def tearDown(self) -> None:
+        self.repo.cleanup()
+
+    def _manifest_with_secret(self, configured: bool) -> str:
+        return VALID_MANIFEST.replace(
+            'manifest_path = "pkg/pyproject.toml"\npublish_order = 4',
+            'manifest_path = "pkg/pyproject.toml"\n'
+            'registry_secret = "PYPI_API_TOKEN"\n'
+            f'registry_secret_configured = {"true" if configured else "false"}\n'
+            'publish_order = 4',
+        )
+
+    def test_require_secrets_fails_when_unconfigured(self) -> None:
+        manifest = self._manifest_with_secret(configured=False)
+        with self.assertRaisesRegex(SystemExit, "blocked-on-auth"):
+            _cd_and_run(
+                self.repo, manifest, rba.cmd_list_publish_plan, args_extra={"require_secrets": True}
+            )
+
+    def test_require_secrets_passes_when_configured(self) -> None:
+        manifest = self._manifest_with_secret(configured=True)
+        result = _cd_and_run(
+            self.repo, manifest, rba.cmd_list_publish_plan, args_extra={"require_secrets": True}
+        )
+        self.assertEqual(result, 0)
+
+    def test_without_require_secrets_flag_unconfigured_secret_is_not_checked(self) -> None:
+        manifest = self._manifest_with_secret(configured=False)
+        result = _cd_and_run(self.repo, manifest, rba.cmd_list_publish_plan)
+        self.assertEqual(result, 0)
+
+    def test_only_kind_scopes_require_secrets_away_from_unrelated_kind(self) -> None:
+        # An unconfigured pypi secret must not block a crate-only publish job's
+        # --require-secrets check (each publish job only cares about its own kind).
+        manifest = self._manifest_with_secret(configured=False)
+        result = _cd_and_run(
+            self.repo, manifest, rba.cmd_list_publish_plan,
+            args_extra={"require_secrets": True, "only_kind": "crate"},
+        )
+        self.assertEqual(result, 0)
+
+    def test_only_kind_still_enforces_require_secrets_for_matching_kind(self) -> None:
+        manifest = self._manifest_with_secret(configured=False)
+        with self.assertRaisesRegex(SystemExit, "blocked-on-auth"):
+            _cd_and_run(
+                self.repo, manifest, rba.cmd_list_publish_plan,
+                args_extra={"require_secrets": True, "only_kind": "pypi"},
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

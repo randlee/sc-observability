@@ -35,3 +35,9 @@ target
 bindings/schema-generator/target/
 bindings/typescript/node_modules/
 bindings/typescript/dist/
+
+# B.7 candidate release evidence (release_bindings_artifacts.py build-evidence):
+# real packaged .crate/sdist/wheel bytes and their hash record, rebuilt fresh
+# on demand by scripts/ci/validate_binding_registry_consumers.sh -- generated
+# build output, not a committed source-of-truth artifact.
+release/evidence/
