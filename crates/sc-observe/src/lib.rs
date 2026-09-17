@@ -1206,14 +1206,28 @@ mod tests {
             .expect("typed runtime"),
         );
 
+        let (completed_tx, completed_rx) = std::sync::mpsc::channel();
         let handles: Vec<_> = (0..8)
             .map(|_| {
                 let runtime = runtime.clone();
-                std::thread::spawn(move || runtime.shutdown_typed())
+                let completed_tx = completed_tx.clone();
+                std::thread::spawn(move || {
+                    let result = runtime.shutdown_typed();
+                    completed_tx
+                        .send(result)
+                        .expect("shutdown completion receiver");
+                })
             })
             .collect();
+        drop(completed_tx);
+        for _ in 0..8 {
+            completed_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("bounded shutdown completion")
+                .expect("shutdown");
+        }
         for handle in handles {
-            handle.join().expect("shutdown thread").expect("shutdown");
+            handle.join().expect("shutdown thread");
         }
         assert_eq!(runtime.health().state, ObservationHealthState::Unavailable);
     }
@@ -1230,6 +1244,7 @@ mod tests {
 
         struct FlushFailSink {
             flush_calls: Arc<AtomicU64>,
+            second_flush_completed: std::sync::mpsc::Sender<()>,
         }
 
         impl LogSink for FlushFailSink {
@@ -1238,7 +1253,11 @@ mod tests {
             }
 
             fn flush(&self) -> Result<(), LogSinkError> {
-                self.flush_calls.fetch_add(1, Ordering::SeqCst);
+                if self.flush_calls.fetch_add(1, Ordering::SeqCst) == 1 {
+                    self.second_flush_completed
+                        .send(())
+                        .expect("flush completion receiver");
+                }
                 Err(LogSinkError(Box::new(ErrorContext::new(
                     sc_observability::error_codes::LOGGER_FLUSH_FAILED,
                     "flush failed",
@@ -1269,6 +1288,7 @@ mod tests {
 
         let build_failing_runtime = |name: &str| {
             let flush_calls = Arc::new(AtomicU64::new(0));
+            let (second_flush_completed, second_flush_rx) = std::sync::mpsc::channel();
             let mut logger_config = LoggerConfig::default_for(
                 ServiceName::new("obs-app").expect("service"),
                 temp_path(name),
@@ -1280,6 +1300,7 @@ mod tests {
             builder.register_sink(
                 SinkRegistration::new(Arc::new(FlushFailSink {
                     flush_calls: flush_calls.clone(),
+                    second_flush_completed,
                 }))
                 .with_filter(Arc::new(PassthroughFilter)),
             );
@@ -1293,30 +1314,29 @@ mod tests {
                 observability_health_provider: None,
                 runtime: RuntimeState::default(),
             };
-            (runtime, flush_calls)
+            (runtime, flush_calls, second_flush_rx)
         };
 
-        let (legacy_runtime, legacy_flush_calls) = build_failing_runtime("flush-legacy");
-        let (typed_runtime, typed_flush_calls) = build_failing_runtime("flush-typed");
-        let wait_for_second_flush = |flush_calls: &AtomicU64| {
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
-            while flush_calls.load(Ordering::SeqCst) < 2 && std::time::Instant::now() < deadline {
-                std::thread::yield_now();
-            }
-            assert_eq!(flush_calls.load(Ordering::SeqCst), 2);
-        };
+        let (legacy_runtime, legacy_flush_calls, legacy_second_flush_rx) =
+            build_failing_runtime("flush-legacy");
+        let (typed_runtime, typed_flush_calls, typed_second_flush_rx) =
+            build_failing_runtime("flush-typed");
         let Err(legacy_error) = legacy_runtime.flush() else {
             panic!("legacy flush must report sink failure");
         };
-        // The writer sends the flush reply before its follow-up pass completes;
-        // wait on the bounded fixture counter before checking the exact count.
-        wait_for_second_flush(legacy_flush_calls.as_ref());
+        legacy_second_flush_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .expect("bounded legacy second flush completion");
         let Err(typed_error) = typed_runtime.flush_typed() else {
             panic!("typed flush must report sink failure");
         };
         assert_eq!(legacy_error.kind(), FlushFailureKind::LoggerFlush);
         assert_eq!(typed_error.kind(), FlushFailureKind::LoggerFlush);
-        wait_for_second_flush(typed_flush_calls.as_ref());
+        typed_second_flush_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .expect("bounded typed second flush completion");
+        assert_eq!(legacy_flush_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(typed_flush_calls.load(Ordering::SeqCst), 2);
         for runtime in [&legacy_runtime, &typed_runtime] {
             let logging = runtime.health().logging.expect("logging health");
             assert_eq!(logging.flush_errors_total, 1);
