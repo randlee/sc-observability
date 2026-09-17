@@ -24,6 +24,31 @@ for (const fixture of fixtureCases.filter((row) => row.entrypoint === 'OutputFai
     assert.deepEqual(err(await client.tryLog(event)), fixture.value);
   });
 }
+await test('maximum-health-revision-and-counter-roundtrip', async () => {
+  const health = structuredClone(fixtureCases.find((row) => row.entrypoint === 'OutputLogHealthDto' && row.valid).value);
+  const max = '18446744073709551615';
+  health.level_state.level_revision = max;
+  health.logging.dropped_events_total = max;
+  health.logging.active_log_path = { kind: 'unrepresentable' };
+  if (health.bridge) {
+    health.bridge.level_revision = max;
+    health.bridge.logging = structuredClone(health.logging);
+  }
+  const client = clientFor({ schema_version: 1, kind: 'ok', value: health });
+  assert.deepEqual(ok(await client.health()), health);
+});
+await test('same-timestamp-snapshot-and-additive-output', async () => {
+  const stored = structuredClone(fixtureCases.find((row) => row.entrypoint === 'OutputStoredEventDto' && row.valid).value);
+  const snapshot = { schema_version: 1, truncated: false, events: [{ ...stored, action: 'first' }, { ...stored, action: 'second' }], future_field: true };
+  const client = clientFor({ schema_version: 1, kind: 'ok', value: snapshot });
+  assert.deepEqual(ok(await client.query({ schema_version: 1 })), snapshot);
+});
+await test('saturating-failure-counter', async () => {
+  const client = clientFor({ schema_version: 1, kind: 'error', error: { kind: 'closed', ...diagnostic } });
+  client.counts.closed = '18446744073709551615';
+  err(await client.tryLog(event), 'closed');
+  assert.equal(ok(client.client_status()).failures_by_kind.closed, '18446744073709551615');
+});
 await test('query-version-before-transport', async () => {
   let calls = 0;
   const client = ok(createClient({ request: async () => { calls++; return {}; } }));

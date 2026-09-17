@@ -1,4 +1,4 @@
-import type { Result, Failure, ClientOutcome, ClientStatus, ValueDto } from '@sc-observability/client';
+import type { Result, Failure, ClientOutcome, ClientStatus, ValueDto, RemediationDto, LevelChangeDto, ChangeDiagnosticDto } from '@sc-observability/client';
 const unreachable = (value: never): never => { throw new Error(String(value)); };
 export function failureTag(failure: Failure): string {
   switch (failure.kind) {
@@ -32,3 +32,25 @@ export function valueTag(value: ValueDto): string {
   }
 }
 export function localStatus(status: ClientStatus): string { return resultTag(status.last_result); }
+
+export function remediationTag(value: RemediationDto): string {
+  switch (value.kind) {
+    case 'recoverable': return value.steps.join('\n');
+    case 'not_recoverable': return value.justification;
+    default: return unreachable(value);
+  }
+}
+export function changeDiagnosticTag(value: ChangeDiagnosticDto): string {
+  switch (value.kind) {
+    case 'accepted': return 'accepted';
+    case 'not_accepted': return remediationTag(value.diagnostic.remediation);
+    default: return unreachable(value);
+  }
+}
+export function levelChangeTag(value: LevelChangeDto): string {
+  switch (value.kind) {
+    case 'changed': return changeDiagnosticTag(value.diagnostic);
+    case 'unchanged': return value.state.level_revision;
+    default: return unreachable(value);
+  }
+}

@@ -143,6 +143,7 @@ def main():
             if len(archives) != 1:
                 raise RuntimeError('exactly one npm package archive is required')
             archive = archives[0]
+            report['conformance_fixture_sha256'] = digest(ROOT / 'bindings/conformance/v1/schema-cases.json')
             report['npm_archive'] = {'filename': archive.name, 'sha256': digest(archive)}
             consumer = external / 'frontend'
             shutil.copytree(FIXTURE, consumer)
@@ -182,6 +183,10 @@ def main():
             shutil.copyfile(host / 'Cargo.lock', output / 'host-Cargo.lock')
             raw_report = external / 'ipc.json'
             sandbox = Sandbox(external, registered_checkouts(ROOT))
+            for variable in ('XDG_CACHE_HOME', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME'):
+                location = external / variable.lower()
+                location.mkdir()
+                sandbox.env[variable] = str(location)
             try:
                 with sandbox:
                     report['isolation'] = sandbox.prove_denials(sys.executable, ROOT)
@@ -206,6 +211,7 @@ def main():
             ipc = json.loads(raw_report.read_text())
             if set(ipc) != {'main', 'forbidden'} or not all(record['passed'] for record in ipc.values()):
                 raise RuntimeError('incomplete or failed actual-webview qualification')
+            report['fault_results_sha256'] = digest(output / 'fault-results.json')
             report['ipc_sha256'] = digest(output / 'ipc.json')
             report['case_count'] = sum(len(item['records']) for item in ipc.values())
             jsonl = list((output / 'logs').rglob('*.jsonl'))

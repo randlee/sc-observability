@@ -13,6 +13,13 @@ REQUIRED_MAIN = {
     'off-below-baseline', 'reset', 'level-forged-source', 'level-invalid-tag',
     'direct-denied-target', 'direct-denied-query', 'oversized-request',
     'deep-request', 'cyclic-value', 'getter-value', 'no-hidden-rejection',
+    'minimal-exact-64k-normalization', 'exact-64k-request', 'one-byte-oversize-request',
+    'bridge-health-coherence', 'owner-contention-queue-full', 'owner-contention-state-preserved',
+    'actual-native-queue-full', 'full-diagnostic-preserves-change', 'actual-flush-slot-full',
+    'host-responsive-during-blocked-io', 'query-timeout-and-overlap',
+    'frontend-heartbeat-during-blocked-io', 'query-slot-retained-after-timeout',
+    'native-flush-late-completion', 'actual-flush-zero-timeout',
+    'actual-flush-after-timeout-overlap',
 }
 REQUIRED_FORBIDDEN = {'forbidden-window-' + name for name in ('try_log', 'query', 'health', 'flush', 'level')}
 
@@ -51,7 +58,13 @@ def validate(root, source=None):
                 raise ValueError('failed IPC result: ' + name + '/' + window)
             if not required <= {case['name'] for case in record['records']}:
                 raise ValueError('skipped IPC cases: ' + name + '/' + window)
-        faults = json.loads((directory / 'fault-results.json').read_text())
+        faults = json.loads(hashed('fault-results.json', report['fault_results_sha256']).read_text())
+        fixture_path = Path(__file__).resolve().parents[2] / 'bindings/conformance/v1/schema-cases.json'
+        if report['conformance_fixture_sha256'] != digest(fixture_path):
+            raise ValueError('stale canonical conformance fixtures: ' + name)
+        required_fixtures = {'schema-' + case['id'] for case in json.loads(fixture_path.read_text())}
+        if not required_fixtures <= {case['name'] for case in faults['results']}:
+            raise ValueError('canonical conformance fixture skipped: ' + name)
         if not faults['passed'] or not faults['results'] or not all(case['passed'] for case in faults['results']):
             raise ValueError('incomplete fault/conformance evidence: ' + name)
         if not all(report['isolation'].get(key) is True for key in ('checkout', 'cargo_cache', 'network')):
