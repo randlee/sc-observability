@@ -24,10 +24,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use config::validate_config_typed;
-use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
+use sc_observability_types::typed::{ExportFailure, FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, ErrorContext, ExportError, FlushError, InitError, LogEvent,
-    MetricRecord, ObservabilityHealthProvider, Remediation, ShutdownError, SinkName, SpanSignal,
+    DiagnosticInfo, DiagnosticSummary, ErrorContext, FlushError, InitError, LogEvent, MetricRecord,
+    ObservabilityHealthProvider, Remediation, ShutdownError, SinkName, SpanSignal,
     telemetry_health_provider_sealed,
 };
 #[doc(inline)]
@@ -50,19 +50,19 @@ pub use projectors::TelemetryProjectors;
 /// Exporter contract for projected log records.
 pub(crate) trait LogExporter: Send + Sync {
     /// Exports one batch of log events.
-    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError>;
+    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportFailure>;
 }
 
 /// Exporter contract for completed spans.
 pub(crate) trait TraceExporter: Send + Sync {
     /// Exports one batch of completed spans.
-    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError>;
+    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportFailure>;
 }
 
 /// Exporter contract for projected metrics.
 pub(crate) trait MetricExporter: Send + Sync {
     /// Exports one batch of metric records.
-    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError>;
+    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportFailure>;
 }
 
 /// OTLP-backed telemetry runtime.
@@ -145,19 +145,19 @@ struct NoopTraceExporter;
 struct NoopMetricExporter;
 
 impl LogExporter for NoopLogExporter {
-    fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
+    fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportFailure> {
         Ok(())
     }
 }
 
 impl TraceExporter for NoopTraceExporter {
-    fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportError> {
+    fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportFailure> {
         Ok(())
     }
 }
 
 impl MetricExporter for NoopMetricExporter {
-    fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportError> {
+    fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportFailure> {
         Ok(())
     }
 }
@@ -482,7 +482,12 @@ impl Telemetry {
         status.last_error = None;
     }
 
-    fn record_export_failure(&self, exporter_kind: ExporterKind, dropped: u64, error: ExportError) {
+    fn record_export_failure(
+        &self,
+        exporter_kind: ExporterKind,
+        dropped: u64,
+        error: ExportFailure,
+    ) {
         self.dropped_exports_total
             .fetch_add(dropped, Ordering::SeqCst);
         let summary = DiagnosticSummary::from(error.diagnostic());
@@ -625,10 +630,10 @@ mod tests {
     }
 
     impl LogExporter for RecordingLogExporter {
-        fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError> {
+        fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportFailure> {
             self.calls.lock().expect("calls poisoned").push(batch.len());
             if self.fail.load(Ordering::SeqCst) {
-                Err(ExportError(Box::new(ErrorContext::new(
+                Err(ExportFailure::from_context(Box::new(ErrorContext::new(
                     error_codes::TELEMETRY_EXPORT_FAILED,
                     "log export failed",
                     Remediation::not_recoverable("test exporter failure"),
@@ -646,10 +651,10 @@ mod tests {
     }
 
     impl TraceExporter for RecordingTraceExporter {
-        fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError> {
+        fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportFailure> {
             self.calls.lock().expect("calls poisoned").push(batch.len());
             if self.fail.load(Ordering::SeqCst) {
-                Err(ExportError(Box::new(ErrorContext::new(
+                Err(ExportFailure::from_context(Box::new(ErrorContext::new(
                     error_codes::TELEMETRY_EXPORT_FAILED,
                     "trace export failed",
                     Remediation::not_recoverable("test exporter failure"),
@@ -667,10 +672,10 @@ mod tests {
     }
 
     impl MetricExporter for RecordingMetricExporter {
-        fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError> {
+        fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportFailure> {
             self.calls.lock().expect("calls poisoned").push(batch.len());
             if self.fail.load(Ordering::SeqCst) {
-                Err(ExportError(Box::new(ErrorContext::new(
+                Err(ExportFailure::from_context(Box::new(ErrorContext::new(
                     error_codes::TELEMETRY_EXPORT_FAILED,
                     "metric export failed",
                     Remediation::not_recoverable("test exporter failure"),
