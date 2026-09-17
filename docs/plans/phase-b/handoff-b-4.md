@@ -14,7 +14,7 @@ owned loggers, and non-owning Rust-host attachments. Owned lifecycle and level
 authority stay with `CoreLoggerOwner`; attached handles retain only a shared
 `HostLoggingBackend` Arc and cannot stop or mutate the host.
 
-Current source evidence is `fffff97bba4fd720cf8c38c8117f577fef30df10`.
+Current source evidence is `93d90fdf3c56b030bc97d2ad8d2ff7b0bebf1627`.
 It carries frozen B.3, B.3b and telemetry/copy ancestors while retaining the
 direct TypeScript parent. The facade contains no authored validation `raise`:
 malformed Python values, hostile mappings/accessors, foreign native exceptions,
@@ -65,6 +65,9 @@ That source-validation wheel alone enables private native test hooks; they force
 a tagged native internal failure before both factories and every owned or
 attached public operation, proving the real PyO3 boundary returns `Err` while
 ordinary package builds expose neither hook nor test host fixture.
+The ordinary locked wheel is also installed independently without that feature:
+its seven production-runtime tests pass and the two source-hook fixtures skip,
+which proves the companion coverage does not become a package API requirement.
 
 The retained B.3b coordinator operation matrix was also run one named process
 case at a time: timer/bootstrap rollback, worker rollback, waiters/callbacks,
@@ -83,7 +86,7 @@ another worker or conversion path.
 | Embedding correlation/redaction/query/health/stop | `cargo run -p rust-python-logging` | covered |
 | GC/interpreter teardown | Installed owned-handle subprocess and native module-collection fixture | covered |
 | Shared helper rollback, held sink, slot/timeout and late-result mechanics | all named B.3b coordinator cases | covered in supplied backend |
-| Python-bound blocked-sink heartbeat and every detailed operation interleaving | no direct Python fixture yet | active |
+| Python-bound blocked-sink heartbeat and every detailed operation interleaving | source-hook host holds one real attached log while Python health/query/flush progress | active: retained-sink-specific heartbeat still needs native seam |
 | Native fault injection through every Python public Result method | feature-gated source wheel forces tagged faults for both factories and all owned/attached methods | covered |
 | Diagnostic/remediation conversion through Python | exact unavailable/IO messages, codes, recoverable steps and terminal justification | covered |
 | Revision-overflow through Python | no direct Python fixture yet | active |
