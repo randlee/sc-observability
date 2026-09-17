@@ -82,7 +82,7 @@ class Sandbox:
                         subprocess.run(['icacls', str(path), '/save', str(saved), '/T', '/C'], check=True,
                                        stdout=subprocess.DEVNULL)
                         self.acls.append((path, saved))
-                        subprocess.run(['icacls', str(path), '/deny', account + ':(OI)(CI)(R)', '/T', '/C'],
+                        subprocess.run(['icacls', str(path), '/deny', account + ':(OI)(CI)(R)', '/C'],
                                        check=True, stdout=subprocess.DEVNULL)
                 self.powershell(f"New-NetFirewallRule -DisplayName '{self.firewall}' "
                                 "-Direction Outbound -Action Block -Profile Any | Out-Null")
@@ -106,7 +106,7 @@ class Sandbox:
 
     def run(self, command: list[str], cwd: Path, *, expect_failure: bool = False) -> str:
         result = subprocess.run(self.prefix + command, cwd=cwd, env=self.env,
-                                text=True, capture_output=True)
+                                text=True, encoding='utf-8', errors='replace', capture_output=True)
         self.commands.append({'command': command, 'exit_code': result.returncode,
                               'stdout': result.stdout, 'stderr': result.stderr})
         if (result.returncode == 0) == expect_failure:

@@ -62,7 +62,10 @@ def linkage(wheel: Path, policy: dict, sandbox: Sandbox, directory: Path) -> dic
     else:
         import pefile
         image = pefile.PE(str(native))
-        dependencies = [entry.dll.decode() for entry in image.DIRECTORY_ENTRY_IMPORT]
+        try:
+            dependencies = [entry.dll.decode() for entry in image.DIRECTORY_ENTRY_IMPORT]
+        finally:
+            image.close()
         if any(re.fullmatch(r'python\d{2,}\.dll', name.lower()) for name in dependencies):
             raise DistributionError('abi3 wheel links interpreter-specific Python DLL')
         output = '\n'.join(dependencies)
@@ -90,8 +93,8 @@ def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) 
                       if entry['name'] == 'sc-observability-binding-runtime')
     cases = {
         'missing-unpublished': ('rust-bundle/' + dependency['root'], True),
-        'missing-registry': (str(Path(registry[0]['manifest_path']).parent.relative_to(root)), True),
-        'missing-target-registry': (str(Path(target_registry[0]['manifest_path']).parent.relative_to(root)), True),
+        'missing-registry': (Path(registry[0]['manifest_path']).parent.relative_to(root).as_posix(), True),
+        'missing-target-registry': (Path(target_registry[0]['manifest_path']).parent.relative_to(root).as_posix(), True),
         'missing-stubs': ('python/sc_observability/generated/__init__.pyi', False),
         'missing-py-typed': ('python/sc_observability/py.typed', False),
     }
