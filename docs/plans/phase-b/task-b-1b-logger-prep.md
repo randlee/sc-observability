@@ -41,3 +41,16 @@ warning activation is part of this task.
 - public API/docs review and bridge regression evidence
 - two passes: contract/API completeness, then Rust behavior/source integrity
 
+## Fixture matrix
+
+| Required behavior | Typed/legacy evidence |
+| --- | --- |
+| startup validation and native spawn source | `logger_builder_rejects_zero_queue_capacity`, `typed_builder_rejects_zero_queue_capacity_with_the_same_diagnostic`, `owner_construction_returns_the_injected_writer_start_source` |
+| invalid event and filtering | `invalid_event_returns_event_error`, `typed_logger_admission_preserves_filtering_and_invalid_event_failure` |
+| queue, owner, and level concurrency | `try_log_reports_queue_full_on_saturated_queue`, `level_owner_changes_only_its_logger_and_filters_with_shared_admission`, `admission_and_level_mutation_contend_on_one_control_state` |
+| flush, timeout, and shutdown | `flush_failures_propagate_and_are_counted_in_health`, `shutdown_records_join_timeout_but_waits_for_join`, `emit_path_remains_available_during_maintenance_pass` |
+| built-in sink, maintenance, and fault behavior | `file_and_console_fan_out_both_receive_event`, sink maintenance/write tests, retained fault-injector tests under `--all-features` |
+| adapters and source preservation | `typed_sink_adapters_preserve_default_flush_health_and_single_write`, `logger_admission_conversions_keep_the_original_source` |
+
+The copied-bridge suite remains an explicit B.1 integration dependency; no
+bridge source or behavior is changed by this preparation layer.
