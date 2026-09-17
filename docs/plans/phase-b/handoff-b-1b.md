@@ -29,6 +29,13 @@ surfaces, admission/filtering semantics, and bridge API are unchanged.
 - PASS: `cargo test --locked -p sc-observability --doc`
 - PASS: `cargo test --locked --workspace --doc`
 - PASS: `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`
+- PASS: `python3 scripts/ci/validate_public_api_semver.py` (223 checks passed
+  for each of the four workspace crates)
+- PASS: `bash scripts/ci/validate_public_api_docs.sh`
+- REVIEWED: `bash scripts/ci/validate_public_api_diff.sh` generated the expected
+  nonzero additive-diff report against `1.2.0`; it includes the stacked B.P1/
+  B.1a additions and this layer's typed logger API. It is evidence for public
+  API review, not a claim that an additive diff is empty.
 
 The task-plan fixture matrix records the paired legacy/typed and retained
 behavior coverage. The copied bridge regression is pending B.1 source
