@@ -1,9 +1,10 @@
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use sc_observability::typed::{TypedLogSink, legacy_sink, typed_sink};
 use sc_observability::{LogEvent, LogSink, SinkHealth, SinkHealthState};
 use sc_observability_types::typed::{
-    ClassifiedError, ProjectionFailure, TypedLogProjector, TypedMetricProjector,
+    ClassifiedError, ProjectionFailure, ProjectionFailureKind, TypedLogProjector, TypedMetricProjector,
     TypedObservationSubscriber, TypedProcessIdentityResolver, TypedSpanProjector,
     legacy_identity, legacy_log_projector, legacy_metric_projector, legacy_span_projector,
     legacy_subscriber, typed_identity, typed_log_projector, typed_metric_projector,
@@ -56,18 +57,47 @@ impl TypedMetricProjector<String> for TypedAdapters {
     }
 }
 
-struct FailingTypedProjector;
+struct CountingTypedProjector {
+    calls: Arc<AtomicUsize>,
+    code: ErrorCode,
+}
 
-impl TypedLogProjector<String> for FailingTypedProjector {
+impl TypedLogProjector<String> for CountingTypedProjector {
     fn project_logs(
         &self,
         _observation: &Observation<String>,
     ) -> Result<Vec<LogEvent>, ProjectionFailure> {
-        Err(ProjectionFailure::from_context(Box::new(ErrorContext::new(
-            ErrorCode::new_static("FIXTURE_PROJECTION_FAILURE"),
-            "fixture projector failure",
-            Remediation::recoverable("inspect the projector", ["repair the projection path"]),
-        ))))
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Err(ProjectionFailure::from_context(Box::new(
+            ErrorContext::new(
+                self.code.clone(),
+                "typed adapter failure",
+                Remediation::recoverable("inspect the typed projector", ["repair the adapter"]),
+            )
+            .source(Box::new(std::io::Error::other("typed adapter source"))),
+        )))
+    }
+}
+
+struct CountingLegacyProjector {
+    calls: Arc<AtomicUsize>,
+    code: ErrorCode,
+}
+
+impl LogProjector<String> for CountingLegacyProjector {
+    fn project_logs(
+        &self,
+        _observation: &Observation<String>,
+    ) -> Result<Vec<LogEvent>, ProjectionError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Err(ProjectionError(Box::new(
+            ErrorContext::new(
+                self.code.clone(),
+                "legacy adapter failure",
+                Remediation::recoverable("inspect the legacy projector", ["repair the adapter"]),
+            )
+            .source(Box::new(std::io::Error::other("legacy adapter source"))),
+        )))
     }
 }
 
@@ -200,49 +230,41 @@ pub fn run() {
         .register_projection(registration)
         .build_typed()
         .expect("mixed legacy registration");
-    runtime.emit(observation).expect("successful mixed routing");
+    runtime
+        .emit(observation.clone())
+        .expect("successful mixed routing");
     runtime.shutdown_typed().expect("mixed routing shutdown");
 
-    let failure_config = ObservabilityConfig::default_for_typed(
-        ToolName::new("b1e-adapter-failure").expect("tool"),
-        std::env::temp_dir().join("sc-observability-b1e-adapter-failure"),
-    )
-    .expect("failure config");
-    let failing_registration = ProjectionRegistration::<String>::new()
-        .with_log_projector(legacy_log_projector(Arc::new(FailingTypedProjector)));
-    let failure_runtime = Observability::builder(failure_config)
-        .register_projection(failing_registration)
-        .build_typed()
-        .expect("failing projector runtime");
-    assert!(
-        failure_runtime
-            .emit(Observation::new(
-                ServiceName::new("b1e-adapter-failure").expect("service"),
-                "payload".to_owned(),
-            ))
-            .is_err(),
-        "projector failure must remain observable at the routing boundary"
-    );
-    failure_runtime
-        .shutdown_typed()
-        .expect("failing projector shutdown");
+    let typed_calls = Arc::new(AtomicUsize::new(0));
+    let custom_legacy = legacy_log_projector::<String>(Arc::new(CountingTypedProjector {
+        calls: typed_calls.clone(),
+        code: ErrorCode::new_static("CUSTOM_FIXTURE_CODE"),
+    }));
+    let custom_legacy_error = custom_legacy
+        .project_logs(&observation)
+        .expect_err("typed-to-legacy failure must remain observable");
+    assert_eq!(typed_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(custom_legacy_error.diagnostic().code.as_str(), "CUSTOM_FIXTURE_CODE");
+    assert!(custom_legacy_error.diagnostic().message.contains("typed adapter"));
+    assert!(std::error::Error::source(&custom_legacy_error).is_some());
+    assert!(std::error::Error::source(&custom_legacy_error)
+        .and_then(std::error::Error::source)
+        .is_some());
 
-    let custom = ProjectionFailure::from_context(Box::new(
-        ErrorContext::new(
-            ErrorCode::new_static("CUSTOM_FIXTURE_CODE"),
-            "custom adapter failure",
-            Remediation::recoverable("inspect the source", ["retry the adapter"]),
-        )
-        .source(Box::new(std::io::Error::other("fixture source"))),
-    ));
-    assert_eq!(custom.kind(), sc_observability_types::typed::ProjectionFailureKind::Unclassified);
-    assert!(custom.context().diagnostic().message.contains("custom adapter"));
-    assert!(std::error::Error::source(&custom).is_some());
-
-    let wrong_family = ProjectionFailure::from_context(Box::new(ErrorContext::new(
-        sc_observability::error_codes::LOGGER_INVALID_EVENT,
-        "wrong family code",
-        Remediation::not_recoverable("fixture"),
-    )));
-    assert_eq!(wrong_family.kind(), sc_observability_types::typed::ProjectionFailureKind::Unclassified);
+    let legacy_calls = Arc::new(AtomicUsize::new(0));
+    let wrong_family_typed = typed_log_projector::<String>(Arc::new(CountingLegacyProjector {
+        calls: legacy_calls.clone(),
+        code: sc_observability::error_codes::LOGGER_INVALID_EVENT,
+    }));
+    let wrong_family = wrong_family_typed
+        .project_logs(&observation)
+        .expect_err("legacy-to-typed failure must remain observable");
+    assert_eq!(legacy_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(wrong_family.kind(), ProjectionFailureKind::Unclassified);
+    assert_eq!(wrong_family.context().diagnostic().code.as_str(), "SC_OBSERVABILITY_LOGGER_INVALID_EVENT");
+    assert!(wrong_family.context().diagnostic().message.contains("legacy adapter"));
+    assert!(std::error::Error::source(&wrong_family).is_some());
+    assert!(std::error::Error::source(&wrong_family)
+        .and_then(std::error::Error::source)
+        .is_some());
 }
