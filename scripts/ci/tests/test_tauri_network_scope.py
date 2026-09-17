@@ -1,17 +1,40 @@
 """The real desktop process must retain Windows network denial until exit."""
 import sys
 import subprocess
+import os
+import signal
+import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _python_sandbox import Sandbox
+from _python_sandbox import Sandbox, bounded_command
 from _python_distribution import DistributionError
 import _tauri_webview
 
 
 class NetworkScopeTests(unittest.TestCase):
+    def test_completed_command_does_not_wait_for_descendant_output_handles(self):
+        child = None
+        with tempfile.TemporaryDirectory() as temporary:
+            try:
+                started = time.monotonic()
+                result = bounded_command([sys.executable, '-u', '-c',
+                    'import subprocess,sys; '
+                    'child=subprocess.Popen([sys.executable,"-c","import time; time.sleep(30)"]); '
+                    'print(child.pid,flush=True)'], Path(temporary), dict(os.environ), timeout=2)
+                child = int(result.stdout.strip())
+                self.assertEqual(result.returncode, 0)
+                self.assertLess(time.monotonic() - started, 2)
+            finally:
+                if child is not None:
+                    try:
+                        os.kill(child, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+
     def sandbox(self, system='Windows'):
         value = Sandbox.__new__(Sandbox)
         value.system = system

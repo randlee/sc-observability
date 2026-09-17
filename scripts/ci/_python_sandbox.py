@@ -21,35 +21,40 @@ from _python_distribution import DistributionError
 
 
 def bounded_command(command: list[str], cwd: Path, environment: dict, timeout: float = 900) -> subprocess.CompletedProcess:
-    """Kill the entire timed-out build tree, including children holding log pipes."""
-    process = subprocess.Popen(command, cwd=cwd, env=environment, text=True,
-                               encoding='utf-8', errors='replace', stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE, start_new_session=os.name != 'nt')
-    try:
-        stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired as error:
-        if os.name == 'nt':
-            try:
-                subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
-                               capture_output=True, timeout=20)
-            except subprocess.TimeoutExpired:
-                process.kill()
-        else:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+    """Bound command lifetime without waiting for inherited output handles."""
+    # Compiler service descendants can retain their parent's output handles.
+    # Regular files preserve output without making completion depend on EOF.
+    with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
+        process = subprocess.Popen(command, cwd=cwd, env=environment, stdout=stdout_file,
+                                   stderr=stderr_file, start_new_session=os.name != 'nt')
+        def captured(handle):
+            size = os.fstat(handle.fileno()).st_size
+            handle.seek(0)
+            return handle.read(size).decode('utf-8', errors='replace')
         try:
-            stdout, stderr = process.communicate(timeout=10)
-        except subprocess.TimeoutExpired:
-            stdout, stderr = error.stdout, error.stderr
-            process.kill()
-            process.stdout.close()
-            process.stderr.close()
-        decode = lambda value: value.decode('utf-8', errors='replace') if isinstance(value, bytes) else (value or '')
-        raise DistributionError(f'qualification command exceeded {timeout:g} seconds: {command}\n'
-                                + decode(stdout) + '\n' + decode(stderr)) from error
-    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+            process.wait(timeout=timeout)
+        except subprocess.TimeoutExpired as error:
+            if os.name == 'nt':
+                try:
+                    subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+                except subprocess.TimeoutExpired:
+                    pass
+            else:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            if process.poll() is None:
+                process.kill()
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pass
+            raise DistributionError(f'qualification command exceeded {timeout:g} seconds: {command}\n'
+                                    + captured(stdout_file) + '\n' + captured(stderr_file)) from error
+        return subprocess.CompletedProcess(command, process.returncode,
+                                           captured(stdout_file), captured(stderr_file))
 
 
 def registered_checkouts(checkout: Path) -> list[Path]:
