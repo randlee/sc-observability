@@ -1,8 +1,7 @@
-//! Neutral wire DTOs for schema and language-binding generation.
-
-use serde::{Deserialize, Serialize};
-
-/// Canonical decimal wire integer, serialized as a string.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct DecimalDto(pub String);
+//! Neutral, versioned wire contracts and checked conversions for language bindings.
+//! The crate has no logging runtime, transport, or ownership authority.
+mod conversion;
+pub mod error_codes;
+mod wire;
+pub use conversion::*;
+pub use wire::*;
