@@ -4,38 +4,22 @@ import {
   createTauriTransport,
   encodeEvent,
   err,
-  isRecord,
-  ok,
+  parseWireEnvelope,
   safeFailure,
   type LevelChangeDto,
   type LevelRequestDto,
   type Result,
-  type WireEnvelope,
-  unsupportedVersion,
-  validate,
-  validation,
 } from "@sc-observability/client";
 
 const transport = createTauriTransport(invoke);
 
 function levelResponse(value: unknown): Result<LevelChangeDto> {
-  try {
-    if (isRecord(value) && typeof value.schema_version === "number" && Number.isSafeInteger(value.schema_version) && value.schema_version >= 0 && value.schema_version !== 1) {
-      return err(unsupportedVersion(value.schema_version));
-    }
-    if (!isRecord(value) || !validate("OutputWireEnvelopeLevelChangeDto", value)) {
-      return err(validation("response", "level response failed schema validation"));
-    }
-    const envelope = value as WireEnvelope<LevelChangeDto>;
-    return envelope.kind === "error" ? err(envelope.error) : ok(envelope.value);
-  } catch (error: unknown) {
-    return err(safeFailure(error, "level change response"));
-  }
+  return parseWireEnvelope<LevelChangeDto>(value, "OutputWireEnvelopeLevelChangeDto");
 }
 
 export function requestLevelChange(change: LevelRequestDto): Promise<Result<LevelChangeDto>> {
   try {
-    return invoke<WireEnvelope<LevelChangeDto>>("app_observability_level_change", {
+    return invoke<unknown>("app_observability_level_change", {
       request: { schema_version: 1, change },
     }).then(levelResponse, (error: unknown) => err(safeFailure(error, "level change invoke")));
   } catch (error: unknown) {

@@ -161,7 +161,7 @@ function validEventInput(event: unknown): event is LogEventDto {
   }
 }
 
-function asEnvelope<T>(value: unknown, entrypoint: string): Result<T> {
+export function parseWireEnvelope<T>(value: unknown, entrypoint: string): Result<T> {
   let raw = value;
   if (isRecord(raw) && raw.kind === "ok" && !Object.hasOwn(raw, "schema_version")) raw = raw.value;
   if (isRecord(raw) && raw.kind === "error" && !Object.hasOwn(raw, "schema_version")) return err(envelopeFailure(raw.error));
@@ -338,7 +338,7 @@ class Client implements ObservabilityClient {
       const response = await this.transport.request(operation, request);
       if (isRecord(response) && response.kind === "error") return err(envelopeFailure(response.error));
       const value = isRecord(response) && response.kind === "ok" ? response.value : response;
-      return asEnvelope<T>(value, entrypoint);
+      return parseWireEnvelope<T>(value, entrypoint);
     } catch (error: unknown) {
       return err(safeFailure(error, `${operation} transport`));
     }
