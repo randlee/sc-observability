@@ -7,6 +7,7 @@ use sc_observability_dto as dto;
 use sc_observability_log as bridge;
 use sc_observability_types as native;
 
+#[derive(Clone, Copy)]
 pub(crate) enum Kind {
     Validation,
     QueueFull,
@@ -20,6 +21,7 @@ fn failure(diagnostic: Diagnostic, kind: Kind) -> Failure {
     if let Err(error) = dto::validate_diagnostic(&diagnostic, "response.error") {
         return error;
     }
+    let diagnostic = Box::new(diagnostic);
     match kind {
         Kind::Validation => Failure::Validation {
             diagnostic,
@@ -89,7 +91,7 @@ pub(crate) fn core_admission(value: sc_observability::TryLogFailure) -> Failure 
         _ => crate::error::internal("unrecognized native admission variant"),
     }
 }
-pub(crate) fn core_flush(error: native::typed::FlushFailure) -> Failure {
+pub(crate) fn core_flush(error: &native::typed::FlushFailure) -> Failure {
     use native::typed::FlushFailureKind as K;
     let kind = match error.kind() {
         K::Closed => Kind::Closed,
@@ -98,7 +100,7 @@ pub(crate) fn core_flush(error: native::typed::FlushFailure) -> Failure {
     };
     context(error.diagnostic(), kind)
 }
-pub(crate) fn query(error: native::QueryError) -> Failure {
+pub(crate) fn query(error: &native::QueryError) -> Failure {
     let kind = match &error {
         native::QueryError::InvalidQuery(_) => Kind::Validation,
         native::QueryError::Shutdown => Kind::Closed,
@@ -129,7 +131,7 @@ pub(crate) fn bridge_control(error: bridge::ControlError) -> Failure {
         bridge::ControlError::Unavailable { diagnostic } => {
             operation(diagnostic, Kind::Unavailable)
         }
-        other => boundary_native(
+        other @ bridge::ControlError::NotRunning { .. } => boundary_native(
             other.code(),
             other.to_string(),
             other.remediation(),
@@ -162,7 +164,15 @@ pub(crate) fn bridge_health(
         effective_level: value.effective_level.into(),
         level_revision: value.level_revision.into(),
     };
-    let logging = dto::from_logging_health(value.logging);
+    let checked = dto::from_core_health(
+        value.logging,
+        native::LevelState {
+            configured_level: value.configured_level,
+            effective_level: value.effective_level,
+            revision: value.level_revision,
+        },
+    )?;
+    let logging = checked.logging;
     let dropped = value.dropped;
     let bridge = dto::BridgeHealthDto {
         schema_version: value.schema_version,
