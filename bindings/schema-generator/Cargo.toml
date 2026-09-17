@@ -1,0 +1,16 @@
+[package]
+name = "sc-observability-schema"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94.1"
+publish = false
+
+[workspace]
+
+[dependencies]
+sc-observability-dto = { path = "../../crates/sc-observability-dto", features = ["schema-gen"] }
+schemars = "=1.2.2"
+serde_json = "1"
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
