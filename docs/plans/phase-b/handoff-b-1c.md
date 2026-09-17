@@ -67,7 +67,7 @@ Behavior/source-integrity pass:
 cargo fmt --all -- --check: passed
 cargo test --locked --workspace: 170 unit/integration tests passed; 0 failed; 6 normal doctests passed; 2 compile-fail doctests passed
 cargo clippy --locked --workspace --all-targets -- -D warnings: passed
-python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py': 31 tests, OK
+python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py': 36 tests, OK
 bash scripts/ci/validate_docs_consistency.sh: passed
 bash scripts/ci/validate_dependency_bans.sh: passed
 bash scripts/ci/validate_repo_boundaries.sh: passed
