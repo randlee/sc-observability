@@ -137,6 +137,9 @@ Before starting a sprint:
    the developer using `fix-assignment.xml.j2`. Fix assignments must also include
    `sprint_doc`, and the sprint document remains authoritative if the task
    summary omits or compresses details.
+11. Fix handoffs require a worktree-local checklist and two complete passes:
+    implement every fix, then verify each against its files and test/check evidence.
+    The lead checks completeness before QA and returns incomplete work.
 
 ## Stacked Phases
 
