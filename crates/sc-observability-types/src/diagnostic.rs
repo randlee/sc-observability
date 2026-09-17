@@ -205,6 +205,25 @@ impl ErrorContext {
     pub fn backtrace(&self) -> &Backtrace {
         &self.backtrace
     }
+
+    pub(crate) fn set_cause(&mut self, cause: impl Into<String>) {
+        self.diagnostic.cause = Some(cause.into());
+    }
+
+    pub(crate) fn set_docs(&mut self, docs: impl Into<String>) {
+        self.diagnostic.docs = Some(docs.into());
+    }
+
+    pub(crate) fn set_detail(&mut self, key: impl Into<String>, value: Value) {
+        self.diagnostic.details.insert(key.into(), value);
+    }
+
+    pub(crate) fn set_source(
+        &mut self,
+        source: Box<dyn std::error::Error + Send + Sync + 'static>,
+    ) {
+        self.source = Some(Arc::from(source));
+    }
 }
 
 impl std::fmt::Display for ErrorContext {
