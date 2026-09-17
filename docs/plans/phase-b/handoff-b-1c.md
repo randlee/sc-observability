@@ -4,7 +4,7 @@ status: preparation-complete
 branch: feature/phase-b-1c-observation-prep
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1c-observation-prep
 parent: feature/phase-b-1b-logger-prep
-parent_checkpoint: 17a6a9a048b55837b96b6aa614ea1303084542ab
+parent_checkpoint: 6d01518f2c72b16f97a8c2576596c828f17584e9
 implementation_commits: 7d49ed2, 37bba66, 392c1dd, d90fba2, 4327fd3, 5b25b20
 ---
 
@@ -69,9 +69,9 @@ Behavior/source-integrity pass:
 
 ```text
 cargo fmt --all -- --check: passed
-cargo test --locked --workspace: 175 unit/integration tests passed; 0 failed; 6 normal doctests passed; 2 compile-fail doctests passed
+cargo test --locked --workspace: 177 unit/integration tests passed; 0 failed; 6 normal doctests passed; 2 compile-fail doctests passed
 cargo clippy --locked --workspace --all-targets -- -D warnings: passed
-python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py': 36 tests, OK
+python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py': 41 tests, OK
 bash scripts/ci/validate_docs_consistency.sh: passed
 bash scripts/ci/validate_dependency_bans.sh: passed
 bash scripts/ci/validate_repo_boundaries.sh: passed
@@ -79,9 +79,8 @@ bash scripts/ci/validate_public_api_docs.sh: passed
 bash scripts/ci/validate_public_api_diff.sh: exit 1 with additive API report, as expected for Phase B typed operations
 ```
 
-The recorded parent merge-forward was
-`17a6a9a048b55837b96b6aa614ea1303084542ab`; a final validation pass must merge
-the newer parent tip before this handoff is considered current. The parent owns
-its logger/provenance changes and no lower layer was edited.
+The final parent merge-forward is
+`6d01518f2c72b16f97a8c2576596c828f17584e9`; the parent owns its
+logger/provenance changes and no lower layer was edited.
 This is preparation evidence only: copied bridge source import, independent QA,
 and full B.1c integration acceptance remain pending.
