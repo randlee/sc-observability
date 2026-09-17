@@ -17,8 +17,9 @@ This is an explicit prerequisite to B.1, not a post-copy implementation task.
 On 2026-09-16 (America/Los_Angeles), aobs relayed the owner's instruction:
 "you task was to complete phase-b w/ publish delayed until the end."
 As coordinating lead, aobs withdraws the additional manual execution stop it
-imposed under QA-B010. Execution may continue. Public-API review status remains
-proposed; this records neither direct contract acceptance nor independent QA PASS.
+imposed under QA-B010. Execution may continue. The scoped aobs approval accepts
+this contract for implementation at the frontmatter revision; it is neither a
+personal owner signature, registry-publication approval, nor independent QA PASS.
 
 sc-observability implements and qualifies the additive core capability first;
 BTIT implements the corresponding bridge API and behavior against B.P2's exact
@@ -36,9 +37,10 @@ This document is the normative signature/behavior reference, not an additional
 sprint or a separate closure checklist. B.3 owns the shared wire projection; B.3b owns native backends and conversions;
 B.3a and B.4 own TypeScript/Tauri and Python runtime projections.
 
-## Proposed API and values
+## Accepted implementation API and values
 
-The following is the target direction for review, not an approved API freeze.
+The following is accepted for scoped implementation, not a registry-release or
+cross-project API-freeze approval.
 Core types live in the neutral types crate; owner/state implementation lives in
 sc-observability. Bridge re-exports these values rather than duplicating enums.
 

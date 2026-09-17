@@ -15,7 +15,7 @@ aobs approves this scoped contract for implementation based on independently
 verified code/evidence and green gates. This is not a personal owner signature,
 registry-publication approval, or an independent QA PASS.
 
-## Affected artifacts
+## Affected Artifacts
 
 The runtime-level contract, B.P1 implementation/handoff, and B.P2 staged
 candidate qualification. QA-5's scoped checks are recorded at

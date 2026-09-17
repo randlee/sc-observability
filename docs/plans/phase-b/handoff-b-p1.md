@@ -37,10 +37,12 @@ its 17 raw files and `SHA256SUMS.txt` are the checksum index.
 
 On 2026-09-16 (America/Los_Angeles), aobs relayed the owner's instruction:
 "you task was to complete phase-b w/ publish delayed until the end."
-Coordinating lead aobs withdraws its additional manual QA-B010 execution stop.
-Public-API status remains proposed. This is neither direct contract acceptance
-nor independent QA PASS; historical verdicts remain unchanged. Final closeout
-QA is pending. Live publication remains reserved for B.7.
+Coordinating lead aobs withdraws its additional manual QA-B010 execution stop
+and records scoped implementation approval in
+[`phase-b-runtime-level.md`](../../api-approvals/phase-b-runtime-level.md).
+This is neither a personal owner signature nor independent QA PASS; historical
+verdicts remain unchanged. QA-5's scoped checks are satisfied while its overall
+review verdict at that head remains FAIL. Live publication remains reserved for B.7.
 
 ## QA-1 provenance and pending gates
 
