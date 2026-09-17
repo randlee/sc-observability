@@ -40,9 +40,10 @@ bash scripts/ci/validate_public_api_diff.sh: exit 1, public API diff report gene
 ```
 
 The API diff exit 1 is the repository's intentional signal for an additive
-public diff; the companion docs gate passed because the existing approval
-artifacts cover public API changes. No removals or changes were reported for
-the scoped legacy APIs.
+public diff. The API docs validator only checks that approval files exist; its
+PASS is not approval of this new API. Independent review acceptance for the
+typed API remains pending. No removals or changes were reported for the scoped
+legacy APIs.
 
 Two-pass worktree-local checklist:
 

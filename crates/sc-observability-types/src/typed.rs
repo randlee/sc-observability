@@ -3,6 +3,32 @@
 //! This module is intentionally separate from the crate-root compatibility
 //! surface. Existing wrappers and extension traits remain unchanged while new
 //! callers can opt into stored, family-specific failure classification.
+//!
+//! Typed failures intentionally do not implement `Clone` or Serde:
+//!
+//! ```compile_fail
+//! use sc_observability_types::{ErrorCode, ErrorContext, Remediation};
+//! use sc_observability_types::typed::IdentityFailure;
+//!
+//! let failure = IdentityFailure::from_context(Box::new(ErrorContext::new(
+//!     ErrorCode::new_static("CUSTOM_FAILURE"),
+//!     "failure",
+//!     Remediation::not_recoverable("test"),
+//! )));
+//! let _clone = failure.clone();
+//! ```
+//!
+//! ```compile_fail
+//! use sc_observability_types::{ErrorCode, ErrorContext, Remediation};
+//! use sc_observability_types::typed::IdentityFailure;
+//!
+//! let failure = IdentityFailure::from_context(Box::new(ErrorContext::new(
+//!     ErrorCode::new_static("CUSTOM_FAILURE"),
+//!     "failure",
+//!     Remediation::not_recoverable("test"),
+//! )));
+//! let _encoded = serde_json::to_vec(&failure);
+//! ```
 
 use std::sync::Arc;
 
@@ -557,6 +583,31 @@ mod tests {
         ))
     }
 
+    fn context_with_source(code: &'static str) -> Box<ErrorContext> {
+        Box::new(
+            ErrorContext::new(ErrorCode::new_static(code), "failure", remediation())
+                .source(Box::new(std::io::Error::other("source"))),
+        )
+    }
+
+    fn assert_context_fidelity(
+        context: &ErrorContext,
+        context_pointer: usize,
+        backtrace_pointer: usize,
+        timestamp: crate::Timestamp,
+        expected_display: &str,
+    ) {
+        assert_eq!(std::ptr::from_ref(context) as usize, context_pointer);
+        assert_eq!(
+            std::ptr::from_ref(context.backtrace()) as usize,
+            backtrace_pointer
+        );
+        assert_eq!(context.diagnostic().timestamp, timestamp);
+        assert_eq!(context.to_string(), expected_display);
+        let source = std::error::Error::source(context).expect("source error");
+        assert_eq!(source.to_string(), "source");
+    }
+
     #[test]
     #[expect(
         clippy::too_many_lines,
@@ -894,6 +945,238 @@ mod tests {
             ExportFailure,
             "SC_OBSERVABILITY_OTLP_EXPORT_FAILED",
             ExportFailureKind::Export
+        );
+    }
+
+    #[test]
+    fn every_family_preserves_identity_through_all_builders() {
+        macro_rules! assert_builders {
+            ($constructor:path, $kind:path, $code:literal) => {{
+                let failure = $constructor("failure", remediation());
+                let context_pointer = std::ptr::from_ref(failure.context()) as usize;
+                let backtrace_pointer = std::ptr::from_ref(failure.context().backtrace()) as usize;
+                let timestamp = failure.diagnostic().timestamp;
+                let failure = failure
+                    .cause("cause")
+                    .docs("https://example.invalid/docs")
+                    .detail("attempt", json!(2))
+                    .source(Box::new(std::io::Error::other("source")));
+
+                assert_eq!(failure.kind(), $kind);
+                assert_eq!(failure.diagnostic().code.as_str(), $code);
+                assert_eq!(failure.diagnostic().cause.as_deref(), Some("cause"));
+                assert_eq!(
+                    failure.diagnostic().docs.as_deref(),
+                    Some("https://example.invalid/docs")
+                );
+                assert_eq!(failure.diagnostic().details["attempt"], json!(2));
+                assert_context_fidelity(
+                    failure.context(),
+                    context_pointer,
+                    backtrace_pointer,
+                    timestamp,
+                    "failure: cause; caused by: source",
+                );
+            }};
+        }
+
+        assert_builders!(
+            IdentityFailure::resolution_failed,
+            IdentityFailureKind::ResolutionFailed,
+            "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"
+        );
+        assert_builders!(
+            InitFailure::logger_initialization,
+            InitFailureKind::LoggerInitialization,
+            "SC_OBSERVABILITY_LOGGER_INIT_FAILED"
+        );
+        assert_builders!(
+            EventFailure::invalid_event,
+            EventFailureKind::InvalidEvent,
+            "SC_OBSERVABILITY_LOGGER_INVALID_EVENT"
+        );
+        assert_builders!(
+            FlushFailure::logger_flush,
+            FlushFailureKind::LoggerFlush,
+            "SC_OBSERVABILITY_LOGGER_FLUSH_FAILED"
+        );
+        assert_builders!(
+            ShutdownFailure::telemetry_flush,
+            ShutdownFailureKind::TelemetryFlush,
+            "SC_OBSERVABILITY_OTLP_FLUSH_FAILED"
+        );
+        assert_builders!(
+            ProjectionFailure::telemetry_export,
+            ProjectionFailureKind::TelemetryExport,
+            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+        );
+        assert_builders!(
+            SubscriberFailure::routing,
+            SubscriberFailureKind::Routing,
+            "SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"
+        );
+        assert_builders!(
+            LogSinkFailure::write,
+            LogSinkFailureKind::Write,
+            "SC_OBSERVABILITY_LOGGER_SINK_WRITE_FAILED"
+        );
+        assert_builders!(
+            ExportFailure::export,
+            ExportFailureKind::Export,
+            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+        );
+    }
+
+    #[test]
+    fn every_family_moves_legacy_context_without_reconstruction() {
+        macro_rules! assert_round_trip {
+            ($legacy:ident, $failure:ident, $kind:path, $code:literal) => {{
+                let original = context_with_source($code);
+                let context_pointer = std::ptr::from_ref(original.as_ref()) as usize;
+                let backtrace_pointer = std::ptr::from_ref(original.backtrace()) as usize;
+                let timestamp = original.diagnostic().timestamp;
+                let legacy = $legacy(original);
+                assert_eq!(ClassifiedError::kind(&legacy), $kind);
+                let typed = $failure::from(legacy);
+                assert_eq!(typed.kind(), $kind);
+                assert_context_fidelity(
+                    typed.context(),
+                    context_pointer,
+                    backtrace_pointer,
+                    timestamp,
+                    "failure; caused by: source",
+                );
+                let legacy = $legacy::from(typed);
+                assert_context_fidelity(
+                    &legacy.0,
+                    context_pointer,
+                    backtrace_pointer,
+                    timestamp,
+                    "failure; caused by: source",
+                );
+                let typed = $failure::from(legacy);
+                assert_eq!(typed.kind(), $kind);
+                assert_context_fidelity(
+                    typed.context(),
+                    context_pointer,
+                    backtrace_pointer,
+                    timestamp,
+                    "failure; caused by: source",
+                );
+            }};
+        }
+
+        assert_round_trip!(
+            IdentityError,
+            IdentityFailure,
+            IdentityFailureKind::ResolutionFailed,
+            "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"
+        );
+        assert_round_trip!(
+            InitError,
+            InitFailure,
+            InitFailureKind::LoggerInitialization,
+            "SC_OBSERVABILITY_LOGGER_INIT_FAILED"
+        );
+        assert_round_trip!(
+            EventError,
+            EventFailure,
+            EventFailureKind::InvalidEvent,
+            "SC_OBSERVABILITY_LOGGER_INVALID_EVENT"
+        );
+        assert_round_trip!(
+            FlushError,
+            FlushFailure,
+            FlushFailureKind::LoggerFlush,
+            "SC_OBSERVABILITY_LOGGER_FLUSH_FAILED"
+        );
+        assert_round_trip!(
+            ShutdownError,
+            ShutdownFailure,
+            ShutdownFailureKind::TelemetryFlush,
+            "SC_OBSERVABILITY_OTLP_FLUSH_FAILED"
+        );
+        assert_round_trip!(
+            ProjectionError,
+            ProjectionFailure,
+            ProjectionFailureKind::TelemetryExport,
+            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+        );
+        assert_round_trip!(
+            SubscriberError,
+            SubscriberFailure,
+            SubscriberFailureKind::Routing,
+            "SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"
+        );
+        assert_round_trip!(
+            LogSinkError,
+            LogSinkFailure,
+            LogSinkFailureKind::Write,
+            "SC_OBSERVABILITY_LOGGER_SINK_WRITE_FAILED"
+        );
+        assert_round_trip!(
+            ExportError,
+            ExportFailure,
+            ExportFailureKind::Export,
+            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+        );
+    }
+
+    #[test]
+    fn every_family_rejects_custom_and_cross_family_codes() {
+        macro_rules! assert_unclassified {
+            ($failure:ty, $unclassified:path, $code:literal) => {
+                assert_eq!(
+                    <$failure>::from_context(context($code)).kind(),
+                    $unclassified
+                );
+            };
+        }
+
+        assert_unclassified!(
+            IdentityFailure,
+            IdentityFailureKind::Unclassified,
+            "CUSTOM_FAILURE"
+        );
+        assert_unclassified!(
+            InitFailure,
+            InitFailureKind::Unclassified,
+            "SC_OBSERVABILITY_LOGGER_QUEUE_FULL"
+        );
+        assert_unclassified!(
+            EventFailure,
+            EventFailureKind::Unclassified,
+            "SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"
+        );
+        assert_unclassified!(
+            FlushFailure,
+            FlushFailureKind::Unclassified,
+            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+        );
+        assert_unclassified!(
+            ShutdownFailure,
+            ShutdownFailureKind::Unclassified,
+            "SC_OBSERVABILITY_LOGGER_FLUSH_FAILED"
+        );
+        assert_unclassified!(
+            ProjectionFailure,
+            ProjectionFailureKind::Unclassified,
+            "SC_OBSERVABILITY_LOGGER_QUEUE_FULL"
+        );
+        assert_unclassified!(
+            SubscriberFailure,
+            SubscriberFailureKind::Unclassified,
+            "SC_OBSERVABILITY_LOGGER_QUEUE_FULL"
+        );
+        assert_unclassified!(
+            LogSinkFailure,
+            LogSinkFailureKind::Unclassified,
+            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+        );
+        assert_unclassified!(
+            ExportFailure,
+            ExportFailureKind::Unclassified,
+            "SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"
         );
     }
 
