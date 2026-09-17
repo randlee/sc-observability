@@ -102,9 +102,10 @@ The implementation correction pass is on
 `feature/phase-b-1e-migration-validation`, based on and merged with the active
 QA1 parent `origin/fix/phase-b-1ab-qa1` at `4299e25b7506a6e1d0852a2f3784d954a796329f`
 before final validation. The initial correction source/fixture commit is
-`331a0db`; the item/span and adapter-failure correction is `dc31ae7`. The
-integrated parent merge head at this pass is `f79c4eb`, and the current
-validated child head is `dc31ae7`. The child
+`331a0db`; the item/span and adapter-failure correction is `dc31ae7`; the
+exact-diagnostic and post-import correction is `9854270`. The integrated
+parent merge head at this pass is `f79c4eb`, and the current validated child
+head is `9854270`. The child
 activates all nine wrapper warnings and 20 mapped method warnings at
 `since = "1.4.0"`, while retaining the three supported method exemptions and
 `Logger::emit` at its existing `since = "1.2.0"`. Ordinary observation routing
