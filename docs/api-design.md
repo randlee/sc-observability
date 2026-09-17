@@ -2360,7 +2360,8 @@ The new OperationDiagnostic provides required code, message, remediation and
 timestamp for operation outcomes; existing DiagnosticSummary remains an optional
 code plus message/time summary. Conversions preserve available original data
 and use explicitly documented fallback remediation only when an operation has
-already discarded it. Core support is published before BTIT bridge integration. Existing standalone
+already discarded it. B.P2-qualified staged core support is consumed before BTIT
+bridge integration; B.7 owns later publication. Existing standalone
 constructors preserve baseline filtering without acquiring an external owner.
 The core and every adapter use the same effective admission level. Mutation is
 serialized against shutdown; diagnostic admission is reported separately and

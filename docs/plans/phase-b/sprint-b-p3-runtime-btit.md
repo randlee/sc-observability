@@ -83,6 +83,16 @@ staged artifact version/checksum. B.1's independent provenance verification is
 still required. B.P3's staged consumption is not live registry proof; B.7 owns
 that proof at phase end.
 
+Before B.1 copy, B.P3 must retain an immutable source-repository inspection:
+the exact BTIT commit, complete root/export and hidden-macro-support inventory,
+target disposition for every observed export, source-side commands/results, and
+the BTIT critical review/re-review path and commit. This repository's workspace
+CI cannot prove BTIT workspace tests, exports, or boundary rules; B.P3 records
+BTIT-owned evidence rather than claiming that coverage. The final inventory and
+source-review verdict remain a B.P3/B.1 gate, not a pre-implementation completion
+claim. B.P3 compile-fail coverage proves LogControl cannot acquire mutation
+authority. B.3a/B.4 add binding host-routing proof once those bindings exist.
+
 ## Paths to delete
 
 BTIT removes its independent THRESHOLD policy and threshold setter helpers after

@@ -118,6 +118,16 @@ impl LogGuard {
 }
 ```
 
+`OperationDiagnostic` is intentionally a narrow operation projection, not a
+rename or replacement for the existing `Diagnostic`. Both derive exactly
+`Debug`, `Clone`, `PartialEq`, `Serialize`, and `Deserialize`; `Diagnostic`
+retains its full reusable payload (`timestamp`, optional `cause`/`docs`, and
+`details`), while OperationDiagnostic carries only mandatory code, message,
+remediation, and `at` for a committed operation's retained outcome. It neither
+implements nor changes the sealed `DiagnosticInfo` contract. Conversion copies
+the original code/remediation unchanged when they are available; no conversion
+claims recovery of details a legacy summary already discarded.
+
 B.1b's improved logger error API must include the new construction boundary in its
 inventory; this prerequisite preserves existing core error conventions until
 that additive migration ships. Failure enums carry stable code/remediation
@@ -200,6 +210,16 @@ rather than claim lost remediation was preserved.
   remains sole bridge lifecycle owner and retains this capability internally.
   Python owned mode exposes owner operations; attached Python and TypeScript
   request changes through an application-owned handler, never LogControl.
+- Core `LevelLifecycle` and the bridge's proposed `LifecyclePhase` are distinct
+  state machines. Core's crate-private `Running`/`Stopping`/`Stopped` only
+  governs whether a LevelOwner may mutate its logger. Bridge completion tracks
+  its own installed facade/coordinator: `Running`, `Stopping`, `Stopped`, or
+  `Failed`. Bridge `Failed` records unconfirmed helper/coordinator completion
+  (for example HelperSpawn or HelperLost); it does **not** assert that the core
+  logger stopped, and it is never projected backwards as a fourth core state.
+  Conversely, core Stopped does not prove a bridge helper joined. A shutdown
+  wait timeout is not terminal: it remains observable until the retained bridge
+  completion becomes Stopped or Failed.
 - A committed change has one linearization point shared with authoritative core
   admission and stopping transitions. A submission overlapping the change may
   use either revision; a submission starting after successful return sees the
