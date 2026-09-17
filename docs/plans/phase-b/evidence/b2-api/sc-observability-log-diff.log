@@ -1,0 +1,292 @@
+pub mod sc_observability_log
+pub use sc_observability_log::ActionName
+pub use sc_observability_log::AdmissionOutcome
+pub use sc_observability_log::CorrelationId
+pub use sc_observability_log::ErrorCode
+pub use sc_observability_log::EventLevel
+pub use sc_observability_log::LevelChange
+pub use sc_observability_log::LevelChangeError
+pub use sc_observability_log::LevelChangeSource
+pub use sc_observability_log::LevelFilter
+pub use sc_observability_log::LevelState
+pub use sc_observability_log::LogEvent
+pub use sc_observability_log::LogQuery
+pub use sc_observability_log::LogSnapshot
+pub use sc_observability_log::LoggerConfig
+pub use sc_observability_log::LoggingHealthReport
+pub use sc_observability_log::OperationDiagnostic
+pub use sc_observability_log::OutcomeLabel
+pub use sc_observability_log::ProcessIdentityPolicy
+pub use sc_observability_log::Remediation
+pub use sc_observability_log::ServiceName
+pub use sc_observability_log::TargetCategory
+pub use sc_observability_log::Timestamp
+pub use sc_observability_log::TraceContext
+pub use sc_observability_log::debug
+pub use sc_observability_log::error
+pub use sc_observability_log::event
+pub use sc_observability_log::info
+pub use sc_observability_log::instrument
+pub use sc_observability_log::trace
+pub use sc_observability_log::warn
+pub mod sc_observability_log::error_codes
+pub const sc_observability_log::error_codes::ALL: &[sc_observability_types::primitives::ErrorCode]
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FLUSH_TIMED_OUT: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_HELPER_LOST: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_HELPER_SPAWN_FAILED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_INVALID_FIELD: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_LOGGER_PANICKED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_NOT_RUNNING: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_REENTRANT_EMIT: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_RUNTIME_START_FAILED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_SHUTDOWN_NOT_STARTED: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_SHUTDOWN_TIMED_OUT: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_STATUS_UNAVAILABLE: sc_observability_types::primitives::ErrorCode
+pub const sc_observability_log::error_codes::SC_OBSERVABILITY_LOG_UNSUPPORTED_LEVEL: sc_observability_types::primitives::ErrorCode
+pub enum sc_observability_log::ControlError
+pub sc_observability_log::ControlError::NotRunning
+pub sc_observability_log::ControlError::NotRunning::phase: sc_observability_log::LifecyclePhase
+pub sc_observability_log::ControlError::Query
+pub sc_observability_log::ControlError::Query::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::ControlError::Unavailable
+pub sc_observability_log::ControlError::Unavailable::diagnostic: sc_observability_types::level::OperationDiagnostic
+impl sc_observability_log::ControlError
+pub fn sc_observability_log::ControlError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::ControlError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+pub enum sc_observability_log::DropCause
+pub sc_observability_log::DropCause::InvalidEvent
+pub sc_observability_log::DropCause::LoggerPanicked
+pub sc_observability_log::DropCause::NotInstalled
+pub sc_observability_log::DropCause::QueueFull
+pub sc_observability_log::DropCause::ReentrantEmit
+pub sc_observability_log::DropCause::ShutdownTimedOut
+pub sc_observability_log::DropCause::WriterDegraded
+impl sc_observability_log::DropCause
+pub const sc_observability_log::DropCause::ALL: [sc_observability_log::DropCause; 7]
+pub enum sc_observability_log::EmitError
+pub sc_observability_log::EmitError::InvalidEvent
+pub sc_observability_log::EmitError::InvalidEvent::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::EmitError::InvalidField
+pub sc_observability_log::EmitError::InvalidField::raw_key: alloc::string::String
+pub sc_observability_log::EmitError::InvalidField::reason: sc_observability_log::FieldKeyError
+pub sc_observability_log::EmitError::NotRunning
+pub sc_observability_log::EmitError::NotRunning::phase: sc_observability_log::LifecyclePhase
+pub sc_observability_log::EmitError::Panicked
+pub sc_observability_log::EmitError::QueueFull
+pub sc_observability_log::EmitError::QueueFull::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::EmitError::Reentrant
+pub sc_observability_log::EmitError::ShutdownTimedOut
+pub sc_observability_log::EmitError::ShutdownTimedOut::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::EmitError::WriterDegraded
+pub sc_observability_log::EmitError::WriterDegraded::diagnostic: sc_observability_types::level::OperationDiagnostic
+impl sc_observability_log::EmitError
+pub fn sc_observability_log::EmitError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::EmitError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+pub enum sc_observability_log::FieldKeyError
+pub sc_observability_log::FieldKeyError::Collision
+pub sc_observability_log::FieldKeyError::Collision::other_raw_key: alloc::string::String
+pub sc_observability_log::FieldKeyError::Empty
+pub sc_observability_log::FieldKeyError::ReservedPrefix
+pub enum sc_observability_log::FlushError
+pub sc_observability_log::FlushError::HelperLost
+pub sc_observability_log::FlushError::HelperLost::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::FlushError::HelperSpawn
+pub sc_observability_log::FlushError::HelperSpawn::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::FlushError::InProgress
+pub sc_observability_log::FlushError::Logger
+pub sc_observability_log::FlushError::Logger::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::FlushError::NotRunning
+pub sc_observability_log::FlushError::NotRunning::phase: sc_observability_log::LifecyclePhase
+pub sc_observability_log::FlushError::TimedOut
+pub sc_observability_log::FlushError::TimedOut::timeout: core::time::Duration
+impl sc_observability_log::FlushError
+pub fn sc_observability_log::FlushError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::FlushError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+pub enum sc_observability_log::InitError
+pub sc_observability_log::InitError::AlreadyInitialized
+pub sc_observability_log::InitError::ForeignLoggerInstalled
+pub sc_observability_log::InitError::IdentityResolution
+pub sc_observability_log::InitError::IdentityResolution::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::InitError::Logger
+pub sc_observability_log::InitError::Logger::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::InitError::RuntimeStart
+pub sc_observability_log::InitError::RuntimeStart::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::InitError::UnsupportedLevel
+pub sc_observability_log::InitError::UnsupportedLevel::available: sc_observability_types::level::LevelFilter
+pub sc_observability_log::InitError::UnsupportedLevel::configured: sc_observability_types::level::LevelFilter
+impl sc_observability_log::InitError
+pub fn sc_observability_log::InitError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::InitError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+pub enum sc_observability_log::LifecyclePhase
+pub sc_observability_log::LifecyclePhase::Failed
+pub sc_observability_log::LifecyclePhase::Running
+pub sc_observability_log::LifecyclePhase::Stopped
+pub sc_observability_log::LifecyclePhase::Stopping
+pub enum sc_observability_log::ShutdownError
+pub sc_observability_log::ShutdownError::FinalFlush
+pub sc_observability_log::ShutdownError::FinalFlush::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::ShutdownError::HelperLost
+pub sc_observability_log::ShutdownError::HelperLost::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::ShutdownError::HelperSpawn
+pub sc_observability_log::ShutdownError::HelperSpawn::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::ShutdownError::TimedOut
+pub sc_observability_log::ShutdownError::TimedOut::timeout: core::time::Duration
+impl sc_observability_log::ShutdownError
+pub fn sc_observability_log::ShutdownError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::ShutdownError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+pub enum sc_observability_log::ShutdownOutcome
+pub sc_observability_log::ShutdownOutcome::Stopped
+pub sc_observability_log::ShutdownOutcome::StoppedWithFlushError
+pub sc_observability_log::ShutdownOutcome::StoppedWithFlushError::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::ShutdownOutcome::Unconfirmed
+pub sc_observability_log::ShutdownOutcome::Unconfirmed::cause: sc_observability_log::UnconfirmedShutdown
+pub enum sc_observability_log::UnconfirmedShutdown
+pub sc_observability_log::UnconfirmedShutdown::HelperLost
+pub sc_observability_log::UnconfirmedShutdown::HelperLost::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub sc_observability_log::UnconfirmedShutdown::HelperSpawn
+pub sc_observability_log::UnconfirmedShutdown::HelperSpawn::diagnostic: sc_observability_types::level::OperationDiagnostic
+pub enum sc_observability_log::WaitError
+pub sc_observability_log::WaitError::NotStarted
+pub sc_observability_log::WaitError::TimedOut
+pub sc_observability_log::WaitError::TimedOut::timeout: core::time::Duration
+pub sc_observability_log::WaitError::Unavailable
+pub sc_observability_log::WaitError::Unavailable::diagnostic: sc_observability_types::level::OperationDiagnostic
+impl sc_observability_log::WaitError
+pub fn sc_observability_log::WaitError::code(&self) -> sc_observability_types::primitives::ErrorCode
+pub fn sc_observability_log::WaitError::remediation(&self) -> sc_observability_types::diagnostic::Remediation
+pub struct sc_observability_log::BridgeEvent
+pub sc_observability_log::BridgeEvent::action: core::option::Option<sc_observability_types::validation::ActionName>
+pub sc_observability_log::BridgeEvent::correlation_id: core::option::Option<sc_observability_types::validation::CorrelationId>
+pub sc_observability_log::BridgeEvent::fields: serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub sc_observability_log::BridgeEvent::level: sc_observability_types::level::Level
+pub sc_observability_log::BridgeEvent::message: core::option::Option<alloc::string::String>
+pub sc_observability_log::BridgeEvent::outcome: core::option::Option<sc_observability_types::validation::OutcomeLabel>
+pub sc_observability_log::BridgeEvent::request_id: core::option::Option<sc_observability_types::validation::CorrelationId>
+pub sc_observability_log::BridgeEvent::target: sc_observability_types::validation::TargetCategory
+pub sc_observability_log::BridgeEvent::trace: core::option::Option<sc_observability_types::tracing::TraceContext>
+pub struct sc_observability_log::BridgeHealthReport
+pub sc_observability_log::BridgeHealthReport::active_log_path: core::option::Option<std::path::PathBuf>
+pub sc_observability_log::BridgeHealthReport::configured_level: sc_observability_types::level::LevelFilter
+pub sc_observability_log::BridgeHealthReport::dropped: sc_observability_log::DroppedEvents
+pub sc_observability_log::BridgeHealthReport::effective_level: sc_observability_types::level::LevelFilter
+pub sc_observability_log::BridgeHealthReport::level_revision: u64
+pub sc_observability_log::BridgeHealthReport::lifecycle: sc_observability_log::LifecyclePhase
+pub sc_observability_log::BridgeHealthReport::logging: sc_observability_types::health::LoggingHealthReport
+pub sc_observability_log::BridgeHealthReport::schema_version: u32
+pub struct sc_observability_log::BridgeOptions
+pub sc_observability_log::BridgeOptions::default_action: sc_observability_types::validation::ActionName
+pub sc_observability_log::BridgeOptions::parse_bracket_action: bool
+pub struct sc_observability_log::DroppedEvents
+impl sc_observability_log::DroppedEvents
+pub fn sc_observability_log::DroppedEvents::get(&self, sc_observability_log::DropCause) -> u64
+pub fn sc_observability_log::DroppedEvents::total(&self) -> u64
+pub struct sc_observability_log::Level(_)
+impl sc_observability_log::Level
+pub const sc_observability_log::Level::DEBUG: sc_observability_log::Level
+pub const sc_observability_log::Level::ERROR: sc_observability_log::Level
+pub const sc_observability_log::Level::INFO: sc_observability_log::Level
+pub const sc_observability_log::Level::TRACE: sc_observability_log::Level
+pub const sc_observability_log::Level::WARN: sc_observability_log::Level
+impl core::convert::From<sc_observability_log::Level> for sc_observability_types::level::Level
+pub fn sc_observability_types::level::Level::from(sc_observability_log::Level) -> Self
+pub struct sc_observability_log::LogControl
+impl sc_observability_log::LogControl
+pub fn sc_observability_log::LogControl::active_log_path(&self) -> core::result::Result<core::option::Option<std::path::PathBuf>, sc_observability_log::ControlError>
+pub fn sc_observability_log::LogControl::dropped_events(&self) -> sc_observability_log::DroppedEvents
+pub fn sc_observability_log::LogControl::flush(&self, core::time::Duration) -> core::result::Result<(), sc_observability_log::FlushError>
+pub fn sc_observability_log::LogControl::health(&self) -> core::result::Result<sc_observability_log::BridgeHealthReport, sc_observability_log::ControlError>
+pub fn sc_observability_log::LogControl::query(&self, &sc_observability_types::query::LogQuery) -> core::result::Result<sc_observability_types::query::LogSnapshot, sc_observability_log::ControlError>
+pub fn sc_observability_log::LogControl::try_log(&self, sc_observability_log::BridgeEvent) -> core::result::Result<sc_observability_log::EmitOutcome, sc_observability_log::EmitError>
+pub fn sc_observability_log::LogControl::wait_stopped(&self, core::time::Duration) -> core::result::Result<sc_observability_log::ShutdownReport, sc_observability_log::WaitError>
+pub struct sc_observability_log::LogGuard
+impl sc_observability_log::LogGuard
+pub fn sc_observability_log::LogGuard::active_log_path(&self) -> core::option::Option<&std::path::Path>
+pub fn sc_observability_log::LogGuard::control(&self) -> sc_observability_log::LogControl
+pub fn sc_observability_log::LogGuard::dropped_events(&self) -> sc_observability_log::DroppedEvents
+pub fn sc_observability_log::LogGuard::elevate_level(&mut self, sc_observability_types::level::LevelFilter, sc_observability_types::level::LevelChangeSource) -> core::result::Result<sc_observability_types::level::LevelChange, sc_observability_types::level::LevelChangeError>
+pub fn sc_observability_log::LogGuard::flush(&self, core::time::Duration) -> core::result::Result<(), sc_observability_log::FlushError>
+pub fn sc_observability_log::LogGuard::health(&self) -> core::result::Result<sc_observability_log::BridgeHealthReport, sc_observability_log::ControlError>
+pub fn sc_observability_log::LogGuard::reset_level(&mut self, sc_observability_types::level::LevelChangeSource) -> core::result::Result<sc_observability_types::level::LevelChange, sc_observability_types::level::LevelChangeError>
+pub fn sc_observability_log::LogGuard::shutdown(self, core::time::Duration) -> core::result::Result<(), sc_observability_log::ShutdownError>
+impl core::ops::drop::Drop for sc_observability_log::LogGuard
+pub fn sc_observability_log::LogGuard::drop(&mut self)
+pub struct sc_observability_log::ShutdownReport
+pub sc_observability_log::ShutdownReport::health: sc_observability_log::BridgeHealthReport
+pub sc_observability_log::ShutdownReport::outcome: sc_observability_log::ShutdownOutcome
+pub const sc_observability_log::BRIDGE_HEALTH_SCHEMA_VERSION: u32
+pub const sc_observability_log::DEFAULT_DROP_SHUTDOWN_TIMEOUT: core::time::Duration
+pub fn sc_observability_log::init(sc_observability::LoggerConfig, sc_observability_log::BridgeOptions) -> core::result::Result<sc_observability_log::LogGuard, sc_observability_log::InitError>
+pub type sc_observability_log::EmitOutcome = sc_observability_types::level::AdmissionOutcome
+warning: unused workspace dependency `sc-observability-log`
+  --> Cargo.toml:31:1
+   |
+31 | sc-observability-log = { version = "1.4.0", path = "crates/sc-observability-log" }
+   | ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `cargo::unused_workspace_dependencies` is set to `warn` by default
+help: consider removing the workspace dependency `sc-observability-log`
+warning: unused workspace dependency `sc-observability-log-consumer-check`
+  --> Cargo.toml:33:1
+   |
+33 | sc-observability-log-consumer-check = { version = "1.4.0", path = "crates/sc-observability-log-consumer-check" }
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: consider removing the workspace dependency `sc-observability-log-consumer-check`
+warning: unused workspace dependency `sc-observability-otlp`
+  --> Cargo.toml:30:1
+   |
+30 | sc-observability-otlp = { version = "1.4.0", path = "crates/sc-observability-otlp" }
+   | ^^^^^^^^^^^^^^^^^^^^^
+   |
+help: consider removing the workspace dependency `sc-observability-otlp`
+warning: workspace (manifest) generated 3 warnings
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability-otlp/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability-otlp` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability-types/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability-types` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observe/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observe` (manifest) generated 1 warning
+ Documenting sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability-log)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s

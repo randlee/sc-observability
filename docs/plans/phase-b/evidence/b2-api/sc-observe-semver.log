@@ -1,0 +1,12 @@
+    Building sc-observe v1.4.0 (current)
+       Built [   3.276s] (current)
+     Parsing sc-observe v1.4.0 (current)
+      Parsed [   0.001s] (current)
+    Building sc-observe v1.2.0 (baseline)
+       Built [   2.877s] (baseline)
+     Parsing sc-observe v1.2.0 (baseline)
+      Parsed [   0.001s] (baseline)
+    Checking sc-observe v1.2.0 -> v1.4.0 (assume minor change)
+     Checked [   0.004s] 196 checks: 196 pass, 57 skip
+     Summary no semver update required
+    Finished [   6.621s] sc-observe

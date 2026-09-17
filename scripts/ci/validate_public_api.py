@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -14,13 +15,14 @@ ROOT = Path(__file__).resolve().parents[2]
 CACHE = ROOT / 'target/public-api'
 
 
-def approval_for(crate: str, version: str, directory: Path) -> bool:
+def approval_for(crate: str, version: str, directory: Path, api_sha256: str) -> bool:
     for path in directory.glob('*.json'):
         record = json.loads(path.read_text())
         scoped = record.get('crates', {}).get(crate, {})
         if (record.get('schema_version') == 1 and record.get('candidate_version') == version
                 and scoped.get('status') == 'approved' and scoped.get('reviewer')
-                and scoped.get('evidence') and 'public-api' in scoped.get('scope', [])):
+                and scoped.get('evidence') and 'public-api' in scoped.get('scope', [])
+                and scoped.get('api_sha256') == api_sha256):
             return True
     return False
 
@@ -61,9 +63,11 @@ def main() -> int:
         head = run(['git', 'rev-parse', 'HEAD']).stdout.strip()
         if report.get('source_commit') != head or report.get('candidate_version') != policy['candidate_version']:
             raise ValueError('API diff report is stale; rerun diff at this source revision')
+        if set(report.get('crates', {})) != set(policy['crates']):
+            raise ValueError('API diff report omits a required crate')
         missing = [crate for crate, item in report['crates'].items()
                    if item['status'] in ('changed', 'initial-public-api')
-                   and not approval_for(crate, policy['candidate_version'], ROOT / 'docs/api-approvals')]
+                   and not approval_for(crate, policy['candidate_version'], ROOT / 'docs/api-approvals', item['api_sha256'])]
         failed = [crate for crate, item in report['crates'].items() if item['status'] == 'tool-error']
         if failed or missing:
             print(f'API documentation gate: tool_errors={failed}, missing_scoped_approvals={missing}', file=sys.stderr)
@@ -107,7 +111,8 @@ def main() -> int:
             status = 'changed' if any(line.startswith(('+', '-')) for line in result.stdout.splitlines()) else 'unchanged'
             changes |= status == 'changed'
         report['crates'][crate] = {'status': status, 'baseline_version': baseline, 'kind': settings['kind'],
-                                   'command': command, 'exit_code': result.returncode, 'log': log_name}
+                                   'command': command, 'exit_code': result.returncode, 'log': log_name,
+                                   'api_sha256': hashlib.sha256(result.stdout.encode()).hexdigest()}
         lines.append(f'{crate}: {status} (baseline={baseline}, exit={result.returncode}, log={log_name})')
     (CACHE / f'public-api-{args.mode}.json').write_text(json.dumps(report, indent=2) + '\n')
     (CACHE / f'public-api-{args.mode}.txt').write_text('\n'.join(lines) + '\n')

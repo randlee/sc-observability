@@ -6,6 +6,7 @@ import argparse
 import json
 import shutil
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -43,6 +44,7 @@ def main() -> int:
     public = {p["name"] for p in metadata["packages"] if p.get("publish") != []}
     if public != set(PACKAGES):
         raise SystemExit(f"public workspace roster mismatch: {public}")
+    subprocess.run([sys.executable, str(source / "scripts/ci/_log_release_adaptations.py"), "--destination", str(source)], check=True)
     output.mkdir(parents=True)
     build = source / "target" / "b2-package-build"
     command = ["cargo", "package", "--workspace", "--exclude", PRIVATE_PACKAGE, "--locked", "--target-dir", str(build)]

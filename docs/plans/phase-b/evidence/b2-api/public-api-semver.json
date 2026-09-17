@@ -1,0 +1,106 @@
+{
+  "source_commit": "f8c8233a33b3b25c9c82314b31105befb52e344e",
+  "candidate_version": "1.4.0",
+  "crates": {
+    "sc-observability-types": {
+      "status": "passed",
+      "baseline_version": "1.2.0",
+      "kind": "lib",
+      "command": [
+        "cargo",
+        "semver-checks",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability-types/Cargo.toml",
+        "--baseline-version",
+        "1.2.0",
+        "--release-type",
+        "minor",
+        "--default-features"
+      ],
+      "exit_code": 0,
+      "log": "sc-observability-types-semver.log"
+    },
+    "sc-observability": {
+      "status": "passed",
+      "baseline_version": "1.2.0",
+      "kind": "lib",
+      "command": [
+        "cargo",
+        "semver-checks",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability/Cargo.toml",
+        "--baseline-version",
+        "1.2.0",
+        "--release-type",
+        "minor",
+        "--default-features"
+      ],
+      "exit_code": 0,
+      "log": "sc-observability-semver.log"
+    },
+    "sc-observe": {
+      "status": "passed",
+      "baseline_version": "1.2.0",
+      "kind": "lib",
+      "command": [
+        "cargo",
+        "semver-checks",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observe/Cargo.toml",
+        "--baseline-version",
+        "1.2.0",
+        "--release-type",
+        "minor",
+        "--default-features"
+      ],
+      "exit_code": 0,
+      "log": "sc-observe-semver.log"
+    },
+    "sc-observability-otlp": {
+      "status": "passed",
+      "baseline_version": "1.2.0",
+      "kind": "lib",
+      "command": [
+        "cargo",
+        "semver-checks",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability-otlp/Cargo.toml",
+        "--baseline-version",
+        "1.2.0",
+        "--release-type",
+        "minor",
+        "--default-features"
+      ],
+      "exit_code": 0,
+      "log": "sc-observability-otlp-semver.log"
+    },
+    "sc-observability-log-macros": {
+      "status": "initial-release-no-published-baseline",
+      "baseline_version": null,
+      "kind": "proc-macro",
+      "command": [
+        "cargo",
+        "public-api",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability-log-macros/Cargo.toml",
+        "-sss"
+      ],
+      "exit_code": 0,
+      "log": "sc-observability-log-macros-semver.log"
+    },
+    "sc-observability-log": {
+      "status": "initial-release-no-published-baseline",
+      "baseline_version": null,
+      "kind": "lib",
+      "command": [
+        "cargo",
+        "public-api",
+        "--manifest-path",
+        "/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability-log/Cargo.toml",
+        "-sss"
+      ],
+      "exit_code": 0,
+      "log": "sc-observability-log-semver.log"
+    }
+  }
+}

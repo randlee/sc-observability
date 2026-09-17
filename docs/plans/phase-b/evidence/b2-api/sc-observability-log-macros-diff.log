@@ -1,0 +1,77 @@
+pub mod sc_observability_log_macros
+pub proc macro sc_observability_log_macros::debug!()
+pub proc macro sc_observability_log_macros::error!()
+pub proc macro sc_observability_log_macros::event!()
+pub proc macro sc_observability_log_macros::info!()
+pub proc macro sc_observability_log_macros::#[instrument]
+pub proc macro sc_observability_log_macros::trace!()
+pub proc macro sc_observability_log_macros::warn!()
+warning: unused workspace dependency `sc-observability-log`
+  --> Cargo.toml:31:1
+   |
+31 | sc-observability-log = { version = "1.4.0", path = "crates/sc-observability-log" }
+   | ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `cargo::unused_workspace_dependencies` is set to `warn` by default
+help: consider removing the workspace dependency `sc-observability-log`
+warning: unused workspace dependency `sc-observability-log-consumer-check`
+  --> Cargo.toml:33:1
+   |
+33 | sc-observability-log-consumer-check = { version = "1.4.0", path = "crates/sc-observability-log-consumer-check" }
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: consider removing the workspace dependency `sc-observability-log-consumer-check`
+warning: unused workspace dependency `sc-observability-otlp`
+  --> Cargo.toml:30:1
+   |
+30 | sc-observability-otlp = { version = "1.4.0", path = "crates/sc-observability-otlp" }
+   | ^^^^^^^^^^^^^^^^^^^^^
+   |
+help: consider removing the workspace dependency `sc-observability-otlp`
+warning: workspace (manifest) generated 3 warnings
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability-otlp/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability-otlp` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability-types/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability-types` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observe/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observe` (manifest) generated 1 warning
+ Documenting sc-observability-log-macros v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification/crates/sc-observability-log-macros)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s

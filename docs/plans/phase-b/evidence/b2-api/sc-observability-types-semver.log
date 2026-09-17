@@ -1,0 +1,13 @@
+    Blocking waiting for cargo global package lock
+    Building sc-observability-types v1.4.0 (current)
+       Built [   3.055s] (current)
+     Parsing sc-observability-types v1.4.0 (current)
+      Parsed [   0.006s] (current)
+    Building sc-observability-types v1.2.0 (baseline)
+       Built [   2.726s] (baseline)
+     Parsing sc-observability-types v1.2.0 (baseline)
+      Parsed [   0.004s] (baseline)
+    Checking sc-observability-types v1.2.0 -> v1.4.0 (assume minor change)
+     Checked [   0.010s] 196 checks: 196 pass, 57 skip
+     Summary no semver update required
+    Finished [   6.627s] sc-observability-types
