@@ -116,4 +116,5 @@ None. Replace internal config.level filtering in place; remove no public API.
 
 No publication, BTIT bridge implementation, DTO/bindings, settings loader,
 legacy deprecation (#92), automatic expiry or sc-runtime topology. B.P2 owns
-publication; B.P3 owns BTIT integration acceptance.
+qualification/staging; B.P3 owns BTIT integration acceptance; B.7 alone
+publishes at phase end.

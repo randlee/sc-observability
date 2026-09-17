@@ -28,7 +28,8 @@ documentation and validation artifacts; partial completion leaves the sprint ope
 1. Apply the contract's exact deprecation policy to nine wrapper types and the
    mapped old methods in B.1b–B.1d except the explicit supported-method
    exemptions below. Each `since` is the selected next minor release
-   after the B.P2 publication; each `note` names its method/type replacement and the migration guide.
+   after B.P2's staged candidate version; each `note` names its method/type
+   replacement and the migration guide.
    Existing `Logger::emit` keeps its existing deprecation version and documents
    typed blocking versus nonblocking alternatives without changing behavior.
 2. Migrate first-party ordinary production use, examples and docs to recommended
