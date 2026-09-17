@@ -381,6 +381,10 @@ impl Logger<Running> {
     }
 
     /// Validates, redacts, and blocks for admission with typed failures.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn log_typed(&self, event: LogEvent) -> Result<(), LogFailure> {
         let event = self
             .prepare_event_typed(event)
@@ -423,6 +427,10 @@ impl Logger<Running> {
     }
 
     /// Attempts non-blocking admission and reports filtering with typed failures.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn try_log_with_outcome_typed(
         &self,
         event: LogEvent,
@@ -491,6 +499,10 @@ impl Logger<Running> {
     }
 
     /// Flushes all registered sinks through the writer-owned runtime with typed failures.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn flush_typed(&self) -> Result<(), FlushFailure> {
         let writer = self
             .runtime
