@@ -16,7 +16,7 @@ import zipfile
 from pathlib import Path
 
 from _python_distribution import (DistributionError, actual_cell, confined, digest,
-                                  extract_sdist, inspect_wheel, verify_source)
+                                  extract_sdist, inspect_wheel, verify_source, runtime_options)
 from _python_sandbox import Sandbox, registered_checkouts
 
 
@@ -54,7 +54,6 @@ def linkage(wheel: Path, policy: dict, sandbox: Sandbox, directory: Path) -> dic
         if 'Python.framework' in output or 'libpython' in output:
             raise DistributionError('extension links an interpreter-specific Python library')
         load = sandbox.run(['otool', '-l', str(native)], directory)
-        minima = re.findall(r'(?:minos|version)\s+(\d+\.\d+)', load)
         # The wheel tag is exact; inspect the actual LC_BUILD_VERSION/LC_VERSION_MIN command.
         deployment = re.findall(r'(?:LC_BUILD_VERSION[\s\S]*?minos|LC_VERSION_MIN_MACOSX[\s\S]*?version)\s+(\d+\.\d+)', load)
         if not deployment or any(tuple(map(int, item.split('.'))) > tuple(map(int, policy['deployment_target'].split('.'))) for item in deployment):
@@ -63,11 +62,19 @@ def linkage(wheel: Path, policy: dict, sandbox: Sandbox, directory: Path) -> dic
     else:
         import pefile
         image = pefile.PE(str(native))
-        dependencies = [entry.dll.decode() for entry in image.DIRECTORY_ENTRY_IMPORT]
+        try:
+            dependencies = [entry.dll.decode() for entry in image.DIRECTORY_ENTRY_IMPORT]
+        finally:
+            image.close()
         if any(re.fullmatch(r'python\d{2,}\.dll', name.lower()) for name in dependencies):
             raise DistributionError('abi3 wheel links interpreter-specific Python DLL')
         output = '\n'.join(dependencies)
     return {**details, 'linked_libraries': output}
+
+
+def verify_embedding_features(metadata: dict) -> None:
+    if any('extension-module' in node['features'] for node in metadata['resolve']['nodes']):
+        raise DistributionError('extension-only features leaked into embedding link settings')
 
 
 def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) -> dict:
@@ -86,9 +93,9 @@ def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) 
                       if entry['name'] == 'sc-observability-binding-runtime')
     cases = {
         'missing-unpublished': ('rust-bundle/' + dependency['root'], True),
-        'missing-registry': (str(Path(registry[0]['manifest_path']).parent.relative_to(root)), True),
-        'missing-target-registry': (str(Path(target_registry[0]['manifest_path']).parent.relative_to(root)), True),
-        'missing-stubs': ('python/sc_observability/__init__.pyi', False),
+        'missing-registry': (Path(registry[0]['manifest_path']).parent.relative_to(root).as_posix(), True),
+        'missing-target-registry': (Path(target_registry[0]['manifest_path']).parent.relative_to(root).as_posix(), True),
+        'missing-stubs': ('python/sc_observability/generated/__init__.pyi', False),
         'missing-py-typed': ('python/sc_observability/py.typed', False),
     }
     for name, (relative, build_must_fail) in cases.items():
@@ -105,7 +112,12 @@ def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) 
         if build_must_fail:
             sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline', '--format-version', '1'],
                         copy, expect_failure=True)
-        results[name] = {'integrity_rejected': True, 'offline_resolution_rejected': build_must_fail}
+            sandbox.run([sys.executable, '-m', 'maturin', 'build', '--locked', '--offline',
+                         '--out', str(scratch / 'rejected-wheels')], copy, expect_failure=True)
+            sandbox.run([sandbox.cargo, 'build', '--locked', '--offline'], copy / 'embedding',
+                        expect_failure=True)
+        results[name] = {'integrity_rejected': True, 'offline_resolution_rejected': build_must_fail,
+                         'wheel_and_embedding_builds_rejected': build_must_fail}
         shutil.rmtree(copy)
     for name, relative, content in (
         ('stale-lock', 'Cargo.lock', b'\n# deliberately stale frozen lock\n'),
@@ -123,6 +135,24 @@ def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) 
         else:
             raise DistributionError(f'{name} incorrectly passed verification')
         shutil.rmtree(copy)
+    import tomli_w
+    from _python_distribution import tomllib
+    copy = scratch / 'extension-link-flags'
+    shutil.copytree(root, copy)
+    manifest_path = copy / 'embedding/Cargo.toml'
+    manifest = tomllib.loads(manifest_path.read_text())
+    dependency = manifest['dependencies']['pyo3']
+    dependency.setdefault('features', []).append('extension-module')
+    manifest_path.write_text(tomli_w.dumps(manifest))
+    wrong_link = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
+                                         '--format-version', '1'], copy / 'embedding'))
+    try:
+        verify_embedding_features(wrong_link)
+    except DistributionError:
+        results['extension-link-flags'] = {'extension_flags_rejected': True}
+    else:
+        raise DistributionError('extension-only embedding flags passed qualification')
+    shutil.rmtree(copy)
     return results
 
 
@@ -147,6 +177,12 @@ def build(args) -> None:
             metadata = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
                                               '--format-version', '1'], root))
             resolution = verify_resolution(metadata, root)
+            sandbox.env['PYTHONHOME'] = sys.base_prefix
+            native_output = sandbox.run([sandbox.cargo, 'test', '--locked', '--offline'], root)
+            native_count = sum(map(int, re.findall(r'test result: ok\. (\d+) passed', native_output)))
+            if not native_count:
+                raise DistributionError('native runtime suite executed no tests')
+            del sandbox.env['PYTHONHOME']
             command = [sys.executable, '-m', 'maturin', 'build', '--locked', '--offline', '--release',
                        '--out', str(scratch / 'wheels')]
             if args.platform.startswith('linux'):
@@ -157,19 +193,29 @@ def build(args) -> None:
                 raise DistributionError('expected exactly one ABI wheel for the platform')
             linked = linkage(wheels[0], selected, sandbox, scratch)
             # Run the same Rust host example with normal rlib linking; never extension flags.
+            # The host starts with its own empty Cargo home and target directory.
+            # It cannot reuse the extension's compiled artifacts or linker choices.
+            extension_home = sandbox.env['CARGO_HOME']
+            extension_target = sandbox.env['CARGO_TARGET_DIR']
+            sandbox.env['CARGO_HOME'] = str(scratch / 'embedding-cargo-home')
+            sandbox.env['CARGO_TARGET_DIR'] = str(scratch / 'embedding-target')
             sandbox.env['PYTHONPATH'] = str(root / 'python')
+            sandbox.env['PYTHONHOME'] = sys.base_prefix
             embedded = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
                                               '--format-version', '1'], root / 'embedding'))
             verify_resolution(embedded, root)
-            if any('extension-module' in node['features'] for node in embedded['resolve']['nodes']):
-                raise DistributionError('extension-only features leaked into embedding link settings')
+            verify_embedding_features(embedded)
             sandbox.run([sandbox.cargo, 'run', '--locked', '--offline', '--release'], root / 'embedding')
             del sandbox.env['PYTHONPATH']
+            del sandbox.env['PYTHONHOME']
+            sandbox.env['CARGO_HOME'] = extension_home
+            sandbox.env['CARGO_TARGET_DIR'] = extension_target
             negatives = negative_cases(root, scratch, sandbox, metadata)
-            record = {'schema_version': 1, 'status': 'passed', 'source_commit': source['source_commit'],
+            verify_source(root)
+            record = {'schema_version': 1, 'status': 'passed', 'development_only': source.get('development_only', False), 'source_commit': source['source_commit'],
                       'sdist_sha256': digest(args.sdist), 'platform': args.platform,
                       'build_interpreter': actual, 'wheel': linked, 'resolution': resolution,
-                      'isolation': probes, 'embedding': 'passed', 'negative_results': negatives,
+                      'isolation': probes, 'native_runtime_tests': 'passed', 'native_test_count': native_count, 'embedding': 'passed', 'negative_results': negatives,
                       'commands': sandbox.commands, 'publication': 'pending_B.7'}
             shutil.copyfile(wheels[0], output / wheels[0].name)
         (output / 'build-result.json').write_text(json.dumps(record, indent=2) + '\n')
@@ -183,6 +229,8 @@ def cell(args) -> None:
         scratch = Path(temporary).resolve()
         root = extract_sdist(args.sdist, scratch / 'unpacked')
         source = verify_source(root)
+        if (source.get('development_only') or not source['runtime_suite'].get('runtime_complete')) and not args.allow_incomplete_runtime:
+            raise DistributionError('development/incomplete runtime artifact cannot qualify an installed cell')
         actual = actual_cell(policy_at(root))
         selected = next(item for item in policy_at(root)['platforms'] if item['id'] == actual['platform'])
         wheel = inspect_wheel(args.wheel, selected, source['version'])
@@ -200,7 +248,8 @@ def cell(args) -> None:
             if (root / relative).exists():
                 shutil.copytree(root / relative, suite / relative)
         contract = source['runtime_suite']
-        if not contract.get('runtime_complete') or not contract.get('typing_paths'):
+        if (not contract.get('typing_paths') or
+                ((source.get('development_only') or not contract.get('runtime_complete')) and not args.allow_incomplete_runtime)):
             raise DistributionError('full runtime/type suite contract is incomplete')
         with Sandbox(scratch, checkouts) as sandbox:
             probes = sandbox.prove_denials(python, args.checkout)
@@ -210,9 +259,12 @@ def cell(args) -> None:
                 'assert pathlib.Path(sc_observability.__file__).resolve().is_relative_to(root); '
                 'assert pathlib.Path(n.__file__).resolve().is_relative_to(root); '
                 'print(n.__file__)'], suite)
+            flags, environment = runtime_options(contract)
+            sandbox.env.update(environment)
+            sandbox.env['SC_OBSERVABILITY_RUNTIME_TEST'] = '1'
             junit = scratch / 'runtime.xml'
             paths = [str(confined(suite, path)) for path in contract['pytest_paths']]
-            sandbox.run([python, '-I', '-m', 'pytest', *paths, '-ra', '--junitxml', str(junit)], suite)
+            sandbox.run([python, *flags, '-m', 'pytest', *paths, '-ra', '--junitxml', str(junit)], suite)
             tree = ET.parse(junit)
             cases = tree.findall('.//testcase')
             if not cases or tree.findall('.//skipped') or tree.findall('.//failure') or tree.findall('.//error'):
@@ -221,11 +273,13 @@ def cell(args) -> None:
             sandbox.run([python, '-I', '-m', 'mypy', '--strict', '--no-incremental',
                          '--cache-dir', str(scratch / 'mypy-cache'), *typed], suite)
             record = {'schema_version': 1, 'status': 'passed', **actual,
+                      'development_only': args.allow_incomplete_runtime or source.get('development_only', False),
                       'source_commit': source['source_commit'], 'sdist_sha256': digest(args.sdist),
                       'wheel': wheel, 'runtime_suite': contract, 'test_count': len(cases),
                       'test_cases': sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in cases),
                       'installed_extension': imported.strip(), 'isolation': probes,
-                      'typecheck': 'passed', 'commands': sandbox.commands, 'publication': 'pending_B.7'}
+                      'typecheck': 'passed', 'interpreter_flags': flags, 'runtime_environment': environment,
+                      'commands': sandbox.commands, 'publication': 'pending_B.7'}
             shutil.copyfile(junit, output / 'runtime.xml')
         (output / 'cell-result.json').write_text(json.dumps(record, indent=2) + '\n')
 
@@ -233,8 +287,10 @@ def cell(args) -> None:
 def aggregate(args) -> None:
     policy = json.loads(args.policy.read_text())
     expected = {(p['id'], python) for p in policy['platforms'] for python in policy['interpreters']}
-    builds = [json.loads(path.read_text()) for path in args.evidence.rglob('build-result.json')]
-    cells = [json.loads(path.read_text()) for path in args.evidence.rglob('cell-result.json')]
+    build_paths = list(args.evidence.rglob('build-result.json'))
+    cell_paths = list(args.evidence.rglob('cell-result.json'))
+    builds = [json.loads(path.read_text()) for path in build_paths]
+    cells = [json.loads(path.read_text()) for path in cell_paths]
     if len(builds) != 5 or len(cells) != 25:
         raise DistributionError('all five builds and all 25 execution cells are required')
     if {(cell['platform'], cell['python']) for cell in cells} != expected:
@@ -243,18 +299,32 @@ def aggregate(args) -> None:
     if len(wheel_hashes) != 5:
         raise DistributionError('missing or duplicate platform wheels')
     for item in builds + cells:
-        if (item.get('status') != 'passed' or item.get('source_commit') != args.source_commit
+        if (item.get('status') != 'passed' or item.get('development_only') or item.get('source_commit') != args.source_commit
                 or item.get('sdist_sha256') != digest(args.sdist)
                 or not all(item['isolation'].get(key) is True for key in ('checkout', 'cargo_cache', 'network'))):
             raise DistributionError('mixed source/artifacts or incomplete isolation evidence')
     for item in cells:
         if item['wheel']['sha256'] != wheel_hashes[item['platform']] or item.get('typecheck') != 'passed':
             raise DistributionError('interpreter cell did not execute its shared ABI wheel and type suite')
+    for path, item in zip(cell_paths, cells):
+        xml = ET.parse(path.with_name('runtime.xml'))
+        actual_cases = sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in xml.findall('.//testcase'))
+        if (actual_cases != item['test_cases'] or len(actual_cases) != item['test_count']
+                or not actual_cases or any(xml.findall('.//' + kind) for kind in ('skipped', 'failure', 'error'))):
+            raise DistributionError('raw JUnit evidence disagrees with the cell result')
+        for tool in ('pytest', 'mypy'):
+            if not any(tool in command['command'] and command['exit_code'] == 0 for command in item['commands']):
+                raise DistributionError('missing successful runtime/type command log')
     cases = {tuple(cell['test_cases']) for cell in cells}
     if len(cases) != 1:
         raise DistributionError('interpreter/platform cells executed different runtime suites')
-    for build in builds:
-        if build.get('embedding') != 'passed' or len(build.get('negative_results', {})) != 8:
+    for path, build in zip(build_paths, builds):
+        selected = next(item for item in policy['platforms'] if item['id'] == build['platform'])
+        wheel = confined(path.parent, build['wheel']['wheel'])
+        inspected = inspect_wheel(wheel, selected, policy['candidate_version'])
+        if inspected['sha256'] != build['wheel']['sha256']:
+            raise DistributionError('retained wheel checksum differs from build evidence')
+        if build.get('embedding') != 'passed' or build.get('native_runtime_tests') != 'passed' or len(build.get('negative_results', {})) != 9:
             raise DistributionError('missing embedding or negative-artifact execution evidence')
     print('B4A_QUALIFIED: five ABI wheels, 25 installed full-suite cells, offline sdist and embedding')
 
@@ -271,6 +341,8 @@ def main() -> None:
             child.add_argument('--platform', required=True)
         else:
             child.add_argument('--wheel', type=Path, required=True)
+            child.add_argument('--allow-incomplete-runtime', action='store_true',
+                               help='execute provisional suites; aggregate still rejects these results')
     child = commands.add_parser('aggregate')
     child.add_argument('--policy', type=Path, required=True)
     child.add_argument('--sdist', type=Path, required=True)

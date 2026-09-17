@@ -50,49 +50,6 @@ function increment(value: string): string {
   }
 }
 
-function envelopeFailure(value: unknown, field = "response"): Failure {
-  try {
-    if (isFailure(value) && isRecord(value) && knownFailureKeys(value.kind).every((key) => Object.hasOwn(value, key)) &&
-        Object.keys(value).every((key) => knownFailureKeys(value.kind).includes(key))) {
-      return freezeDeep(clone(value) as Failure);
-    }
-    if (isRecord(value) && typeof value.kind === "string" && !FAILURE_KEYS[value.kind] &&
-        typeof value.code === "string" && typeof value.message === "string") {
-      return freezeDeep({
-        kind: "unknown_remote",
-        at: boundedText(typeof value.at === "string" ? value.at : new Date().toISOString()),
-        code: boundedText(value.code),
-        message: boundedText(value.message),
-        remote_kind: boundedText(value.kind),
-        remediation: {
-          kind: "recoverable",
-          steps: ["Inspect the remote failure and update the client/host contract if required"],
-        },
-      });
-    }
-  } catch {
-    // Proxies and foreign getters are transport input and must not escape.
-  }
-  return validation(field, "malformed wire response");
-}
-
-function hasOnlyKeys(value: unknown, allowed: readonly string[]): boolean {
-  try {
-    return isRecord(value) && Object.keys(value).every((key) => allowed.includes(key));
-  } catch {
-    return false;
-  }
-}
-
-function validEventInput(event: unknown): event is LogEventDto {
-  try {
-    return hasOnlyKeys(event, ["schema_version", "level", "target", "action", "message", "trace", "request_id", "correlation_id", "outcome", "fields"])
-      && validate("InputLogEventDto", event);
-  } catch {
-    return false;
-  }
-}
-
 const FAILURE_KEYS: Record<string, readonly string[]> = {
   validation: ["kind", "at", "code", "message", "remediation", "field"],
   queue_full: ["kind", "at", "code", "message", "remediation"],
@@ -108,10 +65,6 @@ const FAILURE_KEYS: Record<string, readonly string[]> = {
   internal: ["kind", "at", "code", "message", "remediation"],
   unknown_remote: ["kind", "at", "code", "message", "remediation", "remote_kind"],
 };
-
-function knownFailureKeys(kind: string): readonly string[] {
-  return FAILURE_KEYS[kind] ?? [];
-}
 
 function boundedText(value: string): string {
   const max = 4096;
@@ -131,6 +84,49 @@ function freezeDeep<T>(value: T): T {
     Object.freeze(value);
   }
   return value;
+}
+
+function envelopeFailure(value: unknown, field = "response"): Failure {
+  try {
+    if (isFailure(value) && isRecord(value) && typeof value.kind === "string") {
+      const allowed = FAILURE_KEYS[value.kind];
+      if (allowed && allowed.every((key) => Object.hasOwn(value, key)) &&
+          Object.keys(value).every((key) => allowed.includes(key))) {
+      return freezeDeep(clone(value) as Failure);
+      }
+    }
+    if (isRecord(value) && typeof value.kind === "string" && !FAILURE_KEYS[value.kind] &&
+        typeof value.code === "string" && typeof value.message === "string") {
+      return freezeDeep({
+        kind: "unknown_remote",
+        at: boundedText(typeof value.at === "string" ? value.at : new Date().toISOString()),
+        code: boundedText(value.code),
+        message: boundedText(value.message),
+        remote_kind: boundedText(value.kind),
+        remediation: { kind: "recoverable", steps: ["Inspect the remote failure and update the client/host contract if required"] },
+      });
+    }
+  } catch {
+    // Foreign transport objects, including throwing proxies, are contained.
+  }
+  return validation(field, "malformed wire response");
+}
+
+function hasOnlyKeys(value: unknown, allowed: readonly string[]): boolean {
+  try {
+    return isRecord(value) && Object.keys(value).every((key) => allowed.includes(key));
+  } catch {
+    return false;
+  }
+}
+
+function validEventInput(event: unknown): event is LogEventDto {
+  try {
+    return hasOnlyKeys(event, ["schema_version", "level", "target", "action", "message", "trace", "request_id", "correlation_id", "outcome", "fields"])
+      && validate("InputLogEventDto", event);
+  } catch {
+    return false;
+  }
 }
 
 function asEnvelope<T>(value: unknown, entrypoint: string): Result<T> {
@@ -198,7 +194,8 @@ class Client implements ObservabilityClient {
       .then((result) => {
         if (result.kind === "ok") this.recordSuccess({ kind: result.value.kind, operation: "log" });
         else this.recordFailure(result.error);
-      }, (error: unknown) => this.recordFailure(safeFailure(error, "log dispatch")))
+      })
+      .catch((error: unknown) => this.recordFailure(safeFailure(error, "log dispatch")))
       .finally(() => this.release());
     return ok({ kind: "scheduled" });
   }

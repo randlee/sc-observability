@@ -1,8 +1,9 @@
 ---
 id: B.2
-status: proposed
-branch: feature/phase-b-2-publish-rust
-base: develop
+status: complete
+branch: feature/phase-b-2-qualification
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-2-qualification
+base: feature/phase-b-1-integration
 ---
 
 # B.2 — Qualify the Rust bridge and macros for publication
@@ -126,3 +127,12 @@ No BTIT manifest/lockfile change or removal of its local crates. No binding
 publication or behavior redesign, and no live crates.io publication of any
 package; that is reserved for B.7 at phase end. Missing registry
 credentials/approval is not this sprint's concern.
+
+## Implementation handoff
+
+Implementation is complete at `136799758a5e91aabbf064ae50b5c7c6f20d4413`.
+The [B.2 handoff](handoff-b-2.md) records all six immutable candidate archives,
+source and hashes, actual platform evidence, scoped API review and raw gates.
+The [two-pass checklist](checklist-b-2-qualification.md) records developer
+verification; lead completeness and independent QA remain distinct gates.
+`status: complete` describes implementation, not QA or publication permission.

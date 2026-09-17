@@ -1,8 +1,8 @@
 ---
 id: B.4a
-status: proposed
+status: in_progress
 branch: feature/phase-b-4a-python-packaging
-base: develop
+base: feature/phase-b-4-python
 ---
 
 # B.4a — Python distributions and platform qualification

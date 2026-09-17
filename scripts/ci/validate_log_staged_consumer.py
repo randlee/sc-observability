@@ -9,6 +9,7 @@ import platform
 import subprocess
 import sys
 import tempfile
+import tomllib
 from pathlib import Path
 
 from _log_staging import ASSERTIONS, PACKAGES, PRIVATE_PACKAGE, extract_verified, sha256, verify_stage
@@ -53,6 +54,7 @@ def run_consumer(stage: Path, version: str, result_path: Path, source_commit: st
             f'\n[workspace]\n\n[dependencies]\n{dependencies}\nserde_json = "1"\n\n[patch.crates-io]\n{patches}\n')
         (project / "src/main.rs").write_bytes((ROOT / "scripts/ci/fixtures/log-staged-consumer/main.rs").read_bytes())
         env = {key: value for key, value in os.environ.items() if not key.startswith("CARGO_") and key not in ("RUSTFLAGS", "RUSTDOCFLAGS", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER")}
+        env["RUSTUP_TOOLCHAIN"] = tomllib.loads((ROOT / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
         env["CARGO_HOME"] = str(isolated / "cargo-home")
         env["CARGO_TARGET_DIR"] = str(isolated / "target")
         commands = []
@@ -67,6 +69,8 @@ def run_consumer(stage: Path, version: str, result_path: Path, source_commit: st
                 if result.returncode:
                     raise ValueError(f"consumer command failed ({result.returncode}); see {log_path}")
                 return result.stdout if capture else ""
+            run(["cargo", "--version"])
+            run(["rustc", "--version"])
             metadata = json.loads(run(["cargo", "metadata", "--format-version", "1"], True))
             resolution = validate_resolution(metadata, paths, version)
             run(["cargo", "run", "--locked", "--", str(isolated / "logs")])

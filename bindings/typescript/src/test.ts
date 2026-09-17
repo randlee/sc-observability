@@ -55,65 +55,40 @@ async function main(): Promise<void> {
   let releaseDispatch!: () => void;
   const delayed = createClient({
     request: async () => new Promise<Result<unknown>>((resolve) => {
-      releaseDispatch = () => resolve({
-        kind: "ok",
-        value: { schema_version: 1, kind: "ok", value: { kind: "accepted" } },
-      });
+      releaseDispatch = () => resolve({ kind: "ok", value: { schema_version: 1, kind: "ok", value: { kind: "accepted" } } });
     }),
   });
   assert(delayed.kind === "ok" && event.kind === "ok", "delayed transport setup failed");
   if (delayed.kind === "ok" && event.kind === "ok") {
-    const dispatch = delayed.value.log(event.value);
-    assert(dispatch.kind === "ok", "fire-and-forget dispatch was rejected");
+    assert(delayed.value.log(event.value).kind === "ok", "fire-and-forget dispatch was rejected");
     const pending = delayed.value.client_status();
     assert(pending.kind === "ok" && pending.value.in_flight === 1, "dispatch reservation was not retained");
     releaseDispatch();
     await new Promise((resolve) => setTimeout(resolve, 0));
     const recovered = delayed.value.client_status();
-    assert(recovered.kind === "ok" && recovered.value.in_flight === 0, "dispatch reservation was not released exactly once");
+    assert(recovered.kind === "ok" && recovered.value.in_flight === 0, "dispatch reservation was not released");
     if (recovered.kind === "ok") {
-      try {
-        (recovered.value.failures_by_kind as Record<string, string>).internal = "999";
-      } catch {
-        // Object.freeze throws in strict mode; either outcome must not mutate state.
-      }
+      try { (recovered.value.failures_by_kind as Record<string, string>).internal = "999"; } catch { /* frozen snapshot */ }
       const unchanged = delayed.value.client_status();
-      assert(unchanged.kind === "ok" && unchanged.value.failures_by_kind.internal === "0", "status exposed mutable retained state");
+      assert(unchanged.kind === "ok" && unchanged.value.failures_by_kind.internal === "0", "status retained mutable state");
     }
   }
 
   const unknownRemote = createClient({
-    request: async () => ({
-      kind: "ok",
-      value: {
-        schema_version: 1,
-        kind: "error",
-        error: {
-          kind: "future_failure",
-          at: new Date().toISOString(),
-          code: "FUTURE_CODE",
-          message: "future host failure",
-          remediation: { kind: "recoverable", steps: [] },
-        },
-      },
-    }),
+    request: async () => ({ kind: "ok", value: {
+      schema_version: 1, kind: "error",
+      error: { kind: "future_failure", at: new Date().toISOString(), code: "FUTURE_CODE", message: "future host failure", remediation: { kind: "recoverable", steps: [] } },
+    } }),
   });
   assert(unknownRemote.kind === "ok" && event.kind === "ok", "unknown remote setup failed");
   if (unknownRemote.kind === "ok" && event.kind === "ok") {
     const result = await unknownRemote.value.tryLog(event.value);
-    assert(result.kind === "error" && result.error.kind === "unknown_remote", "unknown remote failure was not retained as unknown_remote");
-    if (result.kind === "error" && result.error.kind === "unknown_remote") assert(result.error.code === "FUTURE_CODE" && result.error.remote_kind === "future_failure", "unknown remote details were lost");
+    assert(result.kind === "error" && result.error.kind === "unknown_remote", "unknown remote was not contained");
+    if (result.kind === "error" && result.error.kind === "unknown_remote") assert(result.error.code === "FUTURE_CODE", "unknown remote code was lost");
   }
 
   const malformedKnown = createClient({
-    request: async () => ({
-      kind: "ok",
-      value: {
-        schema_version: 1,
-        kind: "error",
-        error: { kind: "validation", code: "SC_OBSERVABILITY_BINDING_INVALID_INPUT", message: "missing required fields" },
-      },
-    }),
+    request: async () => ({ kind: "ok", value: { schema_version: 1, kind: "error", error: { kind: "validation", code: "SC_OBSERVABILITY_BINDING_INVALID_INPUT", message: "missing fields" } } }),
   });
   assert(malformedKnown.kind === "ok" && event.kind === "ok", "malformed-known setup failed");
   if (malformedKnown.kind === "ok" && event.kind === "ok") {

@@ -40,18 +40,44 @@ Two distinct approvals are in play; they must not be conflated:
   implementation/critical-review of the target bridge API at source commit
   `396a9d9f77ca1950eeb92d4f88c0eecadb5ef00b`. This is settled and is the basis
   for this copy's entry gate; it is not re-litigated here.
-- **Destination-copy review (pending, this repository).** Team-lead executed
+- **Destination-copy review (recorded below).** Team-lead executed
   the mechanical copy under that upstream acceptance: all 85 source files
   verified byte-identical to the accepted commit by Git blob ID (zero
   mismatches), with only the mechanical adaptations declared in
   `import-provenance.json` (workspace-inherited `[package]` metadata, and
   toolchain-drift `trybuild` `.stderr` rewording since this workspace pins
-  Rust 1.94.1 while BTIT pins 1.98.1) applied on top. This document records
-  that execution; it is not itself the destination-copy reviewer sign-off.
-  Independent QA and an API-approval reviewer's actual sign-off on this
-  destination copy remain outstanding (tracked in
-  `docs/plans/phase-b/handoff-b-1.md`'s "Not in scope here" section) and are
-  required before this approval can be treated as final.
+  Rust 1.94.1 while BTIT pins 1.98.1) applied on top. This document recorded
+  that execution; the destination-copy reviewer sign-off itself is the
+  verbatim record below.
+
+### API-approval reviewer sign-off
+
+Recorded verbatim from
+`/Users/randlee/.config/atm/share/sc-obs/b1copy-evidence/015a8886/lead-copy-approval.json`:
+
+- **Reviewer:** aobs (appointed Phase B lead)
+- **Reviewed at:** 2026-09-17T08:49:45.948232+00:00
+- **Destination SHA:** `015a88867ee79396a6cd406cca449913878c515f`
+- **Accepted source SHA:** `396a9d9f77ca1950eeb92d4f88c0eecadb5ef00b`
+- **Target contract SHA:** `84b32e9d6718418371ffd25a3de52346278725ca`
+- **Statement:** "I approve the B.1 destination mechanical copy and its scoped
+  companion-crate boundary additions at the reviewed destination SHA, against
+  the accepted source and target contract. The source inventory and permitted
+  adaptations are coherent; the copied public contract is retained. This is
+  destination-copy source/API governance approval. It does not approve
+  publication or close the separately owner-deferred runtime-level contract,
+  nor resolve the remaining QA findings."
+- **Evidence:**
+  - `/Users/randlee/.config/atm/share/sc-obs/b1copy-evidence/015a8886/lead-import-validation.log`
+  - `CI35198253852`
+  - `PackageCI35198253863`
+  - `docs/plans/phase-b/log-import-export-report.md` at `015a88867ee79396a6cd406cca449913878c515f`
+  - `docs/plans/phase-b/import-provenance.json` at `015a88867ee79396a6cd406cca449913878c515f`
+
+This is destination-copy source/API governance approval; it does not approve
+publication, does not close the separately owner-deferred runtime-level
+contract, and does not itself resolve or substitute for independent QA
+findings raised against this branch.
 
 Neither approval grants publication, a BTIT dependency switch, or
 runtime-contract closure (Phase B's runtime-level contract remains

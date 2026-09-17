@@ -1,0 +1,100 @@
+{
+  "source_commit": "8776885a6e6e99dc9e892dae90c8f44eb2edae0a",
+  "checks": [
+    {
+      "command": [
+        "bash",
+        "scripts/ci/validate_binding_schema.sh"
+      ],
+      "exit_code": 0,
+      "log": "00.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "sc-observability-dto"
+      ],
+      "exit_code": 0,
+      "log": "01.log"
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/ci/validate_dependency_bans.sh"
+      ],
+      "exit_code": 0,
+      "log": "02.log"
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/ci/validate_repo_boundaries.sh"
+      ],
+      "exit_code": 0,
+      "log": "03.log"
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/ci/validate_docs_consistency.sh"
+      ],
+      "exit_code": 0,
+      "log": "04.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--check"
+      ],
+      "exit_code": 0,
+      "log": "05.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "bindings/schema-generator/Cargo.toml",
+        "--check"
+      ],
+      "exit_code": 0,
+      "log": "06.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "-p",
+        "sc-observability-dto",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "log": "07.log"
+    },
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--manifest-path",
+        "bindings/schema-generator/Cargo.toml",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "log": "08.log"
+    }
+  ]
+}

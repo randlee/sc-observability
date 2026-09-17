@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 pub struct DecimalDto(
     #[cfg_attr(
         feature = "schema-gen",
-        schemars(regex(pattern = r"^(0|[1-9][0-9]*|-[1-9][0-9]*)$"))
+        schemars(regex(pattern = r"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\s\S])"))
     )]
     String,
 );
@@ -68,10 +68,15 @@ impl<'de> Deserialize<'de> for DecimalDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum LevelDto {
+    /// Wire trace.
     Trace,
+    /// Wire debug.
     Debug,
+    /// Wire info.
     Info,
+    /// Wire warn.
     Warn,
+    /// Wire error.
     Error,
 }
 
@@ -80,11 +85,17 @@ pub enum LevelDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum LevelFilterDto {
+    /// Wire off.
     Off,
+    /// Wire error.
     Error,
+    /// Wire warn.
     Warn,
+    /// Wire info.
     Info,
+    /// Wire debug.
     Debug,
+    /// Wire trace.
     Trace,
 }
 
@@ -93,8 +104,11 @@ pub enum LevelFilterDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum LevelChangeSourceDto {
+    /// Wire application.
     Application,
+    /// Wire user request.
     UserRequest,
+    /// Wire diagnostic session.
     DiagnosticSession,
 }
 
@@ -103,8 +117,11 @@ pub enum LevelChangeSourceDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum AvailabilityDto {
+    /// Wire healthy.
     Healthy,
+    /// Wire degraded dropping.
     DegradedDropping,
+    /// Wire unavailable.
     Unavailable,
 }
 
@@ -113,8 +130,11 @@ pub enum AvailabilityDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum WorkerStateDto {
+    /// Wire running.
     Running,
+    /// Wire degraded.
     Degraded,
+    /// Wire stopped.
     Stopped,
 }
 
@@ -123,8 +143,11 @@ pub enum WorkerStateDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum QueryStateDto {
+    /// Wire healthy.
     Healthy,
+    /// Wire degraded.
     Degraded,
+    /// Wire unavailable.
     Unavailable,
 }
 
@@ -133,9 +156,13 @@ pub enum QueryStateDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum LifecycleDto {
+    /// Wire running.
     Running,
+    /// Wire stopping.
     Stopping,
+    /// Wire stopped.
     Stopped,
+    /// Wire failed.
     Failed,
 }
 
@@ -146,7 +173,9 @@ pub enum LifecycleDto {
 #[derive(Default)]
 pub enum LogOrderDto {
     #[default]
+    /// Wire oldest first.
     OldestFirst,
+    /// Wire newest first.
     NewestFirst,
 }
 
@@ -158,8 +187,14 @@ fn default_limit() -> usize {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PathDto {
-    Utf8 { value: String },
+    /// Wire utf8.
+    Utf8 {
+        /// Active variant value.
+        value: String,
+    },
+    /// Wire unrepresentable.
     Unrepresentable,
+    /// Wire absent.
     Absent,
 }
 
@@ -169,13 +204,38 @@ pub enum PathDto {
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-input-strict" = true)))]
 pub enum ValueDto {
+    /// Wire null.
     Null {},
-    Boolean { value: bool },
-    String { value: String },
-    Integer { value: DecimalDto },
-    Float { value: f64 },
-    Array { value: Vec<ValueDto> },
-    Object { value: BTreeMap<String, ValueDto> },
+    /// Wire boolean.
+    Boolean {
+        /// Active variant value.
+        value: bool,
+    },
+    /// Wire string.
+    String {
+        /// Active variant value.
+        value: String,
+    },
+    /// Wire integer.
+    Integer {
+        /// Active variant value.
+        value: DecimalDto,
+    },
+    /// Wire float.
+    Float {
+        /// Active variant value.
+        value: f64,
+    },
+    /// Wire array.
+    Array {
+        /// Active variant value.
+        value: Vec<ValueDto>,
+    },
+    /// Wire object.
+    Object {
+        /// Active variant value.
+        value: BTreeMap<String, ValueDto>,
+    },
 }
 
 /// Version-one RemediationDto wire value.
@@ -183,8 +243,16 @@ pub enum ValueDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum RemediationDto {
-    Recoverable { steps: Vec<String> },
-    NotRecoverable { justification: String },
+    /// Wire recoverable.
+    Recoverable {
+        /// Active variant steps.
+        steps: Vec<String>,
+    },
+    /// Wire not recoverable.
+    NotRecoverable {
+        /// Active variant justification.
+        justification: String,
+    },
 }
 
 /// Version-one TraceContextDto wire record.
@@ -255,6 +323,7 @@ pub struct StoredDiagnosticDto {
 pub struct LogEventDto {
     /// schema version.
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+    /// Wire schema version.
     pub schema_version: u32,
     /// level.
     pub level: LevelDto,
@@ -274,6 +343,7 @@ pub struct LogEventDto {
     pub outcome: Option<String>,
     /// fields.
     #[serde(default)]
+    /// Wire fields.
     pub fields: BTreeMap<String, ValueDto>,
 }
 
@@ -331,11 +401,13 @@ pub struct FieldMatchDto {
 pub struct LogQueryDto {
     /// schema version.
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+    /// Wire schema version.
     pub schema_version: u32,
     /// service.
     pub service: Option<String>,
     /// levels.
     #[serde(default)]
+    /// Wire levels.
     pub levels: Vec<LevelDto>,
     /// target.
     pub target: Option<String>,
@@ -351,13 +423,16 @@ pub struct LogQueryDto {
     pub until: Option<String>,
     /// field matches.
     #[serde(default)]
+    /// Wire field matches.
     pub field_matches: Vec<FieldMatchDto>,
     /// limit.
     #[serde(default = "default_limit")]
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1000)))]
+    /// Wire limit.
     pub limit: usize,
     /// order.
     #[serde(default)]
+    /// Wire order.
     pub order: LogOrderDto,
 }
 
@@ -367,6 +442,7 @@ pub struct LogQueryDto {
 pub struct LogSnapshotDto {
     /// schema version.
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+    /// Wire schema version.
     pub schema_version: u32,
     /// events.
     pub events: Vec<StoredEventDto>,
@@ -435,10 +511,12 @@ pub struct MaintenanceHealthDto {
     /// rotated files total.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire rotated files total.
     pub rotated_files_total: DecimalDto,
     /// pruned files total.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire pruned files total.
     pub pruned_files_total: DecimalDto,
     /// last error.
     pub last_error: Option<DiagnosticSummaryDto>,
@@ -453,26 +531,32 @@ pub struct LoggingHealthDto {
     /// dropped events total.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire dropped events total.
     pub dropped_events_total: DecimalDto,
     /// flush errors total.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire flush errors total.
     pub flush_errors_total: DecimalDto,
     /// queue depth.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire queue depth.
     pub queue_depth: DecimalDto,
     /// queue capacity.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire queue capacity.
     pub queue_capacity: DecimalDto,
     /// queue high water mark.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire queue high water mark.
     pub queue_high_water_mark: DecimalDto,
     /// queue full drops total.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire queue full drops total.
     pub queue_full_drops_total: DecimalDto,
     /// active log path.
     pub active_log_path: PathDto,
@@ -497,30 +581,37 @@ pub struct DropCountsDto {
     /// queue full.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire queue full.
     pub queue_full: DecimalDto,
     /// invalid event.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire invalid event.
     pub invalid_event: DecimalDto,
     /// writer degraded.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire writer degraded.
     pub writer_degraded: DecimalDto,
     /// shutdown timed out.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire shutdown timed out.
     pub shutdown_timed_out: DecimalDto,
     /// not installed.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire not installed.
     pub not_installed: DecimalDto,
     /// logger panicked.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire logger panicked.
     pub logger_panicked: DecimalDto,
     /// reentrant emit.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire reentrant emit.
     pub reentrant_emit: DecimalDto,
 }
 
@@ -535,6 +626,7 @@ pub struct LevelStateDto {
     /// level revision.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire level revision.
     pub level_revision: DecimalDto,
 }
 
@@ -544,6 +636,7 @@ pub struct LevelStateDto {
 pub struct BridgeHealthDto {
     /// schema version.
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+    /// Wire schema version.
     pub schema_version: u32,
     /// logging.
     pub logging: LoggingHealthDto,
@@ -560,6 +653,7 @@ pub struct BridgeHealthDto {
     /// level revision.
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
     #[serde(deserialize_with = "unsigned_decimal")]
+    /// Wire level revision.
     pub level_revision: DecimalDto,
 }
 
@@ -569,6 +663,7 @@ pub struct BridgeHealthDto {
 pub struct LogHealthDto {
     /// schema version.
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+    /// Wire schema version.
     pub schema_version: u32,
     /// logging.
     pub logging: LoggingHealthDto,
@@ -583,6 +678,7 @@ pub struct LogHealthDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum DispatchDto {
+    /// Wire scheduled.
     Scheduled,
 }
 
@@ -591,7 +687,9 @@ pub enum DispatchDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AdmissionDto {
+    /// Wire accepted.
     Accepted,
+    /// Wire filtered.
     Filtered,
 }
 
@@ -600,6 +698,7 @@ pub enum AdmissionDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CompletionDto {
+    /// Wire completed.
     Completed,
 }
 
@@ -608,8 +707,13 @@ pub enum CompletionDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ChangeDiagnosticDto {
+    /// Wire accepted.
     Accepted,
-    NotAccepted { diagnostic: OperationDiagnosticDto },
+    /// Wire not accepted.
+    NotAccepted {
+        /// Active variant diagnostic.
+        diagnostic: OperationDiagnosticDto,
+    },
 }
 
 /// Version-one LevelChangeDto wire value.
@@ -617,13 +721,20 @@ pub enum ChangeDiagnosticDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum LevelChangeDto {
+    /// Wire changed.
     Changed {
+        /// Wire previous.
         previous: LevelStateDto,
+        /// Wire current.
         current: LevelStateDto,
+        /// Wire source.
         source: LevelChangeSourceDto,
+        /// Wire diagnostic.
         diagnostic: ChangeDiagnosticDto,
     },
+    /// Wire unchanged.
     Unchanged {
+        /// Wire state.
         state: LevelStateDto,
     },
 }
@@ -633,7 +744,12 @@ pub enum LevelChangeDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum LevelRequestDto {
-    Elevate { level: LevelFilterDto },
+    /// Wire elevate.
+    Elevate {
+        /// Active variant level.
+        level: LevelFilterDto,
+    },
+    /// Wire reset.
     Reset {},
 }
 
@@ -642,65 +758,100 @@ pub enum LevelRequestDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Failure {
+    /// Wire validation.
     Validation {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
+        /// Wire field.
         field: String,
     },
+    /// Wire queue full.
     QueueFull {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
     },
+    /// Wire below baseline.
     BelowBaseline {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
+        /// Wire requested.
         requested: LevelFilterDto,
+        /// Wire configured.
         configured: LevelFilterDto,
     },
+    /// Wire unsupported level.
     UnsupportedLevel {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
+        /// Wire requested.
         requested: LevelFilterDto,
+        /// Wire available.
         available: LevelFilterDto,
     },
+    /// Wire permission denied.
     PermissionDenied {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
     },
+    /// Wire closed.
     Closed {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
     },
+    /// Wire unavailable.
     Unavailable {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
     },
+    /// Wire io.
     Io {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
     },
+    /// Wire timeout.
     Timeout {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
+        /// Wire operation.
         operation: String,
     },
+    /// Wire cancelled.
     Cancelled {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
+        /// Wire operation.
         operation: String,
     },
+    /// Wire unsupported version.
     UnsupportedVersion {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
+        /// Wire received.
         received: u32,
     },
+    /// Wire internal.
     Internal {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
     },
+    /// Wire unknown remote.
     UnknownRemote {
         #[serde(flatten)]
+        /// Wire diagnostic.
         diagnostic: Box<Diagnostic>,
+        /// Wire remote kind.
         remote_kind: String,
     },
 }
@@ -725,28 +876,42 @@ impl Failure {
         }
     }
 }
-/// Version-one ResultDto<T> wire value.
+/// Version-one `ResultDto<T>` wire value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ResultDto<T> {
-    Ok { value: T },
-    Error { error: Failure },
+    /// Wire ok.
+    Ok {
+        /// Active variant value.
+        value: T,
+    },
+    /// Wire error.
+    Error {
+        /// Active variant error.
+        error: Failure,
+    },
 }
 
-/// Version-one WireEnvelope<T> wire value.
+/// Version-one `WireEnvelope<T>` wire value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum WireEnvelope<T> {
+    /// Wire ok.
     Ok {
+        /// Active variant schema version.
         #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
         schema_version: u32,
+        /// Active variant value.
         value: T,
     },
+    /// Wire error.
     Error {
+        /// Active variant schema version.
         #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
         schema_version: u32,
+        /// Active variant error.
         error: Failure,
     },
 }
@@ -758,6 +923,7 @@ pub enum WireEnvelope<T> {
 pub struct TryLogRequest {
     /// schema version.
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+    /// Wire schema version.
     pub schema_version: u32,
     /// event.
     pub event: LogEventDto,
@@ -770,6 +936,7 @@ pub struct TryLogRequest {
 pub struct QueryRequest {
     /// schema version.
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+    /// Wire schema version.
     pub schema_version: u32,
     /// query.
     pub query: LogQueryDto,
@@ -782,6 +949,7 @@ pub struct QueryRequest {
 pub struct HealthRequest {
     /// schema version.
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+    /// Wire schema version.
     pub schema_version: u32,
 }
 
@@ -792,9 +960,11 @@ pub struct HealthRequest {
 pub struct FlushRequest {
     /// schema version.
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+    /// Wire schema version.
     pub schema_version: u32,
     /// timeout ms.
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 0, max = 60000)))]
+    /// Wire timeout ms.
     pub timeout_ms: u32,
 }
 
@@ -805,6 +975,7 @@ pub struct FlushRequest {
 pub struct LevelChangeRequest {
     /// schema version.
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+    /// Wire schema version.
     pub schema_version: u32,
     /// change.
     pub change: LevelRequestDto,
@@ -823,6 +994,7 @@ fn unsigned_decimal<'de, D: serde::Deserializer<'de>>(
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum LogOperationDto {
+    /// Wire log.
     Log,
 }
 /// Operations returning final logging admission.
@@ -830,7 +1002,9 @@ pub enum LogOperationDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum AdmissionOperationDto {
+    /// Wire log.
     Log,
+    /// Wire try log.
     TryLog,
 }
 /// Operations returning a completed client observation.
@@ -838,8 +1012,11 @@ pub enum AdmissionOperationDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum CompletionOperationDto {
+    /// Wire query.
     Query,
+    /// Wire health.
     Health,
+    /// Wire flush.
     Flush,
 }
 /// Payload-free client outcome, distinct from host persistence.
@@ -847,11 +1024,28 @@ pub enum CompletionOperationDto {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ClientOutcome {
+    /// Wire idle.
     Idle,
-    Scheduled { operation: LogOperationDto },
-    Accepted { operation: AdmissionOperationDto },
-    Filtered { operation: AdmissionOperationDto },
-    Completed { operation: CompletionOperationDto },
+    /// Wire scheduled.
+    Scheduled {
+        /// Active variant operation.
+        operation: LogOperationDto,
+    },
+    /// Wire accepted.
+    Accepted {
+        /// Active variant operation.
+        operation: AdmissionOperationDto,
+    },
+    /// Wire filtered.
+    Filtered {
+        /// Active variant operation.
+        operation: AdmissionOperationDto,
+    },
+    /// Wire completed.
+    Completed {
+        /// Active variant operation.
+        operation: CompletionOperationDto,
+    },
 }
 /// Bounded local client status; no ownership or IPC capability is represented.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -859,6 +1053,7 @@ pub enum ClientOutcome {
 pub struct ClientStatus {
     /// Number of outstanding operations, bounded by client admission.
     #[cfg_attr(feature = "schema-gen", schemars(range(min = 0, max = 256)))]
+    /// Wire in flight.
     pub in_flight: u32,
     /// Saturating counters for every declared failure kind.
     pub failures_by_kind: FailureCountsDto,
@@ -875,53 +1070,66 @@ pub struct FailureCountsDto {
     /// Saturating validation counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire validation.
     pub validation: DecimalDto,
     /// Saturating queue_full counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire queue full.
     pub queue_full: DecimalDto,
     /// Saturating below_baseline counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire below baseline.
     pub below_baseline: DecimalDto,
     /// Saturating unsupported_level counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire unsupported level.
     pub unsupported_level: DecimalDto,
     /// Saturating permission_denied counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire permission denied.
     pub permission_denied: DecimalDto,
     /// Saturating closed counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire closed.
     pub closed: DecimalDto,
     /// Saturating unavailable counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire unavailable.
     pub unavailable: DecimalDto,
     /// Saturating io counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire io.
     pub io: DecimalDto,
     /// Saturating timeout counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire timeout.
     pub timeout: DecimalDto,
     /// Saturating cancelled counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire cancelled.
     pub cancelled: DecimalDto,
     /// Saturating unsupported_version counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire unsupported version.
     pub unsupported_version: DecimalDto,
     /// Saturating internal counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire internal.
     pub internal: DecimalDto,
     /// Saturating unknown_remote counter.
     #[serde(deserialize_with = "unsigned_decimal")]
     #[cfg_attr(feature = "schema-gen", schemars(extend("x-sc-integer-domain" = "unsigned")))]
+    /// Wire unknown remote.
     pub unknown_remote: DecimalDto,
 }
