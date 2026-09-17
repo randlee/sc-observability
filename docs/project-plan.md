@@ -149,6 +149,16 @@ merge, live publication, and B.7 registry-only re-proof remain pending. B.P2
 does not publish to crates.io. B.7 owns the phase-end live release and
 registry-only consumer proof.
 
+### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
+
+[`plans/phase-b/task-b-1-provenance-prep.md`](./plans/phase-b/task-b-1-provenance-prep.md)
+builds and proves `scripts/ci/validate_log_import.py` (B.1 deliverable 3) in
+parallel with B.P3's active source corrections, so the tool is ready once B.1
+has an accepted source to copy. It is preparation tooling only: no BTIT
+source is copied, no source approval is granted, and no real
+`import-provenance.json` exists. Full B.1 remains blocked on B.P3's accepted
+source handoff, which QA1 returned FAIL on pending fixes.
+
 ## Rule
 
 Any sprint plan added here must preserve the standalone boundary defined by:
