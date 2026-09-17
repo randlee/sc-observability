@@ -10,6 +10,11 @@ description = "Owned and host-attached Python runtime bindings for sc-observabil
 name = "_native"
 crate-type = ["cdylib", "rlib"]
 
+[features]
+# Private validation seam compiled only by the B.4 source-validation wheel.
+# It is deliberately absent from normal package builds and public stubs.
+test-hooks = []
+
 [dependencies]
 pyo3 = { version = "=0.29.2", features = ["abi3-py310"] }
 sc-observability.workspace = true
