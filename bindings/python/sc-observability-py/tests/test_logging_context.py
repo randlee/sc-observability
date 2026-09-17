@@ -332,3 +332,44 @@ def test_accounting_failure_preserves_original_result(logger):
     handler._record(original, event=True)
     assert handler.last_result() is original
     handler.close()
+
+
+def test_concurrent_handler_calls_keep_exact_drop_counts():
+    failure = next(item for item in failures() if item.kind == "queue_full")
+    backend = CustomBackend(Err(failure))
+    handler = value(create_handler(backend))
+    barrier = threading.Barrier(5)
+    errors = []
+    def worker():
+        try:
+            barrier.wait(timeout=5)
+            for _ in range(50):
+                handler.emit(record())
+        except BaseException as error:
+            errors.append(error)
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    for thread in threads: thread.start()
+    try:
+        barrier.wait(timeout=5)
+    finally:
+        for thread in threads: thread.join(timeout=5)
+    assert not errors and not any(thread.is_alive() for thread in threads)
+    health = value(handler.health())
+    assert health.dropped_by_cause[HandlerDropCause.QUEUE_FULL] == 200
+    assert sum(health.dropped_by_cause.values()) == 200
+    assert health.last_result.error is failure
+    handler.close()
+
+
+def test_stack_redaction_and_foreign_stack_formatter(logger):
+    handler = value(create_handler(logger))
+    item = record(); item.stack_info = "Bearer stack-secret"
+    handler.emit(item)
+    row = next(row for row in snapshot(logger) if row.action == "python.log")
+    assert "stack-secret" not in row.fields["stack"].value
+    class BrokenFormatter(logging.Formatter):
+        def formatStack(self, stack_info):
+            raise RuntimeError("foreign stack formatting")
+    handler.setFormatter(BrokenFormatter()); handler.emit(item)
+    assert value(handler.health()).dropped_by_cause[HandlerDropCause.INTERNAL] == 1
+    handler.close()

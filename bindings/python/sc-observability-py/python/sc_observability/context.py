@@ -173,10 +173,10 @@ def bind_context(*, request_id: str | None = None, correlation_id: str | None = 
 
 def _inherit_event(event: LogEvent) -> Result[LogEvent]:
     """Called by both facade log methods; explicit non-None fields win."""
-    if not isinstance(event, LogEvent):
-        from . import _failure
-        return Err(_failure("event", "expected LogEvent"))
     try:
+        if not isinstance(event, LogEvent):
+            from . import _failure
+            return Err(_failure("event", "expected LogEvent"))
         stack = _STACK.get()
         if not stack:
             return Ok(event)

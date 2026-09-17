@@ -365,3 +365,11 @@ that integrate against the shipped public API.
      CLI surface precisely enough for implementation and review
    - `qm-comp` cross-document consistency review passes; all three docs are
      confirmed mutually consistent before merge
+
+### B.5 — Python logging and mixed-language context
+
+B.5 implements the explicit standard-library logging handler, Result-returning
+request scopes, typed examples, and shared Rust/Python request correlation in
+[`plans/phase-b/sprint-b-5-python-integration.md`](./plans/phase-b/sprint-b-5-python-integration.md).
+Implementation and installed distribution qualification are active on
+`feature/phase-b-5-python-integration`; package publication remains B.7.

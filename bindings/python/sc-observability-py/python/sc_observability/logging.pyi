@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from enum import Enum
 import logging
-from typing import Literal, Mapping, Never, Union
+from typing import Literal, Mapping, NoReturn, Union
 from . import AttachedLogger, Logger, Result, generated
 
 class HandlerDropCause(str, Enum):
@@ -38,7 +38,7 @@ class HandlerHealth:
     dropped_by_cause: Mapping[HandlerDropCause, int]
     last_result: Result[HandlerOutcome]
 class ObservabilityHandler(logging.Handler):
-    def __init__(self, _private: Never) -> None: ...
+    def __init__(self, _private: NoReturn) -> None: ...
     def emit(self, record: logging.LogRecord) -> None: ...
     def flush(self) -> None: ...
     def close(self) -> None: ...

@@ -1,7 +1,8 @@
 ---
 id: B.5
-status: proposed
+status: in_progress
 branch: feature/phase-b-5-python-integration
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-5-python-integration
 base: develop
 ---
 
