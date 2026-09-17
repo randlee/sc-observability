@@ -101,8 +101,10 @@ result, and B.7 alone publishes it.
 The implementation correction pass is on
 `feature/phase-b-1e-migration-validation`, based on and merged with the active
 QA1 parent `origin/fix/phase-b-1ab-qa1` at `4299e25b7506a6e1d0852a2f3784d954a796329f`
-before final validation. The correction source/fixture commit is `331a0db`;
-the integrated validation merge head at this pass is `f79c4eb`. The child
+before final validation. The initial correction source/fixture commit is
+`331a0db`; the item/span and adapter-failure correction is `dc31ae7`. The
+integrated parent merge head at this pass is `f79c4eb`, and the current
+validated child head is `dc31ae7`. The child
 activates all nine wrapper warnings and 20 mapped method warnings at
 `since = "1.4.0"`, while retaining the three supported method exemptions and
 `Logger::emit` at its existing `since = "1.2.0"`. Ordinary observation routing
@@ -115,10 +117,13 @@ rewrites.
 
 The M01–M05 correction evidence is:
 
-- M01: the validator inventories exactly 29 targets, checks each local
-  attribute and exact replacement note, requires one `deprecated` code and one
-  `src/main.rs` primary span per JSON diagnostic, rejects secondary spans and
-  unexpected notes, and tests broad-allow/unexpected-warning negatives.
+- M01: the validator binds the actual local attribute block (including exact
+  `since = "1.4.0"`) to each of exactly 29 targets, then binds each Cargo
+  diagnostic to its expected deprecated item and exact `src/main.rs` fixture
+  span. It requires one `deprecated` code and span, rejects secondary spans,
+  unexpected notes/warnings, and uses real predicates for misplaced attributes,
+  wrong versions/notes, missing/extra diagnostics, wrong spans and broad
+  allowances.
 - M02: the legacy fixture exercises all nine wrapper names, every mapped
   method, explicit `InitError` tuple/field access, and the exempt owner
   constructors; the deny-deprecated fixture exercises both owner constructors
@@ -126,9 +131,10 @@ The M01–M05 correction evidence is:
   separates wrapper diagnostics from method diagnostics.
 - M03: the migrated fixture runs root-glob imports, all five legacy/typed
   adapter directions, both sink directions, mixed subscriber/projector
-  registration, successful and failing observation routes, custom and wrong
-  family kind fallback, source-chain preservation, and the legacy fixture
-  checks the serialized `InitError` golden and span path.
+  registration, custom and wrong-family failures through both projector
+  adapter directions with one-call invocation assertions, retained
+  code/kind/context/source checks, and the legacy fixture checks the serialized
+  `InitError` golden and span path.
 - M04: ordinary production projection/lifecycle paths call typed APIs; copied
   bridge signatures remain unchanged and its compatibility allowances are
   narrow, named and reason-bearing.
@@ -154,5 +160,6 @@ The validator runs standalone `legacy`, `migrated` and `partial` Cargo
 workspaces, parses every target warning as JSON, executes each fixture, checks
 the legacy serialized `InitError` golden, verifies typed kind fallback and
 source-chain handling, exercises the full adapter matrix, and rejects broad
-fixture allowances. B.2 still owns qualification/staging and B.7 owns
+fixture allowances. Every fixture clean/check/run invocation uses `--locked`.
+B.2 still owns qualification/staging and B.7 owns
 publication; no removal schedule or major release is introduced.
