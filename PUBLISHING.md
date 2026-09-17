@@ -90,10 +90,14 @@ manifest is kept current.
 
 Language-binding artifacts (the DTO and native-runtime crates, the Tauri host
 adapter crate, the Python PyPI package, and the TypeScript npm client) are
-tracked separately in `release/bindings-artifacts.toml`, validated by
-`scripts/release_bindings_artifacts.py`, and published by the
-`publish-binding-crates`/`publish-python-wheel`/`publish-npm-client` jobs in
-`.github/workflows/release.yml` (after the core crates above). See
+tracked separately in `release/bindings-artifacts.toml` and validated by
+`scripts/release_bindings_artifacts.py` (`validate-manifest`, `verify-versions`,
+`list-publish-plan`, `build-evidence`, `verify-evidence`) plus
+`scripts/ci/validate_binding_registry_consumers.sh`. This is review/readiness
+tooling only: `.github/workflows/release.yml` does not publish these
+artifacts. Live publication of binding packages is intentionally out of
+Phase B's scope and is deferred to a separate shared publishing pipeline,
+**`sc-publish`**, to be installed as a follow-up outside this phase. See
 [`docs/plans/phase-b/handoff-b-7.md`](./docs/plans/phase-b/handoff-b-7.md) for
-current readiness status, including which binding artifacts are published
-versus still pending.
+the current review packet: readiness status per artifact, rebuildable
+candidate evidence, and isolated consumer-matrix results.

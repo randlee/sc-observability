@@ -1,7 +1,11 @@
 schema_version = 1
 
-# B.7 binding-release manifest. Publishes after release/publish-artifacts.toml's
-# 6 core/bridge crates. See docs/plans/phase-b/handoff-b-7.md for full context.
+# B.7 binding-release readiness manifest (review/evidence data, not an
+# installed publish pipeline). Records publish order after
+# release/publish-artifacts.toml's 6 core/bridge crates for a future publish
+# pipeline ("sc-publish", a separate follow-up outside Phase B) to consume;
+# nothing in this branch reads this manifest to actually publish anything.
+# See docs/plans/phase-b/handoff-b-7.md for full context.
 #
 # status = "ready": file exists in this branch's tree today, structurally valid.
 # status = "pending": file does not exist in this branch's tree yet; blocked on
