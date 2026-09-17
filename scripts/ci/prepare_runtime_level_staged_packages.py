@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 import tarfile
+import tomllib
 from pathlib import Path
 
 from _runtime_level_common import release_packages, sha256, validate_version
@@ -67,7 +68,7 @@ def normalized_lock(path: Path, version: str) -> bytes:
     """Make the generated package lock agree with this staged release train."""
     names = "|".join(re.escape(name) for name in PACKAGES)
     return re.sub(
-        rf'(?ms)(name = "(?:{names})"\nversion = )"1\.2\.0"',
+        rf'(?ms)(name = "(?:{names})"\nversion = )"\d+\.\d+\.\d+"',
         rf'\g<1>"{version}"',
         path.read_text(),
     ).encode()
@@ -121,6 +122,15 @@ def verify_stage(output: Path) -> None:
                 raise SystemExit(f"archive has an unnormalized manifest: {archive}")
 
 
+def candidate_workspace_manifest(content: str, version: str) -> str:
+    """Advance plain and exact local pins from the actual source workspace version."""
+    baseline = tomllib.loads(content)["workspace"]["package"]["version"]
+    rendered = re.sub(r'(?m)^version = "' + re.escape(baseline) + r'"$', f'version = "{version}"', content, count=1)
+    for prefix in ("", "="):
+        rendered = rendered.replace(f'version = "{prefix}{baseline}", path =', f'version = "{prefix}{version}", path =')
+    return rendered
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
@@ -142,13 +152,7 @@ def main() -> int:
     workspace = output / "workspace"
     shutil.copytree(source, workspace, ignore=shutil.ignore_patterns(".git", "target", ".DS_Store"))
     root_toml = workspace / "Cargo.toml"
-    root_manifest = re.sub(r'(?m)^version = "\d+\.\d+\.\d+"$', f'version = "{args.version}"', root_toml.read_text(), count=1)
-    root_manifest = root_manifest.replace('version = "1.2.0", path =', f'version = "{args.version}", path =')
-    # An exact `=V` pin (e.g. the bridge-to-macros lockstep dependency) must
-    # advance to the same candidate version while staying an exact pin,
-    # otherwise the candidate's own crate is a version cargo won't resolve.
-    root_manifest = root_manifest.replace('version = "=1.2.0", path =', f'version = "={args.version}", path =')
-    root_toml.write_text(root_manifest)
+    root_toml.write_text(candidate_workspace_manifest(root_toml.read_text(), args.version))
     archives, extracted = output / "archives", output / "extracted"
     archives.mkdir(parents=True)
     extracted.mkdir()

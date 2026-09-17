@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from _log_staging import PACKAGES, inspect_archive, sha256, verify_stage
 from validate_log_staged_consumer import validate_resolution
 from validate_public_api import approval_for
+from prepare_runtime_level_staged_packages import candidate_workspace_manifest, normalized_lock
 
 VERSION = '1.4.0'
 SOURCE = 'a' * 40
@@ -101,6 +102,20 @@ class StageTests(unittest.TestCase):
         packages[0]['manifest_path'] = '/checkout/Cargo.toml'
         with self.assertRaisesRegex(ValueError, 'ambient'):
             validate_resolution({'packages': packages}, paths, VERSION)
+
+    def test_historical_staging_derives_current_workspace_version(self):
+        import tomllib
+        for baseline in ('1.2.0', '1.4.0', '2.7.9'):
+            text = f'[workspace.package]\nversion = "{baseline}"\n[workspace.dependencies]\nsc-observability = {{ version = "{baseline}", path = "crates/sc-observability" }}\nsc-observability-log-macros = {{ version = "={baseline}", path = "crates/sc-observability-log-macros" }}\n'
+            candidate = tomllib.loads(candidate_workspace_manifest(text, '1.3.0'))['workspace']
+            self.assertEqual(candidate['package']['version'], '1.3.0')
+            self.assertEqual(candidate['dependencies']['sc-observability']['version'], '1.3.0')
+            self.assertEqual(candidate['dependencies']['sc-observability-log-macros']['version'], '=1.3.0')
+            lock = self.root / 'Cargo.lock'
+            lock.write_text(f'[[package]]\nname = "sc-observability"\nversion = "{baseline}"\n\n[[package]]\nname = "third-party"\nversion = "{baseline}"\n')
+            normalized = tomllib.loads(normalized_lock(lock, '1.3.0').decode())['package']
+            self.assertEqual(normalized[0]['version'], '1.3.0')
+            self.assertEqual(normalized[1]['version'], baseline)
 
     def test_unrelated_or_pending_approval_is_not_a_waiver(self):
         directory = self.root / 'approvals'
