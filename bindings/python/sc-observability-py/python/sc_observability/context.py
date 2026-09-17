@@ -176,14 +176,18 @@ def _inherit_event(event: LogEvent) -> Result[LogEvent]:
     if not isinstance(event, LogEvent):
         from . import _failure
         return Err(_failure("event", "expected LogEvent"))
-    stack = _STACK.get()
-    if not stack:
-        return Ok(event)
-    values = stack[-1].values
-    return Ok(replace(event,
-                      request_id=event.request_id if event.request_id is not None else values.request_id,
-                      correlation_id=event.correlation_id if event.correlation_id is not None else values.correlation_id,
-                      trace=event.trace if event.trace is not None else values.trace))
+    try:
+        stack = _STACK.get()
+        if not stack:
+            return Ok(event)
+        values = stack[-1].values
+        return Ok(replace(event,
+                          request_id=event.request_id if event.request_id is not None else values.request_id,
+                          correlation_id=event.correlation_id if event.correlation_id is not None else values.correlation_id,
+                          trace=event.trace if event.trace is not None else values.trace))
+    except Exception:
+        return Err(_internal("Context inheritance could not complete"))
+
 
 
 __all__ = ["ContextIdle", "ContextEntered", "ContextClosed", "ContextOutcome", "ContextScope", "bind_context"]
