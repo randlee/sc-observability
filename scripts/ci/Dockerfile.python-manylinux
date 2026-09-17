@@ -12,5 +12,7 @@ RUN uv python install 3.10.19 && mkdir -p /opt/b4a-bin && \
     ln -s "$(uv python find 3.10.19)" /opt/b4a-bin/python3
 ENV PATH=/opt/b4a-bin:/root/.cargo/bin:$PATH
 RUN python -c "import pathlib,sysconfig; assert pathlib.Path(sysconfig.get_config_var('LIBDIR'), sysconfig.get_config_var('LDLIBRARY')).is_file()"
+RUN python -m venv /opt/b4a-tools
+ENV PATH=/opt/b4a-tools/bin:/root/.cargo/bin:$PATH
 COPY scripts/ci/python-packaging-requirements.txt /tmp/qualification-requirements.txt
 RUN python -m pip install --disable-pip-version-check -r /tmp/qualification-requirements.txt

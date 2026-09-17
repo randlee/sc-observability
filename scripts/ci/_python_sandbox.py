@@ -118,12 +118,14 @@ class Sandbox:
                                     text=True, encoding='utf-8', errors='replace',
                                     capture_output=True, timeout=900)
         except subprocess.TimeoutExpired as error:
-            raise DistributionError(f'qualification command exceeded 900 seconds: {command}') from error
+            decode = lambda value: value.decode('utf-8', errors='replace') if isinstance(value, bytes) else (value or '')
+            raise DistributionError(f'qualification command exceeded 900 seconds: {command}\n'
+                                    + decode(error.stdout) + '\n' + decode(error.stderr)) from error
         print(f'B4A_EXIT {result.returncode} after {time.monotonic() - started:.2f}s', flush=True)
         self.commands.append({'command': command, 'exit_code': result.returncode,
                               'stdout': result.stdout, 'stderr': result.stderr})
         if (result.returncode == 0) == expect_failure:
-            raise DistributionError(f'isolation command had unexpected result: {command}\n{result.stderr}')
+            raise DistributionError(f'isolation command had unexpected result: {command}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}')
         return result.stdout
 
     def prove_denials(self, python: str, checkout: Path) -> dict:
