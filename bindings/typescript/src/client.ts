@@ -13,7 +13,7 @@ import {
   SC_OBSERVABILITY_BINDING_DISPATCH_FULL,
   validate,
 } from "./generated/index";
-import { diagnosticTooLarge, err, isFailure, isRecord, ok, safeFailure, type Result, unsupportedVersion, validation } from "./result";
+import { diagnosticTooLarge, err, internal, isFailure, isRecord, ok, safeFailure, type Result, unsupportedVersion, validation } from "./result";
 
 export interface JsonTransport {
   request(operation: "try_log" | "query" | "health" | "flush", request: unknown): Promise<Result<unknown>>;
@@ -86,7 +86,7 @@ function boundedText(value: string): string {
 function diagnosticExceedsLimit(value: unknown): boolean {
   try {
     if (!isRecord(value)) return false;
-    for (const key of ["at", "code", "message", "field", "operation", "remote_kind"]) {
+    for (const key of ["at", "code", "message", "field", "operation", "remote_kind", "kind"]) {
       const text = value[key];
       if (typeof text === "string" && new TextEncoder().encode(text).byteLength > 4096) return true;
     }
@@ -125,13 +125,17 @@ function envelopeFailure(value: unknown, field = "response"): Failure {
     if (isRecord(value) && typeof value.kind === "string" && !FAILURE_KEYS[value.kind] &&
         typeof value.code === "string" && typeof value.message === "string") {
       if (diagnosticExceedsLimit(value)) return diagnosticTooLarge(`${field}.error`);
+      let remediation = { kind: "recoverable" as const, steps: ["Inspect the remote failure and update the client/host contract if required"] };
+      if (isRecord(value.remediation) && validate("OutputRemediationDto", value.remediation)) {
+        remediation = clone(value.remediation) as typeof remediation;
+      }
       return freezeDeep({
         kind: "unknown_remote",
         at: boundedText(typeof value.at === "string" ? value.at : new Date().toISOString()),
         code: boundedText(value.code),
         message: boundedText(value.message),
         remote_kind: boundedText(value.kind),
-        remediation: { kind: "recoverable", steps: ["Inspect the remote failure and update the client/host contract if required"] },
+        remediation,
       });
     }
   } catch {
@@ -161,6 +165,9 @@ function asEnvelope<T>(value: unknown, entrypoint: string): Result<T> {
   let raw = value;
   if (isRecord(raw) && raw.kind === "ok" && !Object.hasOwn(raw, "schema_version")) raw = raw.value;
   if (isRecord(raw) && raw.kind === "error" && !Object.hasOwn(raw, "schema_version")) return err(envelopeFailure(raw.error));
+  if (isRecord(raw) && typeof raw.schema_version === "number" && Number.isSafeInteger(raw.schema_version) && raw.schema_version >= 0 && raw.schema_version !== 1) {
+    return err(unsupportedVersion(raw.schema_version));
+  }
   if (!isRecord(raw) || raw.schema_version !== 1 || (raw.kind !== "ok" && raw.kind !== "error")) {
     return err(validation("response", "malformed or unsupported wire envelope"));
   }
@@ -276,12 +283,16 @@ class Client implements ObservabilityClient {
   }
 
   public client_status(): Result<ClientStatus> {
-    return ok(freezeDeep({
-      in_flight: this.inFlight,
-      failures_by_kind: { ...this.counts },
-      last_result: clone(this.lastResult),
-      last_failure: this.lastFailure ? clone(this.lastFailure) : null,
-    }));
+    try {
+      return ok(freezeDeep({
+        in_flight: this.inFlight,
+        failures_by_kind: { ...this.counts },
+        last_result: clone(this.lastResult),
+        last_failure: this.lastFailure ? clone(this.lastFailure) : null,
+      }));
+    } catch {
+      return err(internal("client status accounting is unavailable"));
+    }
   }
 
   public async flush(timeoutMs: number): Promise<Result<CompletionDto>> {
@@ -334,14 +345,22 @@ class Client implements ObservabilityClient {
   }
 
   private recordSuccess(outcome: ClientOutcome): void {
-    this.lastResult = freezeDeep(ok({ ...outcome }));
+    try {
+      this.lastResult = freezeDeep(ok({ ...outcome }));
+    } catch {
+      // Accounting is best effort and must not alter the successful result.
+    }
   }
 
   private recordFailure(failure: Failure): void {
-    const retained = freezeDeep(clone(failure));
-    this.counts[retained.kind] = increment(this.counts[retained.kind]);
-    this.lastFailure = retained;
-    this.lastResult = freezeDeep(err(retained));
+    try {
+      const retained = freezeDeep(clone(failure));
+      this.counts[retained.kind] = increment(this.counts[retained.kind]);
+      this.lastFailure = retained;
+      this.lastResult = freezeDeep(err(retained));
+    } catch {
+      // Accounting is best effort and must not replace the original failure.
+    }
   }
 }
 

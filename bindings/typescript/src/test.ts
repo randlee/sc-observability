@@ -126,7 +126,31 @@ async function main(): Promise<void> {
   if (unknownRemote.kind === "ok" && event.kind === "ok") {
     const result = await unknownRemote.value.tryLog(event.value);
     assert(result.kind === "error" && result.error.kind === "unknown_remote", "unknown remote was not contained");
-    if (result.kind === "error" && result.error.kind === "unknown_remote") assert(result.error.code === "FUTURE_CODE", "unknown remote code was lost");
+    if (result.kind === "error" && result.error.kind === "unknown_remote") {
+      assert(result.error.code === "FUTURE_CODE", "unknown remote code was lost");
+      assert(result.error.remediation.kind === "recoverable" && result.error.remediation.steps.length === 0, "valid unknown remote remediation was replaced");
+    }
+  }
+
+  const oversizedRemoteKind = createClient({
+    request: async () => ({ kind: "ok", value: {
+      schema_version: 1, kind: "error",
+      error: { kind: "x".repeat(5000), at: new Date().toISOString(), code: "REMOTE_CODE", message: "short", remediation: { kind: "recoverable", steps: ["Preserve this remote instruction"] } },
+    } }),
+  });
+  assert(oversizedRemoteKind.kind === "ok" && event.kind === "ok", "oversized remote kind setup failed");
+  if (oversizedRemoteKind.kind === "ok" && event.kind === "ok") {
+    const result = await oversizedRemoteKind.value.tryLog(event.value);
+    assert(result.kind === "error" && result.error.code === SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE, "oversized remote kind was truncated");
+  }
+
+  const unsupportedResponse = createClient({
+    request: async () => ({ kind: "ok", value: { schema_version: 2, kind: "ok", value: { kind: "accepted" } } }),
+  });
+  assert(unsupportedResponse.kind === "ok" && event.kind === "ok", "unsupported response setup failed");
+  if (unsupportedResponse.kind === "ok" && event.kind === "ok") {
+    const result = await unsupportedResponse.value.tryLog(event.value);
+    assert(result.kind === "error" && result.error.kind === "unsupported_version" && result.error.received === 2, "unsupported response version was mapped as input validation");
   }
 
   const malformedKnown = createClient({
@@ -136,6 +160,27 @@ async function main(): Promise<void> {
   if (malformedKnown.kind === "ok" && event.kind === "ok") {
     const result = await malformedKnown.value.tryLog(event.value);
     assert(result.kind === "error" && result.error.kind === "validation", "malformed known failure was not validation");
+  }
+
+  const frozenAccounting = createClient({
+    request: async () => ({ kind: "ok", value: {
+      schema_version: 1, kind: "error",
+      error: { kind: "closed", at: new Date().toISOString(), code: "SC_OBSERVABILITY_BINDING_CLOSED", message: "closed", remediation: { kind: "recoverable", steps: [] } },
+    } }),
+  });
+  assert(frozenAccounting.kind === "ok" && event.kind === "ok", "frozen accounting setup failed");
+  if (frozenAccounting.kind === "ok" && event.kind === "ok") {
+    Object.freeze((frozenAccounting.value as unknown as { counts: object }).counts);
+    const result = await frozenAccounting.value.tryLog(event.value);
+    assert(result.kind === "error" && result.error.kind === "closed", "frozen accounting replaced the original failure");
+  }
+
+  const unavailableAccounting = createClient(transport);
+  assert(unavailableAccounting.kind === "ok", "unavailable accounting setup failed");
+  if (unavailableAccounting.kind === "ok") {
+    Object.defineProperty(unavailableAccounting.value, "counts", { configurable: true, get: () => { throw new Error("accounting storage unavailable"); } });
+    const status = unavailableAccounting.value.client_status();
+    assert(status.kind === "error" && status.error.kind === "internal", "unavailable accounting did not return internal Result");
   }
 
   const additiveKnown = createClient({

@@ -26,6 +26,9 @@ plugin and retains owner authority in Rust. The example exports a nonrejecting
 `requestLevelChange` helper, uses the shared Tauri transport, and demonstrates
 BigInt event conversion; the host composition point is
 `examples/tauri-logging/src-tauri/src/main.rs`.
+The plugin ships generated Tauri ACL metadata for all four plugin commands;
+the example build registers its application command and its checked-in
+capability scopes both surfaces to the `main` window.
 
 Focused source validation performed:
 
@@ -39,12 +42,15 @@ cargo check --manifest-path examples/tauri-logging/src-tauri/Cargo.toml --locked
 
 The TypeScript tests cover the packaged client’s source-level encoding,
 transport, failure-containment, version rejection, diagnostic bounds, proxy
-containment, additive output evolution, prototype-safe encoding, and lifecycle
-boundaries. The adapter tests
+containment, additive output evolution, prototype-safe encoding, lifecycle
+boundaries, response-version mapping, remote remediation preservation, and
+best-effort accounting faults. The adapter tests
 exercise strict request policy, redaction, and the Tauri command dispatcher
 through its mock IPC harness. The source example owns a `LogGuard`, shares its
 control with the adapter backend, and emits correlated Rust/frontend startup
-records. Full installed Rust/npm artifacts, real desktop
+records; its ACL build resolves the four plugin commands plus the application
+level command. The adapter query observer uses the fixed 2000 ms deadline.
+Full installed Rust/npm artifacts, real desktop
 IPC, platform CI, and broad C05 qualification are delegated to
 `bp-tauri-helper` on `feature/phase-b-tauri-qualification`; this handoff does
 not claim those gates. B.3a remains in progress pending that specialist

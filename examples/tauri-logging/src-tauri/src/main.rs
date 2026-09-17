@@ -39,6 +39,16 @@ fn invalid(field: &str, message: &str) -> Failure {
     }
 }
 
+fn unsupported_version(received: u32) -> Failure {
+    Failure::UnsupportedVersion {
+        diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+            sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION,
+            "unsupported schema version",
+        )),
+        received,
+    }
+}
+
 /// Application-owned level request. The frontend supplies no source and never
 /// receives the owner; the host fixes the source to `user_request`.
 #[tauri::command]
@@ -61,8 +71,14 @@ fn app_observability_level_change<R: tauri::Runtime>(
     if object.keys().any(|key| !matches!(key.as_str(), "schema_version" | "change")) {
         return level_envelope(Err(invalid("request", "unknown level request field")));
     }
-    if object.get("schema_version") != Some(&serde_json::Value::from(1u32)) {
+    let Some(schema_version) = object
+        .get("schema_version")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|version| u32::try_from(version).ok()) else {
         return level_envelope(Err(invalid("schema_version", "schema_version must be 1")));
+    };
+    if schema_version != 1 {
+        return level_envelope(Err(unsupported_version(schema_version)));
     }
     let Some(change) = object.get("change").and_then(serde_json::Value::as_object) else {
         return level_envelope(Err(invalid("change", "change must be an object")));

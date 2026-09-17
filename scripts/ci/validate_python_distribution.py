@@ -432,6 +432,7 @@ def aggregate(args) -> None:
     if len(cases) != 1:
         raise DistributionError('interpreter/platform cells executed different runtime suites')
     publication_wheels = []
+    production_paths = []
     for path, build in zip(build_paths, builds):
         production = release_wheel(build['wheel'])
         if sorted(production.get('maturin_features', [])) != production_features:
@@ -439,6 +440,7 @@ def aggregate(args) -> None:
         publication_wheels.append({'platform': build['platform'], **production})
         selected = next(item for item in policy['platforms'] if item['id'] == build['platform'])
         wheel = confined(path.parent, build['wheel']['wheel'])
+        production_paths.append(wheel)
         inspected = inspect_wheel(wheel, selected, policy['candidate_version'])
         if fault_paths(contract):
             private = build.get('instrumented') or {}
@@ -453,7 +455,13 @@ def aggregate(args) -> None:
         if build.get('embedding') != 'passed' or build.get('native_runtime_tests') != 'passed' or len(build.get('negative_results', {})) != 9:
             raise DistributionError('missing embedding or negative-artifact execution evidence')
     publication = {'schema_version': 1, 'source_commit': args.source_commit, 'publication': 'pending_B.7',
-                   'sdist_sha256': digest(args.sdist), 'wheels': publication_wheels}
+                   'sdist_sha256': digest(args.sdist), 'sdist': {'path': 'dist/' + args.sdist.name, 'sha256': digest(args.sdist)},
+                   'wheels': [{**wheel, 'path': 'dist/' + wheel['wheel']} for wheel in publication_wheels]}
+    if getattr(args, 'publication_dir', None):
+        dist = args.publication_dir / 'dist'
+        dist.mkdir(parents=True, exist_ok=False)
+        for artifact in [args.sdist, *production_paths]:
+            shutil.copyfile(artifact, dist / artifact.name)
     if getattr(args, 'output', None):
         args.output.write_text(json.dumps(publication, indent=2) + '\n')
     print('B4A_QUALIFIED: five ABI wheels, 25 installed full-suite cells, offline sdist and embedding')
@@ -480,6 +488,7 @@ def main() -> None:
     child.add_argument('--evidence', type=Path, required=True)
     child.add_argument('--source-commit', required=True)
     child.add_argument('--output', type=Path, help='write production-only future publication inventory')
+    child.add_argument('--publication-dir', type=Path, help='copy only qualified sdist and production wheels under dist/')
     args = parser.parse_args()
     {'build': build, 'cell': cell, 'aggregate': aggregate}[args.mode](args)
 

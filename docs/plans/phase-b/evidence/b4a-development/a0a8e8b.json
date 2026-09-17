@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "source_commit": "a0a8e8bece1940a6dbb1055ba965357a1239123e",
+  "development_only": true,
+  "qualification": "incomplete",
+  "runtime_failure": "B4-C05 helper reservation order; parent owner correcting",
+  "checks": [
+    {
+      "log": "source-validator-a0a8e8b.log",
+      "sha256": "4f8981f2670a1f6fa8df93e9134d785b079f84543ff815e720bf202d22b276dd",
+      "status": "failed",
+      "command": "RUSTUP_TOOLCHAIN=1.94.1 bash scripts/ci/validate_python_bindings.sh"
+    },
+    {
+      "log": "docs-a0a8e8b.log",
+      "sha256": "ee5e38705a2f80a2d5f7e69fbd3b4ff136fd288fcb299be4d929ab2284ff42d4",
+      "status": "passed",
+      "command": "bash scripts/ci/validate_docs_consistency.sh"
+    },
+    {
+      "log": "dependency-bans-a0a8e8b.log",
+      "sha256": "18bfe35136a6372bbf247f948b19e5a9e5cbc02af206d5c6ab3f35c05ac070f7",
+      "status": "passed",
+      "command": "bash scripts/ci/validate_dependency_bans.sh"
+    },
+    {
+      "log": "sdist-a0a8e8b.log",
+      "sha256": "00de3fbecb63fcfc6911762865f58553515b86c889d20a0a4fe8772894b98ccd",
+      "status": "passed",
+      "command": "prepare_python_distributions.py --output target/b4a-tracked-source-e4ad165 --allow-incomplete-runtime"
+    }
+  ]
+}
