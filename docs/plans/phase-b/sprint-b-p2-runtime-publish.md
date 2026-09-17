@@ -3,9 +3,9 @@ id: B.P2
 status: complete
 qa_status: pending_independent_qa
 merge_status: unmerged
-branch: fix/B-P2-consumer-integrity
-worktree: /Users/randlee/github/sc-observability-worktrees/fix/B-P2-consumer-integrity
-target: fix/B-P2-package-completeness
+branch: fix/B-P2-qa2-wording
+worktree: /Users/randlee/github/sc-observability-worktrees/fix/B-P2-qa2-wording
+target: fix/B-P2-qa1-corrections
 base: develop
 ---
 
