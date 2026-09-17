@@ -40,7 +40,8 @@ uvx --from maturin==1.10.2 maturin build --locked \
 uv venv --python "$B4_PYTHON" "$B4_TEMP_DIR/venv"
 uv pip install --python "$B4_TEMP_DIR/venv/bin/python" pytest==9.1.1 "$B4_TEMP_DIR"/wheels/*.whl
 SC_OBSERVABILITY_RUNTIME_TEST=1 "$B4_TEMP_DIR/venv/bin/python" -m pytest \
-  bindings/python/sc-observability-py/tests/test_runtime.py
+  bindings/python/sc-observability-py/tests/test_runtime.py \
+  bindings/python/sc-observability-py/tests/test_runtime_faults.py
 cargo run --locked -p rust-python-logging
 
 if rg -n '\braise\b' bindings/python/sc-observability-py/python/sc_observability/__init__.py; then
