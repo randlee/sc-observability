@@ -4,7 +4,7 @@ status: preparation-complete
 branch: feature/phase-b-1c-observation-prep
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1c-observation-prep
 parent: feature/phase-b-1b-logger-prep
-parent_checkpoint: ad1aea2
+parent_checkpoint: f3792ec35a617b8e1533056eb08974140935c496
 implementation_commits: 7d49ed2, 37bba66
 ---
 
@@ -75,8 +75,7 @@ bash scripts/ci/validate_public_api_docs.sh: passed
 bash scripts/ci/validate_public_api_diff.sh: exit 1 with additive API report, as expected for Phase B typed operations
 ```
 
-The final parent merge-forward was `ad1aea2` (logger parent checkpoint after
-the `56a0908...` correction);
+The final parent merge-forward was `f3792ec35a617b8e1533056eb08974140935c496`;
 the parent owns its logger/provenance changes and no lower layer was edited.
 This is preparation evidence only: copied bridge source import, independent QA,
 and full B.1c integration acceptance remain pending.
