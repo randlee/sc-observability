@@ -7,6 +7,11 @@ function to `createTauriTransport`, and pass the returned transport to
 the admission result is required. Query, health, and flush resolve tagged
 `Result` values and do not reject for operational failures.
 
+The host application must authorize the four plugin commands through its Tauri
+capability and must retain any application-owned command, such as a level
+change, in the app ACL. The example under `examples/tauri-logging` grants the
+plugin and level command only to its `main` window.
+
 Use `encodeValue` and `encodeEvent` for ergonomic event construction. BigInts
 are retained as decimal tagged integers; unsafe numbers, cycles, getters,
 reserved provenance keys, unsupported objects, oversized requests, and deep

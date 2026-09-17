@@ -11,6 +11,7 @@ import {
   type LevelRequestDto,
   type Result,
   type WireEnvelope,
+  unsupportedVersion,
   validate,
   validation,
 } from "@sc-observability/client";
@@ -19,6 +20,9 @@ const transport = createTauriTransport(invoke);
 
 function levelResponse(value: unknown): Result<LevelChangeDto> {
   try {
+    if (isRecord(value) && typeof value.schema_version === "number" && Number.isSafeInteger(value.schema_version) && value.schema_version >= 0 && value.schema_version !== 1) {
+      return err(unsupportedVersion(value.schema_version));
+    }
     if (!isRecord(value) || !validate("OutputWireEnvelopeLevelChangeDto", value)) {
       return err(validation("response", "level response failed schema validation"));
     }

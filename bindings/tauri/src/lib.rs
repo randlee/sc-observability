@@ -336,7 +336,7 @@ impl Adapter {
             let mut target_query = query.clone();
             target_query.target = Some(target);
             let operation = self.backend.start_query(target_query)?;
-            let snapshot = operation.completion(Duration::from_secs(60)).await?;
+            let snapshot = operation.completion(Duration::from_millis(2_000)).await?;
             truncated |= snapshot.truncated;
             events.extend(snapshot.events);
         }

@@ -2,6 +2,8 @@
 name = "sc-observability-tauri"
 version = "1.4.0"
 edition = "2024"
+build = "build.rs"
+links = "tauri-plugin-sc-observability"
 license = "MIT"
 rust-version = "1.94.1"
 description = "Tauri host adapter for sc-observability language bindings"
@@ -22,3 +24,6 @@ tauri = { version = "2", optional = true, default-features = false }
 
 [dev-dependencies]
 serde_json = "1"
+
+[build-dependencies]
+tauri-plugin = { version = "2.4", features = ["build"] }
