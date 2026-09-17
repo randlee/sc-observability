@@ -94,104 +94,105 @@ fn main() -> PyResult<()> {
     let _: fn(Arc<dyn HostLoggingBackend>) = accepts_public_backend;
     pyo3::append_to_inittab!(native_module);
     Python::initialize();
-    Python::attach(|py| {
-        let service = ServiceName::new("rust-python-logging")
-            .map_err(|error| runtime_error(error.to_string()))?;
-        let mut config = sc_observability::LoggerConfig::default_for(
-            service,
-            std::env::temp_dir().join("sc-observability-rust-python-example"),
-        );
-        config.enable_console_sink = false;
-        let (owner, backend) =
-            create_core_backend(config).map_err(|error| runtime_error(format!("{error:?}")))?;
-        let module = PyModule::import(py, "_native")?;
-        let shared: Arc<dyn HostLoggingBackend> = Arc::new(backend.clone());
-        install_host_logger(&module, shared)
-            .map_err(|error| runtime_error(format!("{error:?}")))?;
+    Python::attach(run_example)
+}
 
-        let sys = PyModule::import(py, "sys")?;
-        let modules = sys.getattr("modules")?.cast_into::<PyDict>()?;
-        modules.set_item("sc_observability._native", &module)?;
-        let source_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../bindings/python/sc-observability-py/python");
-        sys.getattr("path")?
-            .call_method1("insert", (0, source_root.to_string_lossy().as_ref()))?;
+fn run_example(py: Python<'_>) -> PyResult<()> {
+    let service = ServiceName::new("rust-python-logging")
+        .map_err(|error| runtime_error(error.to_string()))?;
+    let mut config = sc_observability::LoggerConfig::default_for(
+        service,
+        std::env::temp_dir().join("sc-observability-rust-python-example"),
+    );
+    config.enable_console_sink = false;
+    let (owner, backend) =
+        create_core_backend(config).map_err(|error| runtime_error(format!("{error:?}")))?;
+    let module = PyModule::import(py, "_native")?;
+    let shared: Arc<dyn HostLoggingBackend> = Arc::new(backend.clone());
+    install_host_logger(&module, shared).map_err(|error| runtime_error(format!("{error:?}")))?;
 
-        let api = PyModule::import(py, "sc_observability")?;
-        let attached = api.getattr("get_host_logger")?.call0()?;
-        let kind: String = attached.getattr("kind")?.extract()?;
-        if kind != "ok" {
-            return Err(runtime_error("host attachment did not return tagged Ok"));
-        }
-        let attached_logger = attached.getattr("value")?;
-        let event_kwargs = PyDict::new(py);
-        event_kwargs.set_item("message", "Bearer python-example-secret")?;
-        event_kwargs.set_item("correlation_id", CORRELATION_ID)?;
-        let event = api.getattr("LogEvent")?.call(
-            ("info", "rust.python", "python-embedded"),
-            Some(&event_kwargs),
-        )?;
-        let logged = attached_logger.call_method1("log", (event,))?;
-        let logged_kind: String = logged.getattr("kind")?.extract()?;
-        if logged_kind != "ok" {
-            return Err(runtime_error("attached Python log was not admitted"));
-        }
+    let sys = PyModule::import(py, "sys")?;
+    let modules = sys.getattr("modules")?.cast_into::<PyDict>()?;
+    modules.set_item("sc_observability._native", &module)?;
+    let source_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../bindings/python/sc-observability-py/python");
+    sys.getattr("path")?
+        .call_method1("insert", (0, source_root.to_string_lossy().as_ref()))?;
 
-        backend
-            .try_log(rust_event(), ProducerOrigin::RustHost)
-            .map_err(|error| runtime_error(format!("Rust record was not admitted: {error:?}")))?;
-        backend
-            .start_flush(Duration::from_secs(2))
-            .and_then(|operation| operation.wait(Duration::from_secs(2)))
-            .map_err(|error| runtime_error(format!("shared writer did not flush: {error:?}")))?;
+    let api = PyModule::import(py, "sc_observability")?;
+    let attached = api.getattr("get_host_logger")?.call0()?;
+    let kind: String = attached.getattr("kind")?.extract()?;
+    if kind != "ok" {
+        return Err(runtime_error("host attachment did not return tagged Ok"));
+    }
+    let attached_logger = attached.getattr("value")?;
+    let event_kwargs = PyDict::new(py);
+    event_kwargs.set_item("message", "Bearer python-example-secret")?;
+    event_kwargs.set_item("correlation_id", CORRELATION_ID)?;
+    let event = api.getattr("LogEvent")?.call(
+        ("info", "rust.python", "python-embedded"),
+        Some(&event_kwargs),
+    )?;
+    let logged = attached_logger.call_method1("log", (event,))?;
+    let logged_kind: String = logged.getattr("kind")?.extract()?;
+    if logged_kind != "ok" {
+        return Err(runtime_error("attached Python log was not admitted"));
+    }
 
-        let query_kwargs = PyDict::new(py);
-        query_kwargs.set_item("correlation_id", CORRELATION_ID)?;
-        let query = api.getattr("LogQuery")?.call((), Some(&query_kwargs))?;
-        let python_snapshot = attached_logger.call_method1("query", (query,))?;
-        if python_snapshot.getattr("kind")?.extract::<String>()? != "ok" {
-            return Err(runtime_error(
-                "attached Python query did not return tagged Ok",
-            ));
-        }
-        let native_snapshot = backend
-            .start_query(correlated_query())
-            .and_then(|operation| operation.wait(Duration::from_secs(2)))
-            .map_err(|error| runtime_error(format!("Rust query failed: {error:?}")))?;
-        if !has_record(&native_snapshot, "rust-embedded", "rust")
-            || !has_record(&native_snapshot, "python-embedded", "python")
-        {
-            return Err(runtime_error(
-                "Rust and Python records were not correlated through one redacted writer",
-            ));
-        }
-        if backend.health().is_err() {
-            return Err(runtime_error(
-                "Rust host cannot observe attached backend health",
-            ));
-        }
-        b5_context::verify(py, &backend)?;
-        owner
-            .shutdown(Duration::from_secs(2))
-            .map_err(|error| runtime_error(format!("host shutdown failed: {error:?}")))?;
-        if backend
-            .try_log(rust_event(), ProducerOrigin::RustHost)
-            .is_ok()
-        {
-            return Err(runtime_error("host admitted a record after shutdown"));
-        }
-        if attached_logger
-            .call_method0("health")?
-            .getattr("kind")?
-            .extract::<String>()?
-            != "ok"
-        {
-            return Err(runtime_error(
-                "attached health was not retained after host shutdown",
-            ));
-        }
-        b5_context::after_stop(py)?;
-        async_conformance::run(py)?;
-        Ok(())
-    })
+    backend
+        .try_log(rust_event(), ProducerOrigin::RustHost)
+        .map_err(|error| runtime_error(format!("Rust record was not admitted: {error:?}")))?;
+    backend
+        .start_flush(Duration::from_secs(2))
+        .and_then(|operation| operation.wait(Duration::from_secs(2)))
+        .map_err(|error| runtime_error(format!("shared writer did not flush: {error:?}")))?;
+
+    let query_kwargs = PyDict::new(py);
+    query_kwargs.set_item("correlation_id", CORRELATION_ID)?;
+    let query = api.getattr("LogQuery")?.call((), Some(&query_kwargs))?;
+    let python_snapshot = attached_logger.call_method1("query", (query,))?;
+    if python_snapshot.getattr("kind")?.extract::<String>()? != "ok" {
+        return Err(runtime_error(
+            "attached Python query did not return tagged Ok",
+        ));
+    }
+    let native_snapshot = backend
+        .start_query(correlated_query())
+        .and_then(|operation| operation.wait(Duration::from_secs(2)))
+        .map_err(|error| runtime_error(format!("Rust query failed: {error:?}")))?;
+    if !has_record(&native_snapshot, "rust-embedded", "rust")
+        || !has_record(&native_snapshot, "python-embedded", "python")
+    {
+        return Err(runtime_error(
+            "Rust and Python records were not correlated through one redacted writer",
+        ));
+    }
+    if backend.health().is_err() {
+        return Err(runtime_error(
+            "Rust host cannot observe attached backend health",
+        ));
+    }
+    b5_context::verify(py, &backend)?;
+    owner
+        .shutdown(Duration::from_secs(2))
+        .map_err(|error| runtime_error(format!("host shutdown failed: {error:?}")))?;
+    if backend
+        .try_log(rust_event(), ProducerOrigin::RustHost)
+        .is_ok()
+    {
+        return Err(runtime_error("host admitted a record after shutdown"));
+    }
+    if attached_logger
+        .call_method0("health")?
+        .getattr("kind")?
+        .extract::<String>()?
+        != "ok"
+    {
+        return Err(runtime_error(
+            "attached health was not retained after host shutdown",
+        ));
+    }
+    b5_context::after_stop(py)?;
+    async_conformance::run(py)?;
+    Ok(())
 }
