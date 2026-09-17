@@ -67,6 +67,10 @@ def write_archive(package: str, version: str, workspace: Path, file_list: list[s
         with tarfile.open(fileobj=zipped, mode="w", format=tarfile.PAX_FORMAT) as archive:
             for relative in sorted(set(file_list)):
                 source = root / relative
+                # Cargo's package inventory includes the generated package lock
+                # file even though workspace members share the root lockfile.
+                if relative == "Cargo.lock" and not source.exists():
+                    source = workspace / "Cargo.lock"
                 if not source.is_file():
                     raise SystemExit(f"cargo package list referenced missing file: {source}")
                 content = normalized_manifest(source, version) if relative == "Cargo.toml" else source.read_bytes()
