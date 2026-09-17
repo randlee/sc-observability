@@ -10,7 +10,24 @@ on:
   workflow_dispatch:
 
 jobs:
+  package-stage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build one immutable candidate stage
+        env:
+          STAGE_DIR: ${{ runner.temp }}/bp2-stage
+        shell: bash
+        run: python3 scripts/ci/prepare_runtime_level_staged_packages.py --version 1.3.0 --output "$STAGE_DIR"
+      - name: Retain immutable candidate bytes
+        uses: actions/upload-artifact@v4
+        with:
+          name: bp2-candidate-stage
+          path: ${{ runner.temp }}/bp2-stage
+          if-no-files-found: error
   staged-consumer:
+    needs: package-stage
     strategy:
       fail-fast: false
       matrix:
@@ -25,13 +42,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Build immutable extracted candidate stage
-        run: python3 scripts/ci/prepare_runtime_level_staged_packages.py --version 1.3.0 --output "$RUNNER_TEMP/bp2-stage"
+      - name: Download the shared immutable candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: bp2-candidate-stage
+          path: ${{ runner.temp }}/bp2-stage
       - name: Qualify isolated baseline and extracted candidate
-        run: python3 scripts/ci/validate_runtime_level_staged_consumer.py --version 1.3.0 --stage "$RUNNER_TEMP/bp2-stage" --platform ${{ matrix.evidence }} --result-file bp2-evidence/${{ matrix.evidence }}.json
-      - name: Retain immutable stage with result
-        if: always()
-        run: python3 -c "import os, pathlib, shutil; source = pathlib.Path(os.environ['RUNNER_TEMP']) / 'bp2-stage'; target = pathlib.Path('bp2-evidence') / 'stage'; target.parent.mkdir(exist_ok=True); shutil.copytree(source, target, dirs_exist_ok=True) if source.exists() else None"
+        env:
+          STAGE_DIR: ${{ runner.temp }}/bp2-stage
+        shell: bash
+        run: python3 scripts/ci/validate_runtime_level_staged_consumer.py --version 1.3.0 --stage "$STAGE_DIR" --platform ${{ matrix.evidence }} --result-file bp2-evidence/${{ matrix.evidence }}.json
       - name: Retain platform qualification output
         if: always()
         uses: actions/upload-artifact@v4
