@@ -1,20 +1,35 @@
 ---
 id: B.7-publish-bindings-handoff
-status: readiness_machinery_complete_publication_pending
+status: review_packet_prepared_publication_pending_owner_review
 branch: feature/phase-b-7-publish-bindings
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-7-publish-bindings
 base: develop
-generated_at: 2026-09-17T11:14:42Z
+generated_at: 2026-09-17T18:49:04Z
 ---
 
-# B.7 binding-release readiness handoff
+# B.7 binding-release review packet (readiness handoff)
 
-This document records what B.7's release-readiness machinery proves *today*,
-against this branch's actual (partial) tree state, and what remains genuinely
-pending before phase-end live publication can happen. It is not a
+**Owner sequencing correction (via aobs): no mid-phase publication. B.P2/B.2
+are reviewed immutable release candidates, B.3-B.6 (and this branch's
+bindings) consume prepublication bundles, and B.7 is the sole phase-end
+publication step for all of Phase B (core, bridge/macros, and bindings) --
+but only after explicit owner review authorizes it.** Until that review
+happens, no publication workflow is dispatched and no registry credentials
+are sought, from this branch or any other. Installing or upgrading the
+intended shared publishing pipeline, **`sc-publish`**, is a separate
+follow-up outside Phase B; it is not installed on this branch or in
+`.github/workflows/release.yml`. This is a sequencing/authorization
+constraint, not a permanent scope removal: B.7 remains the eventual
+publication authority the sprint doc already assigns it, deferred rather
+than cancelled.
+
+This document records what B.7's *review* machinery proves today, against
+this branch's actual (partial) tree state: manifest structure, rebuildable
+candidate evidence, and isolated consumer-matrix qualification. It is not a
 publication record: nothing described here has been published to any
-registry. See `release/bindings-artifacts.toml` for the machine-readable
-source of truth this document summarizes.
+registry, no registry credentials have been sought, and no publish workflow
+is dispatched or installed. See `release/bindings-artifacts.toml` for the
+machine-readable source of truth this document summarizes.
 
 ## Registry URLs
 
@@ -126,8 +141,10 @@ two are additionally blocked on the files not existing yet.
 The B.4a Python wheel matrix (`.github/workflows/b4a-python-distributions.yml`,
 policy at `release/python-platform-policy.json`) already builds and qualifies
 the full 5-platform x 5-interpreter (25-cell) matrix for the `sc-observability`
-PyPI package's sdist/wheels. That pipeline is reused (not reinvented) by the
-new `publish-python-wheel` job added to `.github/workflows/release.yml`.
+PyPI package's sdist/wheels. That reusable workflow's `workflow_call` interface
+is available for `sc-publish` (or any future publish pipeline) to consume
+later; `.github/workflows/release.yml` does not call it and installs no
+binding-publish jobs, per the owner scope correction above.
 
 `bindings/typescript/` and `bindings/tauri/` now exist in this branch's tree
 (merged forward from `feature/phase-b-6-python-async`). `sc-observability-tauri`
@@ -187,17 +204,35 @@ scope; this readiness work does not re-run or duplicate those checks.
   publish-readiness -- the manifest entry stays `pending` and no summary
   line claims otherwise.
 
-## Sprint status (updated after aobs's C03/C04/C05 rejection and rework)
+## Sprint status (updated after the owner sequencing correction)
 
 **aobs rejected the first pass of this readiness machinery as too weak**:
 `validate_binding_registry_consumers.sh` succeeded on missing packages,
 skipped pending entries, and only `cargo check`ed local path dependencies
-(C03); `release.yml` tagged/published the 6 core crates before binding
-readiness, silently ignored plan failures via a process-substitution
-exit-code bug, and left PyPI upload literally unimplemented (C04); the
-manifest declared `ready` from file existence alone, with no pinned source,
-artifact hashes, schema, or matrix proof (C05). This section describes the
-reworked state, not the original one.
+(C03); the manifest declared `ready` from file existence alone, with no
+pinned source, artifact hashes, schema, or matrix proof (C05). Those two
+items were genuinely reworked and are described below, and remain part of
+this branch's review packet.
+
+aobs's C04 direction additionally asked for `release.yml` to install real
+crates.io/PyPI/npm publish jobs for the binding artifacts, gated on the
+manifest, and to block the `release` job on all of them. That work was done,
+verified, and then **reverted**: the actual owner corrected the sequencing
+after the fact -- there is no mid-phase publication, and B.7 is the sole
+phase-end publication step for all of Phase B (core, bridge/macros, and
+bindings alike), gated on explicit owner review that has not happened yet.
+Until that review authorizes it, no publication workflow is dispatched and
+no registry credentials are sought; a shared publish pipeline ("sc-publish")
+is a separate follow-up outside this phase's installation scope. This is a
+deferral, not a cancellation of B.7's eventual publication role.
+`.github/workflows/release.yml` no longer contains `publish-binding-crates`,
+`precheck-python-wheel-build`, `qualify-python-wheel-matrix`,
+`publish-python-wheel`, or `publish-npm-client`; the `release` job's `needs:`
+is back to `[gate-and-tag, publish]` (the original 6-core-crate gate only).
+The one narrow, independently-valid fix from that work that *was* kept is
+the process-substitution exit-code bugfix in the pre-existing `publish` job
+(described below) -- it corrects a real bug in a job that already existed
+before B.7, and does not itself install or wire any new publish pipeline.
 
 - `release/bindings-artifacts.toml` exists, parses, and correctly records 4
   crates.io entries (3 `ready`, 1 `pending` with a named reason) and 2
@@ -234,48 +269,44 @@ reworked state, not the original one.
   `--live-registry-check` actually queried a live registry (it did not in
   this readiness work -- nothing has been published). Verified by actually
   running it end to end during this rework: exit 0, all sections passed.
-- `.github/workflows/release.yml` (C04): fixed the process-substitution
-  exit-code bug in both the pre-existing `publish` job and the new
-  `publish-binding-crates` job (plan captured via `plan="$(...)"` then read
-  via a here-string, not `done < <(...)`); added manifest-path-aware
-  `cargo publish` invocation for non-workspace-member crates (needed for
-  `bindings/tauri`, a standalone Cargo workspace); wired `--require-secrets`
-  into `publish-binding-crates`/`publish-python-wheel`/`publish-npm-client`;
-  wired `publish-python-wheel` to `build-evidence`/`verify-evidence` for
-  real hash-verified upload bytes instead of a placeholder; and added all
-  three binding jobs to the `release` job's `needs:` list. **Consequence,
-  stated plainly**: today this means the `release` job (and therefore any
-  GitHub Release, for the 6 core crates too) cannot run at all, because
-  `publish-binding-crates`/`publish-python-wheel`/`publish-npm-client` are
-  all designed to fail closed right now (tauri pending, npm pending,
-  PyPI/npm auth unconfigured). This is intentional per aobs's explicit C04
-  instruction and this sprint's own AC3 ("a staged package or release-ready
-  PR/workflow is not closure") -- it is not a defect to be quietly reverted.
+- `.github/workflows/release.yml`: kept only the process-substitution
+  exit-code bugfix in the pre-existing `publish` job (plan captured via
+  `plan="$(...)"` then read via a here-string, not `done < <(...)`, so a
+  broken manifest/script actually fails the job instead of silently
+  publishing nothing). Every binding-publish job that was added for C04
+  (`publish-binding-crates`, `precheck-python-wheel-build`,
+  `qualify-python-wheel-matrix`, `publish-python-wheel`,
+  `publish-npm-client`) has been removed, and the `release` job's `needs:`
+  is back to `[gate-and-tag, publish]`. A comment in the workflow points at
+  the manifest/script/validator tooling below as where B.7's review evidence
+  actually lives, and names `sc-publish` as the intended future consumer of
+  that evidence.
 
-**Live publication and full 4-crate/npm coverage remain genuinely pending**,
-blocked on:
+**This is a review packet, not a publication.** Nothing in this branch
+uploads to a registry, creates a release tag beyond what the pre-existing
+6-core-crate `gate-and-tag`/`publish` jobs already did before B.7, dispatches
+a publish workflow, or seeks npm/PyPI credentials -- that stays true until
+owner review authorizes B.7's actual phase-end publication pass. What B.7
+hands off for that eventual, owner-reviewed pass (via `sc-publish` once it
+is installed, or whatever mechanism the owner review settles on) to consume:
 
-(a) `feature/phase-b-tauri-qualification` (real Tauri artifact/IPC matrix
-    work, a separate layer being prepared above B.7) landing on this stack
-    before `sc-observability-tauri` can flip to `ready` -- the crate itself
-    already exists in this branch's tree and compiles standalone;
-(b) `bindings/typescript/package.json`'s `"private": true` being cleared
-    upstream before npm publish becomes possible -- the package itself
-    already exists in this branch's tree;
-(c) npm (`NPM_TOKEN`) and PyPI (`PYPI_API_TOKEN`) registry credentials being
-    provisioned (only `CARGO_REGISTRY_TOKEN` exists today);
-(d) actual registry-name control verification -- today's preflight only
-    proved absence of the 6 names on their registries, not ownership or
-    reserved availability, and must be reverified at real release time.
+(a) `release/bindings-artifacts.toml`, a readiness manifest naming 4 crates.io
+    entries (3 `ready`, 1 `pending`: `sc-observability-tauri`, blocked on
+    `feature/phase-b-tauri-qualification` landing) and 2 package entries (1
+    `ready`-but-uncredentialed PyPI package, 1 `pending` npm client blocked on
+    `bindings/typescript/package.json`'s `"private": true`);
+(b) `scripts/release_bindings_artifacts.py`'s `build-evidence`/`verify-evidence`,
+    which produce and re-verify real, rebuildable candidate artifact hashes
+    for every `ready` entry;
+(c) `scripts/ci/validate_binding_registry_consumers.sh`'s real isolated
+    Rust/Python/TypeScript consumer-matrix checks against those built
+    artifacts (never a live registry);
+(d) this document and `docs/api-approvals/phase-b-py.md`, recording the
+    approvals and gaps a future publish pass will need.
 
-This sprint is **not** closed by this readiness work alone. Per the sprint
-doc's own AC3, missing publication access leaves B.7 pending; a staged
-package or release-ready PR/workflow is not itself closure.
-
-As of C04's rework, (a)-(c) above are no longer just documentation gaps --
-they now literally block `.github/workflows/release.yml`'s `release` job
-(and therefore every GitHub Release, including the unrelated 6 core crates)
-from running at all, since `release` now needs
-`publish-binding-crates`/`publish-python-wheel`/`publish-npm-client` and all
-three fail closed today. Resolving (a)-(c) is required not only to publish
-the binding artifacts, but to cut any release through this workflow again.
+None of (a)-(d) installs, dispatches, or authenticates against a publish
+pipeline; they only prove structural/hash/consumer readiness for B.7's
+eventual owner-reviewed publication pass. This sprint is **not** marked
+complete by this review packet -- per the owner's explicit instruction, B.7
+does not claim publication has happened or that it is authorized yet, and
+its sprint doc's frontmatter `status` is not set to `complete`.
