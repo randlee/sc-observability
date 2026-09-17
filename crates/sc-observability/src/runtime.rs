@@ -810,7 +810,7 @@ impl<State> Logger<State> {
 }
 
 impl LevelOwner {
-    #[cfg(feature = "test-hooks")]
+    #[cfg(feature = "fault-injection")]
     /// Sets the actual runtime revision to its terminal value for binding tests.
     pub fn force_revision_exhaustion_for_test(&mut self) -> bool {
         let Some(control) = self.control.upgrade() else {

@@ -10,7 +10,6 @@ description = "Standalone facade crate for observability operations."
 
 [features]
 fault-injection = []
-test-hooks = []
 
 [dependencies]
 serde.workspace = true
