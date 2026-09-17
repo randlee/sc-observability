@@ -6,7 +6,12 @@
   ],
   "typing_paths": [
     "tests/typing/test_result_narrowing.py",
-    "examples/standard_logging.py"
+    "examples/standard_logging.py",
+    "tests/typing/test_async_narrowing.py",
+    "examples/async_logging.py"
   ],
-  "embedding_manifest": "examples/rust-python-logging/Cargo.toml"
+  "embedding_manifest": "examples/rust-python-logging/Cargo.toml",
+  "asyncio_debug": true,
+  "warnings_as_errors": true,
+  "embedding_in_each_cell": true
 }
