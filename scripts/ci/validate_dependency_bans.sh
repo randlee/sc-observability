@@ -105,5 +105,13 @@ for path in [
     if any(name.startswith("opentelemetry") or "otlp" in name for name in deps):
         raise SystemExit(f"OTLP/OpenTelemetry dependency found outside sc-observability-otlp: {path}")
 
+dto = load_toml(root / "crates/sc-observability-dto/Cargo.toml")
+if set(dto["dependencies"]) != {"sc-observability-types", "serde", "serde_json", "schemars"}:
+    raise SystemExit("DTO dependency closure drifted")
+if dto["dependencies"]["schemars"] != {"version": "=1.2.2", "optional": True} or dto["features"].get("schema-gen") != ["dep:schemars"]:
+    raise SystemExit("DTO schema tooling must remain optional and exactly pinned")
+for crate in ("sc-observability-types", "sc-observability", "sc-observe", "sc-observability-otlp"):
+    if section_deps(root / f"crates/{crate}/Cargo.toml", "dependencies") & {"schemars", "sc-observability-dto", "tauri", "pyo3"}:
+        raise SystemExit(f"binding dependencies entered core: {crate}")
 print("dependency ban validation passed")
 PY

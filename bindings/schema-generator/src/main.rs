@@ -19,7 +19,8 @@ fn register<T: JsonSchema>(
     }
     Ok(())
 }
-fn definitions(output: bool) -> Result<(Map<String, Value>, Map<String, Value>), Box<dyn Error>> {
+type SchemaMap = Map<String, Value>;
+fn definitions(output: bool) -> Result<(SchemaMap, SchemaMap), Box<dyn Error>> {
     let settings = SchemaSettings::draft2020_12();
     let mut generator = (if output {
         settings.for_serialize()
@@ -124,6 +125,20 @@ fn definitions(output: bool) -> Result<(Map<String, Value>, Map<String, Value>),
     )?;
     Ok((generator.take_definitions(true), entries))
 }
+fn input_strict(value: &mut Value, output: bool) {
+    if let Some(map) = value.as_object_mut()
+        && map.remove("x-sc-input-strict") == Some(Value::Bool(true))
+        && !output
+    {
+        if let Some(Value::Array(variants)) = map.get_mut("oneOf") {
+            for variant in variants {
+                variant["additionalProperties"] = Value::Bool(false);
+            }
+        } else {
+            map.insert("additionalProperties".into(), Value::Bool(false));
+        }
+    }
+}
 fn prefix_refs(value: &mut Value, prefix: &str) -> Result<(), Box<dyn Error>> {
     match value {
         Value::Object(map) => {
@@ -145,6 +160,71 @@ fn prefix_refs(value: &mut Value, prefix: &str) -> Result<(), Box<dyn Error>> {
             }
         }
         _ => {}
+    }
+    Ok(())
+}
+fn supported(node: &Value, defs: &Map<String, Value>) -> Result<(), Box<dyn Error>> {
+    if node.is_boolean() {
+        return Ok(());
+    }
+    let object = node
+        .as_object()
+        .ok_or("schema node must be object or boolean")?;
+    const KEYS: &[&str] = &[
+        "$schema",
+        "$id",
+        "$defs",
+        "$ref",
+        "title",
+        "description",
+        "type",
+        "properties",
+        "required",
+        "additionalProperties",
+        "items",
+        "enum",
+        "const",
+        "oneOf",
+        "anyOf",
+        "allOf",
+        "default",
+        "format",
+        "minimum",
+        "maximum",
+        "pattern",
+        "minLength",
+        "maxLength",
+        "minItems",
+        "maxItems",
+        "x-sc-integer-domain",
+    ];
+    for (key, value) in object {
+        if !KEYS.contains(&key.as_str()) {
+            return Err(format!("unsupported schema keyword: {key}").into());
+        }
+        match key.as_str() {
+            "$ref" => {
+                let reference = value
+                    .as_str()
+                    .and_then(|r| r.strip_prefix("#/$defs/"))
+                    .ok_or("non-local reference")?;
+                if !defs.contains_key(reference) {
+                    return Err(format!("unresolved reference: {reference}").into());
+                }
+            }
+            "properties" | "$defs" => {
+                for child in value.as_object().ok_or("invalid property map")?.values() {
+                    supported(child, defs)?;
+                }
+            }
+            "items" | "additionalProperties" => supported(value, defs)?,
+            "oneOf" | "anyOf" | "allOf" => {
+                for child in value.as_array().ok_or("invalid schema union")? {
+                    supported(child, defs)?;
+                }
+            }
+            _ => {}
+        }
     }
     Ok(())
 }
@@ -186,6 +266,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     for (is_output, prefix) in [(false, "Input"), (true, "Output")] {
         let (definitions, entries) = definitions(is_output)?;
         for (name, mut value) in definitions {
+            input_strict(&mut value, is_output);
             prefix_refs(&mut value, prefix)?;
             if defs.insert(format!("{prefix}{name}"), value).is_some() {
                 return Err("duplicate schema name".into());
@@ -196,8 +277,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             entrypoints.insert(format!("{prefix}{name}"), value);
         }
     }
+    for node in defs.values().chain(entrypoints.values()) {
+        supported(node, &defs)?;
+    }
     let registry = serde_json::to_value(error_codes::REGISTRY)?;
-    let schema = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://sc-observability.dev/bindings/v1.json","$defs":defs,"x-sc-entrypoints":entrypoints,"x-sc-error-registry":registry,"x-sc-bindings":{"schema_version":1,"integer":{"event_min":"-9223372036854775808","max":"18446744073709551615","counter_min":"0","canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)$"},"limits":{"request_bytes":65536,"container_depth":32,"query_limit":1000,"timeout_ms":60000,"diagnostic_string_bytes":4096,"remediation_steps":32},"defaults":{"query_limit":100,"query_order":"oldest_first"},"reserved_field_namespace":"sc_observability.binding.","generic_projections":[{"name":"Result","source":"OutputResultDtoAdmissionDto","parameter_ref":"OutputAdmissionDto"},{"name":"WireEnvelope","source":"OutputWireEnvelopeAdmissionDto","parameter_ref":"OutputAdmissionDto"}],"operations":{"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"}}}});
+    let schema = json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://sc-observability.dev/bindings/v1.json","$defs":defs,"x-sc-entrypoints":entrypoints,"x-sc-error-registry":registry,"x-sc-bindings":{"schema_version":1,"integer":{"event_min":"-9223372036854775808","max":"18446744073709551615","counter_min":"0","canonical_pattern":"^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])"},"limits":{"request_bytes":65536,"container_depth":32,"query_limit":1000,"timeout_ms":60000,"diagnostic_string_bytes":4096,"remediation_steps":32},"defaults":{"query_limit":100,"query_order":"oldest_first"},"reserved_field_namespace":"sc_observability.binding.","generic_projections":[{"name":"Result","source":"OutputResultDtoAdmissionDto","parameter_ref":"OutputAdmissionDto"},{"name":"WireEnvelope","source":"OutputWireEnvelopeAdmissionDto","parameter_ref":"OutputAdmissionDto"}],"operations":{"try_log":{"input":"InputTryLogRequest","output":"OutputWireEnvelopeAdmissionDto"},"query":{"input":"InputQueryRequest","output":"OutputWireEnvelopeLogSnapshotDto"},"health":{"input":"InputHealthRequest","output":"OutputWireEnvelopeLogHealthDto"},"flush":{"input":"InputFlushRequest","output":"OutputWireEnvelopeCompletionDto"},"change_level":{"input":"InputLevelChangeRequest","output":"OutputWireEnvelopeLevelChangeDto"}}}});
     write_or_check(Path::new(&output), &canonical(&schema)?, check)?;
     write_or_check(
         Path::new(&errors_output),

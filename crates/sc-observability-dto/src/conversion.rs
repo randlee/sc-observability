@@ -8,8 +8,11 @@ use std::collections::BTreeMap;
 /// Host-selected values that cannot be supplied through an input DTO.
 #[derive(Debug, Clone)]
 pub struct EventStamp {
+    /// Wire service.
     pub service: core::ServiceName,
+    /// Wire timestamp.
     pub timestamp: core::Timestamp,
+    /// Wire identity.
     pub identity: core::ProcessIdentity,
 }
 /// Constructs a boundary diagnostic using the sole binding-owned registry.
@@ -88,12 +91,20 @@ fn decode<T: DeserializeOwned>(value: Value, field: &str) -> Result<T, Failure> 
 }
 /// Decodes and validates all event fields before native queue admission.
 pub fn decode_event(value: Value) -> Result<LogEventDto, Failure> {
+    check_event_keys(&value)?;
     let dto: LogEventDto = decode(value, "event")?;
     validate_event(&dto)?;
     Ok(dto)
 }
 /// Decodes and validates the inclusive native query contract.
 pub fn decode_query(value: Value) -> Result<LogQueryDto, Failure> {
+    if let Some(fields) = value.get("field_matches").and_then(Value::as_array) {
+        for item in fields {
+            if let Some(value) = item.get("value") {
+                check_value_keys(value, "field_matches.value", 0)?;
+            }
+        }
+    }
     let dto: LogQueryDto = decode(value, "query")?;
     to_core_query(dto.clone())?;
     Ok(dto)
@@ -685,7 +696,9 @@ pub fn from_level_error(value: core::LevelChangeError) -> Failure {
             requested: requested.into(),
             available: available.into(),
         },
-        core::LevelChangeError::Unavailable { .. } => unreachable!("unavailable returned above"),
+        core::LevelChangeError::Unavailable { diagnostic } => Failure::Unavailable {
+            diagnostic: Box::new(diagnostic.into()),
+        },
     }
 }
 /// Decodes an additive output envelope; an unknown remote failure retains its code and tag.
@@ -757,4 +770,60 @@ pub fn decode_envelope<T: DeserializeOwned>(value: Value) -> Result<WireEnvelope
         }
         _ => Err(invalid_input("response", "invalid result kind")),
     }
+}
+
+fn strict_keys(value: &Value, allowed: &[&str], field: &str) -> Result<(), Failure> {
+    if let Some(object) = value.as_object()
+        && let Some(key) = object.keys().find(|key| !allowed.contains(&key.as_str()))
+    {
+        return Err(invalid_input(
+            format!("{field}.{key}"),
+            "unknown input field",
+        ));
+    }
+    Ok(())
+}
+fn check_value_keys(value: &Value, field: &str, depth: usize) -> Result<(), Failure> {
+    if depth > 32 {
+        return Err(invalid_input(field, "maximum container depth is 32"));
+    }
+    let tag = value.get("kind").and_then(Value::as_str);
+    strict_keys(
+        value,
+        if tag == Some("null") {
+            &["kind"]
+        } else {
+            &["kind", "value"]
+        },
+        field,
+    )?;
+    match tag {
+        Some("array") => {
+            if let Some(values) = value.get("value").and_then(Value::as_array) {
+                for (i, value) in values.iter().enumerate() {
+                    check_value_keys(value, &format!("{field}[{i}]"), depth + 1)?;
+                }
+            }
+        }
+        Some("object") => {
+            if let Some(values) = value.get("value").and_then(Value::as_object) {
+                for (key, value) in values {
+                    check_value_keys(value, &format!("{field}.{key}"), depth + 1)?;
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+fn check_event_keys(value: &Value) -> Result<(), Failure> {
+    if let Some(trace) = value.get("trace") {
+        strict_keys(trace, &["trace_id", "span_id", "parent_span_id"], "trace")?;
+    }
+    if let Some(fields) = value.get("fields").and_then(Value::as_object) {
+        for (key, value) in fields {
+            check_value_keys(value, &format!("fields.{key}"), 0)?;
+        }
+    }
+    Ok(())
 }
