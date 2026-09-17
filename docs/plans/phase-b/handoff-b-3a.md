@@ -2,7 +2,7 @@
 
 Status: in progress on `fix/phase-b-3a-completeness`; parent merge-forwarded
 from `origin/feature/phase-b-4a-python-packaging` at `c403bcf` (including
-the latest B.4a merge-forward). Current child checkpoint: `f6b7123`.
+the latest B.4a merge-forward). Current child checkpoint: `5c341e7`.
 
 The child consumes the B.3 canonical schema and the B.3b native
 `HostLoggingBackend`. The TypeScript package is generated-schema driven and
@@ -67,6 +67,9 @@ Native shutdown failures retain their native diagnostic code and remediation:
 timeouts map to binding `TIMEOUT`, final-flush failures to `IO`, helper-start
 failures to `UNAVAILABLE`, and helper-loss failures to `INTERNAL`; no display
 text is parsed to classify them.
+The example bundle now includes a deterministic 64x64 `icons/icon.ico` derived
+from the checked-in PNG and lists it in `tauri.conf.json`, satisfying the
+Windows resource build without adding new imagery.
 The specialist checkpoint `5a3f380` reports 103 isolated macOS IPC assertions
 and 336 packed-client schema/fault cases PASS, including the exact-size
 correction. Full installed Rust/npm artifacts, platform CI, and broad C05
