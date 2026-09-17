@@ -8,8 +8,8 @@ or handoff-b-p3.md.
 
 Two separate synthetic repositories model the two real-world owners: the
 review document is BTIT's own acceptance record and lives in `source_repo`;
-the target-contract commit and the handoff revision are sc-observability's
-own documents and live in `doc_repo`.
+the target document and the handoff revision are sc-observability's own
+documents and live in `doc_repo`.
 """
 
 from __future__ import annotations
@@ -97,14 +97,46 @@ class ImportContractFixture:
         self.review_commit = commit
         return commit
 
+    target_path = "docs/plans/phase-b/runtime-level-contract.md"
+
     def _init_doc_repo(self) -> None:
         self._init_git_repo(self.doc_repo)
-        contract = self.doc_repo / "docs/plans/phase-b/runtime-level-contract.md"
+        contract = self.doc_repo / self.target_path
         contract.parent.mkdir(parents=True, exist_ok=True)
         contract.write_text("Target contract accepted for staging.\n")
         run("git", "add", "-A", cwd=self.doc_repo)
         run("git", "commit", "--quiet", "-m", "target contract accepted", cwd=self.doc_repo)
         self.target_commit = run("git", "rev-parse", "HEAD", cwd=self.doc_repo)
+
+    def commit_orphan_doc_file(self, path: str, content: str) -> str:
+        """Commit a true orphan commit into doc_repo containing only `path`; returns the SHA.
+
+        A real, existing commit with no ancestry to the branch history and no
+        other content -- the exact bypass shape aobs reported (an orphan
+        commit that exists but does not hold the target document). Direct
+        commit lookup (`git cat-file -e <sha>^{commit}`) finds it regardless
+        of branch reachability, so no ref needs to retain it afterward.
+        """
+        branch = run("git", "symbolic-ref", "--short", "HEAD", cwd=self.doc_repo)
+        run("git", "checkout", "--quiet", "--orphan", "tmp-orphan-doc", cwd=self.doc_repo)
+        run("git", "rm", "-r", "--cached", "--quiet", ".", cwd=self.doc_repo)
+        for existing in self.doc_repo.iterdir():
+            if existing.name != ".git":
+                if existing.is_dir():
+                    for f in existing.rglob("*"):
+                        if f.is_file():
+                            f.unlink()
+                else:
+                    existing.unlink()
+        full = self.doc_repo / path
+        full.parent.mkdir(parents=True, exist_ok=True)
+        full.write_text(content)
+        run("git", "add", "-A", cwd=self.doc_repo)
+        run("git", "commit", "--quiet", "-m", "orphan unrelated file", cwd=self.doc_repo)
+        orphan_commit = run("git", "rev-parse", "HEAD", cwd=self.doc_repo)
+        run("git", "checkout", "--quiet", branch, cwd=self.doc_repo)
+        run("git", "branch", "--quiet", "-D", "tmp-orphan-doc", cwd=self.doc_repo)
+        return orphan_commit
 
     def commit_handoff(self, text: str) -> str:
         """Commit `text` as the handoff document (sc-observability's own record); returns 'path@sha'."""
@@ -127,25 +159,35 @@ class ImportContractFixture:
 
     def handoff_text(self, *, accepted_sha: str | None = None, verdict: str = "accepted",
                       acceptance: str = "accepted", include_review: bool = True,
-                      review_path: str | None = None, review_commit: str | None = None) -> str:
+                      review_path: str | None = None, review_commit: str | None = None,
+                      include_target: bool = True, target_path: str | None = None,
+                      target_commit: str | None = None) -> str:
         accepted_sha = accepted_sha if accepted_sha is not None else self.source_commit
         lines = [f"Accepted source SHA: `{accepted_sha}`"]
         if include_review:
             rp = review_path if review_path is not None else self.review_path
             rc = review_commit if review_commit is not None else self.review_commit
             lines.append(f"Review document: `{rp}` at commit `{rc}`")
+        if include_target:
+            tp = target_path if target_path is not None else self.target_path
+            tc = target_commit if target_commit is not None else self.target_commit
+            lines.append(f"Target document: `{tp}` at commit `{tc}`")
         lines.append(f"Verdict: {verdict}")
         lines.append(f"sc-observability acceptance: {acceptance}")
         return "\n".join(lines) + "\n"
 
     def provenance(self, *, source_commit: str | None = None, inventory: dict[str, str] | None = None,
                     adaptations: list[dict[str, str]] | None = None, review_path: str | None = None,
-                    review_commit: str | None = None, target_contract_commit: str | None = None,
+                    review_commit: str | None = None, target_path: str | None = None,
+                    target_commit: str | None = None,
                     review_verdict: str = "accepted", handoff_revision: str | None = None) -> dict:
         return {
             "repository_url": "https://example.invalid/beads-task-issue-tracker.git",
             "source_commit": source_commit if source_commit is not None else self.source_commit,
-            "target_contract_commit": target_contract_commit if target_contract_commit is not None else self.target_commit,
+            "target_document": {
+                "path": target_path if target_path is not None else self.target_path,
+                "commit": target_commit if target_commit is not None else self.target_commit,
+            },
             "handoff_revision": handoff_revision if handoff_revision is not None else self.handoff_revision,
             "review_document": {
                 "path": review_path if review_path is not None else self.review_path,
@@ -380,12 +422,45 @@ class ValidateLogImportTests(unittest.TestCase):
                     fixture.handoff_text(review_commit=original_commit), doc_repo=fixture.doc_repo,
                 )
 
-    def test_rejects_target_contract_commit_not_found(self) -> None:
+    def test_rejects_target_document_commit_not_found(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             fixture = ImportContractFixture(Path(temp))
-            with self.assertRaisesRegex(SystemExit, "target contract commit not found in doc repository"):
+            fake_commit = "7" * 40
+            with self.assertRaisesRegex(SystemExit, "target document commit not found in doc repository"):
                 validate_import(
-                    fixture.provenance(target_contract_commit="7" * 40), fixture.source_repo, fixture.destination,
+                    fixture.provenance(target_commit=fake_commit), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(target_commit=fake_commit), doc_repo=fixture.doc_repo,
+                )
+
+    def test_rejects_target_document_missing_at_cited_commit(self) -> None:
+        """A real commit that exists but does not hold the target document must not pass."""
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            orphan_commit = fixture.commit_orphan_doc_file(
+                "unrelated.txt", "nothing to do with the target contract\n",
+            )
+            with self.assertRaisesRegex(SystemExit, "target document not found at cited commit"):
+                validate_import(
+                    fixture.provenance(target_commit=orphan_commit), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(target_commit=orphan_commit), doc_repo=fixture.doc_repo,
+                )
+
+    def test_rejects_missing_target_document_citation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            with self.assertRaisesRegex(SystemExit, "missing target-document path/immutable commit"):
+                validate_import(
+                    fixture.provenance(), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(include_target=False), doc_repo=fixture.doc_repo,
+                )
+
+    def test_rejects_handoff_provenance_target_citation_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            orphan_commit = fixture.commit_orphan_doc_file("unrelated2.txt", "still unrelated\n")
+            with self.assertRaisesRegex(SystemExit, "target-document citation mismatch"):
+                validate_import(
+                    fixture.provenance(target_commit=orphan_commit), fixture.source_repo, fixture.destination,
                     fixture.handoff_text(), doc_repo=fixture.doc_repo,
                 )
 
@@ -486,6 +561,38 @@ class ValidateLogImportTests(unittest.TestCase):
             (fixture.destination / path).write_text(after)
             provenance = fixture.provenance(adaptations=[{
                 "path": path, "reason": "point at the staged sibling crate", "kind": "dependency_path",
+                "before": before, "after": after,
+            }])
+            validate_import(provenance, fixture.source_repo, fixture.destination,
+                             fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_rejects_relocated_kind_arbitrary_code_containing_path_substring(self) -> None:
+        """A changed line merely containing '.rs' inside a string literal must not launder arbitrary code."""
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/src/lib.rs"
+            before = fixture.FILES[path]
+            after = before + 'pub fn bypass() { panic!("behavior.rs"); }\n'
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "relocate test path reference", "kind": "relocated_doc_or_test_path",
+                "before": before, "after": after,
+            }])
+            with self.assertRaisesRegex(
+                SystemExit, "not a permitted relocated_doc_or_test_path mechanical change",
+            ):
+                validate_import(provenance, fixture.source_repo, fixture.destination,
+                                 fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_accepts_declared_relocated_doc_or_test_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/src/lib.rs"
+            before = fixture.FILES[path]
+            after = before + '#[path = "relocated/tests.rs"]\nmod tests;\n'
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "relocate test module path", "kind": "relocated_doc_or_test_path",
                 "before": before, "after": after,
             }])
             validate_import(provenance, fixture.source_repo, fixture.destination,

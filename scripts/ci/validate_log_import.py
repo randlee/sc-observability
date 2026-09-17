@@ -9,10 +9,10 @@ the already-copied `--destination` tree, and fails whenever they disagree.
 
 Citations resolve in different repositories depending on who owns the
 document: the BTIT source review is BTIT's own acceptance record, so it
-resolves in `--source-repo`; the target-contract commit and the handoff
-revision are sc-observability's own documents, so they resolve in
-`--doc-repo` (this repo's own history in real use). Conflating the two would
-let a fabricated citation in the wrong repository pass unnoticed.
+resolves in `--source-repo`; the target document and the handoff revision
+are sc-observability's own documents, so they resolve in `--doc-repo` (this
+repo's own history in real use). Conflating the two would let a fabricated
+citation in the wrong repository pass unnoticed.
 
 Independent comparisons exist because they catch different failure modes:
 
@@ -30,17 +30,25 @@ Independent comparisons exist because they catch different failure modes:
   review document is refused even if the provenance record's own
   `review_verdict` field consistently claims "rejected": the contract
   requires an accepted review, not merely internal self-consistency.
-- target-contract/handoff-revision vs sc-observability Git objects: catches
-  a fabricated or stale citation of either document; the handoff revision's
-  cited content must byte-match the `--handoff` document actually used.
+- target-document/handoff-revision vs sc-observability Git objects: catches
+  a fabricated or stale citation of either document. The target document's
+  own citation is required in the handoff (`Target document: ... at commit`)
+  and cross-checked against `provenance.target_document`, and the document
+  itself must actually exist at the cited commit -- an orphan commit that
+  exists but holds only unrelated content cannot stand in for it. The
+  handoff revision's cited content must byte-match the `--handoff` document
+  actually used.
 - destination vs provenance: catches a copy step that changed more than the
   declared mechanical adaptations (package metadata, dependency paths,
   relocated test/doc paths). A blob difference here is only allowed when its
   path is explicitly listed in `adaptations` with a reason, a permitted
-  mechanical `kind`, exact approved before/after content, and a line-level
-  diff confined to that kind's own pattern -- a kind label alone proves
-  nothing about what actually changed, so a runtime rewrite mislabeled
-  `dependency_path` is rejected on content, not accepted on label. The
+  mechanical `kind`, exact approved before/after content, and every changed
+  line fully matching (not merely containing) that kind's own narrow syntax
+  pattern -- a kind label alone proves nothing about what actually changed,
+  so a runtime rewrite mislabeled `dependency_path`, or an arbitrary code
+  line that merely contains a `.rs`/`.md` substring inside unrelated syntax
+  (e.g. a string literal) mislabeled `relocated_doc_or_test_path`, is
+  rejected on content, not accepted on label or incidental substring. The
   destination tree is enumerated by walking the filesystem without
   following symlinked directories (`os.walk(followlinks=False)`), and every
   directory and file entry encountered is checked for symlink/regular-file
@@ -71,17 +79,31 @@ IMPORT_CRATE_PREFIXES = (
 
 _KIND_LINE_PATTERNS = {
     "package_metadata": re.compile(
-        r"^\s*(publish|version|edition|description|license|repository|readme|keywords|categories|authors|homepage)\s*="
+        r"^\s*(publish|version|edition|description|license|repository|readme|keywords|categories|authors|homepage)\s*=\s*.+$"
     ),
     "dependency_path": re.compile(
-        r"^\s*(path|version|git|branch|rev)\s*=|^\s*[\w.-]+\s*=\s*\{|^\s*\[[\w.-]*dependencies[\w.-]*\]\s*$"
+        r'^\s*(path|version|git|branch|rev)\s*=\s*"[^"]*"\s*,?\s*$'
+        r'|^\s*[\w.-]+\s*=\s*\{[^{}]*\}\s*$'
+        r'|^\s*\[[\w.-]*dependencies[\w.-]*\]\s*$'
     ),
-    "relocated_doc_or_test_path": re.compile(r"^\s*(mod|include!|path)\b|\.(md|rs)\b"),
+    # Anchored end-to-end on purpose: a changed line must be *nothing but*
+    # genuine path/mod/include syntax. A substring search (the prior bug)
+    # matched ".rs"/".md" appearing anywhere, including inside a string
+    # literal argument to an arbitrary function call -- fullmatch on these
+    # narrow shapes preserves all non-path syntax instead of trusting a
+    # keyword or extension appearing anywhere on the line.
+    "relocated_doc_or_test_path": re.compile(
+        r'^\s*mod\s+[\w:]+\s*;\s*$'
+        r'|^\s*#\[path\s*=\s*"[^"]+"\]\s*$'
+        r'|^\s*include!\(\s*"[^"]+"\s*\)\s*;?\s*$'
+        r'|^\s*"[\w./-]+\.(md|rs)"\s*,?\s*$'
+    ),
 }
 
 _FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _ACCEPTED_SHA_RE = re.compile(r"Accepted source SHA:\s*`([0-9a-f]{40})`")
 _REVIEW_DOC_RE = re.compile(r"Review document:\s*`([^`]+)`\s*at commit\s*`([0-9a-f]{40})`")
+_TARGET_DOC_RE = re.compile(r"Target document:\s*`([^`]+)`\s*at commit\s*`([0-9a-f]{40})`")
 _VERDICT_RE = re.compile(r"Verdict:\s*(\S+)")
 _ACCEPTANCE_RE = re.compile(r"sc-observability acceptance:\s*(\S+)")
 _REVIEWED_COMMIT_RE = re.compile(r"Reviewed commit:\s*([0-9a-f]{40})")
@@ -104,10 +126,15 @@ def parse_handoff(text: str) -> dict[str, str]:
     review = _REVIEW_DOC_RE.search(text)
     if not review:
         raise SystemExit("missing review-document path/immutable commit citation in B.P3 handoff")
+    target = _TARGET_DOC_RE.search(text)
+    if not target:
+        raise SystemExit("missing target-document path/immutable commit citation in B.P3 handoff")
     return {
         "accepted_sha": accepted_sha.group(1),
         "review_path": review.group(1),
         "review_commit": review.group(2),
+        "target_path": target.group(1),
+        "target_commit": target.group(2),
     }
 
 
@@ -258,7 +285,7 @@ def validate_adaptations(adaptations: list[dict], recorded_inventory: dict[str, 
         if blob_id_of_content(before, cwd) != recorded_inventory[path]:
             raise SystemExit(f"adaptation 'before' content for {path} does not match the recorded source blob")
         for line in _changed_lines(before, after):
-            if not pattern.search(line):
+            if not pattern.fullmatch(line):
                 raise SystemExit(
                     f"adaptation for {path} changes content that is not a permitted {kind} mechanical change: {line!r}"
                 )
@@ -291,10 +318,21 @@ def verify_review_citation(
         raise SystemExit("cited review document verdict does not match the recorded review verdict")
 
 
-def verify_target_contract_commit(doc_repo: Path, target_commit: str) -> None:
-    """Resolve the target-contract citation against sc-observability's own Git history."""
+def verify_target_document(doc_repo: Path, target_path: str, target_commit: str) -> None:
+    """Resolve the target-document citation against sc-observability's own Git history.
+
+    Commit existence alone is not enough: an orphan commit that exists but
+    contains only unrelated content must not stand in for the real target
+    document, so the document itself must actually be present at that commit.
+    """
     if not _FULL_SHA_RE.match(target_commit) or not git_commit_exists(doc_repo, target_commit):
-        raise SystemExit("target contract commit not found in doc repository")
+        raise SystemExit("target document commit not found in doc repository")
+    result = subprocess.run(
+        ["git", "-C", str(doc_repo), "show", f"{target_commit}:{target_path}"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise SystemExit(f"target document not found at cited commit: {target_path}@{target_commit}")
 
 
 def verify_handoff_revision(doc_repo: Path, handoff_revision: str, handoff_text: str) -> None:
@@ -342,6 +380,10 @@ def validate_import(
     if review_document.get("path") != handoff["review_path"] or review_document.get("commit") != handoff["review_commit"]:
         raise SystemExit("handoff and provenance review-document citation mismatch")
 
+    target_document = provenance.get("target_document", {})
+    if target_document.get("path") != handoff["target_path"] or target_document.get("commit") != handoff["target_commit"]:
+        raise SystemExit("handoff and provenance target-document citation mismatch")
+
     if handoff["accepted_sha"] != source_commit:
         raise SystemExit("handoff and provenance source SHA mismatch")
 
@@ -358,7 +400,7 @@ def validate_import(
     diff_inventory(source_inventory, recorded_inventory, label="the source repository")
 
     verify_review_citation(source_repo, handoff["review_path"], handoff["review_commit"], source_commit, review_verdict)
-    verify_target_contract_commit(doc_repo, provenance.get("target_contract_commit", ""))
+    verify_target_document(doc_repo, handoff["target_path"], handoff["target_commit"])
     verify_handoff_revision(doc_repo, provenance.get("handoff_revision", ""), handoff_text)
 
     # Destination comparison tolerates only the explicitly declared, verified adaptations.

@@ -23,12 +23,20 @@ publish anything. Originally implemented on `feature/phase-b-1-provenance-prep`
 of that closed layer reproduced four further bypasses (a self-consistently
 "rejected" review/provenance verdict, a fake `handoff_revision`, an arbitrary
 runtime change mislabeled with a permitted mechanical `kind`, and an extra
-file reached through a symlinked destination directory), so the fix continues
+file reached through a symlinked destination directory), so the fix continued
 on this new top-of-stack layer, `fix/phase-b-1-provenance-integrity`, cut from
-`fix/phase-b-1a-neutral-fixtures`; the frozen layer is never re-edited. Merge
-that parent forward before every round once it has pushed commits. Full B.1
-closure, the real `docs/plans/phase-b/import-provenance.json`, and the real
-copy remain blocked on B.P3's accepted source handoff.
+`fix/phase-b-1a-neutral-fixtures`; the frozen layer is never re-edited. A
+second lead-completeness recheck (at this layer's own `8aeabb5`) reproduced two
+further bypasses surviving the first round: a target-contract commit that
+existed but was checked for existence only, never for actually holding the
+target document or for its reference being cross-checked against the
+immutable handoff; and the `relocated_doc_or_test_path` mechanical-kind
+pattern matching `.rs`/`.md` as a bare substring anywhere in a changed line
+(including inside an unrelated string literal), rather than only in genuine
+path/mod/include syntax. Both are fixed on this same layer. Merge the parent
+forward before every round once it has pushed commits. Full B.1 closure, the
+real `docs/plans/phase-b/import-provenance.json`, and the real copy remain
+blocked on B.P3's accepted source handoff.
 
 ## Deliverables (authoritative)
 
@@ -47,10 +55,16 @@ copy remain blocked on B.P3's accepted source handoff.
    **source repo** (BTIT's own acceptance record) and must actually carry an
    "accepted" verdict covering the accepted source commit -- a
    provenance-declared verdict that is merely internally self-consistent
-   (e.g. a matching "rejected") is not enough; a target-contract commit and a
+   (e.g. a matching "rejected") is not enough; a target document
+   (`target_document: {path, commit}`, mirroring `review_document`) and a
    `handoff_revision` (`<path>@<full-40-character-commit-sha>`), both
-   resolved in the **doc repo** (sc-observability's own documents), with the
-   handoff-revision's cited content required to byte-match the `--handoff`
+   resolved in the **doc repo** (sc-observability's own documents). The
+   target document's own citation (`Target document: `<path>` at commit
+   `<sha>``) is required in the handoff and cross-checked against the
+   provenance record exactly, and the document itself must actually exist at
+   the cited commit -- an existing commit that holds only unrelated content
+   is not enough, closing an existence-only-check bypass. The
+   handoff-revision's cited content is required to byte-match the `--handoff`
    document actually used; a per-file Git blob inventory diffed strictly
    against the source repo (BTIT history is never adapted, so any difference
    there means the provenance record itself is unreliable) and, for the
@@ -63,8 +77,11 @@ copy remain blocked on B.P3's accepted source handoff.
    from a fixed mechanical set (`package_metadata`, `dependency_path`,
    `relocated_doc_or_test_path`), exact approved `before`/`after` content
    matching the recorded source blob and the actual destination blob, and
-   every changed line between them matching that kind's own pattern -- the
-   kind label alone does not authorize the change.
+   every changed line between them **fully matching** (not merely
+   containing) that kind's own narrow syntax pattern -- the kind label alone
+   does not authorize the change, and a changed line that only incidentally
+   contains a keyword or extension substring (e.g. `.rs` inside an unrelated
+   string literal) does not either.
 2. `scripts/ci/tests/test_validate_log_import.py`: fixture coverage built from
    two separate temporary, synthetic Git repositories (a `source_repo`
    modeling BTIT and a `doc_repo` modeling sc-observability's own history)
@@ -81,12 +98,17 @@ copy remain blocked on B.P3's accepted source handoff.
    inventory, a fake/nonexistent review commit, a review document that does
    not cover the accepted source, a self-consistently "rejected" review and
    provenance verdict, a handoff/provenance review-citation mismatch, a
-   nonexistent target-contract commit, a malformed or fake `handoff_revision`,
-   a `handoff_revision` whose cited content does not match the `--handoff`
-   document used, an adaptation missing a reason, an adaptation with a
-   disallowed kind, an adaptation whose declared `before` content does not
-   match the recorded source blob, and an arbitrary runtime content change
-   mislabeled with a permitted kind (e.g. `dependency_path`).
+   missing or nonexistent target-document citation, a real (true orphan)
+   commit that exists but does not hold the target document at the cited
+   path, a handoff/provenance target-document citation mismatch, a malformed
+   or fake `handoff_revision`, a `handoff_revision` whose cited content does
+   not match the `--handoff` document used, an adaptation missing a reason,
+   an adaptation with a disallowed kind, an adaptation whose declared
+   `before` content does not match the recorded source blob, an arbitrary
+   runtime content change mislabeled with a permitted kind (e.g.
+   `dependency_path`), and a changed line merely containing a `.rs`/`.md`
+   substring inside unrelated syntax (e.g. a string literal) mislabeled
+   `relocated_doc_or_test_path`.
 3. This task-plan document and its execution evidence.
 
 The validator's handoff markers (`Accepted source SHA:`, `Review document: ...
