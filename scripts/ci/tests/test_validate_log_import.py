@@ -15,6 +15,8 @@ documents and live in `doc_repo`.
 from __future__ import annotations
 
 import subprocess
+import json
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -277,6 +279,44 @@ class ValidateLogImportTests(unittest.TestCase):
             }])
             validate_import(provenance, fixture.source_repo, fixture.destination,
                              fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_release_and_warning_adaptations_compose_without_weakening_inventory(self) -> None:
+        from _log_staging import PACKAGES
+        from _log_release_adaptations import blob
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            warnings = fixture.post_import_adaptations()
+            license_bytes = b"synthetic MIT license\n"
+            (fixture.destination / "LICENSE").write_bytes(license_bytes)
+            record = {"schema_version": 1, "candidate_version": "1.4.0",
+                      "root_license_sha256": hashlib.sha256(license_bytes).hexdigest(),
+                      "license_copies": {}, "publish_flags": {}}
+            for name in PACKAGES:
+                path = f"crates/{name}/LICENSE"
+                target = fixture.destination / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(license_bytes)
+                record["license_copies"][path] = blob(license_bytes)
+            adaptations = []
+            for name in ("sc-observability-log", "sc-observability-log-macros"):
+                path = f"crates/{name}/Cargo.toml"
+                original = fixture.FILES[path]
+                before = original.replace("[package]\n", "[package]\npublish = false\n")
+                after = before.replace("publish = false", "publish = true")
+                adaptations.append({"path": path, "reason": "private mechanical import",
+                                    "kind": "package_metadata", "before": original, "after": before})
+                (fixture.destination / path).write_text(after)
+                record["publish_flags"][path] = {"before_blob": blob(before.encode()), "after_blob": blob(after.encode())}
+            record_path = fixture.root / "release.json"
+            record_path.write_text(json.dumps(record))
+            kwargs = {"doc_repo": fixture.doc_repo, "post_import_adaptations": warnings,
+                      "release_adaptations": record_path}
+            args = (fixture.provenance(adaptations=adaptations), fixture.source_repo,
+                    fixture.destination, fixture.handoff_text())
+            validate_import(*args, **kwargs)
+            (fixture.destination / "crates/sc-observability-log/src/unrecorded.rs").write_text("unrecorded")
+            with self.assertRaisesRegex(SystemExit, "unexplained extra"):
+                validate_import(*args, **kwargs)
 
     def test_accepts_separate_post_import_warning_adaptations(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

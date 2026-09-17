@@ -699,6 +699,7 @@ def validate_import(
     handoff_text: str,
     doc_repo: Path = ROOT,
     post_import_adaptations: dict | None = None,
+    release_adaptations: Path | None = None,
 ) -> None:
     recorded_inventory = provenance.get("file_inventory", {})
     recorded_paths = list(recorded_inventory)
@@ -750,6 +751,11 @@ def validate_import(
             destination,
             expected_destination_inventory,
         )
+    if release_adaptations is not None:
+        from _log_release_adaptations import apply_release_adaptations
+        expected_destination_inventory = apply_release_adaptations(
+            expected_destination_inventory, destination, release_adaptations,
+        )
     destination_inventory = walk_destination_inventory(destination, IMPORT_CRATE_PREFIXES)
     diff_inventory(destination_inventory, expected_destination_inventory, label="the destination tree")
 
@@ -762,6 +768,7 @@ def main() -> int:
     parser.add_argument("--provenance", default=DEFAULT_PROVENANCE, type=Path)
     parser.add_argument("--handoff", default=DEFAULT_HANDOFF, type=Path)
     parser.add_argument("--post-import-adaptations", type=Path)
+    parser.add_argument("--release-adaptations", type=Path)
     args = parser.parse_args()
 
     if not args.provenance.is_file():
@@ -783,8 +790,11 @@ def main() -> int:
         args.handoff.read_text(),
         doc_repo=args.doc_repo,
         post_import_adaptations=post_import_adaptations,
+        release_adaptations=args.release_adaptations,
     )
-    if post_import_adaptations is None:
+    if args.release_adaptations is not None:
+        print("B.1 historical provenance, declared post-import and B.2 release adaptations are coherent")
+    elif post_import_adaptations is None:
         print("B.1 import provenance, BTIT acceptance handoff, and copied inventory are coherent")
     else:
         print("B.1 import provenance and post-import warning-only adaptations are coherent")
