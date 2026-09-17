@@ -1,0 +1,8 @@
+maturin==1.10.2
+packaging==25.0
+pytest==8.4.2
+mypy==1.18.2
+tomli==2.2.1; python_version < '3.11'
+tomli-w==1.2.0
+pefile==2024.8.26; sys_platform == 'win32'
+auditwheel==6.4.2; sys_platform == 'linux'
