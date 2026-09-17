@@ -4,7 +4,10 @@ use sc_observability_otlp::{
     LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, Telemetry, TelemetryConfigBuilder,
     TelemetryProjectors, TracesConfig,
 };
-use sc_observability_types::typed::{TypedLogProjector, TypedMetricProjector, TypedSpanProjector};
+use sc_observability_types::typed::{
+    TypedLogProjector, TypedMetricProjector, TypedSpanProjector, legacy_log_projector,
+    legacy_metric_projector, legacy_span_projector,
+};
 use sc_observability_types::{
     ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, LogProjector, MetricKind,
     MetricName, MetricProjector, MetricRecord, MetricUnit, Observation, ObservationFilter,
@@ -281,9 +284,11 @@ fn typed_projector_inputs_forward_through_retained_registration() {
         .with_observability_health_provider(telemetry.clone())
         .register_projection(
             TelemetryProjectors::new(telemetry.clone())
-                .with_typed_log_projector(Arc::new(TypedStaticLogProjector))
-                .with_typed_span_projector(Arc::new(TypedStaticSpanProjector))
-                .with_typed_metric_projector(Arc::new(TypedStaticMetricProjector))
+                .with_log_projector(legacy_log_projector(Arc::new(TypedStaticLogProjector)))
+                .with_span_projector(legacy_span_projector(Arc::new(TypedStaticSpanProjector)))
+                .with_metric_projector(legacy_metric_projector(Arc::new(
+                    TypedStaticMetricProjector,
+                )))
                 .with_filter(Arc::new(AllowAll))
                 .into_registration(),
         )

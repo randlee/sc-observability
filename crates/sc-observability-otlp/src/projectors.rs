@@ -17,8 +17,8 @@ use std::sync::Arc;
 
 use crate::{Telemetry, error_codes};
 use sc_observability_types::typed::{
-    TypedLogProjector, TypedMetricProjector, TypedSpanProjector, legacy_log_projector,
-    legacy_metric_projector, legacy_span_projector,
+    ProjectionFailure, TypedLogProjector, TypedMetricProjector, TypedSpanProjector,
+    typed_log_projector, typed_metric_projector, typed_span_projector,
 };
 use sc_observability_types::{
     ErrorContext, LogEvent, LogProjector, MetricProjector, MetricRecord, Observable, Observation,
@@ -63,36 +63,15 @@ where
         self
     }
 
-    /// Attaches a typed log projector through the retained registration adapter.
-    pub fn with_typed_log_projector(mut self, projector: Arc<dyn TypedLogProjector<T>>) -> Self {
-        self.log_projector = Some(legacy_log_projector(projector));
-        self
-    }
-
     /// Attaches a span projector whose output is also forwarded into telemetry.
     pub fn with_span_projector(mut self, projector: Arc<dyn SpanProjector<T>>) -> Self {
         self.span_projector = Some(projector);
         self
     }
 
-    /// Attaches a typed span projector through the retained registration adapter.
-    pub fn with_typed_span_projector(mut self, projector: Arc<dyn TypedSpanProjector<T>>) -> Self {
-        self.span_projector = Some(legacy_span_projector(projector));
-        self
-    }
-
     /// Attaches a metric projector whose output is also forwarded into telemetry.
     pub fn with_metric_projector(mut self, projector: Arc<dyn MetricProjector<T>>) -> Self {
         self.metric_projector = Some(projector);
-        self
-    }
-
-    /// Attaches a typed metric projector through the retained registration adapter.
-    pub fn with_typed_metric_projector(
-        mut self,
-        projector: Arc<dyn TypedMetricProjector<T>>,
-    ) -> Self {
-        self.metric_projector = Some(legacy_metric_projector(projector));
         self
     }
 
@@ -109,7 +88,7 @@ where
         if let Some(inner) = self.log_projector {
             registration = registration.with_log_projector(Arc::new(AttachedLogProjector {
                 telemetry: self.telemetry.clone(),
-                inner,
+                inner: typed_log_projector(inner),
             })
                 as Arc<dyn LogProjector<T>>);
         }
@@ -117,7 +96,7 @@ where
         if let Some(inner) = self.span_projector {
             registration = registration.with_span_projector(Arc::new(AttachedSpanProjector {
                 telemetry: self.telemetry.clone(),
-                inner,
+                inner: typed_span_projector(inner),
             })
                 as Arc<dyn SpanProjector<T>>);
         }
@@ -125,7 +104,7 @@ where
         if let Some(inner) = self.metric_projector {
             registration = registration.with_metric_projector(Arc::new(AttachedMetricProjector {
                 telemetry: self.telemetry,
-                inner,
+                inner: typed_metric_projector(inner),
             })
                 as Arc<dyn MetricProjector<T>>);
         }
@@ -143,7 +122,25 @@ where
     T: Observable,
 {
     telemetry: Arc<Telemetry>,
-    inner: Arc<dyn LogProjector<T>>,
+    inner: Arc<dyn TypedLogProjector<T>>,
+}
+
+impl<T> TypedLogProjector<T> for AttachedLogProjector<T>
+where
+    T: Observable,
+{
+    fn project_logs(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<LogEvent>, ProjectionFailure> {
+        let events = self.inner.project_logs(observation)?;
+        for event in &events {
+            self.telemetry
+                .emit_log(event)
+                .map_err(telemetry_to_projection_failure)?;
+        }
+        Ok(events)
+    }
 }
 
 impl<T> LogProjector<T> for AttachedLogProjector<T>
@@ -151,13 +148,7 @@ where
     T: Observable,
 {
     fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
-        let events = self.inner.project_logs(observation)?;
-        for event in &events {
-            self.telemetry
-                .emit_log(event)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(events)
+        <Self as TypedLogProjector<T>>::project_logs(self, observation).map_err(Into::into)
     }
 }
 
@@ -166,7 +157,25 @@ where
     T: Observable,
 {
     telemetry: Arc<Telemetry>,
-    inner: Arc<dyn SpanProjector<T>>,
+    inner: Arc<dyn TypedSpanProjector<T>>,
+}
+
+impl<T> TypedSpanProjector<T> for AttachedSpanProjector<T>
+where
+    T: Observable,
+{
+    fn project_spans(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<SpanSignal>, ProjectionFailure> {
+        let spans = self.inner.project_spans(observation)?;
+        for span in &spans {
+            self.telemetry
+                .emit_span(span)
+                .map_err(telemetry_to_projection_failure)?;
+        }
+        Ok(spans)
+    }
 }
 
 impl<T> SpanProjector<T> for AttachedSpanProjector<T>
@@ -177,13 +186,7 @@ where
         &self,
         observation: &Observation<T>,
     ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        let spans = self.inner.project_spans(observation)?;
-        for span in &spans {
-            self.telemetry
-                .emit_span(span)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(spans)
+        <Self as TypedSpanProjector<T>>::project_spans(self, observation).map_err(Into::into)
     }
 }
 
@@ -192,7 +195,25 @@ where
     T: Observable,
 {
     telemetry: Arc<Telemetry>,
-    inner: Arc<dyn MetricProjector<T>>,
+    inner: Arc<dyn TypedMetricProjector<T>>,
+}
+
+impl<T> TypedMetricProjector<T> for AttachedMetricProjector<T>
+where
+    T: Observable,
+{
+    fn project_metrics(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<MetricRecord>, ProjectionFailure> {
+        let metrics = self.inner.project_metrics(observation)?;
+        for metric in &metrics {
+            self.telemetry
+                .emit_metric(metric)
+                .map_err(telemetry_to_projection_failure)?;
+        }
+        Ok(metrics)
+    }
 }
 
 impl<T> MetricProjector<T> for AttachedMetricProjector<T>
@@ -203,25 +224,23 @@ where
         &self,
         observation: &Observation<T>,
     ) -> Result<Vec<MetricRecord>, ProjectionError> {
-        let metrics = self.inner.project_metrics(observation)?;
-        for metric in &metrics {
-            self.telemetry
-                .emit_metric(metric)
-                .map_err(telemetry_to_projection_error)?;
-        }
-        Ok(metrics)
+        <Self as TypedMetricProjector<T>>::project_metrics(self, observation).map_err(Into::into)
     }
 }
 
-fn telemetry_to_projection_error(error: sc_observability_types::TelemetryError) -> ProjectionError {
+fn telemetry_to_projection_failure(
+    error: sc_observability_types::TelemetryError,
+) -> ProjectionFailure {
     match error {
         sc_observability_types::TelemetryError::Shutdown => {
-            ProjectionError(Box::new(ErrorContext::new(
+            ProjectionFailure::from_context(Box::new(ErrorContext::new(
                 error_codes::TELEMETRY_EXPORT_FAILED,
                 "telemetry runtime is shut down",
                 Remediation::not_recoverable("do not project telemetry after shutdown"),
             )))
         }
-        sc_observability_types::TelemetryError::ExportFailure(context) => ProjectionError(context),
+        sc_observability_types::TelemetryError::ExportFailure(context) => {
+            ProjectionFailure::from_context(context)
+        }
     }
 }
