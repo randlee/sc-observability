@@ -250,14 +250,16 @@ still uses the newly-deprecated legacy wrapper types (`IdentityError` in
 compatibility path in `control.rs`/`handle.rs`) and cannot be edited without
 violating `import-provenance.json`'s
 pinned source bytes. A workspace- or bridge-wide clippy `-A deprecated`
-suppression was rejected as too broad; the replacement — narrow, per-call-site
-`#[allow(deprecated, reason = ...)]` annotations recorded as a new documented
-adaptation kind in `import-provenance.json`, coordinated with lobs, who owns
-warning-allowance edits — is in progress and not yet landed.
+suppression was rejected as too broad; the landed replacement is narrow,
+per-call-site `#[allow(deprecated, reason = ...)]` annotations recorded as
+post-import adaptations in a separate `docs/plans/phase-b/
+post-import-adaptations.json` manifest (owned by lobs), validated via
+`validate_log_import.py --post-import-adaptations`, without altering
+`import-provenance.json`'s original pinned import manifest.
 `.github/workflows/ci.yml`'s clippy job remains a single `-D warnings` step.
-Broader AC-by-AC reconciliation, the four handoffs' final integration-status
-update, and independent QA/coordinator completeness review remain in
-progress; this entry does not claim closure.
+Broader AC-by-AC reconciliation and the four handoffs' final integration-status
+update are complete; independent QA/coordinator completeness review remains
+pending. This entry does not itself claim that review.
 
 ### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
 
