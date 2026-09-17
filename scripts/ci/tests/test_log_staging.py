@@ -9,7 +9,8 @@ from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _log_staging import PACKAGES, inspect_archive, sha256, verify_stage
+from prepare_log_staged_packages import package_command
+from _log_staging import PRIVATE_PACKAGE, PACKAGES, inspect_archive, sha256, verify_stage
 from validate_log_staged_consumer import validate_resolution
 from validate_public_api import approval_for
 from _log_release_adaptations import apply_release_adaptations, blob
@@ -33,6 +34,36 @@ def archive(path, name, *, dependency='', source=SOURCE, extra=None):
             member = tarfile.TarInfo(f'{name}-{VERSION}/{relative}')
             member.size = len(content)
             output.addfile(member, io.BytesIO(content))
+
+
+class PackageSelectionTests(unittest.TestCase):
+    def metadata(self):
+        names = [*PACKAGES, PRIVATE_PACKAGE, "sc-observability-dto", "unrelated-public-package"]
+        return {"workspace_members": names, "packages": [
+            {"id": name, "name": name, "publish": [] if name == PRIVATE_PACKAGE else None}
+            for name in names]}
+
+    def test_extra_public_packages_do_not_expand_candidate(self):
+        command = package_command(self.metadata(), Path("build"))
+        selected = [command[i + 1] for i, value in enumerate(command) if value == "-p"]
+        self.assertEqual(selected, list(PACKAGES))
+        self.assertNotIn("--workspace", command)
+        self.assertNotIn(PRIVATE_PACKAGE, command)
+
+    def test_selected_package_must_exist_and_be_public(self):
+        metadata = self.metadata()
+        metadata["packages"][0]["publish"] = []
+        with self.assertRaisesRegex(ValueError, "missing or private"):
+            package_command(metadata, Path("build"))
+        metadata["packages"].pop(0)
+        with self.assertRaisesRegex(ValueError, "missing or private"):
+            package_command(metadata, Path("build"))
+
+    def test_private_consumer_cannot_become_public(self):
+        metadata = self.metadata()
+        metadata["packages"][len(PACKAGES)]["publish"] = None
+        with self.assertRaisesRegex(ValueError, "remain private"):
+            package_command(metadata, Path("build"))
 
 
 class StageTests(unittest.TestCase):

@@ -15,6 +15,21 @@ from _log_staging import PACKAGES, PRIVATE_PACKAGE, inspect_archive, sha256, ver
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def package_command(metadata: dict, build: Path) -> list[str]:
+    """Select only B.2's public packages, even in a later expanded workspace."""
+    members = set(metadata["workspace_members"])
+    packages = {p["name"]: p for p in metadata["packages"] if p["id"] in members}
+    for name in PACKAGES:
+        if name not in packages or packages[name].get("publish") == []:
+            raise ValueError(f"B.2 selected package missing or private: {name}")
+    if PRIVATE_PACKAGE not in packages or packages[PRIVATE_PACKAGE].get("publish") != []:
+        raise ValueError("CI-only consumer must remain private")
+    command = ["cargo", "package", "--locked", "--target-dir", str(build)]
+    for name in PACKAGES:
+        command.extend(["-p", name])
+    return command
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True)
@@ -38,16 +53,14 @@ def main() -> int:
     if workspace["workspace"]["package"]["version"] != args.version:
         raise SystemExit("requested version differs from the committed workspace train")
     roster = sorted(tomllib.loads((source / "release/publish-artifacts.toml").read_text())["crates"], key=lambda x: x["publish_order"])
-    if tuple(item["package"] for item in roster) != PACKAGES:
+    if (tuple(item["package"] for item in roster if item["package"] in PACKAGES) != PACKAGES
+            or any(item["package"] == PRIVATE_PACKAGE for item in roster)):
         raise SystemExit("release inventory differs from the six-package qualification order")
     metadata = json.loads(subprocess.check_output(["cargo", "metadata", "--locked", "--no-deps", "--format-version", "1"], cwd=source))
-    public = {p["name"] for p in metadata["packages"] if p.get("publish") != []}
-    if public != set(PACKAGES):
-        raise SystemExit(f"public workspace roster mismatch: {public}")
+    build = source / "target" / "b2-package-build"
+    command = package_command(metadata, build)
     subprocess.run([sys.executable, str(source / "scripts/ci/_log_release_adaptations.py"), "--destination", str(source)], check=True)
     output.mkdir(parents=True)
-    build = source / "target" / "b2-package-build"
-    command = ["cargo", "package", "--workspace", "--exclude", PRIVATE_PACKAGE, "--locked", "--target-dir", str(build)]
     with (output / "cargo-package.log").open("w") as log:
         result = subprocess.run(command, cwd=source, stdout=log, stderr=subprocess.STDOUT)
     if result.returncode:
