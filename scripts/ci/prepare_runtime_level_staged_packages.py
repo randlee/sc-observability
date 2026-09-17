@@ -71,6 +71,8 @@ def write_archive(package: str, version: str, workspace: Path, file_list: list[s
                 # file even though workspace members share the root lockfile.
                 if relative == "Cargo.lock" and not source.exists():
                     source = workspace / "Cargo.lock"
+                if relative == "Cargo.toml.orig" and not source.exists():
+                    source = root / "Cargo.toml"
                 if not source.is_file():
                     raise SystemExit(f"cargo package list referenced missing file: {source}")
                 content = normalized_manifest(source, version) if relative == "Cargo.toml" else source.read_bytes()
