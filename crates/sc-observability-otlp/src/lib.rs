@@ -609,6 +609,17 @@ fn export_failure_from_event(err: EventFailure) -> TelemetryError {
     TelemetryError::ExportFailure(err.into_context())
 }
 
+/// Converts a flush failure into a shutdown failure, chaining the flush
+/// failure as the shutdown context's native source.
+///
+/// `flush_outcome` never currently returns `Err` (it is intentionally
+/// `Result`-shaped so shutdown can propagate real flush failures without a
+/// public-signature change later; see its own `unnecessary_wraps` rationale),
+/// so this conversion is unreachable at runtime today. It is kept, rather
+/// than deleted, for that future propagation path, and is covered directly
+/// by `shutdown_flush_failure_preserves_flush_context_as_native_source`
+/// below so a regression in its error-context/source chaining is still
+/// caught even while the call site is dormant.
 fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
     ShutdownFailure::from_context(Box::new(
         ErrorContext::new(
@@ -1192,7 +1203,9 @@ mod tests {
                     "emit started, event, and ended span signals in order",
                 ),
             )
-            .source(Box::new(std::io::Error::other("orphaned span event source"))),
+            .source(Box::new(std::io::Error::other(
+                "orphaned span event source",
+            ))),
         );
         let original_timestamp = context.diagnostic().timestamp;
         let original_backtrace_ptr = std::ptr::from_ref(context.backtrace());
@@ -1210,6 +1223,45 @@ mod tests {
         );
         let source = std::error::Error::source(&*exported).expect("source must be preserved");
         assert_eq!(source.to_string(), "orphaned span event source");
+    }
+
+    #[test]
+    fn shutdown_flush_failure_preserves_flush_context_as_native_source() {
+        let flush_failure = FlushFailure::from_context(Box::new(
+            ErrorContext::new(
+                error_codes::TELEMETRY_EXPORT_FAILED,
+                "log export failed",
+                Remediation::not_recoverable("test flush failure"),
+            )
+            .source(Box::new(std::io::Error::other("native flush source"))),
+        ));
+
+        let shutdown_failure = shutdown_flush_failure(flush_failure);
+
+        assert_eq!(
+            shutdown_failure.diagnostic().code,
+            error_codes::TELEMETRY_FLUSH_FAILED
+        );
+        assert_eq!(
+            shutdown_failure.diagnostic().message,
+            "failed to flush telemetry during shutdown"
+        );
+        let shutdown_context = std::error::Error::source(&shutdown_failure)
+            .expect("shutdown failure preserves its context");
+        let chained_flush_failure = shutdown_context
+            .source()
+            .expect("shutdown context preserves the flush failure");
+        assert_eq!(
+            chained_flush_failure.to_string(),
+            "log export failed; caused by: native flush source"
+        );
+        let flush_context = chained_flush_failure
+            .source()
+            .expect("flush failure preserves its context");
+        let native_source = flush_context
+            .source()
+            .expect("flush context preserves the native export source");
+        assert_eq!(native_source.to_string(), "native flush source");
     }
 
     #[test]
