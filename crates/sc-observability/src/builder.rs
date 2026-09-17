@@ -94,7 +94,7 @@ impl LoggerBuilder {
     ///
     /// Panics when the operating system cannot start the writer thread. New
     /// code that needs a recoverable startup error should use
-    /// [`Self::build_with_level_owner`].
+    /// [`Self::build_typed`].
     pub fn build(self) -> Logger<Running> {
         self.build_typed()
             .expect("existing infallible builder expects writer thread startup")

@@ -1773,6 +1773,10 @@ mod tests {
         let result = logger.try_log(log_event_with_request(service_name(), "full", 10));
 
         assert!(matches!(result, Err(TryLogError::QueueFull(_))));
+        assert!(matches!(
+            logger.try_log_typed(log_event_with_request(service_name(), "typed-full", 10)),
+            Err(TryLogFailure::QueueFull(_))
+        ));
     }
 
     #[test]
@@ -1916,6 +1920,27 @@ mod tests {
         let Err(error) = Logger::new_with_level_owner(config) else {
             panic!("writer start must fail");
         };
+        assert_eq!(error.diagnostic().code, error_codes::LOGGER_INIT_FAILED);
+        assert_eq!(
+            std::error::Error::source(&error)
+                .expect("preserved writer start source")
+                .to_string(),
+            "failed to start logger writer thread; caused by: injected writer start failure"
+        );
+    }
+
+    #[test]
+    fn typed_owner_construction_preserves_the_injected_writer_start_source() {
+        let root = temp_path("typed-writer-start-failure");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        config.writer_start_should_fail = true;
+
+        let Err(error) = Logger::new_with_level_owner_typed(config) else {
+            panic!("writer start must fail");
+        };
+        assert_eq!(error.kind(), InitFailureKind::LoggerInitialization);
         assert_eq!(error.diagnostic().code, error_codes::LOGGER_INIT_FAILED);
         assert_eq!(
             std::error::Error::source(&error)

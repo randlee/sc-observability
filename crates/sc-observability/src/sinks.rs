@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use std::time::{Duration, SystemTime};
 
+#[cfg(feature = "fault-injection")]
+use sc_observability_types::ErrorContext;
 use sc_observability_types::typed::LogSinkFailure;
 use sc_observability_types::{
     Diagnostic, DiagnosticSummary, Level, LogEvent, LogSinkError, Remediation, SinkHealth,
