@@ -125,6 +125,8 @@ const CASES: &[&str] = &[
     "bridge_native_timeout",
     "bridge_external_overlap",
     "bridge_churn",
+    "last_handle_teardown",
+    "bridge_observers_callbacks",
     "native_diagnostic_fidelity",
 ];
 
@@ -163,6 +165,8 @@ fn contract_matrix() {
             "bridge_native_timeout" => bridge_timeout(false),
             "bridge_external_overlap" => bridge_timeout(true),
             "bridge_churn" => bridge_churn(),
+            "last_handle_teardown" => last_handle_teardown(),
+            "bridge_observers_callbacks" => bridge_observers_callbacks(),
             "native_diagnostic_fidelity" => native_diagnostic_fidelity(),
             _ => panic!("unknown contract case {case}"),
         }
@@ -788,4 +792,85 @@ fn level_gate_busy() {
         )
         .unwrap();
     stop(&owner);
+}
+
+fn last_handle_teardown() {
+    for running in [false, true] {
+        let (_root, owner, backend) = core();
+        let weak = Arc::downgrade(&backend.shared);
+        let gate = Gate::new();
+        let _release = Release(gate.clone());
+        if running {
+            *lock(&backend.shared.hooks.query) = Some(gate.clone());
+            let operation = backend.start_query(query()).unwrap();
+            gate.entered(1);
+            let observation = operation.completion(Duration::from_secs(60));
+            drop((observation, operation));
+        }
+        drop((owner, backend));
+        if running {
+            crate::spawn::wait_live(4);
+            gate.release();
+        }
+        crate::spawn::wait_live(1);
+        assert!(
+            weak.upgrade().is_none(),
+            "idle/running teardown retained coordinator"
+        );
+    }
+    let (_root, owner, backend) = core();
+    let saved = backend.start_query(query()).unwrap();
+    saved.wait(Duration::from_secs(2)).unwrap();
+    let weak = Arc::downgrade(&backend.shared);
+    drop((owner, backend));
+    crate::spawn::wait_live(1);
+    assert!(weak.upgrade().is_none());
+    assert!(matches!(
+        saved.state(),
+        OperationState::Completed { result: Ok(_) }
+    ));
+}
+fn bridge_observers_callbacks() {
+    let (_root, host) = bridge_host();
+    let backend = bridge_backend(host.control()).unwrap();
+    let timer = crate::timer::shared().unwrap();
+    let operation: Operation<u32> = Operation::new(&backend.shared.dispatcher, &timer);
+    let futures: Vec<_> = (0..64)
+        .map(|_| operation.completion(Duration::from_secs(60)))
+        .collect();
+    code(
+        operation.wait(Duration::from_millis(1)),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
+    );
+    drop(futures);
+    let (tx, rx) = mpsc::channel();
+    let cancelled = operation
+        .subscribe(Box::new(|_| panic!("cancelled callback ran")))
+        .unwrap();
+    drop(cancelled);
+    let panic_callback = operation
+        .subscribe(Box::new(|_| panic!("contained bridge callback panic")))
+        .unwrap();
+    let callback = operation
+        .subscribe(Box::new(move |result| tx.send(result).unwrap()))
+        .unwrap();
+    code(
+        operation.wait(Duration::from_millis(1)),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+    );
+    operation.complete(Ok(19), || {});
+    assert_eq!(
+        rx.recv_timeout(Duration::from_secs(2)).unwrap().unwrap(),
+        19
+    );
+    assert_eq!(backend.shared.dispatcher.panics.load(Ordering::SeqCst), 1);
+    for _ in 0..128 {
+        assert_eq!(operation.wait(Duration::ZERO).unwrap(), 19);
+    }
+    drop((panic_callback, callback));
+    assert_eq!(timer.entries(), 0);
+    drop(backend);
+    crate::spawn::wait_live(1);
+    assert_eq!(operation.wait(Duration::ZERO).unwrap(), 19);
+    host.shutdown(Duration::from_secs(2)).unwrap();
 }
