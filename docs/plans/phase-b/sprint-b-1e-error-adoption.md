@@ -58,8 +58,8 @@ legacy build unchanged and supported; its new
 build_typed counterpart adds a fallible startup boundary rather than changing
 the old signature. Logger::new_with_level_owner and
 LoggerBuilder::build_with_level_owner retain their B.P1 Result signatures and
-remain supported without method-level deprecation; avoid publishing them in
-B.P2 only to deprecate the methods in B.2. Their `_typed` counterparts are
+remain supported without method-level deprecation; avoid qualifying/staging
+them in B.P2 only to deprecate the methods in B.2. Their `_typed` counterparts are
 additive recommended alternatives, not mandatory replacements. Nine `XError`
 wrappers still recommend `XFailure`, including InitError returned by those
 supported owner constructors. Explicitly naming/constructing InitError can warn;

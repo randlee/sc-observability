@@ -15,15 +15,17 @@ changes explicitly. The current target proposal is not itself an approved freeze
 
 1. Apply the authoritative [B.1 entry gate](sprint-b-1-copy.md#goal-and-entry-gate)
    for the accepted destination contract and source/review evidence.
-2. B.P1 implements and B.P2 publishes the runtime-level capability; B.P3 owns
-   BTIT integration and acceptance against that contract before source handoff.
+2. B.P1 implements and B.P2 qualifies/stages the runtime-level capability; B.P3
+   owns BTIT integration and acceptance against that staged contract before
+   source handoff. B.7 alone performs the later live publication.
 3. B.1 copies only the accepted generic source and verifies its exported API and
    behavior against that locked target. The copy is mechanical; no second
    destination API redesign is scheduled afterward.
 4. B.1a–B.1e add the destination core error API and warning-only legacy adapters,
    preserving the accepted bridge contract; it does not schedule bridge redesign.
-   B.2 publishes the core update and companion pair. B.3–B.6 implement the destination-owned
-   TypeScript/Python/async binding proposals; B.7 publishes those artifacts.
+   B.2 qualifies/stages the core update and companion pair. B.3–B.6 implement
+   the destination-owned TypeScript/Python/async binding proposals; B.7 alone
+   publishes all of these artifacts at phase end.
 
 BTIT retains application authorization, UI, filesystem deletion, and its later
 published-dependency switch. This planning record does not itself authorize a

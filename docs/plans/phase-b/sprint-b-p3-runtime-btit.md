@@ -86,8 +86,10 @@ BTIT runs its complete bridge/macro/API/UI consumer checks, core-sharing
 integration tests, deterministic races and fault injection, plus release-mode
 logging and capped-build tests. Record resolved Cargo feature graphs and exact
 commands/results rather than assuming debug tests prove release behavior.
-sc-observability checks the handoff against both accepted contracts and B.P2's
-registry version. B.1's independent provenance verification is still required.
+sc-observability checks the handoff against the accepted target design, the
+owner-deferred runtime contract reference, and B.P2's exact staged core
+package version/checksum, not a registry version. B.1's independent
+provenance verification is still required.
 
 ## Paths to delete
 

@@ -70,7 +70,9 @@ normalized manifest hash, archive member hashes and all locked target-dependent
 transitive packages needed by the five platform families. Include
 `sc-observability-dto`, `sc-observability-binding-runtime`, the Python Rust
 embedding/extension crate and any unpublished first-party dependency they
-actually resolve. Published core packages stay at the B.2 registry versions.
+actually resolve. Published core packages stay at their existing released versions; B.2's
+staged companion candidates are referenced by exact staged version/checksum,
+not a registry lookup.
 A missing dependency is a packaging failure, never permission to publish early.
 
 1. Materialize inherited workspace package/dependency/lint values in the staging

@@ -19,7 +19,7 @@ source in the import gate.
 
 Execution ownership and closure are defined once in the prerequisite sprints:
 [B.P1 core implementation](sprint-b-p1-runtime-core.md),
-[B.P2 core publication](sprint-b-p2-runtime-publish.md), and
+[B.P2 core qualification](sprint-b-p2-runtime-publish.md), and
 [B.P3 BTIT integration](sprint-b-p3-runtime-btit.md).
 This document is the normative signature/behavior reference, not an additional
 sprint or a separate closure checklist. B.3 owns the shared wire projection; B.3b owns native backends and conversions;
