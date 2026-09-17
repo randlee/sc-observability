@@ -127,6 +127,15 @@ def rendered(diagnostic: dict) -> str:
     return diagnostic.get("rendered", diagnostic.get("message", ""))
 
 
+def diagnostic_note(diagnostic: dict) -> str | None:
+    """Extract the compiler's complete migration note from its primary message."""
+    message = diagnostic.get("message", "")
+    marker = ": Use "
+    if message.count(marker) != 1:
+        return None
+    return message[message.index(marker) + 2 :]
+
+
 def item_window(source: str, marker: str, note: str) -> str:
     lines = source.splitlines()
     candidates = []
@@ -335,7 +344,7 @@ def validate_diagnostics(
     if not expected_notes:
         assert_true(not diagnostics, f"{name} emitted unexpected fixture warnings")
         return
-    counts = {note: 0 for note in expected_notes}
+    observed_spans = {note: [] for note in expected_notes}
     for diagnostic in diagnostics:
         assert_true(diagnostic.get("level") == "warning", f"{name} emitted a non-warning diagnostic")
         assert_true(
@@ -347,16 +356,16 @@ def validate_diagnostics(
         assert_true(len(spans) == 1 and len(primary) == 1, f"{name} diagnostic has unexpected spans")
         span = primary[0]
         assert_true(span.get("file_name") == "src/main.rs", f"{name} diagnostic escaped fixture source")
-        note_matches = [note for note in expected_notes if note in rendered(diagnostic)]
+        note_matches = [note for note in expected_notes if diagnostic_note(diagnostic) == note]
         assert_true(len(note_matches) == 1, f"{name} diagnostic has an unexpected migration note")
         note = note_matches[0]
         line = span.get("line_start")
         assert_true(line in expected_spans[note], f"{name} diagnostic is bound to the wrong fixture item/span")
-        counts[note] += 1
+        observed_spans[note].append(line)
     for note, expected in expected_spans.items():
         assert_true(
-            counts[note] == len(expected),
-            f"{name} warning count for {note} is {counts[note]}, expected {len(expected)}",
+            sorted(observed_spans[note]) == sorted(expected),
+            f"{name} warning spans for {note} are {sorted(observed_spans[note])}, expected {sorted(expected)}",
         )
 
 
@@ -450,12 +459,30 @@ def check_negative_controls() -> None:
     rejects_diagnostics(wrong_code, "wrong diagnostic code negative did not trigger")
     wrong_note = deepcopy(expected_diagnostics)
     note_index = next(
-        index for index, diagnostic in enumerate(wrong_note) if notes[0] in rendered(diagnostic)
+        index for index, diagnostic in enumerate(wrong_note) if diagnostic_note(diagnostic) == notes[0]
+    )
+    wrong_note[note_index]["message"] = wrong_note[note_index]["message"].replace(
+        notes[0], "wrong migration note"
     )
     wrong_note[note_index]["rendered"] = wrong_note[note_index]["rendered"].replace(
         notes[0], "wrong migration note"
     )
     rejects_diagnostics(wrong_note, "wrong diagnostic note negative did not trigger")
+    appended_note = deepcopy(expected_diagnostics)
+    appended_index = next(
+        index for index, diagnostic in enumerate(appended_note) if diagnostic_note(diagnostic) == notes[0]
+    )
+    appended_note[appended_index]["message"] += " EXTRA TEXT"
+    appended_note[appended_index]["rendered"] += " EXTRA TEXT"
+    rejects_diagnostics(appended_note, "appended diagnostic note negative did not trigger")
+    duplicate_span = deepcopy(expected_diagnostics)
+    default_note = next(note for note in notes if "ObservabilityConfig::default_for_typed" in note)
+    default_indices = [
+        index for index, diagnostic in enumerate(duplicate_span) if diagnostic_note(diagnostic) == default_note
+    ]
+    assert_true(len(default_indices) >= 2, "default_for diagnostic negative lacks repeated target spans")
+    duplicate_span[default_indices[1]] = deepcopy(duplicate_span[default_indices[0]])
+    rejects_diagnostics(duplicate_span, "duplicate diagnostic span negative did not trigger")
     missing = expected_diagnostics[:-1]
     rejects_diagnostics(missing, "missing diagnostic negative did not trigger")
     extra = expected_diagnostics + [deepcopy(expected_diagnostics[0])]

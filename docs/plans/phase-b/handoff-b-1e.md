@@ -121,8 +121,11 @@ The M01–M05 correction evidence is:
   `since = "1.4.0"`) to each of exactly 29 targets, then binds each Cargo
   diagnostic to its expected deprecated item and exact `src/main.rs` fixture
   span. It requires one `deprecated` code and span, rejects secondary spans,
-  unexpected notes/warnings, and uses real predicates for misplaced attributes,
-  wrong versions/notes, missing/extra diagnostics, wrong spans and broad
+  unexpected notes/warnings, compares the complete compiler migration note
+  rather than a substring, and compares the exact expected span multiset
+  rather than only an aggregate note count. Real predicate controls cover
+  misplaced attributes, wrong versions/notes, appended notes, duplicate
+  allowed-line diagnostics, missing/extra diagnostics, wrong spans and broad
   allowances.
 - M02: the legacy fixture exercises all nine wrapper names, every mapped
   method, explicit `InitError` tuple/field access, and the exempt owner
@@ -137,7 +140,12 @@ The M01–M05 correction evidence is:
   `InitError` golden and span path.
 - M04: ordinary production projection/lifecycle paths call typed APIs; copied
   bridge signatures remain unchanged and its compatibility allowances are
-  narrow, named and reason-bearing.
+  narrow, named and reason-bearing. The historical
+  `import-provenance.json` remains unchanged; the separate
+  `post-import-adaptations.json` record pins the three copied bridge files'
+  before/after blobs and exact allowance blocks. The importer verifies that
+  removing only those blocks reconstructs the accepted BTIT source byte for
+  byte, rejecting undeclared, body or signature changes.
 - M05: the local implementation checklist and this handoff record the second
   verification pass; B.2 qualification and B.7 publication remain pending.
 
@@ -146,6 +154,11 @@ The implementation evidence is:
 ```text
 python3 scripts/ci/validate_error_migration.py
 B.1e migration validation: PASS (source contract, JSON diagnostics, and all fixtures)
+python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py'
+Ran 51 tests, OK (including post-import warning-adaptation acceptance and
+body/signature/undeclared-change rejection)
+python3 scripts/ci/validate_log_import.py --source-repo /Users/randlee/github/beads-task-issue-tracker --post-import-adaptations docs/plans/phase-b/post-import-adaptations.json
+B.1 import provenance and post-import warning-only adaptations are coherent
 cargo check --workspace --message-format=short
 PASS; remaining warnings are confined to the copied sc-observability-log bridge
 cargo fmt --all -- --check
