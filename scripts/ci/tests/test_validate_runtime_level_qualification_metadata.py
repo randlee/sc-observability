@@ -11,7 +11,50 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
-from validate_runtime_level_qualification_metadata import validate_version_declarations  # noqa: E402
+from validate_runtime_level_qualification_metadata import (  # noqa: E402
+    validate_version_declarations,
+    validate_workspace_member_roster,
+)
+
+
+STAGED_PACKAGES = ("sc-observability-types", "sc-observability", "sc-observe", "sc-observability-otlp")
+STAGED_MEMBERS = tuple(f"crates/{package}" for package in STAGED_PACKAGES)
+COMPANION_MEMBERS = (
+    "crates/sc-observability-log",
+    "crates/sc-observability-log-macros",
+    "crates/sc-observability-log-consumer-check",
+)
+
+
+class WorkspaceMemberRosterTests(unittest.TestCase):
+    def test_accepts_staged_only_roster(self) -> None:
+        validate_workspace_member_roster(STAGED_MEMBERS, STAGED_PACKAGES)
+
+    def test_accepts_companions_interleaved_after_staged_order_preserved(self) -> None:
+        validate_workspace_member_roster(STAGED_MEMBERS + COMPANION_MEMBERS, STAGED_PACKAGES)
+
+    def test_rejects_staged_members_out_of_order(self) -> None:
+        reordered = (STAGED_MEMBERS[1], STAGED_MEMBERS[0]) + STAGED_MEMBERS[2:] + COMPANION_MEMBERS
+        with self.assertRaisesRegex(SystemExit, "workspace member order"):
+            validate_workspace_member_roster(reordered, STAGED_PACKAGES)
+
+    def test_rejects_companion_interleaved_between_staged_members(self) -> None:
+        interleaved = (STAGED_MEMBERS[0], COMPANION_MEMBERS[0]) + STAGED_MEMBERS[1:]
+        # companion between staged[0] and staged[1] does not disturb the staged subsequence itself
+        validate_workspace_member_roster(interleaved, STAGED_PACKAGES)
+
+    def test_rejects_missing_staged_member(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "workspace member order"):
+            validate_workspace_member_roster(STAGED_MEMBERS[:-1] + COMPANION_MEMBERS, STAGED_PACKAGES)
+
+    def test_rejects_unrecognized_extra_member(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "unrecognized members"):
+            validate_workspace_member_roster(STAGED_MEMBERS + ("crates/some-unreviewed-crate",), STAGED_PACKAGES)
+
+    def test_rejects_private_only_companion_staged_for_publish(self) -> None:
+        packages_with_leak = STAGED_PACKAGES + ("sc-observability-log-consumer-check",)
+        with self.assertRaisesRegex(SystemExit, "unpublished companion package roster overlaps"):
+            validate_workspace_member_roster(STAGED_MEMBERS + COMPANION_MEMBERS, packages_with_leak)
 
 
 VALUES = {"candidate_version": "1.3.0", "baseline_version": "1.2.0"}
