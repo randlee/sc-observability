@@ -11,10 +11,12 @@ bridge conversion belongs to `sc-observability-binding-runtime`.
 
 ## Approval
 
-Appointed lead aobs reviews the exact exported API digest during B.3 completeness.
-The implementation author does not grant independent approval. The machine-readable
-record is added only after that actual review; this document grants no publication,
-native runtime acceptance, or release approval. B.7 remains the sole publication gate.
+Appointed lead aobs approved the exact exported API digest
+`c03027422ae3ff9f49e5b425523c9c5eab1909e34bfac5dc39ac54295f89cc9a`
+on 2026-09-17 at source `6481ac7ea4b321cab76f27a246ed84c5ab6af75f`.
+The actual lead-authored record is retained verbatim in `phase-b-dto.json`.
+This grants no behavior QA, native runtime acceptance, or publication approval.
+B.7 remains the sole publication gate.
 
 ## Affected Artifacts
 

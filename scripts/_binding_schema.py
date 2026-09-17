@@ -96,7 +96,7 @@ def validate(schema, node, value, path='$'):
         if 'pattern' in node and '0|[1-9]' in node['pattern'] and not -(2**63)<=int(value)<2**64:raise ValueError(f'{path}: integer range')
         if not node.get('minLength',0)<=len(value)<=node.get('maxLength',float('inf')):raise ValueError(f'{path}: string length')
     if typ in ('integer','number'):
-        if type(value) not in (int,float) or not math.isfinite(value) or (typ=='integer' and type(value) is not int):raise ValueError(f'{path}: number')
+        if type(value) not in (int,float) or (type(value) is float and not math.isfinite(value)) or (typ=='integer' and type(value) is not int):raise ValueError(f'{path}: number')
         if not node.get('minimum',-float('inf'))<=value<=node.get('maximum',float('inf')):raise ValueError(f'{path}: range')
     if typ=='array':
         if not isinstance(value,list):raise ValueError(f'{path}: array')

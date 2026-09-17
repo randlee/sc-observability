@@ -321,7 +321,7 @@
     },
     "InputDecimalDto": {
       "description": "Canonical integer string: signed i64 or unsigned u64; counters additionally reject negatives.",
-      "pattern": "^(0|[1-9][0-9]*|-[1-9][0-9]*)$",
+      "pattern": "^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])",
       "type": "string"
     },
     "InputDiagnostic": {
@@ -3472,7 +3472,7 @@
     },
     "OutputDecimalDto": {
       "description": "Canonical integer string: signed i64 or unsigned u64; counters additionally reject negatives.",
-      "pattern": "^(0|[1-9][0-9]*|-[1-9][0-9]*)$",
+      "pattern": "^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])",
       "type": "string"
     },
     "OutputDiagnostic": {
@@ -6358,7 +6358,7 @@
       }
     ],
     "integer": {
-      "canonical_pattern": "^(0|[1-9][0-9]*|-[1-9][0-9]*)$",
+      "canonical_pattern": "^(0|[1-9][0-9]*|-[1-9][0-9]*)(?![\\s\\S])",
       "counter_min": "0",
       "event_min": "-9223372036854775808",
       "max": "18446744073709551615"

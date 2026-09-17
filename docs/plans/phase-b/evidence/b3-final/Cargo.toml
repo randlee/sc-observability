@@ -1,0 +1,17 @@
+[package]
+name = "binding-source-consumer"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+members = ["packages/sc-observability-dto-1.4.0", "packages/sc-observability-types-1.4.0"]
+
+[dependencies]
+sc-observability-dto = "=1.4.0"
+sc-observability-types = "=1.4.0"
+serde_json = "1"
+
+[patch.crates-io]
+sc-observability-dto = { path = "packages/sc-observability-dto-1.4.0" }
+sc-observability-types = { path = "packages/sc-observability-types-1.4.0" }
