@@ -9,7 +9,7 @@ import threading
 from types import MappingProxyType
 from typing import Literal, Mapping, Union
 
-from . import AttachedLogger, Err, LogEvent, Logger, Ok, Result, _at, _failure, _internal, generated
+from . import AttachedLogger, Err, Level, LogEvent, Logger, Ok, Result, _at, _failure, _internal, generated
 from .context import _validate_event
 
 
@@ -131,7 +131,7 @@ class ObservabilityHandler(logging.Handler):
             if type(record.levelno) is not int:
                 self._record(Err(_failure("level", "LogRecord level must be an integer")), event=True)
                 return
-            level = ("trace" if record.levelno < logging.DEBUG else
+            level: Level = ("trace" if record.levelno < logging.DEBUG else
                      "debug" if record.levelno < logging.INFO else
                      "info" if record.levelno < logging.WARNING else
                      "warn" if record.levelno < logging.ERROR else "error")
