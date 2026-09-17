@@ -171,6 +171,11 @@ struct NativeAttachedLogger {
     backend: Arc<dyn HostLoggingBackend>,
 }
 
+// This serializes only the check-and-install transition.  The host backend
+// itself remains retained exclusively by its concrete Python module slot; no
+// process-global backend or ownership capability is introduced.
+static HOST_INSTALLATION_LOCK: Mutex<()> = Mutex::new(());
+
 fn log_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, event: &str) -> String {
     let result = parse_value(event, "event")
         .and_then(sc_observability_dto::decode_event)
@@ -352,6 +357,9 @@ pub fn install_host_logger(
     module: &Bound<'_, PyModule>,
     backend: Arc<dyn HostLoggingBackend>,
 ) -> Result<(), Failure> {
+    let _installation = HOST_INSTALLATION_LOCK
+        .lock()
+        .map_err(|_| internal_failure("host installation lock poisoned"))?;
     let installed = module
         .hasattr("_sc_observability_host_backend")
         .map_err(|error| {
