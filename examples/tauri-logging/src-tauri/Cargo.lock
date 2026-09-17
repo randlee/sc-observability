@@ -3247,6 +3247,7 @@ dependencies = [
  "sc-observability",
  "sc-observability-binding-runtime",
  "sc-observability-dto",
+ "sc-observability-log",
  "sc-observability-tauri",
  "sc-observability-types",
  "serde",

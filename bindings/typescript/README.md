@@ -1,8 +1,8 @@
 # `@sc-observability/client`
 
 This package is a generated-schema TypeScript client for the Tauri host
-adapter. Install the packed tarball in a clean consumer, create a
-`JsonTransport` that invokes the four plugin commands, and pass it to
+adapter. Install the packed tarball in a clean consumer, pass Tauri's `invoke`
+function to `createTauriTransport`, and pass the returned transport to
 `createClient`. `log` is bounded fire-and-forget dispatch; use `tryLog` when
 the admission result is required. Query, health, and flush resolve tagged
 `Result` values and do not reject for operational failures.

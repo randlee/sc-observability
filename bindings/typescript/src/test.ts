@@ -1,5 +1,6 @@
 import {
   createClient,
+  createTauriTransport,
   encodeEvent,
   encodeValue,
   SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE,
@@ -60,6 +61,18 @@ async function main(): Promise<void> {
       const status = client.value.client_status();
       assert(status.kind === "ok" && status.value.in_flight === 0, "in-flight status did not recover");
     }
+  }
+
+  const invoked: string[] = [];
+  const tauriTransport = createTauriTransport(async (command, args) => {
+    invoked.push(command);
+    assert(args !== undefined && Object.hasOwn(args, "request"), "Tauri request argument was not wrapped");
+    return { schema_version: 1, kind: "ok", value: { kind: "accepted" } };
+  });
+  assert(tauriTransport.kind === "ok" && event.kind === "ok", "Tauri transport setup failed");
+  if (tauriTransport.kind === "ok" && event.kind === "ok") {
+    const result = await tauriTransport.value.request("try_log", { schema_version: 1, event: event.value });
+    assert(result.kind === "ok" && invoked[0] === "plugin:sc-observability|sc_observability_try_log", "Tauri command mapping failed");
   }
 
   let queryCalls = 0;

@@ -14,8 +14,8 @@ tauri = ["dep:tauri"]
 test = ["tauri/test"]
 
 [dependencies]
-sc-observability-binding-runtime = { path = "../../crates/sc-observability-binding-runtime" }
-sc-observability-dto = { path = "../../crates/sc-observability-dto" }
+sc-observability-binding-runtime = { version = "1.4.0", path = "../../crates/sc-observability-binding-runtime" }
+sc-observability-dto = { version = "1.4.0", path = "../../crates/sc-observability-dto" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", optional = true, default-features = false }

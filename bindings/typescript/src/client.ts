@@ -31,6 +31,15 @@ export interface ObservabilityClient {
 type Operation = "try_log" | "query" | "health" | "flush";
 type FailureKind = Failure["kind"];
 
+export type TauriInvoke = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
+
+const TAURI_COMMANDS: Record<Operation, string> = {
+  try_log: "plugin:sc-observability|sc_observability_try_log",
+  query: "plugin:sc-observability|sc_observability_query",
+  health: "plugin:sc-observability|sc_observability_health",
+  flush: "plugin:sc-observability|sc_observability_flush",
+};
+
 const FAILURE_KINDS: FailureKind[] = [
   "below_baseline", "cancelled", "closed", "internal", "io", "permission_denied", "queue_full",
   "timeout", "unavailable", "unknown_remote", "unsupported_level", "unsupported_version", "validation",
@@ -169,7 +178,7 @@ function normalizeQuery(query: LogQueryDto): Result<LogQueryDto> {
   try {
     if (!isRecord(query)) return err(validation("query", "query must be an object"));
     if (Object.keys(query).some((key) => !allowed.has(key))) return err(validation("query", "unknown query field"));
-    if (query.schema_version !== 1) {
+    if (query.schema_version !== undefined && query.schema_version !== 1) {
       if (typeof query.schema_version === "number" && Number.isSafeInteger(query.schema_version) && query.schema_version >= 0) {
         return err(unsupportedVersion(query.schema_version));
       }
@@ -344,5 +353,20 @@ export function createClient(transport: JsonTransport): Result<ObservabilityClie
     return ok(new Client(transport as JsonTransport));
   } catch {
     return err(validation("transport", "transport.request could not be inspected"));
+  }
+}
+
+export function createTauriTransport(invoke: TauriInvoke): Result<JsonTransport> {
+  try {
+    if (typeof invoke !== "function") return err(validation("invoke", "invoke must be a function"));
+    return ok({
+      request(operation: Operation, request: unknown): Promise<Result<unknown>> {
+        return Promise.resolve()
+          .then(() => invoke(TAURI_COMMANDS[operation], { request }))
+          .then((value) => ok(value), (error: unknown) => err(safeFailure(error, "tauri invoke")));
+      },
+    });
+  } catch {
+    return err(validation("invoke", "invoke could not be configured"));
   }
 }
