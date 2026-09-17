@@ -21,17 +21,18 @@ Phase B completion (ATM `01M2PKX8R4J4VJP5V6RRV9JJPB`, 2026-09-17T02:41:50Z).
 This contract remains proposed for public API review; QA-B010 is owner-deferred,
 not resolved and not a development blocker.
 
-sc-observability implements and qualifies the additive core capability first;
-BTIT implements the corresponding bridge API and behavior against B.P2's exact
-staged core artifacts and the accepted target contract, closes its critical
-review, and hands off the working reference. B.1 remains the first migration
-sprint and copies it mechanically. Live registry publication and registry-only
-consumer proof are deferred to the phase-end release checklist in B.7; record
-the staged core artifact and accepted BTIT source in the import gate instead.
+sc-observability implements, reviews and stages the additive core capability
+first; B.P2 qualifies those immutable staged artifacts, and B.7 alone performs
+live publication. BTIT implements the corresponding bridge API and behavior
+against B.P2's exact staged core artifacts and the accepted target contract,
+closes its critical review, and hands off the working reference. B.1 remains
+the first migration sprint and copies it mechanically. Do not mark this
+prerequisite complete from plan approval alone; record the B.P2 staged
+qualification and accepted BTIT source in the import gate.
 
 Execution ownership and closure are defined once in the prerequisite sprints:
 [B.P1 core implementation](sprint-b-p1-runtime-core.md),
-[B.P2 package qualification](sprint-b-p2-runtime-publish.md), and
+[B.P2 core qualification](sprint-b-p2-runtime-publish.md), and
 [B.P3 BTIT integration](sprint-b-p3-runtime-btit.md).
 This document is the normative signature/behavior reference, not an additional
 sprint or a separate closure checklist. B.3 owns the shared wire projection; B.3b owns native backends and conversions;

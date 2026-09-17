@@ -27,12 +27,12 @@ separate review and merge state.
 
 Owner: sc-observability core team. Implement issue #97's core capability while
 preserving every published interface. This is a pre-copy prerequisite; B.1
-remains the first migration sprint. `must_follow` the execution-authorized
-[runtime contract](runtime-level-contract.md). B.P2 `must_follow` B.P1 to
-prepare and qualify these exact immutable artifacts; live publication is
-deferred to the phase end. No parallel-safe public-contract work is claimed.
-Pushed parent development triggers merge-forward before each child round;
-B.P1's PR merges before B.P2's PR.
+remains the first migration sprint. `must_follow` reviewed acceptance of the
+[runtime contract](runtime-level-contract.md). B.P2 `must_follow` B.P1 because
+it qualifies and stages these exact artifacts; B.7 alone publishes them. No
+parallel-safe public-contract work is claimed. Pushed parent development
+triggers merge-forward before each child round; B.P1's PR merges before
+B.P2's PR.
 
 ## Deliverables (authoritative)
 
@@ -133,4 +133,5 @@ None. Replace internal config.level filtering in place; remove no public API.
 
 No live publication, BTIT bridge implementation, DTO/bindings, settings loader,
 legacy deprecation (#92), automatic expiry or sc-runtime topology. B.P2 owns
-package qualification; B.P3 owns BTIT integration acceptance; B.7 owns publication.
+qualification/staging; B.P3 owns BTIT integration acceptance; B.7 alone
+publishes at phase end.

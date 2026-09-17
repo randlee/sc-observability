@@ -30,7 +30,7 @@ Every listed deliverable must land production-ready for this sprint's stated
 scope. Completion requires evidence for every numbered item, including its code,
 documentation and validation artifacts; partial completion leaves the sprint open.
 
-1. BTIT resolves B.P2's exact staged core capability and implements LogGuard owner
+1. BTIT resolves B.P2's staged core capability and implements LogGuard owner
    operations against its single LevelOwner. Use the shared core filter for
    direct/facade/macro producers; keep LogControl read-only. Remove independent
    threshold policy, retain a conservative fixed Trace runtime facade ceiling,
@@ -86,10 +86,11 @@ BTIT runs its complete bridge/macro/API/UI consumer checks, core-sharing
 integration tests, deterministic races and fault injection, plus release-mode
 logging and capped-build tests. Record resolved Cargo feature graphs and exact
 commands/results rather than assuming debug tests prove release behavior.
-sc-observability checks the handoff against both accepted contracts and B.P2's
-staged artifact version/checksum. B.1's independent provenance verification is
-still required. B.P3's staged consumption is not live registry proof; B.7 owns
-that proof at phase end.
+sc-observability checks the handoff against the accepted target design, the
+owner-deferred runtime contract reference, and B.P2's exact staged core
+package version/checksum, not a registry version. B.1's independent
+provenance verification is still required. B.P3's staged consumption is not
+live registry proof; B.7 owns that proof at phase end.
 
 Before B.1 copy, B.P3 must retain an immutable source-repository inspection:
 the exact BTIT commit, complete root/export and hidden-macro-support inventory,

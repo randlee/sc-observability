@@ -380,8 +380,9 @@ reporting without altering the old infallible build contract. Old traits
 remain documented as supported interoperability boundaries; typed traits and
 explicit adapters are recommended for new implementations.
 
-The two B.P1 owner constructors were published as the prerequisite capability
-in B.P2 and remain supported without method-level deprecation in B.1e/B.2.
+The two B.P1 owner constructors were qualified/staged as the prerequisite
+capability in B.P2 and remain supported without method-level deprecation in
+B.1e/B.2.
 Their additive `_typed` counterparts remain available and recommended when a
 caller wants InitFailure; do not publish an owner method and immediately mark
 that method obsolete. Preserve their exact Result signatures returning InitError.
@@ -397,7 +398,8 @@ forced upgrade or a changed owner capability.
 
 B.1e selects the next available minor workspace version greater than the runtime
 prerequisite release and substitutes it for V in #[deprecated(since = "V", ...)].
-B.2 publishes that exact version; no placeholder may remain in implementation.
+B.2 qualifies/stages that exact version; B.7 alone publishes it, and no
+placeholder may remain in implementation.
 Warnings are the only intended compatibility effect. Downstream -D warnings or
 -D deprecated can fail by caller policy; document narrow temporary lint allowances,
 not workspace-wide suppression. Legacy examples/adapter internals and the imported
