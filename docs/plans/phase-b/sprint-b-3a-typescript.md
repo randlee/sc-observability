@@ -1,8 +1,8 @@
 ---
 id: B.3a
-status: proposed
-branch: feature/phase-b-3a-typescript
-base: develop
+status: complete
+branch: fix/phase-b-3a-completeness
+base: feature/phase-b-4a-python-packaging
 ---
 
 # B.3a — TypeScript bindings for the public logging API

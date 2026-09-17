@@ -1,0 +1,38 @@
+name: TypeScript/Tauri bindings
+
+on:
+  pull_request:
+    paths:
+      - "bindings/schema/**"
+      - "bindings/typescript/**"
+      - "bindings/tauri/**"
+      - "examples/tauri-logging/**"
+      - "scripts/generate_typescript_bindings.py"
+      - "scripts/ci/validate_binding_schema.sh"
+      - "scripts/ci/validate_typescript_bindings.sh"
+      - ".github/workflows/bindings-typescript.yml"
+  workflow_dispatch:
+
+jobs:
+  package-and-adapter:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.10"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: bindings/typescript/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+      - name: Validate schema, package, and adapter
+        shell: bash
+        run: bash scripts/ci/validate_typescript_bindings.sh

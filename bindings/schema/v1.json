@@ -2479,7 +2479,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -2504,7 +2505,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2528,7 +2530,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -2553,7 +2556,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2577,7 +2581,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -2602,7 +2607,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2626,7 +2632,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -2651,7 +2658,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2675,7 +2683,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -2700,7 +2709,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2724,7 +2734,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -2749,7 +2760,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2773,7 +2785,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -2798,7 +2811,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -2822,7 +2836,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -2847,7 +2862,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5207,7 +5223,6 @@
       "type": "object"
     },
     "OutputTraceContextDto": {
-      "additionalProperties": false,
       "description": "Version-one TraceContextDto wire record.",
       "properties": {
         "parent_span_id": {
@@ -5259,7 +5274,6 @@
       "description": "Version-one ValueDto wire value.",
       "oneOf": [
         {
-          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "null",
@@ -5272,7 +5286,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "boolean",
@@ -5289,7 +5302,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "string",
@@ -5306,7 +5318,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "integer",
@@ -5323,7 +5334,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "float",
@@ -5341,7 +5351,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "array",
@@ -5361,7 +5370,6 @@
           "type": "object"
         },
         {
-          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "object",
@@ -5393,7 +5401,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -5418,7 +5427,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5442,7 +5452,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -5467,7 +5478,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5491,7 +5503,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -5516,7 +5529,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5540,7 +5554,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -5565,7 +5580,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5589,7 +5605,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -5614,7 +5631,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5638,7 +5656,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -5663,7 +5682,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5687,7 +5707,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -5712,7 +5733,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
@@ -5736,7 +5758,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             },
             "value": {
@@ -5761,7 +5784,8 @@
             },
             "schema_version": {
               "format": "uint32",
-              "minimum": 0,
+              "maximum": 1,
+              "minimum": 1,
               "type": "integer"
             }
           },
