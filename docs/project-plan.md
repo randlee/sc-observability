@@ -122,6 +122,18 @@ qualification (B.4a), then Python integration/async support and binding release.
 Go remains future scope. The proposal does not reopen the accepted
 Phase A closure or claim that BTIT's currently open review findings are resolved.
 
+### B.3a — TypeScript/Tauri bindings
+
+The TypeScript/Tauri binding sprint is tracked in
+[`plans/phase-b/sprint-b-3a-typescript.md`](./plans/phase-b/sprint-b-3a-typescript.md)
+and its completion handoff is
+[`plans/phase-b/handoff-b-3a.md`](./plans/phase-b/handoff-b-3a.md). The
+correction branch consumes the canonical B.3 schema and shared B.3b runtime,
+provides a generated nonthrowing TypeScript client, and keeps Tauri host
+ownership of lifecycle, policy, provenance and level changes. Locked schema,
+package, adapter and example checks are run by the three-platform workflow;
+publication and downstream B.4 integration remain separately gated.
+
 ### B.P1 — Per-logger runtime level core
 
 B.P1 implements the additive neutral runtime-level state, weak ownership, and
