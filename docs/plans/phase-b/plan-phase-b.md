@@ -9,9 +9,10 @@ guideline_commit: 3d9ddbb0e8d9079a8efa0c471f5b5d8be549a878
 # Phase B — Publish the log bridge and add language bindings
 
 This proposal keeps B.1 as the first migration sprint: copy the corrected generic
-BTIT code; publish the Rust crates so BTIT can consume them later; then add
-TypeScript and Python bindings. Go is future scope. This document is a routing
-index; each linked sprint is authoritative for its own deliverables, acceptance,
+BTIT code; qualify and stage the Rust crates so BTIT and later sprints can
+consume them, with B.7 alone publishing at phase end; then add TypeScript and
+Python bindings. Go is future scope. This document is a routing index; each
+linked sprint is authoritative for its own deliverables, acceptance,
 validation, and non-closure. No implementation or publication is authorized by
 this proposal's status.
 
@@ -23,7 +24,7 @@ entry assumptions. They must complete before the first migration sprint B.1.
 | Sprint | Production deliverable | Authoritative plan |
 | --- | --- | --- |
 | B.P1 | Additive per-logger runtime level state, owner capability and admission outcomes | [Core runtime](sprint-b-p1-runtime-core.md) |
-| B.P2 | Published core capability with registry-consumer proof | [Prerequisite release](sprint-b-p2-runtime-publish.md) |
+| B.P2 | Staged/qualified core capability with two-leg consumer proof; B.7 alone publishes | [Prerequisite qualification](sprint-b-p2-runtime-publish.md) |
 | B.P3 | Accepted BTIT bridge integration and critical-review closure | [BTIT integration](sprint-b-p3-runtime-btit.md) |
 
 ## Migration, error evolution and binding sprints
@@ -36,7 +37,7 @@ entry assumptions. They must complete before the first migration sprint B.1.
 | B.1c | Additive observation runtime methods | [Observation errors](sprint-b-1c-observation-errors.md) |
 | B.1d | Additive telemetry runtime methods | [Telemetry errors](sprint-b-1d-telemetry-errors.md) |
 | B.1e | Warning-only legacy migration and downstream adoption guidance | [Error adoption](sprint-b-1e-error-adoption.md) |
-| B.2 | Published Rust bridge and macros, verified from crates.io | [Rust publication](sprint-b-2-publish-rust.md) |
+| B.2 | Staged/qualified Rust bridge and macros with candidate-consumer proof; B.7 alone publishes | [Rust qualification](sprint-b-2-publish-rust.md) |
 | B.3 | Neutral DTO crate, checked conversions, schema and conformance fixtures | [Shared schema](sprint-b-3-schema.md) |
 | B.3b | Shared native core/bridge backends, conversions and bounded operation coordinator | [Native runtime](sprint-b-3b-native-runtime.md) |
 | B.3a | Generated TypeScript client, Tauri host adapter and real IPC consumer | [TypeScript](sprint-b-3a-typescript.md) |
@@ -61,10 +62,11 @@ The proposal is not yet an accepted freeze. No backward-compatibility/semver
 constraint from BTIT's unpublished API applies to this initial destination API.
 
 The authoritative [B.1 entry gate](sprint-b-1-copy.md#goal-and-entry-gate)
-defines contract approval, published runtime capability, accepted BTIT
+defines contract approval, B.P2's staged runtime capability, accepted BTIT
 implementation/review and immutable source provenance. B.1 is a mechanical
 copy of that accepted implementation; all foreseeable bridge API changes are
-implemented in BTIT before migration. B.2 publishes the companion pair.
+implemented in BTIT before migration. B.2 qualifies/stages the companion pair;
+B.7 alone publishes it.
 Subsequent core error evolution and language bindings preserve the accepted
 bridge public contract. Unforeseen future changes remain possible but are not
 a planned redesign sprint.
@@ -91,7 +93,8 @@ failures/adapters, logger, observation and telemetry entry points, then the
 warning-only migration and adoption guide. Existing published signatures,
 structs, traits, enum exhaustiveness, codes and serialized forms remain intact.
 New methods and types coexist with old interfaces; no planned removal or 2.0
-conversion is authorized. B.2 publishes the completed additive migration.
+conversion is authorized. B.2 qualifies/stages the completed additive
+migration; B.7 alone publishes it.
 
 The plan contains 18 bounded sprint records including the three pre-copy
 prerequisites. The identifiers retain existing B.1–B.7 references; scope is split
@@ -171,17 +174,17 @@ BTIT's later switch to the published crates is a separate BTIT change.
 
 | Relation | Rationale |
 | --- | --- |
-| B.P1 must_follow accepted runtime contract | Implement a reviewed additive core surface |
-| B.P2 must_follow B.P1 | Publish the tested core capability |
-| B.P3 must_follow B.P2 and accepted target bridge contract | BTIT integrates released core behavior before source acceptance |
+| B.P1 must_follow the execution-authorized runtime contract (public acceptance owner-deferred to Phase B completion) | Implement a reviewed additive core surface without claiming runtime acceptance |
+| B.P2 must_follow B.P1 | Qualify and stage the tested core capability; B.7 alone publishes |
+| B.P3 must_follow B.P2 and accepted target bridge contract | BTIT integrates B.P2's staged core behavior before source acceptance |
 | B.1 must_follow B.P3 | Copy only the accepted implementation of the sc-observability-owned locked target |
 | B.1a must_follow B.1 | Verify additive core error evolution against the copied bridge contract |
 | B.1b must_follow B.1a | Logger methods consume neutral failures and adapters |
 | B.1c must_follow B.1b | Observation integration uses the completed logger compatibility path |
 | B.1d must_follow B.1c | Telemetry composes the completed observation/runtime adapters |
 | B.1e must_follow B.1d | Deprecate only after all replacements and upgrade fixtures work |
-| B.2 must_follow B.1e | Publish the improved core API and warning-only compatibility path with the companion release |
-| B.3 must_follow B.2 | Implement neutral DTO conversions against the published Rust baseline |
+| B.2 must_follow B.1e | Qualify and stage the improved core API and warning-only compatibility path with the companion release; B.7 alone publishes |
+| B.3 must_follow B.2 | Implement neutral DTO conversions against B.2's staged Rust baseline |
 | B.3b must_follow B.3 | Implement native backends against the accepted DTO contract |
 | B.3a must_follow B.3b | Consume shared native runtime in TypeScript/Tauri and real IPC tests |
 | B.4 must_follow B.3a | Reuse schema and proven cross-language conformance evidence |

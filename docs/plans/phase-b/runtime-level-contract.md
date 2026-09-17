@@ -8,16 +8,18 @@ issue: 97
 ## Ownership and sequencing
 
 This is an explicit prerequisite to B.1, not a post-copy implementation task.
-sc-observability implements, reviews and publishes the additive core capability
-first. BTIT implements the corresponding bridge API and behavior against that
-released core and the accepted target contract, closes its critical review, and
-hands off the working reference. B.1 remains the first migration sprint and
-copies it mechanically. Do not mark this prerequisite complete from plan approval
-alone; record the core release and accepted BTIT source in the import gate.
+sc-observability implements, reviews and stages the additive core capability
+first; B.P2 qualifies those immutable staged artifacts, and B.7 alone performs
+live publication. BTIT implements the corresponding bridge API and behavior
+against that staged core and the accepted target contract, closes its critical
+review, and hands off the working reference. B.1 remains the first migration
+sprint and copies it mechanically. Do not mark this prerequisite complete from
+plan approval alone; record the B.P2 staged qualification and accepted BTIT
+source in the import gate.
 
 Execution ownership and closure are defined once in the prerequisite sprints:
 [B.P1 core implementation](sprint-b-p1-runtime-core.md),
-[B.P2 core publication](sprint-b-p2-runtime-publish.md), and
+[B.P2 core qualification](sprint-b-p2-runtime-publish.md), and
 [B.P3 BTIT integration](sprint-b-p3-runtime-btit.md).
 This document is the normative signature/behavior reference, not an additional
 sprint or a separate closure checklist. B.3 owns the shared wire projection; B.3b owns native backends and conversions;

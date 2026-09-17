@@ -13,7 +13,7 @@ Owner: sc-observability core team. Implement issue #97's core capability while
 preserving every published interface. This is a pre-copy prerequisite; B.1
 remains the first migration sprint. `must_follow` reviewed acceptance of the
 [runtime contract](runtime-level-contract.md). B.P2 `must_follow` B.P1 because
-it publishes these exact artifacts. No parallel-safe public-contract work is
+it qualifies and stages these exact artifacts; B.7 alone publishes them. No parallel-safe public-contract work is
 claimed. Pushed parent development triggers merge-forward before each child
 round; parent PR merges before child completion.
 
@@ -116,4 +116,5 @@ None. Replace internal config.level filtering in place; remove no public API.
 
 No publication, BTIT bridge implementation, DTO/bindings, settings loader,
 legacy deprecation (#92), automatic expiry or sc-runtime topology. B.P2 owns
-publication; B.P3 owns BTIT integration acceptance.
+qualification/staging; B.P3 owns BTIT integration acceptance; B.7 alone
+publishes at phase end.

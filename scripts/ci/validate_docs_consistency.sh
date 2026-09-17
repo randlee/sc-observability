@@ -43,6 +43,8 @@ for req_id in required_ids:
 print("docs consistency validation passed")
 PY
 
+python3 scripts/ci/check_phase_b_publication_claims.py
+
 for crate in sc-observability-types sc-observability sc-observe sc-observability-otlp; do
   cargo rustdoc -p "$crate" -- -Dmissing-docs >/dev/null
 done

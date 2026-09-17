@@ -111,7 +111,8 @@ and receives its additive typed counterpart.
 Public query/follow/health/shutdown methods retain their signatures and are not
 deprecated: they already use named outcomes or typestate. In particular,
 `Logger<Running>::shutdown(self) -> Logger<Stopped>` is not changed to Result.
-The new runtime-level owner methods remain on their accepted B.P1 contract.
+The new runtime-level owner methods remain on the B.P1 runtime contract; its
+public acceptance remains owner-deferred to Phase B completion.
 
 ## Acceptance criteria (authoritative)
 
