@@ -102,9 +102,10 @@ The implementation correction pass is on
 `feature/phase-b-1e-migration-validation`, based on and merged with the active
 QA1 parent `origin/fix/phase-b-1ab-qa1` at `4299e25b7506a6e1d0852a2f3784d954a796329f`
 before final validation. The initial correction source/fixture commit is
-`331a0db`; the item/span and adapter-failure correction is `dc31ae7`. The
-integrated parent merge head at this pass is `f79c4eb`, and the current
-validated child head is `dc31ae7`. The child
+`331a0db`; the item/span and adapter-failure correction is `dc31ae7`; the
+exact-diagnostic and post-import correction is `9854270`; the final exact
+source-note correction is `1f69cc5`. The integrated parent merge head at this
+pass is `f79c4eb`, and the current validated child head is `1f69cc5`. The child
 activates all nine wrapper warnings and 20 mapped method warnings at
 `since = "1.4.0"`, while retaining the three supported method exemptions and
 `Logger::emit` at its existing `since = "1.2.0"`. Ordinary observation routing
@@ -121,9 +122,12 @@ The M01–M05 correction evidence is:
   `since = "1.4.0"`) to each of exactly 29 targets, then binds each Cargo
   diagnostic to its expected deprecated item and exact `src/main.rs` fixture
   span. It requires one `deprecated` code and span, rejects secondary spans,
-  unexpected notes/warnings, and uses real predicates for misplaced attributes,
-  wrong versions/notes, missing/extra diagnostics, wrong spans and broad
-  allowances.
+  unexpected notes/warnings, compares both the parsed complete source note
+  literal and complete compiler migration note rather than substrings, and
+  compares the exact expected span multiset rather than only an aggregate
+  note count. Real predicate controls cover misplaced attributes, wrong
+  versions/notes, appended source/compiler notes, duplicate allowed-line
+  diagnostics, missing/extra diagnostics, wrong spans and broad allowances.
 - M02: the legacy fixture exercises all nine wrapper names, every mapped
   method, explicit `InitError` tuple/field access, and the exempt owner
   constructors; the deny-deprecated fixture exercises both owner constructors
@@ -137,7 +141,12 @@ The M01–M05 correction evidence is:
   `InitError` golden and span path.
 - M04: ordinary production projection/lifecycle paths call typed APIs; copied
   bridge signatures remain unchanged and its compatibility allowances are
-  narrow, named and reason-bearing.
+  narrow, named and reason-bearing. The historical
+  `import-provenance.json` remains unchanged; the separate
+  `post-import-adaptations.json` record pins the three copied bridge files'
+  before/after blobs and exact allowance blocks. The importer verifies that
+  removing only those blocks reconstructs the accepted BTIT source byte for
+  byte, rejecting undeclared, body or signature changes.
 - M05: the local implementation checklist and this handoff record the second
   verification pass; B.2 qualification and B.7 publication remain pending.
 
@@ -146,6 +155,13 @@ The implementation evidence is:
 ```text
 python3 scripts/ci/validate_error_migration.py
 B.1e migration validation: PASS (source contract, JSON diagnostics, and all fixtures)
+python3 scripts/ci/validate_error_migration.py (second verification pass)
+B.1e migration validation: PASS (source contract, JSON diagnostics, and all fixtures)
+python3 -m unittest discover -s scripts/ci/tests -p 'test_validate_log_import.py'
+Ran 51 tests, OK (including post-import warning-adaptation acceptance and
+body/signature/undeclared-change rejection)
+python3 scripts/ci/validate_log_import.py --source-repo /Users/randlee/github/beads-task-issue-tracker --post-import-adaptations docs/plans/phase-b/post-import-adaptations.json
+B.1 import provenance and post-import warning-only adaptations are coherent
 cargo check --workspace --message-format=short
 PASS; remaining warnings are confined to the copied sc-observability-log bridge
 cargo fmt --all -- --check
@@ -164,25 +180,37 @@ fixture allowances. Every fixture clean/check/run invocation uses `--locked`.
 B.2 still owns qualification/staging and B.7 owns
 publication; no removal schedule or major release is introduced.
 
+Completeness PASS was received from aobs for this implementation layer at
+`1f69cc5239de585e613f7c49bb162b1d1f08066b` (`01M2QA3XBSYF9NY3XXCK6N54TB`).
+Consolidated QA and B.7 publication remain separate follow-on work.
+
 ## Integration-layer status addendum (feature/phase-b-1-integration)
 
-Confirmed against merged source at `68f1443` (the further-integrated head
+Confirmed against merged source at `d9ff369` (the further-integrated head
 merged into the integration branch): the bridge's narrow, named, reason-
 bearing `#[allow(deprecated, reason = ...)]` annotations are landed in
 `control.rs`, `handle.rs`, and `mapping.rs`, and workspace clippy passes
 clean, single-step, `-D warnings`, with no bridge-wide suppression.
 
-One gap found while verifying this against the actual BTIT provenance proof
-(not just clippy): `python3 scripts/ci/validate_log_import.py --source-repo
-<BTIT repo>` reports "unexplained content difference" for `control.rs`,
-because `import-provenance.json`'s `adaptations` array and
-`validate_log_import.py`'s `_KIND_LINE_PATTERNS` were not extended with a new
-kind covering these lint-attribute lines, so they read as undocumented drift
-against the pinned source bytes rather than a recorded adaptation. This
-addendum's "recorded here as compatibility evidence, not as provenance
-rewrites" line above describes the intent correctly, but the provenance
-manifest itself does not yet reflect that intent. Reported to lobs
-(01M2Q8NKYWG91F234H9PJWSDFF) for the adaptation-kind extension and provenance
-entries; not fixed by the integration layer since it is warning-allowance/
-migration-source scope. B1I-C01 (the integration layer's fix-round finding
-requesting exactly this narrow mechanism) remains open pending that landing.
+The provenance gap this addendum previously reported against the BTIT
+provenance proof (not just clippy) is now resolved. Rather than extending
+`import-provenance.json`'s own `adaptations`/`_KIND_LINE_PATTERNS` mechanism,
+lobs landed a separate `docs/plans/phase-b/post-import-adaptations.json`
+manifest plus a `--post-import-adaptations` argument to
+`validate_log_import.py` (commit `859e95b`), and a follow-up predicate
+correction (`1f69cc5`) requiring an exact source deprecation-note match. This
+keeps the original `import-provenance.json` historical import manifest
+untouched, matching B1I-C01's own wording ("preserve historical import
+manifest") and aobs's explicit instruction to record post-import warning
+edits separately. Re-run directly on this integration branch:
+
+```text
+python3 scripts/ci/validate_log_import.py --source-repo /Users/randlee/github/beads-task-issue-tracker --post-import-adaptations docs/plans/phase-b/post-import-adaptations.json
+B.1 import provenance and post-import warning-only adaptations are coherent
+```
+
+B1I-C01 is resolved: the bridge-wide `-A deprecated` CI workaround stays
+removed, workspace clippy passes clean with only narrow named allowances, and
+the provenance proof now passes against the pinned import bytes plus the
+separately recorded post-import adaptations. Independent completeness PASS
+for the integration layer as a whole remains pending aobs's own review.
