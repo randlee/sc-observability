@@ -1,0 +1,3 @@
+BINDING_RUNTIME_DEPENDENCIES_PASS sc-observability,sc-observability-dto,sc-observability-log,sc-observability-types
+BINDING_BOUNDARY_NEGATIVES_PASS aliases+targets tauri+pyo3
+BINDING_RUNTIME_COMPLETE_GATE_PASS three platforms debug+release and isolated packaged consumer

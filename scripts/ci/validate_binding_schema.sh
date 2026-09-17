@@ -18,6 +18,7 @@ cargo test --locked --manifest-path bindings/schema-generator/Cargo.toml
 cargo run --locked --manifest-path bindings/schema-generator/Cargo.toml --bin sc-observability-schema -- \
   --output bindings/schema/v1.json --errors-output bindings/schema/errors-v1.json --check
 "$python_bin" scripts/ci/validate_binding_generators.py
+"$python_bin" -m unittest discover -s scripts/ci/tests -p test_binding_source_bundle.py
 "$python_bin" scripts/ci/validate_binding_artifacts.py
 binding_bundle_dir="$(mktemp -d -t binding-source-bundle.XXXXXX)/artifact"
 trap 'rm -rf "$(dirname "$binding_bundle_dir")"' EXIT

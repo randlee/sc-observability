@@ -251,8 +251,8 @@ impl Coordinator {
         &self,
         query: dto::LogQueryDto,
     ) -> Result<Operation<LogSnapshotDto>, Failure> {
-        let query = dto::to_core_query(query)?;
         let _admission = self.enter()?;
+        let query = dto::to_core_query(query)?;
         let mut queue = lock(&self.queue);
         if queue.query {
             return Err(error::full(
@@ -268,8 +268,8 @@ impl Coordinator {
         Ok(operation)
     }
     pub(crate) fn flush(&self, timeout: Duration) -> Result<Operation<CompletionDto>, Failure> {
-        error::duration(timeout)?;
         let _admission = self.enter()?;
+        error::duration(timeout)?;
         let mut queue = lock(&self.queue);
         if queue.flush {
             return Err(error::full(

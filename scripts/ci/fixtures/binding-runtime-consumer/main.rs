@@ -64,6 +64,7 @@ fn exercise(backend: &impl HostLoggingBackend) {
         "sc_observability.binding.language",
         "sc_observability.binding.other",
         "sc_observability::binding::language",
+        "sc observability.binding.language",
     ] {
         let mut forged = event();
         forged.fields.insert(
@@ -74,6 +75,25 @@ fn exercise(backend: &impl HostLoggingBackend) {
         );
         assert!(matches!(
             backend.try_log(forged, ProducerOrigin::RustHost),
+            Err(Failure::Validation { .. })
+        ));
+        let mut nested = event();
+        nested.fields.insert(
+            "nested".into(),
+            dto::ValueDto::Array {
+                value: vec![dto::ValueDto::Object {
+                    value: [(
+                        key.into(),
+                        dto::ValueDto::String {
+                            value: "forged".into(),
+                        },
+                    )]
+                    .into(),
+                }],
+            },
+        );
+        assert!(matches!(
+            backend.try_log(nested, ProducerOrigin::TauriFrontend),
             Err(Failure::Validation { .. })
         ));
     }
@@ -125,13 +145,24 @@ fn bridge_roundtrip_preserves_host_ownership() {
 struct Root(std::path::PathBuf);
 impl Root {
     fn new() -> Self {
-        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let path = std::env::temp_dir().join(format!("binding-consumer-{}-{unique}", std::process::id()));
-        std::fs::create_dir(&path).unwrap(); Self(path)
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path =
+            std::env::temp_dir().join(format!("binding-consumer-{}-{unique}", std::process::id()));
+        std::fs::create_dir(&path).unwrap();
+        Self(path)
     }
-    fn path(&self) -> &std::path::Path { &self.0 }
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
 }
-impl Drop for Root { fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); } }
+impl Drop for Root {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
 fn main() {
     core_roundtrip_and_surviving_read_handles();
     bridge_roundtrip_preserves_host_ownership();

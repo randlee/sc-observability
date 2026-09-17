@@ -64,6 +64,7 @@ fn exercise(backend: &impl HostLoggingBackend) {
         "sc_observability.binding.language",
         "sc_observability.binding.other",
         "sc_observability::binding::language",
+        "sc observability.binding.language",
     ] {
         let mut forged = event();
         forged.fields.insert(
@@ -74,6 +75,25 @@ fn exercise(backend: &impl HostLoggingBackend) {
         );
         assert!(matches!(
             backend.try_log(forged, ProducerOrigin::RustHost),
+            Err(Failure::Validation { .. })
+        ));
+        let mut nested = event();
+        nested.fields.insert(
+            "nested".into(),
+            dto::ValueDto::Array {
+                value: vec![dto::ValueDto::Object {
+                    value: [(
+                        key.into(),
+                        dto::ValueDto::String {
+                            value: "forged".into(),
+                        },
+                    )]
+                    .into(),
+                }],
+            },
+        );
+        assert!(matches!(
+            backend.try_log(nested, ProducerOrigin::TauriFrontend),
             Err(Failure::Validation { .. })
         ));
     }

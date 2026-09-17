@@ -126,6 +126,17 @@ B.3a implementation now includes the generated TypeScript package, isolated
 Tauri adapter, IPC consumer example, and binding validation handoff; its sprint
 record remains the source of platform qualification and merge evidence.
 
+### B.3b — Shared native binding runtime
+
+Implementation and developer qualification are complete on
+`feature/phase-b-3b-native-runtime` (worktree
+`/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime`).
+The [handoff](plans/phase-b/handoff-b-3b.md) records both native backends,
+bounded helpers/operations/observers, all 26 contract cases in debug/release on
+Linux/macOS/Windows, and the isolated packaged consumer. Public API scope is
+independently reviewed; consolidated QA, owner-deferred contract acceptance and
+B.7 publication remain separate gates.
+
 ### B.P1 — Per-logger runtime level core
 
 B.P1 implements the additive neutral runtime-level state, weak ownership, and
