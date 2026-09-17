@@ -217,8 +217,8 @@ fn unavailable_level_diagnostic(message: &str) -> OperationDiagnostic {
     }
 }
 
-fn unavailable_event_error(message: &str) -> EventError {
-    EventError(Box::new(ErrorContext::new(
+fn unavailable_event_failure(message: &str) -> EventFailure {
+    EventFailure::from_context(Box::new(ErrorContext::new(
         sc_observability_types::error_codes::LEVEL_STATE_UNAVAILABLE,
         message,
         Remediation::not_recoverable("inspect state and create a new logger"),
@@ -514,7 +514,7 @@ impl Logger<Running> {
                 .flush_errors_total
                 .fetch_add(1, Ordering::SeqCst);
             self.record_last_error(DiagnosticSummary::from(error.diagnostic()));
-            return Err(error.into());
+            return Err(error);
         }
         Ok(())
     }
@@ -582,14 +582,13 @@ impl Logger<Running> {
     }
 
     fn prepare_event_typed(&self, event: LogEvent) -> Result<Option<LogEvent>, EventFailure> {
-        validate_event(&event, &self.config.service_name).map_err(EventFailure::from)?;
+        validate_event(&event, &self.config.service_name)?;
         // Filtering and mutation share this short critical section. Redaction,
         // queue waits, and writer work are intentionally outside it.
         let control = self
             .level_control
             .lock()
-            .map_err(|_| unavailable_event_error("logger level state is unavailable"))
-            .map_err(EventFailure::from)?;
+            .map_err(|_| unavailable_event_failure("logger level state is unavailable"))?;
         if !level_enabled(control.state.effective_level, event.level) {
             return Ok(None);
         }
@@ -904,27 +903,25 @@ fn level_enabled(
     }
 }
 
-fn validate_event(event: &LogEvent, expected_service: &ServiceName) -> Result<(), EventError> {
+fn validate_event(event: &LogEvent, expected_service: &ServiceName) -> Result<(), EventFailure> {
     if event.version.as_str() != sc_observability_types::constants::OBSERVATION_ENVELOPE_VERSION {
-        return Err(EventError(Box::new(ErrorContext::new(
-            error_codes::LOGGER_INVALID_EVENT,
+        return Err(EventFailure::invalid_event(
             "log event version is invalid",
             Remediation::recoverable(
                 "emit an observation v1 log event",
                 ["recreate the event with the current contract"],
             ),
-        ))));
+        ));
     }
 
     if &event.service != expected_service {
-        return Err(EventError(Box::new(ErrorContext::new(
-            error_codes::LOGGER_INVALID_EVENT,
+        return Err(EventFailure::invalid_event(
             "log event service does not match logger service",
             Remediation::recoverable(
                 "emit the event with the logger service name",
                 ["rebuild the event before emitting"],
             ),
-        ))));
+        ));
     }
 
     Ok(())

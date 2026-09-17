@@ -6,9 +6,10 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use sc_observability_types::typed::ClassifiedError;
+use sc_observability_types::typed::FlushFailure;
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, ErrorContext, FileCount, FlushError,
-    MaintenanceHealthReport, MaintenanceWorkerState, Remediation, Timestamp, WriterState,
+    DiagnosticInfo, DiagnosticSummary, ErrorContext, FileCount, MaintenanceHealthReport,
+    MaintenanceWorkerState, Remediation, Timestamp, WriterState,
 };
 
 use crate::sinks::JsonlFileSink;
@@ -149,32 +150,43 @@ impl WriterRuntime {
         self.writer_tracker.record_queue_full_drop()
     }
 
-    pub(crate) fn flush(&self) -> Result<(), FlushError> {
+    pub(crate) fn flush(&self) -> Result<(), FlushFailure> {
         let (tx, rx) = mpsc::channel();
         self.sender.send(WriterCommand::Flush(tx)).map_err(|_| {
-            FlushError(Box::new(crate::writer_degraded_error_context(
+            FlushFailure::writer_degraded(
                 "writer thread is not available for flush",
-            )))
+                Remediation::recoverable(
+                    "inspect logger writer-thread health",
+                    [
+                        "inspect logger.health().writer_state",
+                        "inspect logger.health().last_writer_error",
+                    ],
+                ),
+            )
         })?;
         match rx.recv() {
             Ok(Ok(())) => Ok(()),
-            Ok(Err(summary)) => Err(FlushError(Box::new(
-                ErrorContext::new(
-                    error_codes::LOGGER_FLUSH_FAILED,
-                    "writer flush failed",
-                    Remediation::recoverable(
-                        "inspect the writer-thread flush failure",
-                        [
-                            "inspect logger.health().last_writer_error",
-                            "retry the flush after the writer recovers",
-                        ],
-                    ),
-                )
-                .cause(summary.message.clone()),
-            ))),
-            Err(_) => Err(FlushError(Box::new(crate::writer_degraded_error_context(
+            Ok(Err(summary)) => Err(FlushFailure::logger_flush(
+                "writer flush failed",
+                Remediation::recoverable(
+                    "inspect the writer-thread flush failure",
+                    [
+                        "inspect logger.health().last_writer_error",
+                        "retry the flush after the writer recovers",
+                    ],
+                ),
+            )
+            .cause(summary.message.clone())),
+            Err(_) => Err(FlushFailure::writer_degraded(
                 "writer thread disconnected during flush",
-            )))),
+                Remediation::recoverable(
+                    "inspect logger writer-thread health",
+                    [
+                        "inspect logger.health().writer_state",
+                        "inspect logger.health().last_writer_error",
+                    ],
+                ),
+            )),
         }
     }
 
