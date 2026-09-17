@@ -775,6 +775,8 @@ mod tests {
         TraceContext, TraceId,
     };
     use serde_json::Map;
+    use std::sync::mpsc;
+    use std::time::Duration;
 
     #[derive(Debug, Clone)]
     struct AgentEvent {
@@ -1323,78 +1325,141 @@ mod tests {
         assert_eq!(runtime.health().state, ObservationHealthState::Unavailable);
     }
 
+    struct BlockingFlushSink {
+        armed: Arc<AtomicBool>,
+        entered: mpsc::Sender<()>,
+        // MUTEX: LogSink is Sync; the sole writer owns receives on this
+        // test-control channel. A timeout/disconnect releases failed tests.
+        release: Mutex<mpsc::Receiver<()>>,
+    }
+    impl LogSink for BlockingFlushSink {
+        fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
+            Ok(())
+        }
+        fn flush(&self) -> Result<(), LogSinkError> {
+            if self.armed.swap(false, Ordering::SeqCst) {
+                let _ = self.entered.send(());
+                let _ = self
+                    .release
+                    .lock()
+                    .expect("release lock")
+                    .recv_timeout(Duration::from_secs(5));
+            }
+            Err(LogSinkError(Box::new(ErrorContext::new(
+                sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                "controlled flush failure",
+                Remediation::not_recoverable("test fixture"),
+            ))))
+        }
+        fn health(&self) -> SinkHealth {
+            SinkHealth {
+                name: sink_name("controlled-flush"),
+                state: SinkHealthState::DegradedDropping,
+                last_error: None,
+            }
+        }
+    }
+    struct ShutdownFixture {
+        runtime: Arc<Observability>,
+        before: sc_observability_types::LoggingHealthReport,
+        entered_rx: mpsc::Receiver<()>,
+        release_tx: mpsc::Sender<()>,
+    }
+
+    fn shutdown_fixture() -> ShutdownFixture {
+        let armed = Arc::new(AtomicBool::new(false));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let mut config = LoggerConfig::default_for(
+            ServiceName::new("obs-app").expect("service"),
+            temp_path("controlled-shutdown"),
+        );
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let mut builder = Logger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink {
+            armed: armed.clone(),
+            entered: entered_tx,
+            release: Mutex::new(release_rx),
+        })));
+        let logger = builder.build();
+        logger
+            .flush_typed()
+            .expect_err("seed logging failure counter");
+        let before = logger.health();
+        assert_eq!(before.flush_errors_total, 1);
+        assert!(before.last_error.is_some());
+        let runtime = Arc::new(Observability {
+            logger: Mutex::new(LoggerHandle::Running(logger)),
+            logger_changed: Condvar::new(),
+            shutdown: AtomicBool::new(false),
+            subscriber_registrations: Vec::new(),
+            projection_registrations: Vec::new(),
+            observability_health_provider: None,
+            runtime: RuntimeState::default(),
+        });
+        armed.store(true, Ordering::SeqCst);
+        ShutdownFixture {
+            runtime,
+            before,
+            entered_rx,
+            release_tx,
+        }
+    }
+
+    fn assert_retained_shutdown_health(
+        report: ObservabilityHealthReport,
+        before: &sc_observability_types::LoggingHealthReport,
+    ) {
+        assert_eq!(report.state, ObservationHealthState::Unavailable);
+        let after = report.logging.expect("logging health retained");
+        assert_eq!(after.flush_errors_total, before.flush_errors_total);
+        assert_eq!(after.dropped_events_total, before.dropped_events_total);
+        assert_eq!(after.queue_capacity, before.queue_capacity);
+        assert_eq!(
+            after.last_error.as_ref().expect("retained diagnostic").code,
+            before
+                .last_writer_error
+                .as_ref()
+                .expect("original writer diagnostic")
+                .code
+        );
+        let final_writer = after
+            .last_writer_error
+            .as_ref()
+            .expect("final writer diagnostic");
+        let original_writer = before
+            .last_writer_error
+            .as_ref()
+            .expect("original writer diagnostic");
+        assert_eq!(final_writer.code, original_writer.code);
+        assert_eq!(final_writer.message, original_writer.message);
+        assert!(final_writer.at >= original_writer.at);
+        assert_eq!(after.sink_statuses, before.sink_statuses);
+    }
+
+    fn assert_immediate_repeated_shutdown(runtime: &Arc<Observability>) {
+        let (repeat_tx, repeat_rx) = mpsc::channel();
+        let repeated_runtime = runtime.clone();
+        let repeated = std::thread::spawn(move || {
+            let _ = repeat_tx.send(repeated_runtime.shutdown_typed());
+        });
+        repeat_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("repeated shutdown is immediate")
+            .expect("success");
+        repeated.join().expect("repeated shutdown thread");
+    }
+
     #[test]
     fn in_flight_shutdown_preserves_flush_health_and_repeated_shutdown() {
-        use std::sync::mpsc;
-        use std::time::Duration;
-
-        struct BlockingFlushSink {
-            armed: Arc<AtomicBool>,
-            entered: mpsc::Sender<()>,
-            // MUTEX: LogSink is Sync; the sole writer owns receives on this
-            // test-control channel. A timeout/disconnect releases failed tests.
-            release: Mutex<mpsc::Receiver<()>>,
-        }
-        impl LogSink for BlockingFlushSink {
-            fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
-                Ok(())
-            }
-            fn flush(&self) -> Result<(), LogSinkError> {
-                if self.armed.swap(false, Ordering::SeqCst) {
-                    let _ = self.entered.send(());
-                    let _ = self
-                        .release
-                        .lock()
-                        .expect("release lock")
-                        .recv_timeout(Duration::from_secs(5));
-                }
-                Err(LogSinkError(Box::new(ErrorContext::new(
-                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                    "controlled flush failure",
-                    Remediation::not_recoverable("test fixture"),
-                ))))
-            }
-            fn health(&self) -> SinkHealth {
-                SinkHealth {
-                    name: sink_name("controlled-flush"),
-                    state: SinkHealthState::DegradedDropping,
-                    last_error: None,
-                }
-            }
-        }
         for legacy in [false, true] {
-            let armed = Arc::new(AtomicBool::new(false));
-            let (entered_tx, entered_rx) = mpsc::channel();
-            let (release_tx, release_rx) = mpsc::channel();
-            let mut config = LoggerConfig::default_for(
-                ServiceName::new("obs-app").expect("service"),
-                temp_path("controlled-shutdown"),
-            );
-            config.enable_file_sink = false;
-            config.enable_console_sink = false;
-            let mut builder = Logger::builder(config).expect("logger builder");
-            builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink {
-                armed: armed.clone(),
-                entered: entered_tx,
-                release: Mutex::new(release_rx),
-            })));
-            let logger = builder.build();
-            logger
-                .flush_typed()
-                .expect_err("seed logging failure counter");
-            let before = logger.health();
-            assert_eq!(before.flush_errors_total, 1);
-            assert!(before.last_error.is_some());
-            let runtime = Arc::new(Observability {
-                logger: Mutex::new(LoggerHandle::Running(logger)),
-                logger_changed: Condvar::new(),
-                shutdown: AtomicBool::new(false),
-                subscriber_registrations: Vec::new(),
-                projection_registrations: Vec::new(),
-                observability_health_provider: None,
-                runtime: RuntimeState::default(),
-            });
-            armed.store(true, Ordering::SeqCst);
+            let ShutdownFixture {
+                runtime,
+                before,
+                entered_rx,
+                release_tx,
+            } = shutdown_fixture();
             let (shutdown_tx, shutdown_rx) = mpsc::channel();
             let shutdown_runtime = runtime.clone();
             let shutdown = std::thread::spawn(move || {
@@ -1419,17 +1484,7 @@ mod tests {
                 runtime.emit(observation(true)),
                 Err(ObservationError::Shutdown)
             ));
-            let (repeat_tx, repeat_rx) = mpsc::channel();
-            let repeated_runtime = runtime.clone();
-            let repeated = std::thread::spawn(move || {
-                let _ = repeat_tx.send(repeated_runtime.shutdown_typed());
-            });
-            repeat_rx
-                .recv_timeout(Duration::from_secs(1))
-                .expect("repeated shutdown is immediate")
-                .expect("success");
-            repeated.join().expect("repeated shutdown thread");
-
+            assert_immediate_repeated_shutdown(&runtime);
             let (started_tx, started_rx) = mpsc::channel();
             let (flush_tx, flush_rx) = mpsc::channel();
             let flush_runtime = runtime.clone();
@@ -1484,31 +1539,7 @@ mod tests {
             let report = health_rx
                 .recv_timeout(Duration::from_secs(2))
                 .expect("bounded health completion");
-            assert_eq!(report.state, ObservationHealthState::Unavailable);
-            let after = report.logging.expect("logging health retained");
-            assert_eq!(after.flush_errors_total, before.flush_errors_total);
-            assert_eq!(after.dropped_events_total, before.dropped_events_total);
-            assert_eq!(after.queue_capacity, before.queue_capacity);
-            assert_eq!(
-                after.last_error.as_ref().expect("retained diagnostic").code,
-                before
-                    .last_writer_error
-                    .as_ref()
-                    .expect("original writer diagnostic")
-                    .code
-            );
-            let final_writer = after
-                .last_writer_error
-                .as_ref()
-                .expect("final writer diagnostic");
-            let original_writer = before
-                .last_writer_error
-                .as_ref()
-                .expect("original writer diagnostic");
-            assert_eq!(final_writer.code, original_writer.code);
-            assert_eq!(final_writer.message, original_writer.message);
-            assert!(final_writer.at >= original_writer.at);
-            assert_eq!(after.sink_statuses, before.sink_statuses);
+            assert_retained_shutdown_health(report, &before);
             for thread in [shutdown, flush, health] {
                 thread.join().expect("completed worker");
             }
