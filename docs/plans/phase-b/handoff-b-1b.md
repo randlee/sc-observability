@@ -23,7 +23,7 @@ surfaces, admission/filtering semantics, and bridge API are unchanged.
 
 - PASS: `cargo test --locked -p sc-observability --all-targets`
 - PASS: `cargo test --locked -p sc-observability --all-targets --all-features`
-  (74 unit tests and the logging-only consumer)
+  (75 unit tests and the logging-only consumer)
 - PASS: `cargo fmt --all -- --check`
 - PASS: `cargo clippy --locked -p sc-observability --all-targets --all-features -- -D warnings`
 - PASS: `cargo test --locked -p sc-observability --doc`
