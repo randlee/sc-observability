@@ -1,19 +1,20 @@
 use std::path::PathBuf;
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
 
 use sc_observability_types::typed::{
     ClassifiedError, InitFailureKind, ProjectionFailure, SubscriberFailure, TypedLogProjector,
     TypedMetricProjector, TypedObservationSubscriber, TypedSpanProjector, legacy_log_projector,
-    legacy_metric_projector, legacy_span_projector, legacy_subscriber,
+    legacy_metric_projector, legacy_span_projector, legacy_subscriber, typed_subscriber,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
-    MetricUnit, Observation, ProcessIdentity, ProjectionRegistration, Remediation, SchemaVersion,
-    ServiceName, SpanId, SpanRecord, SpanSignal, SpanStarted, SubscriberRegistration,
-    TargetCategory, Timestamp, ToolName, TraceContext, TraceId,
+    ActionName, Diagnostic, DiagnosticInfo, ErrorCode, Level, LogEvent, MetricKind, MetricName,
+    MetricRecord, MetricUnit, Observation, ObservationError, ObservationFilter, ProcessIdentity,
+    ProjectionRegistration, Remediation, SchemaVersion, ServiceName, SpanId, SpanRecord,
+    SpanSignal, SpanStarted, SubscriberRegistration, TargetCategory, Timestamp, ToolName,
+    TraceContext, TraceId,
 };
 use sc_observe::Observability;
 use serde_json::Map;
@@ -21,6 +22,55 @@ use serde_json::Map;
 #[derive(Debug, Clone)]
 struct ObservationPayload {
     message: &'static str,
+    allow: bool,
+}
+
+#[derive(Debug, Clone)]
+struct OtherObservationPayload;
+
+struct AllowFilter;
+
+impl ObservationFilter<ObservationPayload> for AllowFilter {
+    fn accepts(&self, observation: &Observation<ObservationPayload>) -> bool {
+        observation.payload.allow
+    }
+}
+
+struct OrderedSubscriber {
+    id: &'static str,
+    calls: Arc<Mutex<Vec<&'static str>>>,
+}
+
+impl TypedObservationSubscriber<ObservationPayload> for OrderedSubscriber {
+    fn observe(
+        &self,
+        _observation: &Observation<ObservationPayload>,
+    ) -> Result<(), SubscriberFailure> {
+        self.calls.lock().expect("calls poisoned").push(self.id);
+        Ok(())
+    }
+}
+
+struct FailingSubscriber {
+    code: ErrorCode,
+    calls: Arc<AtomicUsize>,
+}
+
+impl TypedObservationSubscriber<ObservationPayload> for FailingSubscriber {
+    fn observe(
+        &self,
+        _observation: &Observation<ObservationPayload>,
+    ) -> Result<(), SubscriberFailure> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Err(SubscriberFailure::from_context(Box::new(
+            sc_observability_types::ErrorContext::new(
+                self.code.clone(),
+                "subscriber fixture failed",
+                Remediation::not_recoverable("inspect the subscriber fixture"),
+            )
+            .source(Box::new(std::io::Error::other("subscriber fixture source"))),
+        )))
+    }
 }
 
 struct CountingSubscriber {
@@ -105,14 +155,215 @@ fn temp_path(name: &str) -> PathBuf {
 }
 
 fn observation() -> Observation<ObservationPayload> {
+    observation_with(true)
+}
+
+fn observation_with(allow: bool) -> Observation<ObservationPayload> {
     let mut observation = Observation::new(
         ServiceName::new("typed-observe").expect("valid service"),
         ObservationPayload {
             message: "received",
+            allow,
         },
     );
     observation.identity = ProcessIdentity::default();
     observation
+}
+
+fn other_observation() -> Observation<OtherObservationPayload> {
+    Observation::new(
+        ServiceName::new("typed-observe").expect("valid service"),
+        OtherObservationPayload,
+    )
+}
+
+fn config(name: &str) -> sc_observe::ObservabilityConfig {
+    sc_observe::ObservabilityConfig::default_for(
+        ToolName::new("typed-observe").expect("valid tool"),
+        temp_path(name),
+    )
+    .expect("config")
+}
+
+fn paired_subscriber_runtimes(
+    name: &str,
+    registrations: Vec<SubscriberRegistration<ObservationPayload>>,
+) -> (Observability, Observability) {
+    let mut legacy_builder = Observability::builder(config(&format!("{name}-legacy")));
+    let mut typed_builder = Observability::builder(config(&format!("{name}-typed")));
+    for registration in registrations {
+        legacy_builder = legacy_builder.register_subscriber(registration.clone());
+        typed_builder = typed_builder.register_subscriber(registration);
+    }
+    let legacy = legacy_builder.build().expect("legacy runtime");
+    let typed = typed_builder.build_typed().expect("typed runtime");
+    (legacy, typed)
+}
+
+fn paired_projection_runtimes(
+    name: &str,
+    subscriber: SubscriberRegistration<ObservationPayload>,
+    projection: ProjectionRegistration<ObservationPayload>,
+) -> (Observability, Observability) {
+    let legacy = Observability::builder(config(&format!("{name}-legacy")))
+        .register_subscriber(subscriber.clone())
+        .register_projection(projection.clone())
+        .build()
+        .expect("legacy runtime");
+    let typed = Observability::builder(config(&format!("{name}-typed")))
+        .register_subscriber(subscriber)
+        .register_projection(projection)
+        .build_typed()
+        .expect("typed runtime");
+    (legacy, typed)
+}
+
+#[test]
+fn paired_filters_ordering_and_invocation_counts_match() {
+    let order = Arc::new(Mutex::new(Vec::new()));
+    let registrations = vec![
+        SubscriberRegistration::new(legacy_subscriber(Arc::new(OrderedSubscriber {
+            id: "first",
+            calls: order.clone(),
+        })))
+        .with_filter(Arc::new(AllowFilter)),
+        SubscriberRegistration::new(legacy_subscriber(Arc::new(OrderedSubscriber {
+            id: "second",
+            calls: order.clone(),
+        })))
+        .with_filter(Arc::new(AllowFilter)),
+    ];
+    let (legacy, typed) = paired_subscriber_runtimes("filter-order", registrations);
+
+    assert!(matches!(
+        legacy.emit(observation_with(false)),
+        Err(ObservationError::RoutingFailure(_))
+    ));
+    assert!(matches!(
+        typed.emit(observation_with(false)),
+        Err(ObservationError::RoutingFailure(_))
+    ));
+    legacy.emit(observation_with(true)).expect("legacy emit");
+    typed.emit(observation_with(true)).expect("typed emit");
+
+    assert_eq!(
+        *order.lock().expect("calls poisoned"),
+        vec!["first", "second", "first", "second"]
+    );
+    for runtime in [&legacy, &typed] {
+        let health = runtime.health();
+        assert_eq!(health.dropped_observations_total, 1);
+        assert_eq!(health.subscriber_failures_total, 0);
+    }
+}
+
+#[test]
+fn paired_no_matching_route_and_failure_outcomes_are_classified() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let registration =
+        SubscriberRegistration::new(legacy_subscriber(Arc::new(CountingSubscriber {
+            calls: calls.clone(),
+        })));
+    let (legacy, typed) = paired_subscriber_runtimes("no-match", vec![registration]);
+
+    assert!(matches!(
+        legacy.emit(other_observation()),
+        Err(ObservationError::RoutingFailure(_))
+    ));
+    assert!(matches!(
+        typed.emit(other_observation()),
+        Err(ObservationError::RoutingFailure(_))
+    ));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    for runtime in [&legacy, &typed] {
+        assert_eq!(runtime.health().dropped_observations_total, 1);
+    }
+
+    let failed_calls = Arc::new(AtomicUsize::new(0));
+    let delivered_calls = Arc::new(AtomicUsize::new(0));
+    let mixed = vec![
+        SubscriberRegistration::new(legacy_subscriber(Arc::new(FailingSubscriber {
+            code: ErrorCode::new_static("SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"),
+            calls: failed_calls.clone(),
+        }))),
+        SubscriberRegistration::new(legacy_subscriber(Arc::new(CountingSubscriber {
+            calls: delivered_calls.clone(),
+        }))),
+    ];
+    let (legacy, typed) = paired_subscriber_runtimes("mixed-failure", mixed);
+    legacy.emit(observation()).expect("legacy success route");
+    typed.emit(observation()).expect("typed success route");
+    assert_eq!(failed_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(delivered_calls.load(Ordering::SeqCst), 2);
+    for runtime in [&legacy, &typed] {
+        let health = runtime.health();
+        assert_eq!(health.subscriber_failures_total, 1);
+        assert_eq!(health.dropped_observations_total, 0);
+    }
+
+    let all_failed_calls = Arc::new(AtomicUsize::new(0));
+    let all_failed = SubscriberRegistration::new(legacy_subscriber(Arc::new(FailingSubscriber {
+        code: ErrorCode::new_static("SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"),
+        calls: all_failed_calls.clone(),
+    })));
+    let (legacy, typed) = paired_subscriber_runtimes("all-failure", vec![all_failed]);
+    assert!(matches!(
+        legacy.emit(observation()),
+        Err(ObservationError::RoutingFailure(_))
+    ));
+    assert!(matches!(
+        typed.emit(observation()),
+        Err(ObservationError::RoutingFailure(_))
+    ));
+    assert_eq!(all_failed_calls.load(Ordering::SeqCst), 2);
+    for runtime in [&legacy, &typed] {
+        let health = runtime.health();
+        assert_eq!(health.subscriber_failures_total, 1);
+        assert_eq!(health.dropped_observations_total, 1);
+        assert_eq!(
+            health.last_error.expect("routing diagnostic").code,
+            Some(ErrorCode::new_static(
+                "SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"
+            ))
+        );
+    }
+}
+
+#[test]
+fn observation_adapter_preserves_custom_and_cross_family_context() {
+    for code in [
+        ErrorCode::new_static("SC_CUSTOM_OBSERVATION_FAILURE"),
+        sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+    ] {
+        let legacy = legacy_subscriber(Arc::new(FailingSubscriber {
+            code: code.clone(),
+            calls: Arc::new(AtomicUsize::new(0)),
+        }));
+        let legacy_error =
+            sc_observability_types::ObservationSubscriber::observe(legacy.as_ref(), &observation())
+                .expect_err("legacy adapter should preserve failure");
+        assert_eq!(
+            legacy_error.kind(),
+            sc_observability_types::typed::SubscriberFailureKind::Unclassified
+        );
+        assert_eq!(legacy_error.context().diagnostic().code, code);
+
+        let typed = typed_subscriber(legacy);
+        let typed_error = typed
+            .observe(&observation())
+            .expect_err("typed adapter should preserve failure");
+        assert_eq!(
+            typed_error.kind(),
+            sc_observability_types::typed::SubscriberFailureKind::Unclassified
+        );
+        assert_eq!(typed_error.context().diagnostic().code, code);
+        assert_eq!(
+            std::error::Error::source(typed_error.context())
+                .expect("source context")
+                .to_string(),
+            "subscriber fixture source"
+        );
+    }
 }
 
 fn trace_context() -> TraceContext {
@@ -213,17 +464,61 @@ fn typed_routes_execute_real_subscriber_and_projector_adapters() {
 }
 
 #[test]
+fn paired_projection_routes_preserve_output_family_invocation_counts() {
+    let subscriber_calls = Arc::new(AtomicUsize::new(0));
+    let log_calls = Arc::new(AtomicUsize::new(0));
+    let span_calls = Arc::new(AtomicUsize::new(0));
+    let metric_calls = Arc::new(AtomicUsize::new(0));
+    let subscriber = SubscriberRegistration::new(legacy_subscriber(Arc::new(CountingSubscriber {
+        calls: subscriber_calls.clone(),
+    })));
+    let projection = ProjectionRegistration::new()
+        .with_log_projector(legacy_log_projector(Arc::new(CountingLogProjector {
+            calls: log_calls.clone(),
+        })))
+        .with_span_projector(legacy_span_projector(Arc::new(CountingSpanProjector {
+            calls: span_calls.clone(),
+        })))
+        .with_metric_projector(legacy_metric_projector(Arc::new(CountingMetricProjector {
+            calls: metric_calls.clone(),
+        })));
+    let (legacy, typed) = paired_projection_runtimes("projection-families", subscriber, projection);
+
+    legacy.emit(observation()).expect("legacy emit");
+    legacy.flush().expect("legacy flush");
+    typed.emit(observation()).expect("typed emit");
+    typed.flush_typed().expect("typed flush");
+
+    assert_eq!(subscriber_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(log_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(span_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(metric_calls.load(Ordering::SeqCst), 2);
+    legacy.shutdown().expect("legacy shutdown");
+    typed.shutdown_typed().expect("typed shutdown");
+}
+
+#[test]
+fn invalid_names_are_rejected_before_observation_facade_boundary() {
+    assert!(ToolName::new("").is_err());
+    assert!(ServiceName::new("").is_err());
+}
+
+#[test]
 fn typed_and_legacy_construction_failures_classify_consistently() {
-    let Err(new_empty) = Observability::new_typed(
-        sc_observe::ObservabilityConfig::default_for_typed(
-            ToolName::new("typed-observe").expect("valid tool"),
-            temp_path("new-empty"),
-        )
-        .expect("typed config"),
-    ) else {
+    let legacy_config = config("legacy-new-empty");
+    let typed_config = config("typed-new-empty");
+    let Err(legacy_new) = Observability::new(legacy_config) else {
+        panic!("legacy new without routes must fail");
+    };
+    let Err(new_empty) = Observability::new_typed(typed_config) else {
         panic!("new_typed without routes must fail");
     };
+    assert_eq!(
+        legacy_new.kind(),
+        InitFailureKind::ObservationInitialization
+    );
     assert_eq!(new_empty.kind(), InitFailureKind::ObservationInitialization);
+    assert_eq!(legacy_new.diagnostic().code, new_empty.diagnostic().code);
 
     let Err(empty) = Observability::builder(
         sc_observe::ObservabilityConfig::default_for_typed(

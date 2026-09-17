@@ -649,8 +649,8 @@ mod tests {
         LogFilter, LogSink, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
     };
     use sc_observability_types::typed::{
-        ClassifiedError, InitFailureKind, SubscriberFailure, TypedObservationSubscriber,
-        legacy_subscriber,
+        ClassifiedError, FlushFailureKind, InitFailureKind, SubscriberFailure,
+        TypedObservationSubscriber, legacy_subscriber,
     };
     use sc_observability_types::{
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
@@ -1204,7 +1204,9 @@ mod tests {
             }
         }
 
-        struct FlushFailSink;
+        struct FlushFailSink {
+            flush_calls: Arc<AtomicU64>,
+        }
 
         impl LogSink for FlushFailSink {
             fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
@@ -1212,6 +1214,7 @@ mod tests {
             }
 
             fn flush(&self) -> Result<(), LogSinkError> {
+                self.flush_calls.fetch_add(1, Ordering::SeqCst);
                 Err(LogSinkError(Box::new(ErrorContext::new(
                     sc_observability::error_codes::LOGGER_FLUSH_FAILED,
                     "flush failed",
@@ -1240,29 +1243,53 @@ mod tests {
             .expect("runtime");
         assert!(ok_runtime.flush().is_ok());
 
-        let fail_root = temp_path("flush-fail");
-        let mut logger_config =
-            LoggerConfig::default_for(ServiceName::new("obs-app").expect("service"), fail_root);
-        logger_config.enable_file_sink = false;
-        logger_config.enable_console_sink = false;
-        let mut builder = sc_observability::Logger::builder(logger_config).expect("logger builder");
-        builder.register_sink(
-            SinkRegistration::new(Arc::new(FlushFailSink)).with_filter(Arc::new(PassthroughFilter)),
-        );
-        let logger = builder.build();
+        let build_failing_runtime = |name: &str| {
+            let flush_calls = Arc::new(AtomicU64::new(0));
+            let mut logger_config = LoggerConfig::default_for(
+                ServiceName::new("obs-app").expect("service"),
+                temp_path(name),
+            );
+            logger_config.enable_file_sink = false;
+            logger_config.enable_console_sink = false;
+            let mut builder =
+                sc_observability::Logger::builder(logger_config).expect("logger builder");
+            builder.register_sink(
+                SinkRegistration::new(Arc::new(FlushFailSink {
+                    flush_calls: flush_calls.clone(),
+                }))
+                .with_filter(Arc::new(PassthroughFilter)),
+            );
+            let logger = builder.build();
 
-        let runtime = Observability {
-            logger: Mutex::new(Some(LoggerHandle::Running(logger))),
-            shutdown: AtomicBool::new(false),
-            subscriber_registrations: Vec::new(),
-            projection_registrations: Vec::new(),
-            observability_health_provider: None,
-            runtime: RuntimeState::default(),
+            let runtime = Observability {
+                logger: Mutex::new(Some(LoggerHandle::Running(logger))),
+                shutdown: AtomicBool::new(false),
+                subscriber_registrations: Vec::new(),
+                projection_registrations: Vec::new(),
+                observability_health_provider: None,
+                runtime: RuntimeState::default(),
+            };
+            (runtime, flush_calls)
         };
 
-        assert!(runtime.flush().is_err());
-        let logging = runtime.health().logging.expect("logging health");
-        assert_eq!(logging.flush_errors_total, 1);
-        assert!(logging.last_error.is_some());
+        let (legacy_runtime, legacy_flush_calls) = build_failing_runtime("flush-legacy");
+        let (typed_runtime, typed_flush_calls) = build_failing_runtime("flush-typed");
+        let Err(legacy_error) = legacy_runtime.flush() else {
+            panic!("legacy flush must report sink failure");
+        };
+        let Err(typed_error) = typed_runtime.flush_typed() else {
+            panic!("typed flush must report sink failure");
+        };
+        assert_eq!(legacy_error.kind(), FlushFailureKind::LoggerFlush);
+        assert_eq!(typed_error.kind(), FlushFailureKind::LoggerFlush);
+        // The writer performs the requested flush and its terminal cleanup pass;
+        // both facade methods must expose the same concrete sink behavior.
+        assert_eq!(legacy_flush_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(typed_flush_calls.load(Ordering::SeqCst), 2);
+        for runtime in [&legacy_runtime, &typed_runtime] {
+            let logging = runtime.health().logging.expect("logging health");
+            assert_eq!(logging.flush_errors_total, 1);
+            assert!(logging.last_error.is_some());
+        }
     }
 }
