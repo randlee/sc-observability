@@ -162,22 +162,22 @@ function validEventInput(event: unknown): event is LogEventDto {
 }
 
 export function parseWireEnvelope<T>(value: unknown, entrypoint: string): Result<T> {
-  let raw = value;
-  if (isRecord(raw) && raw.kind === "ok" && !Object.hasOwn(raw, "schema_version")) raw = raw.value;
-  if (isRecord(raw) && raw.kind === "error" && !Object.hasOwn(raw, "schema_version")) return err(envelopeFailure(raw.error));
-  if (isRecord(raw) && typeof raw.schema_version === "number" && Number.isSafeInteger(raw.schema_version) && raw.schema_version >= 0 && raw.schema_version !== 1) {
-    return err(unsupportedVersion(raw.schema_version));
-  }
-  if (!isRecord(raw) || raw.schema_version !== 1 || (raw.kind !== "ok" && raw.kind !== "error")) {
-    return err(validation("response", "malformed or unsupported wire envelope"));
-  }
-  if (raw.kind === "error") return err(envelopeFailure(raw.error));
   try {
+    let raw = value;
+    if (isRecord(raw) && raw.kind === "ok" && !Object.hasOwn(raw, "schema_version")) raw = raw.value;
+    if (isRecord(raw) && raw.kind === "error" && !Object.hasOwn(raw, "schema_version")) return err(envelopeFailure(raw.error));
+    if (isRecord(raw) && typeof raw.schema_version === "number" && Number.isSafeInteger(raw.schema_version) && raw.schema_version >= 0 && raw.schema_version !== 1) {
+      return err(unsupportedVersion(raw.schema_version));
+    }
+    if (!isRecord(raw) || raw.schema_version !== 1 || (raw.kind !== "ok" && raw.kind !== "error")) {
+      return err(validation("response", "malformed or unsupported wire envelope"));
+    }
+    if (raw.kind === "error") return err(envelopeFailure(raw.error));
     if (!validate(entrypoint, raw)) return err(validation("response", "wire response failed schema validation"));
+    return ok(raw.value as T);
   } catch {
-    return err(validation("response", "wire response could not be validated"));
+    return err(internal("wire response could not be inspected"));
   }
-  return ok(raw.value as T);
 }
 
 function normalizeQuery(query: LogQueryDto): Result<LogQueryDto> {
