@@ -66,17 +66,17 @@ def stage_host(destination, bundle, report):
         'let result = tauri::Builder::default().manage(qualification::Backend(Arc::clone(&backend)))')
     instrumented = replace_once(instrumented,
         '.invoke_handler(tauri::generate_handler![app_observability_level_change])',
-        '.invoke_handler(tauri::generate_handler![app_observability_level_change, qualification::qualification_report, qualification::qualification_owner_gate, qualification::qualification_output_gate, qualification::qualification_host_flush])\n        .setup(qualification::setup)')
+        '.invoke_handler(tauri::generate_handler![app_observability_level_change, qualification::qualification_report, qualification::qualification_owner_gate, qualification::qualification_output_gate, qualification::qualification_host_flush, qualification::qualification_shutdown])\n        .setup(qualification::setup)')
     (destination / 'src/main.rs').write_text(instrumented)
     build_script = (destination / 'build.rs').read_text(encoding='utf-8')
     build_script = replace_once(build_script, '.commands(&["app_observability_level_change"])',
-        '.commands(&["app_observability_level_change", "qualification_report", "qualification_owner_gate", "qualification_output_gate", "qualification_host_flush"])')
+        '.commands(&["app_observability_level_change", "qualification_report", "qualification_owner_gate", "qualification_output_gate", "qualification_host_flush", "qualification_shutdown"])')
     (destination / 'build.rs').write_text(build_script)
     capabilities = destination / 'capabilities'
     capabilities.mkdir(exist_ok=True)
     (capabilities / 'qualification-observation.json').write_text(json.dumps({
         'identifier': 'qualification-observation', 'windows': ['main', 'forbidden'],
-        'permissions': ['allow-qualification-report', 'allow-qualification-owner-gate', 'allow-qualification-output-gate', 'allow-qualification-host-flush'],
+        'permissions': ['allow-qualification-report', 'allow-qualification-owner-gate', 'allow-qualification-output-gate', 'allow-qualification-host-flush', 'allow-qualification-shutdown'],
     }, indent=2))
     shutil.copyfile(FIXTURE / 'qualification.rs', destination / 'src/qualification.rs')
     report['host_source_sha256'] = digest(source / 'src/main.rs')

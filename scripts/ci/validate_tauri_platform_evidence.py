@@ -21,6 +21,10 @@ REQUIRED_MAIN = {
     'frontend-heartbeat-during-blocked-io', 'query-slot-retained-after-timeout',
     'native-flush-late-completion', 'actual-flush-zero-timeout',
     'actual-flush-after-timeout-overlap',
+    'shutdown-contention-queue-full', 'level-during-shutdown-closed',
+    'shutdown-level-state-preserved', 'admission-during-shutdown-closed',
+    'native-shutdown-pending', 'native-shutdown-completed',
+    'level-after-shutdown-closed', 'post-shutdown-health-retained',
 }
 REQUIRED_FORBIDDEN = {'forbidden-window-' + name for name in ('try_log', 'query', 'health', 'flush', 'level')}
 REQUIRED_CAPPED = {'capped-baseline', 'capped-level-rejected', 'capped-payload-preserved', 'capped-state-preserved', 'capped-bridge-coherence', 'capped-accepted', 'capped-filtered', 'capped-flush', 'capped-no-hidden-rejection'}
@@ -103,6 +107,8 @@ def validate(root, source=None):
         raise ValueError('platforms exercised different source revisions')
     if len({report['npm_archive']['sha256'] for report in found.values()}) != 1:
         raise ValueError('platforms exercised different npm artifacts')
+    if len({json.dumps(report['rust_archives'], sort_keys=True) for report in found.values()}) != 1:
+        raise ValueError('platforms exercised different Rust artifacts')
     return {'status': 'passed', 'source_commit': next(iter(found.values()))['source_commit'],
             'platforms': {key: {'cases': value['case_count'], 'npm_sha256': value['npm_archive']['sha256'],
                                 'rust_archives': value['rust_archives']} for key, value in found.items()}}

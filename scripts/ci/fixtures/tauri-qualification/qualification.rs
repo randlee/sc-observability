@@ -24,6 +24,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(Reports::default());
     app.manage(OwnerHold::default());
     app.manage(HostFlush::default());
+    app.manage(HostShutdown::default());
     tauri::WebviewWindowBuilder::new(
         app, "forbidden", tauri::WebviewUrl::App("index.html?forbidden=1".into()),
     ).title("Unauthorized qualification caller").build()?;
@@ -61,7 +62,7 @@ pub struct OwnerHold(Mutex<Option<(std::sync::mpsc::Sender<()>, std::sync::mpsc:
 #[tauri::command]
 pub fn qualification_owner_gate(
     held: bool,
-    owner: tauri::State<'_, super::OwnerState>,
+    app: tauri::AppHandle,
     state: tauri::State<'_, OwnerHold>,
 ) -> Result<(), String> {
     use std::{sync::mpsc, time::Duration};
@@ -76,12 +77,12 @@ pub fn qualification_owner_gate(
     if slot.is_some() {
         return Err("owner holder already active".into());
     }
-    let owner = owner.0.clone();
     let (ready_tx, ready_rx) = mpsc::sync_channel(1);
     let (release_tx, release_rx) = mpsc::channel();
     let (done_tx, done_rx) = mpsc::channel();
     std::thread::Builder::new().name("qualification-owner-holder".into()).spawn(move || {
-        let guard = owner.lock();
+        let owner = app.state::<super::OwnerState>();
+        let guard = owner.guard.lock();
         if ready_tx.send(guard.is_ok()).is_err() { return; }
         if guard.is_ok() {
             let _ = release_rx.recv_timeout(Duration::from_secs(30));
@@ -202,4 +203,40 @@ pub fn policy_matrix() -> Result<(), String> {
     std::fs::write(path, serde_json::to_vec_pretty(&json!({"passed": passed, "records": records})).map_err(|error| error.to_string())?)
         .map_err(|error| error.to_string())?;
     if passed { Ok(()) } else { Err("packaged adapter accepted an invalid host policy".into()) }
+}
+
+type ShutdownResult = Result<(), sc_observability_dto::Failure>;
+type ShutdownCompletion = std::sync::Arc<Mutex<Option<ShutdownResult>>>;
+#[derive(Default)]
+pub struct HostShutdown(Mutex<Option<ShutdownCompletion>>);
+
+/// Invoke the production host-only shutdown method on one bounded worker.
+/// No fixture creates a lifecycle owner or changes the production handler.
+#[tauri::command]
+pub fn qualification_shutdown(
+    operation: String,
+    app: tauri::AppHandle,
+    state: tauri::State<'_, HostShutdown>,
+) -> Result<Value, String> {
+    use std::{sync::Arc, time::Duration};
+    if operation == "busy" {
+        return serde_json::to_value(app.state::<super::OwnerState>().shutdown(Duration::ZERO))
+            .map_err(|error| error.to_string());
+    }
+    let mut slot = state.0.lock().map_err(|_| "shutdown observation poisoned")?;
+    if operation == "start" {
+        if slot.is_some() { return Err("shutdown already started".into()); }
+        let result = Arc::new(Mutex::new(None));
+        let completed = Arc::clone(&result);
+        std::thread::Builder::new().name("qualification-host-shutdown".into()).spawn(move || {
+            let result = app.state::<super::OwnerState>().shutdown(Duration::from_secs(60));
+            if let Ok(mut completed) = completed.lock() { *completed = Some(result); }
+        }).map_err(|error| error.to_string())?;
+        *slot = Some(result);
+    } else if operation != "status" {
+        return Err("unknown shutdown observation operation".into());
+    }
+    let result = slot.as_ref().ok_or("shutdown not started")?.lock()
+        .map_err(|_| "shutdown completion poisoned")?;
+    Ok(json!({"pending": result.is_none(), "result": &*result}))
 }

@@ -21,6 +21,9 @@ qualification_args=(--evidence target/tauri-qualification)
 if [[ -n ${TAURI_NPM_ARCHIVE:-} ]]; then
   qualification_args+=(--npm-archive "$TAURI_NPM_ARCHIVE" --npm-manifest "$TAURI_NPM_MANIFEST")
 fi
+if [[ -n ${TAURI_RUST_BUNDLE:-} ]]; then
+  qualification_args+=(--bundle "$TAURI_RUST_BUNDLE")
+fi
 python3 scripts/ci/validate_tauri_qualification.py "${qualification_args[@]}"
 if [[ ${1:-} != '--platform' ]]; then
   python3 scripts/ci/validate_tauri_platform_evidence.py target/tauri-platforms

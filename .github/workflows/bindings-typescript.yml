@@ -62,6 +62,15 @@ jobs:
           archive,=directory.glob('*.tgz')
           (directory/'npm-producer.json').write_text(json.dumps({'source_commit':os.environ['GITHUB_SHA'],'filename':archive.name,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest()},indent=2)+'\n')
           PYTHON
+      - name: Package canonical Rust adapter source bundle
+        run: |
+          python scripts/ci/build_binding_source_bundle.py --root-manifest bindings/tauri/Cargo.toml --output target/tauri-rust-bundle
+          tar -czf target/tauri-rust-bundle.tar.gz -C target tauri-rust-bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tauri-shared-rust-bundle
+          path: target/tauri-rust-bundle.tar.gz
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: tauri-shared-npm
@@ -102,10 +111,16 @@ jobs:
         with:
           name: tauri-shared-npm
           path: target/tauri-npm
+      - uses: actions/download-artifact@v4
+        with:
+          name: tauri-shared-rust-bundle
+          path: target/tauri-rust-shared
       - name: Validate real IPC from packaged artifacts
         shell: bash
         run: |
           export TAURI_NPM_ARCHIVE="$PWD/target/tauri-npm/$(python -c 'import json; print(json.load(open("target/tauri-npm/npm-producer.json"))["filename"])')"
+          tar -xzf target/tauri-rust-shared/tauri-rust-bundle.tar.gz -C target
+          export TAURI_RUST_BUNDLE="$PWD/target/tauri-rust-bundle"
           export TAURI_NPM_MANIFEST="$PWD/target/tauri-npm/npm-producer.json"
           if [ "$RUNNER_OS" = Linux ]; then
             xvfb-run -a bash scripts/ci/validate_typescript_bindings.sh --platform

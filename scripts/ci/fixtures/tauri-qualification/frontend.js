@@ -86,6 +86,8 @@ async function run() {
     failure('owner-contention-queue-full', busy, 'queue_full');
     check('owner-contention-code', busy.error.code === 'SC_OBSERVABILITY_BINDING_DISPATCH_FULL', busy);
     check('owner-contention-state-preserved', JSON.stringify(value('health-during-owner-contention', await client.health()).level_state) === JSON.stringify(beforeContention));
+    const busyShutdown = await invoke('qualification_shutdown', { operation: 'busy' });
+    check('shutdown-contention-queue-full', busyShutdown.Err?.kind === 'queue_full' && busyShutdown.Err?.code === 'SC_OBSERVABILITY_BINDING_DISPATCH_FULL', busyShutdown);
   } finally {
     await invoke('qualification_owner_gate', { held: false });
   }
@@ -170,6 +172,36 @@ async function run() {
     check('native-or-adapter-flush-overlap-code', ['SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS', 'SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS'].includes(overlap.error.code), overlap);
     value('health-after-flush-timeout', await client.health());
   } finally { await gate(false, 'release-timeout'); }
+  const beforeShutdown = value('health-before-shutdown', await client.health()).level_state;
+  await gate(true, 'shutdown');
+  try {
+    for (let count = 0; count < 128; count++) {
+      value('shutdown-setup-admission', await client.tryLog({ ...event, action: 'shutdown-output', message: 'x'.repeat(8192), fields: {} }));
+    }
+    await invoke('qualification_shutdown', { operation: 'start' });
+    const deadline = performance.now() + 2000;
+    let closed;
+    do {
+      closed = await level({ kind: 'reset' });
+      if (closed.kind === 'error' && closed.error.kind === 'closed') break;
+      await tick();
+    } while (performance.now() < deadline);
+    failure('level-during-shutdown-closed', closed, 'closed');
+    check('level-during-shutdown-code', closed.error.code === 'SC_OBSERVABILITY_BINDING_CLOSED', closed);
+    const stopping = value('health-during-shutdown', await client.health());
+    check('shutdown-level-state-preserved', JSON.stringify(stopping.level_state) === JSON.stringify(beforeShutdown), stopping);
+    failure('admission-during-shutdown-closed', await client.tryLog(event), 'closed');
+    check('native-shutdown-pending', (await invoke('qualification_shutdown', { operation: 'status' })).pending === true);
+  } finally { await gate(false, 'release-shutdown'); }
+  const stopDeadline = performance.now() + 5000;
+  let stopped;
+  do {
+    stopped = await invoke('qualification_shutdown', { operation: 'status' });
+    if (stopped.pending) await new Promise((resolve) => setTimeout(resolve, 10));
+  } while (stopped.pending && performance.now() < stopDeadline);
+  check('native-shutdown-completed', stopped.pending === false && Object.hasOwn(stopped.result, 'Ok'), stopped);
+  failure('level-after-shutdown-closed', await level({ kind: 'elevate', level: 'debug' }), 'closed');
+  check('post-shutdown-health-retained', JSON.stringify(value('health-after-shutdown', await client.health()).level_state) === JSON.stringify(beforeShutdown));
   await tick();
   check('no-hidden-rejection' , uncaught.length === 0, uncaught);
 }
