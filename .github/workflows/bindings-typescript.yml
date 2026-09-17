@@ -54,7 +54,7 @@ jobs:
           mkdir -p target/tauri-npm
           npm --prefix bindings/typescript ci --ignore-scripts
           npm --prefix bindings/typescript run build
-          npm --prefix bindings/typescript pack --pack-destination "$PWD/target/tauri-npm"
+          npm pack ./bindings/typescript --pack-destination "$PWD/target/tauri-npm"
           python - <<'PYTHON'
           import hashlib,json,os
           from pathlib import Path
