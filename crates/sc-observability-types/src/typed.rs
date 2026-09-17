@@ -558,49 +558,342 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "table-driven fixture enumerates every contract constructor"
+    )]
     fn named_constructors_store_their_declared_kind_and_code() {
-        assert_eq!(
-            IdentityFailure::resolution_failed("x", remediation()).kind(),
+        macro_rules! assert_constructor {
+            ($constructor:path, $kind:path, $code:literal) => {
+                let failure = $constructor("x", remediation());
+                assert_eq!(failure.kind(), $kind);
+                assert_eq!(failure.diagnostic().code.as_str(), $code);
+            };
+        }
+
+        assert_constructor!(
+            IdentityFailure::resolution_failed,
+            IdentityFailureKind::ResolutionFailed,
+            "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"
+        );
+        assert_constructor!(
+            InitFailure::logger_initialization,
+            InitFailureKind::LoggerInitialization,
+            "SC_OBSERVABILITY_LOGGER_INIT_FAILED"
+        );
+        assert_constructor!(
+            InitFailure::observation_initialization,
+            InitFailureKind::ObservationInitialization,
+            "SC_OBSERVE_INIT_FAILED"
+        );
+        assert_constructor!(
+            InitFailure::invalid_telemetry_config,
+            InitFailureKind::InvalidTelemetryConfig,
+            "SC_OBSERVABILITY_OTLP_INVALID_CONFIG"
+        );
+        assert_constructor!(
+            InitFailure::invalid_protocol,
+            InitFailureKind::InvalidProtocol,
+            "SC_OBSERVABILITY_OTLP_INVALID_PROTOCOL"
+        );
+        assert_constructor!(
+            InitFailure::exporter_initialization,
+            InitFailureKind::ExporterInitialization,
+            "SC_OBSERVABILITY_OTLP_EXPORTER_INIT_FAILED"
+        );
+        assert_constructor!(
+            InitFailure::identity_resolution,
+            InitFailureKind::IdentityResolution,
+            "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"
+        );
+        assert_constructor!(
+            EventFailure::invalid_event,
+            EventFailureKind::InvalidEvent,
+            "SC_OBSERVABILITY_LOGGER_INVALID_EVENT"
+        );
+        assert_constructor!(
+            EventFailure::closed,
+            EventFailureKind::Closed,
+            "SC_OBSERVABILITY_LOGGER_SHUTDOWN"
+        );
+        assert_constructor!(
+            EventFailure::queue_full,
+            EventFailureKind::QueueFull,
+            "SC_OBSERVABILITY_LOGGER_QUEUE_FULL"
+        );
+        assert_constructor!(
+            EventFailure::writer_degraded,
+            EventFailureKind::WriterDegraded,
+            "SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"
+        );
+        assert_constructor!(
+            EventFailure::shutdown_timed_out,
+            EventFailureKind::ShutdownTimedOut,
+            "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT"
+        );
+        assert_constructor!(
+            EventFailure::span_assembly,
+            EventFailureKind::SpanAssembly,
+            "SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED"
+        );
+        assert_constructor!(
+            FlushFailure::logger_flush,
+            FlushFailureKind::LoggerFlush,
+            "SC_OBSERVABILITY_LOGGER_FLUSH_FAILED"
+        );
+        assert_constructor!(
+            FlushFailure::writer_degraded,
+            FlushFailureKind::WriterDegraded,
+            "SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"
+        );
+        assert_constructor!(
+            FlushFailure::observation_flush,
+            FlushFailureKind::ObservationFlush,
+            "SC_OBSERVE_FLUSH_FAILED"
+        );
+        assert_constructor!(
+            FlushFailure::telemetry_flush,
+            FlushFailureKind::TelemetryFlush,
+            "SC_OBSERVABILITY_OTLP_FLUSH_FAILED"
+        );
+        assert_constructor!(
+            FlushFailure::closed,
+            FlushFailureKind::Closed,
+            "SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN"
+        );
+        assert_constructor!(
+            ShutdownFailure::telemetry_flush,
+            ShutdownFailureKind::TelemetryFlush,
+            "SC_OBSERVABILITY_OTLP_FLUSH_FAILED"
+        );
+        assert_constructor!(
+            ShutdownFailure::incomplete_spans,
+            ShutdownFailureKind::IncompleteSpans,
+            "SC_OBSERVABILITY_OTLP_INCOMPLETE_SPAN_DROPPED"
+        );
+        assert_constructor!(
+            ShutdownFailure::writer_degraded,
+            ShutdownFailureKind::WriterDegraded,
+            "SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"
+        );
+        assert_constructor!(
+            ShutdownFailure::timed_out,
+            ShutdownFailureKind::TimedOut,
+            "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT"
+        );
+        assert_constructor!(
+            ProjectionFailure::telemetry_closed,
+            ProjectionFailureKind::TelemetryClosed,
+            "SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN"
+        );
+        assert_constructor!(
+            ProjectionFailure::telemetry_export,
+            ProjectionFailureKind::TelemetryExport,
+            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+        );
+        assert_constructor!(
+            ProjectionFailure::span_assembly,
+            ProjectionFailureKind::SpanAssembly,
+            "SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED"
+        );
+        assert_constructor!(
+            ProjectionFailure::routing,
+            ProjectionFailureKind::Routing,
+            "SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"
+        );
+        assert_constructor!(
+            SubscriberFailure::routing,
+            SubscriberFailureKind::Routing,
+            "SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"
+        );
+        assert_constructor!(
+            LogSinkFailure::write,
+            LogSinkFailureKind::Write,
+            "SC_OBSERVABILITY_LOGGER_SINK_WRITE_FAILED"
+        );
+        assert_constructor!(
+            LogSinkFailure::maintenance,
+            LogSinkFailureKind::Maintenance,
+            "SC_OBSERVABILITY_LOGGER_MAINTENANCE_FAILED"
+        );
+        assert_constructor!(
+            LogSinkFailure::fault_injected,
+            LogSinkFailureKind::FaultInjected,
+            "SC_OBSERVABILITY_LOGGER_SINK_FAULT_INJECTED"
+        );
+        assert_constructor!(
+            ExportFailure::export,
+            ExportFailureKind::Export,
+            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+        );
+    }
+
+    #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "table-driven fixture enumerates every contract code mapping"
+    )]
+    fn every_contract_mapping_classifies_in_its_own_family() {
+        macro_rules! assert_context_kind {
+            ($failure:ty, $code:literal, $kind:expr) => {
+                assert_eq!(<$failure>::from_context(context($code)).kind(), $kind);
+            };
+        }
+
+        assert_context_kind!(
+            IdentityFailure,
+            "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED",
             IdentityFailureKind::ResolutionFailed
         );
-        assert_eq!(
-            InitFailure::logger_initialization("x", remediation()).kind(),
+        assert_context_kind!(
+            InitFailure,
+            "SC_OBSERVABILITY_LOGGER_INIT_FAILED",
             InitFailureKind::LoggerInitialization
         );
-        assert_eq!(
-            EventFailure::queue_full("x", remediation()).kind(),
+        assert_context_kind!(
+            InitFailure,
+            "SC_OBSERVE_INIT_FAILED",
+            InitFailureKind::ObservationInitialization
+        );
+        assert_context_kind!(
+            InitFailure,
+            "SC_OBSERVABILITY_OTLP_INVALID_CONFIG",
+            InitFailureKind::InvalidTelemetryConfig
+        );
+        assert_context_kind!(
+            InitFailure,
+            "SC_OBSERVABILITY_OTLP_INVALID_PROTOCOL",
+            InitFailureKind::InvalidProtocol
+        );
+        assert_context_kind!(
+            InitFailure,
+            "SC_OBSERVABILITY_OTLP_EXPORTER_INIT_FAILED",
+            InitFailureKind::ExporterInitialization
+        );
+        assert_context_kind!(
+            InitFailure,
+            "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED",
+            InitFailureKind::IdentityResolution
+        );
+        assert_context_kind!(
+            EventFailure,
+            "SC_OBSERVABILITY_LOGGER_INVALID_EVENT",
+            EventFailureKind::InvalidEvent
+        );
+        assert_context_kind!(
+            EventFailure,
+            "SC_OBSERVABILITY_LOGGER_SHUTDOWN",
+            EventFailureKind::Closed
+        );
+        assert_context_kind!(
+            EventFailure,
+            "SC_OBSERVABILITY_LOGGER_QUEUE_FULL",
             EventFailureKind::QueueFull
         );
-        assert_eq!(
-            FlushFailure::telemetry_flush("x", remediation()).kind(),
+        assert_context_kind!(
+            EventFailure,
+            "SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED",
+            EventFailureKind::WriterDegraded
+        );
+        assert_context_kind!(
+            EventFailure,
+            "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT",
+            EventFailureKind::ShutdownTimedOut
+        );
+        assert_context_kind!(
+            EventFailure,
+            "SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED",
+            EventFailureKind::SpanAssembly
+        );
+        assert_context_kind!(
+            FlushFailure,
+            "SC_OBSERVABILITY_LOGGER_FLUSH_FAILED",
+            FlushFailureKind::LoggerFlush
+        );
+        assert_context_kind!(
+            FlushFailure,
+            "SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED",
+            FlushFailureKind::WriterDegraded
+        );
+        assert_context_kind!(
+            FlushFailure,
+            "SC_OBSERVE_FLUSH_FAILED",
+            FlushFailureKind::ObservationFlush
+        );
+        assert_context_kind!(
+            FlushFailure,
+            "SC_OBSERVABILITY_OTLP_FLUSH_FAILED",
             FlushFailureKind::TelemetryFlush
         );
-        assert_eq!(
-            ShutdownFailure::timed_out("x", remediation()).kind(),
+        assert_context_kind!(
+            FlushFailure,
+            "SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN",
+            FlushFailureKind::Closed
+        );
+        assert_context_kind!(
+            ShutdownFailure,
+            "SC_OBSERVABILITY_OTLP_FLUSH_FAILED",
+            ShutdownFailureKind::TelemetryFlush
+        );
+        assert_context_kind!(
+            ShutdownFailure,
+            "SC_OBSERVABILITY_OTLP_INCOMPLETE_SPAN_DROPPED",
+            ShutdownFailureKind::IncompleteSpans
+        );
+        assert_context_kind!(
+            ShutdownFailure,
+            "SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED",
+            ShutdownFailureKind::WriterDegraded
+        );
+        assert_context_kind!(
+            ShutdownFailure,
+            "SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT",
             ShutdownFailureKind::TimedOut
         );
-        assert_eq!(
-            ProjectionFailure::routing("x", remediation()).kind(),
+        assert_context_kind!(
+            ProjectionFailure,
+            "SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN",
+            ProjectionFailureKind::TelemetryClosed
+        );
+        assert_context_kind!(
+            ProjectionFailure,
+            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED",
+            ProjectionFailureKind::TelemetryExport
+        );
+        assert_context_kind!(
+            ProjectionFailure,
+            "SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED",
+            ProjectionFailureKind::SpanAssembly
+        );
+        assert_context_kind!(
+            ProjectionFailure,
+            "SC_OBSERVE_OBSERVATION_ROUTING_FAILURE",
             ProjectionFailureKind::Routing
         );
-        assert_eq!(
-            SubscriberFailure::routing("x", remediation()).kind(),
+        assert_context_kind!(
+            SubscriberFailure,
+            "SC_OBSERVE_OBSERVATION_ROUTING_FAILURE",
             SubscriberFailureKind::Routing
         );
-        assert_eq!(
-            LogSinkFailure::fault_injected("x", remediation()).kind(),
+        assert_context_kind!(
+            LogSinkFailure,
+            "SC_OBSERVABILITY_LOGGER_SINK_WRITE_FAILED",
+            LogSinkFailureKind::Write
+        );
+        assert_context_kind!(
+            LogSinkFailure,
+            "SC_OBSERVABILITY_LOGGER_MAINTENANCE_FAILED",
+            LogSinkFailureKind::Maintenance
+        );
+        assert_context_kind!(
+            LogSinkFailure,
+            "SC_OBSERVABILITY_LOGGER_SINK_FAULT_INJECTED",
             LogSinkFailureKind::FaultInjected
         );
-        assert_eq!(
-            ExportFailure::export("x", remediation()).kind(),
+        assert_context_kind!(
+            ExportFailure,
+            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED",
             ExportFailureKind::Export
-        );
-        assert_eq!(
-            ExportFailure::export("x", remediation())
-                .diagnostic()
-                .code
-                .as_str(),
-            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
         );
     }
 
