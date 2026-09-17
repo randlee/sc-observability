@@ -36,9 +36,9 @@ use sc_observability::{LogError, Logger, LoggerConfig, RetainedLogPolicy, Runnin
 use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError,
-    LoggingHealthReport, ObservabilityHealthProvider, Observable, Observation,
-    ProjectionRegistration, Remediation, ServiceName, ShutdownError, SubscriberError,
-    SubscriberRegistration, TelemetryHealthState, ToolName,
+    ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, Remediation,
+    ServiceName, ShutdownError, SubscriberError, SubscriberRegistration, TelemetryHealthState,
+    ToolName,
 };
 #[doc(inline)]
 pub use sc_observability_types::{
@@ -168,9 +168,8 @@ pub struct Observability {
     // writer shutdown occurs after publishing `ShuttingDown`, so callers never
     // observe an absent handle while emit, flush, and health race shutdown.
     logger: Mutex<LoggerHandle>,
+    logger_changed: Condvar,
     shutdown: AtomicBool,
-    shutdown_complete: (Mutex<bool>, Condvar),
-    shutting_down_logging: Mutex<Option<LoggingHealthReport>>,
     subscriber_registrations: Vec<ErasedSubscriberRegistration>,
     projection_registrations: Vec<ErasedProjectionRegistration>,
     observability_health_provider: Option<Arc<dyn ObservabilityHealthProvider>>,
@@ -370,7 +369,13 @@ impl Observability {
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing its registered sinks.
     pub fn flush_typed(&self) -> Result<(), FlushFailure> {
-        let logger = self.logger.lock().expect("observability logger poisoned");
+        let mut logger = self.logger.lock().expect("observability logger poisoned");
+        while matches!(&*logger, LoggerHandle::ShuttingDown) {
+            logger = self
+                .logger_changed
+                .wait(logger)
+                .expect("observability logger poisoned");
+        }
         match &*logger {
             LoggerHandle::Running(logger) => logger.flush_typed(),
             LoggerHandle::ShuttingDown | LoggerHandle::Stopped(_) => Ok(()),
@@ -400,26 +405,10 @@ impl Observability {
     /// shutting down its writer runtime.
     pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
-            let (complete, changed) = &self.shutdown_complete;
-            let mut complete = complete.lock().expect("shutdown completion poisoned");
-            while !*complete {
-                complete = changed
-                    .wait(complete)
-                    .expect("shutdown completion poisoned");
-            }
             return Ok(());
         }
         let handle = {
             let mut logger = self.logger.lock().expect("observability logger poisoned");
-            let snapshot = match &*logger {
-                LoggerHandle::Running(logger) => logger.health(),
-                LoggerHandle::ShuttingDown => unreachable!("first shutdown owns the transition"),
-                LoggerHandle::Stopped(logger) => logger.health(),
-            };
-            *self
-                .shutting_down_logging
-                .lock()
-                .expect("shutdown health snapshot poisoned") = Some(snapshot);
             std::mem::replace(&mut *logger, LoggerHandle::ShuttingDown)
         };
         let stopped = match handle {
@@ -428,9 +417,7 @@ impl Observability {
             LoggerHandle::Stopped(logger) => LoggerHandle::Stopped(logger),
         };
         *self.logger.lock().expect("observability logger poisoned") = stopped;
-        let (complete, changed) = &self.shutdown_complete;
-        *complete.lock().expect("shutdown completion poisoned") = true;
-        changed.notify_all();
+        self.logger_changed.notify_all();
         Ok(())
     }
 
@@ -441,14 +428,16 @@ impl Observability {
     /// Panics if the internal last-error mutex has been poisoned.
     pub fn health(&self) -> ObservabilityHealthReport {
         let logging = {
-            let logger = self.logger.lock().expect("observability logger poisoned");
+            let mut logger = self.logger.lock().expect("observability logger poisoned");
+            while matches!(&*logger, LoggerHandle::ShuttingDown) {
+                logger = self
+                    .logger_changed
+                    .wait(logger)
+                    .expect("observability logger poisoned");
+            }
             match &*logger {
                 LoggerHandle::Running(logger) => Some(logger.health()),
-                LoggerHandle::ShuttingDown => self
-                    .shutting_down_logging
-                    .lock()
-                    .expect("shutdown health snapshot poisoned")
-                    .clone(),
+                LoggerHandle::ShuttingDown => unreachable!("waited for shutdown completion"),
                 LoggerHandle::Stopped(logger) => Some(logger.health()),
             }
         };
@@ -653,9 +642,8 @@ impl ObservabilityBuilder {
         let logger = Logger::new_typed(self.config.logger_config_typed()?)?;
         Ok(Observability {
             logger: Mutex::new(LoggerHandle::Running(logger)),
+            logger_changed: Condvar::new(),
             shutdown: AtomicBool::new(false),
-            shutdown_complete: (Mutex::new(false), Condvar::new()),
-            shutting_down_logging: Mutex::new(None),
             subscriber_registrations: self.subscribers,
             projection_registrations: self.projections,
             observability_health_provider: self.observability_health_provider,
@@ -1335,9 +1323,8 @@ mod tests {
 
             let runtime = Observability {
                 logger: Mutex::new(LoggerHandle::Running(logger)),
+                logger_changed: Condvar::new(),
                 shutdown: AtomicBool::new(false),
-                shutdown_complete: (Mutex::new(false), Condvar::new()),
-                shutting_down_logging: Mutex::new(None),
                 subscriber_registrations: Vec::new(),
                 projection_registrations: Vec::new(),
                 observability_health_provider: None,
