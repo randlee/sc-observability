@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "candidate_version": "1.4.0",
-  "source_commit": "87400dfa85611df6bd9d131ba5f0afac92fbca10",
+  "source_commit": "df9953e54eb40ec029a6f6513b241fd1a249c0eb",
   "crates": {
     "sc-observability-dto": {
       "status": "approved",
@@ -13,5 +13,6 @@
       "api_sha256": "3879489bf925437f1704bf54f7160b0d1526d73b6c0cfced076abb655d2da1fc"
     }
   },
-  "approval_scope": "Lead approved the exact additive SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID constant required by the B.5 scope contract; no other public API delta. This records the explicit lead review, not a QA, publication or matrix approval."
+  "approval_scope": "Lead approved the exact additive SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID constant required by the B.5 scope contract; no other public API delta. This records the explicit lead review, not a QA, publication or matrix approval.",
+  "approval_message": "01M2QF5M1GW741SY3CGCJ16N6J"
 }
