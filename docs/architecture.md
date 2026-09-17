@@ -702,9 +702,17 @@ Important boundary:
 | `sc-observability-log-macros` | third-party proc-macro support only (`syn`, `quote`, `proc-macro2`) | `sc-observability-log` (no reverse dependency back to the bridge), `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | procedural macro expansion only for `sc-observability-log`'s event/`#[instrument]` forms; no runtime types; B.1 mechanical copy, unpublished |
 | `sc-observability-log-consumer-check` | `sc-observability-log` only (direct path dependency) | `sc-observability-log-macros` (macro expansion is exercised only through the bridge, preserving the external macro-expansion hygiene check), `agent-team-mail-*` | CI-only compile-time proof that macro consumers need only the bridge dependency; never published |
 
-### Proposed Phase B Binding Runtime Edges
+### Phase B Binding Runtime Edges
 
-B.3b updates structural/dependency CI to enforce this exact set of workspace
+The shared native runtime provides core and bridge backends, bounded operations
+and the unique core shutdown owner. `arc-swap` publishes immutable health and
+logger references without an admission mutex; `serde_json` supports checked DTO
+conversion. These support crates add no host/framework dependency. The resolved
+workspace allowlist and aliased/target host edges are checked by
+`scripts/ci/validate_binding_runtime_dependencies.py`.
+
+
+B.3b structural/dependency CI enforces this exact set of workspace
 edges for sc-observability-binding-runtime; third-party support crates retain
 normal dependency review. Tauri and PyO3 may depend on the runtime, never the
 reverse. This proposed diagram does not claim the crate is implemented.

@@ -29,6 +29,10 @@
     "sc-observability-dto": {
       "baseline_version": null,
       "kind": "lib"
+    },
+    "sc-observability-binding-runtime": {
+      "baseline_version": null,
+      "kind": "lib"
     }
   }
 }

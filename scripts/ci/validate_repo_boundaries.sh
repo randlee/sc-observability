@@ -90,6 +90,7 @@ for crate_path in [
         raise SystemExit(f"{crate_path} must not depend on the `log` crate")
 
 shared_crate_roots = [
+    root / "crates/sc-observability-binding-runtime",
     root / "crates/sc-observability-dto",
     root / "crates/sc-observability-types",
     root / "crates/sc-observability",
@@ -183,3 +184,5 @@ subprocess.run(
 
 print("repo boundary validation passed")
 PY
+
+python3 scripts/ci/validate_binding_runtime_dependencies.py

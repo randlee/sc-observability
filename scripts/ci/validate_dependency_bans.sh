@@ -115,3 +115,5 @@ for crate in ("sc-observability-types", "sc-observability", "sc-observe", "sc-ob
         raise SystemExit(f"binding dependencies entered core: {crate}")
 print("dependency ban validation passed")
 PY
+
+python3 scripts/ci/validate_binding_runtime_dependencies.py
