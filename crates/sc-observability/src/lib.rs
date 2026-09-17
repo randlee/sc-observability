@@ -2224,12 +2224,24 @@ mod tests {
             owner.elevate_level(LevelFilter::Off, LevelChangeSource::Application),
             Err(LevelChangeError::BelowBaseline { .. })
         ));
+        assert!(matches!(
+            owner.reset_level(LevelChangeSource::Application),
+            Ok(LevelChange::Changed { .. })
+        ));
+        let mut filtered_event = log_event(service_name());
+        filtered_event.level = Level::Debug;
+        assert_eq!(
+            logger
+                .try_log_with_outcome_typed(filtered_event)
+                .expect("typed filtered admission"),
+            AdmissionOutcome::Filtered
+        );
         let stopped = logger.shutdown();
         assert!(matches!(
             owner.reset_level(LevelChangeSource::Application),
             Err(LevelChangeError::Stopped)
         ));
-        assert_eq!(stopped.level_state().effective_level, LevelFilter::Debug);
+        assert_eq!(stopped.level_state().effective_level, LevelFilter::Info);
     }
 
     #[test]
