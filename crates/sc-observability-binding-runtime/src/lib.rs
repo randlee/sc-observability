@@ -27,7 +27,7 @@ use std::time::Duration;
 pub enum ProducerOrigin {
     /// Frontend event stamped as TypeScript through Tauri.
     TauriFrontend,
-    /// Python event stamped as Python through PyO3.
+    /// Python event stamped as Python through `PyO3`.
     Python,
     /// Trusted Rust host event stamped as native Rust.
     RustHost,
