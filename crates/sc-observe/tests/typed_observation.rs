@@ -17,7 +17,7 @@ use sc_observability_types::{
     TraceContext, TraceId,
 };
 use sc_observe::Observability;
-use serde_json::Map;
+use serde_json::{Map, json};
 
 #[derive(Debug, Clone)]
 struct ObservationPayload {
@@ -498,9 +498,73 @@ fn paired_projection_routes_preserve_output_family_invocation_counts() {
 }
 
 #[test]
-fn invalid_names_are_rejected_before_observation_facade_boundary() {
+fn invalid_deserialized_names_fail_paired_facade_checks() {
     assert!(ToolName::new("").is_err());
     assert!(ServiceName::new("").is_err());
+
+    let invalid_tool: ToolName = serde_json::from_value(json!("bad/name"))
+        .expect("derived deserialization intentionally admits the fixture");
+    let legacy_default = sc_observe::ObservabilityConfig::default_for(
+        invalid_tool.clone(),
+        temp_path("invalid-default-legacy"),
+    )
+    .expect_err("legacy default must validate the derived env prefix");
+    let typed_default = sc_observe::ObservabilityConfig::default_for_typed(
+        invalid_tool.clone(),
+        temp_path("invalid-default-typed"),
+    )
+    .expect_err("typed default must validate the derived env prefix");
+    assert_eq!(
+        legacy_default.kind(),
+        InitFailureKind::ObservationInitialization
+    );
+    assert_eq!(
+        typed_default.kind(),
+        InitFailureKind::ObservationInitialization
+    );
+    assert_eq!(
+        legacy_default.diagnostic().code,
+        typed_default.diagnostic().code
+    );
+    assert_eq!(
+        legacy_default.diagnostic().code,
+        sc_observe::error_codes::OBSERVABILITY_INIT_FAILED
+    );
+    for source in [
+        std::error::Error::source(&legacy_default).expect("legacy context source"),
+        std::error::Error::source(typed_default.context()).expect("typed context source"),
+    ] {
+        assert!(source.to_string().contains("env prefix"));
+    }
+
+    let mut legacy_config = config("invalid-service-legacy");
+    legacy_config.tool_name = invalid_tool.clone();
+    let mut typed_config = config("invalid-service-typed");
+    typed_config.tool_name = invalid_tool;
+    let legacy_service = legacy_config
+        .service_name()
+        .expect_err("legacy service derivation must validate the tool name");
+    let typed_service = typed_config
+        .service_name_typed()
+        .expect_err("typed service derivation must validate the tool name");
+    assert_eq!(
+        legacy_service.kind(),
+        InitFailureKind::ObservationInitialization
+    );
+    assert_eq!(
+        typed_service.kind(),
+        InitFailureKind::ObservationInitialization
+    );
+    assert_eq!(
+        legacy_service.diagnostic().code,
+        typed_service.diagnostic().code
+    );
+    for source in [
+        std::error::Error::source(&legacy_service).expect("legacy context source"),
+        std::error::Error::source(typed_service.context()).expect("typed context source"),
+    ] {
+        assert!(source.to_string().contains("identifier"));
+    }
 }
 
 #[test]
@@ -532,21 +596,56 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
     };
     assert_eq!(empty.kind(), InitFailureKind::ObservationInitialization);
 
-    let mut config = sc_observe::ObservabilityConfig::default_for_typed(
+    let mut legacy_config = sc_observe::ObservabilityConfig::default_for(
         ToolName::new("typed-observe").expect("valid tool"),
-        temp_path("logger-failure"),
+        temp_path("legacy-logger-failure"),
+    )
+    .expect("legacy config");
+    legacy_config.queue_capacity = 0;
+    let mut typed_config = sc_observe::ObservabilityConfig::default_for_typed(
+        ToolName::new("typed-observe").expect("valid tool"),
+        temp_path("typed-logger-failure"),
     )
     .expect("typed config");
-    config.queue_capacity = 0;
-    let Err(logger_failure) = Observability::builder(config)
-        .register_subscriber(SubscriberRegistration::new(legacy_subscriber(Arc::new(
-            CountingSubscriber {
-                calls: Arc::new(AtomicUsize::new(0)),
-            },
-        ))))
+    typed_config.queue_capacity = 0;
+    let registration =
+        SubscriberRegistration::new(legacy_subscriber(Arc::new(CountingSubscriber {
+            calls: Arc::new(AtomicUsize::new(0)),
+        })));
+    let Err(legacy_logger_failure) = Observability::builder(legacy_config)
+        .register_subscriber(registration.clone())
+        .build()
+    else {
+        panic!("legacy zero queue capacity must fail");
+    };
+    let Err(typed_logger_failure) = Observability::builder(typed_config)
+        .register_subscriber(registration)
         .build_typed()
     else {
-        panic!("zero queue capacity must fail");
+        panic!("typed zero queue capacity must fail");
     };
-    assert_eq!(logger_failure.kind(), InitFailureKind::LoggerInitialization);
+    assert_eq!(
+        legacy_logger_failure.kind(),
+        InitFailureKind::LoggerInitialization
+    );
+    assert_eq!(
+        typed_logger_failure.kind(),
+        InitFailureKind::LoggerInitialization
+    );
+    assert_eq!(
+        legacy_logger_failure.diagnostic().code,
+        typed_logger_failure.diagnostic().code
+    );
+    assert!(
+        legacy_logger_failure
+            .diagnostic()
+            .message
+            .contains("queue capacity")
+    );
+    assert!(
+        typed_logger_failure
+            .diagnostic()
+            .message
+            .contains("queue capacity")
+    );
 }

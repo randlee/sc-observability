@@ -1274,18 +1274,25 @@ mod tests {
 
         let (legacy_runtime, legacy_flush_calls) = build_failing_runtime("flush-legacy");
         let (typed_runtime, typed_flush_calls) = build_failing_runtime("flush-typed");
+        let wait_for_second_flush = |flush_calls: &AtomicU64| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+            while flush_calls.load(Ordering::SeqCst) < 2 && std::time::Instant::now() < deadline {
+                std::thread::yield_now();
+            }
+            assert_eq!(flush_calls.load(Ordering::SeqCst), 2);
+        };
         let Err(legacy_error) = legacy_runtime.flush() else {
             panic!("legacy flush must report sink failure");
         };
+        // The writer sends the flush reply before its follow-up pass completes;
+        // wait on the bounded fixture counter before checking the exact count.
+        wait_for_second_flush(legacy_flush_calls.as_ref());
         let Err(typed_error) = typed_runtime.flush_typed() else {
             panic!("typed flush must report sink failure");
         };
         assert_eq!(legacy_error.kind(), FlushFailureKind::LoggerFlush);
         assert_eq!(typed_error.kind(), FlushFailureKind::LoggerFlush);
-        // The writer performs the requested flush and its terminal cleanup pass;
-        // both facade methods must expose the same concrete sink behavior.
-        assert_eq!(legacy_flush_calls.load(Ordering::SeqCst), 2);
-        assert_eq!(typed_flush_calls.load(Ordering::SeqCst), 2);
+        wait_for_second_flush(typed_flush_calls.as_ref());
         for runtime in [&legacy_runtime, &typed_runtime] {
             let logging = runtime.health().logging.expect("logging health");
             assert_eq!(logging.flush_errors_total, 1);
