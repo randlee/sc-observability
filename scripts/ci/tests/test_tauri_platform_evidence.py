@@ -41,12 +41,13 @@ class EvidenceTests(unittest.TestCase):
                 'policy_results_sha256': write('policy-results.json', {'passed': True, 'records': cases(gate.REQUIRED_POLICIES)}),
                 'fault_results_sha256': write('fault-results.json', {'passed': True, 'results': cases({'schema-' + case['id'] for case in canonical} | gate.REQUIRED_FAULTS)}),
                 'conformance_fixture_sha256': gate.digest(fixture),
+                'runtime_logs': {name: write(name, 'raw runtime log') for name in ('webview-stdout.log', 'webview-stderr.log', 'capped/webview-stdout.log', 'capped/webview-stderr.log')},
                 'jsonl': {'logs/events.jsonl': write('logs/events.jsonl', 'native-event')},
                 'rust_archives': {'adapter': write('rust-archives/adapter.crate', 'packed-adapter')},
             }
             report['bundle_manifest_sha256'] = write('bundle-manifest.json', {
                 'source_commit': 'reviewed-source', 'packages': [{
-                    'archive': 'archives/adapter.crate', 'archive_sha256': report['rust_archives']['adapter']}],
+                    'name': 'adapter', 'archive': 'archives/adapter.crate', 'archive_sha256': report['rust_archives']['adapter']}],
             })
             native = {'source_commit': 'reviewed-source', 'runtime_source_sha256': gate.native_source_digest(), 'profiles': {}}
             for profile in ('debug', 'release'):

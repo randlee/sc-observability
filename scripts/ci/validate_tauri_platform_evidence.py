@@ -72,9 +72,16 @@ def validate(root, source=None):
             raise ValueError('missing real JSONL: ' + name)
         for relative, expected in report['jsonl'].items():
             hashed(relative, expected)
+        required_logs = {'webview-stdout.log', 'webview-stderr.log', 'capped/webview-stdout.log', 'capped/webview-stderr.log'}
+        if set(report['runtime_logs']) != required_logs:
+            raise ValueError('missing raw real-webview logs: ' + name)
+        for relative, expected in report['runtime_logs'].items():
+            hashed(relative, expected)
         bundle = json.loads((directory / 'bundle-manifest.json').read_text(encoding='utf-8'))
         if bundle['source_commit'] != report['source_commit']:
             raise ValueError('stale source bundle: ' + name)
+        if report['rust_archives'] != {package['name']: package['archive_sha256'] for package in bundle['packages']}:
+            raise ValueError('Rust archive inventory differs from verified bundle: ' + name)
         for package in bundle['packages']:
             hashed('rust-archives/' + Path(package['archive']).name, package['archive_sha256'])
         native = json.loads((directory / 'native-runtime' / (name.lower() + '.json')).read_text(encoding='utf-8'))

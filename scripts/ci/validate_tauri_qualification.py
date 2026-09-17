@@ -245,7 +245,8 @@ def main():
             jsonl = list((output / 'logs').rglob('*.jsonl'))
             if not jsonl:
                 raise RuntimeError('real JSONL artifact missing')
-            report['jsonl'] = {str(path.relative_to(output)): digest(path) for path in jsonl}
+            report['runtime_logs'] = {path.relative_to(output).as_posix(): digest(path) for path in output.rglob('webview-*.log')}
+            report['jsonl'] = {path.relative_to(output).as_posix(): digest(path) for path in jsonl}
             if report.get('fault_error'):
                 raise RuntimeError('packed client fault/conformance cases failed; see fault-results.json')
             final_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()

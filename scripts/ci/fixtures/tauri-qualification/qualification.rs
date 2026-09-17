@@ -14,8 +14,10 @@ pub fn seed(backend: &dyn HostLoggingBackend) -> Result<(), String> {
         "schema_version": 1, "level": "info", "target": "tauri-example",
         "action": "rust-host", "correlation_id": "tauri-qualification",
         "message": "Bearer qualification-secret", "fields": {}
-    })).map_err(|error| format!("seed validation failed: {error:?}"))?;
-    backend.try_log(event, ProducerOrigin::RustHost)
+    }))
+    .map_err(|error| format!("seed validation failed: {error:?}"))?;
+    backend
+        .try_log(event, ProducerOrigin::RustHost)
         .map_err(|error| format!("seed admission failed: {error:?}"))?;
     Ok(())
 }
@@ -26,8 +28,12 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(HostFlush::default());
     app.manage(HostShutdown::default());
     tauri::WebviewWindowBuilder::new(
-        app, "forbidden", tauri::WebviewUrl::App("index.html?forbidden=1".into()),
-    ).title("Unauthorized qualification caller").build()?;
+        app,
+        "forbidden",
+        tauri::WebviewUrl::App("index.html?forbidden=1".into()),
+    )
+    .title("Unauthorized qualification caller")
+    .build()?;
     Ok(())
 }
 
@@ -48,7 +54,9 @@ pub fn qualification_report(
     let body = serde_json::to_vec_pretty(&*reports).map_err(|error| error.to_string())?;
     std::fs::write(path, body).map_err(|error| error.to_string())?;
     if reports.len() == 2 {
-        let passed = reports.values().all(|value| value.get("passed") == Some(&Value::Bool(true)));
+        let passed = reports
+            .values()
+            .all(|value| value.get("passed") == Some(&Value::Bool(true)));
         app.exit(if passed { 0 } else { 1 });
     }
     Ok(())
@@ -70,7 +78,8 @@ pub fn qualification_owner_gate(
     if !held {
         if let Some((release, done)) = slot.take() {
             release.send(()).map_err(|_| "holder exited early")?;
-            done.recv_timeout(Duration::from_secs(2)).map_err(|_| "holder did not release")?;
+            done.recv_timeout(Duration::from_secs(2))
+                .map_err(|_| "holder did not release")?;
         }
         return Ok(());
     }
@@ -80,17 +89,25 @@ pub fn qualification_owner_gate(
     let (ready_tx, ready_rx) = mpsc::sync_channel(1);
     let (release_tx, release_rx) = mpsc::channel();
     let (done_tx, done_rx) = mpsc::channel();
-    std::thread::Builder::new().name("qualification-owner-holder".into()).spawn(move || {
-        let owner = app.state::<super::OwnerState>();
-        let guard = owner.guard.lock();
-        if ready_tx.send(guard.is_ok()).is_err() { return; }
-        if guard.is_ok() {
-            let _ = release_rx.recv_timeout(Duration::from_secs(30));
-        }
-        drop(guard);
-        let _ = done_tx.send(());
-    }).map_err(|error| error.to_string())?;
-    if !ready_rx.recv_timeout(Duration::from_secs(2)).map_err(|_| "owner acquisition timed out")? {
+    std::thread::Builder::new()
+        .name("qualification-owner-holder".into())
+        .spawn(move || {
+            let owner = app.state::<super::OwnerState>();
+            let guard = owner.guard.lock();
+            if ready_tx.send(guard.is_ok()).is_err() {
+                return;
+            }
+            if guard.is_ok() {
+                let _ = release_rx.recv_timeout(Duration::from_secs(30));
+            }
+            drop(guard);
+            let _ = done_tx.send(());
+        })
+        .map_err(|error| error.to_string())?;
+    if !ready_rx
+        .recv_timeout(Duration::from_secs(2))
+        .map_err(|_| "owner acquisition timed out")?
+    {
         return Err("owner mutex poisoned".into());
     }
     *slot = Some((release_tx, done_rx));
@@ -109,24 +126,34 @@ pub async fn qualification_output_gate(paused: bool, token: String) -> Result<()
         use std::time::{Duration, Instant};
         let base = std::env::var("SC_TAURI_QUALIFICATION_CONTROL")
             .map_err(|_| "host did not configure output controller")?;
-        std::fs::write(format!("{base}.request"), serde_json::to_vec(&json!({"paused": paused, "token": token})).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
+        std::fs::write(
+            format!("{base}.request"),
+            serde_json::to_vec(&json!({"paused": paused, "token": token}))
+                .map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
         let deadline = Instant::now() + Duration::from_secs(5);
         while Instant::now() < deadline {
             if let Ok(text) = std::fs::read_to_string(format!("{base}.ack")) {
                 if let Ok(value) = serde_json::from_str::<Value>(&text) {
-                    if value.get("token").and_then(Value::as_str) == Some(token.as_str()) { return Ok(()); }
+                    if value.get("token").and_then(Value::as_str) == Some(token.as_str()) {
+                        return Ok(());
+                    }
                 }
             }
             std::thread::sleep(Duration::from_millis(5));
         }
         Err("output controller did not acknowledge".into())
-    }).await.map_err(|e| e.to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 pub struct Backend(pub std::sync::Arc<dyn HostLoggingBackend>);
 #[derive(Default)]
-pub struct HostFlush(Mutex<Option<sc_observability_binding_runtime::Operation<sc_observability_dto::CompletionDto>>>);
+pub struct HostFlush(
+    Mutex<Option<sc_observability_binding_runtime::Operation<sc_observability_dto::CompletionDto>>>,
+);
 
 /// Reserve an actual host flush before frontend query/flush overlap probes.
 /// This calls the supplied backend unchanged with the public maximum timeout.
@@ -136,17 +163,27 @@ pub fn qualification_host_flush(
     backend: tauri::State<'_, Backend>,
     state: tauri::State<'_, HostFlush>,
 ) -> Result<Value, String> {
-    let mut slot = state.0.lock().map_err(|_| "host flush observation poisoned")?;
+    let mut slot = state
+        .0
+        .lock()
+        .map_err(|_| "host flush observation poisoned")?;
     if start {
-        if slot.is_some() { return Err("host flush already reserved".into()); }
-        *slot = Some(backend.0.start_flush(std::time::Duration::from_secs(60))
-            .map_err(|error| format!("host flush start failed: {error:?}"))?);
+        if slot.is_some() {
+            return Err("host flush already reserved".into());
+        }
+        *slot = Some(
+            backend
+                .0
+                .start_flush(std::time::Duration::from_secs(60))
+                .map_err(|error| format!("host flush start failed: {error:?}"))?,
+        );
     }
     let operation = slot.as_ref().ok_or("host flush has not started")?;
     Ok(match operation.state() {
         sc_observability_binding_runtime::OperationState::Pending => json!({"pending": true}),
-        sc_observability_binding_runtime::OperationState::Completed { result } =>
-            json!({"pending": false, "completed": result.is_ok(), "result": format!("{result:?}")}),
+        sc_observability_binding_runtime::OperationState::Completed { result } => {
+            json!({"pending": false, "completed": result.is_ok(), "result": format!("{result:?}")})
+        }
     })
 }
 
@@ -161,31 +198,40 @@ pub fn policy_matrix() -> Result<(), String> {
     };
     let mut cases = Vec::new();
     for (name, labels) in [
-        ("empty-window-set", vec![]), ("empty-window", vec![""]),
-        ("nul-window", vec!["bad\0label"]), ("invalid-window", vec!["bad\nlabel"]),
+        ("empty-window-set", vec![]),
+        ("empty-window", vec![""]),
+        ("nul-window", vec!["bad\0label"]),
+        ("invalid-window", vec!["bad\nlabel"]),
     ] {
         let mut policy = base.clone();
         policy.allowed_window_labels = labels.into_iter().map(str::to_owned).collect();
         cases.push((name, policy));
     }
     for (name, targets) in [
-        ("empty-target-set", vec![]), ("empty-target", vec![""]),
-        ("nul-target", vec!["bad\0target"]), ("invalid-target", vec!["bad target"]),
+        ("empty-target-set", vec![]),
+        ("empty-target", vec![""]),
+        ("nul-target", vec!["bad\0target"]),
+        ("invalid-target", vec!["bad target"]),
     ] {
         let mut policy = base.clone();
         policy.allowed_targets = targets.into_iter().map(str::to_owned).collect();
         cases.push((name, policy));
     }
     for (name, size, depth) in [
-        ("zero-bytes", 0, 32), ("excess-bytes", 65537, 32),
-        ("zero-depth", 65536, 0), ("excess-depth", 65536, 33),
+        ("zero-bytes", 0, 32),
+        ("excess-bytes", 65537, 32),
+        ("zero-depth", 65536, 0),
+        ("excess-depth", 65536, 33),
     ] {
         let mut policy = base.clone();
         policy.max_request_bytes = size;
         policy.max_depth = depth;
         cases.push((name, policy));
     }
-    for key in ["sc_observability.binding.language", "sc_observability::binding::future"] {
+    for key in [
+        "sc_observability.binding.language",
+        "sc_observability::binding::future",
+    ] {
         let mut policy = base.clone();
         policy.redacted_field_keys.insert(key.into());
         cases.push((key, policy));
@@ -193,16 +239,32 @@ pub fn policy_matrix() -> Result<(), String> {
     let mut records = vec![json!({"name": "valid-policy", "passed": base.validate().is_ok()})];
     for (name, policy) in cases {
         let result = policy.validate();
-        let error = result.err().map(serde_json::to_value).transpose().map_err(|error| error.to_string())?;
-        let passed = error.as_ref().is_some_and(|value| value["kind"] == "validation"
-            && value["code"] == sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT);
+        let error = result
+            .err()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|error| error.to_string())?;
+        let passed = error.as_ref().is_some_and(|value| {
+            value["kind"] == "validation"
+                && value["code"]
+                    == sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT
+        });
         records.push(json!({"name": name, "passed": passed, "error": error}));
     }
     let passed = records.iter().all(|record| record["passed"] == true);
-    let path = std::env::var("SC_TAURI_QUALIFICATION_POLICY").map_err(|_| "policy evidence path absent")?;
-    std::fs::write(path, serde_json::to_vec_pretty(&json!({"passed": passed, "records": records})).map_err(|error| error.to_string())?)
-        .map_err(|error| error.to_string())?;
-    if passed { Ok(()) } else { Err("packaged adapter accepted an invalid host policy".into()) }
+    let path = std::env::var("SC_TAURI_QUALIFICATION_POLICY")
+        .map_err(|_| "policy evidence path absent")?;
+    std::fs::write(
+        path,
+        serde_json::to_vec_pretty(&json!({"passed": passed, "records": records}))
+            .map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    if passed {
+        Ok(())
+    } else {
+        Err("packaged adapter accepted an invalid host policy".into())
+    }
 }
 
 type ShutdownResult = Result<(), sc_observability_dto::Failure>;
@@ -223,23 +285,42 @@ pub fn qualification_shutdown(
         return serde_json::to_value(app.state::<super::OwnerState>().shutdown(Duration::ZERO))
             .map_err(|error| error.to_string());
     }
-    let mut slot = state.0.lock().map_err(|_| "shutdown observation poisoned")?;
+    let mut slot = state
+        .0
+        .lock()
+        .map_err(|_| "shutdown observation poisoned")?;
     if operation == "start" {
-        if slot.is_some() { return Err("shutdown already started".into()); }
+        if slot.is_some() {
+            return Err("shutdown already started".into());
+        }
         let result = Arc::new(Mutex::new(None));
         let completed = Arc::clone(&result);
         let shutdown_app = app.clone();
-        std::thread::Builder::new().name("qualification-host-shutdown".into()).spawn(move || {
-            let result = shutdown_app.state::<super::OwnerState>().shutdown(Duration::ZERO);
-            if let Ok(mut completed) = completed.lock() { *completed = Some(result); }
-        }).map_err(|error| error.to_string())?;
+        std::thread::Builder::new()
+            .name("qualification-host-shutdown".into())
+            .spawn(move || {
+                let result = shutdown_app
+                    .state::<super::OwnerState>()
+                    .shutdown(Duration::ZERO);
+                if let Ok(mut completed) = completed.lock() {
+                    *completed = Some(result);
+                }
+            })
+            .map_err(|error| error.to_string())?;
         *slot = Some(result);
     } else if operation != "status" {
         return Err("unknown shutdown observation operation".into());
     }
-    let result = slot.as_ref().ok_or("shutdown not started")?.lock()
+    let result = slot
+        .as_ref()
+        .ok_or("shutdown not started")?
+        .lock()
         .map_err(|_| "shutdown completion poisoned")?;
-    let health = app.state::<super::OwnerState>().control.health().map_err(|error| error.to_string())?;
+    let health = app
+        .state::<super::OwnerState>()
+        .control
+        .health()
+        .map_err(|error| error.to_string())?;
     let pending = health.lifecycle != sc_observability_log::LifecyclePhase::Stopped;
     Ok(json!({"pending": pending, "returned": result.is_some(), "result": &*result}))
 }
