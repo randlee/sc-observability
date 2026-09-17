@@ -8,6 +8,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -105,8 +106,15 @@ class Sandbox:
         self.cache_probe.unlink(missing_ok=True)
 
     def run(self, command: list[str], cwd: Path, *, expect_failure: bool = False) -> str:
-        result = subprocess.run(self.prefix + command, cwd=cwd, env=self.env,
-                                text=True, encoding='utf-8', errors='replace', capture_output=True)
+        print('B4A_COMMAND ' + json.dumps(command), flush=True)
+        started = time.monotonic()
+        try:
+            result = subprocess.run(self.prefix + command, cwd=cwd, env=self.env,
+                                    text=True, encoding='utf-8', errors='replace',
+                                    capture_output=True, timeout=900)
+        except subprocess.TimeoutExpired as error:
+            raise DistributionError(f'qualification command exceeded 900 seconds: {command}') from error
+        print(f'B4A_EXIT {result.returncode} after {time.monotonic() - started:.2f}s', flush=True)
         self.commands.append({'command': command, 'exit_code': result.returncode,
                               'stdout': result.stdout, 'stderr': result.stderr})
         if (result.returncode == 0) == expect_failure:
