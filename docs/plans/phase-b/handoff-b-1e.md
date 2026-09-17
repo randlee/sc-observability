@@ -98,14 +98,40 @@ result, and B.7 alone publishes it.
 
 ## B.1e implementation handoff
 
-The follow-on implementation is complete on
+The implementation correction pass is on
 `feature/phase-b-1e-migration-validation`, based on and merged with the active
-QA1 parent `origin/fix/phase-b-1ab-qa1` at `1e216c7` before final validation.
-The child activates all nine wrapper warnings and 20 mapped method warnings at
+QA1 parent `origin/fix/phase-b-1ab-qa1` at `1e216c7` before validation. The
+child activates all nine wrapper warnings and 20 mapped method warnings at
 `since = "1.4.0"`, while retaining the three supported method exemptions and
 `Logger::emit` at its existing `since = "1.2.0"`. Ordinary observation routing
-uses `log_typed` and `flush_typed`; compatibility signatures and adapter
-modules retain only named, reason-bearing local deprecation allowances.
+uses `log_typed` and `flush_typed`; mixed production and compatibility modules
+use named, reason-bearing allowances. The copied `sc-observability-log` bridge
+keeps its public signatures unchanged and has only boundary/item allowances
+for its retained legacy identity, logger, lifecycle and sink paths; those
+allowances are recorded here as compatibility evidence, not as provenance
+rewrites.
+
+The M01–M05 correction evidence is:
+
+- M01: the validator inventories exactly 29 targets, checks each local
+  attribute and exact replacement note, requires one `deprecated` code and one
+  `src/main.rs` primary span per JSON diagnostic, rejects secondary spans and
+  unexpected notes, and tests broad-allow/unexpected-warning negatives.
+- M02: the legacy fixture exercises all nine wrapper names, every mapped
+  method, explicit `InitError` tuple/field access, and the exempt owner
+  constructors; the deny-deprecated fixture exercises both owner constructors
+  and both typed counterparts without a blanket allowance, while the validator
+  separates wrapper diagnostics from method diagnostics.
+- M03: the migrated fixture runs root-glob imports, all five legacy/typed
+  adapter directions, both sink directions, mixed subscriber/projector
+  registration, successful and failing observation routes, custom and wrong
+  family kind fallback, source-chain preservation, and the legacy fixture
+  checks the serialized `InitError` golden and span path.
+- M04: ordinary production projection/lifecycle paths call typed APIs; copied
+  bridge signatures remain unchanged and its compatibility allowances are
+  narrow, named and reason-bearing.
+- M05: the local implementation checklist and this handoff record the second
+  verification pass; B.2 qualification and B.7 publication remain pending.
 
 The implementation evidence is:
 
@@ -116,11 +142,13 @@ cargo check --workspace --message-format=short
 PASS; remaining warnings are confined to the copied sc-observability-log bridge
 cargo fmt --all -- --check
 PASS
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+PASS
 ```
 
 The validator runs standalone `legacy`, `migrated` and `partial` Cargo
-workspaces, parses `deprecated` JSON diagnostics and source spans, executes
-each fixture, checks the legacy serialized `InitError` golden, verifies typed
-kind fallback handling, and rejects broad fixture allowances. B.2 still owns
-qualification/staging and B.7 owns publication; no removal schedule or major
-release is introduced.
+workspaces, parses every target warning as JSON, executes each fixture, checks
+the legacy serialized `InitError` golden, verifies typed kind fallback and
+source-chain handling, exercises the full adapter matrix, and rejects broad
+fixture allowances. B.2 still owns qualification/staging and B.7 owns
+publication; no removal schedule or major release is introduced.

@@ -1,8 +1,3 @@
-#![allow(
-    deprecated,
-    reason = "runtime retains legacy log, flush, and error conversion boundaries alongside typed implementations"
-)]
-
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -10,6 +5,10 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure};
+#[allow(
+    deprecated,
+    reason = "the logger runtime retains named legacy error types in compatibility signatures"
+)]
 use sc_observability_types::{
     AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext,
     EventError, FlushError, LevelChange, LevelChangeError, LevelChangeSource, LevelFilter,
@@ -341,6 +340,10 @@ impl LoggerRuntime {
 
 impl Logger<Running> {
     /// Starts a construction-time builder for sink registration.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use Logger::builder_typed(); see migrate-error-api.md."
@@ -357,6 +360,10 @@ impl Logger<Running> {
     }
 
     /// Creates a logger with the configured built-in sinks and runtime state.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use Logger::new_typed(); see migrate-error-api.md."
@@ -371,6 +378,10 @@ impl Logger<Running> {
     }
 
     /// Creates a logger together with weak authority for runtime level changes.
+    #[allow(
+        deprecated,
+        reason = "supported owner-returning method keeps its published InitError signature"
+    )]
     pub fn new_with_level_owner(
         config: crate::LoggerConfig,
     ) -> Result<(Self, LevelOwner), sc_observability_types::InitError> {
@@ -494,6 +505,10 @@ impl Logger<Running> {
     }
 
     /// Emits one structured log event through the compatibility path.
+    #[allow(
+        deprecated,
+        reason = "the existing emit compatibility path delegates to retained legacy methods"
+    )]
     #[deprecated(
         since = "1.2.0",
         note = "Use log() for blocking queue admission or try_log() for non-blocking logging."
@@ -519,6 +534,10 @@ impl Logger<Running> {
     /// # Panics
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility lifecycle method keeps the published FlushError signature"
+    )]
     #[deprecated(
         since = "1.4.0",
         note = "Use Logger::flush_typed(); see migrate-error-api.md."
@@ -901,6 +920,10 @@ fn aggregate_logging_health_state(
     }
 }
 
+#[allow(
+    deprecated,
+    reason = "the existing emit compatibility path converts retained legacy logger errors"
+)]
 fn event_error_from_log_error(error: LogError) -> EventError {
     match error {
         LogError::InvalidEvent(error) => error,

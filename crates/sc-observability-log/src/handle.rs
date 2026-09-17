@@ -487,6 +487,10 @@ pub(crate) fn submit_guarded<T, E: Rejection>(
 ///
 /// Never call it outside a [`submit_guarded`] closure: it neither contains panics
 /// nor detects reentrancy.
+#[allow(
+    deprecated,
+    reason = "the copied bridge retains its legacy logger admission boundary"
+)]
 pub(crate) fn submit_to(
     installed: &Installed,
     parts: EventParts,
@@ -681,6 +685,10 @@ pub(crate) fn take_sole<T>(mut shared: Arc<T>) -> T {
 /// `ShutdownError::TimedOut` while the detached helper keeps waiting. When it
 /// completes late it stores the final health report and publishes
 /// `BridgeLifecycle::Stopped`, so the late completion is observable.
+#[allow(
+    deprecated,
+    reason = "the copied bridge preserves its legacy logger flush/shutdown boundary"
+)]
 pub(crate) fn shutdown_installed(
     installed: Arc<Installed>,
     timeout: Duration,
@@ -827,6 +835,10 @@ pub(crate) fn current_installed() -> Option<Arc<Installed>> {
 /// At most one flush helper runs at a time. While one is running (also after its
 /// caller timed out and detached it), a new flush spawns nothing and returns
 /// `FlushError::InProgress`, so a stuck sink cannot accumulate helper threads.
+#[allow(
+    deprecated,
+    reason = "the copied bridge preserves its legacy bounded flush boundary"
+)]
 pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
     if lifecycle() != BridgeLifecycle::Running {
         return Err(FlushError::NotRunning {
@@ -868,6 +880,10 @@ pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "copied bridge tests exercise retained legacy lifecycle signatures"
+)]
 mod tests {
     use super::*;
     use std::time::Instant;

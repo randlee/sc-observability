@@ -1,5 +1,11 @@
 #![deny(deprecated)]
 
+#[allow(
+    deprecated,
+    reason = "the matrix module is an explicit compatibility fixture for both adapter directions"
+)]
+mod compatibility_matrix;
+
 use sc_observability::{Logger, LoggerBuilder, LoggerConfig};
 use sc_observability_otlp::{
     AuthHeader, OtlpEndpoint, Telemetry, TelemetryConfigBuilder,
@@ -27,6 +33,51 @@ fn main() {
     let logger = Logger::new_typed(logger_config).expect("typed logger constructor");
     logger.flush_typed().expect("typed logger flush");
     let _ = logger.shutdown();
+
+    let mut owner_config = LoggerConfig::default_for(
+        ServiceName::new("b1e-owner-legacy").expect("valid service"),
+        std::env::temp_dir().join("sc-observability-b1e-owner-legacy"),
+    );
+    owner_config.enable_file_sink = false;
+    owner_config.enable_console_sink = false;
+    let (owner_logger, _owner) = Logger::new_with_level_owner(owner_config)
+        .expect("supported owner constructor remains callable");
+    let _ = owner_logger.shutdown();
+
+    let mut typed_owner_config = LoggerConfig::default_for(
+        ServiceName::new("b1e-owner-typed").expect("valid service"),
+        std::env::temp_dir().join("sc-observability-b1e-owner-typed"),
+    );
+    typed_owner_config.enable_file_sink = false;
+    typed_owner_config.enable_console_sink = false;
+    let (typed_owner_logger, _typed_owner) = Logger::new_with_level_owner_typed(typed_owner_config)
+        .expect("typed owner constructor");
+    let _ = typed_owner_logger.shutdown();
+
+    let mut owner_builder_config = LoggerConfig::default_for(
+        ServiceName::new("b1e-builder-owner").expect("valid service"),
+        std::env::temp_dir().join("sc-observability-b1e-builder-owner"),
+    );
+    owner_builder_config.enable_file_sink = false;
+    owner_builder_config.enable_console_sink = false;
+    let (builder_owner_logger, _builder_owner) = LoggerBuilder::new_typed(owner_builder_config)
+        .expect("typed builder")
+        .build_with_level_owner()
+        .expect("supported builder owner constructor remains callable");
+    let _ = builder_owner_logger.shutdown();
+
+    let mut typed_builder_owner_config = LoggerConfig::default_for(
+        ServiceName::new("b1e-builder-owner-typed").expect("valid service"),
+        std::env::temp_dir().join("sc-observability-b1e-builder-owner-typed"),
+    );
+    typed_builder_owner_config.enable_file_sink = false;
+    typed_builder_owner_config.enable_console_sink = false;
+    let (typed_builder_owner_logger, _typed_builder_owner) =
+        LoggerBuilder::new_typed(typed_builder_owner_config)
+            .expect("typed builder")
+            .build_with_level_owner_typed()
+            .expect("typed builder owner constructor");
+    let _ = typed_builder_owner_logger.shutdown();
 
     let config = ObservabilityConfig::default_for_typed(
         ToolName::new("b1e-migrated").expect("valid tool"),
@@ -60,4 +111,6 @@ fn main() {
         InitFailureKind::InvalidTelemetryConfig | InitFailureKind::Unclassified => {}
         _ => panic!("unexpected initialization classification"),
     }
+
+    compatibility_matrix::run();
 }

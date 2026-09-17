@@ -1,8 +1,3 @@
-#![allow(
-    deprecated,
-    reason = "sink compatibility paths preserve the published LogSinkError contract"
-)]
-
 use std::borrow::Cow;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -13,6 +8,10 @@ use std::time::{Duration, SystemTime};
 #[cfg(feature = "fault-injection")]
 use sc_observability_types::ErrorContext;
 use sc_observability_types::typed::LogSinkFailure;
+#[allow(
+    deprecated,
+    reason = "sink compatibility implementations preserve the published LogSinkError contract"
+)]
 use sc_observability_types::{
     Diagnostic, DiagnosticSummary, Level, LogEvent, LogSinkError, Remediation, SinkHealth,
     SinkHealthState, SinkName, Timestamp,
@@ -342,6 +341,10 @@ impl crate::typed::TypedLogSink for JsonlFileSink {
     }
 }
 
+#[allow(
+    deprecated,
+    reason = "the legacy sink adapter preserves the published LogSinkError boundary"
+)]
 impl LogSink for JsonlFileSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         <Self as crate::typed::TypedLogSink>::write(self, event).map_err(Into::into)
@@ -483,6 +486,10 @@ impl crate::typed::TypedLogSink for ConsoleSink {
     }
 }
 
+#[allow(
+    deprecated,
+    reason = "the legacy sink adapter preserves the published LogSinkError boundary"
+)]
 impl LogSink for ConsoleSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         <Self as crate::typed::TypedLogSink>::write(self, event).map_err(Into::into)
@@ -576,6 +583,10 @@ impl FaultInjectingSink {
 }
 
 #[cfg(feature = "fault-injection")]
+#[allow(
+    deprecated,
+    reason = "fault-injection compatibility preserves the published LogSinkError boundary"
+)]
 impl LogSink for FaultInjectingSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         if let Some(state) = self.current_state() {
