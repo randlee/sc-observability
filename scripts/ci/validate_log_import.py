@@ -100,6 +100,29 @@ _KIND_LINE_PATTERNS = {
     ),
 }
 
+# `package_metadata` and `dependency_path` describe Cargo manifest edits only.
+_CARGO_TOML_ONLY_KINDS = frozenset({"package_metadata", "dependency_path"})
+
+# Dependency-table structural parsing for `dependency_path`: a full-line regex
+# proves each changed line is syntactically a dependency assignment, but not
+# that it is a *relocation* of an existing dependency rather than a wholesale
+# new one -- so this compares the actual before/after dependency tables.
+_DEP_TABLE_HEADER_RE = re.compile(r"^\s*\[([\w.-]*dependencies[\w.-]*)\]\s*$")
+_OTHER_TABLE_HEADER_RE = re.compile(r"^\s*\[[^\]]*\]\s*$")
+_DEP_ENTRY_RE = re.compile(r'^\s*([A-Za-z0-9_-]+)\s*=\s*("(?:[^"\\]|\\.)*"|\{[^{}]*\})\s*,?\s*$')
+_INLINE_KV_RE = re.compile(r'([A-Za-z0-9_-]+)\s*=\s*("(?:[^"\\]|\\.)*"|\[[^\]]*\]|true|false|[0-9.]+)')
+_LOCATION_KEYS = frozenset({"path", "version", "git", "branch", "rev", "tag"})
+
+# Relocation-declaration profiling for `relocated_doc_or_test_path`: identity
+# (mod name) or count (include!/path-attribute/bare-literal, which carry no
+# identity independent of the path itself) must be preserved across
+# before/after -- a new declaration is a wholesale addition, not a relocation
+# of an existing one.
+_MOD_NAME_RE = re.compile(r"^\s*mod\s+([\w:]+)\s*;\s*$")
+_INCLUDE_LINE_RE = re.compile(r'^\s*include!\(\s*"[^"]+"\s*\)\s*;?\s*$')
+_PATH_ATTR_LINE_RE = re.compile(r'^\s*#\[path\s*=\s*"[^"]+"\]\s*$')
+_BARE_PATH_LITERAL_RE = re.compile(r'^\s*"[\w./-]+\.(md|rs)"\s*,?\s*$')
+
 _FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _ACCEPTED_SHA_RE = re.compile(r"Accepted source SHA:\s*`([0-9a-f]{40})`")
 _REVIEW_DOC_RE = re.compile(r"Review document:\s*`([^`]+)`\s*at commit\s*`([0-9a-f]{40})`")
@@ -254,6 +277,117 @@ def _changed_lines(before: str, after: str) -> list[str]:
     ]
 
 
+def _parse_dependency_tables(content: str) -> dict[str, dict[str, str]]:
+    """Map each `*dependencies*` table name to {dependency_name: raw_value_text}."""
+    tables: dict[str, dict[str, str]] = {}
+    current: str | None = None
+    for line in content.splitlines():
+        header = _DEP_TABLE_HEADER_RE.match(line)
+        if header:
+            current = header.group(1)
+            tables.setdefault(current, {})
+            continue
+        if _OTHER_TABLE_HEADER_RE.match(line):
+            current = None
+            continue
+        if current is None:
+            continue
+        entry = _DEP_ENTRY_RE.match(line)
+        if entry:
+            tables[current][entry.group(1)] = entry.group(2)
+    return tables
+
+
+def _parse_inline_table(value: str) -> dict[str, str]:
+    value = value.strip()
+    if not value.startswith("{"):
+        return {"version": value}
+    return {m.group(1): m.group(2) for m in _INLINE_KV_RE.finditer(value)}
+
+
+def _validate_dependency_path_change(before: str, after: str, path: str) -> None:
+    """Require every dependency-table change to be a relocation, never an addition.
+
+    A full-line regex proves each changed line is syntactically a dependency
+    assignment, not that the assignment relocates an *existing* dependency:
+    appending a whole new `[dependencies]` table, or a whole new dependency
+    entry with its own arbitrary features, previously passed on syntax alone.
+    """
+    before_tables = _parse_dependency_tables(before)
+    after_tables = _parse_dependency_tables(after)
+    if set(before_tables) != set(after_tables):
+        raise SystemExit(
+            f"adaptation for {path} adds or removes a dependency table, "
+            "not a permitted dependency_path mechanical change"
+        )
+    for table, before_deps in before_tables.items():
+        after_deps = after_tables[table]
+        if set(before_deps) != set(after_deps):
+            raise SystemExit(
+                f"adaptation for {path} adds or removes a dependency entry in [{table}], "
+                "not a permitted dependency_path mechanical change"
+            )
+        for name, before_raw in before_deps.items():
+            before_kv = _parse_inline_table(before_raw)
+            after_kv = _parse_inline_table(after_deps[name])
+            before_other = {k: v for k, v in before_kv.items() if k not in _LOCATION_KEYS}
+            after_other = {k: v for k, v in after_kv.items() if k not in _LOCATION_KEYS}
+            if before_other != after_other:
+                raise SystemExit(
+                    f"adaptation for {path} changes non-location dependency keys for {name!r}, "
+                    "not a permitted dependency_path mechanical change"
+                )
+
+
+def _relocation_profile(content: str) -> tuple[set[str], int, int, int]:
+    mod_names: set[str] = set()
+    include_count = path_attr_count = bare_literal_count = 0
+    for line in content.splitlines():
+        mod_match = _MOD_NAME_RE.match(line)
+        if mod_match:
+            mod_names.add(mod_match.group(1))
+        elif _INCLUDE_LINE_RE.match(line):
+            include_count += 1
+        elif _PATH_ATTR_LINE_RE.match(line):
+            path_attr_count += 1
+        elif _BARE_PATH_LITERAL_RE.match(line):
+            bare_literal_count += 1
+    return mod_names, include_count, path_attr_count, bare_literal_count
+
+
+def _validate_relocation_change(before: str, after: str, path: str) -> None:
+    """Require every relocation-kind change to replace an existing declaration.
+
+    `mod` identity (its name) and the count of include!/path-attribute/bare
+    path-literal declarations (which carry no identity independent of the
+    path itself) must be preserved across before/after: a full-line regex
+    proves syntax, not that a `mod` or `include!` is a genuine relocation
+    rather than a wholesale new declaration appended alongside it.
+    """
+    before_mods, before_inc, before_attr, before_bare = _relocation_profile(before)
+    after_mods, after_inc, after_attr, after_bare = _relocation_profile(after)
+    if before_mods != after_mods:
+        raise SystemExit(
+            f"adaptation for {path} adds or removes a mod declaration, "
+            "not a permitted relocated_doc_or_test_path mechanical change"
+        )
+    if before_inc != after_inc:
+        raise SystemExit(
+            f"adaptation for {path} adds or removes an include! declaration, "
+            "not a permitted relocated_doc_or_test_path mechanical change"
+        )
+    if before_attr != after_attr:
+        raise SystemExit(
+            f"adaptation for {path} adds or removes a #[path] attribute, "
+            "not a permitted relocated_doc_or_test_path mechanical change"
+        )
+    if before_bare != after_bare:
+        raise SystemExit(
+            f"adaptation for {path} adds or removes a path literal, "
+            "not a permitted relocated_doc_or_test_path mechanical change"
+        )
+
+
 def validate_adaptations(adaptations: list[dict], recorded_inventory: dict[str, str], cwd: Path) -> dict[str, str]:
     """Verify every declared adaptation and return the expected destination inventory.
 
@@ -262,6 +396,13 @@ def validate_adaptations(adaptations: list[dict], recorded_inventory: dict[str, 
     must match that kind's own pattern -- a kind label alone does not prove
     the change is actually mechanical, so declaring `dependency_path` over an
     arbitrary runtime rewrite is rejected here, not accepted on label alone.
+    `package_metadata`/`dependency_path` are further restricted to Cargo.toml
+    files, and `dependency_path`/`relocated_doc_or_test_path` additionally
+    require structural before/after equivalence (same dependency names/table
+    membership, same mod/include!/path-attribute declarations) -- per-line
+    syntax alone cannot distinguish a genuine relocation of something that
+    already existed from a wholesale new dependency or module appended
+    alongside it.
     """
     expected = dict(recorded_inventory)
     seen: set[str] = set()
@@ -279,6 +420,8 @@ def validate_adaptations(adaptations: list[dict], recorded_inventory: dict[str, 
         pattern = _KIND_LINE_PATTERNS.get(kind)
         if pattern is None:
             raise SystemExit(f"adaptation for {path} has a kind that is not a permitted mechanical change: {kind}")
+        if kind in _CARGO_TOML_ONLY_KINDS and Path(path).name != "Cargo.toml":
+            raise SystemExit(f"adaptation for {path} has kind {kind} but is not a Cargo.toml file")
         before, after = item.get("before"), item.get("after")
         if before is None or after is None:
             raise SystemExit(f"adaptation for {path} is missing exact approved before/after content")
@@ -289,6 +432,10 @@ def validate_adaptations(adaptations: list[dict], recorded_inventory: dict[str, 
                 raise SystemExit(
                     f"adaptation for {path} changes content that is not a permitted {kind} mechanical change: {line!r}"
                 )
+        if kind == "dependency_path":
+            _validate_dependency_path_change(before, after, path)
+        elif kind == "relocated_doc_or_test_path":
+            _validate_relocation_change(before, after, path)
         expected[path] = blob_id_of_content(after, cwd)
     return expected
 

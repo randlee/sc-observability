@@ -41,8 +41,13 @@ class ImportContractFixture:
 
     FILES = {
         "crates/sc-observability-log/Cargo.toml": '[package]\nname = "sc-observability-log"\n',
-        "crates/sc-observability-log/src/lib.rs": "pub fn noop() {}\n",
-        "crates/sc-observability-log-macros/Cargo.toml": '[package]\nname = "sc-observability-log-macros"\n',
+        "crates/sc-observability-log/src/lib.rs": (
+            'pub fn noop() {}\n\n#[path = "tests/original.rs"]\nmod tests;\n'
+        ),
+        "crates/sc-observability-log-macros/Cargo.toml": (
+            '[package]\nname = "sc-observability-log-macros"\n\n'
+            '[dependencies]\nsc-observability-log = { version = "0.1.0" }\n'
+        ),
         "crates/sc-observability-log-consumer-check/Cargo.toml": '[package]\nname = "consumer-check"\n',
         "crates/sc-observability-log-consumer-check/src/main.rs": "fn main() {}\n",
     }
@@ -540,9 +545,9 @@ class ValidateLogImportTests(unittest.TestCase):
         """A kind label alone must not launder an arbitrary content change."""
         with tempfile.TemporaryDirectory() as temp:
             fixture = ImportContractFixture(Path(temp))
-            path = "crates/sc-observability-log/src/lib.rs"
+            path = "crates/sc-observability-log-consumer-check/Cargo.toml"
             before = fixture.FILES[path]
-            after = "pub fn totally_different_runtime_behavior() {}\n"
+            after = "totally different manifest content entirely\n"
             (fixture.destination / path).write_text(after)
             provenance = fixture.provenance(adaptations=[{
                 "path": path, "reason": "relocate dependency", "kind": "dependency_path",
@@ -553,11 +558,15 @@ class ValidateLogImportTests(unittest.TestCase):
                                  fixture.handoff_text(), doc_repo=fixture.doc_repo)
 
     def test_accepts_declared_dependency_path_relocation(self) -> None:
+        """A genuine relocation retargets an *existing* dependency's location key only."""
         with tempfile.TemporaryDirectory() as temp:
             fixture = ImportContractFixture(Path(temp))
             path = "crates/sc-observability-log-macros/Cargo.toml"
             before = fixture.FILES[path]
-            after = before.rstrip("\n") + '\n\n[dependencies]\nsc-observability-log = { path = "../sc-observability-log" }\n'
+            after = before.replace(
+                'sc-observability-log = { version = "0.1.0" }',
+                'sc-observability-log = { path = "../sc-observability-log" }',
+            )
             (fixture.destination / path).write_text(after)
             provenance = fixture.provenance(adaptations=[{
                 "path": path, "reason": "point at the staged sibling crate", "kind": "dependency_path",
@@ -565,6 +574,75 @@ class ValidateLogImportTests(unittest.TestCase):
             }])
             validate_import(provenance, fixture.source_repo, fixture.destination,
                              fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_rejects_dependency_path_adds_new_dependency_table(self) -> None:
+        """A kind label must not launder appending a whole new dependency table."""
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log-consumer-check/Cargo.toml"
+            before = fixture.FILES[path]
+            after = before.rstrip("\n") + (
+                '\n\n[dependencies]\n'
+                'new_runtime_dependency = { version = "99", features = ["change_behavior"] }\n'
+            )
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "add dependency", "kind": "dependency_path",
+                "before": before, "after": after,
+            }])
+            with self.assertRaisesRegex(SystemExit, "adds or removes a dependency table"):
+                validate_import(provenance, fixture.source_repo, fixture.destination,
+                                 fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_rejects_dependency_path_adds_new_dependency_entry(self) -> None:
+        """A kind label must not launder appending a new entry to an existing table."""
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log-macros/Cargo.toml"
+            before = fixture.FILES[path]
+            after = before.rstrip("\n") + '\nnew_runtime_dependency = { version = "99", features = ["change_behavior"] }\n'
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "add dependency", "kind": "dependency_path",
+                "before": before, "after": after,
+            }])
+            with self.assertRaisesRegex(SystemExit, "adds or removes a dependency entry"):
+                validate_import(provenance, fixture.source_repo, fixture.destination,
+                                 fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_rejects_dependency_path_changes_non_location_keys(self) -> None:
+        """Relocating a dependency must preserve its other keys (features, etc.)."""
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log-macros/Cargo.toml"
+            before = fixture.FILES[path]
+            after = before.replace(
+                'sc-observability-log = { version = "0.1.0" }',
+                'sc-observability-log = { path = "../sc-observability-log", features = ["extra"] }',
+            )
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "point at the staged sibling crate", "kind": "dependency_path",
+                "before": before, "after": after,
+            }])
+            with self.assertRaisesRegex(SystemExit, "non-location dependency keys"):
+                validate_import(provenance, fixture.source_repo, fixture.destination,
+                                 fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_rejects_dependency_path_kind_on_non_cargo_toml_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log-consumer-check/src/main.rs"
+            before = fixture.FILES[path]
+            after = "fn main() { println!(); }\n"
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "not actually a manifest", "kind": "dependency_path",
+                "before": before, "after": after,
+            }])
+            with self.assertRaisesRegex(SystemExit, "is not a Cargo.toml file"):
+                validate_import(provenance, fixture.source_repo, fixture.destination,
+                                 fixture.handoff_text(), doc_repo=fixture.doc_repo)
 
     def test_rejects_relocated_kind_arbitrary_code_containing_path_substring(self) -> None:
         """A changed line merely containing '.rs' inside a string literal must not launder arbitrary code."""
@@ -585,11 +663,15 @@ class ValidateLogImportTests(unittest.TestCase):
                                  fixture.handoff_text(), doc_repo=fixture.doc_repo)
 
     def test_accepts_declared_relocated_doc_or_test_path(self) -> None:
+        """A genuine relocation retargets an *existing* mod's #[path] attribute only."""
         with tempfile.TemporaryDirectory() as temp:
             fixture = ImportContractFixture(Path(temp))
             path = "crates/sc-observability-log/src/lib.rs"
             before = fixture.FILES[path]
-            after = before + '#[path = "relocated/tests.rs"]\nmod tests;\n'
+            after = before.replace(
+                '#[path = "tests/original.rs"]',
+                '#[path = "tests/relocated.rs"]',
+            )
             (fixture.destination / path).write_text(after)
             provenance = fixture.provenance(adaptations=[{
                 "path": path, "reason": "relocate test module path", "kind": "relocated_doc_or_test_path",
@@ -597,6 +679,22 @@ class ValidateLogImportTests(unittest.TestCase):
             }])
             validate_import(provenance, fixture.source_repo, fixture.destination,
                              fixture.handoff_text(), doc_repo=fixture.doc_repo)
+
+    def test_rejects_relocated_kind_adds_new_mod_declaration(self) -> None:
+        """A kind label must not launder appending a whole new mod declaration."""
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/src/lib.rs"
+            before = fixture.FILES[path]
+            after = before.rstrip("\n") + "\nmod new_runtime_module;\n"
+            (fixture.destination / path).write_text(after)
+            provenance = fixture.provenance(adaptations=[{
+                "path": path, "reason": "relocate test path reference", "kind": "relocated_doc_or_test_path",
+                "before": before, "after": after,
+            }])
+            with self.assertRaisesRegex(SystemExit, "adds or removes a mod declaration"):
+                validate_import(provenance, fixture.source_repo, fixture.destination,
+                                 fixture.handoff_text(), doc_repo=fixture.doc_repo)
 
 
 if __name__ == "__main__":
