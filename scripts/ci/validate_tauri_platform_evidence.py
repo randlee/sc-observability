@@ -110,8 +110,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path)
     parser.add_argument('--source')
+    parser.add_argument('--output', type=Path)
     args = parser.parse_args()
-    print(json.dumps(validate(args.directory, args.source), indent=2, sort_keys=True))
+    result = json.dumps(validate(args.directory, args.source), indent=2, sort_keys=True) + '\n'
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(result, encoding='utf-8')
+    print(result, end='')
     print('TAURI_THREE_PLATFORM_QUALIFICATION_PASSED')
 
 

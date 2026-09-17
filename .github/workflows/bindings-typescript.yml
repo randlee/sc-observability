@@ -10,9 +10,37 @@ on:
       - "scripts/generate_typescript_bindings.py"
       - ".github/workflows/bindings-typescript.yml"
   workflow_dispatch:
+    inputs:
+      source_commit:
+        type: string
+        required: false
+        description: Exact source SHA; defaults to the selected ref
+  workflow_call:
+    inputs:
+      source_commit:
+        type: string
+        required: true
+        description: Exact immutable source SHA to qualify
+    outputs:
+      qualified_source_commit:
+        description: Exact successfully qualified source SHA
+        value: ${{ jobs.all-platforms.outputs.source_commit }}
+      inventory_sha256:
+        description: SHA256 of tauri-qualification-summary.json
+        value: ${{ jobs.all-platforms.outputs.inventory_sha256 }}
+      inventory_artifact_id:
+        description: Actions artifact ID containing the qualification summary
+        value: ${{ jobs.all-platforms.outputs.inventory_artifact_id }}
+      npm_artifact_name:
+        description: Canonical npm archive and producer manifest
+        value: tauri-shared-npm
+      rust_bundle_artifact_name:
+        description: Canonical Rust source bundle containing qualified crate archives
+        value: tauri-shared-rust-bundle
 
 env:
   PYTHONUTF8: "1"
+  QUALIFICATION_SOURCE: ${{ inputs.source_commit || github.sha }}
 
 jobs:
   schema-and-contract:
@@ -21,6 +49,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ inputs.source_commit || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -44,6 +73,8 @@ jobs:
           fi
       - name: Full schema and shared contracts
         run: |
+          [[ "$QUALIFICATION_SOURCE" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$QUALIFICATION_SOURCE"
           bash scripts/ci/validate_binding_schema.sh
           bash scripts/ci/validate_dependency_bans.sh
           bash scripts/ci/validate_repo_boundaries.sh
@@ -60,7 +91,7 @@ jobs:
           from pathlib import Path
           directory=Path('target/tauri-npm')
           archive,=directory.glob('*.tgz')
-          (directory/'npm-producer.json').write_text(json.dumps({'source_commit':os.environ['GITHUB_SHA'],'filename':archive.name,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest()},indent=2)+'\n')
+          (directory/'npm-producer.json').write_text(json.dumps({'source_commit':os.environ['QUALIFICATION_SOURCE'],'filename':archive.name,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest()},indent=2)+'\n')
           PYTHON
       - name: Package canonical Rust adapter source bundle
         run: |
@@ -89,6 +120,8 @@ jobs:
         if: runner.os == 'Windows'
         run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12.10"
@@ -137,10 +170,16 @@ jobs:
           path: target/tauri-qualification/
           if-no-files-found: error
   all-platforms:
+    outputs:
+      source_commit: ${{ steps.summary.outputs.source_commit }}
+      inventory_sha256: ${{ steps.summary.outputs.inventory_sha256 }}
+      inventory_artifact_id: ${{ steps.inventory.outputs.artifact-id }}
     needs: [schema-and-contract, real-ipc-artifacts]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12.10"
@@ -149,4 +188,14 @@ jobs:
           pattern: tauri-qualification-*
           path: target/tauri-platforms
       - name: Reject missing, stale, failed, or altered qualification
-        run: python scripts/ci/validate_tauri_platform_evidence.py target/tauri-platforms --source "$GITHUB_SHA"
+        id: summary
+        run: |
+          python scripts/ci/validate_tauri_platform_evidence.py target/tauri-platforms --source "$QUALIFICATION_SOURCE" --output target/tauri-qualification-summary.json
+          echo "source_commit=$QUALIFICATION_SOURCE" >> "$GITHUB_OUTPUT"
+          python -c "import hashlib,os; from pathlib import Path; print('inventory_sha256='+hashlib.sha256(Path('target/tauri-qualification-summary.json').read_bytes()).hexdigest(),file=open(os.environ['GITHUB_OUTPUT'],'a'))"
+      - uses: actions/upload-artifact@v4
+        id: inventory
+        with:
+          name: tauri-production-inventory
+          path: target/tauri-qualification-summary.json
+          if-no-files-found: error
