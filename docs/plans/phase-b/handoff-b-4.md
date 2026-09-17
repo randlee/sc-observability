@@ -14,7 +14,7 @@ owned loggers, and non-owning Rust-host attachments. Owned lifecycle and level
 authority stay with `CoreLoggerOwner`; attached handles retain only a shared
 `HostLoggingBackend` Arc and cannot stop or mutate the host.
 
-Current source evidence is `9f44dc7892976a10fb3e6203f30f99ec261518aa`.
+Current source evidence is `94526b66e0b6204ed2abdc53a212d037477fb985`.
 It carries frozen B.3, B.3b and telemetry/copy ancestors while retaining the
 direct TypeScript parent. The facade contains no authored validation `raise`:
 malformed Python values, hostile mappings/accessors, foreign native exceptions,
@@ -80,13 +80,14 @@ another worker or conversion path.
 | Shared helper rollback, held sink, slot/timeout and late-result mechanics | all named B.3b coordinator cases | covered in supplied backend |
 | Python-bound blocked-sink heartbeat and every detailed operation interleaving | no direct Python fixture yet | active |
 | Native fault injection through every Python public Result method | no test-only PyO3 fault control yet | active |
-| Revision-overflow/diagnostic/remediation round-trips through Python | no direct Python fixture yet | active |
+| Diagnostic/remediation conversion through Python | exact unavailable/IO messages, codes, recoverable steps and terminal justification | covered |
+| Revision-overflow through Python | no direct Python fixture yet | active |
 
 ## Active completeness checklist — pass 2: validation paths
 
 | Gate | Result | State |
 | --- | --- | --- |
-| `validate_python_bindings.sh` (CPython 3.10.21) | green: 9 facade, 7 installed runtime, 6 native binding tests, embedding example | covered |
+| `validate_python_bindings.sh` (CPython 3.10.21) | green: 10 facade, 7 installed runtime, 6 native binding tests, embedding example | covered |
 | `cargo clippy --locked -p sc-observability-py --all-targets -- -D warnings` | green; included in the Python validator | covered |
 | `validate_dependency_bans.sh` | green | covered |
 | `validate_docs_consistency.sh` | green | covered |
