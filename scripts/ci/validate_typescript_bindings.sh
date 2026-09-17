@@ -3,15 +3,14 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root"
-bash scripts/ci/validate_binding_schema.sh
 package_dir="$(mktemp -d -t sc-observability-package.XXXXXX)"
+bash scripts/ci/validate_binding_schema.sh
 pushd bindings/typescript >/dev/null
 npm ci --ignore-scripts
 npm run build
 npm test
 npm pack --pack-destination "$package_dir" >/dev/null
 popd >/dev/null
-
 package_file="$(find "$package_dir" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
 test -n "$package_file"
 consumer_dir="$package_dir/consumer"
@@ -37,6 +36,6 @@ created.value.tryLog(event.value).then((result) => {
 }).catch(() => process.exit(1));
 NODE
 popd >/dev/null
-cargo check --manifest-path bindings/tauri/Cargo.toml --locked
+cargo test --manifest-path bindings/tauri/Cargo.toml --locked --features test
 cargo check --manifest-path examples/tauri-logging/src-tauri/Cargo.toml --locked
 echo "TypeScript/Tauri binding validation passed"

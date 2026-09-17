@@ -1,7 +1,8 @@
 ---
 id: B.3b
-status: proposed
+status: complete
 branch: feature/phase-b-3b-native-runtime
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime
 base: develop
 ---
 

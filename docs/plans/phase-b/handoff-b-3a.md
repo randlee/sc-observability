@@ -1,7 +1,7 @@
 # B.3a TypeScript/Tauri handoff
 
-Status: completeness correction complete on `fix/phase-b-3a-completeness`,
-merge-forwarded from `feature/phase-b-4a-python-packaging`.
+Status: in progress on `fix/phase-b-3a-completeness`; parent merge-forwarded
+from `origin/feature/phase-b-4a-python-packaging` at `8acf9b6`.
 
 The child consumes the B.3 canonical schema and the B.3b native
 `HostLoggingBackend`. The TypeScript package is generated-schema driven and
@@ -24,19 +24,17 @@ plugin and retains owner authority in Rust. The example demonstrates the
 frontend transport and BigInt event conversion; the host composition point is
 `examples/tauri-logging/src-tauri/src/main.rs`.
 
-Validation performed on the correction head:
+Validation performed:
 
 ```text
 bash scripts/ci/validate_binding_schema.sh       PASS
-bash scripts/ci/validate_typescript_bindings.sh  PASS (includes packed install)
-cargo test --manifest-path bindings/tauri/Cargo.toml --locked  PASS (3 tests)
-cargo check --manifest-path examples/tauri-logging/src-tauri/Cargo.toml --locked PASS
+bash scripts/ci/validate_typescript_bindings.sh  PASS (packed install + adapter IPC test)
+cargo test --manifest-path bindings/tauri/Cargo.toml --locked --features test  PASS (4 tests)
 ```
 
 The package is packed as a real tarball and installed by a temporary consumer
 outside the checkout. Generated output is checked without overwriting drift.
-The workflow runs the locked package, adapter, example, and schema checks on
-Ubuntu, macOS, and Windows. A desktop GUI invocation is CI-host evidence: this
-head proves the real Tauri command registration and host composition by locked
-Rust compilation, while the local headless run records package and adapter
-boundary evidence rather than claiming a desktop session.
+The workflow covers Ubuntu, macOS, and Windows. Local headless evidence covers
+locked host compilation and the adapter boundary; real desktop IPC evidence is
+still required from those supported CI hosts before this handoff can become
+complete.

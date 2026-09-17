@@ -45,6 +45,47 @@ def manifests_confined(root):
                 for child in value:walk(child)
         walk(document)
 
+def registry_identities(lock):
+    return sorted(({'name':p['name'],'version':p['version'],'source':p['source'],'checksum':p['checksum']} for p in lock['package'] if p.get('source','').startswith('registry+')),key=lambda p:(p['name'],p['version'],p['source']))
+
+def reviewed_registry_closure(lock, roots):
+    packages=lock['package'];selected=set()
+    def follow(package):
+        identity=(package['name'],package['version'],package.get('source'))
+        if identity in selected:return
+        selected.add(identity)
+        for dependency in package.get('dependencies',[]):
+            parts=dependency.split(' ',2);name=parts[0];version=parts[1] if len(parts)>1 and not parts[1].startswith('(') else None
+            source=parts[-1].strip('()') if len(parts)>1 and parts[-1].startswith('(') else None
+            matches=[p for p in packages if p['name']==name and (version is None or p['version']==version) and (source is None or p.get('source')==source)]
+            if len(matches)!=1:raise BundleError('BUNDLE_STALE_LOCK',f'ambiguous source-lock dependency: {dependency}')
+            follow(matches[0])
+    for name,version in roots:
+        matches=[p for p in packages if p['name']==name and p['version']==version and p.get('source') is None]
+        if len(matches)!=1:raise BundleError('BUNDLE_STALE_LOCK',f'missing source-lock package: {name} {version}')
+        follow(matches[0])
+    return registry_identities({'package':[p for p in packages if (p['name'],p['version'],p.get('source')) in selected]})
+
+def verify_registry_selection(source_lock, staged_lock, roots):
+    expected=reviewed_registry_closure(tomllib.loads(source_lock.read_text()),roots)
+    actual=registry_identities(tomllib.loads(staged_lock.read_text()))
+    if expected!=actual:raise BundleError('BUNDLE_REGISTRY_DRIFT','staged registry name/version/source/checksum closure differs from reviewed source lock')
+    return expected
+
+def dependency_requirements(document, workspace=None):
+    result={};tables=[('',document),*document.get('target',{}).items()]
+    for target,table in tables:
+        for section in ('dependencies','build-dependencies','dev-dependencies'):
+            for name,spec in table.get(section,{}).items():
+                if isinstance(spec,str):spec={'version':spec}
+                if spec.get('workspace'):
+                    inherited=(workspace or {}).get('dependencies',{}).get(name)
+                    if inherited is None:raise BundleError('BUNDLE_MISSING_VERSION',f'unresolved workspace dependency: {name}')
+                    spec={'version':inherited} if isinstance(inherited,str) else inherited
+                if not isinstance(spec.get('version'),str) or not spec['version'].strip():raise BundleError('BUNDLE_MISSING_VERSION',f'{target}/{section}/{name} requires a publishable version')
+                result[f'{target}/{section}/{name}']={'package':spec.get('package',name),'version':spec['version']}
+    return result
+
 def verify_bundle(root):
     root=root.resolve()
     try:manifest=json.loads((root/'manifest.json').read_text())
@@ -63,6 +104,13 @@ def verify_bundle(root):
         file=safe(root,relative)
         if not file.is_file():raise BundleError('BUNDLE_MISSING_MEMBER',relative)
         if digest(file)!=expected:raise BundleError('BUNDLE_STALE_LOCK' if relative=='Cargo.lock' else 'BUNDLE_CHECKSUM_MISMATCH',relative)
+    expected=verify_registry_selection(root/'reviewed-source.lock',root/'Cargo.lock',[(p['name'],p['version']) for p in manifest['packages']])
+    if manifest.get('registry_selection')!=expected:raise BundleError('BUNDLE_REGISTRY_DRIFT','manifest selection differs from frozen locks')
+    for entry in manifest['packages']:
+        normalized=tomllib.loads((safe(root,entry['root'])/'Cargo.toml').read_text())
+        if normalized['package']['name']!=entry['name'] or normalized['package']['version']!=entry['version']:raise BundleError('BUNDLE_INVALID_MANIFEST','extracted package identity drift')
+        actual=dependency_requirements(normalized)
+        if actual!=entry['reviewed_requirements']:raise BundleError('BUNDLE_REQUIREMENT_DRIFT',entry['name'])
     return manifest
 
 def command(arguments,cwd,**kwargs):
@@ -96,8 +144,10 @@ def build(root_manifest,output):
                         child=(base/spec['path']/'Cargo.toml').resolve()
                         if not child.is_relative_to(source_root):raise BundleError('BUNDLE_ESCAPING_PATH',str(child))
                         if not child.is_file():raise BundleError('BUNDLE_MISSING_MEMBER',str(child))
+                        if not isinstance(spec.get("version"),str) or not spec["version"].strip():raise BundleError("BUNDLE_MISSING_VERSION",f"{name} path dependency needs a publishable version")
                         preflight(child)
     preflight(root_manifest)
+    reviewed_requirements={str(path):dependency_requirements(tomllib.loads(path.read_text()),workspace) for path in seen}
     # --locked rejects a stale source lock before any package staging.
     try:metadata=json.loads(command(['cargo','metadata','--locked','--format-version','1','--manifest-path',str(root_manifest)],root_manifest.parent))
     except BundleError as exc:raise BundleError('BUNDLE_STALE_LOCK',str(exc)) from exc
@@ -111,6 +161,15 @@ def build(root_manifest,output):
         if pid in closure:return
         closure.add(pid)
         for dependency in nodes[pid]['deps']:visit(dependency['pkg'])
+        # Cargo's active resolve graph omits disabled optional first-party edges.
+        # Bundles must also support the root's later feature/target selections.
+        for dependency in by_id[pid]['dependencies']:
+            if dependency.get('path'):
+                target=(Path(dependency['path'])/'Cargo.toml').resolve()
+                if not target.is_relative_to(source):raise BundleError('BUNDLE_ESCAPING_PATH',str(target))
+                matches=[p['id'] for p in by_id.values() if Path(p['manifest_path']).resolve()==target]
+                if len(matches)!=1:raise BundleError('BUNDLE_MISSING_MEMBER',str(target))
+                visit(matches[0])
     visit(root['id'])
     unpublished=sorted((by_id[pid] for pid in closure if by_id[pid]['source'] is None),key=lambda p:p['name'])
     for package in unpublished:
@@ -142,21 +201,29 @@ def build(root_manifest,output):
         with tarfile.open(archive,'r:gz') as stream:stream.extractall(packages_dir,filter='data')
         normalized=tomllib.loads((packages_dir/stem/'Cargo.toml').read_text())
         if normalized['package']['name']!=package['name'] or normalized['package']['version']!=package['version']:raise BundleError('BUNDLE_INVALID_MANIFEST','archive package identity mismatch')
-        entries.append({'name':package['name'],'version':package['version'],'archive':archive.relative_to(output).as_posix(),'archive_sha256':digest(archive),'root':f'packages/{stem}','provenance':'qualified-B.2-archive' if package['name'] in qualified else 'unpublished-cargo-package','qualified_source_commit':qualified_evidence['source_commit'] if package['name'] in qualified else None})
+        requirements=reviewed_requirements[str(Path(package['manifest_path']).resolve())]
+        if dependency_requirements(normalized)!=requirements:raise BundleError('BUNDLE_REQUIREMENT_DRIFT',package['name'])
+        entries.append({'reviewed_requirements':requirements,'name':package['name'],'version':package['version'],'archive':archive.relative_to(output).as_posix(),'archive_sha256':digest(archive),'root':f'packages/{stem}','provenance':'qualified-B.2-archive' if package['name'] in qualified else 'unpublished-cargo-package','qualified_source_commit':qualified_evidence['source_commit'] if package['name'] in qualified else None})
     shutil.rmtree(build_target)
     patches='\n'.join(f'{p["name"]} = {{ path = "{p["root"]}" }}' for p in entries)
     dependencies='\n'.join(f'{p["name"]} = "={p["version"]}"' for p in entries)
-    (output/'Cargo.toml').write_text('[package]\nname = "binding-source-consumer"\nversion = "0.0.0"\nedition = "2024"\npublish = false\n\n[workspace]\n\n[dependencies]\n'+dependencies+'\nserde_json = "1"\n\n[patch.crates-io]\n'+patches+'\n')
+    members=json.dumps([p['root'] for p in entries])
+    (output/'Cargo.toml').write_text('[package]\nname = "binding-source-consumer"\nversion = "0.0.0"\nedition = "2024"\npublish = false\n\n[workspace]\nmembers = '+members+'\n\n[dependencies]\n'+dependencies+'\nserde_json = "1"\n\n[patch.crates-io]\n'+patches+'\n')
     (output/'src').mkdir();(output/'src/main.rs').write_text('fn main() { println!("binding source bundle ready"); }\n')
-    # Resolve the actual staged layout, then vendor the complete registry closure.
-    command(['cargo','generate-lockfile'],output)
+    # Seed from the reviewed source lock. Cargo may rewrite only local layout identities;
+    # every selected third-party identity/checksum must remain byte-for-byte equivalent.
+    command(['cargo','fetch','--locked','--manifest-path',str(root_manifest)],source)
+    shutil.copyfile(source/'Cargo.lock',output/'reviewed-source.lock')
+    shutil.copyfile(source/'Cargo.lock',output/'Cargo.lock')
+    command(['cargo','metadata','--offline','--format-version','1'],output)
+    registry_selection=verify_registry_selection(output/'reviewed-source.lock',output/'Cargo.lock',[(p['name'],p['version']) for p in entries])
     vendor_config=command(['cargo','vendor','--locked','vendor'],output)
     (output/'.cargo').mkdir();(output/'.cargo/config.toml').write_text(vendor_config)
     command(['cargo','metadata','--locked','--offline','--format-version','1'],output)
     manifests_confined(output)
     files={p.relative_to(output).as_posix():digest(p) for p in sorted(output.rglob('*')) if p.is_file() and p.relative_to(output).parts[0] not in ('src','target')}
     source_sha=command(['git','rev-parse','HEAD'],source).strip()
-    evidence={'schema_version':1,'source_commit':source_sha,'root_package':root['name'],'root_version':root['version'],'publication':'pending_B.7','packages':entries,'files':files,'lock_sha256':digest(output/'Cargo.lock'),'source_lock_sha256':digest(source/'Cargo.lock'),'package_command':args[:args.index('--target-dir')]+['--target-dir','<bundle>/package-build']+args[args.index('--target-dir')+2:]}
+    evidence={'registry_selection':registry_selection,'schema_version':1,'source_commit':source_sha,'root_package':root['name'],'root_version':root['version'],'publication':'pending_B.7','packages':entries,'files':files,'lock_sha256':digest(output/'Cargo.lock'),'source_lock_sha256':digest(source/'Cargo.lock'),'package_command':args[:args.index('--target-dir')]+['--target-dir','<bundle>/package-build']+args[args.index('--target-dir')+2:]}
     (output/'manifest.json').write_text(json.dumps(evidence,indent=2,sort_keys=True)+'\n')
     verify_bundle(output)
     return evidence

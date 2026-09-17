@@ -1,0 +1,2 @@
+dependency ban validation passed
+BINDING_RUNTIME_DEPENDENCIES_PASS sc-observability,sc-observability-dto,sc-observability-log,sc-observability-types
