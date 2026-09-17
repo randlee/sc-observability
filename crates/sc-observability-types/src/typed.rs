@@ -302,6 +302,45 @@ define_failure! {
     }
 }
 
+/// Typed blocking logger-admission failure.
+///
+/// This value intentionally has no Serde representation. Its discriminant is
+/// the public classification, while each context keeps its native source.
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Error)]
+pub enum LogFailure {
+    /// Event validation failed before admission.
+    #[error(transparent)]
+    InvalidEvent(EventFailure),
+    /// The writer can no longer accept work reliably.
+    #[error("{0}")]
+    WriterDegraded(#[source] Box<ErrorContext>),
+    /// Writer shutdown exceeded its configured timeout.
+    #[error("{0}")]
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
+}
+
+/// Typed non-blocking logger-admission failure.
+///
+/// This value intentionally has no Serde representation. Its discriminant is
+/// the public classification, while each context keeps its native source.
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Error)]
+pub enum TryLogFailure {
+    /// Event validation failed before admission.
+    #[error(transparent)]
+    InvalidEvent(EventFailure),
+    /// The bounded writer queue was full.
+    #[error("{0}")]
+    QueueFull(#[source] Box<ErrorContext>),
+    /// The writer can no longer accept work reliably.
+    #[error("{0}")]
+    WriterDegraded(#[source] Box<ErrorContext>),
+    /// Writer shutdown exceeded its configured timeout.
+    #[error("{0}")]
+    ShutdownTimedOut(#[source] Box<ErrorContext>),
+}
+
 impl_legacy_classification!(IdentityError, IdentityFailure, IdentityFailureKind);
 impl_legacy_classification!(InitError, InitFailure, InitFailureKind);
 impl_legacy_classification!(EventError, EventFailure, EventFailureKind);

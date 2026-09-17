@@ -4,10 +4,11 @@ use std::sync::{Arc, Mutex, Weak};
 #[cfg(test)]
 use std::time::Duration;
 
+use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure};
 use sc_observability_types::{
     AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext,
-    EventError, FlushError, InitError, LevelChange, LevelChangeError, LevelChangeSource,
-    LevelFilter, LevelState, LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState,
+    EventError, FlushError, LevelChange, LevelChangeError, LevelChangeSource, LevelFilter,
+    LevelState, LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState,
     MaintenanceHealthReport, MaintenanceWorkerState, OperationDiagnostic, QueryError,
     QueryHealthState, Remediation, SinkHealth, SinkHealthState, Timestamp, WriterState,
 };
@@ -23,9 +24,9 @@ use crate::maintenance::{
 use crate::redact::{redact_bearer_token_text, redact_string_value};
 use crate::sinks::JsonlFileSink;
 use crate::{
-    LevelOwner, LogError, LogEvent, Logger, LoggerConfig, RedactionPolicy, RetainedLogPolicy,
-    Running, ServiceName, Stopped, TryLogError, default_log_path, error_codes,
-    shutdown_timed_out_error_context, writer_degraded_error_context,
+    LevelOwner, LogError, LogEvent, LogFailure, Logger, LoggerConfig, RedactionPolicy,
+    RetainedLogPolicy, Running, ServiceName, Stopped, TryLogError, TryLogFailure, default_log_path,
+    error_codes, shutdown_timed_out_error_context, writer_degraded_error_context,
 };
 
 pub(crate) struct LoggerRuntime {
@@ -278,39 +279,6 @@ impl LoggerRuntime {
             reason = "test-only writer startup injection extends the runtime construction boundary"
         )
     )]
-    pub(crate) fn new(
-        query_available: bool,
-        sinks: Vec<crate::SinkRegistration>,
-        file_sink: Option<Arc<JsonlFileSink>>,
-        retained_log_policy: RetainedLogPolicy,
-        queue_capacity: usize,
-        #[cfg(test)] test_pass_delay: Option<Duration>,
-        #[cfg(test)] test_pass_signal: Option<Arc<crate::maintenance::TestPassDelaySignal>>,
-        #[cfg(test)] writer_start_should_fail: bool,
-    ) -> Self {
-        Self::try_new(
-            query_available,
-            sinks,
-            file_sink,
-            retained_log_policy,
-            queue_capacity,
-            #[cfg(test)]
-            test_pass_delay,
-            #[cfg(test)]
-            test_pass_signal,
-            #[cfg(test)]
-            writer_start_should_fail,
-        )
-        .expect("existing infallible logger construction expects writer thread startup")
-    }
-
-    #[cfg_attr(
-        test,
-        expect(
-            clippy::too_many_arguments,
-            reason = "test-only writer startup injection extends the runtime construction boundary"
-        )
-    )]
     pub(crate) fn try_new(
         query_available: bool,
         sinks: Vec<crate::SinkRegistration>,
@@ -320,7 +288,7 @@ impl LoggerRuntime {
         #[cfg(test)] test_pass_delay: Option<Duration>,
         #[cfg(test)] test_pass_signal: Option<Arc<crate::maintenance::TestPassDelaySignal>>,
         #[cfg(test)] writer_start_should_fail: bool,
-    ) -> Result<Self, InitError> {
+    ) -> Result<Self, InitFailure> {
         let dropped_events_total = Arc::new(AtomicU64::new(0));
         let flush_errors_total = Arc::new(AtomicU64::new(0));
         let last_error = Arc::new(Mutex::new(None));
@@ -345,17 +313,14 @@ impl LoggerRuntime {
             writer_start_should_fail,
         )
         .map_err(|error| {
-            InitError(Box::new(
-                ErrorContext::new(
-                    error_codes::LOGGER_INIT_FAILED,
-                    "failed to start logger writer thread",
-                    Remediation::recoverable(
-                        "inspect the operating system thread-resource limits",
-                        ["retry logger construction after resources are available"],
-                    ),
-                )
-                .source(Box::new(error)),
-            ))
+            InitFailure::logger_initialization(
+                "failed to start logger writer thread",
+                Remediation::recoverable(
+                    "inspect the operating system thread-resource limits",
+                    ["retry logger construction after resources are available"],
+                ),
+            )
+            .source(Box::new(error))
         })?;
 
         Ok(Self {
@@ -374,19 +339,36 @@ impl Logger<Running> {
     pub fn builder(
         config: crate::LoggerConfig,
     ) -> Result<LoggerBuilder, sc_observability_types::InitError> {
-        LoggerBuilder::new(config)
+        Self::builder_typed(config).map_err(Into::into)
+    }
+
+    /// Starts a construction-time builder that reports typed startup failures.
+    pub fn builder_typed(config: crate::LoggerConfig) -> Result<LoggerBuilder, InitFailure> {
+        LoggerBuilder::new_typed(config)
     }
 
     /// Creates a logger with the configured built-in sinks and runtime state.
     pub fn new(config: crate::LoggerConfig) -> Result<Self, sc_observability_types::InitError> {
-        Ok(LoggerBuilder::new(config)?.build())
+        Self::new_typed(config).map_err(Into::into)
+    }
+
+    /// Creates a logger with recoverable typed startup failures.
+    pub fn new_typed(config: crate::LoggerConfig) -> Result<Self, InitFailure> {
+        LoggerBuilder::new_typed(config)?.build_typed()
     }
 
     /// Creates a logger together with weak authority for runtime level changes.
     pub fn new_with_level_owner(
         config: crate::LoggerConfig,
     ) -> Result<(Self, LevelOwner), sc_observability_types::InitError> {
-        LoggerBuilder::new(config)?.build_with_level_owner()
+        Self::new_with_level_owner_typed(config).map_err(Into::into)
+    }
+
+    /// Creates a logger and weak level owner with typed startup failures.
+    pub fn new_with_level_owner_typed(
+        config: crate::LoggerConfig,
+    ) -> Result<(Self, LevelOwner), InitFailure> {
+        LoggerBuilder::new_typed(config)?.build_with_level_owner_typed()
     }
 
     /// Validates, redacts, and admits one structured log event into the writer queue.
@@ -395,7 +377,14 @@ impl Logger<Running> {
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn log(&self, event: LogEvent) -> Result<(), LogError> {
-        let event = self.prepare_event(event).map_err(LogError::InvalidEvent)?;
+        self.log_typed(event).map_err(Into::into)
+    }
+
+    /// Validates, redacts, and blocks for admission with typed failures.
+    pub fn log_typed(&self, event: LogEvent) -> Result<(), LogFailure> {
+        let event = self
+            .prepare_event_typed(event)
+            .map_err(LogFailure::InvalidEvent)?;
         let Some(event) = event else {
             return Ok(());
         };
@@ -406,7 +395,7 @@ impl Logger<Running> {
             .as_ref()
             .expect("running logger must retain its writer runtime");
         writer.enqueue_blocking(event).map_err(|error| match error {
-            BlockingEnqueueError::Disconnected => self.log_disconnected_error(),
+            BlockingEnqueueError::Disconnected => self.log_disconnected_failure(),
         })
     }
 
@@ -416,7 +405,12 @@ impl Logger<Running> {
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn try_log(&self, event: LogEvent) -> Result<(), TryLogError> {
-        self.try_log_with_outcome(event).map(|_| ())
+        self.try_log_typed(event).map_err(Into::into)
+    }
+
+    /// Attempts non-blocking queue admission with typed failures.
+    pub fn try_log_typed(&self, event: LogEvent) -> Result<(), TryLogFailure> {
+        self.try_log_with_outcome_typed(event).map(|_| ())
     }
 
     /// Attempts non-blocking admission and reports whether level policy filtered the event.
@@ -425,9 +419,17 @@ impl Logger<Running> {
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn try_log_with_outcome(&self, event: LogEvent) -> Result<AdmissionOutcome, TryLogError> {
+        self.try_log_with_outcome_typed(event).map_err(Into::into)
+    }
+
+    /// Attempts non-blocking admission and reports filtering with typed failures.
+    pub fn try_log_with_outcome_typed(
+        &self,
+        event: LogEvent,
+    ) -> Result<AdmissionOutcome, TryLogFailure> {
         let event = self
-            .prepare_event(event)
-            .map_err(TryLogError::InvalidEvent)?;
+            .prepare_event_typed(event)
+            .map_err(TryLogFailure::InvalidEvent)?;
         let Some(event) = event else {
             return Ok(AdmissionOutcome::Filtered);
         };
@@ -442,7 +444,7 @@ impl Logger<Running> {
             Err(TryEnqueueError::Full) => {
                 let summary = writer.record_queue_full_drop();
                 self.record_last_error(summary);
-                Err(TryLogError::QueueFull(Box::new(ErrorContext::new(
+                Err(TryLogFailure::QueueFull(Box::new(ErrorContext::new(
                     error_codes::LOGGER_QUEUE_FULL,
                     "writer queue is full",
                     Remediation::recoverable(
@@ -454,7 +456,7 @@ impl Logger<Running> {
                     ),
                 ))))
             }
-            Err(TryEnqueueError::Disconnected) => Err(self.try_log_disconnected_error()),
+            Err(TryEnqueueError::Disconnected) => Err(self.try_log_disconnected_failure()),
         }
     }
 
@@ -485,6 +487,11 @@ impl Logger<Running> {
     ///
     /// Panics if the running logger has lost its writer runtime unexpectedly.
     pub fn flush(&self) -> Result<(), FlushError> {
+        self.flush_typed().map_err(Into::into)
+    }
+
+    /// Flushes all registered sinks through the writer-owned runtime with typed failures.
+    pub fn flush_typed(&self) -> Result<(), FlushFailure> {
         let writer = self
             .runtime
             .writer
@@ -495,7 +502,7 @@ impl Logger<Running> {
                 .flush_errors_total
                 .fetch_add(1, Ordering::SeqCst);
             self.record_last_error(DiagnosticSummary::from(error.diagnostic()));
-            return Err(error);
+            return Err(error.into());
         }
         Ok(())
     }
@@ -562,14 +569,15 @@ impl Logger<Running> {
         }
     }
 
-    fn prepare_event(&self, event: LogEvent) -> Result<Option<LogEvent>, EventError> {
-        validate_event(&event, &self.config.service_name)?;
+    fn prepare_event_typed(&self, event: LogEvent) -> Result<Option<LogEvent>, EventFailure> {
+        validate_event(&event, &self.config.service_name).map_err(EventFailure::from)?;
         // Filtering and mutation share this short critical section. Redaction,
         // queue waits, and writer work are intentionally outside it.
         let control = self
             .level_control
             .lock()
-            .map_err(|_| unavailable_event_error("logger level state is unavailable"))?;
+            .map_err(|_| unavailable_event_error("logger level state is unavailable"))
+            .map_err(EventFailure::from)?;
         if !level_enabled(control.state.effective_level, event.level) {
             return Ok(None);
         }
@@ -600,43 +608,43 @@ impl Logger<Running> {
         ))
     }
 
-    fn log_disconnected_error(&self) -> LogError {
+    fn log_disconnected_failure(&self) -> LogFailure {
         match self.runtime_snapshot().last_writer_error {
             Some(summary)
                 if summary.code.as_ref() == Some(&error_codes::LOGGER_SHUTDOWN_TIMED_OUT) =>
             {
-                LogError::ShutdownTimedOut(Box::new(shutdown_timed_out_error_context(
+                LogFailure::ShutdownTimedOut(Box::new(shutdown_timed_out_error_context(
                     &summary.message,
                 )))
             }
             Some(summary) => {
-                LogError::WriterDegraded(Box::new(writer_degraded_error_context(&format!(
+                LogFailure::WriterDegraded(Box::new(writer_degraded_error_context(&format!(
                     "writer thread disconnected while admitting log work: {}",
                     summary.message
                 ))))
             }
-            None => LogError::WriterDegraded(Box::new(writer_degraded_error_context(
+            None => LogFailure::WriterDegraded(Box::new(writer_degraded_error_context(
                 "writer thread disconnected while admitting log work",
             ))),
         }
     }
 
-    fn try_log_disconnected_error(&self) -> TryLogError {
+    fn try_log_disconnected_failure(&self) -> TryLogFailure {
         match self.runtime_snapshot().last_writer_error {
             Some(summary)
                 if summary.code.as_ref() == Some(&error_codes::LOGGER_SHUTDOWN_TIMED_OUT) =>
             {
-                TryLogError::ShutdownTimedOut(Box::new(shutdown_timed_out_error_context(
+                TryLogFailure::ShutdownTimedOut(Box::new(shutdown_timed_out_error_context(
                     &summary.message,
                 )))
             }
             Some(summary) => {
-                TryLogError::WriterDegraded(Box::new(writer_degraded_error_context(&format!(
+                TryLogFailure::WriterDegraded(Box::new(writer_degraded_error_context(&format!(
                     "writer thread disconnected while admitting non-blocking log work: {}",
                     summary.message
                 ))))
             }
-            None => TryLogError::WriterDegraded(Box::new(writer_degraded_error_context(
+            None => TryLogFailure::WriterDegraded(Box::new(writer_degraded_error_context(
                 "writer thread disconnected while admitting non-blocking log work",
             ))),
         }

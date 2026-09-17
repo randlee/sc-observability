@@ -28,6 +28,7 @@ mod query;
 mod redact;
 mod runtime;
 mod sinks;
+pub mod typed;
 
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -41,6 +42,8 @@ pub use builder::LoggerBuilder;
 pub use follow::LogFollowSession;
 #[doc(inline)]
 pub use jsonl_reader::JsonlLogReader;
+#[doc(inline)]
+pub use sc_observability_types::typed::{LogFailure, TryLogFailure};
 #[doc(inline)]
 pub use sc_observability_types::{
     ActionName, AdmissionOutcome, ChangeDiagnostic, Diagnostic, DiagnosticSummary, ErrorCode,
@@ -588,6 +591,54 @@ pub enum TryLogError {
     #[error("{0}")]
     /// The logger exceeded the shutdown timeout threshold while draining the writer thread.
     ShutdownTimedOut(#[source] Box<ErrorContext>),
+}
+
+impl From<LogError> for LogFailure {
+    fn from(value: LogError) -> Self {
+        match value {
+            LogError::InvalidEvent(error) => Self::InvalidEvent(error.into()),
+            LogError::WriterDegraded(context) => Self::WriterDegraded(context),
+            LogError::ShutdownTimedOut(context) => Self::ShutdownTimedOut(context),
+        }
+    }
+}
+
+impl From<LogFailure> for LogError {
+    fn from(value: LogFailure) -> Self {
+        match value {
+            LogFailure::InvalidEvent(error) => Self::InvalidEvent(error.into()),
+            LogFailure::WriterDegraded(context) => Self::WriterDegraded(context),
+            LogFailure::ShutdownTimedOut(context) => Self::ShutdownTimedOut(context),
+            #[allow(unreachable_patterns)]
+            _ => unreachable!("unknown LogFailure variants cannot be constructed by this version"),
+        }
+    }
+}
+
+impl From<TryLogError> for TryLogFailure {
+    fn from(value: TryLogError) -> Self {
+        match value {
+            TryLogError::InvalidEvent(error) => Self::InvalidEvent(error.into()),
+            TryLogError::QueueFull(context) => Self::QueueFull(context),
+            TryLogError::WriterDegraded(context) => Self::WriterDegraded(context),
+            TryLogError::ShutdownTimedOut(context) => Self::ShutdownTimedOut(context),
+        }
+    }
+}
+
+impl From<TryLogFailure> for TryLogError {
+    fn from(value: TryLogFailure) -> Self {
+        match value {
+            TryLogFailure::InvalidEvent(error) => Self::InvalidEvent(error.into()),
+            TryLogFailure::QueueFull(context) => Self::QueueFull(context),
+            TryLogFailure::WriterDegraded(context) => Self::WriterDegraded(context),
+            TryLogFailure::ShutdownTimedOut(context) => Self::ShutdownTimedOut(context),
+            #[allow(unreachable_patterns)]
+            _ => {
+                unreachable!("unknown TryLogFailure variants cannot be constructed by this version")
+            }
+        }
+    }
 }
 
 fn writer_degraded_error_context(message: &str) -> ErrorContext {
