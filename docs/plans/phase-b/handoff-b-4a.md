@@ -23,6 +23,22 @@ publication and its separate override-free registry proof.
 
 ## Execution interface
 
+The full workflow accepts explicit dispatch with `source_commit` (full SHA;
+defaults to the dispatch commit). B.7 may call
+`.github/workflows/b4a-python-distributions.yml` once per workflow run through
+`workflow_call`, supplying required `source_commit`; reusable calls always use
+strict final qualification. Every job checks out that exact source, and the
+aggregate requires all artifact source identities to match it. Successful call
+outputs are `source_commit`, `inventory_sha256`, `inventory_artifact_id` and
+`inventory_artifact_name` (`b4a-production-inventory`). That artifact contains
+`production-artifacts.json`; raw evidence remains in `b4a-sdist`,
+`b4a-wheel-<platform>` and `b4a-cell-<platform>-<python>` artifacts from the same
+Actions run. The inventory authorizes no publication; B.7 controls that gate.
+
+Routine PRs execute `.github/workflows/python-packaging-boundaries.yml` for
+boundary regressions and actionlint. Full qualification has no broad push/PR
+trigger and awaits the lead's combined-candidate scheduling decision.
+
 The existing source gate remains available unchanged:
 
 ```sh

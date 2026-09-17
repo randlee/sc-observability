@@ -1,0 +1,23 @@
+docs consistency validation passed
+phase-b publication-claim self-test and doc scan passed
+    Blocking waiting for file lock on artifact directory
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.53s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/target/doc/sc_observability_types/index.html
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on artifact directory
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.67s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/target/doc/sc_observability/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/target/doc/sc_observe/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/target/doc/sc_observability_otlp/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/target/doc/sc_observability_log/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/target/doc/sc_observability_log_macros/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/target/doc/sc_observability_dto/index.html
+ Documenting sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/crates/sc-observability-binding-runtime)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
+   Generated /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging/target/doc/sc_observability_binding_runtime/index.html
+rustdoc missing-docs validation passed
