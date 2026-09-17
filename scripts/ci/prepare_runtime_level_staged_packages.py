@@ -137,7 +137,13 @@ def main() -> int:
     workspace = output / "workspace"
     shutil.copytree(source, workspace, ignore=shutil.ignore_patterns(".git", "target", ".DS_Store"))
     root_toml = workspace / "Cargo.toml"
-    root_toml.write_text(re.sub(r'(?m)^version = "\d+\.\d+\.\d+"$', f'version = "{args.version}"', root_toml.read_text(), count=1).replace('version = "1.2.0", path =', f'version = "{args.version}", path ='))
+    root_manifest = re.sub(r'(?m)^version = "\d+\.\d+\.\d+"$', f'version = "{args.version}"', root_toml.read_text(), count=1)
+    root_manifest = root_manifest.replace('version = "1.2.0", path =', f'version = "{args.version}", path =')
+    # An exact `=V` pin (e.g. the bridge-to-macros lockstep dependency) must
+    # advance to the same candidate version while staying an exact pin,
+    # otherwise the candidate's own crate is a version cargo won't resolve.
+    root_manifest = root_manifest.replace('version = "=1.2.0", path =', f'version = "={args.version}", path =')
+    root_toml.write_text(root_manifest)
     archives, extracted = output / "archives", output / "extracted"
     archives.mkdir(parents=True)
     extracted.mkdir()
