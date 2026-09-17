@@ -367,3 +367,13 @@ that integrate against the shipped public API.
      CLI surface precisely enough for implementation and review
    - `qm-comp` cross-document consistency review passes; all three docs are
      confirmed mutually consistent before merge
+
+### B.2 — Six-package Rust qualification
+
+[B.2 implementation](plans/phase-b/sprint-b-2-publish-rust.md) stages the six
+public Rust packages at `1.4.0`, preserving historical B.P2 artifacts and B.1
+source provenance. The [handoff](plans/phase-b/handoff-b-2.md) pins the final
+candidate source, archives, normalized manifests, isolated platform consumers
+and scoped API approval. The [checklist](plans/phase-b/checklist-b-2-qualification.md)
+separates implementation/verification from lead completeness and independent
+QA. Publication and the later registry-only consumer proof remain B.7 gates.
