@@ -84,3 +84,15 @@ The final parent merge-forward is
 logger/provenance changes and no lower layer was edited.
 This is preparation evidence only: copied bridge source import, independent QA,
 and full B.1c integration acceptance remain pending.
+
+## QA1 observation fix-layer evidence
+
+The five reconciled QA1 findings are implemented and verified on
+`fix/phase-b-1c-qa1` at merged source
+`fba711497b26bc9a0c7816d5352fdc8c0c4c64d3`. See
+[`task-b-1c-qa1-fixes.md`](task-b-1c-qa1-fixes.md) for the two-pass
+finding matrix, exact validation commands, raw log index and current counts.
+The retained workspace run has 269 non-doc tests and 9 doctests passing,
+with 7 ignored doctests; the explicit doctest rerun has 9 passing and 7 ignored.
+This supersedes no historical source provenance and does not close independent
+QA or full B.1c integration acceptance.
