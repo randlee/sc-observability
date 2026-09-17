@@ -13,9 +13,9 @@ base: develop
 
 ## Goal and dependencies
 
-Owner: sc-observability release owner. Child development `must_follow` B.P1's
-pushed, independently verified implementation; the parent PR merges before the
-child can complete. B.P3 `must_follow` this sprint's exact staged artifacts,
+Owner: sc-observability release owner. B.P2 develops from B.P1's pushed,
+independently verified implementation; B.P1's PR merges before B.P2's PR.
+B.P3 `must_follow` this sprint's exact staged artifacts,
 not a registry release. Apply parent-to-child merge-forward on pushed development
 before every child round and merge the parent PR first.
 Shared artifacts/version metadata prevent parallel-safe work. B.1 remains the

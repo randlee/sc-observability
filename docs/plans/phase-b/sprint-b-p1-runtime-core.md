@@ -32,7 +32,7 @@ remains the first migration sprint. `must_follow` the execution-authorized
 prepare and qualify these exact immutable artifacts; live publication is
 deferred to the phase end. No parallel-safe public-contract work is claimed.
 Pushed parent development triggers merge-forward before each child round;
-parent PR merges before child completion.
+B.P1's PR merges before B.P2's PR.
 
 ## Deliverables (authoritative)
 

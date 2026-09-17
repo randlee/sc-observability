@@ -127,10 +127,9 @@ Phase A closure or claim that BTIT's currently open review findings are resolved
 B.P1 implements the additive neutral runtime-level state, weak ownership, and
 admission-outcome core described by
 [`plans/phase-b/sprint-b-p1-runtime-core.md`](./plans/phase-b/sprint-b-p1-runtime-core.md).
-It follows the execution-authorized runtime-level contract; B.P2's child
-development follows B.P1's pushed, independently verified implementation,
-and B.P1's parent PR merges before B.P2's development can complete, to
-qualify staged artifacts. QA-4 independently verified 17/18 tracked B.P1 findings at
+It follows the execution-authorized runtime-level contract; B.P2 develops
+from B.P1's pushed, independently verified implementation, and B.P1's PR
+merges before B.P2's PR, to qualify staged artifacts. QA-4 independently verified 17/18 tracked B.P1 findings at
 `a8951321e6b1df6044c2ee1f6f41c07a9dad7d99`; the remaining manual governance
 hold was withdrawn by coordinating lead aobs following the owner's direction
 to complete Phase B with publication delayed until the end. Public-API review
