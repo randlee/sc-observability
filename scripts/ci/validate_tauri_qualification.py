@@ -171,7 +171,7 @@ def main():
                 if (consumer / 'fault-results.json').exists():
                     shutil.copyfile(consumer / 'fault-results.json', output / 'fault-results.json')
             run(['node', 'node_modules/typescript/bin/tsc', '--strict', '--noEmit', '--target', 'ES2022',
-                 '--moduleResolution', 'node', 'narrowing.ts'], consumer, commands)
+                 '--moduleResolution', 'node', 'narrowing.ts', 'host-client.ts'], consumer, commands)
             dist = external / 'dist'
             dist.mkdir()
             run(['node', 'node_modules/esbuild/bin/esbuild', 'frontend.js', '--bundle', '--platform=browser',
@@ -248,6 +248,9 @@ def main():
             jsonl = list((output / 'logs').rglob('*.jsonl'))
             if not jsonl:
                 raise RuntimeError('real JSONL artifact missing')
+            report['private_host_record_persisted'] = any(json.loads(line).get('target') == 'host-private' for path in jsonl for line in path.read_text(encoding='utf-8').splitlines() if line.strip())
+            if not report['private_host_record_persisted']:
+                raise RuntimeError('private native host record missing; unfiltered-query authorization proof is incomplete')
             report['runtime_logs'] = {path.relative_to(output).as_posix(): digest(path) for path in output.rglob('webview-*.log')}
             report['jsonl'] = {path.relative_to(output).as_posix(): digest(path) for path in jsonl}
             if report.get('fault_error'):

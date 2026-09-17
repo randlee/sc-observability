@@ -68,6 +68,8 @@ def validate(root, source=None):
             raise ValueError('incomplete fault/conformance evidence: ' + name)
         if not all(report['isolation'].get(key) is True for key in ('checkout', 'cargo_cache', 'network')):
             raise ValueError('missing isolation probes: ' + name)
+        if report.get('private_host_record_persisted') is not True:
+            raise ValueError('unfiltered-query native history proof missing: ' + name)
         if not report['jsonl']:
             raise ValueError('missing real JSONL: ' + name)
         for relative, expected in report['jsonl'].items():

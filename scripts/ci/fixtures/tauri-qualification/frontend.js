@@ -63,6 +63,9 @@ async function run() {
   const rust = snapshot.events.find((row) => row.action === 'rust-host');
   check('correlated-rust-frontend', Boolean(frontend && rust), snapshot);
   check('bigint-exact-query', frontend.fields.max.value === '18446744073709551615' && frontend.fields.min.value === '-9223372036854775808', frontend);
+  check('native-core-redaction', rust.message === 'Bearer [REDACTED]', rust);
+  const visible = value('unfiltered-query', await client.query({ schema_version: 1 }));
+  check('unfiltered-query-authorized-only', visible.events.length > 0 && visible.events.every((row) => row.target === 'tauri-example'), visible);
   check('recursive-redaction', frontend.fields.nested.value.secret.value === '[REDACTED]', frontend);
   for (const [row, language, channel] of [[frontend, 'typescript', 'tauri'], [rust, 'rust', 'native']]) {
     check(`trusted-${language}-provenance`, row.fields['sc_observability.binding.language'].value === language && row.fields['sc_observability.binding.channel'].value === channel, row);
@@ -76,8 +79,10 @@ async function run() {
   check('health-trace', value('health-elevated', await client.health()).level_state.effective_level === 'trace');
   check('repeat-unchanged', value('repeat', await level({ kind: 'elevate', level: 'trace' })).kind === 'unchanged');
   value('reduce-debug', await level({ kind: 'elevate', level: 'debug' }));
+  const beforeRejectedLevel = value('health-before-rejected-level', await client.health()).level_state;
   failure('below-baseline', await level({ kind: 'elevate', level: 'error' }), 'below_baseline');
   failure('off-below-baseline', await level({ kind: 'elevate', level: 'off' }), 'below_baseline');
+  check('rejected-level-state-preserved', JSON.stringify(value('health-after-rejected-level', await client.health()).level_state) === JSON.stringify(beforeRejectedLevel));
   value('reset', await level({ kind: 'reset' }));
   check('health-reset', value('health-reset-result', await client.health()).level_state.effective_level === 'info');
   const beforeContention = value('health-before-owner-contention', await client.health()).level_state;

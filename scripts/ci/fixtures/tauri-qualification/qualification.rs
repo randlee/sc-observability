@@ -19,6 +19,15 @@ pub fn seed(backend: &dyn HostLoggingBackend) -> Result<(), String> {
     backend
         .try_log(event, ProducerOrigin::RustHost)
         .map_err(|error| format!("seed admission failed: {error:?}"))?;
+    let private_event = sc_observability_dto::decode_event(json!({
+        "schema_version": 1, "level": "info", "target": "host-private",
+        "action": "private-host-record", "fields": {}
+    }))
+    .map_err(|error| format!("private host seed validation failed: {error:?}"))?;
+    match backend.try_log(private_event, ProducerOrigin::RustHost) {
+        Ok(sc_observability_dto::AdmissionDto::Accepted) => {}
+        result => return Err(format!("private host seed was not admitted: {result:?}")),
+    }
     Ok(())
 }
 

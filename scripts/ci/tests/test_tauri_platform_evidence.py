@@ -28,7 +28,7 @@ class EvidenceTests(unittest.TestCase):
                 return [{'name': name, 'passed': True} for name in sorted(names)]
             report = {
                 'platform': name, 'status': 'passed', 'schema_version': 1,
-                'source_dirty': False, 'source_commit': 'reviewed-source', 'case_count': 103,
+                'source_dirty': False, 'private_host_record_persisted': True, 'source_commit': 'reviewed-source', 'case_count': 103,
                 'isolation': {'checkout': True, 'cargo_cache': True, 'network': True},
                 'npm_archive': {'filename': 'client.tgz', 'sha256': write('client.tgz', 'packed-client')},
                 'host_lock_sha256': write('host-Cargo.lock', 'reviewed-lock'),
