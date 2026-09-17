@@ -133,6 +133,7 @@ class ContextScope:
                 return self._last
             expected_task = self._task_ref() if self._task_ref is not None else None
             if (self._state != "active" or self._thread is not threading.current_thread()
+                    or (self._task_ref is not None and expected_task is None)
                     or task is not expected_task or not stack or stack[-1].scope is not self
                     or self._token is None):
                 self._last = _scope_failure("Scope must close in LIFO order on its originating thread and task")

@@ -425,3 +425,21 @@ print('B5_IMPORT_OPT_IN_OK')
                             capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr
     assert "B5_IMPORT_OPT_IN_OK" in result.stdout
+
+
+def test_completed_origin_task_does_not_transfer_token_ownership():
+    import gc
+    import weakref
+    captured = []
+    async def origin():
+        scope = value(bind_context(request_id="expired-owner")); value(scope.enter())
+        captured.append((scope, contextvars.copy_context(), weakref.ref(asyncio.current_task())))
+    asyncio.run(origin())
+    gc.collect()
+    scope, copied, task_ref = captured.pop()
+    assert task_ref() is None
+    result = copied.run(scope.close)
+    assert isinstance(result, Err) and result.error.kind == "validation"
+    assert result.error.code == generated.SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID
+    # Discarding the copied context releases its frames; no foreign task owns the token.
+    del copied, scope
