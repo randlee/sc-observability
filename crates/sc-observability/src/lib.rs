@@ -1765,6 +1765,91 @@ mod tests {
     }
 
     #[test]
+    fn admission_and_level_mutation_contend_on_one_control_state() {
+        use std::sync::{Barrier, mpsc};
+
+        let root = temp_path("level-contention");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let (logger, owner) =
+            Logger::new_with_level_owner(config).expect("construct logger with owner");
+        let logger = Arc::new(logger);
+        let barrier = Arc::new(Barrier::new(3));
+        let (mutation_tx, mutation_rx) = mpsc::channel();
+        let (admission_tx, admission_rx) = mpsc::channel();
+        let held_control = logger.level_control.lock().expect("hold control state");
+
+        let mutation_barrier = barrier.clone();
+        let mutation = std::thread::spawn(move || {
+            let mut owner = owner;
+            mutation_barrier.wait();
+            mutation_tx
+                .send(owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application))
+                .expect("send mutation result");
+        });
+        let admission_barrier = barrier.clone();
+        let admission_logger = logger.clone();
+        let admission = std::thread::spawn(move || {
+            let mut event = log_event(service_name());
+            event.level = Level::Debug;
+            admission_barrier.wait();
+            admission_tx
+                .send(admission_logger.try_log_with_outcome(event))
+                .expect("send admission result");
+        });
+
+        barrier.wait();
+        drop(held_control);
+        let mutation_result = mutation_rx.recv().expect("mutation result");
+        let admission_result = admission_rx.recv().expect("admission result");
+        mutation.join().expect("mutation thread");
+        admission.join().expect("admission thread");
+
+        assert!(matches!(mutation_result, Ok(LevelChange::Changed { .. })));
+        assert!(matches!(
+            admission_result,
+            Ok(AdmissionOutcome::Accepted | AdmissionOutcome::Filtered)
+        ));
+        let snapshot = logger.level_state();
+        assert_eq!(snapshot.configured_level, LevelFilter::Info);
+        assert_eq!(snapshot.effective_level, LevelFilter::Debug);
+        assert_eq!(snapshot.revision, 1);
+        let logger = Arc::try_unwrap(logger).unwrap_or_else(|_| panic!("sole logger owner"));
+        let _ = logger.shutdown();
+    }
+
+    #[test]
+    fn separate_level_owners_do_not_cross_logger_boundaries() {
+        let first_root = temp_path("level-isolation-first");
+        let second_root = temp_path("level-isolation-second");
+        let mut first_config = LoggerConfig::default_for(service_name(), first_root.path_buf());
+        first_config.enable_file_sink = false;
+        first_config.enable_console_sink = false;
+        let mut second_config = LoggerConfig::default_for(service_name(), second_root.path_buf());
+        second_config.enable_file_sink = false;
+        second_config.enable_console_sink = false;
+        let (first, mut first_owner) =
+            Logger::new_with_level_owner(first_config).expect("first logger");
+        let (second, _second_owner) =
+            Logger::new_with_level_owner(second_config).expect("second logger");
+
+        first_owner
+            .elevate_level(LevelFilter::Debug, LevelChangeSource::Application)
+            .expect("change only first logger");
+        assert_eq!(first.level_state().effective_level, LevelFilter::Debug);
+        assert_eq!(second.level_state().effective_level, LevelFilter::Info);
+        let mut event = log_event(service_name());
+        event.level = Level::Debug;
+        assert_eq!(
+            second.try_log_with_outcome(event).expect("filtered event"),
+            AdmissionOutcome::Filtered
+        );
+        let _ = first.shutdown();
+        let _ = second.shutdown();
+    }
+
+    #[test]
     fn level_state_recovers_the_last_committed_snapshot_after_poisoning() {
         let root = temp_path("level-poison");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
@@ -1806,6 +1891,11 @@ mod tests {
             .expect("level state")
             .state
             .revision = u64::MAX;
+
+        assert!(matches!(
+            owner.elevate_level(LevelFilter::Info, LevelChangeSource::Application),
+            Ok(LevelChange::Unchanged { state }) if state.revision == u64::MAX
+        ));
 
         let error = owner
             .elevate_level(LevelFilter::Debug, LevelChangeSource::Application)
@@ -1855,6 +1945,44 @@ mod tests {
                 .all(|event| event.target.as_str() == "sc_observability")
         );
         drop(events);
+        let _ = logger.shutdown();
+    }
+
+    #[test]
+    fn saturated_diagnostic_queue_keeps_the_level_change_committed() {
+        let root = temp_path("level-diagnostic-saturation");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.queue_capacity = 1;
+        config.retained_log_policy.maintenance_cadence = cadence_ms(5);
+        config.maintenance_test_pass_delay = Some(Duration::from_millis(500));
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        config.maintenance_test_pass_signal = Some(signal.clone());
+        let (logger, mut owner) =
+            Logger::new_with_level_owner(config).expect("construct logger with owner");
+
+        logger
+            .log(log_event(service_name()))
+            .expect("start maintenance");
+        wait_for(
+            || signal.is_active(),
+            "expected writer maintenance gate before diagnostic saturation",
+        );
+        owner
+            .elevate_level(LevelFilter::Debug, LevelChangeSource::Application)
+            .expect("first diagnostic fills the queue");
+        let changed = owner
+            .elevate_level(LevelFilter::Trace, LevelChangeSource::Application)
+            .expect("level changes despite diagnostic queue saturation");
+
+        assert!(matches!(
+            changed,
+            LevelChange::Changed {
+                current: LevelState { revision: 2, effective_level: LevelFilter::Trace, .. },
+                diagnostic: ChangeDiagnostic::NotAccepted { ref diagnostic },
+                ..
+            } if diagnostic.code == error_codes::LOGGER_QUEUE_FULL
+        ));
+        signal.release_delay();
         let _ = logger.shutdown();
     }
 

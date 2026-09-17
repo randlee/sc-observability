@@ -48,3 +48,60 @@ QA-B010 remains explicitly open: `runtime-level-contract.md` stays
 `proposed_for_public_api_review` pending an actual ruling. No prior critical
 review failure is represented here as a PASS, and this handoff does not claim
 sprint closure.
+
+## QA-2 durable evidence correction
+
+QA-2 reviewed `08e33dd5f2597885fe9f33b0d9b8b4bb98d3e604` for PR #103 and
+returned **FAIL**. Its report permalink is
+<https://github.com/randlee/sc-observability/pull/103#issuecomment-5706554643>.
+The report's original seven blocking IDs were QA-B003, QA-B004, QA-B005,
+QA-B006, QA-B007, QA-B010, and QA-B011; its machine count incorrectly said six
+and its timestamp was a placeholder. The subsequent correction is recorded at
+<https://github.com/randlee/sc-observability/pull/103#issuecomment-5706566302>:
+the authoritative count is seven, 11/17 findings were independently resolved,
+and the verdict remains FAIL.
+
+The raw QA-2 command logs were deleted after the QA task closed. They cannot be
+reconstructed, so this document does not report their tool output as durable
+evidence or call it PASS. Fresh QA-3 must retain raw fmt/clippy/test/API/semver
+outputs, tool versions, and the exact reviewed SHA before QA-B005 can close.
+On the reviewed SHA, CI format, clippy, docs-consistency, and dependency-bans
+were successful; version-literals failed, and test, manifest-validation, and
+public-api-governance were skipped because they depend on that failing gate.
+
+## Compatibility fixture provenance and commands
+
+The immutable legacy consumer and `LevelFilter` fixture record the reported
+published `v1.2.0` baseline provenance (`dcc5263`). That object is not present
+in this checkout, so this claim must be independently checked against the
+published release before fixture regeneration; the fixture must never be
+regenerated from B.P1 code. The consumer manifest and lock use package version
+`1.2.0` to satisfy the repository's literal-consistency rule while preserving
+the legacy source API shape.
+
+Quality-mgr can independently capture the required fresh transcript with:
+
+```sh
+git show dcc5263:crates/sc-observability-types/src/level.rs
+cargo test -p sc-observability-types published_level_filter_fixture_retains_its_native_serde_shape
+cargo run --manifest-path crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-consumer/Cargo.toml
+python3 scripts/ci/validate_version_literals.py
+```
+
+## AC2 test mapping
+
+| AC2 clause | Artifact |
+| --- | --- |
+| Admission versus mutation contention; coherent snapshot | `admission_and_level_mutation_contend_on_one_control_state` uses a `Barrier`, held control lock, and channels. |
+| Post-stop retained snapshot; poisoned state | `level_state_recovers_the_last_committed_snapshot_after_poisoning`. |
+| Stale owner after shutdown | `level_owner_changes_only_its_logger_and_filters_with_shared_admission`. |
+| Owner cannot retain writer shutdown | The same test shuts down while the weak owner remains available and then observes `Stopped`. |
+| Independent logger isolation | Pending fresh QA verification; no claim of completion is made here. |
+
+## AC3 test mapping
+
+`each_changed_level_queues_one_fixed_info_diagnostic` verifies fixed Info
+diagnostics for Warn/Error/Off transitions. `saturated_diagnostic_queue_keeps_the_level_change_committed`
+uses the existing writer maintenance gate to deterministically fill the bounded
+queue, then verifies `Changed` with revision 2 and the original queue-full
+diagnostic rather than rollback.
