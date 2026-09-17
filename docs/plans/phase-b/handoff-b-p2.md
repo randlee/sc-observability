@@ -11,9 +11,9 @@ python3 scripts/ci/validate_runtime_level_staged_consumer.py --version 1.3.0
 ```
 
 On 2026-09-16 (America/Los_Angeles), implementation retained an actual stage at
-`/Users/randlee/.config/atm/share/sc-obs/bp2-evidence/5dded-stage/`. Its source
-commit is `487a3597230120f4e8317d4b11cfef5b1d6e306f`; stage-manifest SHA-256 is
-`7f6def0156b9a23bc47f0b2de471f0d3605949c3c15b36c44b2d6d8e6feb8141`.
+`/Users/randlee/.config/atm/share/sc-obs/bp2-evidence/5347c56-stage/`. Its source
+commit is `5347c56efb1d1f62ab0253350ea60078b498ccc8`; stage-manifest SHA-256 is
+`45df9d04f55fe1db5dfa385466b8d03b13f875cf8ceac211898be02f60fe624f`.
 
 | Candidate archive | SHA-256 |
 | --- | --- |
@@ -25,8 +25,8 @@ commit is `487a3597230120f4e8317d4b11cfef5b1d6e306f`; stage-manifest SHA-256 is
 The preparer rejects dirty Git provenance, writes deterministic archive bytes,
 checks each archive's normalized `Cargo.toml` and full package inventory, and
 the validator rejects any candidate path that is not an extracted archive.
-`local.json` (SHA-256
-`762c8da6d027707d9fd5b507b9f723136a234ccc4f2975382a2c44048057c3a5`)
+`local-macos.json` (SHA-256
+`c05d6d581e5ee582e3262f9c7536369bf9677cf4ee78ee7b3e8138f841fa705c`)
 records separate exact `1.2.0` registry-baseline and `1.3.0` extracted-candidate
 legs. The baseline source is release commit
 `dcc52685fd845c8d1bddde29199e799ae921cf5c`; the candidate asserts threshold
@@ -41,9 +41,12 @@ aggregate check. They have not yet been produced by that workflow, so this is
 an explicit **platform gate unavailable/pending**, not an implementation or QA
 approval. `quality-mgr` owns independent QA and any PASS verdict.
 
-Contract revision: B.P1 runtime-level contract revision `2` (elevate then reset)
-is asserted by the candidate fixture. Approval: staged implementation evidence
-only; registry publication and release approval remain deferred to B.7.
+Contract approval is the `runtime-level-contract.md` blob
+`e566d7eba4947abe935c1a0e1a20f4c4fab35864` from commit
+`12991c6521d064b733501b9b49a3188e3ce71e1c`, scoped to implementation by aobs
+in [`phase-b-runtime-level.md`](../../api-approvals/phase-b-runtime-level.md).
+The fixture's state revision `2` is behavior evidence, not a contract revision.
+Registry publication and release approval remain deferred to B.7.
 
 For B.7 only, live mode has no `--stage` argument and rejects local overrides:
 

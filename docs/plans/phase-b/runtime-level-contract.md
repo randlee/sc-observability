@@ -1,5 +1,8 @@
 ---
-status: proposed_for_public_api_review
+status: accepted_for_implementation
+approved_by: aobs
+approval_date: 2026-09-16 America/Los_Angeles
+approval_revision: 12991c6521d064b733501b9b49a3188e3ce71e1c
 execution_status: authorized
 execution_stop_withdrawn_by: aobs
 issue: 97
