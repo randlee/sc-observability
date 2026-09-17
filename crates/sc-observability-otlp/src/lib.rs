@@ -20,7 +20,9 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use config::validate_config_typed;
-use sc_observability_types::typed::{ExportFailure, FlushFailure, InitFailure, ShutdownFailure};
+use sc_observability_types::typed::{
+    EventFailure, ExportFailure, FlushFailure, InitFailure, ShutdownFailure,
+};
 #[allow(
     deprecated,
     reason = "telemetry retains legacy error names in its published compatibility signatures"
@@ -280,11 +282,7 @@ impl Telemetry {
         if let Some(complete) = runtime
             .span_assembler
             .push_typed(span.clone())
-            .map_err(|err| {
-                TelemetryError::ExportFailure(Box::new(error_context_from_diagnostic(
-                    err.diagnostic(),
-                )))
-            })?
+            .map_err(export_failure_from_event)?
         {
             runtime.span_buffer.push(complete);
         }
@@ -602,22 +600,13 @@ pub(crate) fn export_failure(message: impl Into<String>) -> TelemetryError {
     )))
 }
 
-fn error_context_from_diagnostic(diagnostic: &sc_observability_types::Diagnostic) -> ErrorContext {
-    let mut context = ErrorContext::new(
-        diagnostic.code.clone(),
-        diagnostic.message.clone(),
-        diagnostic.remediation.clone(),
-    );
-    if let Some(cause) = &diagnostic.cause {
-        context = context.cause(cause.clone());
-    }
-    if let Some(docs) = &diagnostic.docs {
-        context = context.docs(docs.clone());
-    }
-    for (key, value) in &diagnostic.details {
-        context = context.detail(key.clone(), value.clone());
-    }
-    context
+/// Converts a span-assembly event failure into a telemetry export failure.
+///
+/// Moves the original `Box<ErrorContext>` unchanged via `into_context()`
+/// rather than reconstructing a new one from its diagnostic fields, so the
+/// original timestamp, backtrace, and any attached source survive intact.
+fn export_failure_from_event(err: EventFailure) -> TelemetryError {
+    TelemetryError::ExportFailure(err.into_context())
 }
 
 fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
@@ -1163,6 +1152,64 @@ mod tests {
             health.last_error.and_then(|summary| summary.code),
             Some(error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED)
         );
+    }
+
+    #[test]
+    fn orphaned_span_event_returns_export_failure_from_span_assembler() {
+        let trace = trace_context();
+        let telemetry = Telemetry::new(telemetry_config()).expect("telemetry");
+        let event = SpanEvent {
+            timestamp: Timestamp::UNIX_EPOCH,
+            trace,
+            name: ActionName::new("agent.tool_call").expect("valid action"),
+            attributes: Map::new(),
+            diagnostic: None,
+        };
+
+        let error = telemetry
+            .emit_span(&SpanSignal::Event(event))
+            .expect_err("event without a matching started span is rejected");
+        let TelemetryError::ExportFailure(context) = error else {
+            panic!("expected an export failure");
+        };
+        assert_eq!(
+            context.diagnostic().code,
+            error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED
+        );
+        assert_eq!(
+            context.diagnostic().message,
+            "received span event without a matching started span"
+        );
+    }
+
+    #[test]
+    fn export_failure_from_event_moves_original_context_without_reconstruction() {
+        let context = Box::new(
+            ErrorContext::new(
+                error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
+                "received span event without a matching started span",
+                Remediation::not_recoverable(
+                    "emit started, event, and ended span signals in order",
+                ),
+            )
+            .source(Box::new(std::io::Error::other("orphaned span event source"))),
+        );
+        let original_timestamp = context.diagnostic().timestamp;
+        let original_backtrace_ptr = std::ptr::from_ref(context.backtrace());
+        let failure = EventFailure::from_context(context);
+
+        let TelemetryError::ExportFailure(exported) = export_failure_from_event(failure) else {
+            panic!("expected an export failure");
+        };
+
+        assert_eq!(exported.diagnostic().timestamp, original_timestamp);
+        assert_eq!(
+            std::ptr::from_ref(exported.backtrace()),
+            original_backtrace_ptr,
+            "the original context's backtrace allocation must be moved, not recaptured"
+        );
+        let source = std::error::Error::source(&*exported).expect("source must be preserved");
+        assert_eq!(source.to_string(), "orphaned span event source");
     }
 
     #[test]
