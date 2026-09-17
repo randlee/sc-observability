@@ -44,21 +44,21 @@ impl AdapterPolicy {
         if self
             .allowed_window_labels
             .iter()
-            .any(|label| label.is_empty() || label.contains('\0'))
+            .any(|label| label.is_empty() || !tauri_runtime::window::is_label_valid(label))
         {
             return Err(invalid(
                 "policy.allowed_window_labels",
-                "labels must be nonempty and NUL-free",
+                "labels must be valid Tauri window labels",
             ));
         }
         if self
             .allowed_targets
             .iter()
-            .any(|target| target.is_empty() || target.contains('\0'))
+            .any(|target| sc_observability_types::TargetCategory::new(target).is_err())
         {
             return Err(invalid(
                 "policy.allowed_targets",
-                "targets must be nonempty and NUL-free",
+                "targets must be valid target categories",
             ));
         }
         if self.redacted_field_keys.iter().any(|key| {
@@ -511,6 +511,28 @@ mod tests {
             ..policy
         };
         assert!(policy.validate().is_err());
+        let policy = AdapterPolicy {
+            allowed_window_labels: ["bad\nlabel".into()].into(),
+            ..AdapterPolicy {
+                allowed_window_labels: ["main".into()].into(),
+                allowed_targets: ["app".into()].into(),
+                max_request_bytes: MAX_REQUEST_BYTES as u32,
+                max_depth: MAX_DEPTH as u32,
+                redacted_field_keys: BTreeSet::new(),
+            }
+        };
+        assert!(matches!(policy.validate(), Err(Failure::Validation { ref field, .. }) if field == "policy.allowed_window_labels"));
+        let policy = AdapterPolicy {
+            allowed_targets: ["bad target".into()].into(),
+            ..AdapterPolicy {
+                allowed_window_labels: ["main".into()].into(),
+                allowed_targets: ["app".into()].into(),
+                max_request_bytes: MAX_REQUEST_BYTES as u32,
+                max_depth: MAX_DEPTH as u32,
+                redacted_field_keys: BTreeSet::new(),
+            }
+        };
+        assert!(matches!(policy.validate(), Err(Failure::Validation { ref field, .. }) if field == "policy.allowed_targets"));
     }
 
     #[test]

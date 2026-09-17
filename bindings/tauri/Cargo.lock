@@ -2563,10 +2563,12 @@ version = "1.4.0"
 dependencies = [
  "sc-observability-binding-runtime",
  "sc-observability-dto",
+ "sc-observability-types",
  "serde",
  "serde_json",
  "tauri",
  "tauri-plugin",
+ "tauri-runtime",
 ]
 
 [[package]]
