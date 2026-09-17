@@ -151,6 +151,22 @@ jobs:
         with:
           name: tauri-shared-rust-bundle
           path: target/tauri-rust-shared
+      - name: Verify Windows isolation setup and cleanup before compilation
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          python - <<'PYTHON'
+          import json,sys,tempfile
+          from pathlib import Path
+          sys.path.insert(0,str(Path('scripts/ci').resolve()))
+          from _python_sandbox import Sandbox,registered_checkouts
+          root=Path.cwd()
+          with tempfile.TemporaryDirectory(prefix='tauri-isolation-preflight-') as temporary:
+              sandbox=Sandbox(Path(temporary),registered_checkouts(root))
+              with sandbox:
+                  result=sandbox.prove_denials(sys.executable,root)
+              print('WINDOWS_ISOLATION_RESTORED '+json.dumps(result),flush=True)
+          PYTHON
       - name: Validate real IPC from packaged artifacts
         shell: bash
         run: |

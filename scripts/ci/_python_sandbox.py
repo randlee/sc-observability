@@ -11,6 +11,7 @@ import subprocess
 import sys
 import sysconfig
 import time
+import tempfile
 import uuid
 from pathlib import Path
 from contextlib import contextmanager
@@ -92,7 +93,8 @@ class Sandbox:
     @staticmethod
     def powershell(script: str) -> None:
         subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
-                        "$ErrorActionPreference='Stop'; " + script], check=True)
+                        "$ErrorActionPreference='Stop'; " + script], check=True,
+                       cwd=tempfile.gettempdir(), timeout=60)
 
     def __enter__(self):
         if self.system == 'Darwin':
@@ -142,10 +144,11 @@ class Sandbox:
         self.cache_probe.unlink(missing_ok=True)
 
     def remove_firewall(self):
-        # Filtering the existing collection also succeeds when our rule is
-        # already absent. Never remove another process's qualification rule.
-        self.powershell("Get-NetFirewallRule | Where-Object { $_.DisplayName -eq "
-                        f"'{self.firewall}' }} | Remove-NetFirewallRule")
+        # INetFwRules.Remove is an idempotent exact-name operation, including
+        # when our rule is absent. Avoid enumerating the runner's firewall.
+        # https://learn.microsoft.com/windows/win32/api/netfw/nf-netfw-inetfwrules-remove
+        self.powershell("$policy = New-Object -ComObject HNetCfg.FwPolicy2; "
+                        f"$policy.Rules.Remove('{self.firewall}')")
 
     @contextmanager
     def network_denial(self):
@@ -154,7 +157,7 @@ class Sandbox:
             yield
             return
         try:
-            self.powershell(f"New-NetFirewallRule -DisplayName '{self.firewall}' "
+            self.powershell(f"New-NetFirewallRule -Name '{self.firewall}' -DisplayName '{self.firewall}' "
                             "-Direction Outbound -Action Block -Profile Any | Out-Null")
             yield
         finally:
