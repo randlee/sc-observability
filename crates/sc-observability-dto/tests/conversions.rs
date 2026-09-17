@@ -228,14 +228,11 @@ fn registry_has_unique_literals_and_exact_remediation() {
 fn exact_request_size_and_depth_boundaries() {
     let mut raw = event();
     raw["message"] = json!("");
-    // Supply all normalized nullable/default fields so serialization has no hidden growth.
-    let dto = decode_event(raw).unwrap();
-    let mut raw = serde_json::to_value(dto).unwrap();
     let overhead = serde_json::to_vec(&raw).unwrap().len();
     raw["message"] = json!("x".repeat(65536 - overhead));
-    // The existing empty string already accounts for the two JSON quote bytes.
     assert_eq!(serde_json::to_vec(&raw).unwrap().len(), 65536);
-    assert!(decode_event(raw.clone()).is_ok());
+    let dto = decode_event(raw.clone()).unwrap();
+    assert!(to_core_event(dto, stamp()).is_ok());
     let message = raw["message"].as_str().unwrap().to_owned();
     raw["message"] = json!(message + "x");
     assert!(decode_event(raw).is_err());

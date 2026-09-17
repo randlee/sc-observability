@@ -245,6 +245,9 @@ fn trace(value: TraceContextDto) -> Result<core::TraceContext, Failure> {
     })
 }
 fn validate_event(dto: &LogEventDto) -> Result<(), Failure> {
+    // Serialized size and container depth are checked on the original JSON in
+    // `decode_event`. Re-serializing here would add omitted nullable fields and
+    // could reject a request that was within the raw 64 KiB boundary.
     version(dto.schema_version)?;
     checked(core::TargetCategory::new(dto.target.clone()), "target")?;
     checked(core::ActionName::new(dto.action.clone()), "action")?;
@@ -270,11 +273,6 @@ fn validate_event(dto: &LogEventDto) -> Result<(), Failure> {
         true,
         0,
     )?;
-    let raw = checked(serde_json::to_value(dto), "event")?;
-    measure(&raw, 0)?;
-    if checked(serde_json::to_vec(dto), "event")?.len() > 65536 {
-        return Err(invalid_input("event", "request exceeds 65536 UTF-8 bytes"));
-    }
     Ok(())
 }
 /// Converts validated event input using host-selected identity and time.
