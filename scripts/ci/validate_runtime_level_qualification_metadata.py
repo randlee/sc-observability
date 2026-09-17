@@ -6,7 +6,40 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-from _runtime_level_common import PUBLISH_ARTIFACTS, QUALIFICATION, ROOT, qualification, release_packages
+from _runtime_level_common import (
+    PRIVATE_ONLY_COMPANION_PACKAGES,
+    PUBLISH_ARTIFACTS,
+    QUALIFICATION,
+    ROOT,
+    UNPUBLISHED_COMPANION_PACKAGES,
+    qualification,
+    release_packages,
+)
+
+
+def validate_workspace_member_roster(members: tuple[str, ...], packages: tuple[str, ...]) -> None:
+    """Staged packages must keep their publish order; companions ride along unordered."""
+    expected_members = tuple(f"crates/{package}" for package in packages)
+    allowed_companions = {f"crates/{package}" for package in UNPUBLISHED_COMPANION_PACKAGES}
+    overlap = allowed_companions & set(expected_members)
+    if overlap:
+        raise SystemExit(f"unpublished companion package roster overlaps staged publish roster: {sorted(overlap)}")
+
+    staged_subsequence = tuple(member for member in members if member in set(expected_members))
+    if staged_subsequence != expected_members:
+        raise SystemExit("workspace member order does not match release/publish-artifacts.toml")
+
+    unrecognized = [
+        member for member in members
+        if member not in expected_members and member not in allowed_companions
+    ]
+    if unrecognized:
+        raise SystemExit(f"workspace has unrecognized members outside the staged and companion rosters: {unrecognized}")
+
+    private_only = {f"crates/{package}" for package in PRIVATE_ONLY_COMPANION_PACKAGES}
+    leaked = private_only & set(expected_members)
+    if leaked:
+        raise SystemExit(f"private-only companion package must not appear in the staged publish roster: {sorted(leaked)}")
 
 
 def validate_version_declarations(values: dict[str, str], handoff: Path, baseline_fixture: Path) -> None:
@@ -29,9 +62,7 @@ def main() -> int:
     packages = release_packages()
     workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())
     members = tuple(workspace["workspace"]["members"])
-    expected_members = tuple(f"crates/{package}" for package in packages)
-    if members != expected_members:
-        raise SystemExit("workspace member order does not match release/publish-artifacts.toml")
+    validate_workspace_member_roster(members, packages)
 
     artifacts = tomllib.loads(PUBLISH_ARTIFACTS.read_text())["crates"]
     if tuple(item["cargo_toml"] for item in artifacts) != tuple(f"crates/{package}/Cargo.toml" for package in packages):
