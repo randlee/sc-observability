@@ -12,7 +12,9 @@ parent: feature/phase-b-1e-migration-prep
 Apply and verify only FTQ-001, FTQ-002, RBP-F002, RBQA-F002, FTQ-003, and
 FTQ-004 from the reconciled QA1 report. Preserve public configuration,
 shutdown behavior, root `LogFailure`/`TryLogFailure` exports, and all source
-copy boundaries.
+copy boundaries. Record the already-approved B.1d preparation task as complete
+on this QA layer, citing its frozen revision and coordinator receipt, without
+changing the frozen telemetry implementation branch.
 
 ## Required outcomes
 
