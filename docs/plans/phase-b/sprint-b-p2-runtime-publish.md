@@ -1,7 +1,9 @@
 ---
 id: B.P2
-status: proposed
-branch: release/phase-b-p2-runtime-core
+status: complete
+branch: feature/B-P2-runtime-publish
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/B-P2-runtime-publish
+target: feature/B-P1-runtime-core
 base: develop
 ---
 

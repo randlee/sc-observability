@@ -136,6 +136,13 @@ publication delayed until the end. This authorizes the Phase B completion
 workflow, not an independent-review PASS; B.P1 is neither live-published nor a
 claim that the phase is complete.
 
+### B.P2 — Staged runtime-level package qualification
+
+B.P2 selects the `1.3.0` four-crate candidate, records source/version/tree
+checksums and Cargo package file lists, and validates an isolated staged
+consumer. It does not publish to crates.io: B.7 owns the phase-end live release
+and registry-only consumer proof.
+
 ## Rule
 
 Any sprint plan added here must preserve the standalone boundary defined by:
