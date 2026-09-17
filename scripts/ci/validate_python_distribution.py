@@ -177,6 +177,10 @@ def build(args) -> None:
             metadata = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline',
                                               '--format-version', '1'], root))
             resolution = verify_resolution(metadata, root)
+            native_output = sandbox.run([sandbox.cargo, 'test', '--locked', '--offline'], root)
+            native_count = sum(map(int, re.findall(r'test result: ok\. (\d+) passed', native_output)))
+            if not native_count:
+                raise DistributionError('native runtime suite executed no tests')
             command = [sys.executable, '-m', 'maturin', 'build', '--locked', '--offline', '--release',
                        '--out', str(scratch / 'wheels')]
             if args.platform.startswith('linux'):
@@ -198,7 +202,7 @@ def build(args) -> None:
             record = {'schema_version': 1, 'status': 'passed', 'development_only': source.get('development_only', False), 'source_commit': source['source_commit'],
                       'sdist_sha256': digest(args.sdist), 'platform': args.platform,
                       'build_interpreter': actual, 'wheel': linked, 'resolution': resolution,
-                      'isolation': probes, 'embedding': 'passed', 'negative_results': negatives,
+                      'isolation': probes, 'native_runtime_tests': 'passed', 'native_test_count': native_count, 'embedding': 'passed', 'negative_results': negatives,
                       'commands': sandbox.commands, 'publication': 'pending_B.7'}
             shutil.copyfile(wheels[0], output / wheels[0].name)
         (output / 'build-result.json').write_text(json.dumps(record, indent=2) + '\n')
@@ -307,7 +311,7 @@ def aggregate(args) -> None:
         inspected = inspect_wheel(wheel, selected, policy['candidate_version'])
         if inspected['sha256'] != build['wheel']['sha256']:
             raise DistributionError('retained wheel checksum differs from build evidence')
-        if build.get('embedding') != 'passed' or len(build.get('negative_results', {})) != 9:
+        if build.get('embedding') != 'passed' or build.get('native_runtime_tests') != 'passed' or len(build.get('negative_results', {})) != 9:
             raise DistributionError('missing embedding or negative-artifact execution evidence')
     print('B4A_QUALIFIED: five ABI wheels, 25 installed full-suite cells, offline sdist and embedding')
 

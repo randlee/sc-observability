@@ -34,7 +34,7 @@ class Sandbox:
         self.prefix: list[str] = []
         self.env = {key: value for key, value in os.environ.items()
                     if not key.startswith(('CARGO_', 'RUST', 'PYO3_', 'PYTHONPATH', 'PYTHONHOME'))}
-        tool = lambda name: subprocess.check_output(['rustup', 'which', name], text=True).strip()
+        tool = lambda name: subprocess.check_output(['rustup', 'which', '--toolchain', '1.94.1', name], text=True).strip()
         self.cargo, self.rustc = tool('cargo'), tool('rustc')
         (self.scratch / 'temporary').mkdir(exist_ok=True)
         self.env.update(TMPDIR=str(self.scratch / 'temporary'), TEMP=str(self.scratch / 'temporary'), TMP=str(self.scratch / 'temporary'), CARGO_HOME=str(self.scratch / 'cargo-home'),
@@ -64,7 +64,7 @@ class Sandbox:
             if not shutil.which('bwrap'):
                 raise DistributionError('bubblewrap is required; isolation cannot be skipped')
             self.prefix = ['bwrap', '--die-with-parent', '--unshare-net', '--ro-bind', '/', '/',
-                           '--dev-bind', '/dev', '/dev', '--proc', '/proc',
+                           '--dev-bind', '/dev', '/dev', '--ro-bind', '/proc', '/proc',
                            '--bind', str(self.scratch), str(self.scratch)]
             for path in self.denied:
                 if path.exists():

@@ -40,6 +40,19 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     for relative in ('python/sc_observability/generated/__init__.pyi', 'python/sc_observability/py.typed', 'tests'):
         if not (project / relative).exists():
             raise DistributionError(f'full B.4 runtime package is not ready: {relative}')
+    suite_path = project / 'qualification-suite.json'
+    if suite_path.is_file():
+        suite = json.loads(suite_path.read_text())
+    elif allow_incomplete_runtime:
+        suite = {'schema_version': 1, 'runtime_complete': False, 'pytest_paths': ['tests'],
+                 'typing_paths': ['tests/typing/test_result_narrowing.py'],
+                 'embedding_manifest': 'examples/rust-python-logging/Cargo.toml'}
+    else:
+        raise DistributionError('missing B.4 runtime qualification contract')
+    if (suite.get('schema_version') != 1 or (suite.get('runtime_complete') is not True and not allow_incomplete_runtime)
+            or suite.get('pytest_paths') != ['tests'] or not suite.get('typing_paths')):
+        raise DistributionError('B.4 full-runtime qualification contract is not complete')
+    runtime_options(suite)
     output.mkdir(parents=True)
     staging = output / 'source'
     staging.mkdir()
@@ -67,19 +80,6 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
                 raise DistributionError(f'symlink in Python source inputs: {relative}')
             shutil.copytree(project / relative, staging / relative, dirs_exist_ok=True)
     shutil.copyfile(source / 'LICENSE', staging / 'LICENSE')
-    suite_path = project / 'qualification-suite.json'
-    if suite_path.is_file():
-        suite = json.loads(suite_path.read_text())
-    elif allow_incomplete_runtime:
-        suite = {'schema_version': 1, 'runtime_complete': False, 'pytest_paths': ['tests'],
-                 'typing_paths': ['tests/typing/test_result_narrowing.py'],
-                 'embedding_manifest': 'examples/rust-python-logging/Cargo.toml'}
-    else:
-        raise DistributionError('missing B.4 runtime qualification contract')
-    if (suite.get('schema_version') != 1 or (suite.get('runtime_complete') is not True and not allow_incomplete_runtime)
-            or suite.get('pytest_paths') != ['tests'] or not suite.get('typing_paths')):
-        raise DistributionError('B.4 full-runtime qualification contract is not complete')
-    runtime_options(suite)
     (staging / 'qualification-suite.json').write_text(json.dumps(suite, indent=2) + '\n')
     embedding = confined(source, suite['embedding_manifest'])
     if not embedding.is_file():
