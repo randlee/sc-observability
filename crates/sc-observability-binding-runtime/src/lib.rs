@@ -18,9 +18,14 @@ use sc_observability_dto::{
     AdmissionDto, CompletionDto, Failure, LevelChangeDto, LogEventDto, LogHealthDto, LogQueryDto,
     LogSnapshotDto,
 };
+#[cfg(feature = "test-hooks")]
+use sc_observability_types::DiagnosticInfo;
 use sc_observability_types::{LevelChangeSource, LevelFilter};
 use std::sync::{Arc, atomic::Ordering};
 use std::time::Duration;
+
+#[cfg(feature = "test-hooks")]
+use std::sync::{Condvar, Mutex as StdMutex};
 
 /// Trusted adapter identity; never selected from producer event fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,6 +168,114 @@ pub fn create_core_backend(
         CoreLoggerBackend { shared },
     ))
 }
+
+/// Feature-only gate for proving that a real logger sink can retain its writer.
+#[cfg(feature = "test-hooks")]
+#[derive(Debug)]
+pub struct TestWriterGate {
+    state: StdMutex<(bool, bool)>,
+    changed: Condvar,
+}
+
+#[cfg(feature = "test-hooks")]
+impl TestWriterGate {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            state: StdMutex::new((false, false)),
+            changed: Condvar::new(),
+        })
+    }
+
+    /// Returns whether the real sink writer entered its held write.
+    pub fn entered(&self) -> bool {
+        self.state.lock().map(|state| state.0).unwrap_or(false)
+    }
+
+    /// Releases the real sink writer after another binding operation has run.
+    pub fn release(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.1 = true;
+            self.changed.notify_all();
+        }
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+struct TestBlockingSink {
+    gate: Arc<TestWriterGate>,
+}
+
+#[cfg(feature = "test-hooks")]
+#[allow(
+    deprecated,
+    reason = "the test-only sink implements the published compatibility trait signature"
+)]
+impl sc_observability::LogSink for TestBlockingSink {
+    fn write(&self, _: &sc_observability::LogEvent) -> Result<(), sc_observability::LogSinkError> {
+        let mut state = self
+            .gate
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.0 = true;
+        self.gate.changed.notify_all();
+        while !state.1 {
+            state = self
+                .gate
+                .changed
+                .wait(state)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
+        Ok(())
+    }
+
+    fn health(&self) -> sc_observability::SinkHealth {
+        sc_observability::SinkHealth {
+            name: sc_observability::SinkName::new("binding-test-held-writer")
+                .unwrap_or_else(|_| unreachable!("static sink name is valid")),
+            state: sc_observability::SinkHealthState::Healthy,
+            last_error: None,
+        }
+    }
+}
+
+/// Creates a feature-only owned core whose actual sink blocks its writer.
+///
+/// # Errors
+/// Returns the same tagged construction failure as a production core backend.
+#[cfg(feature = "test-hooks")]
+pub fn create_test_blocking_core_backend(
+    config: sc_observability::LoggerConfig,
+) -> Result<(CoreLoggerOwner, CoreLoggerBackend, Arc<TestWriterGate>), Failure> {
+    let gate = TestWriterGate::new();
+    let gate_for_sink = gate.clone();
+    let shared = coordinator::core_from_test_factory(move || {
+        let stamp = sc_observability_dto::EventStamp {
+            service: config.service_name.clone(),
+            timestamp: sc_observability_types::Timestamp::now_utc(),
+            identity: sc_observability_types::ProcessIdentity::default(),
+        };
+        let mut builder = sc_observability::Logger::builder_typed(config).map_err(|error| {
+            conversion::context(error.diagnostic(), conversion::Kind::Unavailable)
+        })?;
+        builder.register_sink(sc_observability::SinkRegistration::new(Arc::new(
+            TestBlockingSink {
+                gate: gate_for_sink,
+            },
+        )));
+        let (logger, level) = builder.build_with_level_owner_typed().map_err(|error| {
+            conversion::context(error.diagnostic(), conversion::Kind::Unavailable)
+        })?;
+        Ok((stamp, logger, level))
+    })?;
+    Ok((
+        CoreLoggerOwner {
+            shared: shared.clone(),
+        },
+        CoreLoggerBackend { shared },
+        gate,
+    ))
+}
 /// Attaches bounded operations to an existing host-owned bridge control.
 ///
 /// # Errors
@@ -175,6 +288,16 @@ pub fn bridge_backend(
     })
 }
 impl CoreLoggerOwner {
+    #[cfg(feature = "test-hooks")]
+    /// Forces the owned core's real level revision to exhaustion for binding tests.
+    ///
+    /// # Errors
+    ///
+    /// Returns a tagged failure when the owner is no longer available.
+    pub fn force_revision_exhaustion_for_test(&mut self) -> Result<(), Failure> {
+        self.shared.force_revision_exhaustion_for_test()
+    }
+
     /// Closes admission once and returns the same saved shutdown operation.
     ///
     /// # Errors

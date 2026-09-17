@@ -451,11 +451,29 @@ impl Coordinator {
         }))
         .unwrap_or_else(|_| Err(error::internal("level owner callback panicked")))
     }
+
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn force_revision_exhaustion_for_test(&self) -> Result<(), Failure> {
+        let Backend::Core { level, .. } = &self.backend else {
+            return Err(error::closed());
+        };
+        let mut owner = level
+            .lock()
+            .map_err(|_| error::internal("level owner state poisoned"))?;
+        owner
+            .force_revision_exhaustion_for_test()
+            .then_some(())
+            .ok_or_else(error::closed)
+    }
 }
 
-pub(crate) fn core(
+pub(crate) fn core(config: sc_observability::LoggerConfig) -> Result<Arc<Coordinator>, Failure> {
+    core_from_factory(|| core_parts(config))
+}
+
+fn core_parts(
     mut config: sc_observability::LoggerConfig,
-) -> Result<Arc<Coordinator>, Failure> {
+) -> Result<(dto::EventStamp, Logger<Running>, LevelOwner), Failure> {
     let stamp = dto::EventStamp {
         service: config.service_name.clone(),
         timestamp: native::Timestamp::now_utc(),
@@ -478,15 +496,21 @@ pub(crate) fn core(
     };
     let (logger, level) = Logger::new_with_level_owner_typed(config)
         .map_err(|e| conversion::context(e.diagnostic(), conversion::Kind::Unavailable))?;
-    core_from_parts(stamp, logger, level)
+    Ok((stamp, logger, level))
 }
 
-pub(crate) fn core_from_parts(
-    stamp: dto::EventStamp,
-    logger: Logger<Running>,
-    level: LevelOwner,
+#[cfg(feature = "test-hooks")]
+pub(crate) fn core_from_test_factory(
+    build: impl FnOnce() -> Result<(dto::EventStamp, Logger<Running>, LevelOwner), Failure>,
+) -> Result<Arc<Coordinator>, Failure> {
+    core_from_factory(build)
+}
+
+fn core_from_factory(
+    build: impl FnOnce() -> Result<(dto::EventStamp, Logger<Running>, LevelOwner), Failure>,
 ) -> Result<Arc<Coordinator>, Failure> {
     Coordinator::create(|| {
+        let (stamp, logger, level) = build()?;
         let health = dto::from_core_health(logger.health(), logger.level_state())?;
         Ok((
             Backend::Core {

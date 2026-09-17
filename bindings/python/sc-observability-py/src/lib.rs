@@ -15,6 +15,8 @@ pub use sc_observability_binding_runtime::{
     OperationState,
 };
 use sc_observability_binding_runtime::{ProducerOrigin, create_core_backend};
+#[cfg(feature = "test-hooks")]
+use sc_observability_binding_runtime::{TestWriterGate, create_test_blocking_core_backend};
 use sc_observability_dto::{
     Failure, LevelChangeDto, LogEventDto, LogHealthDto, LogQueryDto, ResultDto,
 };
@@ -163,6 +165,8 @@ struct OwnedState {
 struct NativeLogger {
     backend: CoreLoggerBackend,
     owned: Mutex<OwnedState>,
+    #[cfg(feature = "test-hooks")]
+    test_writer_gate: Option<Arc<TestWriterGate>>,
 }
 
 /// Module-owned host backend. Its `Arc` survives while any attached Python
@@ -418,6 +422,25 @@ impl NativeLogger {
         state.shutdown = Some(operation.clone());
         Ok(operation)
     }
+
+    #[cfg(feature = "test-hooks")]
+    fn force_revision_exhaustion_for_test(&self) -> Result<(), Failure> {
+        let mut state = self
+            .owned
+            .lock()
+            .map_err(|_| internal_failure("owned logger state lock poisoned"))?;
+        state.owner.force_revision_exhaustion_for_test()
+    }
+
+    #[cfg(feature = "test-hooks")]
+    fn test_writer_gate(&self) -> Result<Arc<TestWriterGate>, Failure> {
+        self.test_writer_gate.clone().ok_or_else(|| {
+            unavailable_failure(
+                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED,
+                "owned logger was not created with the private held-writer fixture",
+            )
+        })
+    }
 }
 
 #[pymethods]
@@ -502,6 +525,21 @@ impl NativeLogger {
             result_json::<LevelChangeDto>(result)
         })
     }
+
+    #[cfg(feature = "test-hooks")]
+    fn _test_force_revision_exhaustion(&self) -> String {
+        contained_json(|| result_json(self.force_revision_exhaustion_for_test()))
+    }
+
+    #[cfg(feature = "test-hooks")]
+    fn _test_blocked_writer_entered(&self) -> String {
+        contained_json(|| result_json::<bool>(self.test_writer_gate().map(|gate| gate.entered())))
+    }
+
+    #[cfg(feature = "test-hooks")]
+    fn _test_release_blocked_writer(&self) -> String {
+        contained_json(|| result_json(self.test_writer_gate().map(|gate| gate.release())))
+    }
 }
 
 #[pymethods]
@@ -551,6 +589,8 @@ fn create_owned(py: Python<'_>, config: &str) -> PyResult<(Option<Py<NativeLogge
                             owner,
                             shutdown: None,
                         }),
+                        #[cfg(feature = "test-hooks")]
+                        test_writer_gate: None,
                     },
                 )?;
                 Ok((Some(logger), result_json::<()>(Ok(()))))
@@ -563,6 +603,32 @@ fn create_owned(py: Python<'_>, config: &str) -> PyResult<(Option<Py<NativeLogge
             None,
             result_json::<()>(Err(internal_failure("native create_owned panicked"))),
         )),
+    }
+}
+
+/// Constructs a private source-validation logger with a real blocked sink.
+#[cfg(feature = "test-hooks")]
+#[pyfunction]
+fn _test_create_blocking_owned(
+    py: Python<'_>,
+    config: &str,
+) -> PyResult<(Option<Py<NativeLogger>>, String)> {
+    match logger_config(config).and_then(create_test_blocking_core_backend) {
+        Ok((owner, backend, gate)) => Ok((
+            Some(Py::new(
+                py,
+                NativeLogger {
+                    backend,
+                    owned: Mutex::new(OwnedState {
+                        owner,
+                        shutdown: None,
+                    }),
+                    test_writer_gate: Some(gate),
+                },
+            )?),
+            result_json::<()>(Ok(())),
+        )),
+        Err(error) => Ok((None, result_json::<()>(Err(error)))),
     }
 }
 
@@ -692,6 +758,8 @@ pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(get_installed_host_logger, module)?)?;
     #[cfg(feature = "test-hooks")]
     module.add_function(wrap_pyfunction!(_test_force_failure, module)?)?;
+    #[cfg(feature = "test-hooks")]
+    module.add_function(wrap_pyfunction!(_test_create_blocking_owned, module)?)?;
     #[cfg(feature = "test-hooks")]
     module.add_function(wrap_pyfunction!(_test_install_owned_host, module)?)?;
     #[cfg(feature = "test-hooks")]
