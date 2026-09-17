@@ -345,6 +345,11 @@ impl Observability {
     }
 
     /// Flushes the attached logger with a typed failure.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the attached logger encounters a poisoned internal mutex while
+    /// flushing its registered sinks.
     pub fn flush_typed(&self) -> Result<(), FlushFailure> {
         let logger = self.logger.lock().expect("observability logger poisoned");
         match logger
@@ -368,6 +373,11 @@ impl Observability {
 
     /// Shuts down the routing runtime with a typed failure. Repeated calls are
     /// idempotent and return success, matching the legacy lifecycle contract.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the attached logger encounters a poisoned internal mutex while
+    /// shutting down its writer runtime.
     pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
@@ -1130,14 +1140,12 @@ mod tests {
 
     #[test]
     fn typed_builder_reports_empty_routes_and_logger_startup_failures() {
-        let empty = match Observability::builder(
+        let Err(empty) = Observability::builder(
             ObservabilityConfig::default_for_typed(tool_name(), temp_path("typed-empty"))
                 .expect("typed config"),
         )
-        .build_typed()
-        {
-            Err(error) => error,
-            Ok(_) => panic!("empty routes must fail"),
+        .build_typed() else {
+            panic!("empty routes must fail");
         };
         assert_eq!(empty.kind(), InitFailureKind::ObservationInitialization);
 
@@ -1145,16 +1153,15 @@ mod tests {
             ObservabilityConfig::default_for_typed(tool_name(), temp_path("typed-init-failure"))
                 .expect("typed config");
         config.queue_capacity = 0;
-        let error = match Observability::builder(config)
+        let Err(error) = Observability::builder(config)
             .register_subscriber(SubscriberRegistration::new(legacy_subscriber(Arc::new(
                 TypedRecordingSubscriber {
                     calls: Arc::new(AtomicU64::new(0)),
                 },
             ))))
             .build_typed()
-        {
-            Err(error) => error,
-            Ok(_) => panic!("zero queue capacity must fail"),
+        else {
+            panic!("zero queue capacity must fail");
         };
         assert_eq!(error.kind(), InitFailureKind::LoggerInitialization);
     }

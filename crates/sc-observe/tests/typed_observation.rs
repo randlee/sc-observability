@@ -214,17 +214,26 @@ fn typed_routes_execute_real_subscriber_and_projector_adapters() {
 
 #[test]
 fn typed_and_legacy_construction_failures_classify_consistently() {
-    let empty = match Observability::builder(
+    let Err(new_empty) = Observability::new_typed(
+        sc_observe::ObservabilityConfig::default_for_typed(
+            ToolName::new("typed-observe").expect("valid tool"),
+            temp_path("new-empty"),
+        )
+        .expect("typed config"),
+    ) else {
+        panic!("new_typed without routes must fail");
+    };
+    assert_eq!(new_empty.kind(), InitFailureKind::ObservationInitialization);
+
+    let Err(empty) = Observability::builder(
         sc_observe::ObservabilityConfig::default_for_typed(
             ToolName::new("typed-observe").expect("valid tool"),
             temp_path("empty"),
         )
         .expect("typed config"),
     )
-    .build_typed()
-    {
-        Err(error) => error,
-        Ok(_) => panic!("empty routes must fail"),
+    .build_typed() else {
+        panic!("empty routes must fail");
     };
     assert_eq!(empty.kind(), InitFailureKind::ObservationInitialization);
 
@@ -234,16 +243,15 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
     )
     .expect("typed config");
     config.queue_capacity = 0;
-    let logger_failure = match Observability::builder(config)
+    let Err(logger_failure) = Observability::builder(config)
         .register_subscriber(SubscriberRegistration::new(legacy_subscriber(Arc::new(
             CountingSubscriber {
                 calls: Arc::new(AtomicUsize::new(0)),
             },
         ))))
         .build_typed()
-    {
-        Err(error) => error,
-        Ok(_) => panic!("zero queue capacity must fail"),
+    else {
+        panic!("zero queue capacity must fail");
     };
     assert_eq!(logger_failure.kind(), InitFailureKind::LoggerInitialization);
 }
