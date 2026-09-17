@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin==1.10.2"]
+build-backend = "maturin"
+
+[project]
+name = "sc-observability"
+version = "1.4.0"
+description = "Typed Python runtime bindings for sc-observability"
+requires-python = ">=3.10"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Typing :: Typed",
+]
+
+[tool.maturin]
+module-name = "sc_observability._native"
+python-source = "python"
+features = ["pyo3/abi3-py310"]
+locked = true

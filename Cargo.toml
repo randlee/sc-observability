@@ -9,6 +9,7 @@ members = [
   "crates/sc-observability-log-consumer-check",
   "crates/sc-observability-dto",
   "crates/sc-observability-binding-runtime",
+  "bindings/python/sc-observability-py",
 ]
 exclude = ["examples/atm-adapter-example"]
 resolver = "2"
