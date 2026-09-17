@@ -33,6 +33,10 @@
     "sc-observability-binding-runtime": {
       "baseline_version": null,
       "kind": "lib"
+    },
+    "sc-observability-py": {
+      "baseline_version": null,
+      "kind": "rlib"
     }
   }
 }
