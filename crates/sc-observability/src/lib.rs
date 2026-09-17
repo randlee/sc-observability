@@ -2138,6 +2138,15 @@ mod tests {
             AdmissionOutcome::Accepted
         );
 
+        let mut typed_event = log_event(service_name());
+        typed_event.level = Level::Debug;
+        assert_eq!(
+            logger
+                .try_log_with_outcome_typed(typed_event)
+                .expect("typed debug admitted"),
+            AdmissionOutcome::Accepted
+        );
+
         assert!(matches!(
             owner.elevate_level(LevelFilter::Off, LevelChangeSource::Application),
             Err(LevelChangeError::BelowBaseline { .. })

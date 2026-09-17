@@ -18,6 +18,7 @@ surfaces, admission/filtering semantics, and bridge API are unchanged.
 - Required provenance parent merged: `8aeabb584b3b2d004606591ff80741867ebb9ca7`
 - Merge-forward revision: `44b3f3c5d06e3ab4195984f8141777be5726ae6d`
 - Typed production-site correction: `2d1f207c24268d618f1fda135484cde88f079706`
+- Final parent-merged validation base: `f3792ec35a617b8e1533056eb08974140935c496`
 
 ## Validation
 
@@ -40,6 +41,13 @@ surfaces, admission/filtering semantics, and bridge API are unchanged.
 The task-plan fixture matrix records the paired legacy/typed and retained
 behavior coverage. The copied bridge regression is pending B.1 source
 integration and is intentionally not represented as a completed local run.
+
+After the final provenance merge, the clean validation base passed
+`cargo test --locked -p sc-observability --all-targets --all-features`
+(76 unit tests and 2 integration-consumer tests),
+`cargo fmt --all -- --check`,
+`cargo clippy --locked -p sc-observability --all-targets --all-features -- -D warnings`,
+and `git diff --check`.
 
 ## Startup ordering and rollback boundary
 
