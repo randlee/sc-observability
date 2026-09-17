@@ -1788,6 +1788,68 @@ mod tests {
     }
 
     #[test]
+    fn disconnected_writer_returns_legacy_and_typed_admission_and_flush_failures() {
+        struct PanicSink {
+            entered: Arc<AtomicBool>,
+        }
+
+        impl LogSink for PanicSink {
+            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+                self.entered.store(true, Ordering::SeqCst);
+                panic!("injected sink panic terminates writer");
+            }
+
+            fn health(&self) -> SinkHealth {
+                SinkHealth {
+                    name: sink_name("panic-sink"),
+                    state: SinkHealthState::Unavailable,
+                    last_error: None,
+                }
+            }
+        }
+
+        let root = temp_path("disconnected-writer");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let entered = Arc::new(AtomicBool::new(false));
+        let mut builder = Logger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::new(Arc::new(PanicSink {
+            entered: entered.clone(),
+        })));
+        let logger = builder.build();
+
+        logger
+            .log(log_event(service_name()))
+            .expect("initial admission");
+        wait_for(
+            || entered.load(Ordering::SeqCst),
+            "writer should enter the injected sink",
+        );
+
+        assert!(matches!(
+            logger.try_log(log_event(service_name())),
+            Err(TryLogError::WriterDegraded(_))
+        ));
+        assert!(matches!(
+            logger.try_log_typed(log_event(service_name())),
+            Err(TryLogFailure::WriterDegraded(_))
+        ));
+        let legacy_flush = logger.flush().expect_err("legacy flush is disconnected");
+        assert_eq!(
+            legacy_flush.diagnostic().code,
+            error_codes::LOGGER_WRITER_DEGRADED
+        );
+        let typed_flush = logger
+            .flush_typed()
+            .expect_err("typed flush is disconnected");
+        assert_eq!(
+            typed_flush.diagnostic().code,
+            error_codes::LOGGER_WRITER_DEGRADED
+        );
+    }
+
+    #[test]
     fn logger_builder_rejects_zero_queue_capacity() {
         let root = temp_path("zero-queue-capacity");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
