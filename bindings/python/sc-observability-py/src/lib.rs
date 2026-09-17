@@ -10,10 +10,11 @@
 
 use pyo3::prelude::*;
 use pyo3::sync::MutexExt;
-use sc_observability_binding_runtime::{
-    CoreLoggerBackend, CoreLoggerOwner, HostLoggingBackend, Operation, ProducerOrigin,
-    create_core_backend,
+pub use sc_observability_binding_runtime::{
+    BridgeControlBackend, CoreLoggerBackend, CoreLoggerOwner, HostLoggingBackend, Operation,
+    OperationState,
 };
+use sc_observability_binding_runtime::{ProducerOrigin, create_core_backend};
 use sc_observability_dto::{
     Failure, LevelChangeDto, LogEventDto, LogHealthDto, LogQueryDto, ResultDto,
 };
