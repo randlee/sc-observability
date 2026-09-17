@@ -20,6 +20,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 use crate::{constants, error_codes};
+use sc_observability_types::typed::InitFailure;
 use sc_observability_types::{DurationMs, ErrorContext, InitError, Remediation, ServiceName};
 use serde_json::{Map, Value};
 
@@ -41,15 +42,20 @@ pub struct OtlpEndpoint(String);
 impl OtlpEndpoint {
     /// Creates a validated OTLP endpoint using the documented HTTP(S) schemes.
     pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
+        Self::new_typed(value).map_err(Into::into)
+    }
+
+    /// Creates a validated OTLP endpoint with a neutral initialization failure.
+    pub fn new_typed(value: impl Into<String>) -> Result<Self, InitFailure> {
         let value = value.into();
         if value.trim().is_empty() {
-            return Err(invalid_transport_value(
+            return Err(invalid_transport_value_typed(
                 "endpoint must not be empty",
                 "set an explicit http:// or https:// OTLP endpoint",
             ));
         }
         if !(value.starts_with("http://") || value.starts_with("https://")) {
-            return Err(invalid_transport_value(
+            return Err(invalid_transport_value_typed(
                 "endpoint must start with http:// or https://",
                 "set an OTLP endpoint with an explicit HTTP(S) scheme",
             ));
@@ -90,9 +96,14 @@ pub struct AuthHeader(String);
 impl AuthHeader {
     /// Creates a validated non-empty authorization header value.
     pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
+        Self::new_typed(value).map_err(Into::into)
+    }
+
+    /// Creates a validated authorization header with a neutral initialization failure.
+    pub fn new_typed(value: impl Into<String>) -> Result<Self, InitFailure> {
         let value = value.into();
         if value.trim().is_empty() {
-            return Err(invalid_transport_value(
+            return Err(invalid_transport_value_typed(
                 "auth header must not be empty",
                 "set a non-empty authorization header or omit it entirely",
             ));
@@ -353,6 +364,11 @@ impl TelemetryConfigBuilder {
     /// assert_eq!(config.service_name.as_str(), "demo");
     /// ```
     pub fn build(self) -> Result<TelemetryConfig, InitError> {
+        self.build_typed().map_err(Into::into)
+    }
+
+    /// Finalizes the telemetry configuration with a neutral initialization failure.
+    pub fn build_typed(self) -> Result<TelemetryConfig, InitFailure> {
         let config = TelemetryConfig {
             service_name: self.service_name,
             resource: self.resource,
@@ -361,14 +377,18 @@ impl TelemetryConfigBuilder {
             traces: self.traces,
             metrics: self.metrics,
         };
-        validate_config(&config)?;
+        validate_config_typed(&config)?;
         Ok(config)
     }
 }
 
 pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
+    validate_config_typed(config).map_err(Into::into)
+}
+
+pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), InitFailure> {
     if config.transport.enabled && config.transport.endpoint.is_none() {
-        return Err(InitError(Box::new(ErrorContext::new(
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "enabled telemetry requires an endpoint",
             Remediation::recoverable(
@@ -378,7 +398,7 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
         ))));
     }
     if u64::from(config.transport.timeout_ms) == 0 {
-        return Err(InitError(Box::new(ErrorContext::new(
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "timeout_ms must be greater than zero",
             Remediation::recoverable(
@@ -388,7 +408,7 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
         ))));
     }
     if config.transport.initial_backoff_ms > config.transport.max_backoff_ms {
-        return Err(InitError(Box::new(ErrorContext::new(
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "initial_backoff_ms must not exceed max_backoff_ms",
             Remediation::recoverable("fix the backoff configuration", ["use documented defaults"]),
@@ -399,7 +419,7 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
         && config.traces.is_none()
         && config.metrics.is_none()
     {
-        return Err(InitError(Box::new(ErrorContext::new(
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "at least one telemetry signal must be enabled",
             Remediation::recoverable(
@@ -414,7 +434,7 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
             .metrics
             .is_some_and(|cfg| cfg.batch_size == 0 || u64::from(cfg.export_interval_ms) == 0)
     {
-        return Err(InitError(Box::new(ErrorContext::new(
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "telemetry batch sizing and export intervals must be positive",
             Remediation::recoverable(
@@ -426,8 +446,8 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
     Ok(())
 }
 
-fn invalid_transport_value(message: &str, remediation: &str) -> InitError {
-    InitError(Box::new(ErrorContext::new(
+fn invalid_transport_value_typed(message: &str, remediation: &str) -> InitFailure {
+    InitFailure::from_context(Box::new(ErrorContext::new(
         error_codes::TELEMETRY_INVALID_CONFIG,
         message,
         Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
