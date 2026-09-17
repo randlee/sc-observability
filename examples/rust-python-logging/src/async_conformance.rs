@@ -81,6 +81,9 @@ fn failure(error: impl std::fmt::Debug) -> PyErr {
 }
 
 /// Run real owned/core-attached/bridge-attached asyncio tests in this interpreter.
+///
+/// # Errors
+/// Returns an error if native construction, Python checks or a subprocess fail.
 pub fn run(py: Python<'_>) -> PyResult<()> {
     for mode in ["owned", "core", "bridge"] {
         let flushes = Arc::new(AtomicUsize::new(0));
@@ -183,6 +186,10 @@ pub fn run(py: Python<'_>) -> PyResult<()> {
 
 /// Isolated process: finalize Python while a native flush is held, then let
 /// that exact native operation complete and shut down its Rust owner afterward.
+///
+/// # Errors
+/// Returns the failed native/embedding check as owned text, without retaining
+/// Python values after interpreter finalization.
 pub fn finalize(mode: &str) -> Result<(), String> {
     let service =
         sc_observability_types::ServiceName::new("b6-finalize").map_err(|e| e.to_string())?;

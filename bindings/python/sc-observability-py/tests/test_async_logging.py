@@ -191,3 +191,39 @@ def test_submit_preserves_original_failure_and_never_attempts_accounting() -> No
         result = _submit(logger, LogEvent(level="info", target="async.test", action="reject"))
         assert isinstance(result, Err) and result.error is failure
         assert logger.calls == 1
+
+
+def test_native_slot_rejection_preserves_diagnostic_and_releases_before_timer() -> None:
+    from sc_observability.async_logging import _boundary
+    failure = _boundary("queue_full").error
+    payload = json.dumps({"kind": "error", "error": {
+        "kind": failure.kind, "code": failure.code, "message": failure.message,
+        "at": failure.at, "remediation": {"kind": "recoverable", "steps": list(failure.remediation.steps)},
+    }})
+    class Rejected(Native):
+        def start_flush(self, timeout: str) -> tuple[None, str]:
+            self.calls += 1
+            return None, payload
+    native = Rejected()
+    result = asyncio.run(_flush_async(native), debug=True)
+    assert result == Err(failure)
+    assert native.calls == 1 and native.reserved == 0
+    assert all(not pool.observers for pool in _pools.values())
+
+
+@pytest.mark.parametrize("stage", ["start", "state"])
+def test_foreign_operation_errors_are_contained_without_retry(stage: str) -> None:
+    class BrokenOperation(Operation):
+        def state(self) -> str | None:
+            raise RuntimeError("foreign operation state failure")
+    class Broken(Native):
+        def start_flush(self, timeout: str) -> tuple[Operation, str]:
+            self.calls += 1
+            if stage == "start":
+                raise RuntimeError("foreign operation start failure")
+            return BrokenOperation(), STARTED
+    native = Broken()
+    result = asyncio.run(_flush_async(native), debug=True)
+    assert isinstance(result, Err) and result.error.kind == "internal"
+    assert native.calls == 1 and native.reserved == 0
+    assert all(not pool.observers for pool in _pools.values())
