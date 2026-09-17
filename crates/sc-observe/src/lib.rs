@@ -463,14 +463,25 @@ impl Observability {
             let mut logger = self.logger.lock().expect("observability logger poisoned");
             std::mem::replace(&mut *logger, LoggerHandle::ShuttingDown)
         };
-        let stopped = match handle {
+        self.complete_shutdown(|| match handle {
             LoggerHandle::Running(logger) => LoggerHandle::Stopped(logger.shutdown()),
-            LoggerHandle::ShuttingDown => LoggerHandle::ShuttingDown,
+            LoggerHandle::ShuttingDown => unreachable!("shutdown has one owner"),
             LoggerHandle::Stopped(logger) => LoggerHandle::Stopped(logger),
-        };
-        *self.logger.lock().expect("observability logger poisoned") = stopped;
-        self.logger_changed.notify_all();
+        });
         Ok(())
+    }
+
+    fn complete_shutdown(&self, shutdown: impl FnOnce() -> LoggerHandle) {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(shutdown));
+        let mut logger = self.logger.lock().expect("observability logger poisoned");
+        self.logger_changed.notify_all();
+        match result {
+            Ok(stopped) => *logger = stopped,
+            // Resume while holding the mutex so it is poisoned just as it was
+            // when shutdown ran under the lock. Woken waiters observe that
+            // poison instead of waiting forever on ShuttingDown after unwind.
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
     }
 
     /// Returns the aggregate runtime health view.
@@ -1313,6 +1324,254 @@ mod tests {
     }
 
     #[test]
+    fn in_flight_shutdown_preserves_flush_health_and_repeated_shutdown() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        struct BlockingFlushSink {
+            armed: Arc<AtomicBool>,
+            entered: mpsc::Sender<()>,
+            // MUTEX: LogSink is Sync; the sole writer owns receives on this
+            // test-control channel. A timeout/disconnect releases failed tests.
+            release: Mutex<mpsc::Receiver<()>>,
+        }
+        impl LogSink for BlockingFlushSink {
+            fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
+                Ok(())
+            }
+            fn flush(&self) -> Result<(), LogSinkError> {
+                if self.armed.swap(false, Ordering::SeqCst) {
+                    let _ = self.entered.send(());
+                    let _ = self
+                        .release
+                        .lock()
+                        .expect("release lock")
+                        .recv_timeout(Duration::from_secs(5));
+                }
+                Err(LogSinkError(Box::new(ErrorContext::new(
+                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                    "controlled flush failure",
+                    Remediation::not_recoverable("test fixture"),
+                ))))
+            }
+            fn health(&self) -> SinkHealth {
+                SinkHealth {
+                    name: sink_name("controlled-flush"),
+                    state: SinkHealthState::DegradedDropping,
+                    last_error: None,
+                }
+            }
+        }
+        for legacy in [false, true] {
+            let armed = Arc::new(AtomicBool::new(false));
+            let (entered_tx, entered_rx) = mpsc::channel();
+            let (release_tx, release_rx) = mpsc::channel();
+            let mut config = LoggerConfig::default_for(
+                ServiceName::new("obs-app").expect("service"),
+                temp_path("controlled-shutdown"),
+            );
+            config.enable_file_sink = false;
+            config.enable_console_sink = false;
+            let mut builder = Logger::builder(config).expect("logger builder");
+            builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink {
+                armed: armed.clone(),
+                entered: entered_tx,
+                release: Mutex::new(release_rx),
+            })));
+            let logger = builder.build();
+            logger
+                .flush_typed()
+                .expect_err("seed logging failure counter");
+            let before = logger.health();
+            assert_eq!(before.flush_errors_total, 1);
+            assert!(before.last_error.is_some());
+            let runtime = Arc::new(Observability {
+                logger: Mutex::new(LoggerHandle::Running(logger)),
+                logger_changed: Condvar::new(),
+                shutdown: AtomicBool::new(false),
+                subscriber_registrations: Vec::new(),
+                projection_registrations: Vec::new(),
+                observability_health_provider: None,
+                runtime: RuntimeState::default(),
+            });
+            armed.store(true, Ordering::SeqCst);
+            let (shutdown_tx, shutdown_rx) = mpsc::channel();
+            let shutdown_runtime = runtime.clone();
+            let shutdown = std::thread::spawn(move || {
+                let result = if legacy {
+                    shutdown_runtime.shutdown().map_err(ShutdownFailure::from)
+                } else {
+                    shutdown_runtime.shutdown_typed()
+                };
+                let _ = shutdown_tx.send(result);
+            });
+            entered_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("writer inside controlled final flush");
+            assert!(matches!(
+                *runtime
+                    .logger
+                    .lock()
+                    .expect("logger unlocked during shutdown"),
+                LoggerHandle::ShuttingDown
+            ));
+            assert!(matches!(
+                runtime.emit(observation(true)),
+                Err(ObservationError::Shutdown)
+            ));
+            let (repeat_tx, repeat_rx) = mpsc::channel();
+            let repeated_runtime = runtime.clone();
+            let repeated = std::thread::spawn(move || {
+                let _ = repeat_tx.send(repeated_runtime.shutdown_typed());
+            });
+            repeat_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("repeated shutdown is immediate")
+                .expect("success");
+            repeated.join().expect("repeated shutdown thread");
+
+            let (started_tx, started_rx) = mpsc::channel();
+            let (flush_tx, flush_rx) = mpsc::channel();
+            let flush_runtime = runtime.clone();
+            let flush_started = started_tx.clone();
+            let flush = std::thread::spawn(move || {
+                let _ = flush_started.send(());
+                let result = if legacy {
+                    flush_runtime.flush().map_err(FlushFailure::from)
+                } else {
+                    flush_runtime.flush_typed()
+                };
+                let _ = flush_tx.send(result);
+            });
+            let (health_tx, health_rx) = mpsc::channel();
+            let health_runtime = runtime.clone();
+            let health = std::thread::spawn(move || {
+                let _ = started_tx.send(());
+                let _ = health_tx.send(health_runtime.health());
+            });
+            for _ in 0..2 {
+                started_rx
+                    .recv_timeout(Duration::from_secs(1))
+                    .expect("waiter started");
+            }
+            assert!(
+                matches!(
+                    flush_rx.recv_timeout(Duration::from_millis(50)),
+                    Err(mpsc::RecvTimeoutError::Timeout)
+                ),
+                "flush must wait for original writer"
+            );
+            assert!(
+                matches!(
+                    health_rx.recv_timeout(Duration::from_millis(50)),
+                    Err(mpsc::RecvTimeoutError::Timeout)
+                ),
+                "health must wait for retained stopped snapshot"
+            );
+            assert!(matches!(
+                shutdown_rx.try_recv(),
+                Err(mpsc::TryRecvError::Empty)
+            ));
+            release_tx.send(()).expect("release original writer");
+            shutdown_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("bounded original shutdown")
+                .expect("shutdown success");
+            flush_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("bounded flush completion")
+                .expect("stopped flush succeeds");
+            let report = health_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("bounded health completion");
+            assert_eq!(report.state, ObservationHealthState::Unavailable);
+            let after = report.logging.expect("logging health retained");
+            assert_eq!(after.flush_errors_total, before.flush_errors_total);
+            assert_eq!(after.dropped_events_total, before.dropped_events_total);
+            assert_eq!(after.queue_capacity, before.queue_capacity);
+            assert_eq!(
+                after.last_error.as_ref().expect("retained diagnostic").code,
+                before
+                    .last_writer_error
+                    .as_ref()
+                    .expect("original writer diagnostic")
+                    .code
+            );
+            let final_writer = after
+                .last_writer_error
+                .as_ref()
+                .expect("final writer diagnostic");
+            let original_writer = before
+                .last_writer_error
+                .as_ref()
+                .expect("original writer diagnostic");
+            assert_eq!(final_writer.code, original_writer.code);
+            assert_eq!(final_writer.message, original_writer.message);
+            assert!(final_writer.at >= original_writer.at);
+            assert_eq!(after.sink_statuses, before.sink_statuses);
+            for thread in [shutdown, flush, health] {
+                thread.join().expect("completed worker");
+            }
+        }
+    }
+
+    #[test]
+    fn shutdown_unwind_releases_condition_waiters() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+        let runtime = Arc::new(Observability {
+            logger: Mutex::new(LoggerHandle::ShuttingDown),
+            logger_changed: Condvar::new(),
+            shutdown: AtomicBool::new(true),
+            subscriber_registrations: Vec::new(),
+            projection_registrations: Vec::new(),
+            observability_health_provider: None,
+            runtime: RuntimeState::default(),
+        });
+        let (started_tx, started_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        let threads: Vec<_> = [false, true]
+            .into_iter()
+            .map(|health| {
+                let runtime = runtime.clone();
+                let started_tx = started_tx.clone();
+                let done_tx = done_tx.clone();
+                std::thread::spawn(move || {
+                    let _ = started_tx.send(());
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        if health {
+                            let _ = runtime.health();
+                        } else {
+                            let _ = runtime.flush_typed();
+                        }
+                    }));
+                    let _ = done_tx.send(result.is_err());
+                })
+            })
+            .collect();
+        for _ in 0..2 {
+            started_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("waiter started");
+        }
+        assert!(done_rx.recv_timeout(Duration::from_millis(50)).is_err());
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            runtime.complete_shutdown(|| panic!("injected shutdown unwind"));
+        }));
+        assert!(result.is_err());
+        for _ in 0..2 {
+            assert!(
+                done_rx
+                    .recv_timeout(Duration::from_secs(1))
+                    .expect("waiter observes poison")
+            );
+        }
+        for thread in threads {
+            thread.join().expect("bounded waiter");
+        }
+    }
+
+    #[test]
     fn flush_forwards_logger_flush_behavior_directly() {
         struct PassthroughFilter;
 
@@ -1333,16 +1592,16 @@ mod tests {
             }
 
             fn flush(&self) -> Result<(), LogSinkError> {
-                if self.flush_calls.fetch_add(1, Ordering::SeqCst) == 1 {
-                    self.second_flush_completed
-                        .send(())
-                        .expect("flush completion receiver");
-                }
-                Err(LogSinkError(Box::new(ErrorContext::new(
+                let call = self.flush_calls.fetch_add(1, Ordering::SeqCst);
+                let result = Err(LogSinkError(Box::new(ErrorContext::new(
                     sc_observability::error_codes::LOGGER_FLUSH_FAILED,
                     "flush failed",
                     Remediation::not_recoverable("test sink intentionally fails flush"),
-                ))))
+                ))));
+                if call == 1 {
+                    let _ = self.second_flush_completed.send(());
+                }
+                result
             }
 
             fn health(&self) -> SinkHealth {
