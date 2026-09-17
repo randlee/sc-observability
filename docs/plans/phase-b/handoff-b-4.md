@@ -49,6 +49,8 @@ the concrete module dictionary directly rather than calling `hasattr`, so a
 user-defined module `__getattr__` cannot run while the once-only lock is held.
 A five-second subprocess regression races two installers with such a
 GIL-releasing hook and retains the exact one-winner/one-duplicate outcome.
+The immutable-slot fixture rejects both a repeat using the exact same backend
+`Arc` and a separate independently owned backend, leaving the first slot intact.
 The attached fixture mutates the host-owned level through its owner and proves
 the attached Python health payload observes `debug` at revision one without
 gaining any mutation authority.

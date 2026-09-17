@@ -506,11 +506,29 @@ mod tests {
                 Ok(pair) => pair,
                 Err(_) => return false,
             };
-            let first: Arc<dyn HostLoggingBackend> = Arc::new(backend.clone());
-            let second: Arc<dyn HostLoggingBackend> = Arc::new(backend);
+            let first: Arc<dyn HostLoggingBackend> = Arc::new(backend);
+            let same_backend = first.clone();
+            let other_service = match ServiceName::new("b4-host-install-other-test") {
+                Ok(service) => service,
+                Err(_) => return false,
+            };
+            let other_config = sc_observability::LoggerConfig::default_for(
+                other_service,
+                std::env::temp_dir().join("sc-observability-b4-host-install-other-test"),
+            );
+            let (other_owner, other_backend) = match create_core_backend(other_config) {
+                Ok(pair) => pair,
+                Err(_) => return false,
+            };
+            let different_backend: Arc<dyn HostLoggingBackend> = Arc::new(other_backend);
             let first_install = install_host_logger(&module, first).is_ok();
-            let duplicate_is_rejected = matches!(
-                install_host_logger(&module, second),
+            let same_is_rejected = matches!(
+                install_host_logger(&module, same_backend),
+                Err(Failure::Unavailable { diagnostic })
+                    if diagnostic.code == SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED
+            );
+            let different_is_rejected = matches!(
+                install_host_logger(&module, different_backend),
                 Err(Failure::Unavailable { diagnostic })
                     if diagnostic.code == SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED
             );
@@ -519,7 +537,13 @@ mod tests {
                 Err(_) => false,
             };
             let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
-            first_install && duplicate_is_rejected && retained_slot && stopped
+            let other_stopped = other_owner.shutdown(Duration::from_secs(2)).is_ok();
+            first_install
+                && same_is_rejected
+                && different_is_rejected
+                && retained_slot
+                && stopped
+                && other_stopped
         });
         assert!(passed);
     }
