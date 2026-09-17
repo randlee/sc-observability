@@ -2,7 +2,7 @@
 
 Status: in progress on `fix/phase-b-3a-completeness`; parent merge-forwarded
 from `origin/feature/phase-b-4a-python-packaging` at `c403bcf` (including
-the latest B.4a merge-forward). Current child checkpoint: `ad77b61`.
+the latest B.4a merge-forward). Current child checkpoint: `fb58739`.
 
 The child consumes the B.3 canonical schema and the B.3b native
 `HostLoggingBackend`. The TypeScript package is generated-schema driven and
@@ -74,6 +74,9 @@ The application-owned `requestLevelChange` helper delegates response handling
 to the shared `parseWireEnvelope` conversion, preserving unknown remote failure
 kinds/remediations and rejecting oversized known diagnostics with
 `DIAGNOSTIC_TOO_LARGE`.
+The shared parser also contains throwing getters and revoked proxies across
+the complete response boundary, returning typed `INTERNAL`/validation results
+instead of allowing fulfilled hostile responses to reject the helper promise.
 The specialist checkpoint `5a3f380` reports 103 isolated macOS IPC assertions
 and 336 packed-client schema/fault cases PASS, including the exact-size
 correction. Full installed Rust/npm artifacts, platform CI, and broad C05
