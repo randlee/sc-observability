@@ -448,12 +448,35 @@ fn get_installed_host_logger(
     Ok((Some(logger), result_json::<()>(Ok(()))))
 }
 
+// Validation-only bridge for Python scopes/handler setup. It creates no logger
+// and performs no admission; the shared conversion owns every native constraint.
+#[pyfunction]
+fn _validate_event(payload: &str) -> String {
+    let checked = std::panic::catch_unwind(|| {
+        let value = sc_observability_dto::decode_event(parse_value(payload, "event")?)?;
+        let service = ServiceName::new("python.validation")
+            .map_err(|_| internal_failure("invalid private validation service"))?;
+        sc_observability_dto::to_core_event(
+            value,
+            sc_observability_dto::EventStamp {
+                service,
+                timestamp: sc_observability_types::Timestamp::now_utc(),
+                identity: sc_observability_types::ProcessIdentity::default(),
+            },
+        )
+        .map(|_| ())
+    })
+    .unwrap_or_else(|_| Err(internal_failure("native input validation panicked")));
+    result_json(checked)
+}
+
 /// Native module used only by the high-level Python facade.
 #[pymodule(gil_used = true)]
 pub fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeLogger>()?;
     module.add_class::<NativeFlushOperation>()?;
     module.add_class::<NativeAttachedLogger>()?;
+    module.add_function(wrap_pyfunction!(_validate_event, module)?)?;
     module.add_function(wrap_pyfunction!(create_owned, module)?)?;
     module.add_function(wrap_pyfunction!(get_installed_host_logger, module)?)?;
     Ok(())

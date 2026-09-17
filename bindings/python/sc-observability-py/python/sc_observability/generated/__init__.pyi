@@ -1455,6 +1455,7 @@ WorkerState: TypeAlias = OutputWorkerState
 
 def validate_wire(name: str, value: object) -> None: ...
 def from_wire(name: str, value: object) -> object: ...
+SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID: str
 SC_OBSERVABILITY_BINDING_INVALID_INPUT: str
 SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION: str
 SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE: str

@@ -323,7 +323,11 @@ class Logger:
         self._native = native
 
     def log(self, event: LogEvent) -> Result[generated.Admission]:
-        encoded = _event(event)
+        from .context import _inherit_event
+        inherited = _inherit_event(event)
+        if isinstance(inherited, Err):
+            return inherited
+        encoded = _event(inherited.value)
         if isinstance(encoded, Err):
             return encoded
         return _typed(_decode("OutputResultDtoAdmissionDto", self._native.log(json.dumps(encoded.value, separators=(",", ":")))))
@@ -383,7 +387,11 @@ class AttachedLogger:
         self._native = native
 
     def log(self, event: LogEvent) -> Result[generated.Admission]:
-        encoded = _event(event)
+        from .context import _inherit_event
+        inherited = _inherit_event(event)
+        if isinstance(inherited, Err):
+            return inherited
+        encoded = _event(inherited.value)
         if isinstance(encoded, Err):
             return encoded
         return _typed(_decode("OutputResultDtoAdmissionDto", self._native.log(json.dumps(encoded.value, separators=(",", ":")))))
