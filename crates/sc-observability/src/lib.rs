@@ -757,6 +757,17 @@ mod tests {
         }
     }
 
+    struct FailingConsoleWriter {
+        writes: Arc<AtomicU64>,
+    }
+
+    impl ConsoleWriter for FailingConsoleWriter {
+        fn write_line(&self, _line: &str) -> std::io::Result<()> {
+            self.writes.fetch_add(1, Ordering::SeqCst);
+            Err(std::io::Error::other("injected console write failure"))
+        }
+    }
+
     struct PrefixRedactor;
 
     impl Redactor for PrefixRedactor {
@@ -1296,6 +1307,54 @@ mod tests {
     }
 
     #[test]
+    fn console_writer_failures_preserve_legacy_and_typed_write_parity() {
+        let writes = Arc::new(AtomicU64::new(0));
+        let sink = ConsoleSink::from_writer(Box::new(FailingConsoleWriter {
+            writes: writes.clone(),
+        }));
+        let event = log_event(service_name());
+
+        let legacy = LogSink::write(&sink, &event).expect_err("legacy console write fails");
+        assert_eq!(
+            legacy.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        assert_eq!(
+            std::error::Error::source(&legacy)
+                .expect("legacy native source")
+                .to_string(),
+            "console sink write failed: injected console write failure; caused by: injected console write failure"
+        );
+        let health = LogSink::health(&sink);
+        assert_eq!(health.state, SinkHealthState::DegradedDropping);
+        assert_eq!(
+            health.last_error.expect("legacy failure health").code,
+            Some(error_codes::LOGGER_SINK_WRITE_FAILED)
+        );
+        assert_eq!(writes.load(Ordering::SeqCst), 1);
+
+        let typed = crate::typed::TypedLogSink::write(&sink, &event)
+            .expect_err("typed console write fails");
+        assert_eq!(
+            typed.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        assert_eq!(
+            std::error::Error::source(&typed)
+                .expect("typed native source")
+                .to_string(),
+            "console sink write failed: injected console write failure; caused by: injected console write failure"
+        );
+        let health = crate::typed::TypedLogSink::health(&sink);
+        assert_eq!(health.state, SinkHealthState::DegradedDropping);
+        assert_eq!(
+            health.last_error.expect("typed failure health").code,
+            Some(error_codes::LOGGER_SINK_WRITE_FAILED)
+        );
+        assert_eq!(writes.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
     fn redaction_runs_before_sink_fan_out() {
         let root = temp_path("redaction");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
@@ -1788,6 +1847,75 @@ mod tests {
     }
 
     #[test]
+    fn disconnected_writer_returns_legacy_and_typed_admission_and_flush_failures() {
+        struct PanicSink {
+            entered: Arc<AtomicBool>,
+        }
+
+        impl LogSink for PanicSink {
+            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+                self.entered.store(true, Ordering::SeqCst);
+                panic!("injected sink panic terminates writer");
+            }
+
+            fn health(&self) -> SinkHealth {
+                SinkHealth {
+                    name: sink_name("panic-sink"),
+                    state: SinkHealthState::Unavailable,
+                    last_error: None,
+                }
+            }
+        }
+
+        let root = temp_path("disconnected-writer");
+        let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let entered = Arc::new(AtomicBool::new(false));
+        let mut builder = Logger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::new(Arc::new(PanicSink {
+            entered: entered.clone(),
+        })));
+        let logger = builder.build();
+
+        logger
+            .log(log_event(service_name()))
+            .expect("initial admission");
+        wait_for(
+            || entered.load(Ordering::SeqCst),
+            "writer should enter the injected sink",
+        );
+
+        // A failed flush is the synchronization point: send failure proves the
+        // worker has unwound and dropped its receiver.
+        let legacy_flush = logger.flush().expect_err("legacy flush is disconnected");
+        assert_eq!(
+            legacy_flush.diagnostic().code,
+            error_codes::LOGGER_WRITER_DEGRADED
+        );
+        assert!(matches!(
+            logger.try_log(log_event(service_name())),
+            Err(TryLogError::WriterDegraded(_))
+        ));
+        assert!(matches!(
+            logger.try_log_typed(log_event(service_name())),
+            Err(TryLogFailure::WriterDegraded(_))
+        ));
+        let typed_flush = logger
+            .flush_typed()
+            .expect_err("typed flush is disconnected");
+        assert_eq!(
+            typed_flush.diagnostic().code,
+            error_codes::LOGGER_WRITER_DEGRADED
+        );
+
+        // Consume the runtime after the intentionally panicked worker has
+        // been observed. Its completion channel is already disconnected, so
+        // shutdown joins the terminated worker without an unbounded wait.
+        let _stopped = logger.shutdown();
+    }
+
+    #[test]
     fn logger_builder_rejects_zero_queue_capacity() {
         let root = temp_path("zero-queue-capacity");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
@@ -1885,6 +2013,17 @@ mod tests {
                 .to_string(),
             "writer degraded; caused by: native writer cause"
         );
+
+        let timeout = ErrorContext::new(
+            error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
+            "writer shutdown timed out",
+            Remediation::recoverable("wait", ["inspect shutdown timing"]),
+        )
+        .source(Box::new(std::io::Error::other("native timeout cause")));
+        let typed: TryLogFailure = TryLogError::ShutdownTimedOut(Box::new(timeout)).into();
+        assert!(matches!(typed, TryLogFailure::ShutdownTimedOut(_)));
+        let legacy: TryLogError = typed.into();
+        assert!(matches!(legacy, TryLogError::ShutdownTimedOut(_)));
     }
 
     #[test]
@@ -2151,67 +2290,141 @@ mod tests {
             owner.elevate_level(LevelFilter::Off, LevelChangeSource::Application),
             Err(LevelChangeError::BelowBaseline { .. })
         ));
+        assert!(matches!(
+            owner.reset_level(LevelChangeSource::Application),
+            Ok(LevelChange::Changed { .. })
+        ));
+        let mut filtered_event = log_event(service_name());
+        filtered_event.level = Level::Debug;
+        assert_eq!(
+            logger
+                .try_log_with_outcome_typed(filtered_event)
+                .expect("typed filtered admission"),
+            AdmissionOutcome::Filtered
+        );
         let stopped = logger.shutdown();
         assert!(matches!(
             owner.reset_level(LevelChangeSource::Application),
             Err(LevelChangeError::Stopped)
         ));
-        assert_eq!(stopped.level_state().effective_level, LevelFilter::Debug);
+        assert_eq!(stopped.level_state().effective_level, LevelFilter::Info);
     }
 
     #[test]
     fn admission_and_level_mutation_contend_on_one_control_state() {
         use std::sync::{Barrier, mpsc};
 
-        let root = temp_path("level-contention");
+        fn assert_contention<F, E>(name: &str, admit: F)
+        where
+            F: Fn(&Logger, LogEvent) -> Result<AdmissionOutcome, E> + Send + Sync + 'static,
+            E: std::fmt::Debug + Send + 'static,
+        {
+            let root = temp_path(name);
+            let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+            config.enable_file_sink = false;
+            config.enable_console_sink = false;
+            let (logger, owner) =
+                Logger::new_with_level_owner(config).expect("construct logger with owner");
+            let logger = Arc::new(logger);
+            let barrier = Arc::new(Barrier::new(3));
+            let (mutation_tx, mutation_rx) = mpsc::channel();
+            let (admission_tx, admission_rx) = mpsc::channel();
+            let held_control = logger.level_control.lock().expect("hold control state");
+
+            let mutation_barrier = barrier.clone();
+            let mutation = std::thread::spawn(move || {
+                let mut owner = owner;
+                mutation_barrier.wait();
+                mutation_tx
+                    .send(owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application))
+                    .expect("send mutation result");
+            });
+            let admission_barrier = barrier.clone();
+            let admission_logger = logger.clone();
+            let admission = std::thread::spawn(move || {
+                let mut event = log_event(service_name());
+                event.level = Level::Debug;
+                admission_barrier.wait();
+                admission_tx
+                    .send(admit(&admission_logger, event))
+                    .expect("send admission result");
+            });
+
+            barrier.wait();
+            drop(held_control);
+            let mutation_result = mutation_rx.recv().expect("mutation result");
+            let admission_result = admission_rx.recv().expect("admission result");
+            mutation.join().expect("mutation thread");
+            admission.join().expect("admission thread");
+
+            assert!(matches!(mutation_result, Ok(LevelChange::Changed { .. })));
+            assert!(matches!(
+                admission_result,
+                Ok(AdmissionOutcome::Accepted | AdmissionOutcome::Filtered)
+            ));
+            let snapshot = logger.level_state();
+            assert_eq!(snapshot.configured_level, LevelFilter::Info);
+            assert_eq!(snapshot.effective_level, LevelFilter::Debug);
+            assert_eq!(snapshot.revision, 1);
+            let logger = Arc::try_unwrap(logger).unwrap_or_else(|_| panic!("sole logger owner"));
+            let _ = logger.shutdown();
+        }
+
+        assert_contention("legacy-level-contention", |logger, event| {
+            logger.try_log_with_outcome(event)
+        });
+        assert_contention("typed-level-contention", |logger, event| {
+            logger.try_log_with_outcome_typed(event)
+        });
+    }
+
+    #[test]
+    fn typed_admission_and_flush_can_run_concurrently() {
+        use std::sync::{Barrier, mpsc};
+
+        let root = temp_path("typed-admission-flush-concurrency");
         let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
         config.enable_file_sink = false;
         config.enable_console_sink = false;
-        let (logger, owner) =
-            Logger::new_with_level_owner(config).expect("construct logger with owner");
-        let logger = Arc::new(logger);
+        let logger = Arc::new(Logger::new_typed(config).expect("typed logger"));
         let barrier = Arc::new(Barrier::new(3));
-        let (mutation_tx, mutation_rx) = mpsc::channel();
+        let (flush_tx, flush_rx) = mpsc::channel();
         let (admission_tx, admission_rx) = mpsc::channel();
-        let held_control = logger.level_control.lock().expect("hold control state");
 
-        let mutation_barrier = barrier.clone();
-        let mutation = std::thread::spawn(move || {
-            let mut owner = owner;
-            mutation_barrier.wait();
-            mutation_tx
-                .send(owner.elevate_level(LevelFilter::Debug, LevelChangeSource::Application))
-                .expect("send mutation result");
+        let flush_logger = logger.clone();
+        let flush_barrier = barrier.clone();
+        let flush = std::thread::spawn(move || {
+            flush_barrier.wait();
+            let _ = flush_tx.send(flush_logger.flush_typed());
         });
-        let admission_barrier = barrier.clone();
+
         let admission_logger = logger.clone();
+        let admission_barrier = barrier.clone();
         let admission = std::thread::spawn(move || {
-            let mut event = log_event(service_name());
-            event.level = Level::Debug;
             admission_barrier.wait();
-            admission_tx
-                .send(admission_logger.try_log_with_outcome(event))
-                .expect("send admission result");
+            let _ = admission_tx
+                .send(admission_logger.try_log_with_outcome_typed(log_event(service_name())));
         });
 
         barrier.wait();
-        drop(held_control);
-        let mutation_result = mutation_rx.recv().expect("mutation result");
-        let admission_result = admission_rx.recv().expect("admission result");
-        mutation.join().expect("mutation thread");
+        flush_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("flush completion must be bounded")
+            .expect("typed flush");
+        assert_eq!(
+            admission_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("admission completion must be bounded")
+                .expect("typed admission"),
+            AdmissionOutcome::Accepted
+        );
+        flush.join().expect("flush thread");
         admission.join().expect("admission thread");
 
-        assert!(matches!(mutation_result, Ok(LevelChange::Changed { .. })));
-        assert!(matches!(
-            admission_result,
-            Ok(AdmissionOutcome::Accepted | AdmissionOutcome::Filtered)
-        ));
-        let snapshot = logger.level_state();
-        assert_eq!(snapshot.configured_level, LevelFilter::Info);
-        assert_eq!(snapshot.effective_level, LevelFilter::Debug);
-        assert_eq!(snapshot.revision, 1);
-        let logger = Arc::try_unwrap(logger).unwrap_or_else(|_| panic!("sole logger owner"));
-        let _ = logger.shutdown();
+        let Ok(logger) = Arc::try_unwrap(logger) else {
+            panic!("all concurrent handles dropped");
+        };
+        logger.shutdown();
     }
 
     #[test]
