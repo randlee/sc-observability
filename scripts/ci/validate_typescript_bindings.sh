@@ -24,13 +24,14 @@ const { createClient, encodeEvent } = require("@sc-observability/client");
 const event = encodeEvent({ level: "info", target: "package-consumer", action: "smoke", fields: { count: 3n } });
 if (event.kind !== "ok" || event.value.fields.count.value !== "3") throw new Error("package event encoding failed");
 const operations = [];
-const client = createClient({
+const created = createClient({
   request(operation, request) {
     operations.push([operation, request]);
     return Promise.resolve({ kind: "ok", value: { schema_version: 1, kind: "ok", value: { kind: "accepted", operation: "try_log" } } });
   },
 });
-client.tryLog(event.value).then((result) => {
+if (created.kind !== "ok") throw new Error("package client construction failed");
+created.value.tryLog(event.value).then((result) => {
   if (result.kind !== "ok" || operations.length !== 1 || operations[0][0] !== "try_log") process.exit(1);
   console.log("INSTALLED_PACKAGE_CONSUMER_PASSED");
 }).catch(() => process.exit(1));
