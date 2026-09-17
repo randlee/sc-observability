@@ -1,7 +1,7 @@
 # B.3a TypeScript/Tauri handoff
 
 Status: in progress on `fix/phase-b-3a-completeness`; parent merge-forwarded
-from `origin/feature/phase-b-4a-python-packaging` at `1e3bc38` (including
+from `origin/feature/phase-b-4a-python-packaging` at `7a785bf` (including
 `b3d90dd`).
 
 The child consumes the B.3 canonical schema and the B.3b native
@@ -34,7 +34,9 @@ cargo test --manifest-path bindings/tauri/Cargo.toml --locked --features test  P
 ```
 
 The TypeScript tests cover the packaged client’s source-level encoding,
-transport, failure-containment, and lifecycle boundaries. The adapter tests
+transport, failure-containment, version rejection, diagnostic bounds, proxy
+containment, additive output evolution, prototype-safe encoding, and lifecycle
+boundaries. The adapter tests
 exercise strict request policy, redaction, and the Tauri command dispatcher
 through its mock IPC harness. Full installed Rust/npm artifacts, real desktop
 IPC, platform CI, and broad C05 qualification are delegated to

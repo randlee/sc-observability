@@ -13,7 +13,7 @@ import {
   SC_OBSERVABILITY_BINDING_DISPATCH_FULL,
   validate,
 } from "./generated/index";
-import { err, internal, isFailure, isRecord, ok, safeFailure, type Result, validation } from "./result";
+import { diagnosticTooLarge, err, isFailure, isRecord, ok, safeFailure, type Result, unsupportedVersion, validation } from "./result";
 
 export interface JsonTransport {
   request(operation: "try_log" | "query" | "health" | "flush", request: unknown): Promise<Result<unknown>>;
@@ -74,6 +74,24 @@ function boundedText(value: string): string {
   return value.slice(0, end);
 }
 
+function diagnosticExceedsLimit(value: unknown): boolean {
+  try {
+    if (!isRecord(value)) return false;
+    for (const key of ["at", "code", "message", "field", "operation", "remote_kind"]) {
+      const text = value[key];
+      if (typeof text === "string" && new TextEncoder().encode(text).byteLength > 4096) return true;
+    }
+    const remediation = value.remediation;
+    if (isRecord(remediation)) {
+      const steps = remediation.steps;
+      if (Array.isArray(steps) && (steps.length > 32 || steps.some((step) => typeof step !== "string" || new TextEncoder().encode(step).byteLength > 4096))) return true;
+    }
+  } catch {
+    return true;
+  }
+  return false;
+}
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -90,13 +108,14 @@ function envelopeFailure(value: unknown, field = "response"): Failure {
   try {
     if (isFailure(value) && isRecord(value) && typeof value.kind === "string") {
       const allowed = FAILURE_KEYS[value.kind];
-      if (allowed && allowed.every((key) => Object.hasOwn(value, key)) &&
-          Object.keys(value).every((key) => allowed.includes(key))) {
-      return freezeDeep(clone(value) as Failure);
+      if (allowed && allowed.every((key) => Object.hasOwn(value, key))) {
+        if (diagnosticExceedsLimit(value)) return diagnosticTooLarge(`${field}.error`);
+        return freezeDeep(clone(value) as Failure);
       }
     }
     if (isRecord(value) && typeof value.kind === "string" && !FAILURE_KEYS[value.kind] &&
         typeof value.code === "string" && typeof value.message === "string") {
+      if (diagnosticExceedsLimit(value)) return diagnosticTooLarge(`${field}.error`);
       return freezeDeep({
         kind: "unknown_remote",
         at: boundedText(typeof value.at === "string" ? value.at : new Date().toISOString()),
@@ -146,10 +165,16 @@ function asEnvelope<T>(value: unknown, entrypoint: string): Result<T> {
 }
 
 function normalizeQuery(query: LogQueryDto): Result<LogQueryDto> {
-  if (!isRecord(query)) return err(validation("query", "query must be an object"));
   const allowed = new Set(["schema_version", "service", "levels", "target", "action", "request_id", "correlation_id", "since", "until", "field_matches", "limit", "order"]);
   try {
+    if (!isRecord(query)) return err(validation("query", "query must be an object"));
     if (Object.keys(query).some((key) => !allowed.has(key))) return err(validation("query", "unknown query field"));
+    if (query.schema_version !== 1) {
+      if (typeof query.schema_version === "number" && Number.isSafeInteger(query.schema_version) && query.schema_version >= 0) {
+        return err(unsupportedVersion(query.schema_version));
+      }
+      return err(validation("query.schema_version", "schema_version must be 1"));
+    }
     const normalized = {
       schema_version: 1 as const,
       service: query.service ?? null,
