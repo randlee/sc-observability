@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { createClient, createTauriTransport, encodeEvent, encodeValue, validate } from '@sc-observability/client';
+import { createClient, createTauriTransport, parseWireEnvelope, encodeEvent, encodeValue, validate } from '@sc-observability/client';
 const results = [];
 const escaped = [];
 process.on('unhandledRejection', (error) => escaped.push(String(error)));
@@ -165,6 +165,20 @@ for (const mode of ['throw', 'reject', 'getter']) {
   });
 }
 await test('tauri-transport-invalid-factory', () => err(createTauriTransport(null), 'validation'));
+for (const field of ['kind', 'schema_version']) {
+  const foreignResponse = () => Object.defineProperty({}, field, { get() { throw new Error('foreign response ' + field); } });
+  await test(`level-helper-response-getter-${field}`, async () => {
+    window.__TAURI_INTERNALS__ = { invoke: async () => foreignResponse() };
+    err(await requestLevelChange(levelRequest), 'internal');
+  });
+  await test(`parse-wire-envelope-getter-${field}`, () => {
+    err(parseWireEnvelope(foreignResponse(), 'OutputWireEnvelopeLevelChangeDto'), 'internal');
+  });
+}
+await test('parse-wire-envelope-revoked-proxy', () => {
+  const response = Proxy.revocable({}, {}); response.revoke();
+  err(parseWireEnvelope(response.proxy, 'OutputWireEnvelopeLevelChangeDto'));
+});
 await test('level-helper-invalid-envelope', async () => {
   window.__TAURI_INTERNALS__ = { invoke: async () => ({ kind: 'ok', value: {} }) };
   err(await requestLevelChange(levelRequest), 'validation');

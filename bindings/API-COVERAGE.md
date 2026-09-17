@@ -131,6 +131,7 @@ coverage without claiming an unexecuted matrix pass.
 
 | Surface | Executable qualification evidence |
 | --- | --- |
+| Production application `requestLevelChange` and shared `parseWireEnvelope` | Unchanged example source staged into both `frontend.js` and `faults.mjs`; actual IPC, every Failure payload and foreign invoke/response getter checks |
 | Installed npm client, all canonical schema fixtures, remote failures and local accounting | `scripts/ci/fixtures/tauri-qualification/faults.mjs`; retained `fault-results.json` |
 | Exhaustive Result/Failure/Value/Remediation/level narrowing | External packed consumer `scripts/ci/fixtures/tauri-qualification/narrowing.ts` |
 | Real command transport, bigint stored/query round trip, correlated Rust/frontend, redaction/provenance | Real desktop webview `scripts/ci/fixtures/tauri-qualification/frontend.js` |

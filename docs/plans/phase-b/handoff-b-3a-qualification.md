@@ -68,3 +68,12 @@ Final open gates are the same-source three-platform aggregate and lead
 completeness check. `--platform` is a partial platform stage and never signals
 sprint completion. No registry has been published. B.3a remains in progress until
 production and qualification evidence pass the lead's complete review.
+
+The current fixture imports the unchanged production `requestLevelChange`
+helper into both actual webviews and an installed-client fault consumer linked
+to locked `@tauri-apps/api` 2.11.1. Its inventory additionally requires every
+Failure payload, unknown remote preservation, diagnostic bounds and foreign
+invoke/response containment. These supplement the earlier 339-case checkpoint;
+the current required fault suite has 368 cases. The reusable workflow accepts a
+full `source_commit` and returns successful source/inventory hashes plus canonical
+npm/Rust artifact names only after the strict three-platform aggregate passes.
