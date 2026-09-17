@@ -70,3 +70,28 @@ partial-start rollback path is claimed.
 This is scoped B.1b preparation only. B.1 accepted bridge integration,
 observation/telemetry adoption, warning activation, publication, and phase
 closure remain owned by their respective later layers.
+
+## Integration-layer status addendum (feature/phase-b-1-integration)
+
+Implementation-complete, confirmed against merged source: `InitError` and
+`EventError` are the two B.1b-owned families (`LogFailure`/`TryLogFailure`
+compose `EventFailure`); both have registry-parity tests passing
+(`error_registry_parity.rs::init_failure_matches_owning_registry`,
+`::event_failure_matches_owning_registry`). B.1e's warning activation (noted
+as pending in this handoff's "remaining integration boundary") landed on
+`feature/phase-b-1e-migration-validation` and is merged into the integration
+branch; `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+passes across all active crates as a result.
+
+The copied bridge regression called out as "pending B.1 source integration"
+above is now identified precisely: the frozen bridge uses `InitError` via
+`sc_observability::Logger::new` (`handle.rs:903`) and `EventError` via
+`Logger::try_log_with_outcome`'s `TryLogError` wrapper (`control.rs:111`,
+`handle.rs:504`). Both are recorded as explicit disposition rows in
+`error-api-inventory.md`. lobs has landed narrow per-call-site
+`#[allow(deprecated, reason = ...)]` annotations covering these sites, but the
+`import-provenance.json` adaptation-kind extension needed to keep the
+immutable import manifest documented (rather than silently drifting) has not
+yet landed — this is reported and tracked by the integration layer, not
+resolved as of this addendum. Independent QA/coordinator completeness PASS
+remains pending for both this preparation layer and the integration layer.

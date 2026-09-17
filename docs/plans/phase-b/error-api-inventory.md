@@ -124,7 +124,7 @@ adding a dev-only feature edge to `sc-observability-otlp` that would drift
 
 | Occurrence | Disposition | Owning registry constant |
 | --- | --- | --- |
-| `sc-observability-otlp/src/lib.rs`: crate-private `Exporter` trait (`export_logs`/`export_spans`/`export_metrics`); built-in log/trace/metric exporters; export/health/shutdown paths | Typed production: the private `Exporter` trait was authored directly against `Result<(), ExportFailure>` from inception (there is no legacy `ExportError`-returning form of this trait to be compatible with); no public exporter API is added | `sc_observability_otlp::error_codes::TELEMETRY_EXPORT_FAILED` |
+| `sc-observability-otlp/src/lib.rs`: three crate-private traits `LogExporter::export_logs`, `TraceExporter::export_spans`, `MetricExporter::export_metrics`; built-in log/trace/metric exporters; export/health/shutdown paths | Typed production: all three private traits are authored directly against `Result<(), ExportFailure>`, and no `ExportError` type exists anywhere in this crate to be a compatibility form of (the public `TelemetryError::ExportFailure` variant is that unrelated, retained legacy wrapper's own variant name, not a use of the nine-family `ExportError`/`ExportFailure` pair); no public exporter API is added | `sc_observability_otlp::error_codes::TELEMETRY_EXPORT_FAILED` |
 
 Typed production constructor: `ExportFailure::export`. Verified by
 `error_registry_parity.rs::export_failure_matches_owning_registry`.

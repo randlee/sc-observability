@@ -156,3 +156,26 @@ the legacy serialized `InitError` golden, verifies typed kind fallback and
 source-chain handling, exercises the full adapter matrix, and rejects broad
 fixture allowances. B.2 still owns qualification/staging and B.7 owns
 publication; no removal schedule or major release is introduced.
+
+## Integration-layer status addendum (feature/phase-b-1-integration)
+
+Confirmed against merged source at `68f1443` (the further-integrated head
+merged into the integration branch): the bridge's narrow, named, reason-
+bearing `#[allow(deprecated, reason = ...)]` annotations are landed in
+`control.rs`, `handle.rs`, and `mapping.rs`, and workspace clippy passes
+clean, single-step, `-D warnings`, with no bridge-wide suppression.
+
+One gap found while verifying this against the actual BTIT provenance proof
+(not just clippy): `python3 scripts/ci/validate_log_import.py --source-repo
+<BTIT repo>` reports "unexplained content difference" for `control.rs`,
+because `import-provenance.json`'s `adaptations` array and
+`validate_log_import.py`'s `_KIND_LINE_PATTERNS` were not extended with a new
+kind covering these lint-attribute lines, so they read as undocumented drift
+against the pinned source bytes rather than a recorded adaptation. This
+addendum's "recorded here as compatibility evidence, not as provenance
+rewrites" line above describes the intent correctly, but the provenance
+manifest itself does not yet reflect that intent. Reported to lobs
+(01M2Q8NKYWG91F234H9PJWSDFF) for the adaptation-kind extension and provenance
+entries; not fixed by the integration layer since it is warning-allowance/
+migration-source scope. B1I-C01 (the integration layer's fix-round finding
+requesting exactly this narrow mechanism) remains open pending that landing.

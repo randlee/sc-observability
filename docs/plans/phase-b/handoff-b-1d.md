@@ -61,3 +61,25 @@ removed or changed OTLP public items). Copied-bridge integration, warning
 activation, publication, and independent QA remain outside this preparation
 layer. This handoff requests coordinator completeness review; it does not close
 the task.
+
+## Integration-layer status addendum (feature/phase-b-1-integration)
+
+Implementation-complete, confirmed against merged source: the private
+`LogExporter`/`TraceExporter`/`MetricExporter` traits described above
+(`export_logs`/`export_spans`/`export_metrics`) are confirmed authored
+directly against `Result<(), ExportFailure>` — there is no `ExportError` type
+anywhere in this crate for them to be a compatibility form of (the retained
+public `TelemetryError::ExportFailure` variant is an unrelated same-named
+variant of that separate legacy wrapper enum). `error-api-inventory.md`'s
+`## ExportError` disposition is corrected to "typed production" accordingly
+(it previously read "named compatibility", which this addendum's source
+inspection found to be inaccurate). `EventFailure::span_assembly` and
+`ExportFailure::export`'s registry constants are both exercised by
+`error_registry_parity.rs`, all passing. This crate has no copied-bridge
+occurrence of any of its owned families (`FlushError`/`ShutdownError`/
+`ProjectionError`/`ExportError`/part of `EventError`) — the frozen bridge
+import does not call into `sc-observability-otlp`.
+
+Independent QA/coordinator completeness PASS remains pending for both this
+preparation layer and the integration layer; this addendum reports evidence,
+it does not itself constitute that review.
