@@ -63,6 +63,7 @@ def main() -> int:
     parser.add_argument("--mode", choices=("staged", "live"), default="staged")
     parser.add_argument("--stage", type=Path)
     parser.add_argument("--result-file", type=Path)
+    parser.add_argument("--platform", choices=("macos", "ubuntu", "windows"))
     args = parser.parse_args()
     if not re.fullmatch(r"\d+\.\d+\.\d+", args.version):
         raise SystemExit("--version must be exact; placeholders are rejected")
@@ -83,7 +84,7 @@ def main() -> int:
             extracted = (args.stage / package["extracted_root"]).resolve()
             if not extracted.is_dir() or "workspace" in extracted.parts:
                 raise SystemExit(f"candidate package is not an extracted archive: {extracted}")
-            lines.append(f'{package["name"]} = {{ path = "{extracted}" }}')
+            lines.append(f'{package["name"]} = {{ path = "{extracted.as_posix()}" }}')
         patches = "\n".join(lines)
         provenance["candidate"] = {"version": args.version, "mode": args.mode, "stage_manifest": str(manifest.resolve()), "source_commit": evidence["source_commit"], "archives": {item["name"]: item["archive_sha256"] for item in evidence["packages"]}}
 
@@ -99,7 +100,7 @@ def main() -> int:
         run(["cargo", "run", "--locked"], candidate)
     if args.result_file:
         args.result_file.parent.mkdir(parents=True, exist_ok=True)
-        args.result_file.write_text(json.dumps({"status": "passed", **provenance}, indent=2) + "\n")
+        args.result_file.write_text(json.dumps({"status": "passed", "platform": args.platform, **provenance}, indent=2) + "\n")
     print(json.dumps(provenance, sort_keys=True))
     return 0
 

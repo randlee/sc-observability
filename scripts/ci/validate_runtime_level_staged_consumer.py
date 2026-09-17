@@ -20,11 +20,14 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     parser.add_argument("--stage", type=Path)
     parser.add_argument("--result-file", type=Path)
+    parser.add_argument("--platform", choices=("macos", "ubuntu", "windows"))
     args = parser.parse_args()
     if args.stage:
         command = [sys.executable, str(VALIDATE), "--mode", "staged", "--version", args.version, "--stage", str(args.stage.resolve())]
         if args.result_file:
             command.extend(["--result-file", str(args.result_file)])
+        if args.platform:
+            command.extend(["--platform", args.platform])
         return subprocess.call(command)
     with tempfile.TemporaryDirectory(prefix="bp2-runtime-stage-") as temporary:
         stage = Path(temporary) / "stage"
@@ -32,6 +35,8 @@ def main() -> int:
         command = [sys.executable, str(VALIDATE), "--mode", "staged", "--version", args.version, "--stage", str(stage)]
         if args.result_file:
             command.extend(["--result-file", str(args.result_file)])
+        if args.platform:
+            command.extend(["--platform", args.platform])
         return subprocess.call(command)
 
 

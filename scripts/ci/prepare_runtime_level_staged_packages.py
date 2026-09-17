@@ -40,6 +40,15 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def source_tree_sha256(root: Path) -> str:
+    """Hash the complete candidate source tree, excluding generated Git/build state."""
+    digest = hashlib.sha256()
+    for path in sorted(item for item in root.rglob("*") if item.is_file() and ".git" not in item.parts and "target" not in item.parts):
+        digest.update(path.relative_to(root).as_posix().encode())
+        digest.update(sha256(path).encode())
+    return digest.hexdigest()
+
+
 def checked_run(command: list[str], cwd: Path) -> str:
     return subprocess.run(command, cwd=cwd, check=True, text=True, capture_output=True).stdout
 
@@ -60,6 +69,16 @@ def normalized_manifest(path: Path, version: str) -> bytes:
     return rendered.encode()
 
 
+def normalized_lock(path: Path, version: str) -> bytes:
+    """Make the generated package lock agree with this staged release train."""
+    names = "|".join(re.escape(name) for name in PACKAGES)
+    return re.sub(
+        rf'(?ms)(name = "(?:{names})"\nversion = )"1\.2\.0"',
+        rf'\g<1>"{version}"',
+        path.read_text(),
+    ).encode()
+
+
 def write_archive(package: str, version: str, workspace: Path, file_list: list[str], destination: Path) -> None:
     root = workspace / "crates" / package
     archive_root = f"{package}-{version}"
@@ -75,7 +94,12 @@ def write_archive(package: str, version: str, workspace: Path, file_list: list[s
                     source = root / "Cargo.toml"
                 if not source.is_file():
                     raise SystemExit(f"cargo package list referenced missing file: {source}")
-                content = normalized_manifest(source, version) if relative == "Cargo.toml" else source.read_bytes()
+                if relative == "Cargo.toml":
+                    content = normalized_manifest(source, version)
+                elif relative == "Cargo.lock":
+                    content = normalized_lock(source, version)
+                else:
+                    content = source.read_bytes()
                 info = tarfile.TarInfo(f"{archive_root}/{relative}")
                 info.size, info.mode, info.mtime = len(content), source.stat().st_mode & 0o777, 0
                 info.uid = info.gid = 0
@@ -140,7 +164,7 @@ def main() -> int:
             contents.extractall(extracted, filter="data")
             checked_contents = sorted(member.name for member in contents.getmembers() if member.isfile())
         packages.append({"name": package, "version": args.version, "archive": archive.relative_to(output).as_posix(), "archive_root": f"{package}-{args.version}", "extracted_root": (extracted / f"{package}-{args.version}").relative_to(output).as_posix(), "archive_sha256": sha256(archive), "checked_contents": checked_contents, "package_file_list": f"package-lists/{package}.txt"})
-    evidence = {"schema_version": 2, "candidate_version": args.version, "source_commit": source_sha, "source_tree_sha256": sha256(source / "Cargo.lock"), "publication": "deferred_until_phase_end", "packages": packages}
+    evidence = {"schema_version": 2, "candidate_version": args.version, "source_commit": source_sha, "source_tree_sha256": source_tree_sha256(source), "publication": "deferred_until_phase_end", "packages": packages}
     (output / "stage-manifest.json").write_text(json.dumps(evidence, indent=2) + "\n")
     verify_stage(output)
     print(output / "stage-manifest.json")
