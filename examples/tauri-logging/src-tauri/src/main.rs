@@ -12,7 +12,7 @@ use tauri::Manager;
 use std::{
     collections::BTreeSet,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, TryLockError},
     time::Duration,
 };
 
@@ -26,14 +26,38 @@ impl OwnerState {
     ///
     /// The retained control remains available for post-stop health and
     /// `wait_stopped` observation after the guard has been consumed.
-    fn shutdown(&self, timeout: Duration) {
-        let guard = self.guard.lock().ok().and_then(|mut guard| guard.take());
-        if let Some(guard) = guard {
-            if let Err(error) = guard.shutdown(timeout) {
-                eprintln!("observability host shutdown did not complete cleanly: {error}");
+    fn shutdown(&self, timeout: Duration) -> Result<(), Failure> {
+        let mut owner = match self.guard.try_lock() {
+            Ok(owner) => owner,
+            Err(TryLockError::WouldBlock) => {
+                return Err(Failure::QueueFull {
+                    diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                        sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_DISPATCH_FULL,
+                        "the host owner is busy",
+                    )),
+                });
             }
-        }
+            Err(TryLockError::Poisoned(_)) => {
+                return Err(Failure::Internal {
+                    diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                        sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                        "the host owner state is unavailable",
+                    )),
+                });
+            }
+        };
+        let Some(guard) = owner.take() else {
+            return Err(closed_level_change());
+        };
+        drop(owner);
+        let result = guard.shutdown(timeout).map_err(|error| Failure::Internal {
+            diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+                error.to_string(),
+            )),
+        });
         let _ = self.control.wait_stopped(Duration::ZERO);
+        result
     }
 }
 
@@ -270,7 +294,9 @@ fn main() {
         if matches!(event, tauri::RunEvent::ExitRequested { .. })
             && let Some(owner) = app.try_state::<OwnerState>()
         {
-            owner.shutdown(Duration::from_secs(2));
+            if let Err(error) = owner.shutdown(Duration::from_secs(2)) {
+                eprintln!("observability host shutdown was not accepted: {error:?}");
+            }
         }
     });
 }
