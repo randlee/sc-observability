@@ -1,0 +1,775 @@
+//! Additive typed failures and neutral extension-trait adapters.
+//!
+//! This module is intentionally separate from the crate-root compatibility
+//! surface. Existing wrappers and extension traits remain unchanged while new
+//! callers can opt into stored, family-specific failure classification.
+
+use std::sync::Arc;
+
+use serde_json::Value;
+use thiserror::Error;
+
+use crate::{
+    Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, EventError, ExportError, FlushError,
+    IdentityError, InitError, LogEvent, LogProjector, LogSinkError, MetricProjector, MetricRecord,
+    Observable, Observation, ObservationSubscriber, ProcessIdentity, ProcessIdentityResolver,
+    ProjectionError, Remediation, ShutdownError, SpanProjector, SpanSignal, SubscriberError,
+    sealed,
+};
+
+/// A diagnostic error whose family-specific kind is available without parsing
+/// its diagnostic at every call site.
+pub trait ClassifiedError: DiagnosticInfo {
+    /// The closed-over classification family for this error value.
+    type Kind: Copy + Eq;
+
+    /// Returns the stored or compatibility-derived failure kind.
+    fn kind(&self) -> Self::Kind;
+
+    /// Returns the original structured diagnostic context.
+    fn context(&self) -> &ErrorContext;
+}
+
+macro_rules! impl_failure_builders {
+    ($failure:ident) => {
+        impl $failure {
+            /// Adds a human-readable cause to this failure.
+            #[must_use]
+            pub fn cause(mut self, cause: impl Into<String>) -> Self {
+                self.context.set_cause(cause);
+                self
+            }
+
+            /// Adds a documentation reference to this failure.
+            #[must_use]
+            pub fn docs(mut self, docs: impl Into<String>) -> Self {
+                self.context.set_docs(docs);
+                self
+            }
+
+            /// Adds one structured diagnostic detail to this failure.
+            #[must_use]
+            pub fn detail(mut self, key: impl Into<String>, value: Value) -> Self {
+                self.context.set_detail(key, value);
+                self
+            }
+
+            /// Attaches the original source error to this failure.
+            #[must_use]
+            pub fn source(
+                mut self,
+                source: Box<dyn std::error::Error + Send + Sync + 'static>,
+            ) -> Self {
+                self.context.set_source(source);
+                self
+            }
+        }
+    };
+}
+
+macro_rules! define_failure {
+    (
+        $(#[$meta:meta])*
+        $legacy:ident => $failure:ident, $kind:ident {
+            $(
+                $constructor:ident => $variant:ident => [$canonical:literal $(, $alias:literal)*]
+            ),+ $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        #[non_exhaustive]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum $kind {
+            $(
+                #[doc = concat!("The `", stringify!($variant), "` classification.")]
+                $variant,
+            )+
+            /// A custom, missing, or family-mismatched diagnostic code.
+            Unclassified,
+        }
+
+        $(#[$meta])*
+        #[derive(Debug, PartialEq, Error)]
+        #[error("{context}")]
+        pub struct $failure {
+            kind: $kind,
+            #[source]
+            context: Box<ErrorContext>,
+        }
+
+        impl $failure {
+            fn classify_context(context: &ErrorContext) -> $kind {
+                match context.diagnostic().code.as_str() {
+                    $(
+                        $canonical $(| $alias)* => $kind::$variant,
+                    )+
+                    _ => $kind::Unclassified,
+                }
+            }
+
+            $(
+                #[doc = concat!("Creates a typed failure classified as `", stringify!($variant), "`.")]
+                #[must_use]
+                pub fn $constructor(
+                    message: impl Into<String>,
+                    remediation: Remediation,
+                ) -> Self {
+                    Self {
+                        kind: $kind::$variant,
+                        context: Box::new(ErrorContext::new(
+                            ErrorCode::new_static($canonical),
+                            message,
+                            remediation,
+                        )),
+                    }
+                }
+            )+
+
+            /// Classifies an existing context without changing or copying it.
+            #[must_use]
+            pub fn from_context(context: Box<ErrorContext>) -> Self {
+                let kind = Self::classify_context(&context);
+                Self { kind, context }
+            }
+
+            /// Consumes this failure and returns its original context box.
+            #[must_use]
+            pub fn into_context(self) -> Box<ErrorContext> {
+                self.context
+            }
+        }
+
+        impl sealed::Sealed for $failure {}
+
+        impl DiagnosticInfo for $failure {
+            fn diagnostic(&self) -> &Diagnostic {
+                self.context.diagnostic()
+            }
+        }
+
+        impl ClassifiedError for $failure {
+            type Kind = $kind;
+
+            fn kind(&self) -> Self::Kind {
+                self.kind
+            }
+
+            fn context(&self) -> &ErrorContext {
+                &self.context
+            }
+        }
+
+        impl From<$legacy> for $failure {
+            fn from(value: $legacy) -> Self {
+                Self::from_context(value.0)
+            }
+        }
+
+        impl From<$failure> for $legacy {
+            fn from(value: $failure) -> Self {
+                Self(value.context)
+            }
+        }
+
+        impl_failure_builders!($failure);
+    };
+}
+
+macro_rules! impl_legacy_classification {
+    ($legacy:ident, $failure:ident, $kind:ident) => {
+        impl ClassifiedError for $legacy {
+            type Kind = $kind;
+
+            fn kind(&self) -> Self::Kind {
+                <$failure>::classify_context(&self.0)
+            }
+
+            fn context(&self) -> &ErrorContext {
+                &self.0
+            }
+        }
+    };
+}
+
+define_failure! {
+    /// Typed process identity resolution failure.
+    IdentityError => IdentityFailure, IdentityFailureKind {
+        resolution_failed => ResolutionFailed => ["SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"]
+    }
+}
+
+define_failure! {
+    /// Typed initialization failure spanning the neutral/runtime boundaries.
+    InitError => InitFailure, InitFailureKind {
+        logger_initialization => LoggerInitialization => ["SC_OBSERVABILITY_LOGGER_INIT_FAILED"],
+        observation_initialization => ObservationInitialization => ["SC_OBSERVE_INIT_FAILED"],
+        invalid_telemetry_config => InvalidTelemetryConfig => ["SC_OBSERVABILITY_OTLP_INVALID_CONFIG"],
+        invalid_protocol => InvalidProtocol => ["SC_OBSERVABILITY_OTLP_INVALID_PROTOCOL"],
+        exporter_initialization => ExporterInitialization => ["SC_OBSERVABILITY_OTLP_EXPORTER_INIT_FAILED"],
+        identity_resolution => IdentityResolution => ["SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"]
+    }
+}
+
+define_failure! {
+    /// Typed event validation or lifecycle failure.
+    EventError => EventFailure, EventFailureKind {
+        invalid_event => InvalidEvent => ["SC_OBSERVABILITY_LOGGER_INVALID_EVENT"],
+        closed => Closed => ["SC_OBSERVABILITY_LOGGER_SHUTDOWN"],
+        queue_full => QueueFull => ["SC_OBSERVABILITY_LOGGER_QUEUE_FULL"],
+        writer_degraded => WriterDegraded => ["SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"],
+        shutdown_timed_out => ShutdownTimedOut => ["SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT"],
+        span_assembly => SpanAssembly => ["SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED"]
+    }
+}
+
+define_failure! {
+    /// Typed explicit flush failure.
+    FlushError => FlushFailure, FlushFailureKind {
+        logger_flush => LoggerFlush => ["SC_OBSERVABILITY_LOGGER_FLUSH_FAILED"],
+        writer_degraded => WriterDegraded => ["SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"],
+        observation_flush => ObservationFlush => ["SC_OBSERVE_FLUSH_FAILED"],
+        telemetry_flush => TelemetryFlush => ["SC_OBSERVABILITY_OTLP_FLUSH_FAILED"],
+        closed => Closed => ["SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN"]
+    }
+}
+
+define_failure! {
+    /// Typed graceful-shutdown failure.
+    ShutdownError => ShutdownFailure, ShutdownFailureKind {
+        telemetry_flush => TelemetryFlush => ["SC_OBSERVABILITY_OTLP_FLUSH_FAILED"],
+        incomplete_spans => IncompleteSpans => ["SC_OBSERVABILITY_OTLP_INCOMPLETE_SPAN_DROPPED"],
+        writer_degraded => WriterDegraded => ["SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"],
+        timed_out => TimedOut => ["SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT"]
+    }
+}
+
+define_failure! {
+    /// Typed log, span, or metric projection failure.
+    ProjectionError => ProjectionFailure, ProjectionFailureKind {
+        telemetry_closed => TelemetryClosed => ["SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN"],
+        telemetry_export => TelemetryExport => ["SC_OBSERVABILITY_OTLP_EXPORT_FAILED"],
+        span_assembly => SpanAssembly => ["SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED"],
+        routing => Routing => ["SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"]
+    }
+}
+
+define_failure! {
+    /// Typed observation subscriber failure.
+    SubscriberError => SubscriberFailure, SubscriberFailureKind {
+        routing => Routing => ["SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"]
+    }
+}
+
+define_failure! {
+    /// Typed logging sink failure.
+    LogSinkError => LogSinkFailure, LogSinkFailureKind {
+        write => Write => ["SC_OBSERVABILITY_LOGGER_SINK_WRITE_FAILED"],
+        maintenance => Maintenance => ["SC_OBSERVABILITY_LOGGER_MAINTENANCE_FAILED"],
+        fault_injected => FaultInjected => ["SC_OBSERVABILITY_LOGGER_SINK_FAULT_INJECTED"]
+    }
+}
+
+define_failure! {
+    /// Typed telemetry exporter failure.
+    ExportError => ExportFailure, ExportFailureKind {
+        export => Export => ["SC_OBSERVABILITY_OTLP_EXPORT_FAILED"]
+    }
+}
+
+impl_legacy_classification!(IdentityError, IdentityFailure, IdentityFailureKind);
+impl_legacy_classification!(InitError, InitFailure, InitFailureKind);
+impl_legacy_classification!(EventError, EventFailure, EventFailureKind);
+impl_legacy_classification!(FlushError, FlushFailure, FlushFailureKind);
+impl_legacy_classification!(ShutdownError, ShutdownFailure, ShutdownFailureKind);
+impl_legacy_classification!(ProjectionError, ProjectionFailure, ProjectionFailureKind);
+impl_legacy_classification!(SubscriberError, SubscriberFailure, SubscriberFailureKind);
+impl_legacy_classification!(LogSinkError, LogSinkFailure, LogSinkFailureKind);
+impl_legacy_classification!(ExportError, ExportFailure, ExportFailureKind);
+
+/// Typed process identity resolver contract.
+pub trait TypedProcessIdentityResolver: Send + Sync {
+    /// Resolves process identity with a typed failure on error.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentityFailure`] when identity resolution cannot complete.
+    fn resolve(&self) -> Result<ProcessIdentity, IdentityFailure>;
+}
+
+/// Typed observation subscriber contract.
+pub trait TypedObservationSubscriber<T: Observable>: Send + Sync {
+    /// Consumes one observation with a typed subscriber failure on error.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SubscriberFailure`] when the subscriber rejects the observation.
+    fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberFailure>;
+}
+
+/// Typed log projector contract.
+pub trait TypedLogProjector<T: Observable>: Send + Sync {
+    /// Projects an observation into log events.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProjectionFailure`] when log projection cannot complete.
+    fn project_logs(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<LogEvent>, ProjectionFailure>;
+}
+
+/// Typed span projector contract.
+pub trait TypedSpanProjector<T: Observable>: Send + Sync {
+    /// Projects an observation into span signals.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProjectionFailure`] when span projection cannot complete.
+    fn project_spans(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<SpanSignal>, ProjectionFailure>;
+}
+
+/// Typed metric projector contract.
+pub trait TypedMetricProjector<T: Observable>: Send + Sync {
+    /// Projects an observation into metric records.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProjectionFailure`] when metric projection cannot complete.
+    fn project_metrics(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<MetricRecord>, ProjectionFailure>;
+}
+
+struct LegacyIdentityAdapter {
+    inner: Arc<dyn TypedProcessIdentityResolver>,
+}
+
+impl ProcessIdentityResolver for LegacyIdentityAdapter {
+    fn resolve(&self) -> Result<ProcessIdentity, IdentityError> {
+        self.inner.resolve().map_err(Into::into)
+    }
+}
+
+struct TypedIdentityAdapter {
+    inner: Arc<dyn ProcessIdentityResolver>,
+}
+
+impl TypedProcessIdentityResolver for TypedIdentityAdapter {
+    fn resolve(&self) -> Result<ProcessIdentity, IdentityFailure> {
+        self.inner.resolve().map_err(Into::into)
+    }
+}
+
+struct LegacySubscriberAdapter<T: Observable> {
+    inner: Arc<dyn TypedObservationSubscriber<T>>,
+}
+
+impl<T: Observable> ObservationSubscriber<T> for LegacySubscriberAdapter<T> {
+    fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError> {
+        self.inner.observe(observation).map_err(Into::into)
+    }
+}
+
+struct TypedSubscriberAdapter<T: Observable> {
+    inner: Arc<dyn ObservationSubscriber<T>>,
+}
+
+impl<T: Observable> TypedObservationSubscriber<T> for TypedSubscriberAdapter<T> {
+    fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberFailure> {
+        self.inner.observe(observation).map_err(Into::into)
+    }
+}
+
+struct LegacyLogProjectorAdapter<T: Observable> {
+    inner: Arc<dyn TypedLogProjector<T>>,
+}
+
+impl<T: Observable> LogProjector<T> for LegacyLogProjectorAdapter<T> {
+    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
+        self.inner.project_logs(observation).map_err(Into::into)
+    }
+}
+
+struct TypedLogProjectorAdapter<T: Observable> {
+    inner: Arc<dyn LogProjector<T>>,
+}
+
+impl<T: Observable> TypedLogProjector<T> for TypedLogProjectorAdapter<T> {
+    fn project_logs(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<LogEvent>, ProjectionFailure> {
+        self.inner.project_logs(observation).map_err(Into::into)
+    }
+}
+
+struct LegacySpanProjectorAdapter<T: Observable> {
+    inner: Arc<dyn TypedSpanProjector<T>>,
+}
+
+impl<T: Observable> SpanProjector<T> for LegacySpanProjectorAdapter<T> {
+    fn project_spans(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<SpanSignal>, ProjectionError> {
+        self.inner.project_spans(observation).map_err(Into::into)
+    }
+}
+
+struct TypedSpanProjectorAdapter<T: Observable> {
+    inner: Arc<dyn SpanProjector<T>>,
+}
+
+impl<T: Observable> TypedSpanProjector<T> for TypedSpanProjectorAdapter<T> {
+    fn project_spans(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<SpanSignal>, ProjectionFailure> {
+        self.inner.project_spans(observation).map_err(Into::into)
+    }
+}
+
+struct LegacyMetricProjectorAdapter<T: Observable> {
+    inner: Arc<dyn TypedMetricProjector<T>>,
+}
+
+impl<T: Observable> MetricProjector<T> for LegacyMetricProjectorAdapter<T> {
+    fn project_metrics(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<MetricRecord>, ProjectionError> {
+        self.inner.project_metrics(observation).map_err(Into::into)
+    }
+}
+
+struct TypedMetricProjectorAdapter<T: Observable> {
+    inner: Arc<dyn MetricProjector<T>>,
+}
+
+impl<T: Observable> TypedMetricProjector<T> for TypedMetricProjectorAdapter<T> {
+    fn project_metrics(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<MetricRecord>, ProjectionFailure> {
+        self.inner.project_metrics(observation).map_err(Into::into)
+    }
+}
+
+/// Adapts a typed identity resolver to the existing resolver trait.
+#[must_use]
+pub fn legacy_identity(
+    value: Arc<dyn TypedProcessIdentityResolver>,
+) -> Arc<dyn ProcessIdentityResolver> {
+    Arc::new(LegacyIdentityAdapter { inner: value })
+}
+
+/// Adapts an existing identity resolver to the typed resolver trait.
+#[must_use]
+pub fn typed_identity(
+    value: Arc<dyn ProcessIdentityResolver>,
+) -> Arc<dyn TypedProcessIdentityResolver> {
+    Arc::new(TypedIdentityAdapter { inner: value })
+}
+
+/// Adapts a typed subscriber to the existing subscriber trait.
+#[must_use]
+pub fn legacy_subscriber<T: Observable>(
+    value: Arc<dyn TypedObservationSubscriber<T>>,
+) -> Arc<dyn ObservationSubscriber<T>> {
+    Arc::new(LegacySubscriberAdapter { inner: value })
+}
+
+/// Adapts an existing subscriber to the typed subscriber trait.
+#[must_use]
+pub fn typed_subscriber<T: Observable>(
+    value: Arc<dyn ObservationSubscriber<T>>,
+) -> Arc<dyn TypedObservationSubscriber<T>> {
+    Arc::new(TypedSubscriberAdapter { inner: value })
+}
+
+/// Adapts a typed log projector to the existing projector trait.
+#[must_use]
+pub fn legacy_log_projector<T: Observable>(
+    value: Arc<dyn TypedLogProjector<T>>,
+) -> Arc<dyn LogProjector<T>> {
+    Arc::new(LegacyLogProjectorAdapter { inner: value })
+}
+
+/// Adapts an existing log projector to the typed projector trait.
+#[must_use]
+pub fn typed_log_projector<T: Observable>(
+    value: Arc<dyn LogProjector<T>>,
+) -> Arc<dyn TypedLogProjector<T>> {
+    Arc::new(TypedLogProjectorAdapter { inner: value })
+}
+
+/// Adapts a typed span projector to the existing projector trait.
+#[must_use]
+pub fn legacy_span_projector<T: Observable>(
+    value: Arc<dyn TypedSpanProjector<T>>,
+) -> Arc<dyn SpanProjector<T>> {
+    Arc::new(LegacySpanProjectorAdapter { inner: value })
+}
+
+/// Adapts an existing span projector to the typed projector trait.
+#[must_use]
+pub fn typed_span_projector<T: Observable>(
+    value: Arc<dyn SpanProjector<T>>,
+) -> Arc<dyn TypedSpanProjector<T>> {
+    Arc::new(TypedSpanProjectorAdapter { inner: value })
+}
+
+/// Adapts a typed metric projector to the existing projector trait.
+#[must_use]
+pub fn legacy_metric_projector<T: Observable>(
+    value: Arc<dyn TypedMetricProjector<T>>,
+) -> Arc<dyn MetricProjector<T>> {
+    Arc::new(LegacyMetricProjectorAdapter { inner: value })
+}
+
+/// Adapts an existing metric projector to the typed projector trait.
+#[must_use]
+pub fn typed_metric_projector<T: Observable>(
+    value: Arc<dyn MetricProjector<T>>,
+) -> Arc<dyn TypedMetricProjector<T>> {
+    Arc::new(TypedMetricProjectorAdapter { inner: value })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn remediation() -> Remediation {
+        Remediation::not_recoverable("test remediation")
+    }
+
+    fn context(code: &'static str) -> Box<ErrorContext> {
+        Box::new(ErrorContext::new(
+            ErrorCode::new_static(code),
+            "failure",
+            remediation(),
+        ))
+    }
+
+    #[test]
+    fn named_constructors_store_their_declared_kind_and_code() {
+        assert_eq!(
+            IdentityFailure::resolution_failed("x", remediation()).kind(),
+            IdentityFailureKind::ResolutionFailed
+        );
+        assert_eq!(
+            InitFailure::logger_initialization("x", remediation()).kind(),
+            InitFailureKind::LoggerInitialization
+        );
+        assert_eq!(
+            EventFailure::queue_full("x", remediation()).kind(),
+            EventFailureKind::QueueFull
+        );
+        assert_eq!(
+            FlushFailure::telemetry_flush("x", remediation()).kind(),
+            FlushFailureKind::TelemetryFlush
+        );
+        assert_eq!(
+            ShutdownFailure::timed_out("x", remediation()).kind(),
+            ShutdownFailureKind::TimedOut
+        );
+        assert_eq!(
+            ProjectionFailure::routing("x", remediation()).kind(),
+            ProjectionFailureKind::Routing
+        );
+        assert_eq!(
+            SubscriberFailure::routing("x", remediation()).kind(),
+            SubscriberFailureKind::Routing
+        );
+        assert_eq!(
+            LogSinkFailure::fault_injected("x", remediation()).kind(),
+            LogSinkFailureKind::FaultInjected
+        );
+        assert_eq!(
+            ExportFailure::export("x", remediation()).kind(),
+            ExportFailureKind::Export
+        );
+        assert_eq!(
+            ExportFailure::export("x", remediation())
+                .diagnostic()
+                .code
+                .as_str(),
+            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+        );
+    }
+
+    #[test]
+    fn unknown_and_cross_family_codes_are_unclassified_without_data_loss() {
+        let unknown = EventFailure::from_context(context("CUSTOM_FAILURE"));
+        assert_eq!(unknown.kind(), EventFailureKind::Unclassified);
+        assert_eq!(unknown.diagnostic().code.as_str(), "CUSTOM_FAILURE");
+
+        let cross_family = InitFailure::from_context(context("SC_OBSERVABILITY_LOGGER_QUEUE_FULL"));
+        assert_eq!(cross_family.kind(), InitFailureKind::Unclassified);
+        assert_eq!(
+            cross_family.diagnostic().code.as_str(),
+            "SC_OBSERVABILITY_LOGGER_QUEUE_FULL"
+        );
+    }
+
+    #[test]
+    fn legacy_conversion_moves_the_original_context_box() {
+        let original = context("SC_OBSERVABILITY_LOGGER_QUEUE_FULL");
+        let pointer = std::ptr::from_ref::<ErrorContext>(original.as_ref());
+        let typed = EventFailure::from(EventError(original));
+        assert_eq!(std::ptr::from_ref(typed.context()), pointer);
+        let legacy = EventError::from(typed);
+        assert_eq!(std::ptr::from_ref(legacy.0.as_ref()), pointer);
+    }
+
+    #[test]
+    fn builders_modify_the_existing_context_and_retain_classification() {
+        let failure = EventFailure::queue_full("failure", remediation())
+            .cause("capacity")
+            .docs("https://example.invalid/failure")
+            .detail("attempt", json!(2));
+        assert_eq!(failure.kind(), EventFailureKind::QueueFull);
+        assert_eq!(failure.diagnostic().cause.as_deref(), Some("capacity"));
+        assert_eq!(
+            failure.diagnostic().docs.as_deref(),
+            Some("https://example.invalid/failure")
+        );
+        assert_eq!(failure.diagnostic().details["attempt"], json!(2));
+    }
+
+    #[test]
+    fn legacy_serialization_remains_available_and_typed_failures_are_not_serializable() {
+        let legacy = EventError(context("SC_OBSERVABILITY_LOGGER_QUEUE_FULL"));
+        let encoded = serde_json::to_vec(&legacy).expect("legacy wrapper serializes");
+        let decoded: EventError = serde_json::from_slice(&encoded).expect("legacy wrapper decodes");
+        assert_eq!(decoded, legacy);
+    }
+
+    #[derive(Debug)]
+    struct TypedResolver;
+
+    impl TypedProcessIdentityResolver for TypedResolver {
+        fn resolve(&self) -> Result<ProcessIdentity, IdentityFailure> {
+            Ok(ProcessIdentity::default())
+        }
+    }
+
+    #[derive(Debug)]
+    struct LegacyResolver;
+
+    impl ProcessIdentityResolver for LegacyResolver {
+        fn resolve(&self) -> Result<ProcessIdentity, IdentityError> {
+            Ok(ProcessIdentity::default())
+        }
+    }
+
+    struct TypedProjector;
+    impl<T: Observable> TypedLogProjector<T> for TypedProjector {
+        fn project_logs(&self, _: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionFailure> {
+            Ok(Vec::new())
+        }
+    }
+    impl<T: Observable> TypedSpanProjector<T> for TypedProjector {
+        fn project_spans(&self, _: &Observation<T>) -> Result<Vec<SpanSignal>, ProjectionFailure> {
+            Ok(Vec::new())
+        }
+    }
+    impl<T: Observable> TypedMetricProjector<T> for TypedProjector {
+        fn project_metrics(
+            &self,
+            _: &Observation<T>,
+        ) -> Result<Vec<MetricRecord>, ProjectionFailure> {
+            Ok(Vec::new())
+        }
+    }
+
+    struct LegacyProjector;
+    impl<T: Observable> LogProjector<T> for LegacyProjector {
+        fn project_logs(&self, _: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
+            Ok(Vec::new())
+        }
+    }
+    impl<T: Observable> SpanProjector<T> for LegacyProjector {
+        fn project_spans(&self, _: &Observation<T>) -> Result<Vec<SpanSignal>, ProjectionError> {
+            Ok(Vec::new())
+        }
+    }
+    impl<T: Observable> MetricProjector<T> for LegacyProjector {
+        fn project_metrics(
+            &self,
+            _: &Observation<T>,
+        ) -> Result<Vec<MetricRecord>, ProjectionError> {
+            Ok(Vec::new())
+        }
+    }
+
+    struct TypedSubscriber;
+    impl<T: Observable> TypedObservationSubscriber<T> for TypedSubscriber {
+        fn observe(&self, _: &Observation<T>) -> Result<(), SubscriberFailure> {
+            Ok(())
+        }
+    }
+    struct LegacySubscriber;
+    impl<T: Observable> ObservationSubscriber<T> for LegacySubscriber {
+        fn observe(&self, _: &Observation<T>) -> Result<(), SubscriberError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn explicit_adapters_preserve_success_and_are_object_safe() {
+        let observation = Observation::new(
+            crate::ServiceName::new("typed-test").expect("valid service"),
+            "payload".to_string(),
+        );
+
+        assert!(legacy_identity(Arc::new(TypedResolver)).resolve().is_ok());
+        assert!(typed_identity(Arc::new(LegacyResolver)).resolve().is_ok());
+        assert!(
+            legacy_subscriber::<String>(Arc::new(TypedSubscriber))
+                .observe(&observation)
+                .is_ok()
+        );
+        assert!(
+            typed_subscriber::<String>(Arc::new(LegacySubscriber))
+                .observe(&observation)
+                .is_ok()
+        );
+        assert!(
+            legacy_log_projector::<String>(Arc::new(TypedProjector))
+                .project_logs(&observation)
+                .is_ok()
+        );
+        assert!(
+            typed_log_projector::<String>(Arc::new(LegacyProjector))
+                .project_logs(&observation)
+                .is_ok()
+        );
+        assert!(
+            legacy_span_projector::<String>(Arc::new(TypedProjector))
+                .project_spans(&observation)
+                .is_ok()
+        );
+        assert!(
+            typed_span_projector::<String>(Arc::new(LegacyProjector))
+                .project_spans(&observation)
+                .is_ok()
+        );
+        assert!(
+            legacy_metric_projector::<String>(Arc::new(TypedProjector))
+                .project_metrics(&observation)
+                .is_ok()
+        );
+        assert!(
+            typed_metric_projector::<String>(Arc::new(LegacyProjector))
+                .project_metrics(&observation)
+                .is_ok()
+        );
+    }
+}

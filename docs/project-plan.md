@@ -149,6 +149,15 @@ merge, live publication, and B.7 registry-only re-proof remain pending. B.P2
 does not publish to crates.io. B.7 owns the phase-end live release and
 registry-only consumer proof.
 
+### B.1a — Neutral typed failure preparation
+
+The scoped neutral preparation layer is recorded in
+[`plans/phase-b/task-b-1a-neutral-prep.md`](./plans/phase-b/task-b-1a-neutral-prep.md).
+It adds opt-in typed failure values and explicit resolver/subscriber/projector
+adapters inside `sc-observability-types`, while retaining the published root
+APIs and legacy serialization. Runtime adoption, copied-bridge reconciliation,
+and warning policy remain owned by the subsequent B.1 layers.
+
 ## Rule
 
 Any sprint plan added here must preserve the standalone boundary defined by:
