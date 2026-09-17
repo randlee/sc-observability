@@ -23,7 +23,8 @@ npm/adapter production artifacts.
 Retained artifacts: npm `.tgz`; Rust `.crate` archives; bundle manifest and
 reviewed lock identities; exact frontend/host source hashes; `fault-results.json`;
 `ipc.json`; JSONL; raw build/runtime commands; platform metadata. The aggregate
-requires Linux/macOS/Windows at one source revision, identical npm hash, valid
+requires Linux/macOS/Windows at one source revision, identical npm and Rust
+archive hashes, valid
 archive/file hashes, every canonical fixture and every mandatory real IPC case.
 The full shell gate includes schema validation; CI executes the shared schema
 and contract gate once, each native platform separately, then requires all four
@@ -42,9 +43,28 @@ Executed checkpoints:
   plus all 336 installed-client cases. New narrowing/max-counter assertions and
   Linux XDG/Windows origin fixes are queued for the next same-source matrix.
 
-Open gates: final same-source three-platform execution/aggregation, full
-lifecycle/owner-shutdown and remaining native fixture correlation, exact
-artifact retention for the final source, and independent second checklist pass.
-The parent production branch owns further production fixes. No registry has
-been published, and the qualification task stays open until all authoritative
-requirements and the lead completeness gate pass.
+- `ac245df`: local isolated macOS passed 244 ordinary IPC assertions, 20 capped
+  release-host IPC assertions, all 339 installed-client cases and 15 native host
+  policy cases. The actual host-owned shutdown takes the sole guard, returns
+  native timeout at zero milliseconds while the real console pipe is held,
+  preserves level state, rejects level/admission calls as closed, and reaches
+  stopped after pipe release. Native code/remediation survives the timeout
+  mapping. Raw evidence is retained in the ATM team share under
+  `b3a-evidence/qualification-ac245df-macos`.
+- CI run `35216642109` at `d283f87` passed the schema/contracts gate and Linux and
+  macOS artifact/IPC jobs; Windows remained running at this handoff checkpoint.
+- CI run `35217602809` at `ac245df` passed schema/contracts plus the canonical
+  npm/Rust artifact producer; all three platform jobs were running at this
+  handoff checkpoint. This matrix consumes the same actual archives everywhere.
+
+The committed case inventory names every required main/forbidden/capped IPC,
+custom client fault and native policy assertion. Canonical schema case IDs and
+native debug/release CASE/helper-count logs are independently required as well.
+The aggregate rejects missing/skipped cases, changed artifacts, mismatched source
+revisions and any absent isolation probe. Seven rejection tests exercise the
+aggregate gate; seven source-bundle tests exercise lock/confinement behavior.
+
+Final open gates are the same-source three-platform aggregate and lead
+completeness check. `--platform` is a partial platform stage and never signals
+sprint completion. No registry has been published. B.3a remains in progress until
+production and qualification evidence pass the lead's complete review.

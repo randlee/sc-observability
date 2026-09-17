@@ -140,7 +140,12 @@ coverage without claiming an unexecuted matrix pass.
 | Packaged Rust adapter, exact normalized dependency requirements/registry checksums, denied checkout/cache/network | `build_binding_source_bundle.py`; `validate_tauri_qualification.py`; retained archive, lock, manifest and raw command evidence |
 | Supported platform completeness and tamper rejection | `validate_tauri_platform_evidence.py`; `bindings-typescript.yml` matrix and aggregate |
 
-Qualification is still in progress. A macOS checkpoint passes 103 real IPC
-assertions and 336 installed-client cases. That checkpoint does not establish
-three-platform completion or every remaining lifecycle fixture; the worktree
-checklist and `handoff-b-3a-qualification.md` record open gates explicitly.
+Qualification remains in progress until the final three-platform aggregate and
+lead completeness check. Local checkpoint `ac245df` passes 244 ordinary real IPC
+assertions, 20 capped release-host IPC assertions, 339 installed-client cases and
+15 policy cases. The complete case inventory, including real owner/shutdown
+contention, zero-timeout native diagnostics, late shutdown completion and
+retained post-stop health, is committed in
+`scripts/ci/fixtures/tauri-qualification/required-evidence-cases.json`.
+The worktree checklist and `handoff-b-3a-qualification.md` retain the exact gates
+and evidence locations without claiming an unfinished platform matrix passed.
