@@ -1,0 +1,87 @@
+[
+  {
+    "code": "SC_OBSERVABILITY_BINDING_INVALID_INPUT",
+    "kind": "validation",
+    "remediation": "Correct the named input field and submit a new request"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION",
+    "kind": "unsupported_version",
+    "remediation": "Install client and host packages supporting the same schema"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE",
+    "kind": "validation",
+    "remediation": "Reduce remote diagnostic text or remediation steps to the documented bounds"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_CLOSED",
+    "kind": "closed",
+    "remediation": "Stop submitting through the closed backend and inspect its retained health"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_DISPATCH_FULL",
+    "kind": "queue_full",
+    "remediation": "Wait for an outstanding request to complete before submitting again"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS",
+    "kind": "queue_full",
+    "remediation": "Wait for the current adapter flush to finish before submitting another"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED",
+    "kind": "unavailable",
+    "remediation": "Restore native thread resources before explicitly creating another backend"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_WAITERS_FULL",
+    "kind": "queue_full",
+    "remediation": "Wait for an existing operation observer to finish before registering another"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_QUERY_IN_PROGRESS",
+    "kind": "queue_full",
+    "remediation": "Wait for the existing query to finish before starting another"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_HOST_NOT_INSTALLED",
+    "kind": "unavailable",
+    "remediation": "Install a host backend before requesting an attached logger"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_HOST_ALREADY_INSTALLED",
+    "kind": "unavailable",
+    "remediation": "Reuse the module's existing backend; replacement is unsupported"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_PERMISSION_DENIED",
+    "kind": "permission_denied",
+    "remediation": "Request access through the application's authorized window"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_TRANSPORT_UNAVAILABLE",
+    "kind": "unavailable",
+    "remediation": "Restore the host connection before submitting a new request"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_TIMEOUT",
+    "kind": "timeout",
+    "remediation": "Inspect operation status before deciding whether another operation is needed"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_CANCELLED",
+    "kind": "cancelled",
+    "remediation": "Inspect the saved operation result if confirmation is still needed"
+  },
+  {
+    "code": "SC_OBSERVABILITY_PY_HANDLER_REENTRANT",
+    "kind": "internal",
+    "remediation": "Remove logging calls from handler formatting and error callbacks"
+  },
+  {
+    "code": "SC_OBSERVABILITY_BINDING_INTERNAL",
+    "kind": "internal",
+    "remediation": "Inspect the retained status and restore the affected host or client"
+  }
+]

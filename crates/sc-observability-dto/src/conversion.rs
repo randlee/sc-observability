@@ -31,10 +31,10 @@ pub fn boundary_diagnostic(code: &str, message: impl Into<String>) -> Diagnostic
 /// Reports a checked input failure with its offending field.
 pub fn invalid_input(field: impl Into<String>, message: impl Into<String>) -> Failure {
     Failure::Validation {
-        diagnostic: boundary_diagnostic(
+        diagnostic: Box::new(boundary_diagnostic(
             error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT,
             message,
-        ),
+        )),
         field: field.into(),
     }
 }
@@ -49,10 +49,10 @@ fn version(version: u32) -> Result<(), Failure> {
         Ok(())
     } else {
         Err(Failure::UnsupportedVersion {
-            diagnostic: boundary_diagnostic(
+            diagnostic: Box::new(boundary_diagnostic(
                 error_codes::SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION,
                 "unsupported schema version",
-            ),
+            )),
             received: version,
         })
     }
@@ -489,10 +489,10 @@ pub fn validate_diagnostic(value: &Diagnostic, field: &str) -> Result<(), Failur
         };
     if oversized {
         return Err(Failure::Validation {
-            diagnostic: boundary_diagnostic(
+            diagnostic: Box::new(boundary_diagnostic(
                 error_codes::SC_OBSERVABILITY_BINDING_DIAGNOSTIC_TOO_LARGE,
                 "diagnostic exceeds documented bounds",
-            ),
+            )),
             field: field.into(),
         });
     }
@@ -656,15 +656,15 @@ pub fn from_level_change(value: core::LevelChange) -> Result<LevelChangeDto, Fai
 pub fn from_level_error(value: core::LevelChangeError) -> Failure {
     if let core::LevelChangeError::Unavailable { diagnostic } = value {
         return Failure::Unavailable {
-            diagnostic: diagnostic.into(),
+            diagnostic: Box::new(diagnostic.into()),
         };
     }
-    let diagnostic = Diagnostic {
+    let diagnostic = Box::new(Diagnostic {
         at: core::Timestamp::now_utc().to_string(),
         code: value.code().as_str().into(),
         message: value.to_string(),
         remediation: value.remediation().into(),
-    };
+    });
     match value {
         core::LevelChangeError::Stopping | core::LevelChangeError::Stopped => {
             Failure::Closed { diagnostic }
@@ -746,7 +746,7 @@ pub fn decode_envelope<T: DeserializeOwned>(value: Value) -> Result<WireEnvelope
                 checked(serde_json::from_value(error.clone()), "response")?
             } else {
                 Failure::UnknownRemote {
-                    diagnostic,
+                    diagnostic: Box::new(diagnostic),
                     remote_kind: tag.into(),
                 }
             };
