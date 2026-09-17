@@ -23,15 +23,21 @@ publication and its separate override-free registry proof.
 
 ## Execution interface
 
-The full workflow accepts explicit dispatch with `source_commit` (full SHA;
-defaults to the dispatch commit). B.7 may call
+The full workflow accepts explicit dispatch with required `source_commit`
+(full SHA; no branch or HEAD fallback). B.7 may call
 `.github/workflows/b4a-python-distributions.yml` once per workflow run through
 `workflow_call`, supplying required `source_commit`; reusable calls always use
 strict final qualification. Every job checks out that exact source, and the
 aggregate requires all artifact source identities to match it. Successful call
-outputs are `source_commit`, `inventory_sha256`, `inventory_artifact_id` and
-`inventory_artifact_name` (`b4a-production-inventory`). That artifact contains
-`production-artifacts.json`; raw evidence remains in `b4a-sdist`,
+outputs are `qualified_source_commit`, `inventory_sha256`,
+`production_inventory_artifact_id` and `production_inventory_artifact_name`
+(`b4a-production-inventory`). That artifact contains `production-artifacts.json`
+plus `dist/` with exactly the qualified sdist and five production wheels. It
+contains no companion wheels. B.7 compares the qualified source to its requested
+SHA, verifies the downloaded inventory SHA256 and each artifact digest before
+publication. Reusable calls require no secrets and share the caller run artifact
+scope, so download by the returned artifact ID needs no cross-run token.
+Raw evidence remains in `b4a-sdist`,
 `b4a-wheel-<platform>` and `b4a-cell-<platform>-<python>` artifacts from the same
 Actions run. The inventory authorizes no publication; B.7 controls that gate.
 

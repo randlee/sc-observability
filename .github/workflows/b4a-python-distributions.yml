@@ -5,8 +5,8 @@ on:
     inputs:
       source_commit:
         type: string
-        required: false
-        description: 'Full source SHA; defaults to the workflow dispatch commit'
+        required: true
+        description: 'Full immutable source SHA to qualify'
       development:
         type: boolean
         default: false
@@ -18,16 +18,16 @@ on:
         required: true
         description: 'Full immutable source SHA to qualify'
     outputs:
-      source_commit:
+      qualified_source_commit:
         description: 'Exact successfully qualified source SHA'
         value: ${{ jobs.aggregate.outputs.source_commit }}
       inventory_sha256:
         description: 'SHA256 of production-artifacts.json'
         value: ${{ jobs.aggregate.outputs.inventory_sha256 }}
-      inventory_artifact_id:
+      production_inventory_artifact_id:
         description: 'Actions artifact ID containing production-artifacts.json'
         value: ${{ jobs.aggregate.outputs.inventory_artifact_id }}
-      inventory_artifact_name:
+      production_inventory_artifact_name:
         description: 'Actions artifact name containing production-artifacts.json'
         value: b4a-production-inventory
 
@@ -44,11 +44,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_commit || github.sha }}
+          ref: ${{ inputs.source_commit }}
       - id: source
         shell: bash
         env:
-          EXPECTED_SOURCE: ${{ inputs.source_commit || github.sha }}
+          EXPECTED_SOURCE: ${{ inputs.source_commit }}
         run: |
           [[ "$EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]]
           actual=$(git rev-parse HEAD)
@@ -72,7 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_commit || github.sha }}
+          ref: ${{ inputs.source_commit }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -110,7 +110,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_commit || github.sha }}
+          ref: ${{ inputs.source_commit }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
@@ -160,7 +160,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_commit || github.sha }}
+          ref: ${{ inputs.source_commit }}
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -213,7 +213,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.source_commit || github.sha }}
+          ref: ${{ inputs.source_commit }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -230,11 +230,12 @@ jobs:
           python scripts/ci/validate_python_distribution.py aggregate \
             --policy release/python-platform-policy.json --sdist "${sdist[0]}" \
             --evidence "$RUNNER_TEMP/b4a-evidence" --source-commit "${{ needs.plan.outputs.source_commit }}" \
-            --output "$RUNNER_TEMP/b4a-evidence/production-artifacts.json"
+            --publication-dir "$RUNNER_TEMP/b4a-production" \
+            --output "$RUNNER_TEMP/b4a-production/production-artifacts.json"
           python - <<'PYTHON'
           import hashlib, os
           from pathlib import Path
-          inventory = Path(os.environ['RUNNER_TEMP']) / 'b4a-evidence/production-artifacts.json'
+          inventory = Path(os.environ['RUNNER_TEMP']) / 'b4a-production/production-artifacts.json'
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('sha256=' + hashlib.sha256(inventory.read_bytes()).hexdigest() + '\n')
           PYTHON
@@ -242,6 +243,6 @@ jobs:
         id: inventory
         with:
           name: b4a-production-inventory
-          path: ${{ runner.temp }}/b4a-evidence/production-artifacts.json
+          path: ${{ runner.temp }}/b4a-production/
           if-no-files-found: error
           retention-days: 90
