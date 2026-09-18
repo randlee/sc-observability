@@ -49,11 +49,10 @@ completion leaves the sprint open.
    path above. Re-verify the pin is still the intended revision immediately
    before running the installer.
 2. **Author a reviewed `install.json`.** Run
-   `plugins/sc-publish/install.py --example-json` against this repository to
-   get a source-discovered starting point, then hand-review and correct
-   every field before use — the example generator infers `publish`/
-   `required` flags and channel enablement heuristically and must not be
-   installed unmodified. In particular:
+   Create a complete caller-owned `install.json` and hand-review every field
+   before use. The older pinned installer offered `--example-json` discovery,
+   but the current candidate contract no longer does; no source-discovery
+   output is an acceptable installation input. In particular:
    - **Preserve the full ten-crate Phase B publish inventory** unless the
      owner explicitly approves an exclusion — `sc-observability-types`,
      `sc-observability`, `sc-observe`, `sc-observability-otlp`,
@@ -89,17 +88,14 @@ completion leaves the sprint open.
      its crates.io source-crate entry above.
    - `artifacts.binaries`: this repo currently ships no standalone release
      binary target; leave empty unless a Phase B deliverable adds one.
-   - `channels`: enable `crates_io` (crates present) and `pypi` (wheel
-     present); `github_release` only if a GitHub Release is actually wanted
-     as an artifact host (record the decision either way, do not leave it at
-     the heuristic default without review); `homebrew`/`scoop`/`winget`
-     disabled unless a real distributable binary exists to justify them; the
-     npm channel is enabled only once it exists upstream (deliverable 3).
+   - `channels`: root crates.io/GitHub Release channels are implicit in the
+     current candidate installer; declare opt-in post-release `pypi` and npm
+     channels only when their upstream contracts are present. Record every
+     decision explicitly; do not rely on the older heuristic defaults.
 3. **npm publish capability — upstream prerequisite (PHC-002).**
-   `install.py`'s `CHANNEL_NAMES` is exactly `github_release`, `crates_io`,
-   `pypi`, `homebrew`, `scoop`, `winget` — confirmed by reading `install.py`
-   at the pinned revision; there is no npm channel, and this sprint does not
-   invent one locally. The TypeScript client (`@sc-observability/client`,
+   The stale pinned installer lacked npm; the current upstream candidate adds
+   npm as an opt-in post-release channel. The TypeScript client
+   (`@sc-observability/client`,
    `bindings/typescript/package.json`) needs a publish path, but that
    capability belongs in `../sc-publish` itself, consumed here at a reviewed
    pin, matching how every other channel is adopted:
@@ -193,7 +189,7 @@ completion leaves the sprint open.
   (deliverable 6).
 - `release/publish-artifacts.toml` and `release/publish-channel-contracts.toml`
   are valid TOML and contain every crate/wheel/channel decision from
-  deliverable 2, with none silently defaulted from the discovery heuristic.
+  deliverable 2, with none silently defaulted from an obsolete discovery heuristic.
 - Every path in deliverable 4's table has the disposition the table states:
   same-path overwrites pass their byte-parity diff check, and the two
   genuinely-deleted paths pass their absence check. No path is both
