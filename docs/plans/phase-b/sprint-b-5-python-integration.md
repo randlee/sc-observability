@@ -233,9 +233,11 @@ and the embedding example; do not rely only on mocks of the backend.
 
 Status: `in_progress` is accurate, not stale. Remaining closure is the B.4a
 25-cell installed-distribution matrix this sprint's own tests run against
-(see `sprint-b-4a-python-packaging.md`'s current qualification evidence):
-run `35295219562` completed with `conclusion: failure` (diagnostic-only, expected per the known-incomplete Windows process-tree fixture); the acceptance-grade
-run has not started. B.5's own implementation/local-check evidence is recorded
+(see `sprint-b-4a-python-packaging.md`'s current qualification evidence, which
+records the exact Windows embedding failure): run `35295219562` completed
+with `conclusion: failure`, a real defect, not merely diagnostic; the
+acceptance-grade run has not started. B.5's own implementation/local-check
+evidence is recorded
 in `handoff-b-5.md`; lead completeness review is separately still open.
 
 ## Paths to delete
