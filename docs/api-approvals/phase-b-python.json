@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "candidate_version": "1.4.0",
-  "source_commit": "b8681473fd372bf7a5dbab36d0e024076ec49467",
+  "source_commit": "b868147a20471ff9d65ca010fb9053c6254e57f6",
   "approved_at": "2026-09-17T19:50:00Z",
   "crates": {
     "sc-observability-py": {
