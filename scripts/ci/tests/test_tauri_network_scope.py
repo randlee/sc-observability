@@ -56,11 +56,11 @@ class NetworkScopeTests(unittest.TestCase):
 
     def test_command_rule_resolves_bare_executable_and_tracks_process_tree(self):
         sandbox = self.sandbox()
-        with patch('_python_sandbox.subprocess.check_output', return_value=''):
-          with patch('_python_sandbox.shutil.which', return_value='C:/tool/python.exe'):
+        with patch('_python_sandbox.subprocess.check_output', return_value='C:/Runner.Listener.exe\n'):
             with sandbox.network_denial(Path('python')):
                 pass
         self.assertTrue(any('-Direction Outbound -Action Block' in item for item in sandbox.commands))
+        self.assertTrue(any('-OverrideBlockRules $true' in item for item in sandbox.commands))
         self.assertIn('-OverrideBlockRules', inspect.getsource(Sandbox.network_denial))
 
     def test_webview_failure_still_removes_only_own_rule(self):

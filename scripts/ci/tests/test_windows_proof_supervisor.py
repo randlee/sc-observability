@@ -19,6 +19,8 @@ class SupervisorTests(unittest.TestCase):
         root = directory / 'owned-root'
         path.write_text(json.dumps({'schema_version': 1,
             'firewall': 'sc-observability-proof-' + 'a' * 32,
+            'firewall_rules': ['sc-observability-proof-' + 'a' * 32,
+                               'sc-observability-proof-' + 'a' * 32 + '-allow-0'],
             'acls': [[str(root), str(directory / 'acl-0.txt')]]}))
         return path, root
 

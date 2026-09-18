@@ -19,12 +19,21 @@ def recover(path, allowed_roots, temporary_root):
     record = json.loads(path.read_text(encoding='utf-8'))
     if record.get('schema_version') != 1 or not re.fullmatch(r'sc-observability-proof-[0-9a-f]{32}', record.get('firewall', '')):
         raise DistributionError('invalid proof recovery identity')
+    rules = record.get('firewall_rules', [record['firewall']])
+    prefix = record['firewall'] + '-allow-'
+    if (not isinstance(rules, list) or not rules or
+            any(not isinstance(name, str) or
+                (name != record['firewall'] and
+                 (not name.startswith(prefix) or not name[len(prefix):].isdigit()))
+                for name in rules)):
+        raise DistributionError('invalid proof recovery rules')
     acls = [(Path(root), Path(saved)) for root, saved in record['acls']]
     for root, saved in acls:
         if root not in allowed_roots or '..' in saved.parts or not saved.is_relative_to(temporary_root) or not re.fullmatch(r'acl-\d+\.txt', saved.name):
             raise DistributionError('proof recovery path outside owned roots')
     sandbox = Sandbox.__new__(Sandbox)
     sandbox.firewall = record['firewall']
+    sandbox.firewall_rules = rules
     sandbox.acls = acls
     print('WINDOWS_PROOF_RECOVERY: restoring saved isolation after worker failure', flush=True)
     try:
