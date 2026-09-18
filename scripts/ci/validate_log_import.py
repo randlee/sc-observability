@@ -174,6 +174,9 @@ _VERDICT_RE = re.compile(r"Verdict:\s*(\S+)")
 _ACCEPTANCE_RE = re.compile(r"sc-observability acceptance:\s*(\S+)")
 _REVIEWED_COMMIT_RE = re.compile(r"Reviewed commit:\s*([0-9a-f]{40})")
 _HANDOFF_REVISION_RE = re.compile(r"^([^@]+)@([0-9a-f]{40})$")
+_QA_REVIEW_CITATION_URL_RE = re.compile(
+    r"https://github\.com/randlee/sc-observability/pull/[1-9][0-9]*#issuecomment-[1-9][0-9]*"
+)
 
 
 def parse_handoff(text: str) -> dict[str, str]:
@@ -630,6 +633,7 @@ def validate_post_import_adaptations(
         else:
             if not isinstance(qa_delta, dict) or not re.fullmatch(r"[0-9a-f]{40}", qa_delta.get("commit", "")):
                 raise SystemExit(f"post-import adaptation QA delta for {path} lacks an immutable commit")
+            validate_qa_delta_review_citation(qa_delta, path)
             commit_check = subprocess.run(
                 ["git", "-C", str(destination), "cat-file", "-e", f"{qa_delta['commit']}^{{commit}}"],
                 stdout=subprocess.DEVNULL,
@@ -662,6 +666,28 @@ def validate_post_import_adaptations(
         updated[path] = after_blob
 
     return updated
+
+
+def validate_qa_delta_review_citation(qa_delta: dict, path: str) -> None:
+    """Require structural metadata for an approved QA delta's review citation.
+
+    The citation is an audit-trail reference, not a network or signature
+    check: its URL must identify an issue comment on this repository's GitHub
+    PR and its reviewed commit must be a full Git SHA. The existing immutable
+    commit, blob, and exact-patch checks remain the source of content
+    validation.
+    """
+    citation = qa_delta.get("review_citation")
+    if not isinstance(citation, dict):
+        raise SystemExit(f"post-import adaptation QA delta for {path} lacks review citation")
+    url = citation.get("url")
+    if not isinstance(url, str) or not _QA_REVIEW_CITATION_URL_RE.fullmatch(url):
+        raise SystemExit(f"post-import adaptation QA delta for {path} has an invalid review citation URL")
+    reviewed_commit = citation.get("reviewed_commit")
+    if not isinstance(reviewed_commit, str) or not _FULL_SHA_RE.fullmatch(reviewed_commit):
+        raise SystemExit(
+            f"post-import adaptation QA delta for {path} has an invalid reviewed commit citation"
+        )
 
 
 def verify_review_citation(

@@ -25,7 +25,7 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
-from validate_log_import import validate_import  # noqa: E402
+from validate_log_import import validate_import, validate_qa_delta_review_citation  # noqa: E402
 
 
 def run(*args: str, cwd: Path) -> str:
@@ -203,6 +203,10 @@ class ImportContractFixture:
             "qa_delta": {
                 "commit": commit,
                 "reason": "approved QA delta in an exact immutable fixture",
+                "review_citation": {
+                    "url": "https://github.com/randlee/sc-observability/pull/148#issuecomment-5724132637",
+                    "reviewed_commit": "5bcc27ee8f228d396bb603fc7dfc1a1c65861fe0",
+                },
                 "patch": patch,
             },
         }
@@ -385,6 +389,85 @@ class ValidateLogImportTests(unittest.TestCase):
                 fixture.handoff_text(), doc_repo=fixture.doc_repo,
                 post_import_adaptations=post_import,
             )
+
+    def test_accepts_recorded_real_qa_delta_review_citations(self) -> None:
+        manifest = json.loads(
+            (Path(__file__).resolve().parents[3] / "docs/plans/phase-b/post-import-adaptations.json").read_text()
+        )
+        qa_deltas = [
+            item["qa_delta"]
+            for item in manifest["adaptations"]
+            if "qa_delta" in item
+        ]
+        self.assertEqual(len(qa_deltas), 4)
+        for item in qa_deltas:
+            validate_qa_delta_review_citation(item, "real-manifest-fixture")
+
+    def test_rejects_missing_qa_delta_review_citation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/src/control.rs"
+            after = fixture.FILES[path] + "pub fn approved_delta() {}\n"
+            (fixture.destination / path).write_text(after)
+            fixture.init_destination_repo()
+            commit = fixture.commit_destination_paths(path)
+            adaptation = fixture.qa_delta_adaptation(path, after, commit)
+            del adaptation["qa_delta"]["review_citation"]
+            post_import = {
+                "historical_provenance": "docs/plans/phase-b/import-provenance.json",
+                "source_commit": fixture.source_commit,
+                "adaptations": [adaptation],
+            }
+            with self.assertRaisesRegex(SystemExit, "lacks review citation"):
+                validate_import(
+                    fixture.provenance(), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                    post_import_adaptations=post_import,
+                )
+
+    def test_rejects_malformed_qa_delta_review_citation_url(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/src/control.rs"
+            after = fixture.FILES[path] + "pub fn approved_delta() {}\n"
+            (fixture.destination / path).write_text(after)
+            fixture.init_destination_repo()
+            commit = fixture.commit_destination_paths(path)
+            adaptation = fixture.qa_delta_adaptation(path, after, commit)
+            adaptation["qa_delta"]["review_citation"]["url"] = "https://example.invalid/review"
+            post_import = {
+                "historical_provenance": "docs/plans/phase-b/import-provenance.json",
+                "source_commit": fixture.source_commit,
+                "adaptations": [adaptation],
+            }
+            with self.assertRaisesRegex(SystemExit, "invalid review citation URL"):
+                validate_import(
+                    fixture.provenance(), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                    post_import_adaptations=post_import,
+                )
+
+    def test_rejects_malformed_qa_delta_reviewed_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/src/control.rs"
+            after = fixture.FILES[path] + "pub fn approved_delta() {}\n"
+            (fixture.destination / path).write_text(after)
+            fixture.init_destination_repo()
+            commit = fixture.commit_destination_paths(path)
+            adaptation = fixture.qa_delta_adaptation(path, after, commit)
+            adaptation["qa_delta"]["review_citation"]["reviewed_commit"] = "not-a-commit"
+            post_import = {
+                "historical_provenance": "docs/plans/phase-b/import-provenance.json",
+                "source_commit": fixture.source_commit,
+                "adaptations": [adaptation],
+            }
+            with self.assertRaisesRegex(SystemExit, "invalid reviewed commit citation"):
+                validate_import(
+                    fixture.provenance(), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                    post_import_adaptations=post_import,
+                )
 
     def test_rejects_qa_delta_existing_unrelated_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
