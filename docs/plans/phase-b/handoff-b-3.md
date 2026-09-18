@@ -45,9 +45,19 @@ outside the wire crate. Core serialization was not changed.
 
 - Generation: Rust1.94.1, Python3.12.10, Schemars1.2.2, committed compiler lock.
 - Schema SHA256: `6336e4542cdbf7c642505a18b2eb7dcda9c7aceb41f2ca4183382d63fdd2035c`.
-- `bindings/generation-manifest.json` freezes generator source revision
-  `4046209085414bca71f64fb2509ab24df8dba204`, every generator source/toolchain/compiler-lock hash and every generated
+- `bindings/generation-manifest.json` freezes a generator source revision,
+  every generator source/toolchain/compiler-lock hash and every generated
   output hash. The gate compares source bytes to that recorded Git revision.
+  This document does not pin that revision's SHA: the manifest is actively
+  regenerated as fixes land on branches above this one in the phase stack
+  (for example PHB-CI-007's generation-manifest refresh), so a value written
+  here would go stale before qualification finishes. `bindings/generation-manifest.json`'s
+  own `source_revision` field on whichever branch/PR is current is the
+  authoritative value. On this document's own branch (`fix/phase-b-qa-evidence`,
+  PR149) it reads `cbcdaf8a90f3915a337beba0ca5a2916d5a1d682` -- this is this
+  branch's historical state, verified directly from that file, not a claim
+  about the current top of the phase stack (which has since advanced past
+  this branch, e.g. through PR155).
   The root workspace lock is excluded from generation inputs because the schema
   compiler is isolated; unrelated adapter dependencies cannot alter its selection.
   The source-bundle gate independently retains and verifies the entire root lock.

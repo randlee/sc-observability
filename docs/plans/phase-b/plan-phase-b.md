@@ -214,26 +214,27 @@ or implementation readiness is claimed here.
 ## Phase-end completeness gate amendment (ATM-QA-103)
 
 Consolidated phase-end QA's 100%-deliverable-completion gate is explicitly
-amended, by owner instruction, on one narrow point: B.7's own sprint doc
-`status` frontmatter is not required to read `complete` on the basis of its
-registry-publication tail alone, because that tail (live crates.io/PyPI/npm
-publication and registry-consumer proof) is owner-deferred until explicit
-post-review authorization -- not unfinished implementation. B.7's actual
-review-readiness scope (the manifest, validation scripts, and evidence
-tooling recorded in [`docs/project-plan.md`](../../project-plan.md)'s B.7
-entry and [`handoff-b-7.md`](handoff-b-7.md)) is complete and reviewable
-today; only the live publish step itself is deferred.
+amended, by owner instruction: a sprint doc's `status` frontmatter reads
+`complete` once its own development qualification is done and the lead has
+recorded a completeness decision, without waiting for independent phase-end
+QA acceptance or B.7's live publication step -- those are separate,
+subsequent gates, not development work, and are tracked in each sprint's own
+handoff rather than blocking `status`.
 
-This amendment does not extend to B.3a, B.5, or B.6: each of those sprints'
-own handoff records
-([`handoff-b-3a-qualification.md`](handoff-b-3a-qualification.md),
-[`handoff-b-5.md`](handoff-b-5.md), [`handoff-b-6.md`](handoff-b-6.md))
-transparently documents real, non-publication remaining work of its own
-(B.3a's real-IPC artifact qualification; B.5/B.6's installed distribution
-matrix and lead completeness review) that this amendment does not waive.
-Phase-end QA continues to correctly report those three sprints' `status` as
-non-`complete` until that specific remaining work lands, independent of and
-in addition to the B.7 publication gate they also transitively depend on.
+B.7's own registry-publication tail (live crates.io/PyPI/npm publication and
+registry-consumer proof) is owner-deferred until explicit post-review
+authorization; its review-readiness scope (manifest, validation scripts and
+evidence tooling in [`docs/project-plan.md`](../../project-plan.md)'s B.7
+entry and [`handoff-b-7.md`](handoff-b-7.md)) is complete and reviewable
+today. B.3a's real-IPC artifact qualification and B.4a/B.5/B.6's installed
+distribution matrix have likewise passed in full (terminal CI runs recorded
+in each sprint's own "Current qualification evidence" section and handoff:
+[`handoff-b-3a-qualification.md`](handoff-b-3a-qualification.md),
+[`handoff-b-4a.md`](handoff-b-4a.md), [`handoff-b-5.md`](handoff-b-5.md),
+[`handoff-b-6.md`](handoff-b-6.md)), and the lead completeness decision for
+all four is recorded **PASS** (aobs, 2026-09-18). Independent phase-end QA
+acceptance and formal API/ADR approval remain separately pending for all
+five sprints, not implied by `status: complete`.
 
 ## Planning validation and evidence
 
