@@ -1,0 +1,23 @@
+name: Windows proof identity preflight
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+      - name: Real identity and descendant preflight
+        shell: pwsh
+        run: python scripts/ci/windows_identity_preflight.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-identity-preflight
+          path: target/windows-identity-preflight/
+          if-no-files-found: error
