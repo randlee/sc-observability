@@ -157,7 +157,9 @@ class Api:
 
 def recover(journal):
     """Idempotent recovery from every planned setup state; never trusts arbitrary names."""
-    journal = Path(journal)
+    # TEMP may use RUNNER~1 while the protected journal records the long name.
+    # Compare canonical filesystem paths, not two spellings of the same root.
+    journal = Path(journal).resolve()
     if not journal.exists():
         return False
     record = json.loads(journal.read_text(encoding='utf-8'))

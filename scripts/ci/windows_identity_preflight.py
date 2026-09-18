@@ -181,6 +181,7 @@ def supervise():
     output.mkdir(parents=True,exist_ok=True)
     result=125
     recovered=[]
+    recovery_errors=[]
     with tempfile.TemporaryDirectory(prefix='windows-preflight-control-') as temporary:
         environment=dict(os.environ,SC_WINDOWS_IDENTITY_CONTROL_ROOT=temporary)
         process=subprocess.Popen([sys.executable,__file__,'--worker',*sys.argv[1:]],env=environment)
@@ -195,6 +196,9 @@ def supervise():
                 try:
                     recover(journal)
                     recovered.append(str(journal))
+                except Exception as error:
+                    recovery_errors.append(str(error))
+                    shutil.copytree(journal.parent,output/('failed-recovery-'+str(len(recovery_errors))),dirs_exist_ok=True)
                 finally:
                     result=result or 125
             report_path=output/'preflight.json'
@@ -202,7 +206,7 @@ def supervise():
                 report=json.loads(report_path.read_text(encoding='utf-8'))
                 report.update(status='failed',supervisor_exit=result)
                 report_path.write_text(json.dumps(report,indent=2),encoding='utf-8')
-            (output/'supervisor.json').write_text(json.dumps({'exit':result,'recovered':recovered},indent=2),encoding='utf-8')
+            (output/'supervisor.json').write_text(json.dumps({'exit':result,'recovered':recovered,'recovery_errors':recovery_errors},indent=2),encoding='utf-8')
     raise SystemExit(result)
 
 
