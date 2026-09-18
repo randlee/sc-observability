@@ -583,17 +583,20 @@ def validate_post_import_adaptations(
         if not isinstance(path, str) or path in seen:
             raise SystemExit(f"duplicate or missing post-import adaptation path: {path}")
         seen.add(path)
-        if path not in _POST_IMPORT_WARNING_PATHS:
+        kind = item.get("kind")
+        if kind == "deprecated_warning_allowance" and path not in _POST_IMPORT_WARNING_PATHS:
             raise SystemExit(f"post-import adaptation path is outside the warning-only bridge allowlist: {path}")
         if path not in provenance.get("file_inventory", {}):
             raise SystemExit(f"post-import adaptation path is absent from historical inventory: {path}")
-        if item.get("kind") != "deprecated_warning_allowance":
-            raise SystemExit(f"post-import adaptation for {path} is not a warning-only allowance")
         if not (item.get("reason") or "").strip():
             raise SystemExit(f"post-import adaptation for {path} is missing a reason")
         blocks = item.get("blocks")
-        if not isinstance(blocks, list) or not blocks:
+        if kind == "deprecated_warning_allowance" and (not isinstance(blocks, list) or not blocks):
             raise SystemExit(f"post-import adaptation for {path} has no exact allowance blocks")
+        if kind not in {"deprecated_warning_allowance", "approved_qa_delta"}:
+            raise SystemExit(f"post-import adaptation for {path} has an unsupported kind")
+        if blocks is None:
+            blocks = []
         normalized_blocks: list[str] = []
         for block in blocks:
             if not isinstance(block, str) or not _POST_IMPORT_ALLOW_BLOCK_RE.fullmatch(block):
@@ -618,10 +621,29 @@ def validate_post_import_adaptations(
             if insertion not in reconstructed:
                 raise SystemExit(f"post-import adaptation block missing from destination: {path}")
             reconstructed = reconstructed.replace(insertion, "", 1)
-        if reconstructed != before:
-            raise SystemExit(
-                f"post-import adaptation for {path} changes content beyond declared warning allowances"
+        qa_delta = item.get("qa_delta")
+        if qa_delta is None:
+            if reconstructed != before:
+                raise SystemExit(
+                    f"post-import adaptation for {path} changes content beyond declared warning allowances"
+                )
+        else:
+            if not isinstance(qa_delta, dict) or not re.fullmatch(r"[0-9a-f]{40}", qa_delta.get("commit", "")):
+                raise SystemExit(f"post-import adaptation QA delta for {path} lacks an immutable commit")
+            reason = qa_delta.get("reason")
+            patch = qa_delta.get("patch")
+            if not isinstance(reason, str) or not reason.strip() or not isinstance(patch, str) or not patch:
+                raise SystemExit(f"post-import adaptation QA delta for {path} lacks exact evidence and rationale")
+            actual_patch = "".join(
+                difflib.unified_diff(
+                    before.splitlines(keepends=True),
+                    reconstructed.splitlines(keepends=True),
+                    fromfile=f"accepted/{path}",
+                    tofile=f"approved/{qa_delta['commit']}/{path}",
+                )
             )
+            if actual_patch != patch:
+                raise SystemExit(f"post-import adaptation QA delta for {path} does not match exact result evidence")
         updated[path] = after_blob
 
     return updated
