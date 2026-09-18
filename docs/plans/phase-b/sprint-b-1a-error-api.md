@@ -1,8 +1,9 @@
 ---
 id: B.1a
-status: proposed
-branch: feature/phase-b-1a-errors
-base: develop
+status: complete
+branch: feature/phase-b-1a-neutral-prep
+base: fix/phase-b-policy-sync
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1a-neutral-prep
 ---
 
 # B.1a — Typed failure values and neutral extension adapters

@@ -1,8 +1,9 @@
 ---
 id: B.1c
-status: proposed
-branch: feature/phase-b-1c-errors
-base: develop
+status: complete
+branch: feature/phase-b-1c-observation-prep
+base: feature/phase-b-1b-logger-prep
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1c-observation-prep
 ---
 
 # B.1c — Typed observation construction and lifecycle failures
