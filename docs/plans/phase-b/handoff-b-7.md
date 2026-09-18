@@ -4,7 +4,7 @@ status: review_packet_prepared_publication_pending_owner_review
 branch: feature/phase-b-7-publish-bindings
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-7-publish-bindings
 base: develop
-generated_at: 2026-09-18T16:21:23Z
+generated_at: 2026-09-18T16:24:13Z
 ---
 
 # B.7 binding-release review packet (readiness handoff)
@@ -120,9 +120,17 @@ and machine-readable JSON records used by the API governance gate:
 - `docs/api-approvals/phase-b-log-import.md`
 - `docs/api-approvals/phase-b-runtime-level.md` (owner-deferred; not a
   current approval)
+- `docs/api-approvals/phase-b-dto.json` (initial scoped lead approval for the
+  neutral wire DTO declarations, checked conversions, and binding-owned
+  diagnostic registry; no behavior/QA, owner runtime-contract, or B.7
+  publication approval)
+- `docs/api-approvals/phase-b-native-runtime.json` (initial scoped lead
+  approval for the public native runtime API and supplied factories; no
+  behavior QA, owner runtime-contract, or publication approval)
 - `docs/api-approvals/phase-b-integration-review-decimal.json` (scoped lead
   approval for the unpublished DTO DecimalDtoError API change; public API only)
 
+These records are scoped API approvals, not release or runtime-owner sign-off.
 The DecimalDtoError record specifically approves the `sc-observability-dto`
 public surface at the exact recorded digest, limited to the enum, stable error
 codes and the two constructor Result signature changes. It does not approve

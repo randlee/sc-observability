@@ -9,7 +9,7 @@ API changes introduced after the currently shipped baseline.
 - Markdown records use the file name format `<change-id>.md`; B.2 and later
   machine-checkable API governance records use `<change-id>.json` and the
   schema described below.
-- required headings in every approval file:
+- required headings in every Markdown approval record:
   - `## Scope`
   - `## Approval`
   - `## Affected Artifacts`
