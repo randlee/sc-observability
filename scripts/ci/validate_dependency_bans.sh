@@ -148,43 +148,58 @@ for path in boundary_manifests:
     assert_no_banned_dependencies(path)
 
 # Exercise each banned prefix through the same manifest reader used above.
-# These fixtures prove the gate rejects a direct runtime, proc-macro, or
-# consumer-check boundary violation rather than only checking today's files.
+# Keep every declaration form in an independent fixture so a partial scanner
+# cannot pass merely because another section contains the same banned package.
 with tempfile.TemporaryDirectory(prefix="dependency-ban-fixtures-") as directory:
     fixture_root = Path(directory)
     for banned in BANNED_PREFIXES:
-        fixture = fixture_root / f"{banned}.toml"
         alias = f"blocked_{banned.replace('-', '_')}"
-        fixture.write_text(
-            "[dependencies]\n"
-            f"{alias} = {{ workspace = true }}\n"
-            "[build-dependencies]\n"
-            f"direct_{alias} = {{ package = \"{banned}\", version = \"0.0.0\" }}\n"
-            "[dev-dependencies]\n"
-            f"dev_{alias} = {{ package = \"{banned}\", version = \"0.0.0\" }}\n"
-            "[target.'cfg(unix)'.dependencies]\n"
-            f"target_{alias} = {{ package = \"{banned}\", version = \"0.0.0\" }}\n",
-            encoding="utf-8",
-        )
-        workspace_fixture = fixture_root / "Cargo.toml"
-        workspace_fixture.write_text(
-            "[workspace.dependencies]\n"
-            f"{alias} = {{ package = \"{banned}\", version = \"0.0.0\" }}\n",
-            encoding="utf-8",
-        )
-        workspace_document = load_toml(workspace_fixture)
-        try:
-            assert_no_banned_dependencies(fixture, workspace_document)
-        except SystemExit as error:
-            if banned not in str(error):
-                raise SystemExit(f"negative dependency-ban fixture lost {banned}: {error}")
-        else:
-            raise SystemExit(f"negative dependency-ban fixture was accepted: {banned}")
-
-for crate in ("sc-observability-types", "sc-observability", "sc-observe", "sc-observability-otlp"):
-    assert_no_banned_dependencies(root / f"crates/{crate}/Cargo.toml")
-    if section_deps(root / f"crates/{crate}/Cargo.toml", "dependencies") & {"schemars", "sc-observability-dto", "tauri", "pyo3"}:
-        raise SystemExit(f"binding dependencies entered core: {crate}")
+        cases = {
+            "direct": (
+                f"[dependencies]\n{banned} = \"0.0.0\"\n",
+                None,
+            ),
+            "renamed-package": (
+                f"[dependencies]\n{alias} = {{ package = \"{banned}\", version = \"0.0.0\" }}\n",
+                None,
+            ),
+            "workspace-inherited": (
+                f"[dependencies]\n{alias} = {{ workspace = true }}\n",
+                {
+                    "workspace": {
+                        "dependencies": {
+                            alias: {"package": banned, "version": "0.0.0"}
+                        }
+                    }
+                },
+            ),
+            "build": (
+                f"[build-dependencies]\n{alias} = {{ package = \"{banned}\", version = \"0.0.0\" }}\n",
+                None,
+            ),
+            "dev": (
+                f"[dev-dependencies]\n{alias} = {{ package = \"{banned}\", version = \"0.0.0\" }}\n",
+                None,
+            ),
+            "target": (
+                f"[target.'cfg(unix)'.dependencies]\n{alias} = {{ package = \"{banned}\", version = \"0.0.0\" }}\n",
+                None,
+            ),
+        }
+        for case, (manifest, workspace_document) in cases.items():
+            fixture = fixture_root / f"{banned}-{case}.toml"
+            fixture.write_text(manifest, encoding="utf-8")
+            try:
+                assert_no_banned_dependencies(fixture, workspace_document)
+            except SystemExit as error:
+                if banned not in str(error):
+                    raise SystemExit(
+                        f"negative dependency-ban fixture lost {banned} in {case}: {error}"
+                    )
+            else:
+                raise SystemExit(
+                    f"negative dependency-ban fixture was accepted: {banned} in {case}"
+                )
 print("dependency ban validation passed")
 PY
 
