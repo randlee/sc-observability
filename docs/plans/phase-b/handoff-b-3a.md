@@ -1,8 +1,10 @@
 # B.3a TypeScript/Tauri handoff
 
-Status: in progress on `fix/phase-b-3a-completeness`; parent merge-forwarded
-from `origin/feature/phase-b-4a-python-packaging` at `c403bcf` (including
-the latest B.4a merge-forward). Current child checkpoint: `2076600`.
+Status at checkpoint `2076600` on `fix/phase-b-3a-completeness` (parent
+merge-forwarded from `origin/feature/phase-b-4a-python-packaging` at
+`c403bcf`, including the latest B.4a merge-forward): superseded by
+`handoff-b-3a-qualification.md`'s terminal qualification and the recorded
+development-complete decision.
 
 The child consumes the B.3 canonical schema and the B.3b native
 `HostLoggingBackend`. The TypeScript package is generated-schema driven and
