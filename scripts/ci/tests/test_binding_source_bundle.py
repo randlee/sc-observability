@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 import importlib.util
 ROOT=Path(__file__).resolve().parents[3]
+HELPER_DIR=ROOT/'scripts/ci'
+sys.path.insert(0,str(HELPER_DIR))
 HELPER=ROOT/'scripts/ci/build_binding_source_bundle.py'
 SPEC=importlib.util.spec_from_file_location('binding_source_bundle', HELPER)
 BUNDLE=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(BUNDLE)
