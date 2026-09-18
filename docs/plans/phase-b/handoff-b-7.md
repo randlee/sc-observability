@@ -69,8 +69,8 @@ in the manifest; their versions are not checked by `verify-versions`. Both
 files exist in this branch's tree and are pinned to `1.4.0`. Tauri's real
 IPC/artifact qualification has passed in the recorded B.3a matrix, while
 independent phase-end QA and formal API/ADR approval remain pending. The npm
-entry remains pending because `NPM_TOKEN` is not configured and publication
-approval is owner-deferred.
+entry remains pending because sc-publish credential provisioning and publication
+approval are owner-deferred; `NPM_TOKEN` is only a workflow configuration key.
 
 ## Source commit / tag
 
@@ -232,8 +232,8 @@ before B.7, and does not itself install or wire any new publish pipeline.
   crates.io entries (3 `ready`, 1 `pending` with a named reason) and 2
   package entries (1 `ready`, 1 `pending` with a named reason). Every entry
   now also carries `registry_secret`/`registry_secret_configured`
-  (CARGO_REGISTRY_TOKEN is real and configured; PYPI_API_TOKEN/NPM_TOKEN are
-  not), and the pypi entry carries `platform_policy_ref` pointing at
+  (registry credential provisioning is owner-deferred; token names are workflow
+  configuration keys), and the pypi entry carries `platform_policy_ref` pointing at
   `release/python-platform-policy.json`.
 - `scripts/release_bindings_artifacts.py` gained `build-evidence` and
   `verify-evidence` (C05: real cargo package/maturin builds, real sha256 +
@@ -287,8 +287,8 @@ is installed, or whatever mechanism the owner review settles on) to consume:
 (a) `release/bindings-artifacts.toml`, a readiness manifest naming 4 crates.io
     entries (3 `ready`, 1 `pending`: `sc-observability-tauri`, pending
     independent phase-end QA/API approval) and 2 package entries (1
-    ready-but-uncredentialed PyPI package, 1 pending npm client blocked on
-    its missing `NPM_TOKEN` credential and owner publication approval);
+    ready-but-unpublished PyPI package, 1 pending npm client awaiting
+    owner-deferred sc-publish credential provisioning and publication approval);
 (b) `scripts/release_bindings_artifacts.py`'s `build-evidence`/`verify-evidence`,
     which produce and re-verify real, rebuildable candidate artifact hashes
     for every `ready` entry;

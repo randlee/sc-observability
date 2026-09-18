@@ -258,7 +258,7 @@ created.value.tryLog(event.value).then((result) => {
   console.log("TS_PACKAGED_TARBALL_CONSUMER_PASSED");
 }).catch((error) => { console.error(error); process.exit(1); });
 ' )
-echo "STRUCTURAL PROOF ONLY (pending): @sc-observability/client packs into a real npm tarball and installs/smoke-checks in isolation; NPM_TOKEN and owner publication approval remain pending, so this is NOT npm-publish-readiness"
+echo "STRUCTURAL PROOF ONLY (pending): @sc-observability/client packs into a real npm tarball and installs/smoke-checks in isolation; sc-publish credential provisioning and owner publication approval remain deferred, so this is NOT npm-publish-readiness"
 
 echo
 echo "== 4/4: summary =="

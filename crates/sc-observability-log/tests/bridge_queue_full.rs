@@ -47,22 +47,57 @@ fn flood() {
     }
 }
 
-fn hold_stdout() -> (mpsc::Sender<()>, std::thread::JoinHandle<()>) {
+struct StdoutHold {
+    release: Option<mpsc::Sender<()>>,
+    released: mpsc::Receiver<Result<(), String>>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl StdoutHold {
+    fn release(mut self) -> Result<(), String> {
+        self.release.take().unwrap().send(()).unwrap();
+        let result = self
+            .released
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|error| format!("stdout holder acknowledgement: {error}"))?;
+        self.thread.take().unwrap().join().unwrap();
+        result
+    }
+}
+
+impl Drop for StdoutHold {
+    fn drop(&mut self) {
+        if let Some(release) = self.release.take() {
+            let _ = release.send(());
+        }
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+fn hold_stdout() -> StdoutHold {
     let (release, receive) = mpsc::channel();
+    let (acknowledge, released) = mpsc::channel();
     let (ready, entered) = mpsc::sync_channel(0);
     let holder = std::thread::spawn(move || {
         let stdout = std::io::stdout();
         let lock = stdout.lock();
         ready.send(()).expect("stdout holder ready");
-        receive
-            .recv_timeout(Duration::from_secs(30))
-            .expect("stdout holder release");
+        receive.recv().expect("stdout holder release");
         drop(lock);
+        acknowledge
+            .send(Ok(()))
+            .expect("stdout holder acknowledgement receiver");
     });
     entered
         .recv_timeout(Duration::from_secs(5))
         .expect("stdout holder entered");
-    (release, holder)
+    StdoutHold {
+        release: Some(release),
+        released,
+        thread: Some(holder),
+    }
 }
 
 #[test]
@@ -79,7 +114,7 @@ fn full_queue_drops_without_blocking() {
         parse_bracket_action: false,
     };
     let guard = sc_observability_log::init(config, options).unwrap();
-    let (release_stdout, stdout_holder) = hold_stdout();
+    let stdout_holder = hold_stdout();
 
     let before = guard.dropped_events();
     let started = Instant::now();
@@ -102,7 +137,6 @@ fn full_queue_drops_without_blocking() {
     // the one-slot queue was dropping admissions; retain a broad failure guard.
     assert!(elapsed < Duration::from_secs(30), "flood took {elapsed:?}");
 
-    release_stdout.send(()).unwrap();
-    stdout_holder.join().unwrap();
+    stdout_holder.release().unwrap();
     guard.shutdown(Duration::from_secs(10)).unwrap();
 }

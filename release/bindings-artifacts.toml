@@ -21,12 +21,13 @@ schema_version = 1
 # [[packages]] in this manifest (crates.io Rust crates publish first, in
 # their own dependency order, then pypi/npm packages that consume them).
 #
-# registry_secret / registry_secret_configured: the GitHub Actions secret name
-# each entry needs to actually publish, and whether it is provisioned today.
+# registry_secret / registry_secret_configured: the workflow configuration key
+# and owner-deferred readiness marker for a future sc-publish setup. This file
+# does not probe live credentials or make a claim about their presence.
 # `scripts/release_bindings_artifacts.py list-publish-plan --require-secrets`
 # fails closed (blocked-on-auth) if any status="ready" entry needs a secret
 # that is not registry_secret_configured=true. Only CARGO_REGISTRY_TOKEN is
-# configured today; PYPI_API_TOKEN and NPM_TOKEN genuinely are not.
+# Credential provisioning and publication approval remain owner-deferred.
 #
 # platform_matrix_ref / platform_policy_ref (pypi entry only): the workflow
 # that runs the platform matrix, and the JSON policy file it reads
@@ -108,6 +109,6 @@ manifest_path = "bindings/typescript/package.json"
 publish_order = 6
 depends_on = []
 status = "pending"
-pending_reason = "NPM_TOKEN registry credential is not configured; owner publication approval and the phase-end publication gate remain pending"
+pending_reason = "owner-deferred sc-publish credential/publication approval and the phase-end publication gate remain pending"
 registry_secret = "NPM_TOKEN"
 registry_secret_configured = false

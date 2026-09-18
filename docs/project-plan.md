@@ -343,10 +343,11 @@ it keeps only the 6-core-crate `gate-and-tag`/`publish`/`release` jobs that
 predate B.7.
 
 `sc-observability-tauri` (qualification passed; independent phase-end QA/API
-approval remains pending) and the npm client (blocked on the missing
-`NPM_TOKEN` credential and owner publication approval) are correctly and
-honestly reported as `pending` with named reasons, not treated as failures or
-given fabricated placeholder files. No npm/PyPI registry credentials exist, and
+approval remains pending) and the npm client (awaiting owner-deferred
+sc-publish credential provisioning and owner publication approval) are correctly
+and honestly reported as `pending` with named reasons, not treated as failures or
+given fabricated placeholder files. Live npm/PyPI credential state is not
+asserted by this review packet, and
 the crates.io/PyPI/npm name-preflight only proved the 6 target names are
 currently unclaimed, not that namespace control is secured. This sprint is
 not marked complete; producing this review packet is not sprint closure. It

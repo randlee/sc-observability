@@ -186,3 +186,4 @@ print("repo boundary validation passed")
 PY
 
 python3 scripts/ci/validate_binding_runtime_dependencies.py
+PYTHONPATH=scripts/ci python3 -m unittest scripts/ci/test_binding_runtime_dependencies.py

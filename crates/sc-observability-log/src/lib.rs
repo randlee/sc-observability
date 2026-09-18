@@ -133,9 +133,6 @@ pub use handle::{
 };
 #[cfg(feature = "test_hooks")]
 #[doc(hidden)]
-pub use handle::{reset_test_native_flush_calls, test_native_flush_calls};
-#[cfg(feature = "test_hooks")]
-#[doc(hidden)]
 pub use health::fail_next_health_snapshot;
 #[doc(inline)]
 pub use sc_observability_types::{

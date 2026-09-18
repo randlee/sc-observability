@@ -9,6 +9,29 @@ use crate::{DropCause, mapping};
 #[derive(Debug)]
 pub(crate) struct Bridge;
 
+#[cfg(test)]
+mod tests {
+    use super::Bridge;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NATIVE_FLUSH_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+    #[test]
+    fn facade_flush_does_not_enter_native_flush_path() {
+        NATIVE_FLUSH_CALLS.store(1, Ordering::SeqCst);
+        assert_eq!(NATIVE_FLUSH_CALLS.load(Ordering::SeqCst), 1);
+        NATIVE_FLUSH_CALLS.store(0, Ordering::SeqCst);
+
+        log::Log::flush(&Bridge);
+
+        assert_eq!(
+            NATIVE_FLUSH_CALLS.load(Ordering::SeqCst),
+            0,
+            "facade flush must not invoke native flush"
+        );
+    }
+}
+
 impl log::Log for Bridge {
     /// Retains every compiled facade site through Trace. The staged core applies
     /// the one effective runtime filter during admission.

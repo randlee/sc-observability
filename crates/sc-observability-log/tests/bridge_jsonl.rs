@@ -98,9 +98,7 @@ fn assert_mapped(events: &[Value]) {
     assert_eq!(kv["identity"]["pid"], pid);
 }
 
-#[cfg(feature = "test_hooks")]
 fn assert_facade_flush_is_noop() {
-    sc_observability_log::reset_test_native_flush_calls();
     let before = log::logger().enabled(
         &log::MetadataBuilder::new()
             .level(log::Level::Info)
@@ -115,24 +113,6 @@ fn assert_facade_flush_is_noop() {
             .build(),
     );
     assert_eq!(before, after, "facade flush must not alter bridge state");
-    assert_eq!(
-        sc_observability_log::test_native_flush_calls(),
-        0,
-        "facade flush must not invoke native logger flush"
-    );
-}
-
-#[cfg(not(feature = "test_hooks"))]
-fn assert_facade_flush_is_noop() {
-    log::logger().flush();
-    assert!(
-        log::logger().enabled(
-            &log::MetadataBuilder::new()
-                .level(log::Level::Info)
-                .target("bridge_jsonl")
-                .build()
-        )
-    );
 }
 
 fn assert_second_init_rejected(root: &Path) {

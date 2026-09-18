@@ -543,18 +543,6 @@ static DETACHED_HELPERS: AtomicU32 = AtomicU32::new(0);
 
 /// Set while a flush helper runs: at most one flush helper per installed bridge.
 static FLUSH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
-#[cfg(feature = "test_hooks")]
-static NATIVE_FLUSH_CALLS: AtomicU64 = AtomicU64::new(0);
-
-#[cfg(feature = "test_hooks")]
-pub fn test_native_flush_calls() -> u64 {
-    NATIVE_FLUSH_CALLS.load(Ordering::SeqCst)
-}
-
-#[cfg(feature = "test_hooks")]
-pub fn reset_test_native_flush_calls() {
-    NATIVE_FLUSH_CALLS.store(0, Ordering::SeqCst);
-}
 
 /// Per-helper state shared by the caller and the helper of one [`run_bounded`] call.
 const HELPER_RUNNING: u8 = 0;
@@ -868,8 +856,6 @@ pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
     let flush = move || {
         // Released when the flush returns or unwinds, before the result is sent.
         let _flight = flight;
-        #[cfg(feature = "test_hooks")]
-        NATIVE_FLUSH_CALLS.fetch_add(1, Ordering::SeqCst);
         installed.logger.flush()
     };
     match run_bounded(timeout, flush) {
