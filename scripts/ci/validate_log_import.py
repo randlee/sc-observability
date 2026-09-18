@@ -637,6 +637,14 @@ def validate_post_import_adaptations(
             )
             if commit_check.returncode != 0:
                 raise SystemExit(f"post-import adaptation QA delta for {path} cites an unavailable commit")
+            recorded_commit_blob = subprocess.run(
+                ["git", "-C", str(destination), "rev-parse", f"{qa_delta['commit']}:{path}"],
+                capture_output=True, text=True,
+            )
+            if recorded_commit_blob.returncode != 0 or recorded_commit_blob.stdout.strip() != after_blob:
+                raise SystemExit(
+                    f"post-import adaptation QA delta for {path} commit does not contain the recorded after file"
+                )
             reason = qa_delta.get("reason")
             patch = qa_delta.get("patch")
             if not isinstance(reason, str) or not reason.strip() or not isinstance(patch, str) or not patch:

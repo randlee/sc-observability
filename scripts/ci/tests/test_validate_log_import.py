@@ -14,6 +14,7 @@ documents and live in `doc_repo`.
 
 from __future__ import annotations
 
+import difflib
 import subprocess
 import json
 import hashlib
@@ -170,6 +171,41 @@ class ImportContractFixture:
             full = self.destination / path
             full.parent.mkdir(parents=True, exist_ok=True)
             full.write_text(content)
+
+    def init_destination_repo(self) -> None:
+        self._init_git_repo(self.destination)
+
+    def commit_destination_paths(self, *paths: str) -> str:
+        if paths:
+            run("git", "add", "--", *paths, cwd=self.destination)
+        else:
+            run("git", "add", "-A", cwd=self.destination)
+        run("git", "commit", "--quiet", "-m", "approved QA delta", cwd=self.destination)
+        return run("git", "rev-parse", "HEAD", cwd=self.destination)
+
+    def qa_delta_adaptation(self, path: str, after: str, commit: str) -> dict:
+        before = self.FILES[path]
+        patch = "".join(
+            difflib.unified_diff(
+                before.splitlines(keepends=True),
+                after.splitlines(keepends=True),
+                fromfile=f"accepted/{path}",
+                tofile=f"approved/{commit}/{path}",
+            )
+        )
+        return {
+            "path": path,
+            "kind": "approved_qa_delta",
+            "reason": "approved QA delta in an exact immutable fixture",
+            "before_blob": blob_id(before, self.source_repo),
+            "after_blob": blob_id(after, self.destination),
+            "blocks": [],
+            "qa_delta": {
+                "commit": commit,
+                "reason": "approved QA delta in an exact immutable fixture",
+                "patch": patch,
+            },
+        }
 
     def recorded_inventory(self) -> dict[str, str]:
         return {path: blob_id(content, self.source_repo) for path, content in self.FILES.items()}
@@ -330,6 +366,92 @@ class ValidateLogImportTests(unittest.TestCase):
                 doc_repo=fixture.doc_repo,
                 post_import_adaptations=post_import,
             )
+
+    def test_accepts_qa_delta_bound_to_recorded_after_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/src/control.rs"
+            after = fixture.FILES[path] + "pub fn approved_delta() {}\n"
+            (fixture.destination / path).write_text(after)
+            fixture.init_destination_repo()
+            commit = fixture.commit_destination_paths(path)
+            post_import = {
+                "historical_provenance": "docs/plans/phase-b/import-provenance.json",
+                "source_commit": fixture.source_commit,
+                "adaptations": [fixture.qa_delta_adaptation(path, after, commit)],
+            }
+            validate_import(
+                fixture.provenance(), fixture.source_repo, fixture.destination,
+                fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                post_import_adaptations=post_import,
+            )
+
+    def test_rejects_qa_delta_existing_unrelated_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/src/control.rs"
+            after = fixture.FILES[path] + "pub fn approved_delta() {}\n"
+            (fixture.destination / path).write_text(after)
+            fixture.init_destination_repo()
+            unrelated = fixture.destination / "unrelated.txt"
+            unrelated.write_text("unrelated commit content\n")
+            commit = fixture.commit_destination_paths("unrelated.txt")
+            post_import = {
+                "historical_provenance": "docs/plans/phase-b/import-provenance.json",
+                "source_commit": fixture.source_commit,
+                "adaptations": [fixture.qa_delta_adaptation(path, after, commit)],
+            }
+            with self.assertRaisesRegex(SystemExit, "does not contain the recorded after file"):
+                validate_import(
+                    fixture.provenance(), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                    post_import_adaptations=post_import,
+                )
+
+    def test_rejects_qa_delta_altered_patch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/src/control.rs"
+            after = fixture.FILES[path] + "pub fn approved_delta() {}\n"
+            (fixture.destination / path).write_text(after)
+            fixture.init_destination_repo()
+            commit = fixture.commit_destination_paths(path)
+            adaptation = fixture.qa_delta_adaptation(path, after, commit)
+            adaptation["qa_delta"]["patch"] += "tampered\n"
+            post_import = {
+                "historical_provenance": "docs/plans/phase-b/import-provenance.json",
+                "source_commit": fixture.source_commit,
+                "adaptations": [adaptation],
+            }
+            with self.assertRaisesRegex(SystemExit, "does not match exact result evidence"):
+                validate_import(
+                    fixture.provenance(), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                    post_import_adaptations=post_import,
+                )
+
+    def test_rejects_qa_delta_changed_after_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            fixture = ImportContractFixture(Path(temp))
+            path = "crates/sc-observability-log/src/control.rs"
+            after = fixture.FILES[path] + "pub fn approved_delta() {}\n"
+            destination_path = fixture.destination / path
+            destination_path.write_text(after)
+            fixture.init_destination_repo()
+            commit = fixture.commit_destination_paths(path)
+            adaptation = fixture.qa_delta_adaptation(path, after, commit)
+            destination_path.write_text(after + "pub fn changed_after_recording() {}\n")
+            post_import = {
+                "historical_provenance": "docs/plans/phase-b/import-provenance.json",
+                "source_commit": fixture.source_commit,
+                "adaptations": [adaptation],
+            }
+            with self.assertRaisesRegex(SystemExit, "after blob"):
+                validate_import(
+                    fixture.provenance(), fixture.source_repo, fixture.destination,
+                    fixture.handoff_text(), doc_repo=fixture.doc_repo,
+                    post_import_adaptations=post_import,
+                )
 
     def test_rejects_post_import_body_change(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

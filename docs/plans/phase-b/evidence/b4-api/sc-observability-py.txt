@@ -1,8 +1,8 @@
-B.4 initial public API evidence
+B.4 refreshed public API evidence after the DTO internal wire-module split
 
-Source commit: ef7027a5f843444a00cfb134c85c1c80c3253b4f
+Source commit: f518ad8dfb95b9f1950c0d08a4308a0ea15a3458
 Command: cargo public-api --manifest-path bindings/python/sc-observability-py/Cargo.toml -sss
-API stdout SHA-256: d4d01640af4a8a7a980fd86df7b4a844ad65c1fa66f5c364a4ce930f91bd12fd
+API stdout SHA-256: 5b41508de3fee743e7ae694754e0d108fb1b630639b88a098838978b5a0bdc36
 
 The published rlib surface is the reviewed embedding API. Private test-hook
 methods are feature-gated and excluded from the default-feature digest.
@@ -17,4 +17,4 @@ pub use _native::HostLoggingBackend
 pub use _native::Operation
 pub use _native::OperationState
 pub fn _native::_native(&pyo3::instance::Bound<'_, pyo3::types::module::PyModule>) -> pyo3::err::PyResult<()>
-pub fn _native::install_host_logger(&pyo3::instance::Bound<'_, pyo3::types::module::PyModule>, alloc::sync::Arc<dyn sc_observability_binding_runtime::HostLoggingBackend>) -> core::result::Result<(), sc_observability_dto::wire::Failure>
+pub fn _native::install_host_logger(&pyo3::instance::Bound<'_, pyo3::types::module::PyModule>, alloc::sync::Arc<dyn sc_observability_binding_runtime::HostLoggingBackend>) -> core::result::Result<(), sc_observability_dto::wire::operations::Failure>

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "candidate_version": "1.4.0",
-  "source_commit": "ef7027a5f843444a00cfb134c85c1c80c3253b4f",
+  "source_commit": "f518ad8dfb95b9f1950c0d08a4308a0ea15a3458",
   "approved_at": "2026-09-17T19:50:00Z",
   "crates": {
     "sc-observability-py": {
@@ -9,7 +9,7 @@
       "reviewer": "aobs (appointed Phase B lead)",
       "scope": ["public-api"],
       "evidence": "docs/plans/phase-b/evidence/b4-api/sc-observability-py.txt",
-      "api_sha256": "d4d01640af4a8a7a980fd86df7b4a844ad65c1fa66f5c364a4ce930f91bd12fd"
+      "api_sha256": "5b41508de3fee743e7ae694754e0d108fb1b630639b88a098838978b5a0bdc36"
     }
   },
   "approval_scope": "Initial public Python rlib embedding surface reviewed against sprint B.4. Private feature-gated test seams are excluded from the default API digest. This approval does not grant behavior QA or B.7 publication approval."
