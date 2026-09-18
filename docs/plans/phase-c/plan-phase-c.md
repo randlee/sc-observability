@@ -1,13 +1,16 @@
 ---
 phase: C
-status: draft
-branch: plan/phase-c-sc-publish
-worktree: /Users/randlee/github/sc-observability-worktrees/plan/phase-c-sc-publish
+status: in_progress
+branch: integrate/phase-c
+worktree: /Users/randlee/github/sc-observability-worktrees/integrate/phase-c
 ---
 # Phase C — Shared publishing migration
 
 Owner scope: two sprints, executed only after Phase B merges into develop.
-This branch is planning only; do not install or execute publication while planning.
+Execution authorized by the owner after Phase B and the Phase C plan merged into
+`develop` at `28e4ee6`. Lead: `aobs`. Publication remains unauthorized.
+C.1 begins with inventory and prerequisite verification; installation requires
+a shared-package revision satisfying the upstream npm/action-runtime gates.
 
 Sprints:
 
