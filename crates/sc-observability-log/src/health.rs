@@ -184,6 +184,7 @@ mod tests {
         fn serde_bounds<T: serde::Serialize + serde::de::DeserializeOwned>() {}
         serde_bounds::<BridgeHealthReport>();
         assert_eq!(BRIDGE_HEALTH_SCHEMA_VERSION, 1);
+        let active_path = std::env::temp_dir().join("native-health.jsonl");
 
         let report = BridgeHealthReport {
             schema_version: BRIDGE_HEALTH_SCHEMA_VERSION,
@@ -191,7 +192,7 @@ mod tests {
                 state: LoggingHealthState::Healthy,
                 dropped_events_total: 2,
                 flush_errors_total: 3,
-                active_log_path: PathBuf::from("/tmp/native-health.jsonl"),
+                active_log_path: active_path.clone(),
                 sink_statuses: Vec::new(),
                 queue_depth: 0,
                 queue_capacity: 8,
@@ -205,7 +206,7 @@ mod tests {
             },
             dropped: DroppedEvents::default(),
             lifecycle: LifecyclePhase::Stopped,
-            active_log_path: Some(PathBuf::from("/tmp/native-health.jsonl")),
+            active_log_path: Some(active_path),
             configured_level: LevelFilter::Info,
             effective_level: LevelFilter::Warn,
             level_revision: 7,

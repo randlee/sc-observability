@@ -294,7 +294,7 @@ class _BrokenExtension:
         raise _UnprintableForeignError()
 
 
-def test_malformed_native_results_and_factory_failures_are_tagged(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_malformed_native_results_and_factory_failures_are_tagged(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     owned = Logger(_MalformedNative())
     attached = AttachedLogger(_MalformedNative())
     event = LogEvent(level="info", target="python.test", action="emit")
@@ -315,7 +315,7 @@ def test_malformed_native_results_and_factory_failures_are_tagged(monkeypatch: p
     assert all(isinstance(result, Err) for result in results)
 
     monkeypatch.setattr(sc_observability.importlib, "import_module", lambda _: _BrokenExtension())
-    assert isinstance(create_logger(LoggerConfig("service", "/tmp/factory")), Err)
+    assert isinstance(create_logger(LoggerConfig("service", str(tmp_path / "factory"))), Err)
     assert isinstance(get_host_logger(), Err)
 
 

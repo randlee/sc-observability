@@ -1097,9 +1097,9 @@ mod tests {
 
     fn release_test_pass_delay(signal: &Arc<crate::maintenance::TestPassDelaySignal>) {
         signal.release_delay();
-        wait_for(
-            || !signal.is_active(),
-            "expected maintenance worker to leave the released test gate",
+        assert!(
+            signal.wait_for_state(Duration::from_secs(1), |signal| !signal.is_active()),
+            "expected maintenance worker to leave the released test gate"
         );
         assert!(
             !signal.wait_timed_out(),
@@ -1122,6 +1122,32 @@ mod tests {
             "the test-gate timeout must use one bounded deadline"
         );
         assert!(signal.wait_timed_out());
+    }
+
+    #[test]
+    fn test_pass_signal_condition_wait_has_one_deadline() {
+        let signal = crate::maintenance::TestPassDelaySignal::default();
+        let started = Instant::now();
+        assert!(!signal.wait_for_state(Duration::from_millis(10), |signal| signal.is_active()));
+        assert!(started.elapsed() < Duration::from_millis(250));
+        assert!(signal.wait_for_state(Duration::ZERO, |signal| !signal.is_active()));
+    }
+
+    #[test]
+    fn test_pass_signal_condition_wait_observes_release_notification() {
+        let signal = Arc::new(crate::maintenance::TestPassDelaySignal::default());
+        signal.block_delay_until_released();
+        let waiting = signal.clone();
+        let worker = std::thread::spawn(move || waiting.wait_until_released());
+        let unwound = std::panic::catch_unwind(move || {
+            let _release = signal.release_on_drop();
+            panic!("injected failure while maintenance is gated");
+        });
+        assert!(unwound.is_err());
+        assert_eq!(
+            worker.join().expect("released waiter"),
+            crate::maintenance::TestPassDelayWait::Released
+        );
     }
 
     #[test]
@@ -1833,9 +1859,9 @@ mod tests {
         let logger = Logger::new(config).expect("logger");
 
         logger.emit(log_event(service_name())).expect("emit");
-        wait_for(
-            || signal.is_active(),
-            "expected maintenance worker to enter the delayed test pass",
+        assert!(
+            signal.wait_for_state(Duration::from_secs(1), |signal| signal.is_active()),
+            "expected maintenance worker to enter the delayed test pass"
         );
 
         let stopped = logger.shutdown();
@@ -1864,9 +1890,9 @@ mod tests {
         let logger = Logger::new(config).expect("logger");
 
         logger.emit(log_event(service_name())).expect("emit");
-        wait_for(
-            || signal.is_active(),
-            "expected maintenance worker to enter the delayed test pass",
+        assert!(
+            signal.wait_for_state(Duration::from_secs(1), |signal| signal.is_active()),
+            "expected maintenance worker to enter the delayed test pass"
         );
 
         let shutdown_finished = Arc::new(AtomicBool::new(false));
@@ -1877,9 +1903,10 @@ mod tests {
             stopped
         });
 
-        wait_for(
-            || signal.shutdown_timeout_recorded(),
-            "expected shutdown to record the configured timeout while maintenance is gated",
+        assert!(
+            signal.wait_for_state(Duration::from_secs(1), |signal| signal
+                .shutdown_timeout_recorded()),
+            "expected shutdown to record the configured timeout while maintenance is gated"
         );
         assert!(
             !shutdown_finished.load(Ordering::SeqCst),
@@ -1909,9 +1936,9 @@ mod tests {
         let logger = Logger::new(config).expect("logger");
 
         logger.log(log_event(service_name())).expect("initial log");
-        wait_for(
-            || signal.is_active(),
-            "expected maintenance worker to enter the delayed test pass",
+        assert!(
+            signal.wait_for_state(Duration::from_secs(1), |signal| signal.is_active()),
+            "expected maintenance worker to enter the delayed test pass"
         );
 
         logger
@@ -2710,9 +2737,9 @@ mod tests {
         logger
             .log(log_event(service_name()))
             .expect("start maintenance");
-        wait_for(
-            || signal.is_active(),
-            "expected writer maintenance gate before diagnostic saturation",
+        assert!(
+            signal.wait_for_state(Duration::from_secs(1), |signal| signal.is_active()),
+            "expected writer maintenance gate before diagnostic saturation"
         );
         owner
             .elevate_level(LevelFilter::Debug, LevelChangeSource::Application)
@@ -2752,9 +2779,9 @@ mod tests {
         logger
             .log(log_event(service_name()))
             .expect("start maintenance");
-        wait_for(
-            || signal.is_active(),
-            "expected writer maintenance gate before shutdown",
+        assert!(
+            signal.wait_for_state(Duration::from_secs(1), |signal| signal.is_active()),
+            "expected writer maintenance gate before shutdown"
         );
 
         let shutdown = std::thread::spawn(move || logger.shutdown());
@@ -2794,9 +2821,9 @@ mod tests {
         let logger = Logger::new(config).expect("logger");
 
         logger.emit(log_event(service_name())).expect("emit");
-        wait_for(
-            || signal.is_active(),
-            "expected maintenance worker to enter the delayed test pass",
+        assert!(
+            signal.wait_for_state(Duration::from_secs(1), |signal| signal.is_active()),
+            "expected maintenance worker to enter the delayed test pass"
         );
 
         logger

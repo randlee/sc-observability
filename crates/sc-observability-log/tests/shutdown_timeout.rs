@@ -30,6 +30,34 @@ struct Gate {
 
 static GATE: OnceLock<Gate> = OnceLock::new();
 
+struct ReleaseOnDrop(Option<SyncSender<()>>);
+
+impl ReleaseOnDrop {
+    fn release(&mut self) {
+        if let Some(sender) = self.0.take() {
+            let _ = sender.try_send(());
+        }
+    }
+}
+
+impl Drop for ReleaseOnDrop {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
+
+#[test]
+fn gate_release_survives_assertion_unwind() {
+    let (release_tx, release_rx) = sync_channel(1);
+    let worker = std::thread::spawn(move || release_rx.recv_timeout(Duration::from_secs(1)));
+    let unwound = std::panic::catch_unwind(move || {
+        let _release = ReleaseOnDrop(Some(release_tx));
+        panic!("injected assertion before release");
+    });
+    assert!(unwound.is_err());
+    assert!(matches!(worker.join(), Ok(Ok(()))));
+}
+
 struct BlockingRedactor;
 
 impl Redactor for BlockingRedactor {
@@ -64,6 +92,7 @@ fn event(message: &str, fields: serde_json::Map<String, serde_json::Value>) -> B
 fn timed_out_owner_shutdown_completes_late_for_repeated_control_waiters() {
     let (entered_tx, entered_rx) = sync_channel(1);
     let (release_tx, release_rx) = sync_channel(1);
+    let mut release = ReleaseOnDrop(Some(release_tx));
     GATE.set(Gate {
         entered: entered_tx,
         release: Mutex::new(release_rx),
@@ -126,7 +155,7 @@ fn timed_out_owner_shutdown_completes_late_for_repeated_control_waiters() {
         Err(WaitError::TimedOut { .. })
     ));
 
-    release_tx.send(()).unwrap();
+    release.release();
     assert_eq!(
         blocked_rx
             .recv_timeout(LATE_COMPLETION_DEADLINE)

@@ -6,6 +6,8 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
+from typing import Callable
 
 import pytest
 
@@ -16,6 +18,34 @@ pytestmark = pytest.mark.skipif(
 
 from sc_observability import Err, LogEvent, Logger, LoggerConfig, LogQuery, Ok, create_logger, get_host_logger
 from sc_observability import _native
+
+
+
+def _wait_for_native(predicate: Callable[[], bool], description: str, timeout: float = 2.0) -> None:
+    # Native hooks expose a nonblocking snapshot, not a Python notification API.
+    # Retain a bounded poll with a single monotonic deadline and named evidence.
+    started = time.monotonic()
+    deadline = started + timeout
+    pause = Event()
+    attempts = 0
+    while True:
+        attempts += 1
+        observed = predicate()
+        if observed:
+            return
+        remaining = deadline - time.monotonic()
+        assert remaining > 0, (
+            f"{description} did not become ready within {timeout:.3f}s; "
+            f"last native state={observed!r}, observations={attempts}"
+        )
+        pause.wait(min(0.01, remaining))
+
+
+def test_native_wait_failure_is_bounded_and_names_the_missing_signal() -> None:
+    started = time.monotonic()
+    with pytest.raises(AssertionError, match="fixture writer.*last native state=False"):
+        _wait_for_native(lambda: False, "fixture writer", timeout=0.01)
+    assert time.monotonic() - started < 0.5, "native snapshot timeout exceeded its bound"
 
 
 def _owned(root: Path, service: str) -> Logger:
@@ -56,10 +86,10 @@ def test_real_retained_sink_blocks_while_python_operations_progress(tmp_path: Pa
     logger = Logger(native)
     try:
         assert isinstance(logger.log(_event("held-sink")), Ok)
-        deadline = time.monotonic() + 2
-        while not json.loads(native._test_blocked_writer_entered())["value"] and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert json.loads(native._test_blocked_writer_entered())["value"]
+        _wait_for_native(
+            lambda: json.loads(native._test_blocked_writer_entered())["value"],
+            "owned retained writer entry",
+        )
         assert isinstance(logger.health(), Ok)
         assert isinstance(logger.query(LogQuery(action="held-sink")), (Ok, Err))
         blocked_flush = logger.flush(timeout_ms=10)
@@ -68,6 +98,8 @@ def test_real_retained_sink_blocks_while_python_operations_progress(tmp_path: Pa
         assert json.loads(native._test_release_blocked_writer())["kind"] == "ok"
         assert isinstance(logger.shutdown(timeout_ms=2_000), Ok)
     finally:
+        # Release before shutdown even if an assertion above fails.
+        native._test_release_blocked_writer()
         assert isinstance(logger.shutdown(timeout_ms=2_000), Ok)
 
 
@@ -113,12 +145,13 @@ def test_private_ci_fault_hook_covers_attached_native_results(tmp_path: Path) ->
     forced(None)
     with ThreadPoolExecutor(max_workers=1) as workers:
         blocked_log = workers.submit(attached.value.log, _event("blocked-attached-log"))
-        deadline = time.monotonic() + 2
-        while not _native._test_blocked_host_entered():
-            assert time.monotonic() < deadline
-            time.sleep(0.005)
-        assert isinstance(attached.value.health(), Ok)
-        assert isinstance(attached.value.query(LogQuery()), (Ok, Err))
-        assert isinstance(attached.value.flush(), (Ok, Err))
-        _native._test_release_blocked_host()
+        try:
+            _wait_for_native(_native._test_blocked_host_entered, "attached blocked host entry")
+            assert isinstance(attached.value.health(), Ok)
+            assert isinstance(attached.value.query(LogQuery()), (Ok, Err))
+            assert isinstance(attached.value.flush(), (Ok, Err))
+        finally:
+            # Executor.__exit__ joins its worker: unblock it before that join,
+            # including assertion/timeout unwind paths.
+            _native._test_release_blocked_host()
         assert isinstance(blocked_log.result(timeout=2), Ok)

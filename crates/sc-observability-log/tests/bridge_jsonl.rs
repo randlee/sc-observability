@@ -111,9 +111,23 @@ fn assert_second_init_rejected(root: &Path) {
 
 fn assert_shutdown_stops_writing(guard: LogGuard, root: &Path) {
     let path = guard.active_log_path().unwrap().to_path_buf();
+    let control = guard.control();
     guard.shutdown(Duration::from_secs(5)).unwrap();
+    let stopped = control.wait_stopped(Duration::from_secs(5)).unwrap();
+    assert!(matches!(
+        stopped.outcome,
+        sc_observability_log::ShutdownOutcome::Stopped
+    ));
+    assert_eq!(
+        stopped.health.logging.writer_state,
+        sc_observability_types::WriterState::Stopped
+    );
+    assert_eq!(stopped.health.logging.queue_depth, 0);
     log::error!(target: "app_lib::commands", "after shutdown");
-    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(
+        control.health().unwrap().lifecycle,
+        sc_observability_log::LifecyclePhase::Stopped
+    );
     let events = read_events(&path);
     assert!(find(&events, "after shutdown").is_none());
     assert_second_init_rejected(root);

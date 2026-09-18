@@ -866,6 +866,7 @@ impl Drop for TestPassDelayReleaseGuard {
 #[cfg(test)]
 impl TestPassDelaySignal {
     fn set_active(&self, active: bool) {
+        let _gate = self.gate.lock().expect("test gate poisoned");
         self.active.store(active, Ordering::SeqCst);
         self.changed.notify_all();
     }
@@ -875,6 +876,7 @@ impl TestPassDelaySignal {
     }
 
     pub(crate) fn block_delay_until_released(&self) {
+        let _gate = self.gate.lock().expect("test gate poisoned");
         self.released.store(false, Ordering::SeqCst);
         self.wait_timed_out.store(false, Ordering::SeqCst);
         self.block_until_released.store(true, Ordering::SeqCst);
@@ -918,17 +920,40 @@ impl TestPassDelaySignal {
     }
 
     pub(crate) fn release_delay(&self) {
+        let _gate = self.gate.lock().expect("test gate poisoned");
         self.released.store(true, Ordering::SeqCst);
         self.changed.notify_all();
     }
 
     fn record_shutdown_timeout(&self) {
+        let _gate = self.gate.lock().expect("test gate poisoned");
         self.shutdown_timeout_recorded.store(true, Ordering::SeqCst);
         self.changed.notify_all();
     }
 
     pub(crate) fn shutdown_timeout_recorded(&self) -> bool {
         self.shutdown_timeout_recorded.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn wait_for_state(
+        &self,
+        timeout: Duration,
+        mut predicate: impl FnMut(&Self) -> bool,
+    ) -> bool {
+        let deadline = Instant::now() + timeout;
+        let mut gate = self.gate.lock().expect("test gate poisoned");
+        while !predicate(self) {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return false;
+            }
+            let (next_gate, _) = self
+                .changed
+                .wait_timeout(gate, remaining)
+                .expect("test gate poisoned");
+            gate = next_gate;
+        }
+        true
     }
 
     pub(crate) fn wait_timed_out(&self) -> bool {

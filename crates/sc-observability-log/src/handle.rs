@@ -888,6 +888,34 @@ mod tests {
     use super::*;
     use std::time::Instant;
 
+    struct ReleaseOnDrop(Option<mpsc::SyncSender<()>>);
+
+    impl ReleaseOnDrop {
+        fn release(&mut self) {
+            if let Some(sender) = self.0.take() {
+                let _ = sender.try_send(());
+            }
+        }
+    }
+
+    impl Drop for ReleaseOnDrop {
+        fn drop(&mut self) {
+            self.release();
+        }
+    }
+
+    #[test]
+    fn shutdown_test_release_survives_assertion_unwind() {
+        let (release_tx, release_rx) = mpsc::sync_channel(1);
+        let worker = std::thread::spawn(move || release_rx.recv_timeout(Duration::from_secs(1)));
+        let unwound = std::panic::catch_unwind(move || {
+            let _release = ReleaseOnDrop(Some(release_tx));
+            panic!("injected assertion before normal release");
+        });
+        assert!(unwound.is_err());
+        assert!(matches!(worker.join(), Ok(Ok(()))));
+    }
+
     #[test]
     fn run_bounded_times_out_on_blocked_work() {
         let started = Instant::now();
@@ -943,12 +971,13 @@ mod tests {
         });
         let (entered_tx, entered_rx) = mpsc::sync_channel(1);
         let (release_tx, release_rx) = mpsc::sync_channel(1);
+        let mut release = ReleaseOnDrop(Some(release_tx));
         *SHUTDOWN_WORK_HOOK
             .get_or_init(|| Mutex::new(None))
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = Some(Box::new(move || {
             let _ = entered_tx.send(());
-            let _ = release_rx.recv();
+            let _ = release_rx.recv_timeout(Duration::from_secs(5));
             panic!("test worker failure");
         }));
         assert!(reserve_shutdown_coordinator().is_ok());
@@ -956,7 +985,10 @@ mod tests {
         set_lifecycle(BridgeLifecycle::ShuttingDown);
         let owner =
             std::thread::spawn(move || shutdown_installed(installed, Duration::from_millis(1)));
-        assert!(entered_rx.recv().is_ok());
+        assert!(
+            entered_rx.recv_timeout(Duration::from_secs(1)).is_ok(),
+            "shutdown worker did not enter its test hook within one second"
+        );
         assert!(matches!(
             wait_stopped(Duration::from_millis(1)),
             Err(crate::WaitError::TimedOut { .. })
@@ -965,7 +997,7 @@ mod tests {
             owner.join(),
             Ok(Err(ShutdownError::TimedOut { .. }))
         ));
-        assert!(release_tx.send(()).is_ok());
+        release.release();
         assert!(matches!(
             wait_stopped(Duration::from_secs(1)),
             Ok(ShutdownReport {
