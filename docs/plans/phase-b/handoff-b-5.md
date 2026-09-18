@@ -1,4 +1,4 @@
-# B.5 implementation handoff — qualification in progress
+# B.5 implementation handoff — development qualification complete
 
 Branch: `feature/phase-b-5-python-integration`.
 Direct parent: `fix/phase-b-3a-completeness`; first pushed parent `1d613bc`
