@@ -2,6 +2,7 @@
 id: C.1
 status: in_progress
 branch: fix/phase-c-1-shared-pipeline-migration
+worktree: /Users/randlee/github/sc-observability-worktrees/fix/phase-c-1-shared-pipeline-migration
 base: develop
 ---
 
