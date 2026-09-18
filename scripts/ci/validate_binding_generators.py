@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Check frozen schema conformance, complete generator outputs and determinism."""
-import hashlib
 import importlib.util
 import json
 import os
@@ -11,8 +10,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'scripts'))
 from _binding_schema import inspect_schema,validate
-
-def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
+from _hashing import digest
 def main():
     schema=json.loads((ROOT/'bindings/schema/v1.json').read_text());inspect_schema(schema)
     cases=json.loads((ROOT/'bindings/conformance/v1/schema-cases.json').read_text())

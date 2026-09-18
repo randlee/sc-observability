@@ -2,7 +2,6 @@
 """Build and verify self-contained prepublication Cargo source bundles."""
 from __future__ import annotations
 import argparse
-import hashlib
 import json
 import os
 import shutil
@@ -10,11 +9,11 @@ import subprocess
 import tarfile
 import tomllib
 from pathlib import Path,PurePosixPath
+from _hashing import digest
 
 class BundleError(ValueError):
     def __init__(self,code,message):super().__init__(f'{code}: {message}');self.code=code
 
-def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def safe(root,relative):
     parts=PurePosixPath(relative)
     if parts.is_absolute() or '..' in parts.parts or '\\' in relative or ':' in relative:raise BundleError('BUNDLE_ESCAPING_PATH',relative)

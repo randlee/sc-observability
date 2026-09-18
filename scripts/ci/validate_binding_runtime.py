@@ -11,13 +11,13 @@ import tempfile
 import subprocess
 from pathlib import Path
 from validate_binding_runtime_dependencies import validate_manifest, main as dependencies
+from _hashing import digest
 import tomllib
 import copy
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = 'sc-observability-binding-runtime'
 
-def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
 def source_digest():
     roots = ['sc-observability-binding-runtime','sc-observability','sc-observability-types','sc-observability-dto','sc-observability-log','sc-observability-log-macros']
     paths = []
