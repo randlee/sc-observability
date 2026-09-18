@@ -1,6 +1,6 @@
 ---
 id: B.3a
-status: in_progress
+status: complete
 branch: feature/phase-b-tauri-qualification
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-tauri-qualification
 base: feature/phase-b-7-publish-bindings
@@ -306,10 +306,11 @@ supervisor clean, per `bp-tauri-helper`'s retained artifact/aggregate
 evidence. This resolves the previously-cited "remaining real-IPC/artifact
 matrix items."
 
-`status` above stays `in_progress`, not `complete`: `handoff-b-3a-qualification.md`
-predates this result and does not itself constitute a completeness sign-off,
-and this evidence-fix task is not authorized to make the lead completeness
-decision. `status` moves to `complete` only once that decision is made.
+Lead completeness decision: **PASS** (aobs, 2026-09-18), recorded in
+`handoff-b-4a.md` and `handoff-b-3a-qualification.md`. `status` above reads
+`complete`: development qualification is done. Independent phase-end QA
+acceptance remains separately pending; formal API/ADR approval and
+publication remain deferred to B.7.
 
 ## Paths to delete
 
