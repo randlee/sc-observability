@@ -291,23 +291,25 @@ hashes. It must not overwrite drift and then report success.
 
 Status: `in_progress` is accurate; this reflects current retained CI run
 state, not the older handoff prose in `handoff-b-3a-qualification.md`
-("Status: in progress; no sprint completion or publication claim"), which
-predates the runs below. GitHub Actions run `35278483559` ("TypeScript/Tauri
-bindings", `feature/phase-b-tauri-qualification` @ `a8eaeec`) completed with
-`conclusion: success` -- a full manual qualification pass. Its rerun on the
-same branch/commit, `35278469028`, has since concluded `failure`:
-`schema-and-contract` and `real-ipc-artifacts` on ubuntu-latest/macos-latest
-passed, but `real-ipc-artifacts (windows-2022)` failed with the hosted
-runner losing communication with the server mid-job (GitHub check annotation:
-"The hosted runner lost communication with the server..."), and the
-`all-platforms` aggregate was skipped as a result. This is recorded as the
-actual result without asserting it is uniquely an infrastructure fault or a
-real regression -- a fresh full qualification run is required once the
-corrected shared Windows isolation work lands. Do not treat the earlier
-`35278483559` success as closure while this later run on the same revision
-ended in failure; `status` moves to `complete` only once a clean qualification
-run exists and the remaining real-IPC/artifact matrix items owned by
-`bp-tauri-helper` land.
+("Status: in progress; no sprint completion or publication claim") or the
+several intermediate failed/partial runs recorded in this repository's
+history (`35278469028`: Windows hosted-runner communication loss;
+`35300655966`: real-IPC failure at synthetic merge SHA `f8bce021`, not the
+branch tip; `35302307302`/manifest-drift attempts), all of which predate and
+are superseded by the terminal run below. GitHub Actions run `35303041402`
+("TypeScript/Tauri bindings") at exact source SHA
+`c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18` completed `conclusion: success`:
+`schema-and-contract`, all three `real-ipc-artifacts` platform jobs
+(Linux/macOS/Windows), and the `all-platforms` aggregate all passed --
+including Windows actual debug/release IPC and three-generation isolation,
+supervisor clean, per `bp-tauri-helper`'s retained artifact/aggregate
+evidence. This resolves the previously-cited "remaining real-IPC/artifact
+matrix items."
+
+`status` above stays `in_progress`, not `complete`: `handoff-b-3a-qualification.md`
+predates this result and does not itself constitute a completeness sign-off,
+and this evidence-fix task is not authorized to make the lead completeness
+decision. `status` moves to `complete` only once that decision is made.
 
 ## Paths to delete
 
