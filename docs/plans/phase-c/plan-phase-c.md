@@ -48,14 +48,16 @@ Pin and document the reviewed shared-pipeline revision and its supported channel
 Any unsupported Phase B channel needs an explicit resolution and acceptance test;
 never silently omit it or claim unsupported functionality exists.
 
-Confirmed shared-package facts as of the pinned revision
-`3a57926b3e939835644aad944a614cbb48e4d5fc` (see sprint C.1 for the full
-inventory and resolution):
+Historical shared-package facts from the superseded revision
+`3a57926b3e939835644aad944a614cbb48e4d5fc` are retained below for audit. The
+current upstream candidate under review is PR95 (`a99c9a7`); its caller-owned
+JSON adds npm and structured wheel entries, but it is not yet a reviewed pin.
+See sprint C.1 for the full inventory and resolution:
 
-- `install.py`'s `CHANNEL_NAMES` is exactly `github_release`, `crates_io`,
-  `pypi`, `homebrew`, `scoop`, `winget` — no npm channel exists. Adopting an
-  npm publish path is therefore a **named upstream prerequisite** for C.1
-  (see sprint C.1 deliverable 3), not a repository-local publisher.
+- The superseded installer's `CHANNEL_NAMES` lacked npm. PR95 adds npm as an
+  opt-in post-release channel; adopting it remains a **named upstream
+  prerequisite** until that revision is reviewed and pinned, not a
+  repository-local publisher.
 - The PyPI channel's `environment_secrets` require `PYPI_API_TOKEN` in a
   `pypi` GitHub Environment and `TEST_PYPI_API_TOKEN` in a `testpypi`
   Environment via `maturin upload`; it does not assume trusted (OIDC)
