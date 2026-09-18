@@ -4,35 +4,12 @@ import argparse
 import json
 import os
 import platform
-import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
-from _python_distribution import DistributionError
-from _python_sandbox import Sandbox, registered_checkouts
-
-
-def recover(path, allowed_roots, temporary_root):
-    if not path.exists():
-        return False
-    record = json.loads(path.read_text(encoding='utf-8'))
-    if record.get('schema_version') != 1 or not re.fullmatch(r'sc-observability-proof-[0-9a-f]{32}', record.get('firewall', '')):
-        raise DistributionError('invalid proof recovery identity')
-    acls = [(Path(root), Path(saved)) for root, saved in record['acls']]
-    for root, saved in acls:
-        if root not in allowed_roots or '..' in saved.parts or not saved.is_relative_to(temporary_root) or not re.fullmatch(r'acl-\d+\.txt', saved.name):
-            raise DistributionError('proof recovery path outside owned roots')
-    sandbox = Sandbox.__new__(Sandbox)
-    sandbox.firewall = record['firewall']
-    sandbox.acls = acls
-    print('WINDOWS_PROOF_RECOVERY: restoring saved isolation after worker failure', flush=True)
-    try:
-        sandbox.remove_firewall()
-    finally:
-        sandbox.restore_acls()
-    path.unlink()
-    return True
+from _windows_identity import recover
 
 
 def invalidate_evidence(directory, result):
@@ -52,11 +29,8 @@ def main():
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
     if platform.system() != 'Windows' or os.environ.get('GITHUB_ACTIONS') != 'true' or not command:
         parser.error('requires an ephemeral Windows CI runner and a proof command')
-    allowed = set(registered_checkouts(Path.cwd())) | {Path.home() / '.cargo'}
-    temporary_root = Path(tempfile.gettempdir()).resolve()
     with tempfile.TemporaryDirectory(prefix='windows-proof-supervisor-') as temporary:
-        recovery = Path(temporary).resolve() / 'recovery.json'
-        environment = dict(os.environ, SC_PROOF_RECOVERY_FILE=str(recovery))
+        environment = dict(os.environ, SC_WINDOWS_IDENTITY_CONTROL_ROOT=str(Path(temporary).resolve()))
         process = subprocess.Popen(command, env=environment)
         result = 125
         try:
@@ -78,14 +52,22 @@ def main():
         finally:
             # Recovery always invalidates success, even if the worker somehow
             # exited zero while leaving access restrictions behind.
-            try:
-                if recover(recovery, allowed, temporary_root):
+            recovery_errors = []
+            recovered = []
+            args.evidence.mkdir(parents=True, exist_ok=True)
+            for journal in Path(temporary).glob('windows-identity-control-*/identity-recovery.json'):
+                try:
+                    recover(journal)
+                    recovered.append(str(journal))
+                except Exception as error:
+                    recovery_errors.append(str(error))
+                    shutil.copytree(journal.parent, args.evidence / ('failed-recovery-' + str(len(recovery_errors))), dirs_exist_ok=True)
+                    print(f'WINDOWS_PROOF_RECOVERY_ERROR: {error}', flush=True)
+                finally:
                     result = result or 125
-            except Exception as error:
-                result = result or 125
-                print(f'WINDOWS_PROOF_RECOVERY_ERROR: {error}', flush=True)
-            finally:
-                invalidate_evidence(args.evidence, result)
+            (args.evidence / 'windows-supervisor.json').write_text(json.dumps(
+                {'exit': result, 'recovered': recovered, 'recovery_errors': recovery_errors}, indent=2), encoding='utf-8')
+            invalidate_evidence(args.evidence, result)
         print(f'WINDOWS_PROOF_SUPERVISOR_EXIT {result}', flush=True)
         raise SystemExit(result)
 
