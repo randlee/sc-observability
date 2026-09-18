@@ -23,6 +23,10 @@ COMPANION_MEMBERS = (
     "crates/sc-observability-log",
     "crates/sc-observability-log-macros",
     "crates/sc-observability-log-consumer-check",
+    "crates/sc-observability-dto",
+    "crates/sc-observability-binding-runtime",
+    "bindings/python/sc-observability-py",
+    "examples/rust-python-logging",
 )
 
 

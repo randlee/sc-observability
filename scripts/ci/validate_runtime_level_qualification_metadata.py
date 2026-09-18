@@ -8,6 +8,7 @@ from pathlib import Path
 
 from _runtime_level_common import (
     PRIVATE_ONLY_COMPANION_PACKAGES,
+    UNPUBLISHED_COMPANION_MEMBERS,
     PUBLISH_ARTIFACTS,
     QUALIFICATION,
     ROOT,
@@ -20,7 +21,10 @@ from _runtime_level_common import (
 def validate_workspace_member_roster(members: tuple[str, ...], packages: tuple[str, ...]) -> None:
     """Staged packages must keep their publish order; companions ride along unordered."""
     expected_members = tuple(f"crates/{package}" for package in packages)
-    allowed_companions = {f"crates/{package}" for package in UNPUBLISHED_COMPANION_PACKAGES}
+    allowed_companions = {
+        package if "/" in package else f"crates/{package}"
+        for package in UNPUBLISHED_COMPANION_MEMBERS
+    }
     overlap = allowed_companions & set(expected_members)
     if overlap:
         raise SystemExit(f"unpublished companion package roster overlaps staged publish roster: {sorted(overlap)}")

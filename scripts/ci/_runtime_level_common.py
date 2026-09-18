@@ -20,6 +20,12 @@ UNPUBLISHED_COMPANION_PACKAGES = (
     "sc-observability-log",
     "sc-observability-log-macros",
     "sc-observability-log-consumer-check",
+    "sc-observability-dto",
+    "sc-observability-binding-runtime",
+)
+UNPUBLISHED_COMPANION_MEMBERS = UNPUBLISHED_COMPANION_PACKAGES + (
+    "bindings/python/sc-observability-py",
+    "examples/rust-python-logging",
 )
 # The consumer-check crate is CI-only and must never be staged/published.
 PRIVATE_ONLY_COMPANION_PACKAGES = ("sc-observability-log-consumer-check",)
