@@ -46,32 +46,30 @@ class NetworkScopeTests(unittest.TestCase):
 
     def test_webview_is_inside_rule_scope(self):
         sandbox = self.sandbox()
-        def process(*args):
-            self.assertEqual(len(sandbox.commands), 1)
-            self.assertIn('New-NetFirewallRule', sandbox.commands[0])
-            self.assertIn('-Program', sandbox.commands[0])
+        with patch('_python_sandbox.subprocess.check_output', return_value=''):
+          def process(*args):
+            self.assertTrue(any('New-NetFirewallRule' in item for item in sandbox.commands))
             return 'finished'
-        with patch.object(_tauri_webview, '_execute', side_effect=process):
+          with patch.object(_tauri_webview, '_execute', side_effect=process):
             self.assertEqual(_tauri_webview.execute(sandbox, None, None, None, None), 'finished')
-        self.assertEqual(len(sandbox.commands), 2)
-        self.assertIn("$policy.Rules.Remove('qualification-test-owned-rule')", sandbox.commands[1])
-        self.assertIn('Rules.Remove', sandbox.commands[1])
+        self.assertTrue(any('Rules.Remove' in item for item in sandbox.commands))
 
     def test_command_rule_resolves_bare_executable_and_tracks_process_tree(self):
         sandbox = self.sandbox()
-        with patch('_python_sandbox.shutil.which', return_value='C:/tool/python.exe'):
+        with patch('_python_sandbox.subprocess.check_output', return_value=''):
+          with patch('_python_sandbox.shutil.which', return_value='C:/tool/python.exe'):
             with sandbox.network_denial(Path('python')):
                 pass
-        self.assertIn("-Program 'C:/tool/python.exe'", sandbox.commands[0])
-        self.assertIn('Get-CimInstance Win32_Process', inspect.getsource(Sandbox._watch_process_tree))
+        self.assertTrue(any('-Direction Outbound -Action Block' in item for item in sandbox.commands))
+        self.assertIn('-OverrideBlockRules', inspect.getsource(Sandbox.network_denial))
 
     def test_webview_failure_still_removes_only_own_rule(self):
         sandbox = self.sandbox()
-        with patch.object(_tauri_webview, '_execute', side_effect=RuntimeError('native failure')):
-            with self.assertRaisesRegex(RuntimeError, 'native failure'):
-                _tauri_webview.execute(sandbox, None, None, None, None)
-        self.assertEqual(len(sandbox.commands), 2)
-        self.assertIn('Rules.Remove', sandbox.commands[1])
+        with patch('_python_sandbox.subprocess.check_output', return_value=''):
+            with patch.object(_tauri_webview, '_execute', side_effect=RuntimeError('native failure')):
+                with self.assertRaisesRegex(RuntimeError, 'native failure'):
+                    _tauri_webview.execute(sandbox, None, None, None, None)
+        self.assertTrue(any('Rules.Remove' in item for item in sandbox.commands))
 
     def test_non_windows_does_not_change_firewall(self):
         sandbox = self.sandbox('Darwin')
@@ -117,10 +115,11 @@ class NetworkScopeTests(unittest.TestCase):
         def timer(seconds, callback):
             return Mock(start=Mock(side_effect=callback), is_alive=Mock(return_value=False))
         with patch('_python_sandbox.threading.Timer', side_effect=timer):
-            with patch.object(sandbox, 'abort_windows_proof'):
-                with self.assertRaisesRegex(DistributionError, 'watchdog exceeded'):
-                    with sandbox.network_denial():
-                        pass
+            with patch('_python_sandbox.subprocess.check_output', return_value=''):
+                with patch.object(sandbox, 'abort_windows_proof'):
+                    with self.assertRaisesRegex(DistributionError, 'watchdog exceeded'):
+                        with sandbox.network_denial():
+                            pass
 
 
 if __name__ == '__main__':

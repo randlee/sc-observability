@@ -20,15 +20,13 @@ from contextlib import contextmanager
 from _python_distribution import DistributionError
 
 
-def bounded_command(command: list[str], cwd: Path, environment: dict, timeout: float = 900, on_start=None) -> subprocess.CompletedProcess:
+def bounded_command(command: list[str], cwd: Path, environment: dict, timeout: float = 900) -> subprocess.CompletedProcess:
     """Bound command lifetime without waiting for inherited output handles."""
     # Compiler service descendants can retain their parent's output handles.
     # Regular files preserve output without making completion depend on EOF.
     with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
         process = subprocess.Popen(command, cwd=cwd, env=environment, stdout=stdout_file,
                                    stderr=stderr_file, start_new_session=os.name != 'nt')
-        if on_start:
-            on_start(process)
         def captured(handle):
             size = os.fstat(handle.fileno()).st_size
             handle.seek(0)
@@ -77,7 +75,6 @@ class Sandbox:
         self.acls: list[tuple[Path, Path]] = []
         self.firewall = 'sc-observability-proof-' + uuid.uuid4().hex
         self.firewall_rules: list[str] = []
-        self._proof_pid: int | None = None
         self.prefix: list[str] = []
         self.env = {key: value for key, value in os.environ.items()
                     if not key.startswith(('CARGO_', 'RUST', 'PYO3_', 'PYTHONPATH', 'PYTHONHOME'))}
@@ -193,37 +190,8 @@ class Sandbox:
         # INetFwRules.Remove is an idempotent exact-name operation, including
         # when our rule is absent. Avoid enumerating the runner's firewall.
         # https://learn.microsoft.com/windows/win32/api/netfw/nf-netfw-inetfwrules-remove
-        rules = '; '.join(f"$policy.Rules.Remove('{name}')" for name in self.firewall_rules)
+        rules = '; '.join(f"$policy.Rules.Remove('{name}')" for name in getattr(self, 'firewall_rules', [self.firewall]))
         self.powershell("$policy = New-Object -ComObject HNetCfg.FwPolicy2; " + rules)
-
-    def _add_program_rule(self, program: Path) -> None:
-        name = self.firewall if not self.firewall_rules else f'{self.firewall}-{len(self.firewall_rules)}'
-        display = str(program) if not program.is_absolute() and ':' in str(program) else str(program.resolve())
-        self.powershell(f"New-NetFirewallRule -Name '{name}' -DisplayName '{name}' "
-                        f"-Program '{display}' -Direction Outbound -Action Block -Profile Any | Out-Null")
-        self.firewall_rules.append(name)
-
-    def _watch_process_tree(self, stop: threading.Event) -> None:
-        seen: set[str] = set()
-        while not stop.wait(0.5):
-            if self._proof_pid is None:
-                continue
-            script = "Get-CimInstance Win32_Process | Select ProcessId,ParentProcessId,ExecutablePath | ConvertTo-Json -Compress"
-            try:
-                raw = subprocess.check_output(['powershell', '-NoProfile', '-NonInteractive', '-Command', script], text=True)
-                rows = json.loads(raw) if raw.strip() else []
-                rows = rows if isinstance(rows, list) else [rows]
-                parents = {self._proof_pid}; paths: set[str] = set()
-                while parents:
-                    children = {int(row['ProcessId']) for row in rows
-                                if int(row.get('ParentProcessId') or 0) in parents}
-                    parents = children
-                    paths.update(row['ExecutablePath'] for row in rows
-                                 if int(row.get('ProcessId') or 0) in children and row.get('ExecutablePath'))
-                for path in sorted(paths - seen):
-                    self._add_program_rule(Path(path)); seen.add(path)
-            except (OSError, subprocess.SubprocessError, ValueError, TypeError, KeyError):
-                continue
 
     @contextmanager
     def network_denial(self, program: Path | None = None):
@@ -240,24 +208,29 @@ class Sandbox:
         watchdog = threading.Timer(1050, deadline)
         watchdog.daemon = True
         watchdog.start()
-        watcher_stop = threading.Event()
-        watcher = threading.Thread(target=self._watch_process_tree, args=(watcher_stop,), daemon=True)
         try:
             self.firewall_rules = []
-            self._proof_pid = None
-            raw_executable = str(program or Path(sys.executable))
-            resolved_executable = shutil.which(raw_executable) or raw_executable
-            executable = Path(resolved_executable)
-            if not executable.is_absolute() and ':' not in resolved_executable:
-                executable = executable.resolve()
-            self._add_program_rule(executable)
-            watcher.start()
+            # Establish the deny boundary before any proof child starts. The
+            # runner's own control processes are explicitly allowed to keep
+            # the job alive; OverrideBlockRules makes this safe with the
+            # process-tree-wide block below.
+            allow_script = ("$names=@('Runner.Listener','Runner.Worker','Runner.PluginHost'); "
+                            "$paths=@(Get-Process -Name $names -ErrorAction SilentlyContinue | "
+                            "Where-Object Path | Select-Object -ExpandProperty Path -Unique); "
+                            "$paths -join [Environment]::NewLine")
+            output = subprocess.check_output(['powershell', '-NoProfile', '-NonInteractive', '-Command', allow_script], text=True)
+            for index, path in enumerate(line for line in output.splitlines() if line.strip()):
+                name = f'{self.firewall}-allow-{index}'
+                self.powershell(f"New-NetFirewallRule -Name '{name}' -DisplayName '{name}' "
+                                f"-Program '{path}' -Direction Outbound -Action Allow -OverrideBlockRules -Profile Any | Out-Null")
+                self.firewall_rules.append(name)
+            self.powershell(f"New-NetFirewallRule -Name '{self.firewall}' -DisplayName '{self.firewall}' "
+                            "-Direction Outbound -Action Block -Profile Any | Out-Null")
+            self.firewall_rules.append(self.firewall)
             yield
         finally:
             try:
-                watcher_stop.set(); watcher.join(timeout=5)
                 self.remove_firewall()
-                self._proof_pid = None
             finally:
                 watchdog.cancel()
                 watchdog.join(timeout=210)
@@ -268,8 +241,7 @@ class Sandbox:
         print('B4A_COMMAND ' + json.dumps(command), flush=True)
         started = time.monotonic()
         with self.network_denial(Path(command[0])):
-            result = bounded_command(self.prefix + command, cwd, self.env,
-                                     on_start=lambda process: setattr(self, '_proof_pid', process.pid))
+            result = bounded_command(self.prefix + command, cwd, self.env)
         print(f'B4A_EXIT {result.returncode} after {time.monotonic() - started:.2f}s', flush=True)
         self.commands.append({'command': command, 'exit_code': result.returncode,
                               'stdout': result.stdout, 'stderr': result.stderr})
