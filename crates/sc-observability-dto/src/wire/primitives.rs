@@ -1,6 +1,45 @@
 //! Explicit wire shapes; input entrypoints apply checked semantic validation.
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::fmt;
+
+/// Stable validation failures returned by [`DecimalDto`] constructors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecimalDtoError {
+    /// The value is not in canonical decimal spelling.
+    InvalidCanonical,
+    /// A negative value is outside the signed 64-bit domain.
+    SignedOverflow,
+    /// A non-negative value is outside the unsigned 64-bit domain.
+    UnsignedOverflow,
+    /// The canonical value is negative and cannot represent a counter.
+    NotUnsigned,
+}
+
+impl DecimalDtoError {
+    /// Stable machine-readable validation code.
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::InvalidCanonical => "SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL",
+            Self::SignedOverflow => "SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW",
+            Self::UnsignedOverflow => "SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW",
+            Self::NotUnsigned => "SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED",
+        }
+    }
+}
+
+impl fmt::Display for DecimalDtoError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::InvalidCanonical => "expected canonical decimal integer",
+            Self::SignedOverflow => "signed integer overflow",
+            Self::UnsignedOverflow => "unsigned integer overflow",
+            Self::NotUnsigned => "expected unsigned decimal",
+        })
+    }
+}
+
+impl std::error::Error for DecimalDtoError {}
 
 /// Canonical integer string: signed i64 or unsigned u64; counters additionally reject negatives.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -15,7 +54,7 @@ pub struct DecimalDto(
 );
 impl DecimalDto {
     /// Checks canonical spelling and the shared JSON integer domain.
-    pub fn new(value: impl Into<String>) -> std::result::Result<Self, String> {
+    pub fn new(value: impl Into<String>) -> std::result::Result<Self, DecimalDtoError> {
         let value = value.into();
         let digits = value.strip_prefix('-').unwrap_or(&value);
         if digits.is_empty()
@@ -23,16 +62,16 @@ impl DecimalDto {
             || (digits.len() > 1 && digits.starts_with('0'))
             || value == "-0"
         {
-            return Err("expected canonical decimal integer".into());
+            return Err(DecimalDtoError::InvalidCanonical);
         }
         if value.starts_with('-') {
             value
                 .parse::<i64>()
-                .map_err(|_| "signed integer overflow")?;
+                .map_err(|_| DecimalDtoError::SignedOverflow)?;
         } else {
             value
                 .parse::<u64>()
-                .map_err(|_| "unsigned integer overflow")?;
+                .map_err(|_| DecimalDtoError::UnsignedOverflow)?;
         }
         Ok(Self(value))
     }
@@ -41,10 +80,8 @@ impl DecimalDto {
         &self.0
     }
     /// Checks the unsigned counter domain.
-    pub fn as_u64(&self) -> std::result::Result<u64, String> {
-        self.0
-            .parse()
-            .map_err(|_| "expected unsigned decimal".into())
+    pub fn as_u64(&self) -> std::result::Result<u64, DecimalDtoError> {
+        self.0.parse().map_err(|_| DecimalDtoError::NotUnsigned)
     }
 }
 impl From<u64> for DecimalDto {

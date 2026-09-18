@@ -302,9 +302,9 @@ def cmd_list_publish_plan(args: argparse.Namespace) -> int:
             raise ManifestError(
                 "list-publish-plan --require-secrets: blocked-on-auth: "
                 f"{len(blocked)} ready artifact(s) need a registry secret that is not yet "
-                "configured (registry_secret_configured=false). This is the correct, expected "
-                "pending state until the credential is actually provisioned -- it must not be "
-                "silently permitted:\n" + "\n".join(f"  - {b}" for b in blocked)
+                "owner-deferred (registry_secret_configured is not approved for this candidate). "
+                "The sc-publish owner must provision and authorize credentials before publication; "
+                "it must not be silently permitted:\n" + "\n".join(f"  - {b}" for b in blocked)
             )
 
     # Row format (pipe-delimited): kind|package|wait_seconds|status|workspace_member|manifest_path
@@ -587,8 +587,9 @@ def cmd_build_evidence(args: argparse.Namespace) -> int:
         elif entry["kind"] == "pypi":
             artifacts[artifact] = build_pypi_artifacts(entry, out_dir)
         else:
-            # npm: status is always "pending" today (package.json is still
-            # "private": true) -- build-evidence never builds pending entries.
+            # npm remains pending until its owner-authorized publication gate
+            # and registry credential are available; build-evidence never
+            # builds pending entries.
             continue
 
     record = {

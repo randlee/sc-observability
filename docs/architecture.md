@@ -719,11 +719,10 @@ edges for sc-observability-binding-runtime; third-party support crates retain
 normal dependency review. Tauri and PyO3 may depend on the runtime, never the
 reverse. This proposed diagram does not claim the crate is implemented.
 
-`scripts/ci/validate_binding_runtime_dependencies.py` checks only
-`sc-observability-binding-runtime`'s own manifest edges; it does not check
-`bindings/tauri/Cargo.toml` or `bindings/python/sc-observability-py/Cargo.toml`
-against this diagram, so the two additional edges below are documented but not
-yet CI-enforced against the consumer crates' manifests.
+`scripts/ci/validate_binding_runtime_dependencies.py` resolves and checks the
+shared runtime manifest plus both consumer manifests. It includes ordinary,
+build, dev, target-specific and aliased workspace declarations, so a renamed
+workspace dependency cannot evade the first-party or forbidden-host policy.
 
 Both binding crates also declare direct `sc-observability-dto` and
 `sc-observability-types` dependencies, alongside their `Runtime` edge, not

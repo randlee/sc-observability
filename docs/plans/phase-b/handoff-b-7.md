@@ -4,7 +4,7 @@ status: review_packet_prepared_publication_pending_owner_review
 branch: feature/phase-b-7-publish-bindings
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-7-publish-bindings
 base: develop
-generated_at: 2026-09-17T18:49:04Z
+generated_at: 2026-09-18T16:24:13Z
 ---
 
 # B.7 binding-release review packet (readiness handoff)
@@ -66,14 +66,11 @@ same version today, verified live (not hardcoded) by
 
 `sc-observability-tauri` and `@sc-observability/client` are `status = "pending"`
 in the manifest; their versions are not checked by `verify-versions`. Both
-files now exist in this branch's tree (merged forward from
-`feature/phase-b-6-python-async` after this readiness work was first
-written) and both are already pinned to `1.4.0` -- `bindings/tauri/Cargo.toml`
-literally, `bindings/typescript/package.json` literally -- but neither is
-`status = "ready"`: `sc-observability-tauri` still needs real qualification
-on `feature/phase-b-tauri-qualification` (a separate layer being prepared
-above B.7), and `bindings/typescript/package.json` still sets
-`"private": true`.
+files exist in this branch's tree and are pinned to `1.4.0`. Tauri's real
+IPC/artifact qualification has passed in the recorded B.3a matrix, while
+independent phase-end QA and formal API/ADR approval remain pending. The npm
+entry remains pending because sc-publish credential provisioning and publication
+approval are owner-deferred; `NPM_TOKEN` is only a workflow configuration key.
 
 ## Source commit / tag
 
@@ -115,26 +112,31 @@ demand), not a committed release record.
 
 ## Public API coverage
 
-Existing approval records under `docs/api-approvals/` (note: these are
-`.md` files with required `## Scope` / `## Approval` / `## Affected Artifacts`
-headings, per `docs/api-approvals/README.md` -- there are no `.json` files in
-that directory on this branch):
+Existing approval records under `docs/api-approvals/` include Markdown records
+with required `## Scope` / `## Approval` / `## Affected Artifacts` headings,
+and machine-readable JSON records used by the API governance gate:
 
 - `docs/api-approvals/phase-a-a3-writer-runtime.md`
 - `docs/api-approvals/phase-b-log-import.md`
 - `docs/api-approvals/phase-b-runtime-level.md` (owner-deferred; not a
   current approval)
+- `docs/api-approvals/phase-b-dto.json` (initial scoped lead approval for the
+  neutral wire DTO declarations, checked conversions, and binding-owned
+  diagnostic registry; no behavior/QA, owner runtime-contract, or B.7
+  publication approval)
+- `docs/api-approvals/phase-b-native-runtime.json` (initial scoped lead
+  approval for the public native runtime API and supplied factories; no
+  behavior QA, owner runtime-contract, or publication approval)
+- `docs/api-approvals/phase-b-integration-review-decimal.json` (scoped lead
+  approval for the unpublished DTO DecimalDtoError API change; public API only)
 
-None of these three specifically approves `sc-observability-dto` or
-`sc-observability-binding-runtime`'s public surface -- no dedicated approval
-record for either crate exists on this branch yet. That is a gap this
-readiness task surfaces rather than papers over: a human/API reviewer should
-confirm whether these two crates need their own approval artifact before
-first publish, consistent with the same owner-deferral pattern
-`phase-b-runtime-level.md` already records for the runtime-level contract.
-`sc-observability-tauri`, `sc-observability-py`'s API, the PyPI package, and
-the npm client have no approval coverage recorded on this branch; the latter
-two are additionally blocked on the files not existing yet.
+These records are scoped API approvals, not release or runtime-owner sign-off.
+The DecimalDtoError record specifically approves the `sc-observability-dto`
+public surface at the exact recorded digest, limited to the enum, stable error
+codes and the two constructor Result signature changes. It does not approve
+the owner ADR/runtime contract, independent QA, publication, or any unrelated
+crate. Other binding surfaces retain their separate review and owner-deferral
+gates; this packet does not infer approval from the DTO record.
 
 ## Platform results
 
@@ -146,12 +148,10 @@ is available for `sc-publish` (or any future publish pipeline) to consume
 later; `.github/workflows/release.yml` does not call it and installs no
 binding-publish jobs, per the owner scope correction above.
 
-`bindings/typescript/` and `bindings/tauri/` now exist in this branch's tree
-(merged forward from `feature/phase-b-6-python-async`). `sc-observability-tauri`
-compiles standalone (`cargo check --locked --no-default-features` inside
-`bindings/tauri/`, verified during this readiness work) but has no IPC/artifact
-platform matrix yet -- that is the explicit scope of `feature/phase-b-tauri-
-qualification`, a separate layer being prepared above B.7. TypeScript has its
+`bindings/typescript/` and `bindings/tauri/` now exist in this branch's tree.
+`sc-observability-tauri` compiles standalone and its real IPC/artifact platform
+matrix is recorded as passed in the B.3a qualification handoff. Independent
+phase-end QA and formal API/ADR approval remain separate gates. TypeScript has its
 own generation/build/pack validation (`scripts/ci/validate_typescript_bindings.sh`,
 `scripts/ci/validate_binding_schema.sh`, both merged in alongside the package)
 which is a different concern from this document's registry-publish-readiness
@@ -196,8 +196,7 @@ scope; this readiness work does not re-run or duplicate those checks.
   itself and is not exercised by this readiness work.
 - **TypeScript**: `bindings/typescript/src/test.ts` exercises the client
   today via `npm test`. `scripts/ci/validate_binding_registry_consumers.sh`
-  additionally runs `npm pack` (this works even with `"private": true` --
-  that flag only blocks `npm publish`) and installs the real resulting
+  additionally runs `npm pack` and installs the real resulting
   tarball into an isolated npm project, then runs a `node -e` smoke check
   against it. This is a genuine forward-looking structural proof of the
   packaged file set, but it is explicitly labeled as such and never as
@@ -238,8 +237,8 @@ before B.7, and does not itself install or wire any new publish pipeline.
   crates.io entries (3 `ready`, 1 `pending` with a named reason) and 2
   package entries (1 `ready`, 1 `pending` with a named reason). Every entry
   now also carries `registry_secret`/`registry_secret_configured`
-  (CARGO_REGISTRY_TOKEN is real and configured; PYPI_API_TOKEN/NPM_TOKEN are
-  not), and the pypi entry carries `platform_policy_ref` pointing at
+  (registry credential provisioning is owner-deferred; token names are workflow
+  configuration keys), and the pypi entry carries `platform_policy_ref` pointing at
   `release/python-platform-policy.json`.
 - `scripts/release_bindings_artifacts.py` gained `build-evidence` and
   `verify-evidence` (C05: real cargo package/maturin builds, real sha256 +
@@ -264,7 +263,7 @@ before B.7, and does not itself install or wire any new publish pipeline.
   freshly-built bytes; (3) a real isolated Rust consumer of the extracted
   `.crate` tarballs, a real isolated Python venv install + test subset of
   the built wheel, and a real isolated npm install + smoke check of the
-  packed (still-private) TypeScript tarball; (4) an honest summary that
+  packed TypeScript tarball; (4) an honest summary that
   never prints "registry consumer validation passed" unless
   `--live-registry-check` actually queried a live registry (it did not in
   this readiness work -- nothing has been published). Verified by actually
@@ -291,10 +290,10 @@ hands off for that eventual, owner-reviewed pass (via `sc-publish` once it
 is installed, or whatever mechanism the owner review settles on) to consume:
 
 (a) `release/bindings-artifacts.toml`, a readiness manifest naming 4 crates.io
-    entries (3 `ready`, 1 `pending`: `sc-observability-tauri`, blocked on
-    `feature/phase-b-tauri-qualification` landing) and 2 package entries (1
-    `ready`-but-uncredentialed PyPI package, 1 `pending` npm client blocked on
-    `bindings/typescript/package.json`'s `"private": true`);
+    entries (3 `ready`, 1 `pending`: `sc-observability-tauri`, pending
+    independent phase-end QA/API approval) and 2 package entries (1
+    ready-but-unpublished PyPI package, 1 pending npm client awaiting
+    owner-deferred sc-publish credential provisioning and publication approval);
 (b) `scripts/release_bindings_artifacts.py`'s `build-evidence`/`verify-evidence`,
     which produce and re-verify real, rebuildable candidate artifact hashes
     for every `ready` entry;

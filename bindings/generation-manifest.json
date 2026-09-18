@@ -10,7 +10,7 @@
     "crates/sc-observability-dto/src/wire/events.rs": "8f741ecc20d99fec909d7c5c3bc56f1af4ffd4c53bd85e1e00c8e560fbb62b82",
     "crates/sc-observability-dto/src/wire/health.rs": "9c25af6ea92d61c780bb5de17e43f41f223cda7aa09c24b68ab980e425eca00b",
     "crates/sc-observability-dto/src/wire/operations.rs": "4725dd57242894a1f1e6eb9baa62d056d4066e9fd4c54bd1e911b1f3189481b2",
-    "crates/sc-observability-dto/src/wire/primitives.rs": "52adb9886596a74689eb6d97a043743c5f1ccc3a4722b36379639e714b9a0940",
+    "crates/sc-observability-dto/src/wire/primitives.rs": "355a92983b612b4cf12b2b47a8b54bc87ecd4ab0b82b0256d54439d0cf651b66",
     "rust-toolchain.toml": "d52c5633ea77aefd345519d0a6c87e19c2636a1e90178585c30db481b3de9de0",
     "scripts/_binding_schema.py": "227a8d3344c32f14d94d1103b1f4f97ee1a9af53d1c0b0411b36c23425451ffa",
     "scripts/generate_python_bindings.py": "cd709fa6e8a641504ea82fd5a82bd6f6398a8267780effdf92b2a97f9c3b8558",
@@ -24,7 +24,7 @@
     "bindings/schema/v1.json": "b9b7328947f3f94961c1cf5cb6f76419bcd6b27f264ba41609de504402632a7b",
     "bindings/typescript/src/generated/index.ts": "025dc322843c7a4522126cf44ed4e7188b649134ef5232f1f85bbb9245dabb0a"
   },
-  "source_revision": "0e48648a23f21200353acee9ece7dfceac76beda",
+  "source_revision": "def5ab205c100021b499324cf4dba0ef2d02a08f",
   "toolchain": {
     "python": "3.12.10",
     "rust": "1.94.1",

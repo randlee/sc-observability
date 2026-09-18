@@ -1,0 +1,30 @@
+--- /tmp/scobs-parent-api.txt	2026-09-18 08:34:12
++++ docs/plans/phase-b/evidence/phase-b-integration-completeness/decimal-api-current.txt	2026-09-18 08:33:52
+@@ -65,6 +65,16 @@
+ pub sc_observability_dto::CompletionOperationDto::Flush
+ pub sc_observability_dto::CompletionOperationDto::Health
+ pub sc_observability_dto::CompletionOperationDto::Query
++pub enum sc_observability_dto::DecimalDtoError
++pub sc_observability_dto::DecimalDtoError::InvalidCanonical
++pub sc_observability_dto::DecimalDtoError::NotUnsigned
++pub sc_observability_dto::DecimalDtoError::SignedOverflow
++pub sc_observability_dto::DecimalDtoError::UnsignedOverflow
++impl sc_observability_dto::DecimalDtoError
++pub const fn sc_observability_dto::DecimalDtoError::code(self) -> &'static str
++impl core::error::Error for sc_observability_dto::DecimalDtoError
++impl core::fmt::Display for sc_observability_dto::DecimalDtoError
++pub fn sc_observability_dto::DecimalDtoError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+ pub enum sc_observability_dto::DispatchDto
+ pub sc_observability_dto::DispatchDto::Scheduled
+ pub enum sc_observability_dto::Failure
+@@ -231,8 +241,8 @@
+ pub struct sc_observability_dto::DecimalDto(_)
+ impl sc_observability_dto::DecimalDto
+ pub fn sc_observability_dto::DecimalDto::as_str(&self) -> &str
+-pub fn sc_observability_dto::DecimalDto::as_u64(&self) -> core::result::Result<u64, alloc::string::String>
+-pub fn sc_observability_dto::DecimalDto::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, alloc::string::String>
++pub fn sc_observability_dto::DecimalDto::as_u64(&self) -> core::result::Result<u64, sc_observability_dto::DecimalDtoError>
++pub fn sc_observability_dto::DecimalDto::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, sc_observability_dto::DecimalDtoError>
+ impl core::convert::From<i64> for sc_observability_dto::DecimalDto
+ pub fn sc_observability_dto::DecimalDto::from(i64) -> Self
+ impl core::convert::From<u64> for sc_observability_dto::DecimalDto

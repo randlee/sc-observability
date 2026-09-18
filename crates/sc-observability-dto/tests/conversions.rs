@@ -36,6 +36,14 @@ fn decimal_domains_are_canonical() {
         assert!(DecimalDto::new(value).is_err(), "{value}");
     }
     assert!(DecimalDto::new("-1").unwrap().as_u64().is_err());
+    assert_eq!(
+        DecimalDto::new("01").unwrap_err().code(),
+        "SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL"
+    );
+    assert_eq!(
+        DecimalDto::new("-1").unwrap().as_u64().unwrap_err().code(),
+        "SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED"
+    );
     assert!(serde_json::from_value::<DecimalDto>(json!(1)).is_err());
 }
 #[test]

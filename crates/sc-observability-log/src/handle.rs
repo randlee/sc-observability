@@ -80,6 +80,28 @@ pub(crate) struct Installed {
 pub(crate) static SLOT: RwLock<Option<Arc<Installed>>> = RwLock::new(None);
 pub(crate) static INSTALLED: AtomicBool = AtomicBool::new(false);
 
+// Test-only observability for the actual native flush boundary.  This remains
+// private to the crate: the public facade must not expose a test counter.
+#[cfg(test)]
+thread_local! {
+    static NATIVE_FLUSH_CALLS: Cell<u64> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_native_flush_calls() {
+    NATIVE_FLUSH_CALLS.with(|calls| calls.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn native_flush_calls() -> u64 {
+    NATIVE_FLUSH_CALLS.with(Cell::get)
+}
+
+#[cfg(test)]
+fn record_native_flush_call() {
+    NATIVE_FLUSH_CALLS.with(|calls| calls.set(calls.get() + 1));
+}
+
 /// Encoded [`BridgeLifecycle`]; `Stopped` until `init` succeeds (no guard exists before).
 static LIFECYCLE: AtomicU8 = AtomicU8::new(LIFECYCLE_STOPPED);
 const LIFECYCLE_RUNNING: u8 = 0;
@@ -840,6 +862,8 @@ pub(crate) fn current_installed() -> Option<Arc<Installed>> {
     reason = "the copied bridge preserves its legacy bounded flush boundary"
 )]
 pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
+    #[cfg(test)]
+    record_native_flush_call();
     if lifecycle() != BridgeLifecycle::Running {
         return Err(FlushError::NotRunning {
             phase: lifecycle_phase(),
@@ -887,6 +911,22 @@ pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
 mod tests {
     use super::*;
     use std::time::Instant;
+
+    #[test]
+    fn native_flush_counter_positive_control_and_facade_zero_proof() {
+        reset_native_flush_calls();
+        let result = flush_installed(Duration::from_millis(1));
+        assert!(matches!(result, Err(FlushError::NotRunning { .. })));
+        assert_eq!(native_flush_calls(), 1);
+
+        reset_native_flush_calls();
+        log::Log::flush(&crate::bridge::Bridge);
+        assert_eq!(
+            native_flush_calls(),
+            0,
+            "facade flush must not invoke the native flush boundary"
+        );
+    }
 
     struct ReleaseOnDrop(Option<mpsc::SyncSender<()>>);
 

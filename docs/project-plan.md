@@ -130,12 +130,11 @@ binding validation handoff (tracking evidence in
 [`handoff-b-3a.md`](plans/phase-b/handoff-b-3a.md)); its sprint record remains
 the source of platform qualification and merge evidence. Real artifact/IPC
 qualification (installed npm/Rust artifacts, cross-platform CI, and the broad
-C05 consumer matrix) is separate, in-progress work delegated to
-`bp-tauri-helper` on `feature/phase-b-tauri-qualification`, tracked in
+C05 consumer matrix) is recorded as passed in
 [`handoff-b-3a-qualification.md`](plans/phase-b/handoff-b-3a-qualification.md).
-Sprint `status: in_progress` is accurate: this remaining qualification work is
-independent Tauri/IPC verification, not the B.7 registry-publication tail, and
-is not waived by [B.7's phase-end gate amendment](plans/phase-b/plan-phase-b.md#phase-end-completeness-gate-amendment-atm-qa-103).
+Independent phase-end QA and formal API/ADR approval remain separate gates; this
+qualification is not the B.7 registry-publication tail and is not waived by
+[B.7's phase-end gate amendment](plans/phase-b/plan-phase-b.md#phase-end-completeness-gate-amendment-atm-qa-103).
 
 ### B.3b — Shared native binding runtime
 
@@ -343,11 +342,12 @@ the review packet. `.github/workflows/release.yml` installs none of this:
 it keeps only the 6-core-crate `gate-and-tag`/`publish`/`release` jobs that
 predate B.7.
 
-`sc-observability-tauri` (blocked on `feature/phase-b-tauri-qualification`
-landing) and the npm client (blocked on `bindings/typescript/package.json`'s
-`"private": true` being cleared upstream) are correctly and honestly
-reported as `pending` with named reasons, not treated as failures or given
-fabricated placeholder files. No npm/PyPI registry credentials exist, and
+`sc-observability-tauri` (qualification passed; independent phase-end QA/API
+approval remains pending) and the npm client (awaiting owner-deferred
+sc-publish credential provisioning and owner publication approval) are correctly
+and honestly reported as `pending` with named reasons, not treated as failures or
+given fabricated placeholder files. Live npm/PyPI credential state is not
+asserted by this review packet, and
 the crates.io/PyPI/npm name-preflight only proved the 6 target names are
 currently unclaimed, not that namespace control is secured. This sprint is
 not marked complete; producing this review packet is not sprint closure. It
