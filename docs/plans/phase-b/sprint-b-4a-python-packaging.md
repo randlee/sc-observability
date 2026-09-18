@@ -3,6 +3,7 @@ id: B.4a
 status: in_progress
 branch: feature/phase-b-4a-python-packaging
 base: feature/phase-b-4-python
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging
 ---
 
 # B.4a — Python distributions and platform qualification
