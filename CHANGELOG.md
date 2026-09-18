@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.4.0 — qualified candidate, publication pending B.7
+## 1.4.0 — qualified candidate, publication pending separate authorization
 
 The six-crate candidate includes additive typed error APIs and warning-only
 compatibility paths from B.1a–B.1e, plus the first bridge/macros public baseline.
@@ -9,7 +9,8 @@ compatibility path; follow `docs/migration-guide.md` for typed replacements and
 the queue-admission versus durability distinction. All package archives include
 MIT license bytes. No candidate is published by B.2.
 
-Versioned API URLs below become available only after B.7 publication:
+Versioned API URLs below become available only after separately authorized
+publication:
 
 - `sc-observability-types`: <https://docs.rs/sc-observability-types/1.4.0/sc_observability_types/>
 - `sc-observability`: <https://docs.rs/sc-observability/1.4.0/sc_observability/>
@@ -22,7 +23,8 @@ Phase-B binding qualification also covers the neutral DTO and native-runtime
 crates, the Tauri host adapter, the PyO3 extension, the Python wheel/sdist
 matrix, and the generated TypeScript client. Their intended channels and
 dependency order are recorded in `release/bindings-artifacts.toml`; publication
-remains deferred to B.7.
+remains deferred until after Phase B merge, the Phase C `sc-publish` migration,
+and separate publication authorization.
 
 
 All notable changes to this project will be documented in this file.
@@ -39,7 +41,7 @@ Candidate `1.4.0` is staged only; it is not published or approved for release.
 - Candidate-only `LevelOwner`, runtime threshold mutation, filtered admission,
   query, and shutdown behavior is qualified through the B.P2 extracted-package
   consumer. The release is pending the retained three-platform evidence and
-  phase-end B.7 publication approval.
+  post-Phase-B publication authorization.
 
 ## [1.2.0] - 2026-05-26
 

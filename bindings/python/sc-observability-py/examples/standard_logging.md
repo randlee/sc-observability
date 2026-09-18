@@ -2,7 +2,8 @@
 
 Use `sc-observability` with GIL-enabled CPython 3.10–3.14 on a qualified
 Linux, macOS, or Windows platform. Install the matching qualified wheel in your
-application environment; distribution publication is handled separately in B.7.
+application environment; distribution publication is separately authorized
+after Phase B and the Phase C `sc-publish` migration.
 The package and embedded Rust module must use the same binding schema version
 (version 1). A standalone wheel creates its own logger; a Rust embedding host
 registers the shared backend and Python obtains it with `get_host_logger()`.

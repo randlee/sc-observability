@@ -1,13 +1,15 @@
 # 1.4.0 qualification candidate
 
-Publication remains pending B.7. B.2 stages all six packages from one committed
-qualification source and checks the same archive checksums on three platforms.
-B.7 must rebuild and qualify the final publication source after all phase fixes;
-this candidate SHA is not a release tag or a publication attestation.
+Publication remains separately unauthorized. Phase B stages the six core
+packages from one committed qualification source and checks the same archive
+checksums on three platforms; its binding inventory covers the additional
+DTO/runtime/Tauri/Python/npm artifacts. Phase C must migrate and preflight the
+shared `sc-publish` pipeline before separately authorized publication; this
+candidate SHA is not a release tag or publication attestation.
 
 ## Compatibility
 
-The four core packages add typed error contracts while retaining deprecated
+The six core packages add typed error contracts while retaining deprecated
 legacy adapters. The log bridge and proc macros establish their initial public
 baseline and remain pinned in lockstep (`=1.4.0`). Use explicit bounded flush
 and shutdown to establish durability; queue admission alone does not do that.

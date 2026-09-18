@@ -77,8 +77,10 @@ config.retained_log_policy.maintenance_max_work_per_pass = None; // default: unb
 The `1.4.0` Phase-B runtime and binding APIs are currently an unpublished
 qualification candidate. Consumers must not depend on them from crates.io or
 the language registries. Release engineering qualifies exact `=1.4.0`
-archives and wheel/npm artifacts locally; B.7 will publish and document the
-registry-only installation paths after owner approval.
+archives and wheel/npm artifacts locally. Phase B does not publish them; after
+the phase merges, Phase C migrates the shared `sc-publish` pipeline and a
+separate owner authorization is required before publication. BTIT adopts the
+published artifacts afterward.
 
 ## 2. `log()`, `try_log()`, `flush()`, And Deprecated `emit()`
 

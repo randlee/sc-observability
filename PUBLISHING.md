@@ -25,7 +25,10 @@ Phase B's binding and native artifacts are inventoried separately in
 standalone Tauri host crate, the PyO3 extension plus PyPI wheel/sdist, and the
 generated TypeScript npm client. The manifest records dependency order,
 platform-matrix references, and deliberate `pending` publication status; it
-does not publish anything.
+does not publish anything. Phase B records readiness only; after this phase
+merges, the shared `sc-publish` migration/preflight is a Phase C task. Registry
+publication is separately authorized after that migration, with BTIT adoption
+following publication.
 
 ## Workflows
 
@@ -107,13 +110,12 @@ tracked separately in `release/bindings-artifacts.toml` and validated by
 `list-publish-plan`, `build-evidence`, `verify-evidence`) plus
 `scripts/ci/validate_binding_registry_consumers.sh`. This is review/readiness
 tooling only: `.github/workflows/release.yml` does not publish these
-artifacts: B.7 is Phase B's sole phase-end publication step for all of
-Phase B (core, bridge/macros, and bindings alike), but publication is
-deferred, not cancelled, until explicit owner review authorizes it -- until
-then no publish workflow is dispatched and no registry credentials are
-sought. Installing or upgrading the intended shared publishing pipeline,
-**`sc-publish`**, is a separate follow-up outside Phase B's installation
-scope. See
+artifacts: Phase B records readiness only; publication is deferred until after
+the phase merges and explicit owner authorization. Until then no publish
+workflow is dispatched and no registry credentials are sought. Installing or
+upgrading the intended shared publishing pipeline,
+**`sc-publish`**, is a separate Phase C follow-up outside Phase B's
+installation scope. See
 [`docs/plans/phase-b/handoff-b-7.md`](./docs/plans/phase-b/handoff-b-7.md) for
 the current review packet: readiness status per artifact, rebuildable
 candidate evidence, and isolated consumer-matrix results.
@@ -123,7 +125,8 @@ its independent Tauri workspace qualification) host crate; PyPI for the
 `sc-observability` wheel and sdist across the checked platform/interpreter
 matrix; and npm for `@sc-observability/client`. Tauri/native binaries are
 qualification artifacts consumed by the host and are not a second registry
-channel. All publication remains deferred to B.7 owner authorization.
+channel. Phase B records readiness only; publication is separately authorized
+after the Phase C `sc-publish` migration, and BTIT adoption follows publication.
 
 Deliberate exclusions are `sc-observability-log-consumer-check` (CI-only
 consumer proof), `bindings/schema-generator` (build tooling), and example

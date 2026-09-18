@@ -14,7 +14,8 @@ Binding and native artifacts are tracked in `release/bindings-artifacts.toml`
 (DTO, native runtime, Tauri host, PyO3 extension, PyPI wheel/sdist, and npm
 client). The six core crates above use `release/publish-artifacts.toml`; the
 binding manifest is a readiness inventory only and all publication remains
-deferred to B.7.
+deferred until after Phase B merge and separately authorized following the
+Phase C `sc-publish` migration; BTIT adopts the published artifacts afterward.
 
 These crates currently exist inside the `agent-team-mail` workspace. After
 cutover, new releases of these crate names must come from this repo instead.
@@ -60,16 +61,19 @@ and never overwritten. `stage-manifest.json` records each real Cargo archive,
 its normalized manifest, all file hashes, its checksum and the source SHA.
 The shared consumer checks an enabled macro, explicit flush and shutdown, and
 persisted JSONL fields. `handoff-b-2.md` records results and adoption instructions.
-B.7 alone rebuilds the final publication source and performs live publication
-and separate registry-only consumer verification.
+B.7 records the final readiness source and evidence. Phase C installs and
+qualifies the shared `sc-publish` pipeline; live publication is separately
+authorized afterward, followed by BTIT's published-artifact adoption and
+registry-only consumer verification.
 
 ## Replacement/Cutover Rule
 
 Before the ATM workspace switches to crates.io dependencies from this repo:
 1. This repo must publish the six core/bridge crates in
    `release/publish-artifacts.toml` in manifest order.
-2. B.7 must publish the separately inventoried binding artifacts only after
-   owner authorization and their registry-consumer proof.
+2. After Phase B merges, Phase C must migrate and preflight the shared
+   `sc-publish` pipeline; publication then requires separate owner
+   authorization and registry-consumer proof.
 3. ATM must then replace its in-workspace path dependencies with version pins.
 
 ## Source of Truth

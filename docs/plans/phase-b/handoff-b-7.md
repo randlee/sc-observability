@@ -9,21 +9,16 @@ generated_at: 2026-09-18T16:24:13Z
 
 # B.7 binding-release review packet (readiness handoff)
 
-**Owner sequencing correction (via aobs): no mid-phase publication. B.P2/B.2
+**Owner sequencing correction (via aobs): no Phase-B publication. B.P2/B.2
 are reviewed immutable release candidates, B.3-B.6 (and this branch's
-bindings) consume prepublication bundles, and B.7 is the sole phase-end
-publication step for all of Phase B (core, bridge/macros, and bindings) --
-but only after explicit owner review authorizes it.** Until that review
-happens, no publication workflow is dispatched and no registry credentials
-are sought, from this branch or any other. Installing or upgrading the
-intended shared publishing pipeline, **`sc-publish`**, is a separate
-follow-up outside Phase B; it is not installed on this branch or in
-`.github/workflows/release.yml`. This is a sequencing/authorization
-constraint, not a permanent scope removal: B.7 remains the eventual
-publication authority the sprint doc already assigns it, deferred rather
-than cancelled.
+bindings) consume prepublication bundles, and this handoff records readiness
+only.** Until Phase B merges, no publication workflow is dispatched and no
+registry credentials are sought. After the merge, Phase C migrates and
+preflights the shared **`sc-publish`** pipeline; publication is separately
+authorized afterward, and BTIT adopts the published artifacts. `sc-publish`
+is not installed on this branch or in `.github/workflows/release.yml`.
 
-This document records what B.7's *review* machinery proves today, against
+This document records what the Phase-B *review* machinery proves today, against
 this branch's actual (partial) tree state: manifest structure, rebuildable
 candidate evidence, and isolated consumer-matrix qualification. It is not a
 publication record: nothing described here has been published to any
@@ -217,13 +212,13 @@ aobs's C04 direction additionally asked for `release.yml` to install real
 crates.io/PyPI/npm publish jobs for the binding artifacts, gated on the
 manifest, and to block the `release` job on all of them. That work was done,
 verified, and then **reverted**: the actual owner corrected the sequencing
-after the fact -- there is no mid-phase publication, and B.7 is the sole
-phase-end publication step for all of Phase B (core, bridge/macros, and
-bindings alike), gated on explicit owner review that has not happened yet.
+after the fact -- there is no Phase-B publication; this packet records
+readiness for all of Phase B (core, bridge/macros, and bindings alike).
 Until that review authorizes it, no publication workflow is dispatched and
 no registry credentials are sought; a shared publish pipeline ("sc-publish")
 is a separate follow-up outside this phase's installation scope. This is a
-deferral, not a cancellation of B.7's eventual publication role.
+Phase C owns the later `sc-publish` migration and preflight; publication is
+separately authorized after that migration, followed by BTIT adoption.
 `.github/workflows/release.yml` no longer contains `publish-binding-crates`,
 `precheck-python-wheel-build`, `qualify-python-wheel-matrix`,
 `publish-python-wheel`, or `publish-npm-client`; the `release` job's `needs:`
@@ -282,18 +277,18 @@ before B.7, and does not itself install or wire any new publish pipeline.
   that evidence.
 
 **This is a review packet, not a publication.** Nothing in this branch
-uploads to a registry, creates a release tag beyond what the pre-existing
-6-core-crate `gate-and-tag`/`publish` jobs already did before B.7, dispatches
-a publish workflow, or seeks npm/PyPI credentials -- that stays true until
-owner review authorizes B.7's actual phase-end publication pass. What B.7
-hands off for that eventual, owner-reviewed pass (via `sc-publish` once it
-is installed, or whatever mechanism the owner review settles on) to consume:
+uploads to a registry, creates a release tag beyond the pre-existing
+6-core-crate workflow, dispatches a publish workflow, or seeks npm/PyPI
+credentials. Phase C consumes this readiness evidence when it migrates and
+preflights `sc-publish`; publication is separately authorized afterward, and
+BTIT adopts the published artifacts. What this handoff provides for that
+later authorized pass:
 
 (a) `release/bindings-artifacts.toml`, a readiness manifest naming 4 crates.io
     entries (3 `ready`, 1 `pending`: `sc-observability-tauri`, pending
     independent phase-end QA/API approval) and 2 package entries (1
     ready-but-unpublished PyPI package, 1 pending npm client awaiting
-    owner-deferred sc-publish credential provisioning and publication approval);
+    owner-deferred credential provisioning and publication approval);
 (b) `scripts/release_bindings_artifacts.py`'s `build-evidence`/`verify-evidence`,
     which produce and re-verify real, rebuildable candidate artifact hashes
     for every `ready` entry;
@@ -304,8 +299,8 @@ is installed, or whatever mechanism the owner review settles on) to consume:
     approvals and gaps a future publish pass will need.
 
 None of (a)-(d) installs, dispatches, or authenticates against a publish
-pipeline; they only prove structural/hash/consumer readiness for B.7's
-eventual owner-reviewed publication pass. This sprint is **not** marked
-complete by this review packet -- per the owner's explicit instruction, B.7
-does not claim publication has happened or that it is authorized yet, and
+pipeline; they only prove structural/hash/consumer readiness for the later
+authorized publication pass. This sprint is **not** marked complete by this
+review packet -- per the owner's explicit instruction, it does not claim
+publication has happened or that it is authorized yet, and
 its sprint doc's frontmatter `status` is not set to `complete`.

@@ -145,7 +145,7 @@ The [handoff](plans/phase-b/handoff-b-3b.md) records both native backends,
 bounded helpers/operations/observers, all 26 contract cases in debug/release on
 Linux/macOS/Windows, and the isolated packaged consumer. Public API scope is
 independently reviewed; consolidated QA, owner-deferred contract acceptance and
-B.7 publication remain separate gates.
+later publication remains separate gates.
 
 ### B.P1 — Per-logger runtime level core
 
@@ -267,8 +267,9 @@ against the merged B.1d API. The implementation activates the nine wrapper
 and 20 method warnings at `1.4.0`, migrates ordinary routing call sites,
 preserves narrow compatibility boundaries, and validates legacy/migrated/
 partial external Cargo consumers with JSON diagnostics and a Serde golden.
-B.2 qualification and B.7 publication remain separately gated; B.7 alone
-publishes and no removal schedule is introduced.
+B.2 qualification and later publication remain separately gated; no removal
+schedule is introduced. Publication follows Phase-C `sc-publish` migration and
+separate authorization.
 
 ### B.1 integration — Combined B.1a-B.1d reconciliation and registry parity
 
@@ -312,19 +313,18 @@ BTIT source was copied, no source approval was granted, and no real
 accepted, and the B.1 copy section above records that this validator's real
 `import-provenance.json` now exists and B.1 has copied the accepted source.
 
-### B.7 — Publish bindings: review-readiness machinery (publication pending owner review)
+### B.7 — Binding publication readiness machinery (publication deferred beyond Phase B)
 
 The phase-end publication sprint is tracked in
 [`plans/phase-b/sprint-b-7-publish-bindings.md`](./plans/phase-b/sprint-b-7-publish-bindings.md),
 built from `feature/phase-b-6-python-async`. **Owner sequencing correction:
 no mid-phase publication.** B.P2/B.2 are reviewed immutable release
 candidates, B.3-B.6 and these bindings consume prepublication bundles, and
-B.7 is the sole phase-end publication step for all of Phase B (core,
-bridge/macros, and bindings) -- but only once explicit owner review
-authorizes it. Until then, no publication workflow is dispatched and no
-registry credentials are sought. Installing or upgrading the intended shared
-publishing pipeline, `sc-publish`, is a separate follow-up outside Phase B
-and is not installed on this branch.
+B.7 readiness packet covers all of Phase B (core, bridge/macros, and bindings)
+-- but Phase B records readiness only. Until the
+phase merges, no publication workflow is dispatched and no registry
+credentials are sought. Phase C migrates and preflights `sc-publish`; separate
+owner authorization follows, then BTIT adopts the published artifacts.
 
 This entry records the review-readiness machinery built instead:
 `release/bindings-artifacts.toml` (manifest for the 4 binding crates.io
@@ -488,7 +488,7 @@ observation for owned and attached backends. The
 local checks and remaining gates. The final B.4/B.5/B.6 combined candidate must
 pass one immutable five-wheel/25-cell matrix, including actual embedded hosts
 per interpreter. Lead completeness, consolidated QA, ordered parent merges and
-B.7 publication remain separate; no intermediate local result closes the matrix.
+later publication remains separate; no intermediate local result closes the matrix.
 
 ### B.4 — Owned and host-attached Python runtime
 

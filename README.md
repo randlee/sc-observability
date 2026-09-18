@@ -25,9 +25,10 @@ Shared structured logging, routing, and OTLP observability crates.
 | OTLP export | `sc-observability-otlp` + lower layers |
 | Shared value types only | `sc-observability-types` |
 
-The Tauri host, PyO3 extension, Python wheel/sdist, and generated TypeScript
-client are binding artifacts rather than root-workspace crates. Their intended
-publish channels and deliberate B.7 deferrals are recorded in
+The PyO3 extension is a root-workspace crate and is published as a Rust
+support artifact; its Python wheel/sdist, the standalone Tauri host, and the
+generated TypeScript client are separate binding artifacts. Their intended
+publish channels and deliberate post-Phase-B authorization are recorded in
 [`release/bindings-artifacts.toml`](./release/bindings-artifacts.toml).
 
 ## Minimal Logging-Only Snippet

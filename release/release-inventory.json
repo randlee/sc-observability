@@ -56,7 +56,7 @@
   ],
   "qualificationCandidate": {
     "version": "1.4.0",
-    "publication": "pending_B.7",
+    "publication": "pending_phase_c_sc_publish_and_owner_authorization",
     "packages": [
       "sc-observability-types",
       "sc-observability",
@@ -67,9 +67,9 @@
     ],
     "bindingInventory": "release/bindings-artifacts.toml",
     "bindingChannels": ["crates.io", "pypi", "npm"],
-    "bindingPublication": "pending_B.7_owner_authorization",
+    "bindingPublication": "pending_phase_c_sc_publish_and_owner_authorization",
     "handoff": "docs/plans/phase-b/handoff-b-2.md",
     "stageManifest": "stage-manifest.json",
-    "qualificationSource": "recorded immutably in each stage manifest; not the final B.7 publication source"
+    "qualificationSource": "recorded immutably in each stage manifest; not an authorized publication source"
   }
 }

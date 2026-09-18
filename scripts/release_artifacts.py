@@ -20,6 +20,16 @@ def workspace_members(workspace_toml: Path) -> set[str]:
     return set(data.get("workspace", {}).get("members", []))
 
 
+def is_workspace_member(cargo_toml: Path, workspace_toml: Path) -> bool:
+    """Accept root members and explicitly standalone package manifests."""
+    members = workspace_members(workspace_toml)
+    relative = cargo_toml.parent.as_posix()
+    if relative in members:
+        return True
+    data = tomllib.loads(cargo_toml.read_text(encoding="utf-8"))
+    return data.get("workspace") == {} and cargo_toml.exists()
+
+
 def package_name(cargo_toml: Path) -> str:
     data = tomllib.loads(cargo_toml.read_text(encoding="utf-8"))
     return data["package"]["name"]
@@ -32,10 +42,10 @@ def workspace_version(workspace_toml: Path) -> str:
 
 def cmd_validate_manifest(args: argparse.Namespace) -> int:
     manifest = load_manifest(Path(args.manifest))
-    members = workspace_members(Path(args.workspace_toml))
     missing = []
     for crate in manifest["crates"]:
-        if crate["cargo_toml"].removesuffix("/Cargo.toml") not in members:
+        cargo_toml = Path(crate["cargo_toml"])
+        if not is_workspace_member(cargo_toml, Path(args.workspace_toml)):
             missing.append(crate["cargo_toml"])
     if missing:
         raise SystemExit(f"manifest references non-member crates: {', '.join(missing)}")
