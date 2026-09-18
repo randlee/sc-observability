@@ -77,6 +77,7 @@ def main():
             (denied/'sentinel').write_text('must not read')
             original_acl=powershell('(Get-Acl '+literal(denied)+').Sddl')
             report['acl_before']=original_acl
+            original_child_acl=powershell('(Get-Acl '+literal(denied/'sentinel')+').Sddl')
             try:
                 executable=scratch/'probe-2.exe'
                 powershell('Add-Type -TypeDefinition '+literal(PROBE)+' -Language CSharp -OutputAssembly '+literal(executable)+' -OutputType ConsoleApplication')
@@ -118,6 +119,7 @@ def main():
                 identity.close(); identity=None
                 report['acl_after']=powershell('(Get-Acl '+literal(denied)+').Sddl')
                 if report['acl_after'] != original_acl: raise RuntimeError('ACL recovery mismatch')
+                if powershell('(Get-Acl '+literal(denied/'sentinel')+').Sddl') != original_child_acl: raise RuntimeError('descendant ACL recovery mismatch')
                 with socket.create_connection((ip,443),timeout=5): pass
                 report['events'].append({'name':'normal_cleanup','status':'passed'})
                 # Recovery from a real ACL-only setup state, before rule creation.

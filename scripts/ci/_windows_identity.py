@@ -99,6 +99,42 @@ class Api:
             W.LPCWSTR, W.LPWSTR, W.DWORD, ctypes.c_void_p, W.LPCWSTR,
             ctypes.POINTER(Startup), ctypes.POINTER(ProcessInfo)]
         self.create.restype = W.BOOL
+        self.get_security = self.advapi.GetFileSecurityW
+        self.get_security.argtypes = [W.LPCWSTR, W.DWORD, ctypes.c_void_p, W.DWORD, ctypes.POINTER(W.DWORD)]
+        self.get_security.restype = W.BOOL
+        self.set_security = self.advapi.SetFileSecurityW
+        self.set_security.argtypes = [W.LPCWSTR, W.DWORD, ctypes.c_void_p]
+        self.set_security.restype = W.BOOL
+
+    def save_acls(self, root, destination):
+        records = []
+        paths = [root]
+        for parent, directories, files in os.walk(root, followlinks=False):
+            paths.extend(Path(parent) / name for name in directories + files)
+        for path in paths:
+            if path.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction()):
+                raise RuntimeError('ACL snapshot refuses reparse paths')
+            size = W.DWORD()
+            self.get_security(str(path), 7, None, 0, ctypes.byref(size))
+            if not size.value:
+                raise ctypes.WinError(ctypes.get_last_error())
+            data = ctypes.create_string_buffer(size.value)
+            self.check(self.get_security(str(path), 7, data, size.value, ctypes.byref(size)))
+            records.append([path.relative_to(root).as_posix(), base64.b64encode(data.raw).decode('ascii')])
+        destination.write_text(json.dumps(records), encoding='utf-8')
+
+    def restore_acls(self, root, source):
+        # SetNamedSecurityInfo/Set-Acl converts old descriptors to automatic
+        # inheritance, changing their control bits. The documented legacy
+        # SetFileSecurity API deliberately does not propagate inheritance;
+        # replay each saved descriptor so existing descendants are exact too.
+        for relative, encoded in reversed(json.loads(source.read_text(encoding='utf-8'))):
+            path = root / relative
+            if Path(relative).is_absolute() or '..' in Path(relative).parts:
+                raise ValueError('ACL snapshot escapes its root')
+            if path.exists():
+                data = ctypes.create_string_buffer(base64.b64decode(encoded, validate=True))
+                self.check(self.set_security(str(path), 4, data))
 
     @staticmethod
     def check(result):
@@ -150,11 +186,7 @@ def recover(journal):
         if root == Path(root.anchor) or not saved.is_relative_to(journal.parent) or not re.fullmatch(r'acl-[0-9]+\.txt', saved.name):
             raise ValueError('invalid proof ACL journal')
         try:
-            # icacls /restore promotes inherited ACEs into explicit ACEs on
-            # these hosted images. Restore the original descriptor instead.
-            powershell('$acl=New-Object System.Security.AccessControl.DirectorySecurity; '
-                       '$acl.SetSecurityDescriptorSddlForm(' + literal(sddl) + '); '
-                       'Set-Acl -LiteralPath ' + literal(root) + ' -AclObject $acl')
+            api.restore_acls(root, saved)
         except (subprocess.SubprocessError, OSError, RuntimeError) as error:
             errors.append(str(error))
     # Account and profile are unique to this proof, never runner accounts.
@@ -202,8 +234,7 @@ class Identity:
             if not root.exists():
                 continue
             saved = self.control / f'acl-{index}.txt'
-            subprocess.run(['icacls', str(root), '/save', str(saved), '/T', '/C'],
-                           check=True, stdout=subprocess.DEVNULL, timeout=60)
+            self.api.save_acls(root, saved)
             original = powershell('(Get-Acl -LiteralPath ' + literal(root) + ').Sddl')
             self.record['acls'].append([str(root), str(saved), original])
             self.write()
