@@ -1,8 +1,9 @@
 ---
 id: B.6
-status: proposed
+status: complete
 branch: feature/phase-b-6-python-async
-base: develop
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-6-python-async
+base: feature/phase-b-5-python-integration
 ---
 
 # B.6 — Fire-and-forget Python logging with optional async confirmation
@@ -198,6 +199,20 @@ completion-before-next-poll race, closed-loop reservation reclamation, and loop/
 subprocess tests. Run both owned and attached modes on the B.4a Python/platform
 matrix. Use deterministic operation counts and bounded outstanding-work checks
 rather than a throughput benchmark as correctness evidence.
+
+## Current qualification evidence (updated 2026-09-18)
+
+Status: `complete` for this development scope. The same B.4a 25-cell
+installed-distribution matrix B.5 depends on has now passed (see
+`sprint-b-4a-python-packaging.md`'s current qualification evidence): run
+`35303039765` at `c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18` completed
+`conclusion: success`, all 33 jobs, with `embedding_in_each_cell` enabled as
+B.6 requires. B.6's own implementation/local-check evidence is recorded in
+`handoff-b-6.md` and `checklist-b-6.md`, both updated from this terminal run.
+Lead completeness decision: **PASS** (aobs, 2026-09-18), recorded in
+`handoff-b-4a.md`. `status` above reads `complete` for this development
+scope; independent phase-end QA acceptance remains separately pending, and
+formal API/ADR approval and publication remain deferred to B.7.
 
 ## Paths to delete
 

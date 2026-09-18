@@ -1,8 +1,9 @@
 ---
 id: B.4a
-status: proposed
+status: complete
 branch: feature/phase-b-4a-python-packaging
-base: develop
+base: feature/phase-b-4-python
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging
 ---
 
 # B.4a — Python distributions and platform qualification
@@ -57,6 +58,26 @@ expose the same Result/Failure tags and stubs as a source build; packaging canno
 replace native functionality with a fallback or weaken error handling.
 Distribution name remains proposed `sc-observability`; registry availability
 and publication belong to B.7.
+
+The lead-approved qualification refinement (ATM 01M2QF796PNV7EN3JN445PTD5D)
+keeps one immutable production abi3 wheel per platform. Every cell runs the full
+public runtime suite, including inherited B.5/B.6 tests, and asserts that private
+native test hooks are absent. Fault injection alone uses a separate instrumented
+companion built from the identical sdist with only the additional `test-hooks`
+feature. Its explicit `fault_pytest_paths` files run in a separate installed
+environment on each cell's interpreter. Both suites reject skips. Evidence
+records separate hashes, features and roles; companion results cannot replace
+production behavior, and companions never enter the publication inventory.
+The runner supports interpreter-matched embedded-host execution in every cell
+through `embedding_in_each_cell`; B.6 enables this together with asyncio debug
+and warnings-as-errors for its full owned/attached qualification.
+
+Full qualification is explicitly scheduled for the combined corrected candidate
+through `workflow_dispatch`, or reused by B.7 through `workflow_call` with a full
+immutable source SHA. The reusable call has no development-mode input. Routine
+PRs run the separate cheap packaging boundary and workflow syntax checks; they
+do not launch redundant 25-cell matrices. This scheduling refinement is recorded
+in ATM 01M2QG7VKZJ6XYBK34XXCG786V and preserves all final acceptance gates.
 
 ## Prepublication Rust source bundle
 
@@ -203,6 +224,25 @@ sdist-specific frozen Cargo.lock. No `--no-verify` packaging result alone counts
 as verification. CI must aggregate all 25 cell results and fail on absent evidence. Test missing
 package data, invalid platform tags and accidental extension-only host linker
 flags through packaging fixtures; do not corrupt release artifacts for tests.
+
+## Current qualification evidence (updated 2026-09-18)
+
+The 25-cell matrix has now actually passed. GitHub Actions run `35303039765`
+("B.4a Python distribution qualification") at exact source SHA
+`c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18` completed `conclusion: success`:
+all 33 jobs passed -- `plan`, `sdist`, all 5 `wheel` platform builds, all 25
+`installed-suite` interpreter/platform cells, and the `aggregate` "Require
+all 25 cells against the same five wheels and sdist" gate. This supersedes
+the earlier failed diagnostic runs recorded in this repository's history
+(`35295219562` at `ca23fc6`: Windows embedding `AssertionError(2)`;
+`35300170241` at `0e48648`: Windows async fixture deadline assertion),
+which remain retained as development history, not current status.
+
+AC1-AC4's development qualification is complete per this terminal evidence.
+Lead completeness decision: **PASS** (aobs, 2026-09-18), recorded in
+`handoff-b-4a.md`. `status` above reads `complete` for this development
+scope; independent phase-end QA acceptance remains separately pending, and
+formal API/ADR approval and publication remain deferred to B.7.
 
 ## Paths to delete
 

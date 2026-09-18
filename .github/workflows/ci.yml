@@ -54,7 +54,7 @@ jobs:
           key: ubuntu-clippy-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
   docs-consistency:
     name: docs-consistency (ubuntu)
@@ -131,6 +131,38 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  log-bridge-import-integrity:
+    name: log-bridge-import-integrity (ubuntu)
+    needs: [clippy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Clone accepted BTIT source for provenance comparison
+        run: git clone https://github.com/randlee/beads-task-issue-tracker.git /tmp/btit-source
+
+      - name: Validate log bridge import provenance
+        run: |
+          python3 scripts/ci/validate_log_import.py \
+            --source-repo /tmp/btit-source \
+            --post-import-adaptations docs/plans/phase-b/post-import-adaptations.json \
+            --release-adaptations docs/plans/phase-b/release-adaptations-b-2.json
+
+      - name: Check imported log-bridge consumer-check crate
+        run: cargo check --locked -p sc-observability-log-consumer-check
+
   manifest-validation:
     name: manifest-validation (ubuntu)
     needs: [clippy, docs-consistency, dependency-bans, version-literals]
@@ -148,6 +180,9 @@ jobs:
           python3 scripts/release_artifacts.py validate-manifest \
             --manifest release/publish-artifacts.toml \
             --workspace-toml Cargo.toml
+
+      - name: Run release manifest regression tests
+        run: python3 -m unittest scripts/ci/tests/test_release_artifacts.py
 
       - name: Validate publish_order dependency graph
         run: bash scripts/ci/validate_publish_order.sh
@@ -199,4 +234,16 @@ jobs:
           key: ${{ runner.os }}-test-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run workspace tests
-        run: cargo test --workspace
+        run: cargo test --locked --workspace --all-targets
+
+      - name: Run workspace doctests
+        run: cargo test --locked --workspace --doc
+
+      - name: Run imported log bridge test_hooks feature
+        run: cargo test --locked -p sc-observability-log --all-targets --features test_hooks
+
+      - name: Run imported log bridge release static-level-cap fixture
+        run: cargo test --locked -p sc-observability-log --release --features static_level_cap_test --test static_level_cap
+
+      - name: Run imported log bridge release runtime-level fixture
+        run: cargo test --locked -p sc-observability-log --release --test runtime_level_bridge

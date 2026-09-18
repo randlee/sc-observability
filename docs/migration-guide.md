@@ -92,6 +92,28 @@ For consumers that export to OTLP:
 3. Attach OTLP by wrapping projector implementations locally, following the
    pattern used by `examples/atm-adapter-example`.
 
+## Typed Error Adoption (B.1e warning rollout)
+
+The additive typed error methods and B.1e warning rollout are implemented and
+validated on the current stack. B.2 qualifies the result before B.7
+publication. For exact old/new symbols, nine wrapper families, typed kind matching,
+source retention, custom-trait adapters, rollback and narrow warning policy,
+use the [typed error migration reference](../.claude/skills/sc-observability-adopting/references/migrate-error-api.md)
+and its [source inventory](plans/phase-b/warning-inventory-b-1e.md).
+
+`LoggerBuilder::build`, `Logger::new_with_level_owner` and
+`LoggerBuilder::build_with_level_owner` remain supported without method-level
+deprecation; their `_typed` methods are additive. `Logger::emit` retains its
+existing v1.2.0 warning and behavior; new migration guidance uses
+`log_typed()` for blocking admission and `try_log_typed()` for nonblocking
+admission. The corrected telemetry projector path
+uses explicit `sc_observability_types::typed::legacy_*` adapters with the
+unchanged `with_log_projector`, `with_span_projector` and
+`with_metric_projector` methods; no `with_typed_*` builders exist.
+
+This guide does not promise warning-free legacy compilation under
+`-D deprecated`, introduce a removal schedule or claim B.2/B.7 completion.
+
 ## Breaking API Renames
 
 The production-readiness review approved these source-breaking API updates:

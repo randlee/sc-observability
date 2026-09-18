@@ -1,0 +1,5740 @@
+[
+  {
+    "id": "InputAdmissionDto-0",
+    "entrypoint": "InputAdmissionDto",
+    "value": {
+      "kind": "accepted"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "accepted"
+    }
+  },
+  {
+    "id": "InputAdmissionDto-1",
+    "entrypoint": "InputAdmissionDto",
+    "value": {
+      "kind": "filtered"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "filtered"
+    }
+  },
+  {
+    "id": "InputAdmissionOperationDto-0",
+    "entrypoint": "InputAdmissionOperationDto",
+    "value": "log",
+    "valid": true,
+    "serde_output": "log"
+  },
+  {
+    "id": "InputAdmissionOperationDto-1",
+    "entrypoint": "InputAdmissionOperationDto",
+    "value": "try_log",
+    "valid": true,
+    "serde_output": "try_log"
+  },
+  {
+    "id": "InputAvailabilityDto-0",
+    "entrypoint": "InputAvailabilityDto",
+    "value": "healthy",
+    "valid": true,
+    "serde_output": "healthy"
+  },
+  {
+    "id": "InputAvailabilityDto-1",
+    "entrypoint": "InputAvailabilityDto",
+    "value": "degraded_dropping",
+    "valid": true,
+    "serde_output": "degraded_dropping"
+  },
+  {
+    "id": "InputAvailabilityDto-2",
+    "entrypoint": "InputAvailabilityDto",
+    "value": "unavailable",
+    "valid": true,
+    "serde_output": "unavailable"
+  },
+  {
+    "id": "InputBridgeHealthDto-0",
+    "entrypoint": "InputBridgeHealthDto",
+    "value": {
+      "active_log_path": {
+        "kind": "utf8",
+        "value": "example"
+      },
+      "configured_level": "off",
+      "dropped": {
+        "invalid_event": "0",
+        "logger_panicked": "0",
+        "not_installed": "0",
+        "queue_full": "0",
+        "reentrant_emit": "0",
+        "shutdown_timed_out": "0",
+        "writer_degraded": "0"
+      },
+      "effective_level": "off",
+      "level_revision": "0",
+      "lifecycle": "running",
+      "logging": {
+        "active_log_path": {
+          "kind": "utf8",
+          "value": "example"
+        },
+        "dropped_events_total": "0",
+        "flush_errors_total": "0",
+        "queue_capacity": "0",
+        "queue_depth": "0",
+        "queue_full_drops_total": "0",
+        "queue_high_water_mark": "0",
+        "sink_statuses": [],
+        "state": "healthy",
+        "writer_state": "running"
+      },
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "active_log_path": {
+        "kind": "utf8",
+        "value": "example"
+      },
+      "configured_level": "off",
+      "dropped": {
+        "invalid_event": "0",
+        "logger_panicked": "0",
+        "not_installed": "0",
+        "queue_full": "0",
+        "reentrant_emit": "0",
+        "shutdown_timed_out": "0",
+        "writer_degraded": "0"
+      },
+      "effective_level": "off",
+      "level_revision": "0",
+      "lifecycle": "running",
+      "logging": {
+        "active_log_path": {
+          "kind": "utf8",
+          "value": "example"
+        },
+        "dropped_events_total": "0",
+        "flush_errors_total": "0",
+        "queue_capacity": "0",
+        "queue_depth": "0",
+        "queue_full_drops_total": "0",
+        "queue_high_water_mark": "0",
+        "sink_statuses": [],
+        "state": "healthy",
+        "writer_state": "running",
+        "last_error": null,
+        "last_writer_error": null,
+        "maintenance": null,
+        "query": null
+      },
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputChangeDiagnosticDto-0",
+    "entrypoint": "InputChangeDiagnosticDto",
+    "value": {
+      "kind": "accepted"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "accepted"
+    }
+  },
+  {
+    "id": "InputChangeDiagnosticDto-1",
+    "entrypoint": "InputChangeDiagnosticDto",
+    "value": {
+      "diagnostic": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "not_accepted"
+    },
+    "valid": true,
+    "serde_output": {
+      "diagnostic": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "not_accepted"
+    }
+  },
+  {
+    "id": "InputClientOutcome-0",
+    "entrypoint": "InputClientOutcome",
+    "value": {
+      "kind": "idle"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "idle"
+    }
+  },
+  {
+    "id": "InputClientOutcome-1",
+    "entrypoint": "InputClientOutcome",
+    "value": {
+      "kind": "scheduled",
+      "operation": "log"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "scheduled",
+      "operation": "log"
+    }
+  },
+  {
+    "id": "InputClientOutcome-2",
+    "entrypoint": "InputClientOutcome",
+    "value": {
+      "kind": "accepted",
+      "operation": "log"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "accepted",
+      "operation": "log"
+    }
+  },
+  {
+    "id": "InputClientOutcome-3",
+    "entrypoint": "InputClientOutcome",
+    "value": {
+      "kind": "filtered",
+      "operation": "log"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "filtered",
+      "operation": "log"
+    }
+  },
+  {
+    "id": "InputClientOutcome-4",
+    "entrypoint": "InputClientOutcome",
+    "value": {
+      "kind": "completed",
+      "operation": "query"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "completed",
+      "operation": "query"
+    }
+  },
+  {
+    "id": "InputClientStatus-0",
+    "entrypoint": "InputClientStatus",
+    "value": {
+      "failures_by_kind": {
+        "below_baseline": "0",
+        "cancelled": "0",
+        "closed": "0",
+        "internal": "0",
+        "io": "0",
+        "permission_denied": "0",
+        "queue_full": "0",
+        "timeout": "0",
+        "unavailable": "0",
+        "unknown_remote": "0",
+        "unsupported_level": "0",
+        "unsupported_version": "0",
+        "validation": "0"
+      },
+      "in_flight": 0,
+      "last_result": {
+        "kind": "ok",
+        "value": {
+          "kind": "idle"
+        }
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "failures_by_kind": {
+        "below_baseline": "0",
+        "cancelled": "0",
+        "closed": "0",
+        "internal": "0",
+        "io": "0",
+        "permission_denied": "0",
+        "queue_full": "0",
+        "timeout": "0",
+        "unavailable": "0",
+        "unknown_remote": "0",
+        "unsupported_level": "0",
+        "unsupported_version": "0",
+        "validation": "0"
+      },
+      "in_flight": 0,
+      "last_result": {
+        "kind": "ok",
+        "value": {
+          "kind": "idle"
+        }
+      },
+      "last_failure": null
+    }
+  },
+  {
+    "id": "InputCompletionDto-0",
+    "entrypoint": "InputCompletionDto",
+    "value": {
+      "kind": "completed"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "completed"
+    }
+  },
+  {
+    "id": "InputCompletionOperationDto-0",
+    "entrypoint": "InputCompletionOperationDto",
+    "value": "query",
+    "valid": true,
+    "serde_output": "query"
+  },
+  {
+    "id": "InputCompletionOperationDto-1",
+    "entrypoint": "InputCompletionOperationDto",
+    "value": "health",
+    "valid": true,
+    "serde_output": "health"
+  },
+  {
+    "id": "InputCompletionOperationDto-2",
+    "entrypoint": "InputCompletionOperationDto",
+    "value": "flush",
+    "valid": true,
+    "serde_output": "flush"
+  },
+  {
+    "id": "InputDecimalDto-0",
+    "entrypoint": "InputDecimalDto",
+    "value": "0",
+    "valid": true,
+    "serde_output": "0"
+  },
+  {
+    "id": "InputDiagnostic-0",
+    "entrypoint": "InputDiagnostic",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "InputDiagnosticSummaryDto-0",
+    "entrypoint": "InputDiagnosticSummaryDto",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "message": "example"
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "message": "example",
+      "code": null
+    }
+  },
+  {
+    "id": "InputDispatchDto-0",
+    "entrypoint": "InputDispatchDto",
+    "value": {
+      "kind": "scheduled"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "scheduled"
+    }
+  },
+  {
+    "id": "InputDropCountsDto-0",
+    "entrypoint": "InputDropCountsDto",
+    "value": {
+      "invalid_event": "0",
+      "logger_panicked": "0",
+      "not_installed": "0",
+      "queue_full": "0",
+      "reentrant_emit": "0",
+      "shutdown_timed_out": "0",
+      "writer_degraded": "0"
+    },
+    "valid": true,
+    "serde_output": {
+      "invalid_event": "0",
+      "logger_panicked": "0",
+      "not_installed": "0",
+      "queue_full": "0",
+      "reentrant_emit": "0",
+      "shutdown_timed_out": "0",
+      "writer_degraded": "0"
+    }
+  },
+  {
+    "id": "InputFailure-0",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "field": "example",
+      "kind": "validation",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "field": "example",
+      "kind": "validation",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "InputFailure-1",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "queue_full",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "queue_full",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "InputFailure-2",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "configured": "off",
+      "kind": "below_baseline",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "requested": "off"
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "configured": "off",
+      "kind": "below_baseline",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "requested": "off"
+    }
+  },
+  {
+    "id": "InputFailure-3",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "available": "off",
+      "code": "example",
+      "kind": "unsupported_level",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "requested": "off"
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "available": "off",
+      "code": "example",
+      "kind": "unsupported_level",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "requested": "off"
+    }
+  },
+  {
+    "id": "InputFailure-4",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "permission_denied",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "permission_denied",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "InputFailure-5",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "closed",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "closed",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "InputFailure-6",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "unavailable",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "unavailable",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "InputFailure-7",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "io",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "io",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "InputFailure-8",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "timeout",
+      "message": "example",
+      "operation": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "timeout",
+      "message": "example",
+      "operation": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "InputFailure-9",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "cancelled",
+      "message": "example",
+      "operation": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "cancelled",
+      "message": "example",
+      "operation": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "InputFailure-10",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "unsupported_version",
+      "message": "example",
+      "received": 0,
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "unsupported_version",
+      "message": "example",
+      "received": 0,
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "InputFailure-11",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "internal",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "internal",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "InputFailure-12",
+    "entrypoint": "InputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "unknown_remote",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "remote_kind": "example"
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "unknown_remote",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "remote_kind": "example"
+    }
+  },
+  {
+    "id": "InputFailureCountsDto-0",
+    "entrypoint": "InputFailureCountsDto",
+    "value": {
+      "below_baseline": "0",
+      "cancelled": "0",
+      "closed": "0",
+      "internal": "0",
+      "io": "0",
+      "permission_denied": "0",
+      "queue_full": "0",
+      "timeout": "0",
+      "unavailable": "0",
+      "unknown_remote": "0",
+      "unsupported_level": "0",
+      "unsupported_version": "0",
+      "validation": "0"
+    },
+    "valid": true,
+    "serde_output": {
+      "below_baseline": "0",
+      "cancelled": "0",
+      "closed": "0",
+      "internal": "0",
+      "io": "0",
+      "permission_denied": "0",
+      "queue_full": "0",
+      "timeout": "0",
+      "unavailable": "0",
+      "unknown_remote": "0",
+      "unsupported_level": "0",
+      "unsupported_version": "0",
+      "validation": "0"
+    }
+  },
+  {
+    "id": "InputFieldMatchDto-0",
+    "entrypoint": "InputFieldMatchDto",
+    "value": {
+      "field": "example",
+      "value": {
+        "kind": "null"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "field": "example",
+      "value": {
+        "kind": "null"
+      }
+    }
+  },
+  {
+    "id": "InputFlushRequest-0",
+    "entrypoint": "InputFlushRequest",
+    "value": {
+      "schema_version": 1,
+      "timeout_ms": 0
+    },
+    "valid": true,
+    "serde_output": {
+      "schema_version": 1,
+      "timeout_ms": 0
+    }
+  },
+  {
+    "id": "InputHealthRequest-0",
+    "entrypoint": "InputHealthRequest",
+    "value": {
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputLevelChangeDto-0",
+    "entrypoint": "InputLevelChangeDto",
+    "value": {
+      "current": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      },
+      "diagnostic": {
+        "kind": "accepted"
+      },
+      "kind": "changed",
+      "previous": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      },
+      "source": "application"
+    },
+    "valid": true,
+    "serde_output": {
+      "current": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      },
+      "diagnostic": {
+        "kind": "accepted"
+      },
+      "kind": "changed",
+      "previous": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      },
+      "source": "application"
+    }
+  },
+  {
+    "id": "InputLevelChangeDto-1",
+    "entrypoint": "InputLevelChangeDto",
+    "value": {
+      "kind": "unchanged",
+      "state": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "unchanged",
+      "state": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      }
+    }
+  },
+  {
+    "id": "InputLevelChangeRequest-0",
+    "entrypoint": "InputLevelChangeRequest",
+    "value": {
+      "change": {
+        "kind": "elevate",
+        "level": "off"
+      },
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "change": {
+        "kind": "elevate",
+        "level": "off"
+      },
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputLevelChangeSourceDto-0",
+    "entrypoint": "InputLevelChangeSourceDto",
+    "value": "application",
+    "valid": true,
+    "serde_output": "application"
+  },
+  {
+    "id": "InputLevelChangeSourceDto-1",
+    "entrypoint": "InputLevelChangeSourceDto",
+    "value": "user_request",
+    "valid": true,
+    "serde_output": "user_request"
+  },
+  {
+    "id": "InputLevelChangeSourceDto-2",
+    "entrypoint": "InputLevelChangeSourceDto",
+    "value": "diagnostic_session",
+    "valid": true,
+    "serde_output": "diagnostic_session"
+  },
+  {
+    "id": "InputLevelDto-0",
+    "entrypoint": "InputLevelDto",
+    "value": "trace",
+    "valid": true,
+    "serde_output": "trace"
+  },
+  {
+    "id": "InputLevelDto-1",
+    "entrypoint": "InputLevelDto",
+    "value": "debug",
+    "valid": true,
+    "serde_output": "debug"
+  },
+  {
+    "id": "InputLevelDto-2",
+    "entrypoint": "InputLevelDto",
+    "value": "info",
+    "valid": true,
+    "serde_output": "info"
+  },
+  {
+    "id": "InputLevelDto-3",
+    "entrypoint": "InputLevelDto",
+    "value": "warn",
+    "valid": true,
+    "serde_output": "warn"
+  },
+  {
+    "id": "InputLevelDto-4",
+    "entrypoint": "InputLevelDto",
+    "value": "error",
+    "valid": true,
+    "serde_output": "error"
+  },
+  {
+    "id": "InputLevelFilterDto-0",
+    "entrypoint": "InputLevelFilterDto",
+    "value": "off",
+    "valid": true,
+    "serde_output": "off"
+  },
+  {
+    "id": "InputLevelFilterDto-1",
+    "entrypoint": "InputLevelFilterDto",
+    "value": "error",
+    "valid": true,
+    "serde_output": "error"
+  },
+  {
+    "id": "InputLevelFilterDto-2",
+    "entrypoint": "InputLevelFilterDto",
+    "value": "warn",
+    "valid": true,
+    "serde_output": "warn"
+  },
+  {
+    "id": "InputLevelFilterDto-3",
+    "entrypoint": "InputLevelFilterDto",
+    "value": "info",
+    "valid": true,
+    "serde_output": "info"
+  },
+  {
+    "id": "InputLevelFilterDto-4",
+    "entrypoint": "InputLevelFilterDto",
+    "value": "debug",
+    "valid": true,
+    "serde_output": "debug"
+  },
+  {
+    "id": "InputLevelFilterDto-5",
+    "entrypoint": "InputLevelFilterDto",
+    "value": "trace",
+    "valid": true,
+    "serde_output": "trace"
+  },
+  {
+    "id": "InputLevelRequestDto-0",
+    "entrypoint": "InputLevelRequestDto",
+    "value": {
+      "kind": "elevate",
+      "level": "off"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "elevate",
+      "level": "off"
+    }
+  },
+  {
+    "id": "InputLevelRequestDto-1",
+    "entrypoint": "InputLevelRequestDto",
+    "value": {
+      "kind": "reset"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "reset"
+    }
+  },
+  {
+    "id": "InputLevelStateDto-0",
+    "entrypoint": "InputLevelStateDto",
+    "value": {
+      "configured_level": "off",
+      "effective_level": "off",
+      "level_revision": "0"
+    },
+    "valid": true,
+    "serde_output": {
+      "configured_level": "off",
+      "effective_level": "off",
+      "level_revision": "0"
+    }
+  },
+  {
+    "id": "InputLifecycleDto-0",
+    "entrypoint": "InputLifecycleDto",
+    "value": "running",
+    "valid": true,
+    "serde_output": "running"
+  },
+  {
+    "id": "InputLifecycleDto-1",
+    "entrypoint": "InputLifecycleDto",
+    "value": "stopping",
+    "valid": true,
+    "serde_output": "stopping"
+  },
+  {
+    "id": "InputLifecycleDto-2",
+    "entrypoint": "InputLifecycleDto",
+    "value": "stopped",
+    "valid": true,
+    "serde_output": "stopped"
+  },
+  {
+    "id": "InputLifecycleDto-3",
+    "entrypoint": "InputLifecycleDto",
+    "value": "failed",
+    "valid": true,
+    "serde_output": "failed"
+  },
+  {
+    "id": "InputLogEventDto-0",
+    "entrypoint": "InputLogEventDto",
+    "value": {
+      "action": "example",
+      "level": "trace",
+      "schema_version": 1,
+      "target": "example"
+    },
+    "valid": true,
+    "serde_output": {
+      "action": "example",
+      "level": "trace",
+      "schema_version": 1,
+      "target": "example",
+      "correlation_id": null,
+      "fields": {},
+      "message": null,
+      "outcome": null,
+      "request_id": null,
+      "trace": null
+    }
+  },
+  {
+    "id": "InputLogHealthDto-0",
+    "entrypoint": "InputLogHealthDto",
+    "value": {
+      "level_state": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      },
+      "logging": {
+        "active_log_path": {
+          "kind": "utf8",
+          "value": "example"
+        },
+        "dropped_events_total": "0",
+        "flush_errors_total": "0",
+        "queue_capacity": "0",
+        "queue_depth": "0",
+        "queue_full_drops_total": "0",
+        "queue_high_water_mark": "0",
+        "sink_statuses": [],
+        "state": "healthy",
+        "writer_state": "running"
+      },
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "level_state": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      },
+      "logging": {
+        "active_log_path": {
+          "kind": "utf8",
+          "value": "example"
+        },
+        "dropped_events_total": "0",
+        "flush_errors_total": "0",
+        "queue_capacity": "0",
+        "queue_depth": "0",
+        "queue_full_drops_total": "0",
+        "queue_high_water_mark": "0",
+        "sink_statuses": [],
+        "state": "healthy",
+        "writer_state": "running",
+        "last_error": null,
+        "last_writer_error": null,
+        "maintenance": null,
+        "query": null
+      },
+      "schema_version": 1,
+      "bridge": null
+    }
+  },
+  {
+    "id": "InputLogOperationDto-0",
+    "entrypoint": "InputLogOperationDto",
+    "value": "log",
+    "valid": true,
+    "serde_output": "log"
+  },
+  {
+    "id": "InputLogOrderDto-0",
+    "entrypoint": "InputLogOrderDto",
+    "value": "oldest_first",
+    "valid": true,
+    "serde_output": "oldest_first"
+  },
+  {
+    "id": "InputLogOrderDto-1",
+    "entrypoint": "InputLogOrderDto",
+    "value": "newest_first",
+    "valid": true,
+    "serde_output": "newest_first"
+  },
+  {
+    "id": "InputLogQueryDto-0",
+    "entrypoint": "InputLogQueryDto",
+    "value": {
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "schema_version": 1,
+      "action": null,
+      "correlation_id": null,
+      "field_matches": [],
+      "levels": [],
+      "limit": 100,
+      "order": "oldest_first",
+      "request_id": null,
+      "service": null,
+      "since": null,
+      "target": null,
+      "until": null
+    }
+  },
+  {
+    "id": "InputLogSnapshotDto-0",
+    "entrypoint": "InputLogSnapshotDto",
+    "value": {
+      "events": [],
+      "schema_version": 1,
+      "truncated": true
+    },
+    "valid": true,
+    "serde_output": {
+      "events": [],
+      "schema_version": 1,
+      "truncated": true
+    }
+  },
+  {
+    "id": "InputLoggingHealthDto-0",
+    "entrypoint": "InputLoggingHealthDto",
+    "value": {
+      "active_log_path": {
+        "kind": "utf8",
+        "value": "example"
+      },
+      "dropped_events_total": "0",
+      "flush_errors_total": "0",
+      "queue_capacity": "0",
+      "queue_depth": "0",
+      "queue_full_drops_total": "0",
+      "queue_high_water_mark": "0",
+      "sink_statuses": [],
+      "state": "healthy",
+      "writer_state": "running"
+    },
+    "valid": true,
+    "serde_output": {
+      "active_log_path": {
+        "kind": "utf8",
+        "value": "example"
+      },
+      "dropped_events_total": "0",
+      "flush_errors_total": "0",
+      "queue_capacity": "0",
+      "queue_depth": "0",
+      "queue_full_drops_total": "0",
+      "queue_high_water_mark": "0",
+      "sink_statuses": [],
+      "state": "healthy",
+      "writer_state": "running",
+      "last_error": null,
+      "last_writer_error": null,
+      "maintenance": null,
+      "query": null
+    }
+  },
+  {
+    "id": "InputMaintenanceHealthDto-0",
+    "entrypoint": "InputMaintenanceHealthDto",
+    "value": {
+      "pruned_files_total": "0",
+      "rotated_files_total": "0",
+      "state": "running"
+    },
+    "valid": true,
+    "serde_output": {
+      "pruned_files_total": "0",
+      "rotated_files_total": "0",
+      "state": "running",
+      "last_error": null,
+      "last_pass_at": null
+    }
+  },
+  {
+    "id": "InputOperationDiagnosticDto-0",
+    "entrypoint": "InputOperationDiagnosticDto",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "InputPathDto-0",
+    "entrypoint": "InputPathDto",
+    "value": {
+      "kind": "utf8",
+      "value": "example"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "utf8",
+      "value": "example"
+    }
+  },
+  {
+    "id": "InputPathDto-1",
+    "entrypoint": "InputPathDto",
+    "value": {
+      "kind": "unrepresentable"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "unrepresentable"
+    }
+  },
+  {
+    "id": "InputPathDto-2",
+    "entrypoint": "InputPathDto",
+    "value": {
+      "kind": "absent"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "absent"
+    }
+  },
+  {
+    "id": "InputProcessIdentityDto-0",
+    "entrypoint": "InputProcessIdentityDto",
+    "value": {},
+    "valid": true,
+    "serde_output": {
+      "hostname": null,
+      "pid": null
+    }
+  },
+  {
+    "id": "InputQueryHealthDto-0",
+    "entrypoint": "InputQueryHealthDto",
+    "value": {
+      "state": "healthy"
+    },
+    "valid": true,
+    "serde_output": {
+      "state": "healthy",
+      "last_error": null
+    }
+  },
+  {
+    "id": "InputQueryRequest-0",
+    "entrypoint": "InputQueryRequest",
+    "value": {
+      "query": {
+        "schema_version": 1
+      },
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "query": {
+        "schema_version": 1,
+        "action": null,
+        "correlation_id": null,
+        "field_matches": [],
+        "levels": [],
+        "limit": 100,
+        "order": "oldest_first",
+        "request_id": null,
+        "service": null,
+        "since": null,
+        "target": null,
+        "until": null
+      },
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputQueryStateDto-0",
+    "entrypoint": "InputQueryStateDto",
+    "value": "healthy",
+    "valid": true,
+    "serde_output": "healthy"
+  },
+  {
+    "id": "InputQueryStateDto-1",
+    "entrypoint": "InputQueryStateDto",
+    "value": "degraded",
+    "valid": true,
+    "serde_output": "degraded"
+  },
+  {
+    "id": "InputQueryStateDto-2",
+    "entrypoint": "InputQueryStateDto",
+    "value": "unavailable",
+    "valid": true,
+    "serde_output": "unavailable"
+  },
+  {
+    "id": "InputRemediationDto-0",
+    "entrypoint": "InputRemediationDto",
+    "value": {
+      "kind": "recoverable",
+      "steps": []
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "recoverable",
+      "steps": []
+    }
+  },
+  {
+    "id": "InputRemediationDto-1",
+    "entrypoint": "InputRemediationDto",
+    "value": {
+      "justification": "example",
+      "kind": "not_recoverable"
+    },
+    "valid": true,
+    "serde_output": {
+      "justification": "example",
+      "kind": "not_recoverable"
+    }
+  },
+  {
+    "id": "InputResultDtoAdmissionDto-0",
+    "entrypoint": "InputResultDtoAdmissionDto",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "kind": "accepted"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "kind": "accepted"
+      }
+    }
+  },
+  {
+    "id": "InputResultDtoAdmissionDto-1",
+    "entrypoint": "InputResultDtoAdmissionDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "InputResultDtoClientOutcome-0",
+    "entrypoint": "InputResultDtoClientOutcome",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "kind": "idle"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "kind": "idle"
+      }
+    }
+  },
+  {
+    "id": "InputResultDtoClientOutcome-1",
+    "entrypoint": "InputResultDtoClientOutcome",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "InputResultDtoClientStatus-0",
+    "entrypoint": "InputResultDtoClientStatus",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "failures_by_kind": {
+          "below_baseline": "0",
+          "cancelled": "0",
+          "closed": "0",
+          "internal": "0",
+          "io": "0",
+          "permission_denied": "0",
+          "queue_full": "0",
+          "timeout": "0",
+          "unavailable": "0",
+          "unknown_remote": "0",
+          "unsupported_level": "0",
+          "unsupported_version": "0",
+          "validation": "0"
+        },
+        "in_flight": 0,
+        "last_result": {
+          "kind": "ok",
+          "value": {
+            "kind": "idle"
+          }
+        }
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "failures_by_kind": {
+          "below_baseline": "0",
+          "cancelled": "0",
+          "closed": "0",
+          "internal": "0",
+          "io": "0",
+          "permission_denied": "0",
+          "queue_full": "0",
+          "timeout": "0",
+          "unavailable": "0",
+          "unknown_remote": "0",
+          "unsupported_level": "0",
+          "unsupported_version": "0",
+          "validation": "0"
+        },
+        "in_flight": 0,
+        "last_result": {
+          "kind": "ok",
+          "value": {
+            "kind": "idle"
+          }
+        },
+        "last_failure": null
+      }
+    }
+  },
+  {
+    "id": "InputResultDtoClientStatus-1",
+    "entrypoint": "InputResultDtoClientStatus",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "InputResultDtoCompletionDto-0",
+    "entrypoint": "InputResultDtoCompletionDto",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "kind": "completed"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "kind": "completed"
+      }
+    }
+  },
+  {
+    "id": "InputResultDtoCompletionDto-1",
+    "entrypoint": "InputResultDtoCompletionDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "InputResultDtoDispatchDto-0",
+    "entrypoint": "InputResultDtoDispatchDto",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "kind": "scheduled"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "kind": "scheduled"
+      }
+    }
+  },
+  {
+    "id": "InputResultDtoDispatchDto-1",
+    "entrypoint": "InputResultDtoDispatchDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "InputResultDtoLevelChangeDto-0",
+    "entrypoint": "InputResultDtoLevelChangeDto",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "current": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "diagnostic": {
+          "kind": "accepted"
+        },
+        "kind": "changed",
+        "previous": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "source": "application"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "current": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "diagnostic": {
+          "kind": "accepted"
+        },
+        "kind": "changed",
+        "previous": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "source": "application"
+      }
+    }
+  },
+  {
+    "id": "InputResultDtoLevelChangeDto-1",
+    "entrypoint": "InputResultDtoLevelChangeDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "InputResultDtoLogHealthDto-0",
+    "entrypoint": "InputResultDtoLogHealthDto",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "level_state": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "logging": {
+          "active_log_path": {
+            "kind": "utf8",
+            "value": "example"
+          },
+          "dropped_events_total": "0",
+          "flush_errors_total": "0",
+          "queue_capacity": "0",
+          "queue_depth": "0",
+          "queue_full_drops_total": "0",
+          "queue_high_water_mark": "0",
+          "sink_statuses": [],
+          "state": "healthy",
+          "writer_state": "running"
+        },
+        "schema_version": 1
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "level_state": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "logging": {
+          "active_log_path": {
+            "kind": "utf8",
+            "value": "example"
+          },
+          "dropped_events_total": "0",
+          "flush_errors_total": "0",
+          "queue_capacity": "0",
+          "queue_depth": "0",
+          "queue_full_drops_total": "0",
+          "queue_high_water_mark": "0",
+          "sink_statuses": [],
+          "state": "healthy",
+          "writer_state": "running",
+          "last_error": null,
+          "last_writer_error": null,
+          "maintenance": null,
+          "query": null
+        },
+        "schema_version": 1,
+        "bridge": null
+      }
+    }
+  },
+  {
+    "id": "InputResultDtoLogHealthDto-1",
+    "entrypoint": "InputResultDtoLogHealthDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "InputResultDtoLogSnapshotDto-0",
+    "entrypoint": "InputResultDtoLogSnapshotDto",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "events": [],
+        "schema_version": 1,
+        "truncated": true
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "events": [],
+        "schema_version": 1,
+        "truncated": true
+      }
+    }
+  },
+  {
+    "id": "InputResultDtoLogSnapshotDto-1",
+    "entrypoint": "InputResultDtoLogSnapshotDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "InputSinkHealthDto-0",
+    "entrypoint": "InputSinkHealthDto",
+    "value": {
+      "name": "example",
+      "state": "healthy"
+    },
+    "valid": true,
+    "serde_output": {
+      "name": "example",
+      "state": "healthy",
+      "last_error": null
+    }
+  },
+  {
+    "id": "InputStateTransitionDto-0",
+    "entrypoint": "InputStateTransitionDto",
+    "value": {
+      "entity_kind": "example",
+      "from_state": "example",
+      "to_state": "example"
+    },
+    "valid": true,
+    "serde_output": {
+      "entity_kind": "example",
+      "from_state": "example",
+      "to_state": "example",
+      "entity_id": null,
+      "reason": null,
+      "trigger": null
+    }
+  },
+  {
+    "id": "InputStoredDiagnosticDto-0",
+    "entrypoint": "InputStoredDiagnosticDto",
+    "value": {
+      "code": "example",
+      "details": {},
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "timestamp": "1970-01-01T00:00:00Z"
+    },
+    "valid": true,
+    "serde_output": {
+      "code": "example",
+      "details": {},
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "timestamp": "1970-01-01T00:00:00Z",
+      "cause": null,
+      "docs": null
+    }
+  },
+  {
+    "id": "InputStoredEventDto-0",
+    "entrypoint": "InputStoredEventDto",
+    "value": {
+      "action": "example",
+      "fields": {},
+      "identity": {},
+      "level": "trace",
+      "service": "example",
+      "target": "example",
+      "timestamp": "1970-01-01T00:00:00Z",
+      "version": "v1"
+    },
+    "valid": true,
+    "serde_output": {
+      "action": "example",
+      "fields": {},
+      "identity": {
+        "hostname": null,
+        "pid": null
+      },
+      "level": "trace",
+      "service": "example",
+      "target": "example",
+      "timestamp": "1970-01-01T00:00:00Z",
+      "version": "v1",
+      "correlation_id": null,
+      "diagnostic": null,
+      "message": null,
+      "outcome": null,
+      "request_id": null,
+      "state_transition": null,
+      "trace": null
+    }
+  },
+  {
+    "id": "InputTraceContextDto-0",
+    "entrypoint": "InputTraceContextDto",
+    "value": {
+      "span_id": "0123456789abcdef",
+      "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "valid": true,
+    "serde_output": {
+      "span_id": "0123456789abcdef",
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "parent_span_id": null
+    }
+  },
+  {
+    "id": "InputTryLogRequest-0",
+    "entrypoint": "InputTryLogRequest",
+    "value": {
+      "event": {
+        "action": "example",
+        "level": "trace",
+        "schema_version": 1,
+        "target": "example"
+      },
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "event": {
+        "action": "example",
+        "level": "trace",
+        "schema_version": 1,
+        "target": "example",
+        "correlation_id": null,
+        "fields": {},
+        "message": null,
+        "outcome": null,
+        "request_id": null,
+        "trace": null
+      },
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputValueDto-0",
+    "entrypoint": "InputValueDto",
+    "value": {
+      "kind": "null"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "null"
+    }
+  },
+  {
+    "id": "InputValueDto-1",
+    "entrypoint": "InputValueDto",
+    "value": {
+      "kind": "boolean",
+      "value": true
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "boolean",
+      "value": true
+    }
+  },
+  {
+    "id": "InputValueDto-2",
+    "entrypoint": "InputValueDto",
+    "value": {
+      "kind": "string",
+      "value": "example"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "string",
+      "value": "example"
+    }
+  },
+  {
+    "id": "InputValueDto-3",
+    "entrypoint": "InputValueDto",
+    "value": {
+      "kind": "integer",
+      "value": "0"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "integer",
+      "value": "0"
+    }
+  },
+  {
+    "id": "InputValueDto-4",
+    "entrypoint": "InputValueDto",
+    "value": {
+      "kind": "float",
+      "value": 0.5
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "float",
+      "value": 0.5
+    }
+  },
+  {
+    "id": "InputValueDto-5",
+    "entrypoint": "InputValueDto",
+    "value": {
+      "kind": "array",
+      "value": []
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "array",
+      "value": []
+    }
+  },
+  {
+    "id": "InputValueDto-6",
+    "entrypoint": "InputValueDto",
+    "value": {
+      "kind": "object",
+      "value": {}
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "object",
+      "value": {}
+    }
+  },
+  {
+    "id": "InputWireEnvelopeAdmissionDto-0",
+    "entrypoint": "InputWireEnvelopeAdmissionDto",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "accepted"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "accepted"
+      }
+    }
+  },
+  {
+    "id": "InputWireEnvelopeAdmissionDto-1",
+    "entrypoint": "InputWireEnvelopeAdmissionDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputWireEnvelopeClientOutcome-0",
+    "entrypoint": "InputWireEnvelopeClientOutcome",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "idle"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "idle"
+      }
+    }
+  },
+  {
+    "id": "InputWireEnvelopeClientOutcome-1",
+    "entrypoint": "InputWireEnvelopeClientOutcome",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputWireEnvelopeClientStatus-0",
+    "entrypoint": "InputWireEnvelopeClientStatus",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "failures_by_kind": {
+          "below_baseline": "0",
+          "cancelled": "0",
+          "closed": "0",
+          "internal": "0",
+          "io": "0",
+          "permission_denied": "0",
+          "queue_full": "0",
+          "timeout": "0",
+          "unavailable": "0",
+          "unknown_remote": "0",
+          "unsupported_level": "0",
+          "unsupported_version": "0",
+          "validation": "0"
+        },
+        "in_flight": 0,
+        "last_result": {
+          "kind": "ok",
+          "value": {
+            "kind": "idle"
+          }
+        }
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "failures_by_kind": {
+          "below_baseline": "0",
+          "cancelled": "0",
+          "closed": "0",
+          "internal": "0",
+          "io": "0",
+          "permission_denied": "0",
+          "queue_full": "0",
+          "timeout": "0",
+          "unavailable": "0",
+          "unknown_remote": "0",
+          "unsupported_level": "0",
+          "unsupported_version": "0",
+          "validation": "0"
+        },
+        "in_flight": 0,
+        "last_result": {
+          "kind": "ok",
+          "value": {
+            "kind": "idle"
+          }
+        },
+        "last_failure": null
+      }
+    }
+  },
+  {
+    "id": "InputWireEnvelopeClientStatus-1",
+    "entrypoint": "InputWireEnvelopeClientStatus",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputWireEnvelopeCompletionDto-0",
+    "entrypoint": "InputWireEnvelopeCompletionDto",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "completed"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "completed"
+      }
+    }
+  },
+  {
+    "id": "InputWireEnvelopeCompletionDto-1",
+    "entrypoint": "InputWireEnvelopeCompletionDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputWireEnvelopeDispatchDto-0",
+    "entrypoint": "InputWireEnvelopeDispatchDto",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "scheduled"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "scheduled"
+      }
+    }
+  },
+  {
+    "id": "InputWireEnvelopeDispatchDto-1",
+    "entrypoint": "InputWireEnvelopeDispatchDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputWireEnvelopeLevelChangeDto-0",
+    "entrypoint": "InputWireEnvelopeLevelChangeDto",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "current": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "diagnostic": {
+          "kind": "accepted"
+        },
+        "kind": "changed",
+        "previous": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "source": "application"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "current": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "diagnostic": {
+          "kind": "accepted"
+        },
+        "kind": "changed",
+        "previous": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "source": "application"
+      }
+    }
+  },
+  {
+    "id": "InputWireEnvelopeLevelChangeDto-1",
+    "entrypoint": "InputWireEnvelopeLevelChangeDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputWireEnvelopeLogHealthDto-0",
+    "entrypoint": "InputWireEnvelopeLogHealthDto",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "level_state": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "logging": {
+          "active_log_path": {
+            "kind": "utf8",
+            "value": "example"
+          },
+          "dropped_events_total": "0",
+          "flush_errors_total": "0",
+          "queue_capacity": "0",
+          "queue_depth": "0",
+          "queue_full_drops_total": "0",
+          "queue_high_water_mark": "0",
+          "sink_statuses": [],
+          "state": "healthy",
+          "writer_state": "running"
+        },
+        "schema_version": 1
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "level_state": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "logging": {
+          "active_log_path": {
+            "kind": "utf8",
+            "value": "example"
+          },
+          "dropped_events_total": "0",
+          "flush_errors_total": "0",
+          "queue_capacity": "0",
+          "queue_depth": "0",
+          "queue_full_drops_total": "0",
+          "queue_high_water_mark": "0",
+          "sink_statuses": [],
+          "state": "healthy",
+          "writer_state": "running",
+          "last_error": null,
+          "last_writer_error": null,
+          "maintenance": null,
+          "query": null
+        },
+        "schema_version": 1,
+        "bridge": null
+      }
+    }
+  },
+  {
+    "id": "InputWireEnvelopeLogHealthDto-1",
+    "entrypoint": "InputWireEnvelopeLogHealthDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputWireEnvelopeLogSnapshotDto-0",
+    "entrypoint": "InputWireEnvelopeLogSnapshotDto",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "events": [],
+        "schema_version": 1,
+        "truncated": true
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "events": [],
+        "schema_version": 1,
+        "truncated": true
+      }
+    }
+  },
+  {
+    "id": "InputWireEnvelopeLogSnapshotDto-1",
+    "entrypoint": "InputWireEnvelopeLogSnapshotDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "InputWorkerStateDto-0",
+    "entrypoint": "InputWorkerStateDto",
+    "value": "running",
+    "valid": true,
+    "serde_output": "running"
+  },
+  {
+    "id": "InputWorkerStateDto-1",
+    "entrypoint": "InputWorkerStateDto",
+    "value": "degraded",
+    "valid": true,
+    "serde_output": "degraded"
+  },
+  {
+    "id": "InputWorkerStateDto-2",
+    "entrypoint": "InputWorkerStateDto",
+    "value": "stopped",
+    "valid": true,
+    "serde_output": "stopped"
+  },
+  {
+    "id": "OutputAdmissionDto-0",
+    "entrypoint": "OutputAdmissionDto",
+    "value": {
+      "kind": "accepted"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "accepted"
+    }
+  },
+  {
+    "id": "OutputAdmissionDto-1",
+    "entrypoint": "OutputAdmissionDto",
+    "value": {
+      "kind": "filtered"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "filtered"
+    }
+  },
+  {
+    "id": "OutputAdmissionOperationDto-0",
+    "entrypoint": "OutputAdmissionOperationDto",
+    "value": "log",
+    "valid": true,
+    "serde_output": "log"
+  },
+  {
+    "id": "OutputAdmissionOperationDto-1",
+    "entrypoint": "OutputAdmissionOperationDto",
+    "value": "try_log",
+    "valid": true,
+    "serde_output": "try_log"
+  },
+  {
+    "id": "OutputAvailabilityDto-0",
+    "entrypoint": "OutputAvailabilityDto",
+    "value": "healthy",
+    "valid": true,
+    "serde_output": "healthy"
+  },
+  {
+    "id": "OutputAvailabilityDto-1",
+    "entrypoint": "OutputAvailabilityDto",
+    "value": "degraded_dropping",
+    "valid": true,
+    "serde_output": "degraded_dropping"
+  },
+  {
+    "id": "OutputAvailabilityDto-2",
+    "entrypoint": "OutputAvailabilityDto",
+    "value": "unavailable",
+    "valid": true,
+    "serde_output": "unavailable"
+  },
+  {
+    "id": "OutputBridgeHealthDto-0",
+    "entrypoint": "OutputBridgeHealthDto",
+    "value": {
+      "active_log_path": {
+        "kind": "utf8",
+        "value": "example"
+      },
+      "configured_level": "off",
+      "dropped": {
+        "invalid_event": "0",
+        "logger_panicked": "0",
+        "not_installed": "0",
+        "queue_full": "0",
+        "reentrant_emit": "0",
+        "shutdown_timed_out": "0",
+        "writer_degraded": "0"
+      },
+      "effective_level": "off",
+      "level_revision": "0",
+      "lifecycle": "running",
+      "logging": {
+        "active_log_path": {
+          "kind": "utf8",
+          "value": "example"
+        },
+        "dropped_events_total": "0",
+        "flush_errors_total": "0",
+        "last_error": null,
+        "last_writer_error": null,
+        "maintenance": null,
+        "query": null,
+        "queue_capacity": "0",
+        "queue_depth": "0",
+        "queue_full_drops_total": "0",
+        "queue_high_water_mark": "0",
+        "sink_statuses": [],
+        "state": "healthy",
+        "writer_state": "running"
+      },
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "active_log_path": {
+        "kind": "utf8",
+        "value": "example"
+      },
+      "configured_level": "off",
+      "dropped": {
+        "invalid_event": "0",
+        "logger_panicked": "0",
+        "not_installed": "0",
+        "queue_full": "0",
+        "reentrant_emit": "0",
+        "shutdown_timed_out": "0",
+        "writer_degraded": "0"
+      },
+      "effective_level": "off",
+      "level_revision": "0",
+      "lifecycle": "running",
+      "logging": {
+        "active_log_path": {
+          "kind": "utf8",
+          "value": "example"
+        },
+        "dropped_events_total": "0",
+        "flush_errors_total": "0",
+        "last_error": null,
+        "last_writer_error": null,
+        "maintenance": null,
+        "query": null,
+        "queue_capacity": "0",
+        "queue_depth": "0",
+        "queue_full_drops_total": "0",
+        "queue_high_water_mark": "0",
+        "sink_statuses": [],
+        "state": "healthy",
+        "writer_state": "running"
+      },
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputChangeDiagnosticDto-0",
+    "entrypoint": "OutputChangeDiagnosticDto",
+    "value": {
+      "kind": "accepted"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "accepted"
+    }
+  },
+  {
+    "id": "OutputChangeDiagnosticDto-1",
+    "entrypoint": "OutputChangeDiagnosticDto",
+    "value": {
+      "diagnostic": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "not_accepted"
+    },
+    "valid": true,
+    "serde_output": {
+      "diagnostic": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "not_accepted"
+    }
+  },
+  {
+    "id": "OutputClientOutcome-0",
+    "entrypoint": "OutputClientOutcome",
+    "value": {
+      "kind": "idle"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "idle"
+    }
+  },
+  {
+    "id": "OutputClientOutcome-1",
+    "entrypoint": "OutputClientOutcome",
+    "value": {
+      "kind": "scheduled",
+      "operation": "log"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "scheduled",
+      "operation": "log"
+    }
+  },
+  {
+    "id": "OutputClientOutcome-2",
+    "entrypoint": "OutputClientOutcome",
+    "value": {
+      "kind": "accepted",
+      "operation": "log"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "accepted",
+      "operation": "log"
+    }
+  },
+  {
+    "id": "OutputClientOutcome-3",
+    "entrypoint": "OutputClientOutcome",
+    "value": {
+      "kind": "filtered",
+      "operation": "log"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "filtered",
+      "operation": "log"
+    }
+  },
+  {
+    "id": "OutputClientOutcome-4",
+    "entrypoint": "OutputClientOutcome",
+    "value": {
+      "kind": "completed",
+      "operation": "query"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "completed",
+      "operation": "query"
+    }
+  },
+  {
+    "id": "OutputClientStatus-0",
+    "entrypoint": "OutputClientStatus",
+    "value": {
+      "failures_by_kind": {
+        "below_baseline": "0",
+        "cancelled": "0",
+        "closed": "0",
+        "internal": "0",
+        "io": "0",
+        "permission_denied": "0",
+        "queue_full": "0",
+        "timeout": "0",
+        "unavailable": "0",
+        "unknown_remote": "0",
+        "unsupported_level": "0",
+        "unsupported_version": "0",
+        "validation": "0"
+      },
+      "in_flight": 0,
+      "last_failure": null,
+      "last_result": {
+        "kind": "ok",
+        "value": {
+          "kind": "idle"
+        }
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "failures_by_kind": {
+        "below_baseline": "0",
+        "cancelled": "0",
+        "closed": "0",
+        "internal": "0",
+        "io": "0",
+        "permission_denied": "0",
+        "queue_full": "0",
+        "timeout": "0",
+        "unavailable": "0",
+        "unknown_remote": "0",
+        "unsupported_level": "0",
+        "unsupported_version": "0",
+        "validation": "0"
+      },
+      "in_flight": 0,
+      "last_failure": null,
+      "last_result": {
+        "kind": "ok",
+        "value": {
+          "kind": "idle"
+        }
+      }
+    }
+  },
+  {
+    "id": "OutputCompletionDto-0",
+    "entrypoint": "OutputCompletionDto",
+    "value": {
+      "kind": "completed"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "completed"
+    }
+  },
+  {
+    "id": "OutputCompletionOperationDto-0",
+    "entrypoint": "OutputCompletionOperationDto",
+    "value": "query",
+    "valid": true,
+    "serde_output": "query"
+  },
+  {
+    "id": "OutputCompletionOperationDto-1",
+    "entrypoint": "OutputCompletionOperationDto",
+    "value": "health",
+    "valid": true,
+    "serde_output": "health"
+  },
+  {
+    "id": "OutputCompletionOperationDto-2",
+    "entrypoint": "OutputCompletionOperationDto",
+    "value": "flush",
+    "valid": true,
+    "serde_output": "flush"
+  },
+  {
+    "id": "OutputDecimalDto-0",
+    "entrypoint": "OutputDecimalDto",
+    "value": "0",
+    "valid": true,
+    "serde_output": "0"
+  },
+  {
+    "id": "OutputDiagnostic-0",
+    "entrypoint": "OutputDiagnostic",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "OutputDiagnosticSummaryDto-0",
+    "entrypoint": "OutputDiagnosticSummaryDto",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": null,
+      "message": "example"
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": null,
+      "message": "example"
+    }
+  },
+  {
+    "id": "OutputDispatchDto-0",
+    "entrypoint": "OutputDispatchDto",
+    "value": {
+      "kind": "scheduled"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "scheduled"
+    }
+  },
+  {
+    "id": "OutputDropCountsDto-0",
+    "entrypoint": "OutputDropCountsDto",
+    "value": {
+      "invalid_event": "0",
+      "logger_panicked": "0",
+      "not_installed": "0",
+      "queue_full": "0",
+      "reentrant_emit": "0",
+      "shutdown_timed_out": "0",
+      "writer_degraded": "0"
+    },
+    "valid": true,
+    "serde_output": {
+      "invalid_event": "0",
+      "logger_panicked": "0",
+      "not_installed": "0",
+      "queue_full": "0",
+      "reentrant_emit": "0",
+      "shutdown_timed_out": "0",
+      "writer_degraded": "0"
+    }
+  },
+  {
+    "id": "OutputFailure-0",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "field": "example",
+      "kind": "validation",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "field": "example",
+      "kind": "validation",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "OutputFailure-1",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "queue_full",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "queue_full",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "OutputFailure-2",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "configured": "off",
+      "kind": "below_baseline",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "requested": "off"
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "configured": "off",
+      "kind": "below_baseline",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "requested": "off"
+    }
+  },
+  {
+    "id": "OutputFailure-3",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "available": "off",
+      "code": "example",
+      "kind": "unsupported_level",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "requested": "off"
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "available": "off",
+      "code": "example",
+      "kind": "unsupported_level",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "requested": "off"
+    }
+  },
+  {
+    "id": "OutputFailure-4",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "permission_denied",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "permission_denied",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "OutputFailure-5",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "closed",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "closed",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "OutputFailure-6",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "unavailable",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "unavailable",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "OutputFailure-7",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "io",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "io",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "OutputFailure-8",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "timeout",
+      "message": "example",
+      "operation": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "timeout",
+      "message": "example",
+      "operation": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "OutputFailure-9",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "cancelled",
+      "message": "example",
+      "operation": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "cancelled",
+      "message": "example",
+      "operation": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "OutputFailure-10",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "unsupported_version",
+      "message": "example",
+      "received": 0,
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "unsupported_version",
+      "message": "example",
+      "received": 0,
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "OutputFailure-11",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "internal",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "internal",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "OutputFailure-12",
+    "entrypoint": "OutputFailure",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "unknown_remote",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "remote_kind": "example"
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "kind": "unknown_remote",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "remote_kind": "example"
+    }
+  },
+  {
+    "id": "OutputFailureCountsDto-0",
+    "entrypoint": "OutputFailureCountsDto",
+    "value": {
+      "below_baseline": "0",
+      "cancelled": "0",
+      "closed": "0",
+      "internal": "0",
+      "io": "0",
+      "permission_denied": "0",
+      "queue_full": "0",
+      "timeout": "0",
+      "unavailable": "0",
+      "unknown_remote": "0",
+      "unsupported_level": "0",
+      "unsupported_version": "0",
+      "validation": "0"
+    },
+    "valid": true,
+    "serde_output": {
+      "below_baseline": "0",
+      "cancelled": "0",
+      "closed": "0",
+      "internal": "0",
+      "io": "0",
+      "permission_denied": "0",
+      "queue_full": "0",
+      "timeout": "0",
+      "unavailable": "0",
+      "unknown_remote": "0",
+      "unsupported_level": "0",
+      "unsupported_version": "0",
+      "validation": "0"
+    }
+  },
+  {
+    "id": "OutputFieldMatchDto-0",
+    "entrypoint": "OutputFieldMatchDto",
+    "value": {
+      "field": "example",
+      "value": {
+        "kind": "null"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "field": "example",
+      "value": {
+        "kind": "null"
+      }
+    }
+  },
+  {
+    "id": "OutputFlushRequest-0",
+    "entrypoint": "OutputFlushRequest",
+    "value": {
+      "schema_version": 1,
+      "timeout_ms": 0
+    },
+    "valid": true,
+    "serde_output": {
+      "schema_version": 1,
+      "timeout_ms": 0
+    }
+  },
+  {
+    "id": "OutputHealthRequest-0",
+    "entrypoint": "OutputHealthRequest",
+    "value": {
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputLevelChangeDto-0",
+    "entrypoint": "OutputLevelChangeDto",
+    "value": {
+      "current": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      },
+      "diagnostic": {
+        "kind": "accepted"
+      },
+      "kind": "changed",
+      "previous": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      },
+      "source": "application"
+    },
+    "valid": true,
+    "serde_output": {
+      "current": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      },
+      "diagnostic": {
+        "kind": "accepted"
+      },
+      "kind": "changed",
+      "previous": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      },
+      "source": "application"
+    }
+  },
+  {
+    "id": "OutputLevelChangeDto-1",
+    "entrypoint": "OutputLevelChangeDto",
+    "value": {
+      "kind": "unchanged",
+      "state": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "unchanged",
+      "state": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      }
+    }
+  },
+  {
+    "id": "OutputLevelChangeRequest-0",
+    "entrypoint": "OutputLevelChangeRequest",
+    "value": {
+      "change": {
+        "kind": "elevate",
+        "level": "off"
+      },
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "change": {
+        "kind": "elevate",
+        "level": "off"
+      },
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputLevelChangeSourceDto-0",
+    "entrypoint": "OutputLevelChangeSourceDto",
+    "value": "application",
+    "valid": true,
+    "serde_output": "application"
+  },
+  {
+    "id": "OutputLevelChangeSourceDto-1",
+    "entrypoint": "OutputLevelChangeSourceDto",
+    "value": "user_request",
+    "valid": true,
+    "serde_output": "user_request"
+  },
+  {
+    "id": "OutputLevelChangeSourceDto-2",
+    "entrypoint": "OutputLevelChangeSourceDto",
+    "value": "diagnostic_session",
+    "valid": true,
+    "serde_output": "diagnostic_session"
+  },
+  {
+    "id": "OutputLevelDto-0",
+    "entrypoint": "OutputLevelDto",
+    "value": "trace",
+    "valid": true,
+    "serde_output": "trace"
+  },
+  {
+    "id": "OutputLevelDto-1",
+    "entrypoint": "OutputLevelDto",
+    "value": "debug",
+    "valid": true,
+    "serde_output": "debug"
+  },
+  {
+    "id": "OutputLevelDto-2",
+    "entrypoint": "OutputLevelDto",
+    "value": "info",
+    "valid": true,
+    "serde_output": "info"
+  },
+  {
+    "id": "OutputLevelDto-3",
+    "entrypoint": "OutputLevelDto",
+    "value": "warn",
+    "valid": true,
+    "serde_output": "warn"
+  },
+  {
+    "id": "OutputLevelDto-4",
+    "entrypoint": "OutputLevelDto",
+    "value": "error",
+    "valid": true,
+    "serde_output": "error"
+  },
+  {
+    "id": "OutputLevelFilterDto-0",
+    "entrypoint": "OutputLevelFilterDto",
+    "value": "off",
+    "valid": true,
+    "serde_output": "off"
+  },
+  {
+    "id": "OutputLevelFilterDto-1",
+    "entrypoint": "OutputLevelFilterDto",
+    "value": "error",
+    "valid": true,
+    "serde_output": "error"
+  },
+  {
+    "id": "OutputLevelFilterDto-2",
+    "entrypoint": "OutputLevelFilterDto",
+    "value": "warn",
+    "valid": true,
+    "serde_output": "warn"
+  },
+  {
+    "id": "OutputLevelFilterDto-3",
+    "entrypoint": "OutputLevelFilterDto",
+    "value": "info",
+    "valid": true,
+    "serde_output": "info"
+  },
+  {
+    "id": "OutputLevelFilterDto-4",
+    "entrypoint": "OutputLevelFilterDto",
+    "value": "debug",
+    "valid": true,
+    "serde_output": "debug"
+  },
+  {
+    "id": "OutputLevelFilterDto-5",
+    "entrypoint": "OutputLevelFilterDto",
+    "value": "trace",
+    "valid": true,
+    "serde_output": "trace"
+  },
+  {
+    "id": "OutputLevelRequestDto-0",
+    "entrypoint": "OutputLevelRequestDto",
+    "value": {
+      "kind": "elevate",
+      "level": "off"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "elevate",
+      "level": "off"
+    }
+  },
+  {
+    "id": "OutputLevelRequestDto-1",
+    "entrypoint": "OutputLevelRequestDto",
+    "value": {
+      "kind": "reset"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "reset"
+    }
+  },
+  {
+    "id": "OutputLevelStateDto-0",
+    "entrypoint": "OutputLevelStateDto",
+    "value": {
+      "configured_level": "off",
+      "effective_level": "off",
+      "level_revision": "0"
+    },
+    "valid": true,
+    "serde_output": {
+      "configured_level": "off",
+      "effective_level": "off",
+      "level_revision": "0"
+    }
+  },
+  {
+    "id": "OutputLifecycleDto-0",
+    "entrypoint": "OutputLifecycleDto",
+    "value": "running",
+    "valid": true,
+    "serde_output": "running"
+  },
+  {
+    "id": "OutputLifecycleDto-1",
+    "entrypoint": "OutputLifecycleDto",
+    "value": "stopping",
+    "valid": true,
+    "serde_output": "stopping"
+  },
+  {
+    "id": "OutputLifecycleDto-2",
+    "entrypoint": "OutputLifecycleDto",
+    "value": "stopped",
+    "valid": true,
+    "serde_output": "stopped"
+  },
+  {
+    "id": "OutputLifecycleDto-3",
+    "entrypoint": "OutputLifecycleDto",
+    "value": "failed",
+    "valid": true,
+    "serde_output": "failed"
+  },
+  {
+    "id": "OutputLogEventDto-0",
+    "entrypoint": "OutputLogEventDto",
+    "value": {
+      "action": "example",
+      "correlation_id": null,
+      "fields": {},
+      "level": "trace",
+      "message": null,
+      "outcome": null,
+      "request_id": null,
+      "schema_version": 1,
+      "target": "example",
+      "trace": null
+    },
+    "valid": true,
+    "serde_output": {
+      "action": "example",
+      "correlation_id": null,
+      "fields": {},
+      "level": "trace",
+      "message": null,
+      "outcome": null,
+      "request_id": null,
+      "schema_version": 1,
+      "target": "example",
+      "trace": null
+    }
+  },
+  {
+    "id": "OutputLogHealthDto-0",
+    "entrypoint": "OutputLogHealthDto",
+    "value": {
+      "bridge": null,
+      "level_state": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      },
+      "logging": {
+        "active_log_path": {
+          "kind": "utf8",
+          "value": "example"
+        },
+        "dropped_events_total": "0",
+        "flush_errors_total": "0",
+        "last_error": null,
+        "last_writer_error": null,
+        "maintenance": null,
+        "query": null,
+        "queue_capacity": "0",
+        "queue_depth": "0",
+        "queue_full_drops_total": "0",
+        "queue_high_water_mark": "0",
+        "sink_statuses": [],
+        "state": "healthy",
+        "writer_state": "running"
+      },
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "bridge": null,
+      "level_state": {
+        "configured_level": "off",
+        "effective_level": "off",
+        "level_revision": "0"
+      },
+      "logging": {
+        "active_log_path": {
+          "kind": "utf8",
+          "value": "example"
+        },
+        "dropped_events_total": "0",
+        "flush_errors_total": "0",
+        "last_error": null,
+        "last_writer_error": null,
+        "maintenance": null,
+        "query": null,
+        "queue_capacity": "0",
+        "queue_depth": "0",
+        "queue_full_drops_total": "0",
+        "queue_high_water_mark": "0",
+        "sink_statuses": [],
+        "state": "healthy",
+        "writer_state": "running"
+      },
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputLogOperationDto-0",
+    "entrypoint": "OutputLogOperationDto",
+    "value": "log",
+    "valid": true,
+    "serde_output": "log"
+  },
+  {
+    "id": "OutputLogOrderDto-0",
+    "entrypoint": "OutputLogOrderDto",
+    "value": "oldest_first",
+    "valid": true,
+    "serde_output": "oldest_first"
+  },
+  {
+    "id": "OutputLogOrderDto-1",
+    "entrypoint": "OutputLogOrderDto",
+    "value": "newest_first",
+    "valid": true,
+    "serde_output": "newest_first"
+  },
+  {
+    "id": "OutputLogQueryDto-0",
+    "entrypoint": "OutputLogQueryDto",
+    "value": {
+      "action": null,
+      "correlation_id": null,
+      "field_matches": [],
+      "levels": [],
+      "limit": 100,
+      "order": "oldest_first",
+      "request_id": null,
+      "schema_version": 1,
+      "service": null,
+      "since": null,
+      "target": null,
+      "until": null
+    },
+    "valid": true,
+    "serde_output": {
+      "action": null,
+      "correlation_id": null,
+      "field_matches": [],
+      "levels": [],
+      "limit": 100,
+      "order": "oldest_first",
+      "request_id": null,
+      "schema_version": 1,
+      "service": null,
+      "since": null,
+      "target": null,
+      "until": null
+    }
+  },
+  {
+    "id": "OutputLogSnapshotDto-0",
+    "entrypoint": "OutputLogSnapshotDto",
+    "value": {
+      "events": [],
+      "schema_version": 1,
+      "truncated": true
+    },
+    "valid": true,
+    "serde_output": {
+      "events": [],
+      "schema_version": 1,
+      "truncated": true
+    }
+  },
+  {
+    "id": "OutputLoggingHealthDto-0",
+    "entrypoint": "OutputLoggingHealthDto",
+    "value": {
+      "active_log_path": {
+        "kind": "utf8",
+        "value": "example"
+      },
+      "dropped_events_total": "0",
+      "flush_errors_total": "0",
+      "last_error": null,
+      "last_writer_error": null,
+      "maintenance": null,
+      "query": null,
+      "queue_capacity": "0",
+      "queue_depth": "0",
+      "queue_full_drops_total": "0",
+      "queue_high_water_mark": "0",
+      "sink_statuses": [],
+      "state": "healthy",
+      "writer_state": "running"
+    },
+    "valid": true,
+    "serde_output": {
+      "active_log_path": {
+        "kind": "utf8",
+        "value": "example"
+      },
+      "dropped_events_total": "0",
+      "flush_errors_total": "0",
+      "last_error": null,
+      "last_writer_error": null,
+      "maintenance": null,
+      "query": null,
+      "queue_capacity": "0",
+      "queue_depth": "0",
+      "queue_full_drops_total": "0",
+      "queue_high_water_mark": "0",
+      "sink_statuses": [],
+      "state": "healthy",
+      "writer_state": "running"
+    }
+  },
+  {
+    "id": "OutputMaintenanceHealthDto-0",
+    "entrypoint": "OutputMaintenanceHealthDto",
+    "value": {
+      "last_error": null,
+      "last_pass_at": null,
+      "pruned_files_total": "0",
+      "rotated_files_total": "0",
+      "state": "running"
+    },
+    "valid": true,
+    "serde_output": {
+      "last_error": null,
+      "last_pass_at": null,
+      "pruned_files_total": "0",
+      "rotated_files_total": "0",
+      "state": "running"
+    }
+  },
+  {
+    "id": "OutputOperationDiagnosticDto-0",
+    "entrypoint": "OutputOperationDiagnosticDto",
+    "value": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "at": "1970-01-01T00:00:00Z",
+      "code": "example",
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      }
+    }
+  },
+  {
+    "id": "OutputPathDto-0",
+    "entrypoint": "OutputPathDto",
+    "value": {
+      "kind": "utf8",
+      "value": "example"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "utf8",
+      "value": "example"
+    }
+  },
+  {
+    "id": "OutputPathDto-1",
+    "entrypoint": "OutputPathDto",
+    "value": {
+      "kind": "unrepresentable"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "unrepresentable"
+    }
+  },
+  {
+    "id": "OutputPathDto-2",
+    "entrypoint": "OutputPathDto",
+    "value": {
+      "kind": "absent"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "absent"
+    }
+  },
+  {
+    "id": "OutputProcessIdentityDto-0",
+    "entrypoint": "OutputProcessIdentityDto",
+    "value": {
+      "hostname": null,
+      "pid": null
+    },
+    "valid": true,
+    "serde_output": {
+      "hostname": null,
+      "pid": null
+    }
+  },
+  {
+    "id": "OutputQueryHealthDto-0",
+    "entrypoint": "OutputQueryHealthDto",
+    "value": {
+      "last_error": null,
+      "state": "healthy"
+    },
+    "valid": true,
+    "serde_output": {
+      "last_error": null,
+      "state": "healthy"
+    }
+  },
+  {
+    "id": "OutputQueryRequest-0",
+    "entrypoint": "OutputQueryRequest",
+    "value": {
+      "query": {
+        "action": null,
+        "correlation_id": null,
+        "field_matches": [],
+        "levels": [],
+        "limit": 100,
+        "order": "oldest_first",
+        "request_id": null,
+        "schema_version": 1,
+        "service": null,
+        "since": null,
+        "target": null,
+        "until": null
+      },
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "query": {
+        "action": null,
+        "correlation_id": null,
+        "field_matches": [],
+        "levels": [],
+        "limit": 100,
+        "order": "oldest_first",
+        "request_id": null,
+        "schema_version": 1,
+        "service": null,
+        "since": null,
+        "target": null,
+        "until": null
+      },
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputQueryStateDto-0",
+    "entrypoint": "OutputQueryStateDto",
+    "value": "healthy",
+    "valid": true,
+    "serde_output": "healthy"
+  },
+  {
+    "id": "OutputQueryStateDto-1",
+    "entrypoint": "OutputQueryStateDto",
+    "value": "degraded",
+    "valid": true,
+    "serde_output": "degraded"
+  },
+  {
+    "id": "OutputQueryStateDto-2",
+    "entrypoint": "OutputQueryStateDto",
+    "value": "unavailable",
+    "valid": true,
+    "serde_output": "unavailable"
+  },
+  {
+    "id": "OutputRemediationDto-0",
+    "entrypoint": "OutputRemediationDto",
+    "value": {
+      "kind": "recoverable",
+      "steps": []
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "recoverable",
+      "steps": []
+    }
+  },
+  {
+    "id": "OutputRemediationDto-1",
+    "entrypoint": "OutputRemediationDto",
+    "value": {
+      "justification": "example",
+      "kind": "not_recoverable"
+    },
+    "valid": true,
+    "serde_output": {
+      "justification": "example",
+      "kind": "not_recoverable"
+    }
+  },
+  {
+    "id": "OutputResultDtoAdmissionDto-0",
+    "entrypoint": "OutputResultDtoAdmissionDto",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "kind": "accepted"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "kind": "accepted"
+      }
+    }
+  },
+  {
+    "id": "OutputResultDtoAdmissionDto-1",
+    "entrypoint": "OutputResultDtoAdmissionDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "OutputResultDtoClientOutcome-0",
+    "entrypoint": "OutputResultDtoClientOutcome",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "kind": "idle"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "kind": "idle"
+      }
+    }
+  },
+  {
+    "id": "OutputResultDtoClientOutcome-1",
+    "entrypoint": "OutputResultDtoClientOutcome",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "OutputResultDtoClientStatus-0",
+    "entrypoint": "OutputResultDtoClientStatus",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "failures_by_kind": {
+          "below_baseline": "0",
+          "cancelled": "0",
+          "closed": "0",
+          "internal": "0",
+          "io": "0",
+          "permission_denied": "0",
+          "queue_full": "0",
+          "timeout": "0",
+          "unavailable": "0",
+          "unknown_remote": "0",
+          "unsupported_level": "0",
+          "unsupported_version": "0",
+          "validation": "0"
+        },
+        "in_flight": 0,
+        "last_failure": null,
+        "last_result": {
+          "kind": "ok",
+          "value": {
+            "kind": "idle"
+          }
+        }
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "failures_by_kind": {
+          "below_baseline": "0",
+          "cancelled": "0",
+          "closed": "0",
+          "internal": "0",
+          "io": "0",
+          "permission_denied": "0",
+          "queue_full": "0",
+          "timeout": "0",
+          "unavailable": "0",
+          "unknown_remote": "0",
+          "unsupported_level": "0",
+          "unsupported_version": "0",
+          "validation": "0"
+        },
+        "in_flight": 0,
+        "last_failure": null,
+        "last_result": {
+          "kind": "ok",
+          "value": {
+            "kind": "idle"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "OutputResultDtoClientStatus-1",
+    "entrypoint": "OutputResultDtoClientStatus",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "OutputResultDtoCompletionDto-0",
+    "entrypoint": "OutputResultDtoCompletionDto",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "kind": "completed"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "kind": "completed"
+      }
+    }
+  },
+  {
+    "id": "OutputResultDtoCompletionDto-1",
+    "entrypoint": "OutputResultDtoCompletionDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "OutputResultDtoDispatchDto-0",
+    "entrypoint": "OutputResultDtoDispatchDto",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "kind": "scheduled"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "kind": "scheduled"
+      }
+    }
+  },
+  {
+    "id": "OutputResultDtoDispatchDto-1",
+    "entrypoint": "OutputResultDtoDispatchDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "OutputResultDtoLevelChangeDto-0",
+    "entrypoint": "OutputResultDtoLevelChangeDto",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "current": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "diagnostic": {
+          "kind": "accepted"
+        },
+        "kind": "changed",
+        "previous": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "source": "application"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "current": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "diagnostic": {
+          "kind": "accepted"
+        },
+        "kind": "changed",
+        "previous": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "source": "application"
+      }
+    }
+  },
+  {
+    "id": "OutputResultDtoLevelChangeDto-1",
+    "entrypoint": "OutputResultDtoLevelChangeDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "OutputResultDtoLogHealthDto-0",
+    "entrypoint": "OutputResultDtoLogHealthDto",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "bridge": null,
+        "level_state": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "logging": {
+          "active_log_path": {
+            "kind": "utf8",
+            "value": "example"
+          },
+          "dropped_events_total": "0",
+          "flush_errors_total": "0",
+          "last_error": null,
+          "last_writer_error": null,
+          "maintenance": null,
+          "query": null,
+          "queue_capacity": "0",
+          "queue_depth": "0",
+          "queue_full_drops_total": "0",
+          "queue_high_water_mark": "0",
+          "sink_statuses": [],
+          "state": "healthy",
+          "writer_state": "running"
+        },
+        "schema_version": 1
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "bridge": null,
+        "level_state": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "logging": {
+          "active_log_path": {
+            "kind": "utf8",
+            "value": "example"
+          },
+          "dropped_events_total": "0",
+          "flush_errors_total": "0",
+          "last_error": null,
+          "last_writer_error": null,
+          "maintenance": null,
+          "query": null,
+          "queue_capacity": "0",
+          "queue_depth": "0",
+          "queue_full_drops_total": "0",
+          "queue_high_water_mark": "0",
+          "sink_statuses": [],
+          "state": "healthy",
+          "writer_state": "running"
+        },
+        "schema_version": 1
+      }
+    }
+  },
+  {
+    "id": "OutputResultDtoLogHealthDto-1",
+    "entrypoint": "OutputResultDtoLogHealthDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "OutputResultDtoLogSnapshotDto-0",
+    "entrypoint": "OutputResultDtoLogSnapshotDto",
+    "value": {
+      "kind": "ok",
+      "value": {
+        "events": [],
+        "schema_version": 1,
+        "truncated": true
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "value": {
+        "events": [],
+        "schema_version": 1,
+        "truncated": true
+      }
+    }
+  },
+  {
+    "id": "OutputResultDtoLogSnapshotDto-1",
+    "entrypoint": "OutputResultDtoLogSnapshotDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error"
+    }
+  },
+  {
+    "id": "OutputSinkHealthDto-0",
+    "entrypoint": "OutputSinkHealthDto",
+    "value": {
+      "last_error": null,
+      "name": "example",
+      "state": "healthy"
+    },
+    "valid": true,
+    "serde_output": {
+      "last_error": null,
+      "name": "example",
+      "state": "healthy"
+    }
+  },
+  {
+    "id": "OutputStateTransitionDto-0",
+    "entrypoint": "OutputStateTransitionDto",
+    "value": {
+      "entity_id": null,
+      "entity_kind": "example",
+      "from_state": "example",
+      "reason": null,
+      "to_state": "example",
+      "trigger": null
+    },
+    "valid": true,
+    "serde_output": {
+      "entity_id": null,
+      "entity_kind": "example",
+      "from_state": "example",
+      "reason": null,
+      "to_state": "example",
+      "trigger": null
+    }
+  },
+  {
+    "id": "OutputStoredDiagnosticDto-0",
+    "entrypoint": "OutputStoredDiagnosticDto",
+    "value": {
+      "cause": null,
+      "code": "example",
+      "details": {},
+      "docs": null,
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "timestamp": "1970-01-01T00:00:00Z"
+    },
+    "valid": true,
+    "serde_output": {
+      "cause": null,
+      "code": "example",
+      "details": {},
+      "docs": null,
+      "message": "example",
+      "remediation": {
+        "kind": "recoverable",
+        "steps": []
+      },
+      "timestamp": "1970-01-01T00:00:00Z"
+    }
+  },
+  {
+    "id": "OutputStoredEventDto-0",
+    "entrypoint": "OutputStoredEventDto",
+    "value": {
+      "action": "example",
+      "correlation_id": null,
+      "diagnostic": null,
+      "fields": {},
+      "identity": {
+        "hostname": null,
+        "pid": null
+      },
+      "level": "trace",
+      "message": null,
+      "outcome": null,
+      "request_id": null,
+      "service": "example",
+      "state_transition": null,
+      "target": "example",
+      "timestamp": "1970-01-01T00:00:00Z",
+      "trace": null,
+      "version": "v1"
+    },
+    "valid": true,
+    "serde_output": {
+      "action": "example",
+      "correlation_id": null,
+      "diagnostic": null,
+      "fields": {},
+      "identity": {
+        "hostname": null,
+        "pid": null
+      },
+      "level": "trace",
+      "message": null,
+      "outcome": null,
+      "request_id": null,
+      "service": "example",
+      "state_transition": null,
+      "target": "example",
+      "timestamp": "1970-01-01T00:00:00Z",
+      "trace": null,
+      "version": "v1"
+    }
+  },
+  {
+    "id": "OutputTraceContextDto-0",
+    "entrypoint": "OutputTraceContextDto",
+    "value": {
+      "parent_span_id": null,
+      "span_id": "0123456789abcdef",
+      "trace_id": "0123456789abcdef0123456789abcdef"
+    },
+    "valid": true,
+    "serde_output": {
+      "parent_span_id": null,
+      "span_id": "0123456789abcdef",
+      "trace_id": "0123456789abcdef0123456789abcdef"
+    }
+  },
+  {
+    "id": "OutputTryLogRequest-0",
+    "entrypoint": "OutputTryLogRequest",
+    "value": {
+      "event": {
+        "action": "example",
+        "correlation_id": null,
+        "fields": {},
+        "level": "trace",
+        "message": null,
+        "outcome": null,
+        "request_id": null,
+        "schema_version": 1,
+        "target": "example",
+        "trace": null
+      },
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "event": {
+        "action": "example",
+        "correlation_id": null,
+        "fields": {},
+        "level": "trace",
+        "message": null,
+        "outcome": null,
+        "request_id": null,
+        "schema_version": 1,
+        "target": "example",
+        "trace": null
+      },
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputValueDto-0",
+    "entrypoint": "OutputValueDto",
+    "value": {
+      "kind": "null"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "null"
+    }
+  },
+  {
+    "id": "OutputValueDto-1",
+    "entrypoint": "OutputValueDto",
+    "value": {
+      "kind": "boolean",
+      "value": true
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "boolean",
+      "value": true
+    }
+  },
+  {
+    "id": "OutputValueDto-2",
+    "entrypoint": "OutputValueDto",
+    "value": {
+      "kind": "string",
+      "value": "example"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "string",
+      "value": "example"
+    }
+  },
+  {
+    "id": "OutputValueDto-3",
+    "entrypoint": "OutputValueDto",
+    "value": {
+      "kind": "integer",
+      "value": "0"
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "integer",
+      "value": "0"
+    }
+  },
+  {
+    "id": "OutputValueDto-4",
+    "entrypoint": "OutputValueDto",
+    "value": {
+      "kind": "float",
+      "value": 0.5
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "float",
+      "value": 0.5
+    }
+  },
+  {
+    "id": "OutputValueDto-5",
+    "entrypoint": "OutputValueDto",
+    "value": {
+      "kind": "array",
+      "value": []
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "array",
+      "value": []
+    }
+  },
+  {
+    "id": "OutputValueDto-6",
+    "entrypoint": "OutputValueDto",
+    "value": {
+      "kind": "object",
+      "value": {}
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "object",
+      "value": {}
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeAdmissionDto-0",
+    "entrypoint": "OutputWireEnvelopeAdmissionDto",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "accepted"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "accepted"
+      }
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeAdmissionDto-1",
+    "entrypoint": "OutputWireEnvelopeAdmissionDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeClientOutcome-0",
+    "entrypoint": "OutputWireEnvelopeClientOutcome",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "idle"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "idle"
+      }
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeClientOutcome-1",
+    "entrypoint": "OutputWireEnvelopeClientOutcome",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeClientStatus-0",
+    "entrypoint": "OutputWireEnvelopeClientStatus",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "failures_by_kind": {
+          "below_baseline": "0",
+          "cancelled": "0",
+          "closed": "0",
+          "internal": "0",
+          "io": "0",
+          "permission_denied": "0",
+          "queue_full": "0",
+          "timeout": "0",
+          "unavailable": "0",
+          "unknown_remote": "0",
+          "unsupported_level": "0",
+          "unsupported_version": "0",
+          "validation": "0"
+        },
+        "in_flight": 0,
+        "last_failure": null,
+        "last_result": {
+          "kind": "ok",
+          "value": {
+            "kind": "idle"
+          }
+        }
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "failures_by_kind": {
+          "below_baseline": "0",
+          "cancelled": "0",
+          "closed": "0",
+          "internal": "0",
+          "io": "0",
+          "permission_denied": "0",
+          "queue_full": "0",
+          "timeout": "0",
+          "unavailable": "0",
+          "unknown_remote": "0",
+          "unsupported_level": "0",
+          "unsupported_version": "0",
+          "validation": "0"
+        },
+        "in_flight": 0,
+        "last_failure": null,
+        "last_result": {
+          "kind": "ok",
+          "value": {
+            "kind": "idle"
+          }
+        }
+      }
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeClientStatus-1",
+    "entrypoint": "OutputWireEnvelopeClientStatus",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeCompletionDto-0",
+    "entrypoint": "OutputWireEnvelopeCompletionDto",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "completed"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "completed"
+      }
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeCompletionDto-1",
+    "entrypoint": "OutputWireEnvelopeCompletionDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeDispatchDto-0",
+    "entrypoint": "OutputWireEnvelopeDispatchDto",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "scheduled"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "kind": "scheduled"
+      }
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeDispatchDto-1",
+    "entrypoint": "OutputWireEnvelopeDispatchDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeLevelChangeDto-0",
+    "entrypoint": "OutputWireEnvelopeLevelChangeDto",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "current": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "diagnostic": {
+          "kind": "accepted"
+        },
+        "kind": "changed",
+        "previous": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "source": "application"
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "current": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "diagnostic": {
+          "kind": "accepted"
+        },
+        "kind": "changed",
+        "previous": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "source": "application"
+      }
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeLevelChangeDto-1",
+    "entrypoint": "OutputWireEnvelopeLevelChangeDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeLogHealthDto-0",
+    "entrypoint": "OutputWireEnvelopeLogHealthDto",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "bridge": null,
+        "level_state": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "logging": {
+          "active_log_path": {
+            "kind": "utf8",
+            "value": "example"
+          },
+          "dropped_events_total": "0",
+          "flush_errors_total": "0",
+          "last_error": null,
+          "last_writer_error": null,
+          "maintenance": null,
+          "query": null,
+          "queue_capacity": "0",
+          "queue_depth": "0",
+          "queue_full_drops_total": "0",
+          "queue_high_water_mark": "0",
+          "sink_statuses": [],
+          "state": "healthy",
+          "writer_state": "running"
+        },
+        "schema_version": 1
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "bridge": null,
+        "level_state": {
+          "configured_level": "off",
+          "effective_level": "off",
+          "level_revision": "0"
+        },
+        "logging": {
+          "active_log_path": {
+            "kind": "utf8",
+            "value": "example"
+          },
+          "dropped_events_total": "0",
+          "flush_errors_total": "0",
+          "last_error": null,
+          "last_writer_error": null,
+          "maintenance": null,
+          "query": null,
+          "queue_capacity": "0",
+          "queue_depth": "0",
+          "queue_full_drops_total": "0",
+          "queue_high_water_mark": "0",
+          "sink_statuses": [],
+          "state": "healthy",
+          "writer_state": "running"
+        },
+        "schema_version": 1
+      }
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeLogHealthDto-1",
+    "entrypoint": "OutputWireEnvelopeLogHealthDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeLogSnapshotDto-0",
+    "entrypoint": "OutputWireEnvelopeLogSnapshotDto",
+    "value": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "events": [],
+        "schema_version": 1,
+        "truncated": true
+      }
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "ok",
+      "schema_version": 1,
+      "value": {
+        "events": [],
+        "schema_version": 1,
+        "truncated": true
+      }
+    }
+  },
+  {
+    "id": "OutputWireEnvelopeLogSnapshotDto-1",
+    "entrypoint": "OutputWireEnvelopeLogSnapshotDto",
+    "value": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    },
+    "valid": true,
+    "serde_output": {
+      "error": {
+        "at": "1970-01-01T00:00:00Z",
+        "code": "example",
+        "field": "example",
+        "kind": "validation",
+        "message": "example",
+        "remediation": {
+          "kind": "recoverable",
+          "steps": []
+        }
+      },
+      "kind": "error",
+      "schema_version": 1
+    }
+  },
+  {
+    "id": "OutputWorkerStateDto-0",
+    "entrypoint": "OutputWorkerStateDto",
+    "value": "running",
+    "valid": true,
+    "serde_output": "running"
+  },
+  {
+    "id": "OutputWorkerStateDto-1",
+    "entrypoint": "OutputWorkerStateDto",
+    "value": "degraded",
+    "valid": true,
+    "serde_output": "degraded"
+  },
+  {
+    "id": "OutputWorkerStateDto-2",
+    "entrypoint": "OutputWorkerStateDto",
+    "value": "stopped",
+    "valid": true,
+    "serde_output": "stopped"
+  },
+  {
+    "id": "negative-270",
+    "entrypoint": "InputDecimalDto",
+    "value": "-0",
+    "valid": false
+  },
+  {
+    "id": "negative-271",
+    "entrypoint": "InputDecimalDto",
+    "value": "01",
+    "valid": false
+  },
+  {
+    "id": "negative-272",
+    "entrypoint": "InputDecimalDto",
+    "value": "+1",
+    "valid": false
+  },
+  {
+    "id": "negative-273",
+    "entrypoint": "InputDecimalDto",
+    "value": "18446744073709551616",
+    "valid": false
+  },
+  {
+    "id": "negative-274",
+    "entrypoint": "InputDecimalDto",
+    "value": "-9223372036854775809",
+    "valid": false
+  },
+  {
+    "id": "negative-275",
+    "entrypoint": "InputLogEventDto",
+    "value": {
+      "schema_version": 1,
+      "level": "info",
+      "target": "test"
+    },
+    "valid": false
+  },
+  {
+    "id": "negative-276",
+    "entrypoint": "InputLogEventDto",
+    "value": {
+      "schema_version": 2,
+      "level": "info",
+      "target": "test",
+      "action": "emit"
+    },
+    "valid": false
+  },
+  {
+    "id": "negative-277",
+    "entrypoint": "InputLogEventDto",
+    "value": {
+      "schema_version": 1,
+      "level": "info",
+      "target": "test",
+      "action": "emit",
+      "unknown": true
+    },
+    "valid": false
+  },
+  {
+    "id": "negative-278",
+    "entrypoint": "InputLevelRequestDto",
+    "value": {
+      "kind": "reset",
+      "level": "info"
+    },
+    "valid": false
+  },
+  {
+    "id": "negative-279",
+    "entrypoint": "InputFlushRequest",
+    "value": {
+      "schema_version": 1,
+      "timeout_ms": 60001
+    },
+    "valid": false
+  },
+  {
+    "id": "negative-280",
+    "entrypoint": "InputFlushRequest",
+    "value": {
+      "schema_version": 1,
+      "timeout_ms": true
+    },
+    "valid": false
+  },
+  {
+    "id": "negative-281",
+    "entrypoint": "InputLogQueryDto",
+    "value": {
+      "schema_version": 1,
+      "limit": 0
+    },
+    "valid": false
+  },
+  {
+    "id": "additive-output-trace",
+    "entrypoint": "OutputTraceContextDto",
+    "value": {
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "span_id": "0123456789abcdef",
+      "parent_span_id": null,
+      "future": true
+    },
+    "valid": true,
+    "serde_output": {
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "span_id": "0123456789abcdef",
+      "parent_span_id": null
+    }
+  },
+  {
+    "id": "additive-output-value",
+    "entrypoint": "OutputValueDto",
+    "value": {
+      "kind": "integer",
+      "value": "18446744073709551615",
+      "future": true
+    },
+    "valid": true,
+    "serde_output": {
+      "kind": "integer",
+      "value": "18446744073709551615"
+    }
+  },
+  {
+    "id": "strict-input-trace",
+    "entrypoint": "InputTraceContextDto",
+    "value": {
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "span_id": "0123456789abcdef",
+      "future": true
+    },
+    "valid": false
+  },
+  {
+    "id": "strict-input-value",
+    "entrypoint": "InputValueDto",
+    "value": {
+      "kind": "null",
+      "future": true
+    },
+    "valid": false
+  },
+  {
+    "id": "negative-counter",
+    "entrypoint": "OutputLevelStateDto",
+    "value": {
+      "configured_level": "info",
+      "effective_level": "trace",
+      "level_revision": "-1"
+    },
+    "valid": false
+  },
+  {
+    "id": "schema-version-envelope",
+    "entrypoint": "OutputWireEnvelopeAdmissionDto",
+    "value": {
+      "schema_version": 2,
+      "kind": "ok",
+      "value": {
+        "kind": "accepted"
+      }
+    },
+    "valid": false
+  },
+  {
+    "id": "newline-decimal-0",
+    "entrypoint": "InputDecimalDto",
+    "value": "1\n",
+    "valid": false
+  },
+  {
+    "id": "newline-decimal-1",
+    "entrypoint": "InputDecimalDto",
+    "value": "0\r\n",
+    "valid": false
+  },
+  {
+    "id": "newline-decimal-2",
+    "entrypoint": "InputDecimalDto",
+    "value": "-1\n",
+    "valid": false
+  }
+]

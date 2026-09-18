@@ -1,3 +1,8 @@
+#![allow(
+    deprecated,
+    reason = "subscriber and projector registrations retain their published legacy trait signatures"
+)]
+
 use std::sync::Arc;
 
 use crate::{

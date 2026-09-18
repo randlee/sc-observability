@@ -1,0 +1,58 @@
+{
+  "qualification_status": "incomplete",
+  "source_commit": "71215ca4c519c91b3f454f1c429a576c761e5972",
+  "run_url": "https://github.com/randlee/sc-observability/actions/runs/35232045864",
+  "verified_platforms": [
+    "Darwin",
+    "Linux"
+  ],
+  "missing_platforms": [
+    "Windows"
+  ],
+  "npm": {
+    "source_commit": "71215ca4c519c91b3f454f1c429a576c761e5972",
+    "filename": "sc-observability-client-1.4.0.tgz",
+    "sha256": "8ab9c2882463928504778c35b0de6149ae7980ef242647d1942d33620c1f42d7"
+  },
+  "bundle_transport_sha256": "4b3d20c3acf6c1519fba8a1db42f22a3b3d360dde8f01ae65da6d2e3033afa8f",
+  "rust_archives": {
+    "sc-observability": {
+      "version": "1.4.0",
+      "sha256": "c63cd7dcb62199ad51f18650a1f8029999cbfde1b91d82b49f8e71d16d8ef26d"
+    },
+    "sc-observability-binding-runtime": {
+      "version": "1.4.0",
+      "sha256": "2ab21219c3b806ddbdcb37e241455e0ae450b4736527397c23e97c32ed16e21b"
+    },
+    "sc-observability-dto": {
+      "version": "1.4.0",
+      "sha256": "f88c5f59fbc0ae97cded518c7486b107f6eda23e1961eb248ccbd7bf2709b013"
+    },
+    "sc-observability-log": {
+      "version": "1.4.0",
+      "sha256": "d6f2ae8459947c643628223a2e79060683ad9f1f171e454896398fceb2f4cf49"
+    },
+    "sc-observability-log-macros": {
+      "version": "1.4.0",
+      "sha256": "207fa60837f22069d0e85a2221c797c08aa1f2bcebf1c7186414a988adb10a0d"
+    },
+    "sc-observability-tauri": {
+      "version": "1.4.0",
+      "sha256": "6784c2ba988f5962ab1e61a3ac11fd203d01549690942e2de3d4bc2ad21904d7"
+    },
+    "sc-observability-types": {
+      "version": "1.4.0",
+      "sha256": "3a076bf879bc3c95578226ba973e8d73f2c545dcdec9f68c92651aa542a25b20"
+    }
+  },
+  "assertions_per_verified_platform": {
+    "ordinary_ipc": 258,
+    "capped_ipc": 20,
+    "faults": 368,
+    "policies": 15,
+    "native_cases_each_profile": 26
+  },
+  "full_required_gate": "failed: required platforms missing: Windows",
+  "lead_completeness": "pending",
+  "publication": "not performed"
+}

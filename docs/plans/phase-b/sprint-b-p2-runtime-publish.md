@@ -1,7 +1,11 @@
 ---
 id: B.P2
-status: proposed
-branch: release/phase-b-p2-runtime-core
+status: complete
+qa_status: pending_independent_qa
+merge_status: unmerged
+branch: fix/B-P2-qa2-wording
+worktree: /Users/randlee/github/sc-observability-worktrees/fix/B-P2-qa2-wording
+target: fix/B-P2-qa1-corrections
 base: develop
 ---
 
@@ -9,13 +13,14 @@ base: develop
 
 ## Goal and dependencies
 
-Owner: sc-observability release owner. `must_follow` B.P1's merged, accepted
-implementation; B.P3 `must_follow` this sprint's exact staged artifacts, not a
-registry release. Apply parent-to-child merge-forward on pushed development
-before every child round and merge the parent PR first. Shared artifacts/version
-metadata prevent parallel-safe work. B.1 remains the first migration sprint; no
-bridge is imported or published here. Live crates.io publication and
-registry-only proof are reserved for B.7 at phase end.
+Owner: sc-observability release owner. B.P2 develops from B.P1's pushed,
+independently verified implementation; B.P1's PR merges before B.P2's PR.
+B.P3 `must_follow` this sprint's exact staged artifacts,
+not a registry release. Apply parent-to-child merge-forward on pushed development
+before every child round and merge the parent PR first.
+Shared artifacts/version metadata prevent parallel-safe work. B.1 remains the
+first migration sprint; no bridge is imported or published here. Live crates.io
+publication and registry-only proof are reserved for B.7 at phase end.
 
 ## Deliverables (authoritative)
 
@@ -72,10 +77,20 @@ Run the staged two-leg consumer:
 python3 scripts/ci/validate_runtime_level_staged_consumer.py --version "$RELEASE_VERSION"
 ```
 
-The new script is implemented in this sprint and rejects version placeholders,
-ambient workspace resolution, missing platform results and skipped assertions.
+The staged consumer script rejects version placeholders and ambient workspace
+resolution. `validate_runtime_level_platform_evidence.py` rejects missing
+platform results, skipped/failed assertions, and mismatched candidate provenance.
 Record actual qualification commands and checksums in the handoff. B.7 must
 later run a separate registry-only consumer after real publication.
+
+Implementation is complete: retained macOS, Linux, and Windows workflow
+artifacts passed the aggregate platform-evidence validator. Independent QA and
+merge remain separate pending states; local output alone was never treated as
+platform qualification.
+
+For all Phase B sprint metadata, `status: complete` means implementation
+completion only; it never asserts a merged branch or QA approval. Those facts
+are separately represented by `merge_status` and `qa_status`.
 
 ## Paths to delete
 

@@ -1,0 +1,5 @@
+error: `parent:` is not supported (no span parents)
+ --> tests/ui/event_parent.rs:6:11
+  |
+6 |     info!(parent: span, "message");
+  |           ^^^^^^

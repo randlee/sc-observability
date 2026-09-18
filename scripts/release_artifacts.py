@@ -20,9 +20,27 @@ def workspace_members(workspace_toml: Path) -> set[str]:
     return set(data.get("workspace", {}).get("members", []))
 
 
+def is_workspace_member(cargo_toml: Path, workspace_toml: Path) -> bool:
+    """Accept root members and explicitly standalone package manifests."""
+    members = workspace_members(workspace_toml)
+    try:
+        relative = cargo_toml.parent.resolve().relative_to(workspace_toml.parent.resolve()).as_posix()
+    except ValueError:
+        relative = ""
+    if relative in members:
+        return True
+    data = tomllib.loads(cargo_toml.read_text(encoding="utf-8"))
+    return data.get("workspace") == {} and cargo_toml.exists()
+
+
 def package_name(cargo_toml: Path) -> str:
     data = tomllib.loads(cargo_toml.read_text(encoding="utf-8"))
     return data["package"]["name"]
+
+
+def package_publish(cargo_toml: Path) -> bool:
+    data = tomllib.loads(cargo_toml.read_text(encoding="utf-8"))
+    return data.get("package", {}).get("publish", True) is not False
 
 
 def workspace_version(workspace_toml: Path) -> str:
@@ -32,10 +50,10 @@ def workspace_version(workspace_toml: Path) -> str:
 
 def cmd_validate_manifest(args: argparse.Namespace) -> int:
     manifest = load_manifest(Path(args.manifest))
-    members = workspace_members(Path(args.workspace_toml))
     missing = []
     for crate in manifest["crates"]:
-        if crate["cargo_toml"].removesuffix("/Cargo.toml") not in members:
+        cargo_toml = Path(crate["cargo_toml"])
+        if not is_workspace_member(cargo_toml, Path(args.workspace_toml)):
             missing.append(crate["cargo_toml"])
     if missing:
         raise SystemExit(f"manifest references non-member crates: {', '.join(missing)}")
@@ -48,6 +66,8 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
         actual = package_name(Path(crate["cargo_toml"]))
         if actual != crate["package"]:
             raise SystemExit(f"{crate['cargo_toml']}: package mismatch: manifest={crate['package']} actual={actual}")
+        if not package_publish(Path(crate["cargo_toml"])):
+            raise SystemExit(f"{crate['cargo_toml']}: publish=false package cannot be in publish manifest")
     print("manifest validation passed")
     return 0
 
@@ -57,6 +77,28 @@ def cmd_list_publish_plan(args: argparse.Namespace) -> int:
     for crate in manifest["crates"]:
         print(f"{crate['package']}|{crate['wait_after_publish_seconds']}")
     return 0
+
+
+def cmd_guard_legacy_release(args: argparse.Namespace) -> int:
+    """Fail closed before the legacy workflow can tag or publish Phase-B."""
+    manifest = load_manifest(Path(args.manifest))
+    validate_args = argparse.Namespace(
+        manifest=args.manifest, workspace_toml=args.workspace_toml
+    )
+    cmd_validate_manifest(validate_args)
+    unsupported = [
+        crate["package"] for crate in manifest["crates"]
+        if crate["package"] in {"sc-observability-tauri", "sc-observability-py"}
+        or not str(crate["cargo_toml"]).startswith("crates/")
+    ]
+    if unsupported:
+        raise SystemExit(
+            "legacy release workflow is disabled for the Phase-B inventory; "
+            f"unsupported standalone/binding artifacts: {', '.join(unsupported)}"
+        )
+    raise SystemExit(
+        "legacy release workflow is disabled until the approved Phase-C publishing pipeline exists"
+    )
 
 
 def cmd_verify_version(args: argparse.Namespace) -> int:
@@ -91,6 +133,11 @@ def main() -> int:
     p = sub.add_parser("list-publish-plan")
     p.add_argument("--manifest", required=True)
     p.set_defaults(func=cmd_list_publish_plan)
+
+    p = sub.add_parser("guard-legacy-release")
+    p.add_argument("--manifest", required=True)
+    p.add_argument("--workspace-toml", required=True)
+    p.set_defaults(func=cmd_guard_legacy_release)
 
     p = sub.add_parser("verify-version")
     p.add_argument("--manifest", required=True)

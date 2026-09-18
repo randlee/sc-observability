@@ -33,10 +33,11 @@ BTIT code change or claim that its implementation/review is complete.
 
 ## Current source observations
 
-At inspected `5fd63ca697fb36e91d754610cb631b1ddb9a3a31`, init/flush/shutdown already
+At inspected `8d8e82ae9f8501dbbf78c76df24d943918d7a6e4`, init/flush/shutdown
 use Rust Result with typed errors. Public direct submission and lifecycle/health
 ownership need the target contract review; hidden emit/guarded helpers currently
-return unit. These observations inform the matrix but are not accepted source
+return unit. The complete observed-export disposition is recorded in the target
+matrix. These observations inform the matrix but are not accepted source
 readiness. Neither this SHA nor `f6f69dc` is selected for import.
 
 The target deliberately retains unit-return standard log::Log/macro adapters and

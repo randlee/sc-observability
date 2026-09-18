@@ -1,0 +1,89 @@
+name: B.P2 staged consumer
+
+on:
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'release/publish-artifacts.toml'
+      - 'release/runtime-level-qualification.toml'
+      - 'scripts/ci/_runtime_level_common.py'
+      - 'scripts/ci/fixtures/runtime-level-consumer/**'
+      - 'scripts/ci/prepare_runtime_level_staged_packages.py'
+      - 'scripts/ci/validate_runtime_level_*'
+      - '.github/workflows/bp2-staged-consumer.yml'
+  workflow_dispatch:
+
+jobs:
+  package-stage:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify qualification metadata and fixture formatting
+        run: |
+          python3 scripts/ci/validate_runtime_level_qualification_metadata.py
+          python3 scripts/ci/tests/test_validate_runtime_level_qualification_metadata.py
+          rustfmt --check scripts/ci/fixtures/runtime-level-consumer/*.rs
+          python3 scripts/ci/tests/test_validate_runtime_level_platform_evidence.py
+      - name: Build one immutable candidate stage
+        env:
+          STAGE_DIR: ${{ runner.temp }}/bp2-stage
+        shell: bash
+        run: |
+          candidate_version="$(python3 scripts/ci/_runtime_level_common.py --candidate-version)"
+          python3 scripts/ci/prepare_runtime_level_staged_packages.py --version "$candidate_version" --output "$STAGE_DIR"
+      - name: Retain immutable candidate bytes
+        uses: actions/upload-artifact@v4
+        with:
+          name: bp2-candidate-stage
+          path: ${{ runner.temp }}/bp2-stage
+          if-no-files-found: error
+  staged-consumer:
+    needs: package-stage
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            evidence: macos
+          - os: ubuntu-latest
+            evidence: ubuntu
+          - os: windows-latest
+            evidence: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Download the shared immutable candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: bp2-candidate-stage
+          path: ${{ runner.temp }}/bp2-stage
+      - name: Qualify isolated baseline and extracted candidate
+        env:
+          STAGE_DIR: ${{ runner.temp }}/bp2-stage
+        shell: bash
+        run: |
+          candidate_version="$(python3 scripts/ci/_runtime_level_common.py --candidate-version)"
+          python3 scripts/ci/validate_runtime_level_staged_consumer.py --version "$candidate_version" --stage "$STAGE_DIR" --platform ${{ matrix.evidence }} --result-file bp2-evidence/${{ matrix.evidence }}.json
+      - name: Retain platform qualification output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bp2-${{ matrix.evidence }}-qualification
+          path: bp2-evidence
+          if-no-files-found: error
+  aggregate-platform-evidence:
+    needs: staged-consumer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bp2-*-qualification
+          path: bp2-evidence-download
+          merge-multiple: true
+      - name: Reject missing platforms or skipped assertions
+        run: python3 scripts/ci/validate_runtime_level_platform_evidence.py --evidence-dir bp2-evidence-download

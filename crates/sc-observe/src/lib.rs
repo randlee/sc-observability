@@ -30,9 +30,18 @@ pub mod error_codes;
 use std::any::{Any, TypeId};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
+#[allow(
+    deprecated,
+    reason = "the facade retains legacy error names in its public compatibility signatures"
+)]
 use sc_observability::{LogError, Logger, LoggerConfig, RetainedLogPolicy, Running, Stopped};
+use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
+#[allow(
+    deprecated,
+    reason = "the facade retains legacy error names in its published compatibility signatures"
+)]
 use sc_observability_types::{
     DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext, FlushError, InitError,
     ObservabilityHealthProvider, Observable, Observation, ProjectionRegistration, Remediation,
@@ -82,7 +91,24 @@ impl ObservabilityConfig {
     ///
     /// assert_eq!(config.tool_name.as_str(), "demo-tool");
     /// ```
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
+    #[allow(
+        deprecated,
+        reason = "retained compatibility accessor keeps the published InitError signature"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use ObservabilityConfig::default_for_typed(); see migrate-error-api.md."
+    )]
     pub fn default_for(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitError> {
+        Self::default_for_typed(tool_name, log_root).map_err(Into::into)
+    }
+
+    /// Builds the documented defaults with a typed construction failure.
+    pub fn default_for_typed(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitFailure> {
         let env_prefix = EnvPrefix::new(
             tool_name
                 .as_str()
@@ -90,15 +116,12 @@ impl ObservabilityConfig {
                 .to_ascii_uppercase(),
         )
         .map_err(|err| {
-            InitError(Box::new(
-                ErrorContext::new(
-                    error_codes::OBSERVABILITY_INIT_FAILED,
-                    "failed to derive env prefix",
-                    Remediation::not_recoverable("use an explicit valid env prefix"),
-                )
-                .cause(err.to_string())
-                .source(Box::new(err)),
-            ))
+            InitFailure::observation_initialization(
+                "failed to derive env prefix",
+                Remediation::not_recoverable("use an explicit valid env prefix"),
+            )
+            .cause(err.to_string())
+            .source(Box::new(err))
         })?;
         Ok(Self {
             tool_name,
@@ -110,22 +133,37 @@ impl ObservabilityConfig {
     }
 
     /// Derives the logging/telemetry service name from the configured tool.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility accessor keeps the published InitError signature"
+    )]
+    #[allow(
+        deprecated,
+        reason = "retained compatibility accessor keeps the published InitError signature"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use ObservabilityConfig::service_name_typed(); see migrate-error-api.md."
+    )]
     pub fn service_name(&self) -> Result<ServiceName, InitError> {
+        self.service_name_typed().map_err(Into::into)
+    }
+
+    /// Derives the logging/telemetry service name with a typed failure.
+    pub fn service_name_typed(&self) -> Result<ServiceName, InitFailure> {
         ServiceName::new(self.tool_name.as_str()).map_err(|err| {
-            InitError(Box::new(
-                ErrorContext::new(
-                    error_codes::OBSERVABILITY_INIT_FAILED,
-                    "failed to derive service name",
-                    Remediation::not_recoverable("use a valid tool name"),
-                )
-                .cause(err.to_string())
-                .source(Box::new(err)),
-            ))
+            InitFailure::observation_initialization(
+                "failed to derive service name",
+                Remediation::not_recoverable("use a valid tool name"),
+            )
+            .cause(err.to_string())
+            .source(Box::new(err))
         })
     }
 
-    fn logger_config(&self) -> Result<LoggerConfig, InitError> {
-        let mut config = LoggerConfig::default_for(self.service_name()?, self.log_root.clone());
+    fn logger_config_typed(&self) -> Result<LoggerConfig, InitFailure> {
+        let mut config =
+            LoggerConfig::default_for(self.service_name_typed()?, self.log_root.clone());
         config.queue_capacity = self.queue_capacity;
         config.retained_log_policy = self.retained_log_policy;
         Ok(config)
@@ -150,7 +188,13 @@ pub struct ObservabilityBuilder {
     reason = "the runtime owns atomic state, mutexes, and type-erased routes that do not have a useful stable Debug representation"
 )]
 pub struct Observability {
-    logger: Mutex<Option<LoggerHandle>>,
+    // MUTEX: state transitions replace the logger handle atomically. Blocking
+    // writer shutdown occurs after publishing `ShuttingDown`, so callers never
+    // observe an absent handle while emit, flush, and health race shutdown.
+    logger: Mutex<LoggerHandle>,
+    logger_changed: Condvar,
+    #[cfg(test)]
+    logger_waiting: Option<std::sync::mpsc::Sender<&'static str>>,
     shutdown: AtomicBool,
     subscriber_registrations: Vec<ErasedSubscriberRegistration>,
     projection_registrations: Vec<ErasedProjectionRegistration>,
@@ -181,9 +225,14 @@ struct ErasedProjectionRegistration {
 
 enum LoggerHandle {
     Running(Logger<Running>),
+    ShuttingDown,
     Stopped(Logger<Stopped>),
 }
 
+#[allow(
+    deprecated,
+    reason = "routing keeps the published SubscriberError callback boundary"
+)]
 type SubscriberDispatchFn =
     dyn Fn(&dyn Any) -> Result<DispatchMatch, SubscriberError> + Send + Sync + 'static;
 type ProjectionDispatchFn =
@@ -213,8 +262,25 @@ fn log_error_summary(error: &LogError) -> DiagnosticSummary {
 
 impl Observability {
     /// Builds a runtime using the documented default logger integration.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Observability::new_typed(); see migrate-error-api.md."
+    )]
     pub fn new(config: ObservabilityConfig) -> Result<Self, InitError> {
-        Self::builder(config).build()
+        Self::new_typed(config).map_err(Into::into)
+    }
+
+    /// Builds a runtime using typed construction and initialization failures.
+    pub fn new_typed(config: ObservabilityConfig) -> Result<Self, InitFailure> {
+        Self::builder(config).build_typed()
     }
 
     /// Starts a construction-time builder for subscribers and projections.
@@ -284,10 +350,7 @@ impl Observability {
             .filter(|entry| entry.type_id == type_id)
         {
             let logger = self.logger.lock().expect("observability logger poisoned");
-            let LoggerHandle::Running(logger) = logger
-                .as_ref()
-                .expect("observability logger should exist while runtime is alive")
-            else {
+            let LoggerHandle::Running(logger) = &*logger else {
                 return Err(ObservationError::Shutdown);
             };
             let result = (registration.dispatch)(observation_any, logger);
@@ -329,14 +392,43 @@ impl Observability {
     ///
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing its registered sinks.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility lifecycle method keeps the published FlushError signature"
+    )]
+    #[allow(
+        deprecated,
+        reason = "retained compatibility lifecycle method keeps the published FlushError signature"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Observability::flush_typed(); see migrate-error-api.md."
+    )]
     pub fn flush(&self) -> Result<(), FlushError> {
-        let logger = self.logger.lock().expect("observability logger poisoned");
-        match logger
-            .as_ref()
-            .expect("observability logger should exist while runtime is alive")
-        {
-            LoggerHandle::Running(logger) => logger.flush(),
-            LoggerHandle::Stopped(_) => Ok(()),
+        self.flush_typed().map_err(Into::into)
+    }
+
+    /// Flushes the attached logger with a typed failure.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the attached logger encounters a poisoned internal mutex while
+    /// flushing its registered sinks.
+    pub fn flush_typed(&self) -> Result<(), FlushFailure> {
+        let mut logger = self.logger.lock().expect("observability logger poisoned");
+        while matches!(&*logger, LoggerHandle::ShuttingDown) {
+            #[cfg(test)]
+            if let Some(waiting) = &self.logger_waiting {
+                let _ = waiting.send("flush");
+            }
+            logger = self
+                .logger_changed
+                .wait(logger)
+                .expect("observability logger poisoned");
+        }
+        match &*logger {
+            LoggerHandle::Running(logger) => logger.flush_typed(),
+            LoggerHandle::ShuttingDown | LoggerHandle::Stopped(_) => Ok(()),
         }
     }
 
@@ -346,19 +438,56 @@ impl Observability {
     ///
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing sinks or updating query/follow health during shutdown.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility lifecycle method keeps the published ShutdownError signature"
+    )]
+    #[allow(
+        deprecated,
+        reason = "retained compatibility lifecycle method keeps the published ShutdownError signature"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use Observability::shutdown_typed(); see migrate-error-api.md."
+    )]
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
+        self.shutdown_typed().map_err(Into::into)
+    }
+
+    /// Shuts down the routing runtime with a typed failure. Repeated calls are
+    /// idempotent and return success, matching the legacy lifecycle contract.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the attached logger encounters a poisoned internal mutex while
+    /// shutting down its writer runtime.
+    pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
-        let mut logger = self.logger.lock().expect("observability logger poisoned");
-        let handle = logger
-            .take()
-            .expect("observability logger should exist while runtime is alive");
-        *logger = Some(match handle {
+        let handle = {
+            let mut logger = self.logger.lock().expect("observability logger poisoned");
+            std::mem::replace(&mut *logger, LoggerHandle::ShuttingDown)
+        };
+        self.complete_shutdown(|| match handle {
             LoggerHandle::Running(logger) => LoggerHandle::Stopped(logger.shutdown()),
+            LoggerHandle::ShuttingDown => unreachable!("shutdown has one owner"),
             LoggerHandle::Stopped(logger) => LoggerHandle::Stopped(logger),
         });
         Ok(())
+    }
+
+    fn complete_shutdown(&self, shutdown: impl FnOnce() -> LoggerHandle) {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(shutdown));
+        let mut logger = self.logger.lock().expect("observability logger poisoned");
+        self.logger_changed.notify_all();
+        match result {
+            Ok(stopped) => *logger = stopped,
+            // Resume while holding the mutex so it is poisoned just as it was
+            // when shutdown ran under the lock. Woken waiters observe that
+            // poison instead of waiting forever on ShuttingDown after unwind.
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
     }
 
     /// Returns the aggregate runtime health view.
@@ -368,13 +497,21 @@ impl Observability {
     /// Panics if the internal last-error mutex has been poisoned.
     pub fn health(&self) -> ObservabilityHealthReport {
         let logging = {
-            let logger = self.logger.lock().expect("observability logger poisoned");
-            match logger
-                .as_ref()
-                .expect("observability logger should exist while runtime is alive")
-            {
-                LoggerHandle::Running(logger) => logger.health(),
-                LoggerHandle::Stopped(logger) => logger.health(),
+            let mut logger = self.logger.lock().expect("observability logger poisoned");
+            while matches!(&*logger, LoggerHandle::ShuttingDown) {
+                #[cfg(test)]
+                if let Some(waiting) = &self.logger_waiting {
+                    let _ = waiting.send("health");
+                }
+                logger = self
+                    .logger_changed
+                    .wait(logger)
+                    .expect("observability logger poisoned");
+            }
+            match &*logger {
+                LoggerHandle::Running(logger) => Some(logger.health()),
+                LoggerHandle::ShuttingDown => unreachable!("waited for shutdown completion"),
+                LoggerHandle::Stopped(logger) => Some(logger.health()),
             }
         };
         let telemetry = self
@@ -399,7 +536,9 @@ impl Observability {
         } else if dropped > 0
             || subscriber_failures > 0
             || projection_failures > 0
-            || logging.state != sc_observability_types::LoggingHealthState::Healthy
+            || logging.as_ref().is_some_and(|logging| {
+                logging.state != sc_observability_types::LoggingHealthState::Healthy
+            })
             || telemetry.as_ref().is_some_and(|health| {
                 matches!(
                     health.state,
@@ -417,7 +556,7 @@ impl Observability {
             dropped_observations_total: dropped,
             subscriber_failures_total: subscriber_failures,
             projection_failures_total: projection_failures,
-            logging: Some(logging),
+            logging,
             telemetry,
             last_error: self
                 .runtime
@@ -521,11 +660,12 @@ impl ObservabilityBuilder {
                         Ok(events) => {
                             result.matched = true;
                             for event in events {
-                                if let Err(err) = logger.log(event) {
+                                if let Err(err) = logger.log_typed(event) {
+                                    let err: LogError = err.into();
                                     record_failure(log_error_summary(&err));
                                 }
                             }
-                            if let Err(err) = logger.flush() {
+                            if let Err(err) = logger.flush_typed() {
                                 record_failure(DiagnosticSummary::from(err.diagnostic()));
                             }
                         }
@@ -554,20 +694,39 @@ impl ObservabilityBuilder {
     }
 
     /// Finalizes registration and constructs the routing runtime.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility builder method keeps the published InitError signature"
+    )]
+    #[allow(
+        deprecated,
+        reason = "retained compatibility builder method keeps the published InitError signature"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use ObservabilityBuilder::build_typed(); see migrate-error-api.md."
+    )]
     pub fn build(self) -> Result<Observability, InitError> {
+        self.build_typed().map_err(Into::into)
+    }
+
+    /// Finalizes registration and constructs the runtime with typed failures.
+    pub fn build_typed(self) -> Result<Observability, InitFailure> {
         if self.subscribers.is_empty() && self.projections.is_empty() {
-            return Err(InitError(Box::new(ErrorContext::new(
-                error_codes::OBSERVABILITY_INIT_FAILED,
+            return Err(InitFailure::observation_initialization(
                 "at least one subscriber or projector route must be registered",
                 Remediation::recoverable(
                     "register a subscriber or projector before building observability",
                     ["add at least one route for the observation types you emit"],
                 ),
-            ))));
+            ));
         }
-        let logger = Logger::new(self.config.logger_config()?)?;
+        let logger = Logger::new_typed(self.config.logger_config_typed()?)?;
         Ok(Observability {
-            logger: Mutex::new(Some(LoggerHandle::Running(logger))),
+            logger: Mutex::new(LoggerHandle::Running(logger)),
+            logger_changed: Condvar::new(),
+            #[cfg(test)]
+            logger_waiting: None,
             shutdown: AtomicBool::new(false),
             subscriber_registrations: self.subscribers,
             projection_registrations: self.projections,
@@ -607,10 +766,16 @@ where
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "routing compatibility tests exercise retained legacy registrations and errors"
+)]
 mod tests {
     use super::*;
-    use sc_observability::{
-        LogFilter, LogSink, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration,
+    use sc_observability::{LogSink, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration};
+    use sc_observability_types::typed::{
+        ClassifiedError, FlushFailureKind, InitFailureKind, SubscriberFailure,
+        TypedObservationSubscriber, legacy_subscriber,
     };
     use sc_observability_types::{
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
@@ -620,6 +785,8 @@ mod tests {
         TraceContext, TraceId,
     };
     use serde_json::Map;
+    use std::sync::mpsc;
+    use std::time::Duration;
 
     #[derive(Debug, Clone)]
     struct AgentEvent {
@@ -656,6 +823,17 @@ mod tests {
                 "subscriber failed",
                 Remediation::not_recoverable("test subscriber intentionally fails"),
             ))))
+        }
+    }
+
+    struct TypedRecordingSubscriber {
+        calls: Arc<AtomicU64>,
+    }
+
+    impl TypedObservationSubscriber<AgentEvent> for TypedRecordingSubscriber {
+        fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberFailure> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
         }
     }
 
@@ -1050,22 +1228,431 @@ mod tests {
         let mut config = ObservabilityConfig::default_for(tool_name(), root).expect("config");
         config.queue_capacity = 2048;
 
-        let logger_config = config.logger_config().expect("logger config");
+        let logger_config = config.logger_config_typed().expect("logger config");
 
         assert_eq!(logger_config.queue_capacity, 2048);
     }
 
     #[test]
-    fn flush_forwards_logger_flush_behavior_directly() {
-        struct PassthroughFilter;
+    fn typed_builder_uses_real_adapters_and_preserves_lifecycle_contract() {
+        let root = temp_path("typed-lifecycle");
+        let calls = Arc::new(AtomicU64::new(0));
+        let config =
+            ObservabilityConfig::default_for_typed(tool_name(), root).expect("typed config");
+        assert_eq!(
+            config.service_name_typed().expect("typed service").as_str(),
+            "obs-app"
+        );
 
-        impl LogFilter for PassthroughFilter {
-            fn accepts(&self, _event: &LogEvent) -> bool {
-                true
+        let runtime = Observability::builder(config)
+            .register_subscriber(SubscriberRegistration::new(legacy_subscriber(Arc::new(
+                TypedRecordingSubscriber {
+                    calls: calls.clone(),
+                },
+            ))))
+            .build_typed()
+            .expect("typed runtime");
+
+        runtime.emit(observation(true)).expect("typed emit");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        runtime.flush_typed().expect("typed flush");
+        runtime.shutdown_typed().expect("typed shutdown");
+        runtime.shutdown_typed().expect("repeated typed shutdown");
+        assert!(matches!(
+            runtime.emit(observation(true)),
+            Err(ObservationError::Shutdown)
+        ));
+        runtime.flush_typed().expect("flush after shutdown");
+    }
+
+    #[test]
+    fn typed_builder_reports_empty_routes_and_logger_startup_failures() {
+        let Err(empty) = Observability::builder(
+            ObservabilityConfig::default_for_typed(tool_name(), temp_path("typed-empty"))
+                .expect("typed config"),
+        )
+        .build_typed() else {
+            panic!("empty routes must fail");
+        };
+        assert_eq!(empty.kind(), InitFailureKind::ObservationInitialization);
+
+        let mut config =
+            ObservabilityConfig::default_for_typed(tool_name(), temp_path("typed-init-failure"))
+                .expect("typed config");
+        config.queue_capacity = 0;
+        let Err(error) = Observability::builder(config)
+            .register_subscriber(SubscriberRegistration::new(legacy_subscriber(Arc::new(
+                TypedRecordingSubscriber {
+                    calls: Arc::new(AtomicU64::new(0)),
+                },
+            ))))
+            .build_typed()
+        else {
+            panic!("zero queue capacity must fail");
+        };
+        assert_eq!(error.kind(), InitFailureKind::LoggerInitialization);
+    }
+
+    #[test]
+    fn concurrent_typed_shutdown_is_idempotent() {
+        let runtime = Arc::new(
+            Observability::builder(
+                ObservabilityConfig::default_for_typed(tool_name(), temp_path("typed-concurrent"))
+                    .expect("typed config"),
+            )
+            .register_subscriber(SubscriberRegistration::new(legacy_subscriber(Arc::new(
+                TypedRecordingSubscriber {
+                    calls: Arc::new(AtomicU64::new(0)),
+                },
+            ))))
+            .build_typed()
+            .expect("typed runtime"),
+        );
+
+        let (completed_tx, completed_rx) = std::sync::mpsc::channel();
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let runtime = runtime.clone();
+                let completed_tx = completed_tx.clone();
+                std::thread::spawn(move || {
+                    let result = runtime.shutdown_typed();
+                    completed_tx
+                        .send(result)
+                        .expect("shutdown completion receiver");
+                })
+            })
+            .collect();
+        drop(completed_tx);
+        for _ in 0..8 {
+            completed_rx
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("bounded shutdown completion")
+                .expect("shutdown");
+        }
+        for handle in handles {
+            handle.join().expect("shutdown thread");
+        }
+        assert_eq!(runtime.health().state, ObservationHealthState::Unavailable);
+    }
+
+    struct BlockingFlushSink {
+        flush_calls: AtomicU64,
+        seed_completed: mpsc::Sender<()>,
+        armed: Arc<AtomicBool>,
+        entered: mpsc::Sender<()>,
+        // MUTEX: LogSink is Sync; the sole writer owns receives on this
+        // test-control channel. A timeout/disconnect releases failed tests.
+        release: Mutex<mpsc::Receiver<()>>,
+    }
+    impl LogSink for BlockingFlushSink {
+        fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
+            Ok(())
+        }
+        fn flush(&self) -> Result<(), LogSinkError> {
+            if self.armed.swap(false, Ordering::SeqCst) {
+                let _ = self.entered.send(());
+                let _ = self
+                    .release
+                    .lock()
+                    .expect("release lock")
+                    .recv_timeout(Duration::from_secs(5));
+            }
+            // An explicit flush acknowledges inside flush_batch, before the
+            // writer's following flush_sinks pass. Signal only after that pass
+            // has checked the gate, so it cannot consume a later shutdown arm.
+            if self.flush_calls.fetch_add(1, Ordering::SeqCst) == 1 {
+                let _ = self.seed_completed.send(());
+            }
+            Err(LogSinkError(Box::new(ErrorContext::new(
+                sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                "controlled flush failure",
+                Remediation::not_recoverable("test fixture"),
+            ))))
+        }
+        fn health(&self) -> SinkHealth {
+            SinkHealth {
+                name: sink_name("controlled-flush"),
+                state: SinkHealthState::DegradedDropping,
+                last_error: None,
             }
         }
+    }
+    struct ShutdownFixture {
+        runtime: Arc<Observability>,
+        before: sc_observability_types::LoggingHealthReport,
+        entered_rx: mpsc::Receiver<()>,
+        release_tx: mpsc::Sender<()>,
+        waiting_rx: mpsc::Receiver<&'static str>,
+    }
 
-        struct FlushFailSink;
+    fn shutdown_fixture() -> ShutdownFixture {
+        let armed = Arc::new(AtomicBool::new(false));
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let (seed_completed, seed_rx) = mpsc::channel();
+        let mut config = LoggerConfig::default_for(
+            ServiceName::new("obs-app").expect("service"),
+            temp_path("controlled-shutdown"),
+        );
+        config.enable_file_sink = false;
+        config.enable_console_sink = false;
+        let mut builder = Logger::builder(config).expect("logger builder");
+        builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink {
+            flush_calls: AtomicU64::new(0),
+            seed_completed,
+            armed: armed.clone(),
+            entered: entered_tx,
+            release: Mutex::new(release_rx),
+        })));
+        let logger = builder.build();
+        logger
+            .flush_typed()
+            .expect_err("seed logging failure counter");
+        seed_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("both seed flush passes completed before shutdown is armed");
+        let before = logger.health();
+        assert_eq!(before.flush_errors_total, 1);
+        assert!(before.last_error.is_some());
+        let (waiting_tx, waiting_rx) = mpsc::channel();
+        let runtime = Arc::new(Observability {
+            logger: Mutex::new(LoggerHandle::Running(logger)),
+            logger_changed: Condvar::new(),
+            #[cfg(test)]
+            logger_waiting: Some(waiting_tx),
+            shutdown: AtomicBool::new(false),
+            subscriber_registrations: Vec::new(),
+            projection_registrations: Vec::new(),
+            observability_health_provider: None,
+            runtime: RuntimeState::default(),
+        });
+        armed.store(true, Ordering::SeqCst);
+        ShutdownFixture {
+            runtime,
+            before,
+            entered_rx,
+            release_tx,
+            waiting_rx,
+        }
+    }
+
+    fn assert_logger_waiters(waiting: &mpsc::Receiver<&'static str>) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let (mut flush, mut health) = (false, false);
+        while !(flush && health) {
+            match waiting
+                .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+                .expect("both callers reached the logger condition wait")
+            {
+                "flush" => flush = true,
+                "health" => health = true,
+                other => panic!("unexpected logger wait site: {other}"),
+            }
+        }
+    }
+
+    fn assert_retained_shutdown_health(
+        report: ObservabilityHealthReport,
+        before: &sc_observability_types::LoggingHealthReport,
+    ) {
+        assert_eq!(report.state, ObservationHealthState::Unavailable);
+        let after = report.logging.expect("logging health retained");
+        assert_eq!(after.flush_errors_total, before.flush_errors_total);
+        assert_eq!(after.dropped_events_total, before.dropped_events_total);
+        assert_eq!(after.queue_capacity, before.queue_capacity);
+        assert_eq!(
+            after.last_error.as_ref().expect("retained diagnostic").code,
+            before
+                .last_writer_error
+                .as_ref()
+                .expect("original writer diagnostic")
+                .code
+        );
+        let final_writer = after
+            .last_writer_error
+            .as_ref()
+            .expect("final writer diagnostic");
+        let original_writer = before
+            .last_writer_error
+            .as_ref()
+            .expect("original writer diagnostic");
+        assert_eq!(final_writer.code, original_writer.code);
+        assert_eq!(final_writer.message, original_writer.message);
+        assert!(final_writer.at >= original_writer.at);
+        assert_eq!(after.sink_statuses, before.sink_statuses);
+    }
+
+    fn assert_immediate_repeated_shutdown(runtime: &Arc<Observability>) {
+        let (repeat_tx, repeat_rx) = mpsc::channel();
+        let repeated_runtime = runtime.clone();
+        let repeated = std::thread::spawn(move || {
+            let _ = repeat_tx.send(repeated_runtime.shutdown_typed());
+        });
+        repeat_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("repeated shutdown is immediate")
+            .expect("success");
+        repeated.join().expect("repeated shutdown thread");
+    }
+
+    #[test]
+    fn in_flight_shutdown_preserves_flush_health_and_repeated_shutdown() {
+        for legacy in [false, true] {
+            let ShutdownFixture {
+                runtime,
+                before,
+                entered_rx,
+                release_tx,
+                waiting_rx,
+            } = shutdown_fixture();
+            let (shutdown_tx, shutdown_rx) = mpsc::channel();
+            let shutdown_runtime = runtime.clone();
+            let shutdown = std::thread::spawn(move || {
+                let result = if legacy {
+                    shutdown_runtime.shutdown().map_err(ShutdownFailure::from)
+                } else {
+                    shutdown_runtime.shutdown_typed()
+                };
+                let _ = shutdown_tx.send(result);
+            });
+            entered_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("writer inside controlled final flush");
+            assert!(matches!(
+                *runtime
+                    .logger
+                    .lock()
+                    .expect("logger unlocked during shutdown"),
+                LoggerHandle::ShuttingDown
+            ));
+            assert!(matches!(
+                runtime.emit(observation(true)),
+                Err(ObservationError::Shutdown)
+            ));
+            assert_immediate_repeated_shutdown(&runtime);
+            let (flush_tx, flush_rx) = mpsc::channel();
+            let flush_runtime = runtime.clone();
+            let flush = std::thread::spawn(move || {
+                let result = if legacy {
+                    flush_runtime.flush().map_err(FlushFailure::from)
+                } else {
+                    flush_runtime.flush_typed()
+                };
+                let _ = flush_tx.send(result);
+            });
+            let (health_tx, health_rx) = mpsc::channel();
+            let health_runtime = runtime.clone();
+            let health = std::thread::spawn(move || {
+                let _ = health_tx.send(health_runtime.health());
+            });
+            assert_logger_waiters(&waiting_rx);
+            assert!(
+                matches!(
+                    flush_rx.recv_timeout(Duration::from_millis(50)),
+                    Err(mpsc::RecvTimeoutError::Timeout)
+                ),
+                "flush must wait for original writer"
+            );
+            assert!(
+                matches!(
+                    health_rx.recv_timeout(Duration::from_millis(50)),
+                    Err(mpsc::RecvTimeoutError::Timeout)
+                ),
+                "health must wait for retained stopped snapshot"
+            );
+            assert!(matches!(
+                shutdown_rx.try_recv(),
+                Err(mpsc::TryRecvError::Empty)
+            ));
+            release_tx.send(()).expect("release original writer");
+            shutdown_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("bounded original shutdown")
+                .expect("shutdown success");
+            flush_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("bounded flush completion")
+                .expect("stopped flush succeeds");
+            let report = health_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("bounded health completion");
+            assert_retained_shutdown_health(report, &before);
+            for thread in [shutdown, flush, health] {
+                thread.join().expect("completed worker");
+            }
+        }
+    }
+
+    #[test]
+    fn shutdown_unwind_releases_condition_waiters() {
+        struct ReleaseOnFailure(Arc<Observability>);
+        impl Drop for ReleaseOnFailure {
+            fn drop(&mut self) {
+                if !self.0.logger.is_poisoned() {
+                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        self.0
+                            .complete_shutdown(|| panic!("release failed unwind fixture"));
+                    }));
+                }
+            }
+        }
+        use std::sync::mpsc;
+        use std::time::Duration;
+        let (waiting_tx, waiting_rx) = mpsc::channel();
+        let runtime = Arc::new(Observability {
+            logger: Mutex::new(LoggerHandle::ShuttingDown),
+            logger_changed: Condvar::new(),
+            #[cfg(test)]
+            logger_waiting: Some(waiting_tx),
+            shutdown: AtomicBool::new(true),
+            subscriber_registrations: Vec::new(),
+            projection_registrations: Vec::new(),
+            observability_health_provider: None,
+            runtime: RuntimeState::default(),
+        });
+        let _release_on_failure = ReleaseOnFailure(runtime.clone());
+        let (done_tx, done_rx) = mpsc::channel();
+        let threads: Vec<_> = [false, true]
+            .into_iter()
+            .map(|health| {
+                let runtime = runtime.clone();
+                let done_tx = done_tx.clone();
+                std::thread::spawn(move || {
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        if health {
+                            let _ = runtime.health();
+                        } else {
+                            let _ = runtime.flush_typed();
+                        }
+                    }));
+                    let _ = done_tx.send(result.is_err());
+                })
+            })
+            .collect();
+        assert_logger_waiters(&waiting_rx);
+        assert!(done_rx.recv_timeout(Duration::from_millis(50)).is_err());
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            runtime.complete_shutdown(|| panic!("injected shutdown unwind"));
+        }));
+        assert!(result.is_err());
+        for _ in 0..2 {
+            assert!(
+                done_rx
+                    .recv_timeout(Duration::from_secs(1))
+                    .expect("waiter observes poison")
+            );
+        }
+        for thread in threads {
+            thread.join().expect("bounded waiter");
+        }
+    }
+
+    #[test]
+    fn flush_forwards_logger_flush_behavior_directly() {
+        struct FlushFailSink {
+            flush_calls: Arc<AtomicU64>,
+            second_flush_completed: std::sync::mpsc::Sender<()>,
+        }
 
         impl LogSink for FlushFailSink {
             fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
@@ -1073,11 +1660,16 @@ mod tests {
             }
 
             fn flush(&self) -> Result<(), LogSinkError> {
-                Err(LogSinkError(Box::new(ErrorContext::new(
+                let call = self.flush_calls.fetch_add(1, Ordering::SeqCst);
+                let result = Err(LogSinkError(Box::new(ErrorContext::new(
                     sc_observability::error_codes::LOGGER_FLUSH_FAILED,
                     "flush failed",
                     Remediation::not_recoverable("test sink intentionally fails flush"),
-                ))))
+                ))));
+                if call == 1 {
+                    let _ = self.second_flush_completed.send(());
+                }
+                result
             }
 
             fn health(&self) -> SinkHealth {
@@ -1101,29 +1693,61 @@ mod tests {
             .expect("runtime");
         assert!(ok_runtime.flush().is_ok());
 
-        let fail_root = temp_path("flush-fail");
-        let mut logger_config =
-            LoggerConfig::default_for(ServiceName::new("obs-app").expect("service"), fail_root);
-        logger_config.enable_file_sink = false;
-        logger_config.enable_console_sink = false;
-        let mut builder = sc_observability::Logger::builder(logger_config).expect("logger builder");
-        builder.register_sink(
-            SinkRegistration::new(Arc::new(FlushFailSink)).with_filter(Arc::new(PassthroughFilter)),
-        );
-        let logger = builder.build();
+        let build_failing_runtime = |name: &str| {
+            let flush_calls = Arc::new(AtomicU64::new(0));
+            let (second_flush_completed, second_flush_rx) = std::sync::mpsc::channel();
+            let mut logger_config = LoggerConfig::default_for(
+                ServiceName::new("obs-app").expect("service"),
+                temp_path(name),
+            );
+            logger_config.enable_file_sink = false;
+            logger_config.enable_console_sink = false;
+            let mut builder =
+                sc_observability::Logger::builder(logger_config).expect("logger builder");
+            builder.register_sink(SinkRegistration::new(Arc::new(FlushFailSink {
+                flush_calls: flush_calls.clone(),
+                second_flush_completed,
+            })));
+            let logger = builder.build();
 
-        let runtime = Observability {
-            logger: Mutex::new(Some(LoggerHandle::Running(logger))),
-            shutdown: AtomicBool::new(false),
-            subscriber_registrations: Vec::new(),
-            projection_registrations: Vec::new(),
-            observability_health_provider: None,
-            runtime: RuntimeState::default(),
+            let runtime = Observability {
+                logger: Mutex::new(LoggerHandle::Running(logger)),
+                logger_changed: Condvar::new(),
+                #[cfg(test)]
+                logger_waiting: None,
+                shutdown: AtomicBool::new(false),
+                subscriber_registrations: Vec::new(),
+                projection_registrations: Vec::new(),
+                observability_health_provider: None,
+                runtime: RuntimeState::default(),
+            };
+            (runtime, flush_calls, second_flush_rx)
         };
 
-        assert!(runtime.flush().is_err());
-        let logging = runtime.health().logging.expect("logging health");
-        assert_eq!(logging.flush_errors_total, 1);
-        assert!(logging.last_error.is_some());
+        let (legacy_runtime, legacy_flush_calls, legacy_second_flush_rx) =
+            build_failing_runtime("flush-legacy");
+        let (typed_runtime, typed_flush_calls, typed_second_flush_rx) =
+            build_failing_runtime("flush-typed");
+        let Err(legacy_error) = legacy_runtime.flush() else {
+            panic!("legacy flush must report sink failure");
+        };
+        legacy_second_flush_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .expect("bounded legacy second flush completion");
+        let Err(typed_error) = typed_runtime.flush_typed() else {
+            panic!("typed flush must report sink failure");
+        };
+        assert_eq!(legacy_error.kind(), FlushFailureKind::LoggerFlush);
+        assert_eq!(typed_error.kind(), FlushFailureKind::LoggerFlush);
+        typed_second_flush_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .expect("bounded typed second flush completion");
+        assert_eq!(legacy_flush_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(typed_flush_calls.load(Ordering::SeqCst), 2);
+        for runtime in [&legacy_runtime, &typed_runtime] {
+            let logging = runtime.health().logging.expect("logging health");
+            assert_eq!(logging.flush_errors_total, 1);
+            assert!(logging.last_error.is_some());
+        }
     }
 }

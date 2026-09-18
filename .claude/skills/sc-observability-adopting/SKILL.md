@@ -20,6 +20,10 @@ Use this skill when an existing Rust codebase wants to adopt
    - `log`
    - `tracing`
    - custom JSONL or custom retained logging
+6. When adopting the additive typed error surface or responding to a
+   deprecation warning, load `references/migrate-error-api.md` after the
+   logging shape is understood. It is the exact symbol and warning policy
+   reference; do not infer replacements from method names alone.
 
 ## Scope Boundary
 
@@ -30,6 +34,7 @@ Library-specific migration detail lives in:
 - `references/migrate-from-log.md`
 - `references/migrate-from-tracing.md`
 - `references/migrate-from-custom-jsonl.md`
+- `references/migrate-error-api.md`
 
 These files are new writes for this package. Do not treat this skill as a
 wrapper around the repo's ATM-scoped migration docs.
@@ -48,6 +53,8 @@ wrapper around the repo's ATM-scoped migration docs.
 - `references/console-and-log-root.md`
 - `references/adoption-checklist.md`
 - migration references as needed
+- `references/migrate-error-api.md` for typed error adoption or deprecation
+  handling
 
 ## Guideline Evaluation
 

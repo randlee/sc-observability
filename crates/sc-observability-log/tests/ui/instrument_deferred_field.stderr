@@ -1,0 +1,11 @@
+error: deferred field `x` without a value is not supported (tracing `field::Empty`)
+ --> tests/ui/instrument_deferred_field.rs:4:21
+  |
+4 | #[instrument(fields(x))]
+  |                     ^
+
+error: deferred field `a.b` without a value is not supported (tracing `field::Empty`)
+ --> tests/ui/instrument_deferred_field.rs:7:21
+  |
+7 | #[instrument(fields(a.b))]
+  |                     ^^^

@@ -1,0 +1,5 @@
+{
+  "purpose": "development plumbing diagnosis, not isolated artifact qualification",
+  "instrumented_host_sha256": "99c317e9523f56f1ee67dcc548829f136d323b953d6b5babd8f2177d93ea5086",
+  "observation_module_sha256": "c9aac144a4ba5a606edc7396ad60195199f20a8312d58be910a7475026f3fbd7"
+}

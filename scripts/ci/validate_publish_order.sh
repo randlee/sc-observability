@@ -13,3 +13,14 @@ if orders != sorted(orders):
     raise SystemExit("publish_order values must already be sorted in the manifest")
 print("publish order validation passed")
 PY
+
+# release/bindings-artifacts.toml (B.7 binding-release manifest) covers a
+# different, mixed shape (crates.io crates plus pypi/npm packages, some
+# "pending"), so its order/dependency validation lives in
+# scripts/release_bindings_artifacts.py's validate-manifest subcommand
+# rather than being duplicated here. Both checks' output is visible in the
+# same CI log.
+python3 scripts/release_bindings_artifacts.py validate-manifest \
+  --manifest release/bindings-artifacts.toml \
+  --workspace-toml Cargo.toml
+echo "bindings publish order/dependency validation passed"

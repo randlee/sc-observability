@@ -1,0 +1,5 @@
+error: `follows_from` is not supported (no span links)
+ --> tests/ui/instrument_follows_from.rs:4:14
+  |
+4 | #[instrument(follows_from = [1_u64])]
+  |              ^^^^^^^^^^^^

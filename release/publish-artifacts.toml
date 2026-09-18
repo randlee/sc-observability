@@ -1,5 +1,10 @@
 schema_version = 1
 
+# Phase-B readiness inventory: ten intended publishable Rust crates in
+# dependency order. CI-only consumer checks, schema-generator tooling, and
+# example applications are intentionally excluded; binding package channels
+# and their pending states are detailed in release/bindings-artifacts.toml.
+
 # ATM baseline publish history:
 # - sc-observability was previously published at 0.45.2
 # - sc-observability-types, sc-observe, and sc-observability-otlp were not
@@ -31,4 +36,46 @@ artifact = "sc-observability-otlp"
 package = "sc-observability-otlp"
 cargo_toml = "crates/sc-observability-otlp/Cargo.toml"
 publish_order = 4
+wait_after_publish_seconds = 0
+
+[[crates]]
+artifact = "sc-observability-log-macros"
+package = "sc-observability-log-macros"
+cargo_toml = "crates/sc-observability-log-macros/Cargo.toml"
+publish_order = 5
+wait_after_publish_seconds = 30
+
+[[crates]]
+artifact = "sc-observability-log"
+package = "sc-observability-log"
+cargo_toml = "crates/sc-observability-log/Cargo.toml"
+publish_order = 6
+wait_after_publish_seconds = 0
+
+[[crates]]
+artifact = "sc-observability-dto"
+package = "sc-observability-dto"
+cargo_toml = "crates/sc-observability-dto/Cargo.toml"
+publish_order = 7
+wait_after_publish_seconds = 30
+
+[[crates]]
+artifact = "sc-observability-binding-runtime"
+package = "sc-observability-binding-runtime"
+cargo_toml = "crates/sc-observability-binding-runtime/Cargo.toml"
+publish_order = 8
+wait_after_publish_seconds = 30
+
+[[crates]]
+artifact = "sc-observability-tauri"
+package = "sc-observability-tauri"
+cargo_toml = "bindings/tauri/Cargo.toml"
+publish_order = 9
+wait_after_publish_seconds = 30
+
+[[crates]]
+artifact = "sc-observability-py"
+package = "sc-observability-py"
+cargo_toml = "bindings/python/sc-observability-py/Cargo.toml"
+publish_order = 10
 wait_after_publish_seconds = 0

@@ -1,7 +1,8 @@
 ---
 id: B.1
-status: proposed
+status: complete
 branch: feature/phase-b-1-copy
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1-copy
 base: develop
 ---
 
@@ -19,8 +20,9 @@ complete its initial implementation against it. This is not a post-copy API
 redesign and does not freeze the unfinished inspected baseline.
 
 Entry also requires the [runtime-level prerequisite](runtime-level-contract.md):
-B.P2-staged core support and accepted BTIT integration, including release-mode
-elevation evidence.
+qualified staged core support and accepted BTIT integration, including
+release-mode elevation evidence. Live registry proof remains a B.7 phase-end
+gate and is not a B.1 entry requirement.
 
 Entry requires the recorded approved target-contract commit, completed BTIT
 initial design/implementation, resolved critical-review findings and accepted
@@ -40,7 +42,7 @@ source parity is checked against the newly accepted target, not legacy behavior.
 ## Dependencies
 
 - `must_follow`: B.P3 accepted source handoff, incorporating target contract
-  approval, B.P2 staged core and BTIT completed implementation/critical review.
+  approval, B.P2 staged core provenance and BTIT completed implementation/critical review.
 - B.1a `must_follow` B.1; no binding sprint, publication or second public-API
   redesign is part of B.1.
 
@@ -129,10 +131,15 @@ macro-expansion hygiene check.
 ## Required validation (authoritative)
 
 From repo root; `BTIT_SOURCE_REPO` is the local checkout containing the accepted
-commit, recorded in the handoff:
+commit, recorded in the handoff. The import validator call is continuously
+enforced in CI by the `log-bridge-import-integrity` job in
+`.github/workflows/ci.yml`, which clones the accepted BTIT source by URL on
+every run rather than relying on a one-time manual transcript:
 
 ```sh
-python3 scripts/ci/validate_log_import.py --source-repo "$BTIT_SOURCE_REPO"
+python3 scripts/ci/validate_log_import.py --source-repo "$BTIT_SOURCE_REPO" \
+  --post-import-adaptations docs/plans/phase-b/post-import-adaptations.json \
+  --release-adaptations docs/plans/phase-b/release-adaptations-b-2.json
 cargo fmt --all -- --check
 cargo test --locked --workspace --all-targets
 cargo test --locked --workspace --doc
@@ -152,6 +159,30 @@ never substitute the previously inspected source or a conventional review path.
 The imported API freeze/consumer fixtures validate the new private packages;
 existing published-core API/semver gates must also remain green in normal CI.
 A pre-existing failure needs recorded disposition; it cannot be silently waived.
+
+### Recorded disposition: trybuild toolchain drift
+
+BTIT's `rust-toolchain.toml` pins channel `1.98.1`; this workspace's
+`rust-toolchain.toml` pins `1.94.1` (matching this repo's own `rust-version`).
+Four `sc-observability-log` `trybuild` `.stderr` fixtures
+(`event_span_macro.stderr`, `field_not_serialize_or_debug.stderr`,
+`instrument_entered_across_await.stderr`, `log_control_not_owner.stderr`) fail
+byte-for-byte against the accepted BTIT blob under this workspace's pinned
+rustc: only pretty-printer wording, path qualification, and surrounding
+source-context lines differ between the two rustc releases; the diagnostic
+code, its `-->` source location, and the rejected operation are unchanged in
+every case (lead-reviewed; see `import-provenance.json`'s
+`trybuild_diagnostic_text` adaptations). Regenerated once with
+`TRYBUILD=overwrite` against the destination's pinned toolchain; the
+underlying `.rs` UI-test sources are unchanged (byte-identical to the accepted
+source blob). `scripts/ci/validate_log_import.py` gained a
+`trybuild_diagnostic_text` adaptation `kind`, restricted to `tests/ui/*.stderr`
+files, requiring the same ordered sequence of diagnostic codes and the same
+ordered sequence of `-->` locations on both sides (both non-empty) -- the
+same structural-equivalence approach already used for `dependency_path` and
+`relocated_doc_or_test_path`. Ordinary CI trybuild runs execute normally
+against the destination-pinned toolchain with no `TRYBUILD=overwrite` in
+effect.
 
 ## Paths to delete
 

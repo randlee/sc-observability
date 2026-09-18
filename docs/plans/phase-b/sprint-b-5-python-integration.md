@@ -1,7 +1,8 @@
 ---
 id: B.5
-status: proposed
+status: complete
 branch: feature/phase-b-5-python-integration
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-5-python-integration
 base: develop
 ---
 
@@ -227,6 +228,21 @@ formatter, recursion, filtered events, full queue, stopped host, counter saturat
 flush timeout, repeat close and logging shutdown/atexit without duplicate core
 shutdown. Verify exactly-once event drop accounting and immutable health snapshots. Run the tests on packaged Python code
 and the embedding example; do not rely only on mocks of the backend.
+
+## Current qualification evidence (updated 2026-09-18)
+
+Status: `complete` for this development scope. The B.4a 25-cell
+installed-distribution matrix this sprint's own tests run against has
+passed (see `sprint-b-4a-python-packaging.md`'s current qualification
+evidence): run `35303039765` at `c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18`
+completed `conclusion: success`, all 33 jobs, including all 25
+`installed-suite` cells running the complete installed tests directory --
+which includes B.5's own handler/context suite. That satisfies this sprint's
+own remaining-qualification requirement in `handoff-b-5.md`. Lead
+completeness decision: **PASS** (aobs, 2026-09-18), recorded in
+`handoff-b-4a.md`. `status` above reads `complete` for this development
+scope; independent phase-end QA acceptance remains separately pending, and
+formal API/ADR approval and publication remain deferred to B.7.
 
 ## Paths to delete
 

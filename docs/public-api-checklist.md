@@ -1,6 +1,6 @@
 # SC-Observability Public API Checklist
 
-**Status**: Approved released baseline; Phase B additions below are proposed
+**Status**: Approved released baseline; all Phase B additions below remain proposed.
 **Purpose**: Track the intended public API so implementation does not invent or
 change the public surface opportunistically.
 
@@ -250,7 +250,7 @@ API freeze is progressive by crate and sprint, not global at Sprint 1.
   that crate.
 - Sprint 3 closes only when the `sc-observe` and
   `sc-observability-otlp` recovery-scope public APIs are frozen together.
-- Sprint 4 / pre-release closes only when all four crate API surfaces are
+- Sprint 4 / pre-release closes only when all six core/bridge crate API surfaces are
   confirmed finalized together.
 
 At each crate freeze gate:
@@ -287,13 +287,16 @@ Steady-state rule:
 - when no public API diff exists, `docs/api-approvals/README.md` may be the
   only file under `docs/api-approvals/`
 
-## 8. Proposed Phase B additions — not implemented or approved
+## 8. Phase B additions
 
 The [phase index](plans/phase-b/plan-phase-b.md) routes authoritative sprint
-contracts. These pending entries do not alter the finalized items above.
+contracts. Except where explicitly marked implemented below, these pending
+entries do not alter the finalized items above.
 
-- [ ] Neutral runtime level state/results and an opaque core mutation capability;
-  see [runtime contract](plans/phase-b/runtime-level-contract.md). Preserve
+- [ ] Neutral runtime level state/results and an opaque core mutation capability,
+  owner-deferred to Phase B completion; see the
+  [runtime contract](plans/phase-b/runtime-level-contract.md) and
+  [approval record](api-approvals/phase-b-runtime-level.md). Preserve
   existing LoggerConfig and health struct shapes and constructor signatures.
 - [ ] Initial companion bridge/control/error/health API and exact-pinned macros;
   see [target matrix](plans/phase-b/target-bridge-api.md). BTIT implements the

@@ -1,15 +1,24 @@
+#![allow(
+    deprecated,
+    reason = "OTLP integration compatibility fixtures exercise retained projector boundaries"
+)]
+
 use std::sync::Arc;
 
 use sc_observability_otlp::{
     LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, Telemetry, TelemetryConfigBuilder,
     TelemetryProjectors, TracesConfig,
 };
+use sc_observability_types::typed::{
+    TypedLogProjector, TypedMetricProjector, TypedSpanProjector, legacy_log_projector,
+    legacy_metric_projector, legacy_span_projector,
+};
 use sc_observability_types::{
-    ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-    MetricRecord, MetricUnit, Observation, ObservationFilter, OutcomeLabel, ProcessIdentity,
-    ProjectionError, Remediation, SchemaVersion, ServiceName, SpanEvent, SpanId, SpanProjector,
-    SpanRecord, SpanSignal, SpanStarted, StateTransition, TargetCategory, TelemetryHealthState,
-    Timestamp, ToolName, TraceContext, TraceId,
+    ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, LogProjector, MetricKind,
+    MetricName, MetricProjector, MetricRecord, MetricUnit, Observation, ObservationFilter,
+    OutcomeLabel, ProcessIdentity, ProjectionError, Remediation, SchemaVersion, ServiceName,
+    SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, StateTransition,
+    TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde_json::Map;
@@ -31,6 +40,9 @@ impl ObservationFilter<AgentPayload> for AllowAll {
 struct StaticLogProjector;
 struct StaticSpanProjector;
 struct StaticMetricProjector;
+struct TypedStaticLogProjector;
+struct TypedStaticSpanProjector;
+struct TypedStaticMetricProjector;
 
 impl sc_observability_types::LogProjector<AgentPayload> for StaticLogProjector {
     fn project_logs(
@@ -88,6 +100,39 @@ impl sc_observability_types::MetricProjector<AgentPayload> for StaticMetricProje
             unit: Some(MetricUnit::new("1").expect("valid metric unit")),
             attributes: Map::default(),
         }])
+    }
+}
+
+impl TypedLogProjector<AgentPayload> for TypedStaticLogProjector {
+    fn project_logs(
+        &self,
+        observation: &Observation<AgentPayload>,
+    ) -> Result<Vec<LogEvent>, sc_observability_types::typed::ProjectionFailure> {
+        StaticLogProjector
+            .project_logs(observation)
+            .map_err(Into::into)
+    }
+}
+
+impl TypedSpanProjector<AgentPayload> for TypedStaticSpanProjector {
+    fn project_spans(
+        &self,
+        observation: &Observation<AgentPayload>,
+    ) -> Result<Vec<SpanSignal>, sc_observability_types::typed::ProjectionFailure> {
+        StaticSpanProjector
+            .project_spans(observation)
+            .map_err(Into::into)
+    }
+}
+
+impl TypedMetricProjector<AgentPayload> for TypedStaticMetricProjector {
+    fn project_metrics(
+        &self,
+        observation: &Observation<AgentPayload>,
+    ) -> Result<Vec<MetricRecord>, sc_observability_types::typed::ProjectionFailure> {
+        StaticMetricProjector
+            .project_metrics(observation)
+            .map_err(Into::into)
     }
 }
 
@@ -229,4 +274,45 @@ fn builder_registration_attaches_logs_spans_and_metrics() {
             .iter()
             .all(|status| status.state == sc_observability_types::ExporterHealthState::Healthy)
     );
+}
+
+#[test]
+fn typed_projector_inputs_forward_through_retained_registration() {
+    let telemetry = Arc::new(Telemetry::new_typed(telemetry_config()).expect("typed telemetry"));
+    let root = temp_root("typed-integration");
+    let config = ObservabilityConfig::default_for(
+        ToolName::new("test-service").expect("valid tool"),
+        root.clone(),
+    )
+    .expect("config");
+    let runtime = Observability::builder(config)
+        .with_observability_health_provider(telemetry.clone())
+        .register_projection(
+            TelemetryProjectors::new(telemetry.clone())
+                .with_log_projector(legacy_log_projector(Arc::new(TypedStaticLogProjector)))
+                .with_span_projector(legacy_span_projector(Arc::new(TypedStaticSpanProjector)))
+                .with_metric_projector(legacy_metric_projector(Arc::new(
+                    TypedStaticMetricProjector,
+                )))
+                .with_filter(Arc::new(AllowAll))
+                .into_registration(),
+        )
+        .build()
+        .expect("runtime");
+
+    runtime.emit(observation()).expect("emit");
+    telemetry.flush_typed().expect("typed flush");
+
+    let log_path = root
+        .join(sc_observability::constants::DEFAULT_LOG_DIR_NAME)
+        .join(format!(
+            "test-service{}",
+            sc_observability::constants::DEFAULT_LOG_FILE_SUFFIX
+        ));
+    assert!(
+        std::fs::read_to_string(log_path)
+            .expect("read projected log file")
+            .contains("\"action\":\"agent.observe\"")
+    );
+    assert_eq!(telemetry.health().state, TelemetryHealthState::Healthy);
 }
