@@ -1,5 +1,6 @@
 """The real desktop process must retain Windows network denial until exit."""
 import sys
+import inspect
 import subprocess
 import os
 import signal
@@ -55,6 +56,14 @@ class NetworkScopeTests(unittest.TestCase):
         self.assertEqual(len(sandbox.commands), 2)
         self.assertIn("$policy.Rules.Remove('qualification-test-owned-rule')", sandbox.commands[1])
         self.assertIn('Rules.Remove', sandbox.commands[1])
+
+    def test_command_rule_resolves_bare_executable_and_tracks_process_tree(self):
+        sandbox = self.sandbox()
+        with patch('_python_sandbox.shutil.which', return_value='C:/tool/python.exe'):
+            with sandbox.network_denial(Path('python')):
+                pass
+        self.assertIn("-Program 'C:/tool/python.exe'", sandbox.commands[0])
+        self.assertIn('Get-CimInstance Win32_Process', inspect.getsource(Sandbox._watch_process_tree))
 
     def test_webview_failure_still_removes_only_own_rule(self):
         sandbox = self.sandbox()
