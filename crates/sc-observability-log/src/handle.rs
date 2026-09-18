@@ -80,6 +80,26 @@ pub(crate) struct Installed {
 pub(crate) static SLOT: RwLock<Option<Arc<Installed>>> = RwLock::new(None);
 pub(crate) static INSTALLED: AtomicBool = AtomicBool::new(false);
 
+// Test-only observability for the actual native flush boundary.  This remains
+// private to the crate: the public facade must not expose a test counter.
+#[cfg(test)]
+static NATIVE_FLUSH_CALLS: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_native_flush_calls() {
+    NATIVE_FLUSH_CALLS.store(0, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub(crate) fn native_flush_calls() -> u64 {
+    NATIVE_FLUSH_CALLS.load(Ordering::SeqCst)
+}
+
+#[cfg(test)]
+fn record_native_flush_call() {
+    NATIVE_FLUSH_CALLS.fetch_add(1, Ordering::SeqCst);
+}
+
 /// Encoded [`BridgeLifecycle`]; `Stopped` until `init` succeeds (no guard exists before).
 static LIFECYCLE: AtomicU8 = AtomicU8::new(LIFECYCLE_STOPPED);
 const LIFECYCLE_RUNNING: u8 = 0;
@@ -856,6 +876,8 @@ pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
     let flush = move || {
         // Released when the flush returns or unwinds, before the result is sent.
         let _flight = flight;
+        #[cfg(test)]
+        record_native_flush_call();
         installed.logger.flush()
     };
     match run_bounded(timeout, flush) {
@@ -887,6 +909,21 @@ pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
 mod tests {
     use super::*;
     use std::time::Instant;
+
+    #[test]
+    fn native_flush_counter_positive_control_and_facade_zero_proof() {
+        reset_native_flush_calls();
+        record_native_flush_call();
+        assert_eq!(native_flush_calls(), 1);
+
+        reset_native_flush_calls();
+        log::Log::flush(&crate::bridge::Bridge);
+        assert_eq!(
+            native_flush_calls(),
+            0,
+            "facade flush must not invoke the native flush boundary"
+        );
+    }
 
     struct ReleaseOnDrop(Option<mpsc::SyncSender<()>>);
 

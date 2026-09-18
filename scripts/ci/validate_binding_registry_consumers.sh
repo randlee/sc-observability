@@ -82,7 +82,7 @@ if secrets_output=$(python3 scripts/release_bindings_artifacts.py list-publish-p
       --manifest "$MANIFEST" --workspace-toml "$WORKSPACE_TOML" --require-secrets 2>&1); then
   echo "all ready artifacts have a configured registry secret"
 else
-  echo "BLOCKED-ON-AUTH (expected, correct pending state today -- only CARGO_REGISTRY_TOKEN is configured):"
+  echo "BLOCKED-ON-AUTH (owner-deferred registry credential/publication approval):"
   echo "$secrets_output" | sed 's/^/  /'
 fi
 
