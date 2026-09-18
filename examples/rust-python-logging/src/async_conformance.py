@@ -85,7 +85,6 @@ assert isinstance(logger.submit(LogEvent(level="info", target="async.embed", act
 async def timeout_case():
     timed = await logger.flush_async(2)
     assert isinstance(timed, Err) and timed.error.kind == "timeout", timed
-    await asyncio.sleep(0.005)
     # This call observes rejection, not another deliberate observation expiry.
     # Bridge rejection arrives through a native Operation; give its event-loop
     # poll enough budget even when Windows schedules beyond the 2 ms deadline.
