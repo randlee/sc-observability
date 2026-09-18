@@ -137,6 +137,11 @@ jobs:
               -v "$GITHUB_WORKSPACE:/checkout:ro" -v "$RUNNER_TEMP/b4a-source:/artifacts:ro" \
               -v "$RUNNER_TEMP/b4a-result:/result" -e B4A_PLATFORM b4a-manylinux \
               bash -c 'set -e; sdist=(/artifacts/dist/*.tar.gz); bash /checkout/scripts/ci/validate_python_bindings.sh --distribution build --sdist "${sdist[0]}" --platform "$B4A_PLATFORM" --checkout /checkout --output /result/wheel; chmod -R a+rX /result'
+          elif [[ "$RUNNER_OS" == Windows ]]; then
+            sdist=( "$RUNNER_TEMP"/b4a-source/dist/*.tar.gz )
+            python scripts/ci/supervise_windows_proof.py --evidence "$RUNNER_TEMP/b4a-result/wheel" -- \
+              python scripts/ci/validate_python_distribution.py build --sdist "${sdist[0]}" \
+              --platform "$B4A_PLATFORM" --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/b4a-result/wheel"
           else
             sdist=( "$RUNNER_TEMP"/b4a-source/dist/*.tar.gz )
             bash scripts/ci/validate_python_bindings.sh --distribution build --sdist "${sdist[0]}" \
@@ -193,8 +198,14 @@ jobs:
           shopt -s nullglob
           companion=( "$RUNNER_TEMP"/b4a-wheel/instrumented/*.whl )
           if (( ${#companion[@]} == 1 )); then flags+=(--instrumented-wheel "${companion[0]}"); fi
-          bash scripts/ci/validate_python_bindings.sh --distribution cell --sdist "${sdist[0]}" --wheel "${wheel[0]}" \
-            --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/b4a-cell" "${flags[@]}"
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            python scripts/ci/supervise_windows_proof.py --evidence "$RUNNER_TEMP/b4a-cell" -- \
+              python scripts/ci/validate_python_distribution.py cell --sdist "${sdist[0]}" --wheel "${wheel[0]}" \
+              --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/b4a-cell" "${flags[@]}"
+          else
+            bash scripts/ci/validate_python_bindings.sh --distribution cell --sdist "${sdist[0]}" --wheel "${wheel[0]}" \
+              --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/b4a-cell" "${flags[@]}"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: b4a-cell-${{ matrix.id }}-${{ matrix.python }}
