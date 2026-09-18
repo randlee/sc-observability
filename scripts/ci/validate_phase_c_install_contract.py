@@ -34,6 +34,8 @@ def main() -> int:
         raise SystemExit(f"five-wheel matrix mismatch: {sorted(actual)}")
     if contract["npm_packages"] != [{"name": "@sc-observability/client", "source": "bindings/typescript"}]:
         raise SystemExit("npm package inventory mismatch")
+    if contract["release_binaries"] != []:
+        raise SystemExit("release_binaries must remain empty: no standalone binary is shipped")
     if contract["python_packages"][0]["artifact"] == contract["crates"][-1]["artifact"]:
         raise SystemExit("python wheel artifact id must differ from Rust crate artifact id")
     if "npm" not in contract["channels"]:
