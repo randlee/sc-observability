@@ -1,80 +1,51 @@
-"""Recovery must be confined to owned resources and can never qualify a proof."""
+"""Recovery cannot qualify a failed or incompletely cleaned proof."""
 import json
 import os
+from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import supervise_windows_proof as supervisor
-from _python_distribution import DistributionError
 
 
 class SupervisorTests(unittest.TestCase):
-    def record(self, directory):
-        path = directory / 'recovery.json'
-        root = directory / 'owned-root'
-        path.write_text(json.dumps({'schema_version': 1,
-            'firewall': 'sc-observability-proof-' + 'a' * 32,
-            'acls': [[str(root), str(directory / 'acl-0.txt')]]}))
-        return path, root
-
-    def test_missing_plan_does_not_restore_anything(self):
+    def execute(self, process, leftover=False, failure=None):
         with tempfile.TemporaryDirectory() as temporary:
-            self.assertFalse(supervisor.recover(Path(temporary) / 'absent', set(), Path(temporary)))
-
-    def test_recovery_restores_owned_rule_and_acl_and_removes_plan(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            path, root = self.record(directory)
-            events = []
-            with patch.object(supervisor.Sandbox, 'remove_firewall', side_effect=lambda: events.append('rule')):
-                with patch.object(supervisor.Sandbox, 'restore_acls', side_effect=lambda: events.append('acl')):
-                    self.assertTrue(supervisor.recover(path, {root}, directory))
-            self.assertEqual(events, ['rule', 'acl'])
-            self.assertFalse(path.exists())
-
-    def test_foreign_roots_are_rejected_before_any_restoration(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            path, _ = self.record(directory)
-            with patch.object(supervisor.Sandbox, 'remove_firewall') as remove:
-                with self.assertRaisesRegex(DistributionError, 'outside owned roots'):
-                    supervisor.recover(path, set(), directory)
-            remove.assert_not_called()
-            self.assertTrue(path.exists())
-
-    def execute(self, process, recovered):
-        with patch.object(sys, 'argv', ['supervisor', '--', 'proof-command']):
-            with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}):
-                with patch.object(supervisor.platform, 'system', return_value='Windows'):
-                    with patch.object(supervisor, 'registered_checkouts', return_value=[]):
-                        with patch.object(supervisor.subprocess, 'Popen', return_value=process):
-                            with patch.object(supervisor, 'recover', return_value=recovered,
-                                              side_effect=recovered if isinstance(recovered, Exception) else None):
-                                with patch.object(supervisor, 'invalidate_evidence') as invalidate:
-                                    with self.assertRaises(SystemExit) as result:
-                                        supervisor.main()
-                                    invalidate.assert_called_once_with(Path('target/tauri-qualification'),
-                                                                       result.exception.code)
-        return result.exception.code
+            evidence = Path(temporary) / 'evidence'
+            def launch(command, env):
+                if leftover:
+                    control = Path(env['SC_WINDOWS_IDENTITY_CONTROL_ROOT']) / 'windows-identity-control-owned'
+                    control.mkdir()
+                    (control / 'identity-recovery.json').write_text('retained journal')
+                return process
+            with patch.object(sys, 'argv', ['supervisor', '--evidence', str(evidence), '--', 'proof-command']), \
+                 patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}), \
+                 patch.object(supervisor.platform, 'system', return_value='Windows'), \
+                 patch.object(supervisor.subprocess, 'Popen', side_effect=launch), \
+                 patch.object(supervisor, 'recover', side_effect=failure, return_value=True):
+                with self.assertRaises(SystemExit) as result:
+                    supervisor.main()
+            report = json.loads((evidence / 'windows-supervisor.json').read_text())
+            self.assertEqual(report['exit'], result.exception.code)
+            if failure:
+                self.assertEqual((evidence / 'failed-recovery-1/identity-recovery.json').read_text(), 'retained journal')
+                self.assertEqual(report['recovery_errors'], [str(failure)])
+            return result.exception.code
 
     def test_normal_worker_success_remains_success(self):
-        self.assertEqual(self.execute(Mock(wait=Mock(return_value=0)), False), 0)
+        self.assertEqual(self.execute(Mock(wait=Mock(return_value=0))), 0)
 
-    def test_recovery_invalidates_zero_worker_exit(self):
-        process = Mock(wait=Mock(return_value=0))
-        self.assertEqual(self.execute(process, True), 125)
+    def test_leftover_recovery_invalidates_zero_worker_exit(self):
+        self.assertEqual(self.execute(Mock(wait=Mock(return_value=0)), leftover=True), 125)
 
-    def test_recovery_error_invalidates_zero_worker_exit_and_retained_evidence(self):
-        for error in (DistributionError('invalid recovery plan'), OSError('restore failed')):
-            with self.subTest(error=error):
-                self.assertEqual(self.execute(Mock(wait=Mock(return_value=0)), error), 125)
+    def test_recovery_error_invalidates_success_and_retains_journal(self):
+        self.assertEqual(self.execute(Mock(wait=Mock(return_value=0)), True, OSError('restore failed')), 125)
 
-    def test_supervisor_timeout_kills_owned_tree_and_fails_after_recovery(self):
+    def test_supervisor_timeout_kills_worker_tree_and_fails(self):
         process = Mock(pid=12345, poll=Mock(return_value=None),
                        wait=Mock(side_effect=[subprocess.TimeoutExpired('proof', 1800), None]))
         with patch.object(supervisor.subprocess, 'run') as kill:
@@ -94,5 +65,4 @@ class SupervisorTests(unittest.TestCase):
             self.assertEqual(report['windows_supervisor_exit'], 124)
 
 
-if __name__ == '__main__':
-    unittest.main()
+if __name__ == '__main__': unittest.main()

@@ -1,0 +1,35 @@
+name: Windows proof identity preflight
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/phase-b-wheel-test-hooks]
+    paths:
+      - scripts/ci/_windows_identity.py
+      - scripts/ci/_python_sandbox.py
+      - scripts/ci/_tauri_webview.py
+      - scripts/ci/supervise_windows_proof.py
+      - scripts/ci/windows_identity_preflight.py
+      - .github/workflows/windows-identity-preflight.yml
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12.10'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - name: Real identity and descendant preflight
+        shell: pwsh
+        run: python scripts/ci/windows_identity_preflight.py
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: windows-identity-preflight
+          path: target/windows-identity-preflight/
+          if-no-files-found: error

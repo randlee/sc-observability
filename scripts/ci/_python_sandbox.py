@@ -12,7 +12,6 @@ import sys
 import sysconfig
 import time
 import tempfile
-import threading
 import uuid
 from pathlib import Path
 from contextlib import contextmanager
@@ -72,8 +71,7 @@ class Sandbox:
         if any(self.scratch.is_relative_to(path) for path in self.denied):
             raise DistributionError('proof directory must be outside all checkouts and Cargo caches')
         self.commands: list[dict] = []
-        self.acls: list[tuple[Path, Path]] = []
-        self.firewall = 'sc-observability-proof-' + uuid.uuid4().hex
+        self.identity = None
         self.prefix: list[str] = []
         self.env = {key: value for key, value in os.environ.items()
                     if not key.startswith(('CARGO_', 'RUST', 'PYO3_', 'PYTHONPATH', 'PYTHONHOME'))}
@@ -86,8 +84,6 @@ class Sandbox:
                         PATH=str(Path(self.cargo).parent) + os.pathsep + os.environ['PATH'],
                         PYO3_PYTHON=sys.executable, PYTHONDONTWRITEBYTECODE='1')
         self.system = platform.system()
-        recovery = os.environ.get('SC_PROOF_RECOVERY_FILE')
-        self.recovery = Path(recovery) if recovery and self.system == 'Windows' else None
         if self.system == 'Linux':
             library_dir = sysconfig.get_config_var('LIBDIR')
             if library_dir:
@@ -97,12 +93,6 @@ class Sandbox:
         with socket.create_connection((self.network_ip, 443), timeout=10):
             pass
         self.cache_probe.write_text('qualification cache denial sentinel')
-
-    @staticmethod
-    def powershell(script: str) -> None:
-        subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
-                        "$ErrorActionPreference='Stop'; " + script], check=True,
-                       cwd=tempfile.gettempdir(), timeout=60)
 
     def __enter__(self):
         if self.system == 'Darwin':
@@ -121,111 +111,53 @@ class Sandbox:
                     self.prefix += ['--tmpfs', str(path)]
             self.prefix += ['--']
         elif self.system == 'Windows':
-            if os.environ.get('GITHUB_ACTIONS') != 'true':
-                raise DistributionError('Windows ACL/firewall isolation requires an ephemeral CI runner')
-            # Ephemeral CI runner: save and restore every ACL, and remove only our rule.
-            account = subprocess.check_output(['whoami'], text=True).strip()
+            from _windows_identity import Identity
+            if not os.environ.get('SC_WINDOWS_IDENTITY_CONTROL_ROOT'):
+                raise DistributionError('Windows proof requires the independent recovery supervisor')
+            # Direct tools are provisioned outside the denied Cargo cache. Their
+            # private runner-profile ACLs need an exact, temporary RX grant.
+            self.identity = Identity(self.scratch, self.denied,
+                                     readable=[Path(self.cargo).resolve().parent.parent])
             try:
-                for index, path in enumerate(self.denied):
-                    if path.exists():
-                        saved = self.scratch / f'acl-{index}.txt'
-                        subprocess.run(['icacls', str(path), '/save', str(saved), '/T', '/C'], check=True,
-                                       stdout=subprocess.DEVNULL)
-                        self.acls.append((path, saved))
-                        self.record_recovery()
-                        subprocess.run(['icacls', str(path), '/deny', account + ':(OI)(CI)(R)', '/C'],
-                                       check=True, stdout=subprocess.DEVNULL)
+                self.identity.setup()
+                self.identity.activate()
             except BaseException:
-                self.__exit__(None, None, None)
+                self.identity.close()
                 raise
         else:
             raise DistributionError(f'unsupported sandbox platform: {self.system}')
         return self
 
     def __exit__(self, *_):
-        if self.system == 'Windows':
-            try:
-                self.remove_firewall()
-            finally:
-                self.restore_acls()
-        self.cache_probe.unlink(missing_ok=True)
-        if getattr(self, 'recovery', None):
-            self.recovery.unlink(missing_ok=True)
-
-    def record_recovery(self):
-        if not self.recovery:
-            return
-        pending = self.recovery.with_suffix('.pending')
-        pending.write_text(json.dumps({'schema_version': 1, 'firewall': self.firewall,
-                                      'acls': [[str(root), str(saved)] for root, saved in self.acls]}),
-                           encoding='utf-8')
-        pending.replace(self.recovery)
-
-    def restore_acls(self):
-        failures = []
-        for path, saved in reversed(self.acls):
-            try:
-                subprocess.run(['icacls', str(path.parent), '/restore', str(saved), '/C'],
-                               check=True, stdout=subprocess.DEVNULL, timeout=60)
-            except (subprocess.SubprocessError, OSError) as error:
-                failures.append(f'{path}: {error}')
-        if failures:
-            raise DistributionError('ACL restoration failed: ' + '; '.join(failures))
-
-    def abort_windows_proof(self):
-        # A stuck child or capture-pipe cleanup must not leave the ephemeral
-        # runner disconnected. Restoring access is never a successful proof:
-        # terminate the qualification unconditionally with a nonzero status.
-        print('WINDOWS_SANDBOX_WATCHDOG_TIMEOUT: restoring isolation; qualification failed',
-              file=sys.stderr, flush=True)
         try:
-            self.__exit__(None, None, None)
-        except Exception as error:
-            print(f'WINDOWS_SANDBOX_RESTORATION_ERROR: {error}', file=sys.stderr, flush=True)
+            if self.identity is not None:
+                self.identity.close()
         finally:
-            os._exit(124)
-
-    def remove_firewall(self):
-        # INetFwRules.Remove is an idempotent exact-name operation, including
-        # when our rule is absent. Avoid enumerating the runner's firewall.
-        # https://learn.microsoft.com/windows/win32/api/netfw/nf-netfw-inetfwrules-remove
-        self.powershell("$policy = New-Object -ComObject HNetCfg.FwPolicy2; "
-                        f"$policy.Rules.Remove('{self.firewall}')")
+            self.cache_probe.unlink(missing_ok=True)
 
     @contextmanager
     def network_denial(self, program: Path | None = None):
-        """Cover one complete command or real-webview process lifetime."""
-        if self.system != 'Windows':
-            yield
-            return
-        # Longer than the 900-second command bound plus kill and cleanup
-        # allowances. Covers capture cleanup as well as the command itself.
-        expired = threading.Event()
-        def deadline():
-            expired.set()
-            self.abort_windows_proof()
-        watchdog = threading.Timer(1050, deadline)
-        watchdog.daemon = True
-        watchdog.start()
-        try:
-            executable = (program or Path(sys.executable)).resolve()
-            self.powershell(f"New-NetFirewallRule -Name '{self.firewall}' -DisplayName '{self.firewall}' "
-                            f"-Program '{executable}' -Direction Outbound -Action Block -Profile Any | Out-Null")
-            yield
-        finally:
-            try:
-                self.remove_firewall()
-            finally:
-                watchdog.cancel()
-                watchdog.join(timeout=210)
-                if expired.is_set() or watchdog.is_alive():
-                    raise DistributionError('Windows sandbox watchdog exceeded its bound')
+        """The identity policy spans the complete sandbox and every descendant."""
+        if self.system == 'Windows' and (self.identity is None or not self.identity.active):
+            raise DistributionError('Windows proof identity policy is not active')
+        yield
+
+    def spawn(self, command, cwd, *, stdout=None, stderr=None):
+        with self.network_denial():
+            if self.system == 'Windows':
+                return self.identity.spawn(command, cwd=cwd, environment=self.env,
+                                           stdout=stdout, stderr=stderr)
+            return subprocess.Popen(self.prefix + command, cwd=cwd, env=self.env,
+                                    stdout=stdout, stderr=stderr)
 
     def run(self, command: list[str], cwd: Path, *, expect_failure: bool = False) -> str:
         print('B4A_COMMAND ' + json.dumps(command), flush=True)
         started = time.monotonic()
         with self.network_denial(Path(command[0])):
-            result = bounded_command(self.prefix + command, cwd, self.env)
+            if self.system == 'Windows':
+                result = self.identity.run(command, cwd=cwd, environment=self.env, timeout=900)
+            else:
+                result = bounded_command(self.prefix + command, cwd, self.env)
         print(f'B4A_EXIT {result.returncode} after {time.monotonic() - started:.2f}s', flush=True)
         self.commands.append({'command': command, 'exit_code': result.returncode,
                               'stdout': result.stdout, 'stderr': result.stderr})
@@ -235,7 +167,7 @@ class Sandbox:
 
     def prove_denials(self, python: str, checkout: Path) -> dict:
         """The destination was verified reachable before applying the deny policy."""
-        code = '''import pathlib,socket,sys
+        code = '''import pathlib,socket,subprocess,sys
 for item in sys.argv[1:3]:
  try: pathlib.Path(item).read_bytes()
  except (PermissionError, FileNotFoundError): pass
@@ -244,11 +176,17 @@ sock=socket.socket(); sock.settimeout(2)
 try: sock.connect((sys.argv[3],443))
 except OSError: pass
 else: raise SystemExit('network remained reachable')
+# A fresh interpreter attempts its socket before launching the next child.
+# All three generations also repeat the actual checkout/cache file probes.
+if int(sys.argv[4]):
+ subprocess.run([sys.executable,'-I',__file__,*sys.argv[1:4],str(int(sys.argv[4])-1)],check=True,timeout=15)
 print('CHECKOUT_CACHE_NETWORK_DENIED')
 '''
-        output = self.run([python, '-I', '-c', code, str(checkout / 'Cargo.toml'),
-                           str(self.cache_probe), self.network_ip], self.scratch)
-        if 'CHECKOUT_CACHE_NETWORK_DENIED' not in output:
+        probe = self.scratch / 'isolation-probe.py'
+        probe.write_text(code, encoding='utf-8')
+        output = self.run([python, '-I', str(probe), str(checkout / 'Cargo.toml'),
+                           str(self.cache_probe), self.network_ip, '2'], self.scratch)
+        if output.count('CHECKOUT_CACHE_NETWORK_DENIED') != 3:
             raise DistributionError('missing isolation denial proof')
         return {'checkout': True, 'cargo_cache': True, 'network': True,
-                'denied_roots': [str(path) for path in self.denied]}
+                'process_generations': 3, 'denied_roots': [str(path) for path in self.denied]}
