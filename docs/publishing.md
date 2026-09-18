@@ -10,6 +10,12 @@ This repo becomes the publishing source of truth for:
 - `sc-observability-log-macros`
 - `sc-observability-log`
 
+Binding and native artifacts are tracked in `release/bindings-artifacts.toml`
+(DTO, native runtime, Tauri host, PyO3 extension, PyPI wheel/sdist, and npm
+client). The six core crates above use `release/publish-artifacts.toml`; the
+binding manifest is a readiness inventory only and all publication remains
+deferred to B.7.
+
 These crates currently exist inside the `agent-team-mail` workspace. After
 cutover, new releases of these crate names must come from this repo instead.
 
@@ -60,11 +66,11 @@ and separate registry-only consumer verification.
 ## Replacement/Cutover Rule
 
 Before the ATM workspace switches to crates.io dependencies from this repo:
-1. This repo must publish the target version of `sc-observability-types`.
-2. This repo must publish the target version of `sc-observability`.
-3. This repo must publish the target version of `sc-observe`.
-4. This repo must publish the target version of `sc-observability-otlp`.
-5. ATM must then replace its in-workspace path dependencies with version pins.
+1. This repo must publish the six core/bridge crates in
+   `release/publish-artifacts.toml` in manifest order.
+2. B.7 must publish the separately inventoried binding artifacts only after
+   owner authorization and their registry-consumer proof.
+3. ATM must then replace its in-workspace path dependencies with version pins.
 
 ## Source of Truth
 
@@ -86,5 +92,7 @@ Before the ATM workspace switches to crates.io dependencies from this repo:
   - `sc-observability`
   - `sc-observe`
   - `sc-observability-otlp`
+  - `sc-observability-log-macros`
+  - `sc-observability-log`
 - The changelog entry for each release should include the same versioned docs.rs
   links so the release record points directly at the published API docs.

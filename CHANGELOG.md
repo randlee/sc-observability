@@ -2,7 +2,7 @@
 
 ## 1.4.0 — qualified candidate, publication pending B.7
 
-The six-package candidate includes additive typed error APIs and warning-only
+The six-crate candidate includes additive typed error APIs and warning-only
 compatibility paths from B.1a–B.1e, plus the first bridge/macros public baseline.
 The bridge pins macros exactly at `=1.4.0`. Existing `emit` callers retain their
 compatibility path; follow `docs/migration-guide.md` for typed replacements and
@@ -18,6 +18,12 @@ Versioned API URLs below become available only after B.7 publication:
 - `sc-observability-log-macros`: <https://docs.rs/sc-observability-log-macros/1.4.0/sc_observability_log_macros/>
 - `sc-observability-log`: <https://docs.rs/sc-observability-log/1.4.0/sc_observability_log/>
 
+Phase-B binding qualification also covers the neutral DTO and native-runtime
+crates, the Tauri host adapter, the PyO3 extension, the Python wheel/sdist
+matrix, and the generated TypeScript client. Their intended channels and
+dependency order are recorded in `release/bindings-artifacts.toml`; publication
+remains deferred to B.7.
+
 
 All notable changes to this project will be documented in this file.
 
@@ -26,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Candidate `1.3.0` is staged only; it is not published or approved for release.
+Candidate `1.4.0` is staged only; it is not published or approved for release.
 
 ### Added
 

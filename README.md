@@ -10,6 +10,10 @@ Shared structured logging, routing, and OTLP observability crates.
 | [`sc-observability`](./crates/sc-observability/) | Logging-only runtime: `Logger`, built-in file/console sinks, custom sink registration, redaction, health, query, and follow. |
 | [`sc-observe`](./crates/sc-observe/) | Observation routing layer on top of logging for subscribers and projectors. |
 | [`sc-observability-otlp`](./crates/sc-observability-otlp/) | OTLP/OTel export layer for logs, spans, and metrics. |
+| [`sc-observability-log`](./crates/sc-observability-log/) | Additive bridge/logging API and typed error surface. |
+| [`sc-observability-log-macros`](./crates/sc-observability-log-macros/) | Procedural macros used by the bridge/logging API. |
+| [`sc-observability-dto`](./crates/sc-observability-dto/) | Language-neutral wire DTOs and checked conversions. |
+| [`sc-observability-binding-runtime`](./crates/sc-observability-binding-runtime/) | Shared native binding runtime and bounded coordination. |
 
 ## Which Crate Do I Need?
 
@@ -20,6 +24,11 @@ Shared structured logging, routing, and OTLP observability crates.
 | Routing one observation to logs and subscribers | `sc-observe` + `sc-observability` + `sc-observability-types` |
 | OTLP export | `sc-observability-otlp` + lower layers |
 | Shared value types only | `sc-observability-types` |
+
+The Tauri host, PyO3 extension, Python wheel/sdist, and generated TypeScript
+client are binding artifacts rather than root-workspace crates. Their intended
+publish channels and deliberate B.7 deferrals are recorded in
+[`release/bindings-artifacts.toml`](./release/bindings-artifacts.toml).
 
 ## Minimal Logging-Only Snippet
 

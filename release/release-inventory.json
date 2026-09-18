@@ -65,6 +65,9 @@
       "sc-observability-log-macros",
       "sc-observability-log"
     ],
+    "bindingInventory": "release/bindings-artifacts.toml",
+    "bindingChannels": ["crates.io", "pypi", "npm"],
+    "bindingPublication": "pending_B.7_owner_authorization",
     "handoff": "docs/plans/phase-b/handoff-b-2.md",
     "stageManifest": "stage-manifest.json",
     "qualificationSource": "recorded immutably in each stage manifest; not the final B.7 publication source"

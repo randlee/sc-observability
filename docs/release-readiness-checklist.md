@@ -1,6 +1,7 @@
 # Release Readiness Checklist
 
-- [x] All four shared crates build in one workspace.
+- [x] All six publishable core/bridge crates build in one workspace; companion
+  binding artifacts are tracked separately in `release/bindings-artifacts.toml`.
 - [x] API design, requirements, architecture, and implementation plan docs are present.
 - [x] ATM adapter requirement, architecture, mapping, and example docs are present.
 - [x] `docs/public-api-checklist.md` is fully marked complete.

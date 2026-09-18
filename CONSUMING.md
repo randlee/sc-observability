@@ -74,10 +74,11 @@ config.retained_log_policy.maintenance_max_work_per_pass = None; // default: unb
 
 ## Candidate qualification boundary
 
-The `1.3.0` runtime-level API is currently an unpublished candidate. Consumers
-must not depend on it from crates.io. Release engineering qualifies it from
-immutable local `.crate` archives with exact `=1.3.0` dependencies; B.7 will
-publish and document the registry-only installation path after approval.
+The `1.4.0` Phase-B runtime and binding APIs are currently an unpublished
+qualification candidate. Consumers must not depend on them from crates.io or
+the language registries. Release engineering qualifies exact `=1.4.0`
+archives and wheel/npm artifacts locally; B.7 will publish and document the
+registry-only installation paths after owner approval.
 
 ## 2. `log()`, `try_log()`, `flush()`, And Deprecated `emit()`
 

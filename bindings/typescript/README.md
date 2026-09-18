@@ -9,9 +9,10 @@ the admission result is required. Query, health, and flush resolve tagged
 
 The host application must authorize the four plugin commands through its Tauri
 capability and must retain any application-owned command, such as a level
-change, in the app ACL. The example under `examples/tauri-logging` routes only
-the five observability commands through ACL for all windows; its handlers
-retain the `main`-window policy checks.
+change, in the app ACL. The example under `examples/tauri-logging` routes the
+four plugin commands plus its application-owned level-change command (five
+observability commands total) through ACL for all windows; its handlers retain
+the `main`-window policy checks.
 
 Use `encodeValue` and `encodeEvent` for ergonomic event construction. BigInts
 are retained as decimal tagged integers; unsafe numbers, cycles, getters,

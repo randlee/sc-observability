@@ -250,7 +250,7 @@ API freeze is progressive by crate and sprint, not global at Sprint 1.
   that crate.
 - Sprint 3 closes only when the `sc-observe` and
   `sc-observability-otlp` recovery-scope public APIs are frozen together.
-- Sprint 4 / pre-release closes only when all four crate API surfaces are
+- Sprint 4 / pre-release closes only when all six core/bridge crate API surfaces are
   confirmed finalized together.
 
 At each crate freeze gate:

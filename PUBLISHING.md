@@ -10,12 +10,22 @@ manifest instead.
 
 ## Distribution Channels
 
-- **crates.io**: all four crates in the workspace
+- **crates.io**: the six publishable core/bridge crates in
+  `release/publish-artifacts.toml`, in dependency order
   - [`sc-observability-types`](https://crates.io/crates/sc-observability-types)
   - [`sc-observability`](https://crates.io/crates/sc-observability)
   - [`sc-observe`](https://crates.io/crates/sc-observe)
   - [`sc-observability-otlp`](https://crates.io/crates/sc-observability-otlp)
+  - [`sc-observability-log-macros`](https://crates.io/crates/sc-observability-log-macros)
+  - [`sc-observability-log`](https://crates.io/crates/sc-observability-log)
 - **GitHub Releases**: <https://github.com/randlee/sc-observability/releases>
+
+Phase B's binding and native artifacts are inventoried separately in
+`release/bindings-artifacts.toml`: the DTO and native-runtime crates, the
+standalone Tauri host crate, the PyO3 extension plus PyPI wheel/sdist, and the
+generated TypeScript npm client. The manifest records dependency order,
+platform-matrix references, and deliberate `pending` publication status; it
+does not publish anything.
 
 ## Workflows
 
@@ -40,10 +50,10 @@ Both workflows are manual dispatch (`workflow_dispatch`).
 
 ## Initial Publish Note
 
-For the first publish (all four crates absent from crates.io), preflight
-automatically detects initial-release mode and uses `--no-verify` on the
-dry-run to skip path dependency resolution. This is safe because correctness
-is already validated by the preceding fmt/clippy/test steps.
+For a first publish of any currently absent crate, preflight automatically
+detects initial-release mode and uses `--no-verify` on the dry-run to skip path
+dependency resolution. This is safe because correctness is already validated
+by the preceding fmt/clippy/test steps.
 
 ## Publish Order
 
@@ -55,6 +65,8 @@ Crates must be published in dependency order (defined in the manifest):
 | 2 | `sc-observability` | 30s |
 | 3 | `sc-observe` | 30s |
 | 4 | `sc-observability-otlp` | — |
+| 5 | `sc-observability-log-macros` | 30s |
+| 6 | `sc-observability-log` | — |
 
 ## Local Validation Commands
 
@@ -105,3 +117,16 @@ scope. See
 [`docs/plans/phase-b/handoff-b-7.md`](./docs/plans/phase-b/handoff-b-7.md) for
 the current review packet: readiness status per artifact, rebuildable
 candidate evidence, and isolated consumer-matrix results.
+
+The intended channels are crates.io for the DTO, native-runtime, and (after
+its independent Tauri workspace qualification) host crate; PyPI for the
+`sc-observability` wheel and sdist across the checked platform/interpreter
+matrix; and npm for `@sc-observability/client`. Tauri/native binaries are
+qualification artifacts consumed by the host and are not a second registry
+channel. All publication remains deferred to B.7 owner authorization.
+
+Deliberate exclusions are `sc-observability-log-consumer-check` (CI-only
+consumer proof), `bindings/schema-generator` (build tooling), and example
+applications, including `examples/atm-adapter-example` (excluded from the
+root workspace) and the Tauri/Python examples. They remain test or tooling
+inputs and must not be published as library artifacts.
