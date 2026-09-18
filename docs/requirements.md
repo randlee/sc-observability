@@ -442,6 +442,13 @@ record the proposed architecture. No item below asserts implementation closure.
 - PHB-006 Existing adoption guidance shall cover incremental upgrades, exact
   symbol mappings, custom extension adapters, typed matching, diagnostic
   preservation and verification. A downstream fixture shall execute that guide.
+
+The B.1e implementation record supplies the exact migration routing, warning
+inventory, downstream Cargo fixtures and JSON diagnostic validator for
+PHB-005/PHB-006. The typed methods and failures remain additive, and the
+warning rollout is active at the selected `1.4.0` next-minor candidate. B.2
+qualifies the B.1e result; B.7 alone publishes it. No removal schedule or
+major-release claim is introduced.
 - PHB-007 Issue #97 shall add one core-owned effective level shared by every
   producer path, with immutable LoggerConfig baseline and owner-only temporary
   elevate/reset operations. Attached handles have read access only. Existing

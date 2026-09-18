@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "candidate_version": "1.4.0",
+  "source_commit": "5b8aed51974c6eec0cdf674cdf8cf04fc5b13a0a",
+  "approved_at": "2026-09-18T05:00:45.004450+00:00",
+  "crates": {
+    "sc-observability-dto": {
+      "status": "approved",
+      "reviewer": "aobs (appointed Phase B lead)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "docs/plans/phase-b/evidence/qa2-api/sc-observability-dto.txt",
+      "api_sha256": "3f859bbd53695a66be5ee18c4db9cdda9d1b882f28ad4e893fcd3c109cba9cec"
+    }
+  },
+  "approval_scope": "Lead independently generated and reviewed the exact DTO export surface. Two additive pure helpers normalize_field_key and is_protected_key unify existing DTO/Tauri provenance policy without behavior change. Existing Python context constant was already approved separately. No behavior QA, deferred owner runtime-contract/ADR acceptance or publication approval."
+}

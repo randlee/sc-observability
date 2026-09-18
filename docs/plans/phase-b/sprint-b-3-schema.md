@@ -1,8 +1,9 @@
 ---
 id: B.3
-status: proposed
+status: complete
 branch: feature/phase-b-3-schema
-base: develop
+base: feature/phase-b-2-qualification
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-3-schema
 ---
 
 # B.3 — Shared binding DTOs, schema and checked conversions
@@ -10,7 +11,7 @@ base: develop
 ## Goal and dependencies
 
 Deliver a usable neutral Rust DTO crate and versioned JSON contract over the
-published Rust API. `must_follow` B.2; B.3b `must_follow` this accepted schema for shared runtime adapters;
+qualified staged Rust API. `must_follow` B.2; B.3b `must_follow` this accepted schema for shared runtime adapters;
 B.3a/B.4 consume its generated language projections.
 Shared public contracts and conformance artifacts prevent parallel_safe work.
 Parent pushes trigger merge-forward before every child dev/fix round; parent PR
@@ -255,3 +256,10 @@ No TypeScript runtime package, Tauri host/IPC example (B.3a), Python
 runtime (B.4), platform wheels (B.4a), or registry publication (B.7). This sprint
 closes working neutral conversions and schema; it does not claim language
 runtime behavior from schema-only tests.
+
+## Implementation handoff
+
+The complete implementation, scoped lead API approval, generation hashes and
+actual isolated prepublication package proof are recorded in
+[handoff-b-3.md](handoff-b-3.md). Status denotes implementation completion;
+consolidated Phase B QA, ordered merges and B.7 publication remain separate.

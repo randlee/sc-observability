@@ -1,0 +1,87 @@
+{
+  "status": "passed",
+  "platform": "ubuntu",
+  "candidate_version": "1.4.0",
+  "source_commit": "e8c05747094fb5299dfab49dc2df3629ed248cf7",
+  "stage_manifest_sha256": "0a18b0dc021625bfc416034e62e731e8607bf5b4a34ce1138707bf82dce0ccaa",
+  "archives": {
+    "sc-observability-types": "679ba0eff7a612bafaf3b59626c17b37ba93544b8ef07400ee8a4723de9cde03",
+    "sc-observability": "d89389edb10bd8daa9f3614ff6544afcbace94f207109b7dd5e975878bcb333d",
+    "sc-observe": "91a6fd90761fa11e148245daa9475e6c6bf5c2a1027a3888c88d701fc0ea6bf6",
+    "sc-observability-otlp": "68484f47640a4c8816da51fdd65a2aa58859a5e8fcdb973d2ccfc82140b79871",
+    "sc-observability-log-macros": "43bbe50c30954bb2657c89357191849228688fa835664f80b5540b1768458652",
+    "sc-observability-log": "add41c97d7fe5f9a1ec8bd71cdd6e721252ad84921b271c59cb62c60b0c7bade"
+  },
+  "staged_locations": {
+    "sc-observability-types": "archives/sc-observability-types-1.4.0.crate",
+    "sc-observability": "archives/sc-observability-1.4.0.crate",
+    "sc-observe": "archives/sc-observe-1.4.0.crate",
+    "sc-observability-otlp": "archives/sc-observability-otlp-1.4.0.crate",
+    "sc-observability-log-macros": "archives/sc-observability-log-macros-1.4.0.crate",
+    "sc-observability-log": "archives/sc-observability-log-1.4.0.crate"
+  },
+  "dependency_resolution": {
+    "sc-observability": {
+      "version": "1.4.0",
+      "manifest_path": "/tmp/b2-isolated-consumer-bx69sh19/packages/sc-observability-1.4.0/Cargo.toml",
+      "source": null
+    },
+    "sc-observability-log": {
+      "version": "1.4.0",
+      "manifest_path": "/tmp/b2-isolated-consumer-bx69sh19/packages/sc-observability-log-1.4.0/Cargo.toml",
+      "source": null
+    },
+    "sc-observability-log-macros": {
+      "version": "1.4.0",
+      "manifest_path": "/tmp/b2-isolated-consumer-bx69sh19/packages/sc-observability-log-macros-1.4.0/Cargo.toml",
+      "source": null
+    },
+    "sc-observability-otlp": {
+      "version": "1.4.0",
+      "manifest_path": "/tmp/b2-isolated-consumer-bx69sh19/packages/sc-observability-otlp-1.4.0/Cargo.toml",
+      "source": null
+    },
+    "sc-observability-types": {
+      "version": "1.4.0",
+      "manifest_path": "/tmp/b2-isolated-consumer-bx69sh19/packages/sc-observability-types-1.4.0/Cargo.toml",
+      "source": null
+    },
+    "sc-observe": {
+      "version": "1.4.0",
+      "manifest_path": "/tmp/b2-isolated-consumer-bx69sh19/packages/sc-observe-1.4.0/Cargo.toml",
+      "source": null
+    }
+  },
+  "assertions": [
+    "six_exact_archive_dependencies",
+    "enabled_macro",
+    "explicit_flush",
+    "explicit_shutdown",
+    "jsonl_content"
+  ],
+  "commands": [
+    [
+      "cargo",
+      "--version"
+    ],
+    [
+      "rustc",
+      "--version"
+    ],
+    [
+      "cargo",
+      "metadata",
+      "--format-version",
+      "1"
+    ],
+    [
+      "cargo",
+      "run",
+      "--locked",
+      "--",
+      "/tmp/b2-isolated-consumer-bx69sh19/logs"
+    ]
+  ],
+  "log_sha256": "56fdbcec2988073fd3b7aef0f4f2b99cd8b78580804a4cce60993b19f5054665",
+  "publication": "pending_B.7"
+}

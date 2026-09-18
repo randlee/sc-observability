@@ -1,0 +1,5 @@
+error: deferred fields (`field::Empty`) are not supported
+ --> tests/ui/instrument_field_empty.rs:4:25
+  |
+4 | #[instrument(fields(x = tracing::field::Empty))]
+  |                         ^^^^^^^^^^^^^^^^^^^^^

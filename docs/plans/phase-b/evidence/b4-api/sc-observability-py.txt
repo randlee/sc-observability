@@ -1,0 +1,20 @@
+B.4 refreshed public API evidence after the DTO internal wire-module split
+
+Source commit: b868147a20471ff9d65ca010fb9053c6254e57f6
+Command: cargo public-api --manifest-path bindings/python/sc-observability-py/Cargo.toml -sss
+API stdout SHA-256: 5b41508de3fee743e7ae694754e0d108fb1b630639b88a098838978b5a0bdc36
+
+The published rlib surface is the reviewed embedding API. Private test-hook
+methods are feature-gated and excluded from the default-feature digest.
+
+Retained API stdout:
+
+pub mod _native
+pub use _native::BridgeControlBackend
+pub use _native::CoreLoggerBackend
+pub use _native::CoreLoggerOwner
+pub use _native::HostLoggingBackend
+pub use _native::Operation
+pub use _native::OperationState
+pub fn _native::_native(&pyo3::instance::Bound<'_, pyo3::types::module::PyModule>) -> pyo3::err::PyResult<()>
+pub fn _native::install_host_logger(&pyo3::instance::Bound<'_, pyo3::types::module::PyModule>, alloc::sync::Arc<dyn sc_observability_binding_runtime::HostLoggingBackend>) -> core::result::Result<(), sc_observability_dto::wire::operations::Failure>

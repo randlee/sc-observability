@@ -1,0 +1,19 @@
+error[E0277]: field value `Neither` implements neither `serde::Serialize` nor `core::fmt::Debug`
+ --> tests/ui/field_not_serialize_or_debug.rs:8:19
+  |
+8 |     info!(field = neither, "message");
+  |                   ^^^^^^^ this field value cannot be recorded
+  |
+  = help: the trait `std::fmt::Debug` is not implemented for `Neither`
+  = note: record it with `?value` (Debug) or `%value` (Display), or implement `serde::Serialize`
+  = note: required for `Neither` to implement `FieldDebug`
+note: required by a bound in `DebugKind::record`
+ --> src/callsite.rs
+  |
+  |     pub fn record<T: ?Sized + FieldDebug>(self, v: &T) -> FieldRecord {
+  |                               ^^^^^^^^^^ required by this bound in `DebugKind::record`
+help: consider annotating `Neither` with `#[derive(Debug)]`
+  |
+4 + #[derive(Debug)]
+5 | struct Neither;
+  |

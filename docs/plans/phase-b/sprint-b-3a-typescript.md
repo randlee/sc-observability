@@ -1,8 +1,9 @@
 ---
 id: B.3a
-status: proposed
-branch: feature/phase-b-3a-typescript
-base: develop
+status: complete
+branch: feature/phase-b-tauri-qualification
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-tauri-qualification
+base: feature/phase-b-7-publish-bindings
 ---
 
 # B.3a — TypeScript bindings for the public logging API
@@ -285,6 +286,32 @@ The new script owns exact locked generator/package-manager commands, temporary
 package-consumer installation, and Rust/IPC integration tests, and fails if any
 stage is skipped. Record macOS/Linux/Windows results and the generated artifact
 hashes. It must not overwrite drift and then report success.
+
+## Current qualification evidence (updated 2026-09-18)
+
+Status: `complete` for this development scope, per the terminal CI run below
+and the recorded lead decision; this supersedes the older handoff prose in
+`handoff-b-3a-qualification.md` (previously "Status: in progress; no sprint
+completion or publication claim", itself since updated) and the several
+intermediate failed/partial runs recorded in this repository's
+history (`35278469028`: Windows hosted-runner communication loss;
+`35300655966`: real-IPC failure at synthetic merge SHA `f8bce021`, not the
+branch tip; `35302307302`/manifest-drift attempts), all of which predate and
+are superseded by the terminal run below. GitHub Actions run `35303041402`
+("TypeScript/Tauri bindings") at exact source SHA
+`c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18` completed `conclusion: success`:
+`schema-and-contract`, all three `real-ipc-artifacts` platform jobs
+(Linux/macOS/Windows), and the `all-platforms` aggregate all passed --
+including Windows actual debug/release IPC and three-generation isolation,
+supervisor clean, per `bp-tauri-helper`'s retained artifact/aggregate
+evidence. This resolves the previously-cited "remaining real-IPC/artifact
+matrix items."
+
+Lead completeness decision: **PASS** (aobs, 2026-09-18), recorded in
+`handoff-b-4a.md` and `handoff-b-3a-qualification.md`. `status` above reads
+`complete`: development qualification is done. Independent phase-end QA
+acceptance remains separately pending; formal API/ADR approval and
+publication remain deferred to B.7.
 
 ## Paths to delete
 

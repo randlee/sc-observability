@@ -28,6 +28,21 @@ Other counters/integers use the decimal-string newtype described below.
 ```ts
 export type LevelDto = "trace" | "debug" | "info" | "warn" | "error";
 export type DecimalDto = string; // validated canonical decimal, never JSON number
+
+Rust's public `DecimalDto::new` and `DecimalDto::as_u64` constructors return
+the `DecimalDtoError` type. The exact unpublished DTO API change is approved
+for public-API scope by
+[`docs/api-approvals/phase-b-integration-review-decimal.json`](../../api-approvals/phase-b-integration-review-decimal.json),
+with digest `4381d76f3741cc20f132ab5763fc9f5bb0894c3f389cd3ad2fe6862ac4c579fd`.
+This is a source-breaking signature change and is not described as additive;
+the approval does not grant owner ADR/runtime-contract acceptance or
+publication authorization. Its stable variants/codes are
+`InvalidCanonical` (`SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL`),
+`SignedOverflow` (`SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW`),
+`UnsignedOverflow` (`SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW`), and
+`NotUnsigned` (`SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED`). Serde continues
+to project these errors through its normal `Error::custom` boundary; the wire
+schema remains the canonical decimal string.
 export type PathDto =
   | { kind: "utf8"; value: string }
   | { kind: "unrepresentable" }
@@ -480,6 +495,7 @@ occurs. Capture time is boundary UTC unless an original native timestamp exists.
 | `SC_OBSERVABILITY_BINDING_TRANSPORT_UNAVAILABLE` | unavailable | Restore the host connection before submitting a new request |
 | `SC_OBSERVABILITY_BINDING_TIMEOUT` | timeout | Inspect operation status before deciding whether another operation is needed |
 | `SC_OBSERVABILITY_BINDING_CANCELLED` | cancelled | Inspect the saved operation result if confirmation is still needed |
+| `SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID` | validation | Enter and close each scope once in LIFO order on its originating thread and task |
 | `SC_OBSERVABILITY_PY_HANDLER_REENTRANT` | internal | Remove logging calls from handler formatting and error callbacks |
 | `SC_OBSERVABILITY_BINDING_INTERNAL` | internal | Inspect the retained status and restore the affected host or client |
 

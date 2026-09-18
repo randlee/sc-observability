@@ -1,0 +1,76 @@
+name: Binding runtime
+on:
+  pull_request:
+  push:
+    branches: ['feature/phase-b-3b-native-runtime', develop, main, 'integrate/*']
+  workflow_dispatch:
+jobs:
+  native-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+      - name: Complete debug and release native contract
+        shell: bash
+        run: bash scripts/ci/validate_binding_runtime.sh --platform-only
+      - name: Retain complete platform proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: binding-runtime-${{ matrix.os }}
+          path: target/binding-runtime-platforms
+          if-no-files-found: error
+  packaged-consumer:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+      - name: Verify offline packaged core and bridge consumer in sandbox
+        run: bash scripts/ci/validate_binding_runtime.sh --consumer-only
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binding-runtime-consumer
+          path: |
+            target/binding-runtime-consumer.json
+            target/binding-runtime-bundle-manifest.json
+          if-no-files-found: error
+  complete-gate:
+    needs: [native-contract, packaged-consumer]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binding-runtime-*-latest
+          path: target/binding-runtime-platforms
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: binding-runtime-consumer
+          path: target
+      - name: Reject missing, stale, skipped or altered evidence
+        run: bash scripts/ci/validate_binding_runtime.sh --aggregate-only

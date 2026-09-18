@@ -1,6 +1,11 @@
 ---
 status: proposed_for_public_api_review
+owner_deferral_date: 2026-09-17T02:41:50Z
+owner_deferral_message: 01M2PKX8R4J4VJP5V6RRV9JJPB
+execution_status: authorized
+execution_stop_withdrawn_by: aobs
 issue: 97
+owner_direction_date: 2026-09-16 America/Los_Angeles
 ---
 
 # Runtime level elevation — pre-copy contract and core prerequisite
@@ -8,14 +13,22 @@ issue: 97
 ## Ownership and sequencing
 
 This is an explicit prerequisite to B.1, not a post-copy implementation task.
+On 2026-09-16 (America/Los_Angeles), aobs relayed the owner's instruction:
+"you task was to complete phase-b w/ publish delayed until the end."
+As coordinating lead, aobs withdraws the additional manual execution stop it
+imposed under QA-B010. The owner subsequently deferred contract acceptance to
+Phase B completion (ATM `01M2PKX8R4J4VJP5V6RRV9JJPB`, 2026-09-17T02:41:50Z).
+This contract remains proposed for public API review; QA-B010 is owner-deferred,
+not resolved and not a development blocker.
+
 sc-observability implements, reviews and stages the additive core capability
 first; B.P2 qualifies those immutable staged artifacts, and B.7 alone performs
 live publication. BTIT implements the corresponding bridge API and behavior
-against that staged core and the accepted target contract, closes its critical
-review, and hands off the working reference. B.1 remains the first migration
-sprint and copies it mechanically. Do not mark this prerequisite complete from
-plan approval alone; record the B.P2 staged qualification and accepted BTIT
-source in the import gate.
+against B.P2's exact staged core artifacts and the accepted target contract,
+closes its critical review, and hands off the working reference. B.1 remains
+the first migration sprint and copies it mechanically. Do not mark this
+prerequisite complete from plan approval alone; record the B.P2 staged
+qualification and accepted BTIT source in the import gate.
 
 Execution ownership and closure are defined once in the prerequisite sprints:
 [B.P1 core implementation](sprint-b-p1-runtime-core.md),
@@ -27,7 +40,8 @@ B.3a and B.4 own TypeScript/Tauri and Python runtime projections.
 
 ## Proposed API and values
 
-The following is the target direction for review, not an approved API freeze.
+The following remains proposed for review and is not a registry-release or
+cross-project API-freeze approval.
 Core types live in the neutral types crate; owner/state implementation lives in
 sc-observability. Bridge re-exports these values rather than duplicating enums.
 
@@ -104,6 +118,16 @@ impl LogGuard {
         -> Result<LevelChange, LevelChangeError>;
 }
 ```
+
+`OperationDiagnostic` is intentionally a narrow operation projection, not a
+rename or replacement for the existing `Diagnostic`. Both derive exactly
+`Debug`, `Clone`, `PartialEq`, `Serialize`, and `Deserialize`; `Diagnostic`
+retains its full reusable payload (`timestamp`, optional `cause`/`docs`, and
+`details`), while OperationDiagnostic carries only mandatory code, message,
+remediation, and `at` for a committed operation's retained outcome. It neither
+implements nor changes the sealed `DiagnosticInfo` contract. Conversion copies
+the original code/remediation unchanged when they are available; no conversion
+claims recovery of details a legacy summary already discarded.
 
 B.1b's improved logger error API must include the new construction boundary in its
 inventory; this prerequisite preserves existing core error conventions until
@@ -187,6 +211,16 @@ rather than claim lost remediation was preserved.
   remains sole bridge lifecycle owner and retains this capability internally.
   Python owned mode exposes owner operations; attached Python and TypeScript
   request changes through an application-owned handler, never LogControl.
+- Core `LevelLifecycle` and the bridge's proposed `LifecyclePhase` are distinct
+  state machines. Core's crate-private `Running`/`Stopping`/`Stopped` only
+  governs whether a LevelOwner may mutate its logger. Bridge completion tracks
+  its own installed facade/coordinator: `Running`, `Stopping`, `Stopped`, or
+  `Failed`. Bridge `Failed` records unconfirmed helper/coordinator completion
+  (for example HelperSpawn or HelperLost); it does **not** assert that the core
+  logger stopped, and it is never projected backwards as a fourth core state.
+  Conversely, core Stopped does not prove a bridge helper joined. A shutdown
+  wait timeout is not terminal: it remains observable until the retained bridge
+  completion becomes Stopped or Failed.
 - A committed change has one linearization point shared with authoritative core
   admission and stopping transitions. A submission overlapping the change may
   use either revision; a submission starting after successful return sees the

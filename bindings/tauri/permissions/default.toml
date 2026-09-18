@@ -1,0 +1,8 @@
+[default]
+description = "Allows the sc-observability plugin commands."
+permissions = [
+    "allow-sc-observability-try-log",
+    "allow-sc-observability-query",
+    "allow-sc-observability-health",
+    "allow-sc-observability-flush",
+]

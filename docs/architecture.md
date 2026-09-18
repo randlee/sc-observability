@@ -697,13 +697,48 @@ Important boundary:
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
+| `sc-observability-log`† | `sc-observability`, `sc-observability-types`, `sc-observability-log-macros` (exact-pinned) | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*`, Tauri/Specta/PyO3 | `log`-facade bridge and tracing-compatible event/`#[instrument]` macros re-exports; `LogGuard`/`LogControl` lifecycle; `InitError`/`FlushError`/`ShutdownError` are a scoped TYP-030 companion exception (PHB-002); B.1 mechanical copy, unpublished |
+| `sc-observability-dto`† | `sc-observability-types`, `serde`, `serde_json`; optional exact-pinned Schemars tooling | core runtime, bridge, Tauri, PyO3, ownership capabilities | B.3 schema-v1 wire projections and checked conversions; scoped TYP-030 wire-only exception, no native type replacement |
+| `sc-observability-log-macros`† | third-party proc-macro support only (`syn`, `quote`, `proc-macro2`) | `sc-observability-log` (no reverse dependency back to the bridge), `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | procedural macro expansion only for `sc-observability-log`'s event/`#[instrument]` forms; no runtime types; B.1 mechanical copy, unpublished |
+| `sc-observability-log-consumer-check`† | `sc-observability-log` only (direct path dependency) | `sc-observability-log-macros` (macro expansion is exercised only through the bridge, preserving the external macro-expansion hygiene check), `agent-team-mail-*` | CI-only compile-time proof that macro consumers need only the bridge dependency; never published |
 
-### Proposed Phase B Binding Runtime Edges
+† This crate's ADR-011 companion-boundary placement (including its TYP-030 companion/wire-only exception scoping above) is provisional pending ADR-011's formal acceptance — see ADR-011's own Status line below.
 
-B.3b updates structural/dependency CI to enforce this exact set of workspace
+### Phase B Binding Runtime Edges
+
+The shared native runtime provides core and bridge backends, bounded operations
+and the unique core shutdown owner. `arc-swap` publishes immutable health and
+logger references without an admission mutex; `serde_json` supports checked DTO
+conversion. These support crates add no host/framework dependency. The resolved
+workspace allowlist and aliased/target host edges are checked by
+`scripts/ci/validate_binding_runtime_dependencies.py`.
+
+
+B.3b structural/dependency CI enforces this exact set of workspace
 edges for sc-observability-binding-runtime; third-party support crates retain
 normal dependency review. Tauri and PyO3 may depend on the runtime, never the
 reverse. This proposed diagram does not claim the crate is implemented.
+
+`scripts/ci/validate_binding_runtime_dependencies.py` resolves and checks the
+shared runtime manifest plus both consumer manifests. It includes ordinary,
+build, dev, target-specific and aliased workspace declarations, so a renamed
+workspace dependency cannot evade the first-party or forbidden-host policy.
+
+Both binding crates also declare direct `sc-observability-dto` and
+`sc-observability-types` dependencies, alongside their `Runtime` edge, not
+instead of it. This is permitted: DTO and Types are the neutral, leaf-level
+wire/contract crates plan-phase-b.md's binding architecture describes as
+depending on "public types, not Tauri or PyO3" — any consumer, including a
+binding crate, may take them directly without duplicating the Runtime's
+responsibilities. `sc-observability-py` additionally depends directly on
+`sc-observability` (core) itself, used only to construct a
+`sc_observability::LoggerConfig` value from Python-supplied inputs
+(`bindings/python/sc-observability-py/src/lib.rs`); it does not call, hold, or
+otherwise duplicate the core logger's own lifecycle/shutdown ownership, which
+the Runtime alone retains. No Tauri/PyO3-facing crate gains an independent
+shutdown-owning edge to core through either dependency; the Runtime-only rule
+is about lifecycle/shutdown ownership, not about every possible workspace
+compile-time edge.
 
 ```mermaid
 graph TD
@@ -712,7 +747,12 @@ graph TD
   Runtime --> DTO[sc-observability-dto]
   Runtime --> Bridge[sc-observability-log]
   Tauri[sc-observability-tauri] --> Runtime
+  Tauri --> DTO
+  Tauri --> Types
   Python[sc-observability-py] --> Runtime
+  Python --> DTO
+  Python --> Types
+  Python -. "LoggerConfig construction only, no shutdown ownership" .-> Core
 ```
 
 ## 6.1 Query/Follow Dependency Order

@@ -12,10 +12,14 @@
     clippy::must_use_candidate,
     reason = "small constructor/accessor methods are intentionally kept free of repetitive must_use decoration"
 )]
-
 use std::collections::HashMap;
 
 use crate::error_codes;
+use sc_observability_types::typed::EventFailure;
+#[allow(
+    deprecated,
+    reason = "span assembly retains its published EventError adapter boundary"
+)]
 use sc_observability_types::{
     ErrorContext, EventError, Remediation, SpanEnded, SpanEvent, SpanRecord, SpanSignal,
     SpanStarted,
@@ -54,7 +58,20 @@ impl SpanAssembler {
     }
 
     /// Pushes one lifecycle signal through the assembler.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility assembler method keeps the published EventError signature"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use SpanAssembler::push_typed(); see migrate-error-api.md."
+    )]
     pub fn push(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventError> {
+        self.push_typed(signal).map_err(Into::into)
+    }
+
+    /// Pushes one lifecycle signal through the assembler with a neutral failure.
+    pub fn push_typed(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventFailure> {
         match signal {
             SpanSignal::Started(record) => {
                 let key = span_key(
@@ -68,7 +85,7 @@ impl SpanAssembler {
             SpanSignal::Event(event) => {
                 let key = span_key(event.trace.trace_id.as_str(), event.trace.span_id.as_str());
                 if !self.started.contains_key(&key) {
-                    return Err(EventError(Box::new(ErrorContext::new(
+                    return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
                         "received span event without a matching started span",
                         Remediation::not_recoverable(
@@ -85,7 +102,7 @@ impl SpanAssembler {
                     record.trace().span_id.as_str(),
                 );
                 if self.started.remove(&key).is_none() {
-                    return Err(EventError(Box::new(ErrorContext::new(
+                    return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
                         "received ended span without a matching started span",
                         Remediation::not_recoverable(
@@ -94,7 +111,7 @@ impl SpanAssembler {
                     ))));
                 }
                 let Some(events) = self.events.remove(&key) else {
-                    return Err(EventError(Box::new(ErrorContext::new(
+                    return Err(EventFailure::from_context(Box::new(ErrorContext::new(
                         error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
                         "missing span event buffer for a started span",
                         Remediation::not_recoverable(

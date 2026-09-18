@@ -1,0 +1,70 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+   Doc-tests sc_observability
+
+running 1 test
+test crates/sc-observability/src/builder.rs - builder::LoggerBuilder::new (line 40) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.35s; merged doctests compilation took 0.12s
+   Doc-tests sc_observability_log
+
+running 1 test
+test crates/sc-observability-log/src/lib.rs - (line 11) - compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.35s; merged doctests compilation took 0.14s
+   Doc-tests sc_observability_log_consumer_check
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests sc_observability_log_macros
+
+running 7 tests
+test crates/sc-observability-log-macros/src/lib.rs - debug (line 48) ... ignored
+test crates/sc-observability-log-macros/src/lib.rs - error (line 81) ... ignored
+test crates/sc-observability-log-macros/src/lib.rs - event (line 92) ... ignored
+test crates/sc-observability-log-macros/src/lib.rs - info (line 59) ... ignored
+test crates/sc-observability-log-macros/src/lib.rs - instrument (line 119) ... ignored
+test crates/sc-observability-log-macros/src/lib.rs - trace (line 37) ... ignored
+test crates/sc-observability-log-macros/src/lib.rs - warn (line 70) ... ignored
+
+test result: ok. 0 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.28s; merged doctests compilation took 0.10s
+   Doc-tests sc_observability_otlp
+
+running 1 test
+test crates/sc-observability-otlp/src/config.rs - config::TelemetryConfigBuilder::build (line 382) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.32s; merged doctests compilation took 0.12s
+   Doc-tests sc_observability_types
+
+running 2 tests
+test crates/sc-observability-types/src/span.rs - span::SpanRecord<SpanStarted>::new (line 46) ... ok
+test crates/sc-observability-types/src/events.rs - events::Observation<T>::new (line 49) ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 2 tests
+test crates/sc-observability-types/src/typed.rs - typed (line 21) - compile fail ... ok
+test crates/sc-observability-types/src/typed.rs - typed (line 9) - compile fail ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+all doctests ran in 0.42s; merged doctests compilation took 0.12s
+   Doc-tests sc_observe
+
+running 2 tests
+test crates/sc-observe/src/lib.rs - ObservabilityConfig::default_for (line 81) ... ok
+test crates/sc-observe/src/lib.rs - Observability::builder (line 290) ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+all doctests ran in 0.41s; merged doctests compilation took 0.12s

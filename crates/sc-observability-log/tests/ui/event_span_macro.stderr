@@ -1,0 +1,5 @@
+error[E0433]: failed to resolve: could not find `info_span` in `sc_observability_log`
+ --> tests/ui/event_span_macro.rs:3:39
+  |
+3 |     let _span = sc_observability_log::info_span!("span");
+  |                                       ^^^^^^^^^ could not find `info_span` in `sc_observability_log`

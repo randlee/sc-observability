@@ -1,0 +1,97 @@
+[1m[92m    Updating[0m crates.io index
+[1m[92m   Packaging[0m sc-observability-types v1.4.0 (/home/runner/work/sc-observability/sc-observability/crates/sc-observability-types)
+[1m[92m    Updating[0m crates.io index
+[1m[92m    Packaged[0m 25 files, 183.7KiB (35.5KiB compressed)
+[1m[92m   Packaging[0m sc-observability v1.4.0 (/home/runner/work/sc-observability/sc-observability/crates/sc-observability)
+[1m[92m    Updating[0m crates.io index
+[1m[92m    Packaged[0m 19 files, 278.2KiB (54.0KiB compressed)
+[1m[92m   Packaging[0m sc-observability-log-macros v1.4.0 (/home/runner/work/sc-observability/sc-observability/crates/sc-observability-log-macros)
+[1m[92m    Updating[0m crates.io index
+[1m[92m    Packaged[0m 11 files, 60.6KiB (16.9KiB compressed)
+[1m[92m   Packaging[0m sc-observability-log v1.4.0 (/home/runner/work/sc-observability/sc-observability/crates/sc-observability-log)
+[1m[92m    Updating[0m crates.io index
+[1m[92m    Packaged[0m 79 files, 371.7KiB (89.4KiB compressed)
+[1m[92m   Packaging[0m sc-observe v1.4.0 (/home/runner/work/sc-observability/sc-observability/crates/sc-observe)
+[1m[92m    Updating[0m crates.io index
+[1m[92m    Packaged[0m 10 files, 110.0KiB (21.1KiB compressed)
+[1m[92m   Packaging[0m sc-observability-otlp v1.4.0 (/home/runner/work/sc-observability/sc-observability/crates/sc-observability-otlp)
+[1m[92m    Updating[0m crates.io index
+[1m[92m    Packaged[0m 13 files, 133.3KiB (24.8KiB compressed)
+[1m[92m   Verifying[0m sc-observability-types v1.4.0 (/home/runner/work/sc-observability/sc-observability/crates/sc-observability-types)
+[1m[92m Downloading[0m crates ...
+[1m[92m  Downloaded[0m time-macros v0.2.32
+[1m[92m  Downloaded[0m quote v1.0.47
+[1m[92m  Downloaded[0m unicode-ident v1.0.26
+[1m[92m  Downloaded[0m time-core v0.1.9
+[1m[92m  Downloaded[0m proc-macro2 v1.0.107
+[1m[92m  Downloaded[0m deranged v0.5.8
+[1m[92m  Downloaded[0m thiserror-impl v2.0.20
+[1m[92m  Downloaded[0m zmij v1.0.23
+[1m[92m  Downloaded[0m thiserror v2.0.20
+[1m[92m  Downloaded[0m serde_derive v1.0.229
+[1m[92m  Downloaded[0m serde_core v1.0.229
+[1m[92m  Downloaded[0m serde v1.0.229
+[1m[92m  Downloaded[0m memchr v2.8.3
+[1m[92m  Downloaded[0m num-conv v0.2.2
+[1m[92m  Downloaded[0m serde_json v1.0.151
+[1m[92m  Downloaded[0m itoa v1.0.18
+[1m[92m  Downloaded[0m powerfmt v0.2.0
+[1m[92m  Downloaded[0m time v0.3.55
+[1m[92m  Downloaded[0m syn v3.0.6
+[1m[92m   Compiling[0m proc-macro2 v1.0.107
+[1m[92m   Compiling[0m quote v1.0.47
+[1m[92m   Compiling[0m unicode-ident v1.0.26
+[1m[92m   Compiling[0m serde_core v1.0.229
+[1m[92m   Compiling[0m zmij v1.0.23
+[1m[92m   Compiling[0m serde v1.0.229
+[1m[92m   Compiling[0m thiserror v2.0.20
+[1m[92m   Compiling[0m serde_json v1.0.151
+[1m[92m   Compiling[0m itoa v1.0.18
+[1m[92m   Compiling[0m powerfmt v0.2.0
+[1m[92m   Compiling[0m num-conv v0.2.2
+[1m[92m   Compiling[0m time-core v0.1.9
+[1m[92m   Compiling[0m memchr v2.8.3
+[1m[92m   Compiling[0m syn v3.0.6
+[1m[92m   Compiling[0m deranged v0.5.8
+[1m[92m   Compiling[0m serde_derive v1.0.229
+[1m[92m   Compiling[0m thiserror-impl v2.0.20
+[1m[92m   Compiling[0m time v0.3.55
+[1m[92m   Compiling[0m sc-observability-types v1.4.0 (/home/runner/work/sc-observability/sc-observability/target/b2-package-build/package/sc-observability-types-1.4.0)
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 6.81s
+[1m[92m   Verifying[0m sc-observability v1.4.0 (/home/runner/work/sc-observability/sc-observability/crates/sc-observability)
+[1m[92m    Updating[0m crates.io index
+[1m[92m   Unpacking[0m sc-observability-types v1.4.0 (registry `/home/runner/work/sc-observability/sc-observability/target/b2-package-build/package/tmp-registry`)
+[1m[92m   Compiling[0m sc-observability-types v1.4.0
+[1m[92m   Compiling[0m sc-observability v1.4.0 (/home/runner/work/sc-observability/sc-observability/target/b2-package-build/package/sc-observability-1.4.0)
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 8.93s
+[1m[92m   Verifying[0m sc-observability-log-macros v1.4.0 (/home/runner/work/sc-observability/sc-observability/crates/sc-observability-log-macros)
+[1m[92m Downloading[0m crates ...
+[1m[92m  Downloaded[0m syn v2.0.119
+[1m[92m   Compiling[0m syn v2.0.119
+[1m[92m   Compiling[0m sc-observability-log-macros v1.4.0 (/home/runner/work/sc-observability/sc-observability/target/b2-package-build/package/sc-observability-log-macros-1.4.0)
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 11.08s
+[1m[92m   Verifying[0m sc-observability-log v1.4.0 (/home/runner/work/sc-observability/sc-observability/crates/sc-observability-log)
+[1m[92m    Updating[0m crates.io index
+[1m[92m Downloading[0m crates ...
+[1m[92m   Unpacking[0m sc-observability v1.4.0 (registry `/home/runner/work/sc-observability/sc-observability/target/b2-package-build/package/tmp-registry`)
+[1m[92m   Unpacking[0m sc-observability-log-macros v1.4.0 (registry `/home/runner/work/sc-observability/sc-observability/target/b2-package-build/package/tmp-registry`)
+[1m[92m  Downloaded[0m cfg-if v1.0.5
+[1m[92m  Downloaded[0m hostname v0.4.2
+[1m[92m  Downloaded[0m log v0.4.34
+[1m[92m  Downloaded[0m libc v0.2.189
+[1m[92m   Compiling[0m libc v0.2.189
+[1m[92m   Compiling[0m cfg-if v1.0.5
+[1m[92m   Compiling[0m sc-observability-log-macros v1.4.0
+[1m[92m   Compiling[0m sc-observability v1.4.0
+[1m[92m   Compiling[0m log v0.4.34
+[1m[92m   Compiling[0m hostname v0.4.2
+[1m[92m   Compiling[0m sc-observability-log v1.4.0 (/home/runner/work/sc-observability/sc-observability/target/b2-package-build/package/sc-observability-log-1.4.0)
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 13.44s
+[1m[92m   Verifying[0m sc-observe v1.4.0 (/home/runner/work/sc-observability/sc-observability/crates/sc-observe)
+[1m[92m    Updating[0m crates.io index
+[1m[92m   Compiling[0m sc-observe v1.4.0 (/home/runner/work/sc-observability/sc-observability/target/b2-package-build/package/sc-observe-1.4.0)
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 13.63s
+[1m[92m   Verifying[0m sc-observability-otlp v1.4.0 (/home/runner/work/sc-observability/sc-observability/crates/sc-observability-otlp)
+[1m[92m    Updating[0m crates.io index
+[1m[92m   Compiling[0m sc-observability-otlp v1.4.0 (/home/runner/work/sc-observability/sc-observability/target/b2-package-build/package/sc-observability-otlp-1.4.0)
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 13.91s

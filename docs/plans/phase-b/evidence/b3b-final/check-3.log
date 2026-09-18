@@ -1,0 +1,156 @@
+warning: use of deprecated tuple struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+  --> src/main.rs:19:36
+   |
+19 |     OutcomeLabel, ProcessIdentity, ProjectionError, ProjectionRegistration, Remediation,
+   |                                    ^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:427:6
+    |
+427 | ) -> ProjectionError {
+    |      ^^^^^^^^^^^^^^^
+
+warning: use of deprecated tuple struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:430:13
+    |
+430 |             ProjectionError(Box::new(sc_observability_types::ErrorContext::new(
+    |             ^^^^^^^^^^^^^^^
+
+warning: use of deprecated tuple struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:436:75
+    |
+436 |         sc_observability_types::TelemetryError::ExportFailure(context) => ProjectionError(context),
+    |                                                                           ^^^^^^^^^^^^^^^
+
+warning: use of deprecated struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:442:6
+    |
+442 | ) -> ProjectionError {
+    |      ^^^^^^^^^^^^^^^
+
+warning: use of deprecated tuple struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:443:5
+    |
+443 |     ProjectionError(Box::new(
+    |     ^^^^^^^^^^^^^^^
+
+warning: use of deprecated struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:651:59
+    |
+651 | ) -> Result<Option<OutcomeLabel>, sc_observability_types::ProjectionError> {
+    |                                                           ^^^^^^^^^^^^^^^
+
+warning: use of deprecated struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:368:32
+    |
+368 |     ) -> Result<Vec<LogEvent>, ProjectionError> {
+    |                                ^^^^^^^^^^^^^^^
+
+warning: use of deprecated struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:391:34
+    |
+391 |     ) -> Result<Vec<SpanSignal>, ProjectionError> {
+    |                                  ^^^^^^^^^^^^^^^
+
+warning: use of deprecated struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:414:36
+    |
+414 |     ) -> Result<Vec<MetricRecord>, ProjectionError> {
+    |                                    ^^^^^^^^^^^^^^^
+
+warning: use of deprecated struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:481:56
+    |
+481 |     ) -> Result<Vec<LogEvent>, sc_observability_types::ProjectionError> {
+    |                                                        ^^^^^^^^^^^^^^^
+
+warning: use of deprecated struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:514:58
+    |
+514 |     ) -> Result<Vec<SpanSignal>, sc_observability_types::ProjectionError> {
+    |                                                          ^^^^^^^^^^^^^^^
+
+warning: use of deprecated tuple struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:553:49
+    |
+553 |                         sc_observability_types::ProjectionError(Box::new(
+    |                                                 ^^^^^^^^^^^^^^^
+
+warning: use of deprecated struct `sc_observability_types::ProjectionError`: Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md.
+   --> src/main.rs:602:60
+    |
+602 |     ) -> Result<Vec<MetricRecord>, sc_observability_types::ProjectionError> {
+    |                                                            ^^^^^^^^^^^^^^^
+
+warning: use of deprecated associated function `sc_observability_otlp::Telemetry::new`: Use Telemetry::new_typed(); see migrate-error-api.md.
+   --> src/main.rs:147:41
+    |
+147 |     let telemetry = Arc::new(Telemetry::new(telemetry_config)?);
+    |                                         ^^^
+
+warning: use of deprecated method `sc_observe::ObservabilityBuilder::build`: Use ObservabilityBuilder::build_typed(); see migrate-error-api.md.
+   --> src/main.rs:165:10
+    |
+165 |         .build()?;
+    |          ^^^^^
+
+warning: use of deprecated method `sc_observe::Observability::flush`: Use Observability::flush_typed(); see migrate-error-api.md.
+   --> src/main.rs:168:13
+    |
+168 |     runtime.flush()?;
+    |             ^^^^^
+
+warning: use of deprecated method `sc_observability_otlp::Telemetry::flush`: Use Telemetry::flush_typed(); see migrate-error-api.md.
+   --> src/main.rs:169:15
+    |
+169 |     telemetry.flush()?;
+    |               ^^^^^
+
+warning: use of deprecated method `sc_observability_otlp::Telemetry::shutdown`: Use Telemetry::shutdown_typed(); see migrate-error-api.md.
+   --> src/main.rs:173:23
+    |
+173 |             telemetry.shutdown()?;
+    |                       ^^^^^^^^
+
+warning: use of deprecated method `sc_observe::Observability::shutdown`: Use Observability::shutdown_typed(); see migrate-error-api.md.
+   --> src/main.rs:174:21
+    |
+174 |             runtime.shutdown()?;
+    |                     ^^^^^^^^
+
+warning: use of deprecated method `sc_observability_otlp::Telemetry::shutdown`: Use Telemetry::shutdown_typed(); see migrate-error-api.md.
+   --> src/main.rs:179:31
+    |
+179 |             let _ = telemetry.shutdown();
+    |                               ^^^^^^^^
+
+warning: use of deprecated method `sc_observe::Observability::shutdown`: Use Observability::shutdown_typed(); see migrate-error-api.md.
+   --> src/main.rs:180:21
+    |
+180 |             runtime.shutdown()?;
+    |                     ^^^^^^^^
+
+warning: use of deprecated associated function `sc_observability_otlp::OtlpEndpoint::new`: Use OtlpEndpoint::new_typed(); see migrate-error-api.md.
+   --> src/main.rs:276:28
+    |
+276 |         .map(OtlpEndpoint::new)
+    |                            ^^^
+
+warning: use of deprecated associated function `sc_observability_otlp::AuthHeader::new`: Use AuthHeader::new_typed(); see migrate-error-api.md.
+   --> src/main.rs:281:26
+    |
+281 |         .map(AuthHeader::new)
+    |                          ^^^
+
+warning: use of deprecated method `sc_observability_otlp::TelemetryConfigBuilder::build`: Use TelemetryConfigBuilder::build_typed(); see migrate-error-api.md.
+   --> src/main.rs:312:10
+    |
+312 |         .build()?)
+    |          ^^^^^
+
+warning: `atm-adapter-example` (bin "atm-adapter-example") generated 25 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+repo boundary validation passed
+BINDING_RUNTIME_DEPENDENCIES_PASS sc-observability,sc-observability-dto,sc-observability-log,sc-observability-types
