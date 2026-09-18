@@ -131,7 +131,8 @@ fn timestamp(value: String, field: &str) -> Result<core::Timestamp, Failure> {
     }
     Ok(ts)
 }
-fn normalize_key(value: &str) -> String {
+/// Normalizes a user field key using the binding wire contract's rules.
+pub fn normalize_field_key(value: &str) -> String {
     value
         .replace("::", ".")
         .chars()
@@ -144,9 +145,10 @@ fn normalize_key(value: &str) -> String {
         })
         .collect()
 }
-fn protected(key: &str) -> bool {
+/// Returns whether a field key is reserved for trusted binding provenance.
+pub fn is_protected_key(key: &str) -> bool {
     key.starts_with("sc_observability.binding.")
-        || normalize_key(key).starts_with("sc_observability.binding.")
+        || normalize_field_key(key).starts_with("sc_observability.binding.")
 }
 fn to_value(value: ValueDto, field: &str, protect: bool, depth: usize) -> Result<Value, Failure> {
     Ok(match value {
@@ -185,7 +187,7 @@ fn to_value(value: ValueDto, field: &str, protect: bool, depth: usize) -> Result
                     .into_iter()
                     .map(|(k, v)| {
                         let path = format!("{field}.{k}");
-                        if protect && protected(&k) {
+                        if protect && is_protected_key(&k) {
                             return Err(invalid_input(path, "reserved binding provenance field"));
                         }
                         Ok((k, to_value(v, &path, protect, depth + 1)?))

@@ -5,7 +5,8 @@
 use sc_observability_binding_runtime::HostLoggingBackend;
 use sc_observability_dto::{
     AdmissionDto, Failure, HealthRequest, LogEventDto, LogHealthDto, LogSnapshotDto, QueryRequest,
-    TryLogRequest, WireEnvelope, decode_event, decode_query, decode_timeout,
+    TryLogRequest, WireEnvelope, decode_event, decode_query, decode_timeout, is_protected_key,
+    normalize_field_key,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -15,7 +16,6 @@ const SCHEMA_VERSION: u32 = 1;
 const MAX_REQUEST_BYTES: usize = 65_536;
 const MAX_DEPTH: usize = 32;
 const REDACTED: &str = "[REDACTED]";
-const PROTECTED_PREFIX: &str = "sc_observability.binding.";
 
 /// Host-selected policy applied before any backend call.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,9 +61,7 @@ impl AdapterPolicy {
                 "targets must be valid target categories",
             ));
         }
-        if self.redacted_field_keys.iter().any(|key| {
-            key.starts_with(PROTECTED_PREFIX) || normalize_key(key).starts_with(PROTECTED_PREFIX)
-        }) {
+        if self.redacted_field_keys.iter().any(|key| is_protected_key(key)) {
             return Err(invalid(
                 "policy.redacted_field_keys",
                 "protected provenance keys are host-owned",
@@ -102,20 +100,6 @@ fn envelope<T>(result: Result<T, Failure>) -> WireEnvelope<T> {
             error,
         },
     }
-}
-
-fn normalize_key(value: &str) -> String {
-    value
-        .replace("::", ".")
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect()
 }
 
 fn inspect(value: &Value, depth: usize, limit: usize) -> Result<(), Failure> {
@@ -243,7 +227,7 @@ fn redact_value(value: &mut sc_observability_dto::ValueDto, keys: &BTreeSet<Stri
     if let sc_observability_dto::ValueDto::Object { value: object } = value {
         for (key, child) in object.iter_mut() {
             if keys.contains(key)
-                || keys.iter().any(|configured| normalize_key(configured) == normalize_key(key))
+                || keys.iter().any(|configured| normalize_field_key(configured) == normalize_field_key(key))
             {
                 *child = sc_observability_dto::ValueDto::String {
                     value: REDACTED.to_owned(),

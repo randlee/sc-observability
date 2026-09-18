@@ -101,6 +101,17 @@ fn spoofed_provenance_is_rejected_at_all_depths() {
     }
 }
 #[test]
+fn protected_key_policy_is_shared_and_exact() {
+    assert_eq!(
+        normalize_field_key("sc_observability::binding::language"),
+        "sc_observability.binding.language"
+    );
+    assert!(is_protected_key("sc_observability.binding.language"));
+    assert!(is_protected_key("sc_observability::binding::future"));
+    assert!(!is_protected_key("sc_observability.bindingx.language"));
+    assert!(!is_protected_key("safe.field"));
+}
+#[test]
 fn query_defaults_and_inclusive_bounds() {
     let query = decode_query(
         json!({"schema_version":1,"since":"1970-01-01T00:00:00Z","until":"1970-01-01T00:00:00Z"}),
