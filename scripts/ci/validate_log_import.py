@@ -630,6 +630,13 @@ def validate_post_import_adaptations(
         else:
             if not isinstance(qa_delta, dict) or not re.fullmatch(r"[0-9a-f]{40}", qa_delta.get("commit", "")):
                 raise SystemExit(f"post-import adaptation QA delta for {path} lacks an immutable commit")
+            commit_check = subprocess.run(
+                ["git", "-C", str(destination), "cat-file", "-e", f"{qa_delta['commit']}^{{commit}}"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if commit_check.returncode != 0:
+                raise SystemExit(f"post-import adaptation QA delta for {path} cites an unavailable commit")
             reason = qa_delta.get("reason")
             patch = qa_delta.get("patch")
             if not isinstance(reason, str) or not reason.strip() or not isinstance(patch, str) or not patch:
