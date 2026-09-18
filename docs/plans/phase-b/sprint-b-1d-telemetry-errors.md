@@ -1,8 +1,9 @@
 ---
 id: B.1d
-status: proposed
-branch: feature/phase-b-1d-errors
-base: develop
+status: complete
+branch: feature/phase-b-1d-telemetry-prep
+base: feature/phase-b-1-copy
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1d-telemetry-prep
 ---
 
 # B.1d — Typed telemetry configuration and lifecycle failures

@@ -1,8 +1,9 @@
 ---
 id: B.1b
-status: proposed
-branch: feature/phase-b-1b-errors
-base: develop
+status: complete
+branch: feature/phase-b-1b-logger-prep
+base: fix/phase-b-1-provenance-integrity
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1b-logger-prep
 ---
 
 # B.1b — Typed logger operations and sink interoperability
