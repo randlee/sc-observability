@@ -287,6 +287,21 @@ package-consumer installation, and Rust/IPC integration tests, and fails if any
 stage is skipped. Record macOS/Linux/Windows results and the generated artifact
 hashes. It must not overwrite drift and then report success.
 
+## Current qualification evidence (updated 2026-09-18)
+
+Status: `in_progress` is accurate; this reflects current retained CI run
+state, not the older handoff prose in `handoff-b-3a-qualification.md`
+("Status: in progress; no sprint completion or publication claim"), which
+predates the runs below. GitHub Actions run `35278483559` ("TypeScript/Tauri
+bindings", `feature/phase-b-tauri-qualification` @ `a8eaeec`) completed with
+`conclusion: success` -- a full manual qualification pass. A rerun,
+`35278469028` (same branch/commit), remains `in_progress` (Windows job still
+live) as of this writing; it has not yet reported a conclusion. Do not treat
+the `35278483559` success as sole/final closure while `35278469028` is still
+outstanding on the same source revision -- both are tracked, and `status`
+moves to `complete` only once the outstanding rerun also concludes and the
+remaining real-IPC/artifact matrix items owned by `bp-tauri-helper` land.
+
 ## Paths to delete
 
 None.

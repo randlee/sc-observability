@@ -229,6 +229,15 @@ flush timeout, repeat close and logging shutdown/atexit without duplicate core
 shutdown. Verify exactly-once event drop accounting and immutable health snapshots. Run the tests on packaged Python code
 and the embedding example; do not rely only on mocks of the backend.
 
+## Current qualification evidence (updated 2026-09-18)
+
+Status: `in_progress` is accurate, not stale. Remaining closure is the B.4a
+25-cell installed-distribution matrix this sprint's own tests run against
+(see `sprint-b-4a-python-packaging.md`'s current qualification evidence):
+run `35295219562` completed with `conclusion: failure` (diagnostic-only, expected per the known-incomplete Windows process-tree fixture); the acceptance-grade
+run has not started. B.5's own implementation/local-check evidence is recorded
+in `handoff-b-5.md`; lead completeness review is separately still open.
+
 ## Paths to delete
 
 None.

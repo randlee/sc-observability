@@ -3,6 +3,7 @@ id: B.4a
 status: in_progress
 branch: feature/phase-b-4a-python-packaging
 base: feature/phase-b-4-python
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging
 ---
 
 # B.4a — Python distributions and platform qualification
@@ -223,6 +224,21 @@ sdist-specific frozen Cargo.lock. No `--no-verify` packaging result alone counts
 as verification. CI must aggregate all 25 cell results and fail on absent evidence. Test missing
 package data, invalid platform tags and accidental extension-only host linker
 flags through packaging fixtures; do not corrupt release artifacts for tests.
+
+## Current qualification evidence (updated 2026-09-18)
+
+Status: `in_progress`, not `complete` -- the full 25-cell matrix has not yet
+produced a passing result. GitHub Actions run `35295219562` ("B.4a Python
+distribution qualification", `fix/phase-b-wheel-test-hooks` @ `ca23fc6`)
+completed with `conclusion: failure`, and is diagnostic-only: it ran against
+a known-incomplete Windows process-tree enforcement fixture, so this
+failure does not by itself qualify or disqualify the matrix. The final,
+acceptance-grade run follows the corrected source; `cobs` owns that
+correction and its run. Do not treat any prior local/partial result, or this
+diagnostic run's failure, as AC1-AC4 closure or as a real regression; every
+one of the 25 required interpreter/platform cells (see Acceptance criteria
+above) must actually pass on the corrected source before this sprint's
+`status` moves to `complete`.
 
 ## Paths to delete
 

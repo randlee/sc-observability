@@ -200,6 +200,17 @@ subprocess tests. Run both owned and attached modes on the B.4a Python/platform
 matrix. Use deterministic operation counts and bounded outstanding-work checks
 rather than a throughput benchmark as correctness evidence.
 
+## Current qualification evidence (updated 2026-09-18)
+
+Status: `in_progress` is accurate, not stale. Remaining closure is the same
+B.4a 25-cell installed-distribution matrix B.5 depends on (see
+`sprint-b-4a-python-packaging.md`'s current qualification evidence): run
+`35295219562` completed with `conclusion: failure` (diagnostic-only, expected
+per the known-incomplete Windows process-tree fixture); the acceptance-grade
+run has not started. B.6's own implementation/local-check evidence is
+recorded in `handoff-b-6.md` and `checklist-b-6.md`; lead completeness
+review and the packaged 25-cell matrix are separately still open.
+
 ## Paths to delete
 
 None.
