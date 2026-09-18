@@ -9,6 +9,14 @@ from prepare_runtime_level_staged_packages import candidate_workspace_manifest, 
 
 
 class BaselineDerivedRewriteTests(unittest.TestCase):
+    def test_candidate_workspace_excludes_later_members(self):
+        content = '[workspace]\nmembers = ["crates/sc-observability-types", "bindings/python/sc-observability-py"]\n[workspace.package]\nversion = "1.2.0"\n'
+        candidate = tomllib.loads(candidate_workspace_manifest(content, "1.3.0"))
+        self.assertEqual(candidate["workspace"]["members"], [
+            "crates/sc-observability-types", "crates/sc-observability", "crates/sc-observe",
+            "crates/sc-observability-otlp",
+        ])
+
     def test_workspace_manifest_advances_plain_and_exact_pins_for_any_baseline(self):
         for baseline in ("1.2.0", "1.4.0", "2.7.9"):
             content = (

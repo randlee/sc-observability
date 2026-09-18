@@ -108,6 +108,11 @@ def candidate_workspace_manifest(content: str, version: str) -> str:
     rendered = re.sub(r'(?m)^version = "' + re.escape(baseline) + r'"$', f'version = "{version}"', content, count=1)
     for prefix in ("", "="):
         rendered = rendered.replace(f'version = "{prefix}{baseline}", path =', f'version = "{prefix}{version}", path =')
+    # Stage only B.P2's four authoritative packages. Later workspace members
+    # remain in the source tree but must not participate in Cargo resolution
+    # while the candidate workspace is packaged.
+    members = "\n".join(f'  "crates/{package}",' for package in PACKAGES)
+    rendered = re.sub(r"(?ms)^members\s*=\s*\[.*?\]", f"members = [\n{members}\n]", rendered, count=1)
     return rendered
 
 
@@ -137,6 +142,8 @@ def candidate_workspace_manifest(content: str, version: str) -> str:
     rendered = re.sub(r'(?m)^version = "' + re.escape(baseline) + r'"$', f'version = "{version}"', content, count=1)
     for prefix in ("", "="):
         rendered = rendered.replace(f'version = "{prefix}{baseline}", path =', f'version = "{prefix}{version}", path =')
+    members = "\n".join(f'  "crates/{package}",' for package in PACKAGES)
+    rendered = re.sub(r"(?ms)^members\s*=\s*\[.*?\]", f"members = [\n{members}\n]", rendered, count=1)
     return rendered
 
 
