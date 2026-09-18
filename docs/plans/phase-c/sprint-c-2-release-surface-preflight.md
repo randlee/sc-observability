@@ -1,0 +1,341 @@
+---
+id: C.2
+status: proposed
+branch: fix/phase-c-2-release-surface-preflight
+base: fix/phase-c-1-shared-pipeline-migration
+---
+
+# C.2 — Phase B release-surface preflight
+
+## Goal and dependencies
+
+Preflight the complete, post-merge Phase B release surface through the
+pipeline migrated in C.1. `must_follow` C.1, with the full dependency
+contract stated explicitly:
+
+- Merge C.1's pushed development forward into this sprint's branch before
+  every round (trigger: C.1's development push, not its QA outcome — this
+  sprint may develop against C.1's in-progress branch).
+- **C.1's own PR must merge into `develop` before this sprint's PR is
+  considered complete/mergeable** (PR-completion trigger: parent PR merges
+  first). This does not add a QA-wait requirement on top of the merge — C.2
+  may finish its own review and validation work in parallel with C.1's PR
+  review, but C.2's PR cannot itself be merged until C.1's PR has merged.
+
+This sprint requires the installed shared manifest/channel contract, the
+upstream npm channel adopted in C.1 (or the owner's explicit escalation
+decision if that prerequisite could not be met), and the reconciled
+`release/publish-artifacts.toml` from C.1. This sprint runs preflight only;
+it never publishes and never runs BTIT repository integration tests.
+
+## Deliverables (authoritative)
+
+Every listed deliverable must land production-ready for this sprint's stated
+scope. Completion requires evidence for every numbered item; partial
+completion leaves the sprint open. **None of deliverables 2–5 may close on
+an owner-visible open-gap note in place of PASS evidence** — a genuine
+external blocker (for example, a Phase B qualification run that has not yet
+been re-run against the actual merge commit) leaves the specific deliverable
+open pending that blocker's resolution, or pending an explicit owner
+decision to revise this sprint's scope; it is never recorded as an accepted
+gap that lets the sprint close anyway.
+
+1. **Deterministic release-surface inventory (PHC-004).** Re-derive the full
+   publishable surface from the actual post-Phase-B-merge `develop` tree —
+   do not reuse a pre-merge snapshot. This is the same ten-crate inventory
+   fixed in C.1 deliverable 2 (`sc-observability-types`, `sc-observability`,
+   `sc-observe`, `sc-observability-otlp`, `sc-observability-log`,
+   `sc-observability-log-macros`, `sc-observability-dto`,
+   `sc-observability-binding-runtime`, `sc-observability-tauri`, and the
+   `sc-observability-py` Rust crate), plus:
+   - The `sc-observability-py` wheel/sdist artifact set across its full
+     packaging matrix (the Python distribution/platform qualification work
+     landed in Phase B's B.4a/B.5/B.6 sprints) — a **separate** inventory row
+     from the `sc-observability-py` crates.io row above, never merged into
+     one line.
+   - The `@sc-observability/client` npm package
+     (`bindings/typescript/package.json`, currently version `1.4.0`).
+   - `sc-observability-tauri`'s standalone-workspace crate (queried via
+     `--manifest-path bindings/tauri/Cargo.toml`, never root `-p`, per C.1
+     deliverable 2) and any Tauri plugin distribution asset Phase B's B.3a
+     sprint produced.
+   Cross-check this inventory against `cargo metadata --no-deps --format-version 1`
+   (root workspace), `cargo metadata --no-deps --format-version 1 --manifest-path bindings/tauri/Cargo.toml`
+   (Tauri), the wheel build matrix's declared targets, and
+   `bindings/typescript/package.json`. A surface item present in the tree but
+   missing from the inventory is a defect that blocks this sprint's closure.
+2. **Package completeness preflight — concrete, executable commands
+   (PHC-006 validation-quality fix).** For each inventory item, run and
+   record PASS/FAIL with actual command output:
+   - **Root-workspace crates already published at the target version**
+     (verified per-crate, not assumed from the `preflight_check` label
+     alone — check via the registry, e.g. `cargo info <crate>@<version>` or
+     the crates.io API): `cargo package --locked --allow-dirty -p <crate>`.
+   - **Root-workspace crates not yet published at the target version —
+     mandatory staged co-packaging, full dependency closure, not just
+     `"locked"`-labeled crates.** Any not-yet-published root-workspace
+     crate must be packaged together with every other not-yet-published
+     root-workspace crate it depends on, directly or transitively —
+     determined from `cargo metadata --no-deps --format-version 1`'s
+     resolve graph, not from the `preflight_check` label alone. A crate
+     labeled `"full"` (no *unpublished* dependency of its own) that is
+     itself depended on by a `"locked"` crate must still be included in
+     this same staged invocation, or the dependent cannot resolve it
+     locally. A per-crate `cargo publish --dry-run --locked --no-verify -p <crate>`
+     run one crate at a time hits the same unresolved-path-dependency
+     failure for any crate in this not-yet-published set — it is not a
+     complete pre-publication path on its own. Instead, generalize
+     `scripts/ci/prepare_log_staged_packages.py`'s actual mechanism (a
+     single `cargo package --locked --target-dir <build-dir> -p <crate-1> -p <crate-2> ... -p <crate-N>`
+     invocation naming the complete not-yet-published closure together,
+     which lets Cargo resolve inter-crate path dependencies from the local
+     workspace instead of the public registry, followed by
+     `verify_stage()`-style archive inspection from
+     `scripts/ci/_log_staging.py`) into a new
+     `scripts/ci/prepare_release_staged_packages.py` that computes this
+     closure from `release/publish-artifacts.toml` plus `cargo metadata`
+     instead of the hardcoded six-package tuple the B.2-era script uses,
+     and packages the closure in `validate-publish-order`-confirmed order.
+   - **`sc-observability-tauri` — separate standalone workspace, partitioned
+     from the root-workspace staging above.** The multi-`-p` co-packaging
+     trick only works within a single Cargo workspace; it cannot select
+     `sc-observability-tauri` at all, since `bindings/tauri/Cargo.toml`
+     declares its own empty `[workspace]`. Reading that manifest directly
+     confirms it path-depends on three root-workspace crates —
+     `sc-observability-types`, `sc-observability-dto`,
+     `sc-observability-binding-runtime` — each declared with both a `path`
+     and a `version` requirement. A plain `cargo build`/`cargo check`
+     against `bindings/tauri/Cargo.toml` resolves these via `path`
+     regardless of publish status, but `cargo package`'s own verification
+     build strips the `path` key and re-resolves by `version` alone, which
+     fails for a not-yet-published version. Generalize
+     `scripts/ci/validate_log_staged_consumer.py`'s existing
+     `[patch.crates-io]`-based isolated-consumer technique (a synthetic
+     manifest declaring plain version dependencies plus a
+     `[patch.crates-io]` section pointing each name at its extracted
+     staged-archive path) for Tauri's own preflight: after the root staged
+     step above produces and extracts archives for whichever of
+     `sc-observability-types`/`sc-observability-dto`/
+     `sc-observability-binding-runtime` are not yet published, run
+     `cargo package --locked --manifest-path bindings/tauri/Cargo.toml`
+     with a `[patch.crates-io]` override (in a scratch `.cargo/config.toml`
+     or an isolated copy of the manifest, never committed) pointing those
+     names at the extracted staged paths, so its verification build
+     resolves them locally instead of against the live registry. Any of
+     the three already published at the required version needs no patch
+     entry.
+   - **Python wheel/sdist**: reuse Phase B's real, existing three-subcommand
+     CLI (`python3 scripts/ci/validate_python_distribution.py {build,cell,aggregate}`,
+     verified directly via `--help` against each subcommand — there is no
+     bare `--wheel`/`--sdist`/`--policy`/`--evidence` flag set on the
+     top-level command). Prefer reusing Phase B's retained evidence over
+     rebuilding:
+     - First, locate the `b4a-production-inventory` GitHub Actions artifact
+       (job `aggregate` in `.github/workflows/b4a-python-distributions.yml`,
+       containing `production-artifacts.json`) from the CI run that
+       qualified the actual post-merge `develop` commit (or a commit
+       provably identical in every qualified path, per deliverable 4).
+       Download it — `gh run download <run-id> --name b4a-production-inventory --dir <dir>`
+       — and verify `sha256sum <dir>/production-artifacts.json` matches
+       that run's recorded `inventory_sha256` output. That file **is** this
+       item's completeness PASS evidence; it is the real output of the
+       `aggregate` subcommand, not a placeholder.
+     - If no such run exists yet for the post-merge commit, **prefer
+       dispatching the existing complete workflow** —
+       `gh workflow run b4a-python-distributions.yml -f source_commit=<post-merge-sha>`
+       — over hand-invoking the individual subcommands: the workflow
+       already implements correct production/instrumented-wheel selection
+       per platform and per policy, which a hand-rolled invocation must
+       otherwise reproduce exactly.
+     - Only if workflow dispatch is unavailable, produce the missing
+       evidence by hand, reproducing the workflow's own logic exactly:
+       `python3 scripts/ci/validate_python_distribution.py build --sdist <sdist> --output <dir>/wheel --checkout <checkout> --platform <platform>`
+       per missing platform; then, before running `cell`, extract the
+       sdist and inspect its embedded `runtime_suite.fault_pytest_paths`
+       contract (`_python_distribution.py`'s `fault_paths()` — confirmed by
+       reading `cell()`'s own logic, which raises `DistributionError` if
+       this list is nonempty and `--instrumented-wheel` is not supplied):
+       if nonempty, first produce a companion instrumented wheel exactly as
+       the workflow's `wheel` job does (`$RUNNER_TEMP/b4a-wheel/instrumented/*.whl`)
+       and pass it as `--instrumented-wheel <path>`; if empty, omit the
+       flag. Then run
+       `python3 scripts/ci/validate_python_distribution.py cell --sdist <sdist> --wheel <dir>/wheel/*.whl --checkout <checkout> --output <dir>/cell [--instrumented-wheel <path>]`
+       per missing Python version (add `--allow-incomplete-runtime` only for
+       a non-production/provisional cell), then combine retained and
+       newly-produced evidence directories under one path and run
+       `python3 scripts/ci/validate_python_distribution.py aggregate --policy release/python-platform-policy.json --sdist <sdist> --evidence <combined-dir> --source-commit <post-merge-sha> --output <dir>/production-artifacts.json`
+       — `aggregate --evidence` recursively globs for `build-result.json`/
+       `cell-result.json` under that path, so retained per-cell artifacts
+       from the GitHub Actions run can sit alongside freshly produced ones
+       in the same directory tree.
+   - **npm**: `npm pack --dry-run` in `bindings/typescript/` (confirmed
+     non-mutating for npm 7+: it lists the exact tarball contents without
+     writing a tarball or contacting the registry) and inspect the printed
+     file list against `package.json`'s declared `files`/`exports`/`types`
+     fields for completeness.
+3. **Authentication setup verification without exposing tokens, at correct
+   scope (PHC-005 fix).** Confirm every secret C.1 deliverable 7 documents is
+   configured at the scope its channel contract actually requires — a
+   repository-scope-only check does not validate an environment-scoped
+   secret:
+   - `gh secret list` (repository scope) for `CARGO_REGISTRY_TOKEN`
+     (crates.io — genuinely repository-scoped).
+   - `gh api repos/{owner}/{repo}/environments --jq '.environments[].name'`
+     to confirm the `pypi` and `testpypi` GitHub Environments exist, then
+     `gh secret list --env pypi` and `gh secret list --env testpypi` to
+     confirm `PYPI_API_TOKEN` and `TEST_PYPI_API_TOKEN` are each present in
+     their own environment (names only, never values).
+   - The npm channel's own environment/secret name, once adopted from
+     upstream in C.1, checked the same way (`gh secret list --env <name>`
+     against whatever environment its shared channel contract specifies) —
+     this sprint does not assume `NPM_TOKEN` or repository scope for it in
+     advance of C.1's actual adopted contract.
+   - Never read, print, or otherwise exercise a secret's value.
+4. **Platform qualification cross-check — no completeness escape hatch
+   (PHC-005 fix).** For each wheel-matrix cell and the Tauri artifact set,
+   name the Phase B CI run that last qualified it (run ID, source SHA,
+   conclusion), reusing Phase B's retained evidence rather than re-running
+   the full matrix, *only when that evidence's source SHA is the actual
+   post-merge `develop` commit or a commit provably identical in the
+   qualified paths* (record the equivalence check, e.g. a diff against the
+   qualified SHA touching none of the qualified paths). Where no such
+   evidence exists for an item — for example the merge commit itself has
+   never been through the full matrix — this sprint does **not** record an
+   open gap and close anyway: it runs the missing non-publishing
+   qualification check itself (build + `validate_python_distribution.py` /
+   equivalent architecture/content verification, without publishing) until
+   every item has PASS evidence, or it stays open pending an explicit owner
+   decision to revise this sprint's scope.
+5. **Recovery/idempotency verification — named mocked harness, bounded to
+   orchestration decisions actually under this repo's control.** Neither
+   this repository nor the pinned `../sc-publish` revision has an existing
+   mocked publish-retry test to reuse (confirmed: no `idempoten`/`retry`/
+   `skip-existing` hit in either repo's test suites other than unrelated
+   doc-claim checks). A canned `subprocess` return cannot verify retry
+   behavior that lives *inside* a third-party executable's own registry
+   client — mocking `maturin upload` and returning success proves nothing
+   about whether `maturin`'s internal skip-existing check would have worked
+   for real. The harness below is therefore scoped precisely to decisions
+   this repository's or the shared package's own installed
+   workflow/orchestration code makes, and cites upstream test coverage
+   instead of re-deriving it for anything internal to a third-party tool:
+   - **PyPI**: the pinned `../sc-publish` `pypi-publish.yml` invokes
+     `maturin upload --repository "$PYPI_REPOSITORY" --non-interactive --skip-existing dist/*.whl dist/*.tar.gz`
+     (confirmed by reading the workflow directly). Add
+     `scripts/ci/tests/test_publish_retry_idempotency.py::test_pypi_invocation_shape`,
+     which mocks the `maturin` executable via `subprocess.run`/`Popen`
+     monkeypatching and asserts only that the installed workflow's
+     generated command line includes `--skip-existing` and that the step
+     maps a 0 exit code to success and nonzero to failure. It does not
+     assert that `maturin`'s own internal already-published detection
+     works — that is an upstream-tested guarantee of the `maturin` project,
+     cited here rather than re-verified with a canned subprocess return.
+   - **crates.io / GitHub Release**: same bounded scope —
+     `test_crates_io_invocation_shape` / `test_github_release_invocation_shape`
+     mock `cargo`/`gh` and assert only the installed workflow's own argument
+     construction and exit-code handling; they do not assert on `cargo
+     publish`'s or `gh release create`'s internal duplicate-detection
+     behavior.
+   - **npm** (once adopted from upstream in C.1 deliverable 3): if its
+     landed channel contract specifies a pre-publish existence check owned
+     by the workflow itself (for example an `npm view <pkg>@<version>`
+     probe run as a repository/shared-package-authored step before calling
+     `npm publish`, rather than relying on `npm publish`'s own built-in
+     behavior), that check *is* this orchestration's own decision and is
+     fully testable end-to-end: `test_npm_retry_idempotency` mocks both
+     `npm view` and `npm publish` and asserts (a) missing version →
+     `npm publish` is invoked; (b) already-present version → `npm publish`
+     is skipped and the step still reports overall success; (c) `npm view`
+     returns a non-404 error → the step reports failure, not success. If
+     the landed contract instead relies on `npm publish`'s own internal
+     handling with no repository/shared-package-owned pre-check, scope this
+     test to argument/exit-code handling only, matching the PyPI/crates.io/
+     GitHub Release cases above, and update this deliverable to match the
+     contract actually adopted.
+   - All external executables are mocked via `subprocess.run`/`Popen`
+     monkeypatching, plus a `socket.socket` monkeypatch that raises on any
+     real connection attempt in every test case, guaranteeing zero network
+     writes regardless of scenario.
+   Run this harness in this sprint's own validation; it is new tooling this
+   sprint adds, since none exists upstream or in this repo to reuse as-is.
+6. **Post-publish verification design.** Because this sprint does not
+   publish, specify the exact read-only commands a later, separately
+   authorized publish step will run to confirm each channel actually
+   received the expected artifact: `npm view @sc-observability/client versions`,
+   `cargo search <crate>` or the crates.io API per crate,
+   `pip index versions sc-observability` (or the actual PyPI project name)
+   or equivalent, and the npm channel's own verification command once
+   adopted. Write these as ready-to-run acceptance commands.
+
+## Acceptance criteria (authoritative)
+
+- The inventory from deliverable 1 is committed to this doc (or a generated
+  artifact this doc links to) and matches `cargo metadata` (root and Tauri),
+  `bindings/typescript/package.json`, and the Python packaging matrix's
+  declared targets with zero unexplained discrepancies.
+- **Deliverables 2–5 each have recorded PASS evidence (command + actual
+  output) for every inventory item.** No deliverable closes with an
+  open-gap note as a substitute for that evidence; a genuine external
+  blocker keeps the affected deliverable, and therefore the sprint, open
+  until resolved or until the owner explicitly revises this sprint's scope.
+- Deliverable 6's commands are present, syntactically valid, and confirmed
+  to run without write/publish credentials (all listed commands are
+  read-only by nature).
+- No channel receives a publish, upload, or tag-creation call anywhere in
+  this sprint's validation.
+- Every secret check in deliverable 3 targets the scope (`repository` vs.
+  named `environment`) its own channel contract actually specifies.
+
+## Required validation
+
+- `gh secret list` (repository scope, `CARGO_REGISTRY_TOKEN` only) and
+  `gh secret list --env pypi` / `gh secret list --env testpypi` (names
+  only), cross-checked against the documented secret-name/scope list.
+- `scripts/ci/prepare_release_staged_packages.py` (new, generalized from
+  `scripts/ci/prepare_log_staged_packages.py`) runs the single
+  multi-package `cargo package --locked --target-dir <dir> -p ... -p ...`
+  invocation across the full transitive closure of not-yet-published
+  root-workspace crates (computed from `cargo metadata` plus
+  `release/publish-artifacts.toml`, not solely the `"locked"` label), in
+  `validate-publish-order`-confirmed order; `cargo package --locked --allow-dirty -p <crate>`
+  runs per-crate for every already-published-at-target-version root-workspace
+  crate; `sc-observability-tauri`'s own standalone-workspace preflight runs
+  separately via `cargo package --locked --manifest-path bindings/tauri/Cargo.toml`
+  with a `[patch.crates-io]` override pointing at the extracted staged
+  archives for whichever of its three root-workspace path dependencies are
+  not yet published, per deliverable 2's generalized
+  `validate_log_staged_consumer.py` pattern.
+- `python3 scripts/ci/validate_python_distribution.py build|cell|aggregate`
+  (the real three-subcommand CLI, per its `--help` output) either verifies
+  the retained `b4a-production-inventory` artifact's `production-artifacts.json`
+  against its recorded `inventory_sha256`, or runs the missing `build`/
+  `cell`/`aggregate` steps to produce it, per deliverable 2.
+- `npm pack --dry-run` in `bindings/typescript/`, output diffed against
+  `package.json`'s declared `files`/`exports`/`types`.
+- `python3 -m pytest scripts/ci/tests/test_publish_retry_idempotency.py`
+  passes all three cases (missing version, already-present version,
+  registry error) per channel with zero real network connections opened.
+- The shared package's three manifest-validation commands (same as C.1) and
+  `bash scripts/ci/validate_publish_workflow_action_versions.sh`, re-run
+  against the post-merge `develop` state to confirm no drift was introduced
+  by the merge.
+- The mocked idempotency/retry dry run from deliverable 5.
+- Read-only registry-check commands from deliverable 6, executed against
+  already-published versions only (never the unreleased Phase B version) to
+  confirm they run without error.
+
+## Paths to delete
+
+None. This sprint is inventory/verification only; it does not remove files.
+
+## Non-closure
+
+- Does not publish anything to any channel.
+- Does not create or push a release tag.
+- Does not run BTIT repository integration tests — those remain gated on
+  authorized publication, per `plan-phase-c.md`'s sequence.
+- Does not resolve an open platform-qualification gap found in deliverable 4
+  by re-running CI itself when that gap is a genuine external blocker (for
+  example, a Phase B CI system unavailable to this sprint); it instead stays
+  open pending that blocker's resolution or an explicit owner scope
+  revision — it does not record the gap and close anyway.
