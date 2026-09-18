@@ -40,6 +40,21 @@ def validate(root, source=None):
         npm = report['npm_archive']
         hashed(npm['filename'], npm['sha256'])
         hashed('host-Cargo.lock', report['host_lock_sha256'])
+        inputs = json.loads(hashed('build-inputs.json', report['pristine_inputs_sha256']).read_text(encoding='utf-8'))['files']
+        for relative, key in [('bundle/manifest.json', 'bundle_manifest_sha256'), ('host/Cargo.lock', 'host_lock_sha256')]:
+            if inputs.get(relative) != report[key]:
+                raise ValueError('pristine inventory differs from qualified artifact: ' + name)
+        profiles = report.get('build_inputs', {})
+        if set(profiles) != {'debug', 'release'}:
+            raise ValueError('missing pristine profile inputs: ' + name)
+        for profile, record in profiles.items():
+            for key in ('pristine_inputs_sha256', 'bundle_manifest_sha256', 'host_lock_sha256'):
+                if record.get(key) != report[key]:
+                    raise ValueError('profile input artifact mismatch: ' + name + '/' + profile)
+        for key in ('build_root', 'cargo_home', 'cargo_target_dir'):
+            values = [profiles[profile].get(key) for profile in ('debug', 'release')]
+            if not all(values) or values[0] == values[1]:
+                raise ValueError('reused profile build directory: ' + name + '/' + key)
         ipc = json.loads(hashed('ipc.json', report['ipc_sha256']).read_text(encoding='utf-8'))
         if set(ipc) != {'main', 'forbidden'}:
             raise ValueError('missing actual caller windows')

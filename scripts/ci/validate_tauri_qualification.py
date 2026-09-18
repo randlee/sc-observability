@@ -21,6 +21,7 @@ from pathlib import Path
 
 from _python_sandbox import Sandbox, registered_checkouts
 from _tauri_webview import execute as execute_webview
+from _tauri_build_inputs import inventory, materialize, verify_inputs
 from build_binding_source_bundle import build, digest, verify_bundle, registry_identities
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -118,7 +119,9 @@ def main():
     try:
         with tempfile.TemporaryDirectory(prefix='tauri-artifact-consumer-') as temporary:
             external = Path(temporary).resolve()
-            artifact = external / 'bundle'
+            pristine = external / 'pristine'
+            pristine.mkdir()
+            artifact = pristine / 'bundle'
             if args.bundle:
                 verify_bundle(args.bundle)
                 shutil.copytree(args.bundle, artifact)
@@ -172,12 +175,12 @@ def main():
                     shutil.copyfile(consumer / 'fault-results.json', output / 'fault-results.json')
             run(['node', 'node_modules/typescript/bin/tsc', '--strict', '--noEmit', '--target', 'ES2022',
                  '--moduleResolution', 'node', 'narrowing.ts', 'host-client.ts'], consumer, commands)
-            dist = external / 'dist'
+            dist = pristine / 'dist'
             dist.mkdir()
             run(['node', 'node_modules/esbuild/bin/esbuild', 'frontend.js', '--bundle', '--platform=browser',
                  '--outfile=' + str(dist / 'qualification.js')], consumer, commands)
             (dist / 'index.html').write_text('<!doctype html><meta charset="utf-8"><title>Real Tauri qualification</title><script src="qualification.js"></script>')
-            host = external / 'host'
+            host = pristine / 'host'
             stage_host(host, bundle, report)
             # The example's reviewed lock owns its extra OS webview dependencies.
             reviewed = registry_identities(tomllib.loads((host / 'Cargo.lock').read_text(encoding='utf-8')))
@@ -194,6 +197,16 @@ def main():
             (host / '.cargo/config.toml').write_text(config)
             report['host_lock_sha256'] = digest(host / 'Cargo.lock')
             shutil.copyfile(host / 'Cargo.lock', output / 'host-Cargo.lock')
+            # Tauri's build script can regenerate permission documentation in
+            # its own registry source. Never reuse that modified tree for the
+            # next Cargo profile; both builds start from these exact bytes.
+            pristine_files = inventory(pristine)
+            (output / 'build-inputs.json').write_text(json.dumps({'files': pristine_files}, sort_keys=True) + '\n')
+            report['pristine_inputs_sha256'] = digest(output / 'build-inputs.json')
+            report['build_inputs'] = {}
+            profile_hosts = {}
+            for profile in ('debug', 'release'):
+                materialize(pristine, external / (profile + '-build'), pristine_files)
             raw_report = external / 'ipc.json'
             sandbox = Sandbox(external, registered_checkouts(ROOT))
             for variable in ('XDG_CACHE_HOME', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME'):
@@ -203,25 +216,46 @@ def main():
             try:
                 with sandbox:
                     report['isolation'] = sandbox.prove_denials(sys.executable, ROOT)
-                    sandbox.env['SC_TAURI_QUALIFICATION_REPORT'] = str(raw_report)
-                    sandbox.env['SC_TAURI_QUALIFICATION_POLICY'] = str(external / 'policy-results.json')
-                    metadata = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline', '--format-version', '1'], host))
-                    for item in metadata['packages']:
-                        if not Path(item['manifest_path']).resolve().is_relative_to(external):
-                            raise RuntimeError('dependency escaped external consumer: ' + item['manifest_path'])
-                    report['resolved_dependencies'] = [{key: item[key] for key in ('name', 'version', 'source', 'manifest_path')} for item in metadata['packages']]
-                    sandbox.run([sandbox.cargo, 'build', '--locked', '--offline'], host)
-                    executable = Path(sandbox.env['CARGO_TARGET_DIR']) / 'debug' / ('tauri-logging-example.exe' if os.name == 'nt' else 'tauri-logging-example')
-                    report['executable_sha256'] = digest(executable)
-                    report['output_gate_transitions'] = execute_webview(sandbox, executable, host, external, external)
-                    capped = external / 'capped'
-                    capped.mkdir()
-                    (dist / 'index.html').write_text('<!doctype html><meta charset="utf-8"><title>Capped native host</title><script>window.qualificationCapped=true</script><script src="qualification.js"></script>', encoding='utf-8')
-                    sandbox.run([sandbox.cargo, 'build', '--locked', '--offline', '--release', '--features', 'sc-observability-log/static_level_cap_test'], host)
-                    capped_executable = Path(sandbox.env['CARGO_TARGET_DIR']) / 'release' / executable.name
-                    report['capped_executable_sha256'] = digest(capped_executable)
-                    sandbox.env['SC_TAURI_QUALIFICATION_REPORT'] = str(capped / 'ipc.json')
-                    execute_webview(sandbox, capped_executable, host, capped, capped)
+                    for profile in ('debug', 'release'):
+                        profile_root = external / (profile + '-build')
+                        verify_inputs(profile_root, pristine_files)
+                        profile_host = profile_root / 'host'
+                        profile_hosts[profile] = profile_host
+                        verify_bundle(profile_root / 'bundle')
+                        sandbox.env['CARGO_HOME'] = str(external / (profile + '-cargo-home'))
+                        sandbox.env['CARGO_TARGET_DIR'] = str(external / (profile + '-cargo-target'))
+                        runtime_output = external if profile == 'debug' else external / 'capped'
+                        runtime_output.mkdir(exist_ok=True)
+                        if profile == 'release':
+                            (profile_root / 'dist/index.html').write_text('<!doctype html><meta charset="utf-8"><title>Capped native host</title><script>window.qualificationCapped=true</script><script src="qualification.js"></script>', encoding='utf-8')
+                        report['build_inputs'][profile] = {
+                            'pristine_inputs_sha256': report['pristine_inputs_sha256'],
+                            'bundle_manifest_sha256': digest(profile_root / 'bundle/manifest.json'),
+                            'host_lock_sha256': digest(profile_host / 'Cargo.lock'),
+                            'build_root': str(profile_root),
+                            'cargo_home': sandbox.env['CARGO_HOME'],
+                            'cargo_target_dir': sandbox.env['CARGO_TARGET_DIR'],
+                            'frontend_entry_sha256': digest(profile_root / 'dist/index.html'),
+                        }
+                        sandbox.env['SC_TAURI_QUALIFICATION_REPORT'] = str(runtime_output / 'ipc.json')
+                        sandbox.env['SC_TAURI_QUALIFICATION_POLICY'] = str(external / 'policy-results.json')
+                        metadata = json.loads(sandbox.run([sandbox.cargo, 'metadata', '--locked', '--offline', '--format-version', '1'], profile_host))
+                        for item in metadata['packages']:
+                            if not Path(item['manifest_path']).resolve().is_relative_to(profile_root):
+                                raise RuntimeError('dependency escaped profile consumer: ' + item['manifest_path'])
+                        report.setdefault('resolved_dependencies_by_profile', {})[profile] = [{key: item[key] for key in ('name', 'version', 'source', 'manifest_path')} for item in metadata['packages']]
+                        if profile == 'debug':
+                            report['resolved_dependencies'] = report['resolved_dependencies_by_profile'][profile]
+                        command = [sandbox.cargo, 'build', '--locked', '--offline']
+                        if profile == 'release':
+                            command += ['--release', '--features', 'sc-observability-log/static_level_cap_test']
+                        sandbox.run(command, profile_host)
+                        executable = Path(sandbox.env['CARGO_TARGET_DIR']) / profile / ('tauri-logging-example.exe' if os.name == 'nt' else 'tauri-logging-example')
+                        report['executable_sha256' if profile == 'debug' else 'capped_executable_sha256'] = digest(executable)
+                        transitions = execute_webview(sandbox, executable, profile_host, runtime_output, runtime_output)
+                        if profile == 'debug':
+                            report['output_gate_transitions'] = transitions
+                        verify_inputs(pristine, pristine_files)
             finally:
                 report['commands'].extend(sandbox.commands)
                 if (external / 'policy-results.json').exists():
@@ -232,8 +266,10 @@ def main():
                     shutil.copyfile(raw_report, output / 'ipc.json')
                 if (external / 'capped').exists():
                     shutil.copytree(external / 'capped', output / 'capped', dirs_exist_ok=True)
-                if (host / 'logs').exists():
-                    shutil.copytree(host / 'logs', output / 'logs', dirs_exist_ok=True)
+                for profile, built_host in profile_hosts.items():
+                    if (built_host / 'logs').exists():
+                        log_output = output / ('logs' if profile == 'debug' else 'capped/logs')
+                        shutil.copytree(built_host / 'logs', log_output, dirs_exist_ok=True)
             ipc = json.loads(raw_report.read_text(encoding='utf-8'))
             if set(ipc) != {'main', 'forbidden'} or not all(record['passed'] for record in ipc.values()):
                 raise RuntimeError('incomplete or failed actual-webview qualification')

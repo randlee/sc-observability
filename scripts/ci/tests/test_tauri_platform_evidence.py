@@ -49,6 +49,15 @@ class EvidenceTests(unittest.TestCase):
                 'source_commit': 'reviewed-source', 'packages': [{
                     'name': 'adapter', 'archive': 'archives/adapter.crate', 'archive_sha256': report['rust_archives']['adapter']}],
             })
+            report['pristine_inputs_sha256'] = write('build-inputs.json', {'files': {
+                'bundle/manifest.json': report['bundle_manifest_sha256'],
+                'host/Cargo.lock': report['host_lock_sha256'],
+            }})
+            report['build_inputs'] = {
+                profile: {**{key: report[key] for key in ('pristine_inputs_sha256', 'bundle_manifest_sha256', 'host_lock_sha256')},
+                          **{key: profile + '/' + key for key in ('build_root', 'cargo_home', 'cargo_target_dir')}}
+                for profile in ('debug', 'release')
+            }
             native = {'source_commit': 'reviewed-source', 'runtime_source_sha256': gate.native_source_digest(), 'profiles': {}}
             for profile in ('debug', 'release'):
                 log = profile + '.log'
@@ -67,6 +76,38 @@ class EvidenceTests(unittest.TestCase):
 
     def test_complete_three_platform_evidence(self):
         self.assertEqual(gate.validate(self.root, 'reviewed-source')['status'], 'passed')
+
+    def test_missing_pristine_profile(self):
+        self.report(lambda report: report['build_inputs'].pop('release'))
+        with self.assertRaisesRegex(ValueError, 'missing pristine profile inputs'):
+            gate.validate(self.root)
+
+    def test_profile_artifact_drift(self):
+        self.report(lambda report: report['build_inputs']['release'].update(bundle_manifest_sha256='different'))
+        with self.assertRaisesRegex(ValueError, 'profile input artifact mismatch'):
+            gate.validate(self.root)
+
+    def test_shared_profile_directory(self):
+        for key in ('build_root', 'cargo_home', 'cargo_target_dir'):
+            with self.subTest(key=key):
+                self.report(lambda report: report['build_inputs']['release'].update({key: report['build_inputs']['debug'][key]}))
+                with self.assertRaisesRegex(ValueError, 'reused profile build directory'):
+                    gate.validate(self.root)
+                self.report(lambda report: report['build_inputs']['release'].update({key: 'release/' + key}))
+
+    def test_tampered_pristine_inventory(self):
+        (self.root / 'Linux/build-inputs.json').write_text('tampered')
+        with self.assertRaisesRegex(ValueError, 'artifact hash/path mismatch'):
+            gate.validate(self.root)
+
+    def test_rehashed_pristine_artifact_drift(self):
+        path = self.root / 'Linux/build-inputs.json'
+        value = json.loads(path.read_text())
+        value['files']['host/Cargo.lock'] = 'different'
+        path.write_text(json.dumps(value))
+        self.report(lambda report: report.update(pristine_inputs_sha256=gate.digest(path)))
+        with self.assertRaisesRegex(ValueError, 'pristine inventory differs'):
+            gate.validate(self.root)
 
     def test_missing_platform(self):
         (self.root / 'Windows/platform.json').unlink()
