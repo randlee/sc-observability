@@ -6,6 +6,7 @@ or pre-existing firewall rules are modified.
 """
 from __future__ import annotations
 import ctypes
+import base64
 from ctypes import wintypes as W
 import json
 import os
@@ -24,8 +25,8 @@ def powershell(script, *, sensitive=False):
     # must calculate its own paths or core modules such as Get-Acl fail to load.
     environment = {key: value for key, value in os.environ.items()
                    if key.casefold() != 'psmodulepath'}
-    result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', '-'],
-                            input="$ErrorActionPreference='Stop';\n" + script,
+    encoded = base64.b64encode(("$ErrorActionPreference='Stop';\n" + script).encode('utf-16le')).decode('ascii')
+    result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
                             text=True, encoding='utf-8', capture_output=True, timeout=60,
                             env=environment)
     if result.returncode:
