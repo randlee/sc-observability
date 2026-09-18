@@ -1,7 +1,6 @@
 """Strict identities and archive checks for immutable Python distributions."""
 from __future__ import annotations
 
-import hashlib
 import json
 import platform
 import sys
@@ -9,6 +8,7 @@ import sysconfig
 import tarfile
 import zipfile
 from pathlib import Path, PurePosixPath
+from _hashing import digest
 
 try:
     import tomllib
@@ -52,10 +52,6 @@ def release_wheel(record: dict) -> dict:
             or 'test-hooks' in record.get('maturin_features', [])):
         raise DistributionError('instrumented artifact cannot satisfy the production release wheel gate')
     return record
-
-
-def digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def confined(root: Path, relative: str) -> Path:
