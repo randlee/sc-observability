@@ -3,8 +3,9 @@
 Branch: `feature/phase-b-6-python-async`; draft PR 138.
 Direct parent: `feature/phase-b-5-python-integration` (PR 139).
 Parent checkpoint `2f11f75` is merged in `2bd3e87`. The implementation is
-pushed; final parent propagation, distribution qualification and lead
-completeness remain open. Publication belongs to B.7.
+pushed; distribution qualification has since passed in full, and the lead
+completeness review recorded PASS -- see "Terminal qualification" below.
+Publication belongs to B.7.
 
 ## Implemented behavior
 
@@ -67,14 +68,29 @@ All 17 DTO conversion tests pass after the parent's central registry correction.
 Raw checkpoint logs and hashes at source `2bd3e87` are retained in
 `evidence/b6-local/index.json`; they are local evidence, not a matrix claim.
 
-The final five-wheel/25-cell matrix must use the forthcoming direct parent with
-the packaging owner's per-cell embedding and separate same-sdist fault companion.
 Production wheels remain authoritative; public async tests stay in normal test
-discovery. The inherited B.4 Rust lint cleanup is assigned to its owner. Final
-source/archive/wheel hashes, CI run and aggregate proof will be added after those
-gates pass. The developer verification checklist and lead completeness must both
-finish before this task closes. No skipped matrix cell or development-only
-artifact can qualify this sprint.
+discovery. The inherited B.4 Rust lint cleanup is assigned to its owner. No
+skipped matrix cell or development-only artifact can qualify this sprint.
+
+## Terminal qualification (updated 2026-09-18)
+
+The five-wheel/25-cell matrix has since run to completion:
+[run 35303039765](https://github.com/randlee/sc-observability/actions/runs/35303039765)
+at source SHA `c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18` finished
+`conclusion: success`, all 33 jobs, with `embedding_in_each_cell` enabled and
+per-cell embedding as B.6 requires. All 25 `installed-suite` cells ran the
+complete installed tests directory, including B.6's own async suite, and the
+`aggregate` job cross-checked JUnit/hashes/source SHA/test identities across
+all cells. This supersedes the provisional single-platform preflight above,
+which is retained as history. Final source/archive/wheel hashes and the
+aggregate proof are recorded in the shared inventory referenced by
+`sprint-b-4a-python-packaging.md` and `handoff-b-4a.md`. The developer
+verification checklist is recorded in `checklist-b-6.md`. B.6's development
+qualification is therefore complete.
+
+**Lead completeness decision: PASS** (aobs, 2026-09-18), recorded in
+`handoff-b-4a.md`. Independent phase-end QA remains pending; formal API/ADR
+approval and publication remain deferred to B.7.
 
 ## Provisional distribution preflight
 
