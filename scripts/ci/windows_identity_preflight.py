@@ -143,6 +143,38 @@ def main():
                     raise RuntimeError('grandchild survived worker crash and recovery')
                 if powershell('(Get-Acl '+literal(denied)+').Sddl') != original_acl: raise RuntimeError('crash recovery ACL mismatch')
                 report['events'].append({'name':'worker_crash_live_grandchild_recovery','status':'passed'})
+                # Kill the controller at the suspended-create/job-assignment gap.
+                gap=subprocess.run([sys.executable,__file__,'--creation-gap-worker',str(scratch),str(denied),ip],timeout=40)
+                if gap.returncode != 93: raise RuntimeError('creation-gap crash was not observed')
+                journals=list(control_root.glob('windows-identity-control-*/identity-recovery.json'))
+                if len(journals)!=1: raise RuntimeError('creation-gap recovery journal missing')
+                record=json.loads(journals[0].read_text())
+                owned_script="@(Get-CimInstance Win32_Process | Where-Object {(Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid -ErrorAction SilentlyContinue).Sid -eq "+literal(record['sid'])+"}).Count"
+                if int(powershell(owned_script)) != 1: raise RuntimeError('suspended root missing from creation-gap proof')
+                recover(journals[0]); shutil.rmtree(journals[0].parent)
+                if int(powershell(owned_script)): raise RuntimeError('suspended root survived creation-gap recovery')
+                if powershell('(Get-Acl '+literal(denied)+').Sddl') != original_acl: raise RuntimeError('creation-gap ACL mismatch')
+                report['events'].append({'name':'suspended_creation_gap_recovery','status':'passed'})
+                # Exercise the actual build caller and pipe-launch contract before
+                # starting any expensive immutable-artifact matrix.
+                from _python_sandbox import Sandbox, registered_checkouts
+                with Sandbox(scratch,registered_checkouts(Path.cwd())) as sandbox:
+                    report['production_denials']=sandbox.prove_denials(sys.executable,Path.cwd())
+                    sandbox.run([sandbox.cargo,'--version'],scratch)
+                    sandbox.run([sandbox.rustc,'--version'],scratch)
+                    hello=scratch/'hello.rs'
+                    hello.write_text('fn main() { println!("NATIVE_TOOLCHAIN_OK"); }')
+                    sandbox.run([sandbox.rustc,str(hello),'-o',str(scratch/'hello.exe')],scratch)
+                    if 'NATIVE_TOOLCHAIN_OK' not in sandbox.run([str(scratch/'hello.exe')],scratch):
+                        raise RuntimeError('isolated native toolchain probe failed')
+                    process=sandbox.spawn([sys.executable,'-I','-c','print("PIPE_LAUNCH_OK",flush=True)'],scratch,stdout=subprocess.PIPE)
+                    try:
+                        data=process.stdout.read()
+                        if process.wait(timeout=10) or b'PIPE_LAUNCH_OK' not in data:
+                            raise RuntimeError('identity pipe-launch probe failed')
+                    finally:
+                        process.close(); process.stdout.close()
+                report['events'].append({'name':'production_sandbox_native_and_pipe','status':'passed'})
             finally:
                 if identity is not None:
                     identity.close(); identity=None
@@ -160,6 +192,14 @@ def main():
         (args.output/'preflight.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
         print(json.dumps(report),flush=True)
 
+
+
+def creation_gap_worker():
+    scratch,denied,ip=Path(sys.argv[2]),Path(sys.argv[3]),sys.argv[4]
+    identity=Identity(scratch,[denied]); identity.setup(); identity.activate()
+    identity.api.kernel.AssignProcessToJobObject=lambda *_: os._exit(93)
+    identity.run([str(scratch/'probe-2.exe'),ip,'deny','2'])
+    raise RuntimeError('creation gap injection was not reached')
 
 
 def crash_worker():
@@ -211,7 +251,8 @@ def supervise():
 
 
 if __name__=='__main__':
-    if '--crash-worker' in sys.argv: crash_worker()
+    if '--creation-gap-worker' in sys.argv: creation_gap_worker()
+    elif '--crash-worker' in sys.argv: crash_worker()
     elif '--worker' in sys.argv:
         sys.argv.remove('--worker'); main()
     else: supervise()

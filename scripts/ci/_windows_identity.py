@@ -180,7 +180,18 @@ def recover(journal):
                 api.kernel.CloseHandle(handle)
         elif ctypes.get_last_error() != 2:
             raise ctypes.WinError(ctypes.get_last_error())
-    # Access is restored only after every owned job has drained.
+    # A controller may die after suspended process creation but before job
+    # assignment. Reap that narrow gap by the unique account SID before any
+    # access is restored. This is recovery, never the enforcement boundary.
+    powershell("$u=Get-LocalUser -Name " + literal(account) + " -ErrorAction SilentlyContinue; "
+        "if($u){$sid=$u.SID.Value; $until=[DateTime]::UtcNow.AddSeconds(10); do { "
+        "$owned=@(Get-CimInstance Win32_Process | Where-Object { "
+        "(Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid -ErrorAction SilentlyContinue).Sid -eq $sid }); "
+        "if(!$owned.Count){break}; foreach($p in $owned){ "
+        "$result=Invoke-CimMethod -InputObject $p -MethodName Terminate -Arguments @{Reason=124} -ErrorAction SilentlyContinue }; "
+        "if([DateTime]::UtcNow -ge $until){throw 'proof identity processes did not drain; retaining deny'}; "
+        "Start-Sleep -Milliseconds 50 } while($true)}")
+    # Access is restored only after every owned job and identity process drains.
     powershell("$p=New-Object -ComObject HNetCfg.FwPolicy2; $p.Rules.Remove(" + literal(record['rule']) + ")")
     errors = []
     for root, saved, sddl in reversed(record.get('acls', [])):
@@ -202,11 +213,14 @@ def recover(journal):
 
 
 class Identity:
-    def __init__(self, scratch, denied):
+    def __init__(self, scratch, denied, readable=()):
         if os.name != 'nt' or os.environ.get('GITHUB_ACTIONS') != 'true':
             raise RuntimeError('identity proof requires an ephemeral Windows Actions runner')
         self.scratch = Path(scratch).resolve()
         self.denied = [Path(path).resolve() for path in denied]
+        self.readable = [Path(path).resolve() for path in readable]
+        if any(path.is_relative_to(root) for path in [self.scratch, *self.readable] for root in self.denied):
+            raise ValueError("proof scratch/tools overlap a denied root")
         self.account = 'scp' + uuid.uuid4().hex[:16]
         self.password = secrets.token_urlsafe(32) + '!aA9'
         self.control = Path(tempfile.mkdtemp(prefix='windows-identity-control-',
@@ -232,7 +246,10 @@ class Identity:
             "$u=New-LocalUser -Name " + literal(self.account) + " -Password $p -AccountNeverExpires; $u.SID.Value", sensitive=True)
         self.record['sid'] = self.sid
         self.write()
-        for index, root in enumerate([self.scratch, *self.denied]):
+        roots = [(self.scratch, "/grant", "(OI)(CI)(M)")]
+        roots += [(root, "/grant", "(OI)(CI)(RX)") for root in self.readable]
+        roots += [(root, "/deny", "(OI)(CI)(R)") for root in self.denied]
+        for index, (root, mode, rights) in enumerate(roots):
             if not root.exists():
                 continue
             saved = self.control / f'acl-{index}.txt'
@@ -240,7 +257,6 @@ class Identity:
             original = powershell('(Get-Acl -LiteralPath ' + literal(root) + ').Sddl')
             self.record['acls'].append([str(root), str(saved), original])
             self.write()
-            mode, rights = ('/grant', '(OI)(CI)(M)') if index == 0 else ('/deny', '(OI)(CI)(R)')
             subprocess.run(['icacls', str(root), mode, '*' + self.sid + ':' + rights, '/C'],
                            check=True, stdout=subprocess.DEVNULL, timeout=60)
         return self
@@ -253,65 +269,135 @@ class Identity:
             "-LocalUser " + literal('D:(A;;CC;;;' + self.sid + ')') + " | Out-Null")
         self.active = True
 
-    def environment(self):
+    def environment(self, extra=None):
         allowed = {'SYSTEMROOT', 'WINDIR', 'SYSTEMDRIVE', 'COMSPEC', 'PATH', 'PATHEXT',
                    'PROGRAMFILES', 'PROGRAMFILES(X86)', 'PROGRAMW6432', 'PROGRAMDATA',
-                   'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE'}
+                   'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'LIB', 'LIBPATH',
+                   'INCLUDE', 'VSINSTALLDIR', 'VCINSTALLDIR', 'VCTOOLSINSTALLDIR',
+                   'UCRTVERSION', 'WINDOWSSDKLIBVERSION', 'WINDOWSSDKDIR'}
         result = {key: value for key, value in os.environ.items() if key.upper() in allowed}
-        result.update(TEMP=str(self.scratch), TMP=str(self.scratch), PYTHONUTF8='1')
+        for key, value in (extra or {}).items():
+            if key.upper() in allowed or key.startswith(('CARGO_', 'PYO3_', 'PYTHON', 'XDG_', 'SC_TAURI_QUALIFICATION_')) or key in {'RUSTC', 'RUSTDOC', 'RUSTFLAGS', 'SC_OBSERVABILITY_RUNTIME_TEST'}:
+                result[key] = value
+        profile = self.scratch / 'proof-profile'
+        for path in (profile, profile / 'AppData' / 'Local', profile / 'AppData' / 'Roaming'):
+            path.mkdir(parents=True, exist_ok=True)
+        result.update(TEMP=str(self.scratch / 'temporary'), TMP=str(self.scratch / 'temporary'),
+                      PYTHONUTF8='1', USERPROFILE=str(profile), HOME=str(profile),
+                      APPDATA=str(profile / 'AppData' / 'Roaming'), LOCALAPPDATA=str(profile / 'AppData' / 'Local'))
+        (self.scratch / 'temporary').mkdir(exist_ok=True)
         return result
 
-    def run(self, command, *, timeout=30, baseline=False):
+    def spawn(self, command, *, cwd=None, environment=None, stdout=None, stderr=None, baseline=False):
         if not self.active and not baseline:
             raise RuntimeError('proof launch before network policy')
-        executable = shutil.which(command[0])
-        if executable is None:
-            raise FileNotFoundError(command[0])
-        name = self.account + '-job-' + uuid.uuid4().hex
-        self.record['jobs'].append(name)
-        self.write()
-        api = self.api
-        job = api.check(api.kernel.CreateJobObjectW(None, name))
-        limits = ExtendedLimits()
-        limits.basic.flags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, no breakaway.
-        api.check(api.kernel.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits)))
-        info = ProcessInfo()
-        try:
-            import msvcrt
-            with (self.scratch / 'stdout.txt').open('w+b') as stdout, (self.scratch / 'stderr.txt').open('w+b') as stderr, open(os.devnull, 'rb') as stdin:
-                startup = Startup()
-                startup.cb, startup.flags = ctypes.sizeof(startup), 0x100
-                for field, stream in [('stdin', stdin), ('stdout', stdout), ('stderr', stderr)]:
-                    handle = msvcrt.get_osfhandle(stream.fileno())
-                    os.set_handle_inheritable(handle, True)
-                    setattr(startup, field, handle)
-                environment = self.environment()
-                block = ctypes.create_unicode_buffer('\0'.join(f'{k}={v}' for k, v in sorted(environment.items())) + '\0')
-                args = ctypes.create_unicode_buffer(subprocess.list2cmdline([executable, *command[1:]]))
-                api.check(api.create(self.account, '.', self.password, 1, executable, args,
-                                    0x4 | 0x400, block, str(self.scratch), ctypes.byref(startup), ctypes.byref(info)))
-                try:
-                    api.check(api.kernel.AssignProcessToJobObject(job, info.process))
-                    if api.kernel.ResumeThread(info.thread) == 0xffffffff:
-                        raise ctypes.WinError(ctypes.get_last_error())
-                    status = api.kernel.WaitForSingleObject(info.process, int(timeout * 1000))
-                    if status != 0:
-                        raise TimeoutError('proof process exceeded bound')
-                    code = W.DWORD()
-                    api.check(api.kernel.GetExitCodeProcess(info.process, ctypes.byref(code)))
-                finally:
-                    # Also covers an assignment failure while the root is suspended.
-                    api.kernel.TerminateProcess(info.process, 124)
-                    api.terminate_job(job)
-                    api.kernel.CloseHandle(info.thread)
-                    api.kernel.CloseHandle(info.process)
-                stdout.seek(0); stderr.seek(0)
-                return subprocess.CompletedProcess(command, code.value,
-                    stdout.read().decode('utf-8', errors='replace'), stderr.read().decode('utf-8', errors='replace'))
-        finally:
-            api.kernel.CloseHandle(job)
+        return ProofProcess(self, command, cwd or self.scratch, self.environment(environment), stdout, stderr)
+
+    def run(self, command, *, cwd=None, environment=None, timeout=30, baseline=False):
+        if not self.active and not baseline:
+            raise RuntimeError('proof launch before network policy')
+        # Regular files avoid compiler descendants holding a capture pipe open.
+        with tempfile.TemporaryFile(dir=self.control) as stdout, tempfile.TemporaryFile(dir=self.control) as stderr:
+            process = self.spawn(command, cwd=cwd, environment=environment, stdout=stdout, stderr=stderr, baseline=baseline)
+            try:
+                process.wait(timeout)
+            finally:
+                process.close()
+            stdout.seek(0); stderr.seek(0)
+            return subprocess.CompletedProcess(command, process.returncode,
+                stdout.read().decode('utf-8', errors='replace'), stderr.read().decode('utf-8', errors='replace'))
 
     def close(self):
         recover(self.journal)
         shutil.rmtree(self.control)
         self.active = False
+
+
+class ProofProcess:
+    """Minimal Popen-compatible process with an identity-bound, non-breakaway job."""
+    def __init__(self, identity, command, cwd, environment, stdout, stderr):
+        import msvcrt
+        self.api = identity.api
+        self.returncode = None
+        self.closed = False
+        self.stdout = None
+        self.info = ProcessInfo()
+        executable = shutil.which(str(command[0]), path=environment.get('PATH'))
+        if executable is None:
+            raise FileNotFoundError(command[0])
+        name = identity.account + '-job-' + uuid.uuid4().hex
+        identity.record['jobs'].append(name)
+        identity.write()
+        self.job = self.api.check(self.api.kernel.CreateJobObjectW(None, name))
+        owned = []
+        try:
+            limits = ExtendedLimits()
+            limits.basic.flags = 0x2000  # Kill-on-close; no breakaway flags.
+            self.api.check(self.api.kernel.SetInformationJobObject(self.job, 9, ctypes.byref(limits), ctypes.sizeof(limits)))
+            if stdout == subprocess.PIPE:
+                read, write = os.pipe()
+                self.stdout = os.fdopen(read, 'rb')
+                stdout = os.fdopen(write, 'wb')
+                owned.append(stdout)
+            if stdout is None:
+                stdout = open(os.devnull, 'wb'); owned.append(stdout)
+            if stderr is None:
+                stderr = open(os.devnull, 'wb'); owned.append(stderr)
+            stdin = open(os.devnull, 'rb'); owned.append(stdin)
+            startup = Startup()
+            startup.cb, startup.flags = ctypes.sizeof(startup), 0x100
+            for field, stream in [('stdin', stdin), ('stdout', stdout), ('stderr', stderr)]:
+                handle = msvcrt.get_osfhandle(stream.fileno())
+                os.set_handle_inheritable(handle, True)
+                setattr(startup, field, handle)
+            block = ctypes.create_unicode_buffer('\0'.join(f'{key}={value}' for key,value in sorted(environment.items()))+'\0')
+            args = ctypes.create_unicode_buffer(subprocess.list2cmdline([executable, *map(str,command[1:])]))
+            self.api.check(self.api.create(identity.account, '.', identity.password, 1, executable, args,
+                0x4 | 0x400, block, str(cwd), ctypes.byref(startup), ctypes.byref(self.info)))
+            self.pid = self.info.pid
+            self.api.check(self.api.kernel.AssignProcessToJobObject(self.job,self.info.process))
+            if self.api.kernel.ResumeThread(self.info.thread)==0xffffffff:
+                raise ctypes.WinError(ctypes.get_last_error())
+        except BaseException:
+            if self.info.process:
+                self.api.kernel.TerminateProcess(self.info.process,124)
+                self.api.kernel.CloseHandle(self.info.process)
+                self.api.kernel.CloseHandle(self.info.thread)
+            self.api.terminate_job(self.job)
+            self.api.kernel.CloseHandle(self.job)
+            if self.stdout is not None: self.stdout.close()
+            raise
+        finally:
+            for stream in owned: stream.close()
+
+    def poll(self):
+        if self.returncode is not None: return self.returncode
+        status = self.api.kernel.WaitForSingleObject(self.info.process,0)
+        if status==258: return None
+        if status!=0: raise ctypes.WinError(ctypes.get_last_error())
+        code = W.DWORD()
+        self.api.check(self.api.kernel.GetExitCodeProcess(self.info.process,ctypes.byref(code)))
+        self.returncode = code.value
+        return self.returncode
+
+    def wait(self, timeout=None):
+        if self.closed: return self.returncode
+        status = self.api.kernel.WaitForSingleObject(self.info.process,0xffffffff if timeout is None else int(timeout*1000))
+        if status==258: raise subprocess.TimeoutExpired('identity proof',timeout)
+        if status!=0: raise ctypes.WinError(ctypes.get_last_error())
+        self.poll()
+        self.close()
+        return self.returncode
+
+    def kill(self):
+        if not self.closed:
+            self.api.terminate_job(self.job)
+
+    def close(self):
+        if self.closed: return
+        self.kill()
+        self.poll()
+        self.api.kernel.CloseHandle(self.info.thread)
+        self.api.kernel.CloseHandle(self.info.process)
+        self.api.kernel.CloseHandle(self.job)
+        self.closed = True
