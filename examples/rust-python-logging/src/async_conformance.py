@@ -98,7 +98,11 @@ async def timeout_case():
         flushed = await logger.flush_async(1000)
         if isinstance(flushed, Ok):
             break
-        assert flushed.error.kind == "queue_full", flushed
+        # A coarse Windows event loop can deliver the previous held
+        # operation's timeout before the released native completion is
+        # observed.  Both errors are transient here; keep retrying until the
+        # released operation is actually visible as complete.
+        assert flushed.error.kind in {"queue_full", "timeout"}, flushed
         assert time.monotonic() < deadline
         await asyncio.sleep(0.001)
 asyncio.run(timeout_case(), debug=True)
