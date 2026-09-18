@@ -1,6 +1,6 @@
 ---
 id: C.1
-status: proposed
+status: in_progress
 branch: fix/phase-c-1-shared-pipeline-migration
 base: develop
 ---

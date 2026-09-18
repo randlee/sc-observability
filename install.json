@@ -1,0 +1,31 @@
+{
+  "release": {"version_source": "Cargo.toml", "tag_prefix": "v"},
+  "artifacts": {
+    "crates": [
+      {"artifact": "sc-observability-types", "package": "sc-observability-types", "cargo_toml": "crates/sc-observability-types/Cargo.toml", "required": true, "publish": true, "publish_order": 1, "preflight_check": "full", "wait_after_publish_seconds": 30, "verify_install": true},
+      {"artifact": "sc-observability", "package": "sc-observability", "cargo_toml": "crates/sc-observability/Cargo.toml", "required": true, "publish": true, "publish_order": 2, "preflight_check": "locked", "wait_after_publish_seconds": 30, "verify_install": true},
+      {"artifact": "sc-observe", "package": "sc-observe", "cargo_toml": "crates/sc-observe/Cargo.toml", "required": true, "publish": true, "publish_order": 3, "preflight_check": "locked", "wait_after_publish_seconds": 30, "verify_install": true},
+      {"artifact": "sc-observability-otlp", "package": "sc-observability-otlp", "cargo_toml": "crates/sc-observability-otlp/Cargo.toml", "required": true, "publish": true, "publish_order": 4, "preflight_check": "locked", "wait_after_publish_seconds": 0, "verify_install": true},
+      {"artifact": "sc-observability-log-macros", "package": "sc-observability-log-macros", "cargo_toml": "crates/sc-observability-log-macros/Cargo.toml", "required": true, "publish": true, "publish_order": 5, "preflight_check": "locked", "wait_after_publish_seconds": 30, "verify_install": true},
+      {"artifact": "sc-observability-log", "package": "sc-observability-log", "cargo_toml": "crates/sc-observability-log/Cargo.toml", "required": true, "publish": true, "publish_order": 6, "preflight_check": "locked", "wait_after_publish_seconds": 0, "verify_install": true},
+      {"artifact": "sc-observability-dto", "package": "sc-observability-dto", "cargo_toml": "crates/sc-observability-dto/Cargo.toml", "required": true, "publish": true, "publish_order": 7, "preflight_check": "locked", "wait_after_publish_seconds": 30, "verify_install": true},
+      {"artifact": "sc-observability-binding-runtime", "package": "sc-observability-binding-runtime", "cargo_toml": "crates/sc-observability-binding-runtime/Cargo.toml", "required": true, "publish": true, "publish_order": 8, "preflight_check": "locked", "wait_after_publish_seconds": 30, "verify_install": true},
+      {"artifact": "sc-observability-tauri", "package": "sc-observability-tauri", "cargo_toml": "bindings/tauri/Cargo.toml", "required": true, "publish": true, "publish_order": 9, "preflight_check": "full", "wait_after_publish_seconds": 30, "verify_install": true},
+      {"artifact": "sc-observability-py", "package": "sc-observability-py", "cargo_toml": "bindings/python/sc-observability-py/Cargo.toml", "required": true, "publish": true, "publish_order": 10, "preflight_check": "full", "wait_after_publish_seconds": 0, "verify_install": true}
+    ],
+    "wheels": [{"package": "sc-observability-py", "python_package": "sc_observability"}],
+    "binaries": []
+  },
+  "channels": {
+    "github_release": {"enabled": false},
+    "crates_io": {"enabled": true},
+    "pypi": {"enabled": true, "workflow": "pypi-publish.yml"},
+    "homebrew": {"enabled": false},
+    "scoop": {"enabled": false},
+    "winget": {"enabled": false}
+  },
+  "review_notes": {
+    "npm": "Blocked pending upstream sc-publish npm channel; do not install or claim adoption until landed.",
+    "publication": "No publication, tag, or release dispatch is authorized by C.1."
+  }
+}

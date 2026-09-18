@@ -1,6 +1,6 @@
 # Publishing and Version Ownership
 
-## Phase C migration (proposed, not yet executed)
+## Phase C migration (C.1 preparation; installation held)
 
 This document currently describes the repository-specific publishing
 implementation. [Phase C](plans/phase-c/plan-phase-c.md) proposes replacing
@@ -9,9 +9,11 @@ coverage to Phase B's full ten-crate release surface (Python wheels/sdist,
 the npm client, the standalone Tauri workspace), and treating the shared
 package's missing npm channel and stale pinned action versions as named
 upstream prerequisites that `../sc-publish` must satisfy at a reviewed pin —
-not a repository-local publisher fork and not an accepted regression. Until
-Phase C's sprints land, this document's "Source of Truth" section below
-remains accurate. See
+not a repository-local publisher fork and not an accepted regression.
+The reviewed caller contract is `install.json`. Installation is intentionally
+held until `sc-publish` lands both an npm channel and current action-major pins;
+the sibling revision inspected for C.1 (`3a57926b3e939835644aad944a614cbb48e4d5fc`) satisfies neither prerequisite. No
+publication, tag, or release dispatch is authorized. See
 `docs/plans/phase-c/sprint-c-1-shared-pipeline-migration.md` for the exact
 asset replacement/removal/retention table and
 `docs/plans/phase-c/sprint-c-2-release-surface-preflight.md` for the
@@ -106,6 +108,14 @@ Before the ATM workspace switches to crates.io dependencies from this repo:
 - Release notes template: `release/RELEASE-NOTES-TEMPLATE.md`
 - Release exit checklist:
   [docs/release-readiness-checklist.md](./release-readiness-checklist.md)
+
+### Shared-pipeline credential scopes (planned)
+
+The shared contract requires repository-scoped `CARGO_REGISTRY_TOKEN` for
+`crates_io`. PyPI uses environment-scoped `PYPI_API_TOKEN` in the `pypi`
+environment and `TEST_PYPI_API_TOKEN` in `testpypi`; no values are documented
+here. npm secret names remain an upstream contract decision and are not
+invented locally while the npm channel prerequisite is unmet.
 
 ## Public API Visibility
 
