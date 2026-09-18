@@ -28,9 +28,10 @@ for install already provides (a) an npm publish channel and (b) current,
 non-deprecated pinned CI action versions in its shared workflows — see
 deliverables 3 and 6. Neither is satisfied by a repository-local workaround.
 If upstream work cannot land before Phase C needs to execute, this sprint
-stops and escalates to the owner for an explicit decision (delay Phase C
-execution, or accept a documented, owner-signed-off temporary gap) rather
-than proceeding as if a local substitute were equivalent adoption.
+stops on the technical compatibility gate and reports the gap; it does not
+substitute a local workaround or treat an unvalidated revision as equivalent
+adoption. Phase C migration itself is already authorized; the lead selects the
+reviewed/validated upstream pin after the compatibility evidence is complete.
 
 ## Deliverables (authoritative)
 

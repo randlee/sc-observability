@@ -2,8 +2,8 @@
 
 This is a read-only disposition inventory for the candidate upstream kit at
 `31328970dbb77f8a686ab85fbe1ae5840b65f245`. It is intentionally not an install
-receipt: no consumer asset is overwritten or deleted until the owner approves
-that exact upstream pin.
+receipt: no consumer asset is overwritten or deleted until the lead selects a
+reviewed/validated upstream pin and the technical compatibility gates pass.
 
 | Consumer path | Current state | Planned disposition |
 | --- | --- | --- |

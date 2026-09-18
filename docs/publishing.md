@@ -10,10 +10,12 @@ the npm client, the standalone Tauri workspace), and treating the shared
 package's missing npm channel and stale pinned action versions as named
 upstream prerequisites that `../sc-publish` must satisfy at a reviewed pin —
 not a repository-local publisher fork and not an accepted regression.
-The reviewed caller contract is `install.json`. Installation is intentionally
-held until `sc-publish` lands both an npm channel and current action-major pins;
-the sibling revision inspected for C.1 (`3a57926b3e939835644aad944a614cbb48e4d5fc`) satisfies neither prerequisite. No
-publication, tag, or release dispatch is authorized. See
+The reviewed caller contract is `install.json`. Phase C migration is authorized;
+installation remains held only for the technical compatibility gates until a
+reviewed/validated `sc-publish` revision provides both an npm channel and
+current action-major pins. The sibling revision inspected for C.1
+(`3a57926b3e939835644aad944a614cbb48e4d5fc`) satisfies neither prerequisite.
+No publication, tag, or release dispatch is authorized. See
 `docs/plans/phase-c/sprint-c-1-shared-pipeline-migration.md` for the exact
 asset replacement/removal/retention table and
 `docs/plans/phase-c/sprint-c-2-release-surface-preflight.md` for the
