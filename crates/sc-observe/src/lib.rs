@@ -1336,6 +1336,8 @@ mod tests {
     }
 
     struct BlockingFlushSink {
+        flush_calls: AtomicU64,
+        seed_completed: mpsc::Sender<()>,
         armed: Arc<AtomicBool>,
         entered: mpsc::Sender<()>,
         // MUTEX: LogSink is Sync; the sole writer owns receives on this
@@ -1354,6 +1356,12 @@ mod tests {
                     .lock()
                     .expect("release lock")
                     .recv_timeout(Duration::from_secs(5));
+            }
+            // An explicit flush acknowledges inside flush_batch, before the
+            // writer's following flush_sinks pass. Signal only after that pass
+            // has checked the gate, so it cannot consume a later shutdown arm.
+            if self.flush_calls.fetch_add(1, Ordering::SeqCst) == 1 {
+                let _ = self.seed_completed.send(());
             }
             Err(LogSinkError(Box::new(ErrorContext::new(
                 sc_observability::error_codes::LOGGER_FLUSH_FAILED,
@@ -1381,6 +1389,7 @@ mod tests {
         let armed = Arc::new(AtomicBool::new(false));
         let (entered_tx, entered_rx) = mpsc::channel();
         let (release_tx, release_rx) = mpsc::channel();
+        let (seed_completed, seed_rx) = mpsc::channel();
         let mut config = LoggerConfig::default_for(
             ServiceName::new("obs-app").expect("service"),
             temp_path("controlled-shutdown"),
@@ -1389,6 +1398,8 @@ mod tests {
         config.enable_console_sink = false;
         let mut builder = Logger::builder(config).expect("logger builder");
         builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink {
+            flush_calls: AtomicU64::new(0),
+            seed_completed,
             armed: armed.clone(),
             entered: entered_tx,
             release: Mutex::new(release_rx),
@@ -1397,6 +1408,9 @@ mod tests {
         logger
             .flush_typed()
             .expect_err("seed logging failure counter");
+        seed_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("both seed flush passes completed before shutdown is armed");
         let before = logger.health();
         assert_eq!(before.flush_errors_total, 1);
         assert!(before.last_error.is_some());
