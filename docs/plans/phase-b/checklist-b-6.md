@@ -1,6 +1,6 @@
 # B.6 implementation and verification checklist
 
-Every row receives an implementation pass followed by an independent verification pass. Lead completeness is separate from these developer checks. The local verification pass inspected the implementation and fixtures and executed the full required gate at `2bd3e87`; raw logs and hashes are in `evidence/b6-local/index.json`. Local passes do not replace the still-open packaged 25-cell matrix.
+Every row receives an implementation pass followed by an independent verification pass. Lead completeness is separate from these developer checks and is recorded PASS in `handoff-b-4a.md` (aobs, 2026-09-18). The local verification pass inspected the implementation and fixtures and executed the full required gate at `2bd3e87`; raw logs and hashes are in `evidence/b6-local/index.json`. The packaged 25-cell matrix has since passed in run 35303039765 -- see row below.
 
 | Criterion | Implement | Verify | Evidence |
 | --- | --- | --- | --- |
@@ -15,7 +15,7 @@ Every row receives an implementation pass followed by an independent verificatio
 | Timeout/cancel end observation only; overlap/late health/native slot semantics | implemented | local pass |  embedded timeout/overlap/cancel; original native bridge codes; late owned shutdown |
 | Contained boundary errors/accounting preserve exact tagged original outcomes | implemented | local pass |  every generated Failure unchanged; real broken-pipe health, queue-full, foreign boundary errors |
 | N32 synchronized producers, responsive heartbeat under held writer/flush | implemented | local pass |  embedded held-writer N32 ThreadPool and asyncio producers with live heartbeat in all modes |
-| Real owned + core/bridge attached packaged fixtures and injected failures | implemented | local pass |  installed wheel runtime suite plus embedded real core/bridge; full packaged matrix pending |
+| Real owned + core/bridge attached packaged fixtures and injected failures | implemented | passed |  installed wheel runtime suite plus embedded real core/bridge; full packaged matrix passed in run 35303039765 |
 | Multiple loops, native completion before next poll and observer saturation | implemented | local pass |  clock-controlled loop with real native flushes and alias handles; atomic permit thread fixture |
 | Loop closure/interpreter teardown/late shutdown subprocess checks | implemented | local pass |  owned held-pipe interpreter exit; core/bridge actual PyO3 finalization then native completion |
 | Typed stubs/examples, debug asyncio/warnings strict, no obsolete receipt codes | implemented | local pass | root/async stubs; strict Python 3.10 fixtures/example; full gate78 tests with debug/warnings; obsolete-code scan clean |

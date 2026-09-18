@@ -109,7 +109,9 @@ artifact subprocess, with bounded execution and firewall cleanup between
 commands; checkout/cache denial remains active for the proof.
 Timed-out artifact commands terminate their process tree, including descendants
 holding captured output pipes; a real child-process regression verifies the
-bounded failure. Windows execution still needs the final combined CI proof.
+bounded failure. Windows execution needed the final combined CI proof at the
+time this paragraph was written; that proof is superseded by the terminal
+run recorded below.
 
 This handoff recorded an incomplete state through the development runs below.
 Explicit development runs label every result `development_only`; final
@@ -156,9 +158,10 @@ evidence.
 Final immutable artifact inventory, platform/interpreter results, required
 validation logs and the two-pass checklist are therefore no longer open items:
 AC1-AC4's development qualification is complete per this terminal evidence.
-The one item this handoff does not resolve is the lead completeness decision:
-that is a governance sign-off owned by the phase lead, not a deliverable or
-test this evidence can satisfy, and it remains open -- distinct from, not
-blocked on, any further development work. Independent phase-end QA acceptance
-is likewise separately pending. This handoff does not claim QA acceptance,
-API/ADR approval or publication readiness.
+
+**Lead completeness decision: PASS** (aobs, 2026-09-18) -- development
+completeness confirmed at qualified source `c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18`,
+independently verifying run 35303039765 and inventory hash
+`ef492dc1793d68d29ddeebda4afcc9bd87557fd3d65771b08cede24cbe9852f7`. Independent
+phase-end QA remains pending; formal API/ADR approval and publication remain
+deferred to B.7.

@@ -208,12 +208,11 @@ installed-distribution matrix B.5 depends on has now passed (see
 `35303039765` at `c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18` completed
 `conclusion: success`, all 33 jobs, with `embedding_in_each_cell` enabled as
 B.6 requires. B.6's own implementation/local-check evidence is recorded in
-`handoff-b-6.md` and `checklist-b-6.md`, both updated from this terminal run:
-no concrete deliverable, checklist item or test remains unsatisfied. `status`
-above stays `in_progress`, not `complete`, because a separate governance step
--- the phase lead's completeness review, and independent phase-end QA -- has
-not yet happened; that step is a sign-off decision, not additional
-development work. `status` moves to `complete` only once that review happens.
+`handoff-b-6.md` and `checklist-b-6.md`, both updated from this terminal run.
+Lead completeness decision: **PASS** (aobs, 2026-09-18), recorded in
+`handoff-b-4a.md`. `status` above stays `in_progress` pending independent
+phase-end QA acceptance; formal API/ADR approval and publication remain
+deferred to B.7.
 
 ## Paths to delete
 

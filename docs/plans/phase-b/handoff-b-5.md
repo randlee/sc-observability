@@ -3,9 +3,8 @@
 Branch: `feature/phase-b-5-python-integration`.
 Direct parent: `fix/phase-b-3a-completeness`; first pushed parent `1d613bc`
 merged in `b15fff9`. This is a progress record, not a completeness claim.
-The installed distribution matrix has since passed in full -- see "Terminal
-qualification" below. The lead completeness review remains required and is a
-separate governance sign-off, not a development deliverable.
+The installed distribution matrix has since passed in full, and the lead
+completeness review recorded PASS -- see "Terminal qualification" below.
 
 ## Implemented surface
 
@@ -106,8 +105,8 @@ handler/context suite, not only B.4a's. This satisfies this handoff's
 "Remaining qualification" full immutable sdist/wheel and embedded-host run on
 all 25 B.4a interpreter/platform cells; see `sprint-b-4a-python-packaging.md`
 and `handoff-b-4a.md` for the shared verified detail. B.5's development
-qualification is therefore complete. The lead completeness review is a
-separate governance sign-off owned by the phase lead, not a development
-deliverable, and remains open independent of this evidence; independent
-phase-end QA acceptance is likewise separately pending. This does not claim
-QA acceptance, API/ADR approval or publication.
+qualification is therefore complete.
+
+**Lead completeness decision: PASS** (aobs, 2026-09-18), recorded in
+`handoff-b-4a.md`. Independent phase-end QA remains pending; formal API/ADR
+approval and publication remain deferred to B.7.

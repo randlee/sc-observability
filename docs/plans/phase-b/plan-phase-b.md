@@ -232,11 +232,11 @@ transparently documents real, non-publication remaining work of its own that
 this amendment does not waive. B.3a's real-IPC artifact qualification and
 B.5/B.6's installed distribution matrix have since passed in full (terminal
 CI runs recorded in each sprint's own "Current qualification evidence"
-section and handoff); the remaining non-waived item for all three is the
-lead completeness review, a governance sign-off rather than additional
-development work. Phase-end QA continues to correctly report those three
-sprints' `status` as non-`complete` until that review lands, independent of
-and in addition to the B.7 publication gate they also transitively depend on.
+section and handoff), and the lead completeness review for B.3a, B.4a, B.5
+and B.6 is recorded **PASS** (aobs, 2026-09-18, `handoff-b-4a.md`). Phase-end
+QA continues to correctly report those sprints' `status` as non-`complete`
+until independent phase-end QA acceptance lands, in addition to the B.7
+publication gate they also transitively depend on.
 
 ## Planning validation and evidence
 

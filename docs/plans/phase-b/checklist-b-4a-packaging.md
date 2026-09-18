@@ -20,7 +20,7 @@ Lead completeness is required before task closure. No publication.
 | Negatives: missing stubs/py.typed, wrong architecture/tag, extension flags in embedding | archive guards, native executable headers and real altered host feature fixture | seven boundary tests and nine actual development negative cases pass |
 | AC4: immutable wheel/sdist source/hashes, exact platform/interpreter/targets and per-cell results | implemented (`production-artifacts.json`) | passed: run 35303039765's `aggregate` job and inventory artifact record exact source SHA `c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18`, five wheel hashes and per-cell results; inventory hash `ef492dc1793d68d29ddeebda4afcc9bd87557fd3d65771b08cede24cbe9852f7` independently confirmed |
 | Full required validation, final parent merge, handoff/sprint/project plan | implemented | passed: `validate_python_bindings.sh` full matrix in run 35303039765; handoff/sprint docs updated from this evidence |
-| Lead completeness review | pending | pending -- governance sign-off owned by the phase lead, not a development deliverable; not blocked on any further evidence |
+| Lead completeness review | PASS (aobs, 2026-09-18) | PASS -- recorded in `handoff-b-4a.md` |
 | Approved production/fault separation: same sdist, separate feature identity/hash/venv, no production hooks | implemented in build/cell/aggregate; companion excluded from publication inventory | release-gate negative regression passes; actual companion proof awaits parent fault file contract |
 | Clean source assembly after runtime tests create ignored Python caches | copy only tracked Python/tests/examples/embedding source; preserve generated local files | tracked-copy regression covers bytecode and optimized caches |
 
@@ -41,6 +41,6 @@ aggregation has since run to completion at source `c6d794c5d8c12a69938b2ec3ccd1c
 in run 35303039765 (`conclusion: success`, all 33 jobs) -- see
 `handoff-b-4a.md`'s "Terminal qualification" section and
 `sprint-b-4a-python-packaging.md`'s "Current qualification evidence" for the
-verified detail. Development qualification is complete; independent
-phase-end QA and the lead completeness review above remain separately
+verified detail. Development qualification is complete; the lead completeness
+review above is recorded PASS. Independent phase-end QA remains separately
 pending. This does not claim QA acceptance, API/ADR approval or publication.

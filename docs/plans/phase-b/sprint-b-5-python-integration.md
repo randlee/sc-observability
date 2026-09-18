@@ -237,14 +237,12 @@ passed (see `sprint-b-4a-python-packaging.md`'s current qualification
 evidence): run `35303039765` at `c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18`
 completed `conclusion: success`, all 33 jobs, including all 25
 `installed-suite` cells running the complete installed tests directory --
-which includes B.5's own handler/context suite. That removes B.5's dependency
-blocker and satisfies this sprint's own remaining-qualification requirement
-in `handoff-b-5.md`: no concrete deliverable, checklist item or test remains
-unsatisfied. `status` above stays `in_progress`, not `complete`, because a
-separate governance step -- the phase lead's completeness review, and
-independent phase-end QA -- has not yet happened; that step is a sign-off
-decision, not additional development work. `status` moves to `complete` only
-once that review happens.
+which includes B.5's own handler/context suite. That satisfies this sprint's
+own remaining-qualification requirement in `handoff-b-5.md`. Lead
+completeness decision: **PASS** (aobs, 2026-09-18), recorded in
+`handoff-b-4a.md`. `status` above stays `in_progress` pending independent
+phase-end QA acceptance; formal API/ADR approval and publication remain
+deferred to B.7.
 
 ## Paths to delete
 
