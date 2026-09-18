@@ -230,15 +230,21 @@ flags through packaging fixtures; do not corrupt release artifacts for tests.
 Status: `in_progress`, not `complete` -- the full 25-cell matrix has not yet
 produced a passing result. GitHub Actions run `35295219562` ("B.4a Python
 distribution qualification", `fix/phase-b-wheel-test-hooks` @ `ca23fc6`)
-completed with `conclusion: failure`, and is diagnostic-only: it ran against
-a known-incomplete Windows process-tree enforcement fixture, so this
-failure does not by itself qualify or disqualify the matrix. The final,
-acceptance-grade run follows the corrected source; `cobs` owns that
-correction and its run. Do not treat any prior local/partial result, or this
-diagnostic run's failure, as AC1-AC4 closure or as a real regression; every
-one of the 25 required interpreter/platform cells (see Acceptance criteria
-above) must actually pass on the corrected source before this sprint's
-`status` moves to `complete`.
+completed with `conclusion: failure`. The `wheel (windows-x86_64,
+windows-2022, AMD64, win_amd64)` job's "External offline wheel and
+separate-link embedding proof" step failed: the embedded
+`rust-python-logging.exe` run raised `AssertionError(2)` inside the embedded
+interpreter, after printing `B5_MIXED_CONTEXT_OK`, `B5_ATTACHED_STOP_OK`, and
+`INFO async.embed held`, then exited 1. This is a real, concrete defect in
+the Windows embedding path, distinct from the separately tracked Windows
+process-tree isolation/recovery gaps now on `cobs`'s active task; it is not
+excused as diagnostic-only. Because that wheel job failed, the downstream
+`aggregate` job's "Require all 25 cells against the same five wheels and
+sdist" step also failed and `installed-suite` was skipped. `cobs` owns the
+fix and the corrected acceptance-grade run. Do not treat this run, or any
+prior local/partial result, as AC1-AC4 closure; every one of the 25 required
+interpreter/platform cells (see Acceptance criteria above) must actually pass
+on the corrected source before this sprint's `status` moves to `complete`.
 
 ## Paths to delete
 

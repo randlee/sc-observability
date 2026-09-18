@@ -294,13 +294,20 @@ state, not the older handoff prose in `handoff-b-3a-qualification.md`
 ("Status: in progress; no sprint completion or publication claim"), which
 predates the runs below. GitHub Actions run `35278483559` ("TypeScript/Tauri
 bindings", `feature/phase-b-tauri-qualification` @ `a8eaeec`) completed with
-`conclusion: success` -- a full manual qualification pass. A rerun,
-`35278469028` (same branch/commit), remains `in_progress` (Windows job still
-live) as of this writing; it has not yet reported a conclusion. Do not treat
-the `35278483559` success as sole/final closure while `35278469028` is still
-outstanding on the same source revision -- both are tracked, and `status`
-moves to `complete` only once the outstanding rerun also concludes and the
-remaining real-IPC/artifact matrix items owned by `bp-tauri-helper` land.
+`conclusion: success` -- a full manual qualification pass. Its rerun on the
+same branch/commit, `35278469028`, has since concluded `failure`:
+`schema-and-contract` and `real-ipc-artifacts` on ubuntu-latest/macos-latest
+passed, but `real-ipc-artifacts (windows-2022)` failed with the hosted
+runner losing communication with the server mid-job (GitHub check annotation:
+"The hosted runner lost communication with the server..."), and the
+`all-platforms` aggregate was skipped as a result. This is recorded as the
+actual result without asserting it is uniquely an infrastructure fault or a
+real regression -- a fresh full qualification run is required once the
+corrected shared Windows isolation work lands. Do not treat the earlier
+`35278483559` success as closure while this later run on the same revision
+ended in failure; `status` moves to `complete` only once a clean qualification
+run exists and the remaining real-IPC/artifact matrix items owned by
+`bp-tauri-helper` land.
 
 ## Paths to delete
 
