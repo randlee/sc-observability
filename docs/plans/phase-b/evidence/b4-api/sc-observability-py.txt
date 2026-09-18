@@ -1,6 +1,6 @@
 B.4 refreshed public API evidence after the DTO internal wire-module split
 
-Source commit: f518ad8dfb95b9f1950c0d08a4308a0ea15a3458
+Source commit: b8681473fd372bf7a5dbab36d0e024076ec49467
 Command: cargo public-api --manifest-path bindings/python/sc-observability-py/Cargo.toml -sss
 API stdout SHA-256: 5b41508de3fee743e7ae694754e0d108fb1b630639b88a098838978b5a0bdc36
 
