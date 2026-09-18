@@ -30,7 +30,8 @@ cutover, new releases of these crate names must come from this repo instead.
 - All published crates in this repo must share that version.
 - The initial standalone release must be strictly higher than the last version
   published from the ATM workspace for these crate names.
-- The initial standalone release for this repo is `1.0.0`.
+- Verification uses the workspace candidate version (currently `1.4.0`),
+  rather than a hard-coded historical `1.0.0` example.
 - Release workflows verify that the requested release version matches:
   - workspace version
   - each crate package version

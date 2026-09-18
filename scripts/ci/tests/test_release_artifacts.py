@@ -57,6 +57,27 @@ class ReleaseManifestValidationTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 self.run_validate(root, manifest, root / "Cargo.toml")
 
+    def test_legacy_release_guard_fails_before_side_effects(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "Cargo.toml").write_text(
+                "[workspace]\nmembers=[]\n[workspace.package]\nversion='1.4.0'\n"
+            )
+            (root / "bindings").mkdir()
+            cargo = root / "bindings/Cargo.toml"
+            cargo.write_text(
+                "[package]\nname='sc-observability-py'\nversion='1.4.0'\n[workspace]\n"
+            )
+            manifest = root / "manifest.toml"
+            manifest.write_text(
+                "[[crates]]\nartifact='sc-observability-py'\npackage='sc-observability-py'\n"
+                f"cargo_toml='{cargo}'\npublish_order=1\nwait_after_publish_seconds=0\n"
+            )
+            with self.assertRaisesRegex(SystemExit, "legacy release workflow is disabled"):
+                release_artifacts.cmd_guard_legacy_release(
+                    argparse.Namespace(manifest=str(manifest), workspace_toml=str(root / "Cargo.toml"))
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -56,13 +56,23 @@ def assert_no_core_boundary_dependencies(path: Path):
 workspace = load_toml(root / "Cargo.toml")
 members = set(workspace["workspace"]["members"])
 artifacts = load_toml(root / "release/publish-artifacts.toml")
-required_members = {f"crates/{crate['package']}" for crate in artifacts["crates"]}
-if len(required_members) != len(artifacts["crates"]):
+required_manifests = {crate["cargo_toml"] for crate in artifacts["crates"]}
+if len(required_manifests) != len(artifacts["crates"]):
     raise SystemExit("publish artifact roster contains duplicate package names")
 
-missing = required_members - members
+def is_workspace_member(cargo_toml: Path) -> bool:
+    try:
+        relative = cargo_toml.parent.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        relative = ""
+    if relative in members:
+        return True
+    return load_toml(cargo_toml).get("workspace") == {}
+
+missing = sorted(path for path in required_manifests
+                 if not (root / path).exists() or not is_workspace_member(root / path))
 if missing:
-    raise SystemExit(f"missing workspace members: {sorted(missing)}")
+    raise SystemExit(f"missing workspace members or standalone manifests: {missing}")
 
 for path in root.rglob("Cargo.toml"):
     text = path.read_text(encoding="utf-8")

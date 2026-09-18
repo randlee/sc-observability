@@ -98,7 +98,7 @@ python3 scripts/release_artifacts.py validate-manifest \
 python3 scripts/release_artifacts.py verify-version \
   --manifest release/publish-artifacts.toml \
   --workspace-toml Cargo.toml \
-  --version 1.0.0
+  --version "$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
 ```
 
 ## Updating Release Artifacts

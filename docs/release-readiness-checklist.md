@@ -1,7 +1,9 @@
 # Release Readiness Checklist
 
-- [x] All six publishable core/bridge crates build in one workspace; companion
-  binding artifacts are tracked separately in `release/bindings-artifacts.toml`.
+- [x] The ten-crate Phase-B Rust publication inventory is recorded in
+  `release/publish-artifacts.toml`; the three standalone/binding manifests are
+  validated by path, while companion package channels remain in
+  `release/bindings-artifacts.toml`.
 - [x] API design, requirements, architecture, and implementation plan docs are present.
 - [x] ATM adapter requirement, architecture, mapping, and example docs are present.
 - [x] `docs/public-api-checklist.md` is fully marked complete.
@@ -21,6 +23,10 @@
 - [x] ATM adapter example compiles and runs in fail-open mode.
 - [x] Migration guide for ATM consumers exists.
 - [x] Performance review is documented.
-- [x] Final pre-publish review reports zero blocking findings.
+- [x] Source-level inventory, manifest, dependency, boundary, and ordering
+  gates have passing evidence on the candidate revision.
+- [ ] Final release QA (including platform consumers and registry dry-run
+  evidence) remains pending; no tag or publication is authorized by this
+  checklist.
 - [ ] B.1e typed-error migration warning rollout is separately qualified; the
   current preparation docs/inventory do not assert publication or removal.

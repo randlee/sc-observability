@@ -52,6 +52,12 @@ jobs:
             --workspace-toml Cargo.toml \
             --version '${{ steps.meta.outputs.release_version }}'
 
+      - name: Fail closed for deferred Phase-B inventory
+        run: |
+          python3 scripts/release_artifacts.py guard-legacy-release \
+            --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
+            --workspace-toml Cargo.toml
+
       - name: Ensure tag is correct or create it
         shell: bash
         run: |
