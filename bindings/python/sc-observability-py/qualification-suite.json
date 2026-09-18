@@ -4,6 +4,9 @@
   "pytest_paths": [
     "tests"
   ],
+  "fault_pytest_paths": [
+    "tests/test_runtime_faults.py"
+  ],
   "typing_paths": [
     "tests/typing/test_result_narrowing.py",
     "examples/standard_logging.py",
