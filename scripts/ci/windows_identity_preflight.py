@@ -139,7 +139,7 @@ def main():
                 if len(journals)!=1: raise RuntimeError('crashed worker recovery journal missing')
                 recover(journals[0])
                 shutil.rmtree(journals[0].parent)
-                if powershell('Get-Process -Id '+str(leaf)+' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id'):
+                if powershell('Get-CimInstance Win32_Process -Filter '+literal('ProcessId = '+str(leaf))+' | Select-Object -ExpandProperty ProcessId'):
                     raise RuntimeError('grandchild survived worker crash and recovery')
                 if powershell('(Get-Acl '+literal(denied)+').Sddl') != original_acl: raise RuntimeError('crash recovery ACL mismatch')
                 report['events'].append({'name':'worker_crash_live_grandchild_recovery','status':'passed'})
