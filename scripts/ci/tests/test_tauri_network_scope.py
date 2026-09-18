@@ -48,6 +48,7 @@ class NetworkScopeTests(unittest.TestCase):
         def process(*args):
             self.assertEqual(len(sandbox.commands), 1)
             self.assertIn('New-NetFirewallRule', sandbox.commands[0])
+            self.assertIn('-Program', sandbox.commands[0])
             return 'finished'
         with patch.object(_tauri_webview, '_execute', side_effect=process):
             self.assertEqual(_tauri_webview.execute(sandbox, None, None, None, None), 'finished')
