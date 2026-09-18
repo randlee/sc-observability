@@ -4,9 +4,17 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+import importlib.util
 ROOT=Path(__file__).resolve().parents[3]
 HELPER=ROOT/'scripts/ci/build_binding_source_bundle.py'
+SPEC=importlib.util.spec_from_file_location('binding_source_bundle', HELPER)
+BUNDLE=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(BUNDLE)
 class SourceBoundaryTests(unittest.TestCase):
+    def test_stale_qualified_archive_is_not_reused(self):
+        evidence={'source_commit':'older','packages':[{'name':'binding-runtime'}]}
+        self.assertEqual(BUNDLE.qualified_packages_for(evidence,'current'),{})
+        self.assertEqual(BUNDLE.qualified_packages_for(evidence,'older'),{'binding-runtime': {'name':'binding-runtime'}})
+
     def invoke(self,root):
         return subprocess.run([sys.executable,str(HELPER),'--root-manifest',str(root/'Cargo.toml'),'--output',str(root/'bundle')],capture_output=True,text=True)
     def project(self,root,extra=''):

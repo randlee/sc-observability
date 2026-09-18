@@ -72,6 +72,12 @@ def verify_registry_selection(source_lock, staged_lock, roots):
     if expected!=actual:raise BundleError('BUNDLE_REGISTRY_DRIFT','staged registry name/version/source/checksum closure differs from reviewed source lock')
     return expected
 
+def qualified_packages_for(evidence, source_sha):
+    """Return qualified archives only when they match the current source."""
+    if evidence.get('source_commit') != source_sha:
+        return {}
+    return {package['name']: package for package in evidence['packages']}
+
 def dependency_requirements(document, workspace=None):
     result={};tables=[('',document),*document.get('target',{}).items()]
     for target,table in tables:
@@ -163,6 +169,11 @@ def build(root_manifest,output):
     try:metadata=json.loads(command(['cargo','metadata','--locked','--format-version','1','--manifest-path',str(root_manifest)],root_manifest.parent))
     except BundleError as exc:raise BundleError('BUNDLE_STALE_LOCK',str(exc)) from exc
     source=Path(metadata['workspace_root']).resolve()
+    # Qualified archives are immutable snapshots. Reusing one from an older
+    # source revision can silently discard newly-added feature-gated APIs (the
+    # packaged fault wheel then fails although the checkout builds). Only use
+    # the qualification stage when it was produced from this exact revision.
+    source_sha=command(['git','rev-parse','HEAD'],source).strip()
     by_id={p['id']:p for p in metadata['packages']}
     candidates=[p for p in by_id.values() if Path(p['manifest_path']).resolve()==root_manifest]
     if len(candidates)!=1:raise BundleError('BUNDLE_INVALID_MANIFEST','root package identity is ambiguous')
@@ -210,7 +221,7 @@ def build(root_manifest,output):
     if qualified_stage.exists():
         from _log_staging import verify_stage
         qualified_evidence=verify_stage(qualified_stage,root['version'])
-        qualified={p['name']:p for p in qualified_evidence['packages']}
+        qualified=qualified_packages_for(qualified_evidence,source_sha)
     for package in unpublished:
         stem=f'{package["name"]}-{package["version"]}'
         archive=archives/f'{stem}.crate'
@@ -249,7 +260,6 @@ def build(root_manifest,output):
     command(['cargo','metadata','--locked','--offline','--format-version','1'],output)
     manifests_confined(output)
     files={p.relative_to(output).as_posix():digest(p) for p in sorted(output.rglob('*')) if p.is_file() and p.relative_to(output).parts[0] not in ('src','target')}
-    source_sha=command(['git','rev-parse','HEAD'],source).strip()
     evidence={'registry_selection':registry_selection,'schema_version':1,'source_commit':source_sha,'root_package':root['name'],'root_version':root['version'],'publication':'pending_B.7','packages':entries,'files':files,'lock_sha256':digest(output/'Cargo.lock'),'source_lock_sha256':digest(source/'Cargo.lock'),'package_commands':[args[:args.index('--target-dir')]+['--target-dir','<bundle>/package-build']+args[args.index('--target-dir')+2:] for args in package_commands]}
     (output/'manifest.json').write_text(json.dumps(evidence,indent=2,sort_keys=True)+'\n')
     verify_bundle(output)
