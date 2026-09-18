@@ -158,7 +158,10 @@ def main():
                 # Exercise the actual build caller and pipe-launch contract before
                 # starting any expensive immutable-artifact matrix.
                 from _python_sandbox import Sandbox, registered_checkouts
-                with Sandbox(scratch,registered_checkouts(Path.cwd())) as sandbox:
+                sandbox=Sandbox(scratch,registered_checkouts(Path.cwd()))
+                tools=[Path(sandbox.cargo).resolve().parent.parent,Path(sandbox.cargo).resolve()]
+                tool_acls=[powershell('(Get-Acl -LiteralPath '+literal(path)+').Sddl') for path in tools]
+                with sandbox:
                     report['production_denials']=sandbox.prove_denials(sys.executable,Path.cwd())
                     sandbox.run([sandbox.cargo,'--version'],scratch)
                     sandbox.run([sandbox.rustc,'--version'],scratch)
@@ -174,6 +177,9 @@ def main():
                             raise RuntimeError('identity pipe-launch probe failed')
                     finally:
                         process.close(); process.stdout.close()
+                restored=[powershell('(Get-Acl -LiteralPath '+literal(path)+').Sddl') for path in tools]
+                if restored != tool_acls: raise RuntimeError('provisioned toolchain ACL recovery mismatch')
+                report['toolchain_acl_restoration']={'paths':list(map(str,tools)),'before':tool_acls,'after':restored}
                 report['events'].append({'name':'production_sandbox_native_and_pipe','status':'passed'})
             finally:
                 if identity is not None:

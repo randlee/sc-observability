@@ -114,7 +114,10 @@ class Sandbox:
             from _windows_identity import Identity
             if not os.environ.get('SC_WINDOWS_IDENTITY_CONTROL_ROOT'):
                 raise DistributionError('Windows proof requires the independent recovery supervisor')
-            self.identity = Identity(self.scratch, self.denied)
+            # Direct tools are provisioned outside the denied Cargo cache. Their
+            # private runner-profile ACLs need an exact, temporary RX grant.
+            self.identity = Identity(self.scratch, self.denied,
+                                     readable=[Path(self.cargo).resolve().parent.parent])
             try:
                 self.identity.setup()
                 self.identity.activate()
