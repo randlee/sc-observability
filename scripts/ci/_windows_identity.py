@@ -26,9 +26,12 @@ def powershell(script, *, sensitive=False):
     environment = {key: value for key, value in os.environ.items()
                    if key.casefold() != 'psmodulepath'}
     encoded = base64.b64encode(("$ErrorActionPreference='Stop';\n" + script).encode('utf-16le')).decode('ascii')
-    result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
-                            text=True, encoding='utf-8', capture_output=True, timeout=60,
-                            env=environment)
+    try:
+        result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+                                text=True, encoding='utf-8', capture_output=True, timeout=60,
+                                env=environment)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError('Windows identity control operation exceeded 60 seconds') from None
     if result.returncode:
         # Scripts may contain the temporary account password; never echo input.
         detail = 'account provisioning (details suppressed)' if sensitive else result.stderr[-2000:]
@@ -171,6 +174,10 @@ class Identity:
         self.password = secrets.token_urlsafe(32) + '!aA9'
         self.control = Path(tempfile.mkdtemp(prefix='windows-identity-control-',
             dir=os.environ.get('SC_WINDOWS_IDENTITY_CONTROL_ROOT'))).resolve()
+        controller = powershell('[Security.Principal.WindowsIdentity]::GetCurrent().User.Value')
+        subprocess.run(['icacls', str(self.control), '/inheritance:r', '/grant:r',
+                        '*' + controller + ':(OI)(CI)(F)', '*S-1-5-18:(OI)(CI)(F)'],
+                       check=True, stdout=subprocess.DEVNULL, timeout=60)
         self.journal = self.control / 'identity-recovery.json'
         self.record = {'schema': 1, 'account': self.account, 'rule': 'sc-proof-' + self.account,
                        'acls': [], 'jobs': []}

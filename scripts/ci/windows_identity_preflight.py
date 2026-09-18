@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.request
 
 from _windows_identity import Identity, literal, powershell, recover
 
@@ -75,6 +76,7 @@ def main():
             denied.mkdir()
             (denied/'sentinel').write_text('must not read')
             original_acl=powershell('(Get-Acl '+literal(denied)+').Sddl')
+            report['acl_before']=original_acl
             try:
                 executable=scratch/'probe-2.exe'
                 powershell('Add-Type -TypeDefinition '+literal(PROBE)+' -Language CSharp -OutputAssembly '+literal(executable)+' -OutputType ConsoleApplication')
@@ -91,6 +93,8 @@ def main():
                 report['effective_rule']=rule
                 report['effective_security']=json.loads(security)
                 if identity.sid not in security: raise RuntimeError('effective rule lost identity condition')
+                with urllib.request.urlopen('https://api.github.com/rate_limit',timeout=10) as response:
+                    report['controller_https_status']=response.status
                 def controller():
                     while not stop.is_set():
                         try:
@@ -112,7 +116,8 @@ def main():
                     stop.set(); monitor.join(timeout=5)
                 if len(samples)<2 or not all(s['connected'] for s in samples): raise RuntimeError('controller connectivity was interrupted')
                 identity.close(); identity=None
-                if powershell('(Get-Acl '+literal(denied)+').Sddl') != original_acl: raise RuntimeError('ACL recovery mismatch')
+                report['acl_after']=powershell('(Get-Acl '+literal(denied)+').Sddl')
+                if report['acl_after'] != original_acl: raise RuntimeError('ACL recovery mismatch')
                 with socket.create_connection((ip,443),timeout=5): pass
                 report['events'].append({'name':'normal_cleanup','status':'passed'})
                 # Recovery from a real ACL-only setup state, before rule creation.
