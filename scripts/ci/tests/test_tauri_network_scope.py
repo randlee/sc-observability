@@ -1,12 +1,12 @@
-"""The real desktop process must retain Windows network denial until exit."""
-import sys
-import subprocess
+"""Caller regressions; actual Windows enforcement is tested by hosted preflight."""
 import os
+from pathlib import Path
 import signal
+import subprocess
+import sys
 import tempfile
 import time
 import unittest
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -30,89 +30,52 @@ class NetworkScopeTests(unittest.TestCase):
                 self.assertLess(time.monotonic() - started, 2)
             finally:
                 if child is not None:
-                    try:
-                        os.kill(child, signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
+                    try: os.kill(child, signal.SIGTERM)
+                    except ProcessLookupError: pass
 
-    def sandbox(self, system='Windows'):
+    def sandbox(self, active=True):
         value = Sandbox.__new__(Sandbox)
-        value.system = system
-        value.firewall = 'qualification-test-owned-rule'
+        value.system = 'Windows'
+        value.identity = Mock(active=active)
+        value.env = {'PATH': 'reviewed-tools'}
         value.commands = []
-        value.powershell = value.commands.append
         return value
 
-    def test_webview_is_inside_rule_scope(self):
-        sandbox = self.sandbox()
-        def process(*args):
-            self.assertEqual(len(sandbox.commands), 1)
-            self.assertIn('New-NetFirewallRule', sandbox.commands[0])
-            self.assertIn('-Program', sandbox.commands[0])
-            return 'finished'
-        with patch.object(_tauri_webview, '_execute', side_effect=process):
-            self.assertEqual(_tauri_webview.execute(sandbox, None, None, None, None), 'finished')
-        self.assertEqual(len(sandbox.commands), 2)
-        self.assertIn("$policy.Rules.Remove('qualification-test-owned-rule')", sandbox.commands[1])
-        self.assertIn('Rules.Remove', sandbox.commands[1])
+    def test_webview_cannot_launch_without_identity_policy(self):
+        sandbox = self.sandbox(active=False)
+        with patch.object(_tauri_webview, '_execute') as execute:
+            with self.assertRaisesRegex(DistributionError, 'policy is not active'):
+                _tauri_webview.execute(sandbox, None, None, None, None)
+        execute.assert_not_called()
 
-    def test_webview_failure_still_removes_only_own_rule(self):
+    def test_windows_spawn_uses_identity_for_pipe_and_stderr(self):
+        sandbox = self.sandbox()
+        stderr = object()
+        with patch('subprocess.Popen') as unprotected:
+            actual = sandbox.spawn(['bare-program'], Path('/proof'), stdout=subprocess.PIPE, stderr=stderr)
+        self.assertIs(actual, sandbox.identity.spawn.return_value)
+        sandbox.identity.spawn.assert_called_once_with(['bare-program'], cwd=Path('/proof'),
+            environment=sandbox.env, stdout=subprocess.PIPE, stderr=stderr)
+        unprotected.assert_not_called()
+
+    def test_windows_build_uses_same_identity_as_webview(self):
+        sandbox = self.sandbox()
+        sandbox.identity.run.return_value = subprocess.CompletedProcess([], 0, 'compiled', '')
+        with patch('_python_sandbox.bounded_command') as unprotected:
+            self.assertEqual(sandbox.run(['cargo', 'build'], Path('/proof')), 'compiled')
+        sandbox.identity.run.assert_called_once_with(['cargo', 'build'], cwd=Path('/proof'),
+                                                     environment=sandbox.env, timeout=900)
+        unprotected.assert_not_called()
+
+    def test_webview_failure_does_not_remove_policy_before_sandbox_cleanup(self):
         sandbox = self.sandbox()
         with patch.object(_tauri_webview, '_execute', side_effect=RuntimeError('native failure')):
             with self.assertRaisesRegex(RuntimeError, 'native failure'):
                 _tauri_webview.execute(sandbox, None, None, None, None)
-        self.assertEqual(len(sandbox.commands), 2)
-        self.assertIn('Rules.Remove', sandbox.commands[1])
-
-    def test_non_windows_does_not_change_firewall(self):
-        sandbox = self.sandbox('Darwin')
-        with sandbox.network_denial():
-            pass
-        self.assertEqual(sandbox.commands, [])
-
-    def test_watchdog_restoration_cannot_turn_timeout_into_success(self):
-        sandbox = self.sandbox()
-        events = []
-        def abort(code):
-            events.append(('exit', code))
-            raise SystemExit(code)
-        with patch.object(sandbox, '__exit__', side_effect=lambda *args: events.append('restore')):
-            with patch('_python_sandbox.os._exit', side_effect=abort):
-                with self.assertRaises(SystemExit) as error:
-                    sandbox.abort_windows_proof()
-        self.assertEqual(error.exception.code, 124)
-        self.assertEqual(events, ['restore', ('exit', 124)])
-
-    def test_watchdog_still_fails_when_restoration_fails(self):
-        sandbox = self.sandbox()
-        with patch.object(sandbox, '__exit__', side_effect=RuntimeError('restore failed')):
-            with patch('_python_sandbox.os._exit', side_effect=SystemExit(124)):
-                with self.assertRaises(SystemExit) as error:
-                    sandbox.abort_windows_proof()
-        self.assertEqual(error.exception.code, 124)
-
-    def test_acl_failure_does_not_skip_other_saved_roots(self):
-        sandbox = self.sandbox()
-        sandbox.acls = [(Path('/first/root'), Path('/first.saved')),
-                        (Path('/second/root'), Path('/second.saved'))]
-        failure = subprocess.TimeoutExpired('icacls', 60)
-        with patch('_python_sandbox.subprocess.run', side_effect=[failure, None]) as restore:
-            with self.assertRaisesRegex(DistributionError, 'ACL restoration failed'):
-                sandbox.restore_acls()
-        self.assertEqual(restore.call_count, 2)
-        self.assertIn(str(sandbox.acls[0][1]), restore.call_args_list[1].args[0])
-        self.assertEqual(restore.call_args_list[1].kwargs['timeout'], 60)
-
-    def test_expired_watchdog_rejects_normal_context_return(self):
-        sandbox = self.sandbox()
-        def timer(seconds, callback):
-            return Mock(start=Mock(side_effect=callback), is_alive=Mock(return_value=False))
-        with patch('_python_sandbox.threading.Timer', side_effect=timer):
-            with patch.object(sandbox, 'abort_windows_proof'):
-                with self.assertRaisesRegex(DistributionError, 'watchdog exceeded'):
-                    with sandbox.network_denial():
-                        pass
+        sandbox.identity.close.assert_not_called()
+        sandbox.cache_probe = Mock()
+        sandbox.__exit__(None, None, None)
+        sandbox.identity.close.assert_called_once()
 
 
-if __name__ == '__main__':
-    unittest.main()
+if __name__ == '__main__': unittest.main()

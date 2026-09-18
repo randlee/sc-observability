@@ -7,6 +7,21 @@ repository: beads-task-issue-tracker
 
 # B.P3 — Accept BTIT runtime-level bridge integration before copy
 
+## Status note (ATM-QA-DEBT-001)
+
+`status: proposed` above is intentional, not stale. `handoff-b-p3.md` already
+records an accepted verdict for the BTIT *source* -- 16/16 deliverables,
+zero remaining findings, retained CI run `35190374497` (13/13 jobs) -- which
+is what makes B.1's mechanical copy of that immutable commit permissible.
+That is a narrower, already-closed gate than this sprint's own title: formal
+owner acceptance of the runtime-level public API/ADR (ADR-011, still
+"Proposed for Phase B review" per `architecture.md`) is explicitly
+owner-deferred to Phase B completion, per `runtime-level-contract.md`'s
+`owner_deferral_date`/`owner_deferral_message` (ATM `01M2PKX8R4J4VJP5V6RRV9JJPB`)
+-- deferred, not resolved, and not a development blocker. `status` moves off
+`proposed` only when that owner-level API/ADR acceptance actually happens,
+not on the strength of the source-review outcome alone.
+
 ## Goal and dependencies
 
 Owner: BTIT team implements in its repository; sc-observability reviews the
