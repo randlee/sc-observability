@@ -21,6 +21,7 @@ pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT: &
 pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_TRANSPORT_UNAVAILABLE: &str
 pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_UNSUPPORTED_VERSION: &str
 pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL: &str
+pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_PY_CONTEXT_SCOPE_INVALID: &str
 pub const sc_observability_dto::error_codes::SC_OBSERVABILITY_PY_HANDLER_REENTRANT: &str
 pub enum sc_observability_dto::AdmissionDto
 pub sc_observability_dto::AdmissionDto::Accepted
@@ -416,8 +417,80 @@ pub fn sc_observability_dto::from_level_error(sc_observability_types::level::Lev
 pub fn sc_observability_dto::from_logging_health(sc_observability_types::health::LoggingHealthReport) -> sc_observability_dto::LoggingHealthDto
 pub fn sc_observability_dto::from_path(core::option::Option<&std::path::Path>) -> sc_observability_dto::PathDto
 pub fn sc_observability_dto::invalid_input(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> sc_observability_dto::Failure
+pub fn sc_observability_dto::is_protected_key(&str) -> bool
+pub fn sc_observability_dto::normalize_field_key(&str) -> alloc::string::String
 pub fn sc_observability_dto::to_core_event(sc_observability_dto::LogEventDto, sc_observability_dto::EventStamp) -> core::result::Result<sc_observability_types::events::LogEvent, sc_observability_dto::Failure>
 pub fn sc_observability_dto::to_core_query(sc_observability_dto::LogQueryDto) -> core::result::Result<sc_observability_types::query::LogQuery, sc_observability_dto::Failure>
 pub fn sc_observability_dto::to_path(&str, &std::path::Path) -> core::result::Result<std::path::PathBuf, sc_observability_dto::Failure>
 pub fn sc_observability_dto::validate_diagnostic(&sc_observability_dto::Diagnostic, &str) -> core::result::Result<(), sc_observability_dto::Failure>
 pub type sc_observability_dto::OperationDiagnosticDto = sc_observability_dto::Diagnostic
+warning: unused workspace dependency `sc-observability-otlp`
+  --> Cargo.toml:36:1
+   |
+36 | sc-observability-otlp = { version = "1.4.0", path = "crates/sc-observability-otlp" }
+   | ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `cargo::unused_workspace_dependencies` is set to `warn` by default
+help: consider removing the workspace dependency `sc-observability-otlp`
+warning: workspace (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability-types/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability-types` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observe/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observe` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability-otlp/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability-otlp` (manifest) generated 1 warning
+warning: `package.homepage` is redundant with `package.repository`
+ --> crates/sc-observability/Cargo.toml:8:1
+  |
+7 | repository.workspace = true
+  | ----------
+8 | homepage.workspace = true
+  | ^^^^^^^^
+  |
+  = note: `cargo::redundant_homepage` is set to `warn` by default
+help: consider removing `package.homepage`
+warning: `sc-observability` (manifest) generated 1 warning
+warning: missing `[lints]` to inherit `[workspace.lints]`
+  --> crates/sc-observability-dto/Cargo.toml
+   = note: `cargo::missing_lints_inheritance` is set to `warn` by default
+help: to inherit `workspace.lints, add:
+   |
+16 ~ schema-gen = ["dep:schemars"]
+17 + [lints]
+18 + workspace = true
+   |
+help: to clarify your intent to not inherit, add:
+   |
+16 ~ schema-gen = ["dep:schemars"]
+17 + [lints]
+   |
+warning: `sc-observability-dto` (manifest) generated 1 warning
+ Documenting sc-observability-dto v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-b-protected-keys/crates/sc-observability-dto)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
