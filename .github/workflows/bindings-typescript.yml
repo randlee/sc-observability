@@ -155,7 +155,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          python - <<'PYTHON'
+          python scripts/ci/supervise_windows_proof.py --evidence target/tauri-qualification/isolation-preflight -- python - <<'PYTHON'
           import json,sys,tempfile
           from pathlib import Path
           sys.path.insert(0,str(Path('scripts/ci').resolve()))
