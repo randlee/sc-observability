@@ -1,6 +1,6 @@
 ---
 id: B.4a
-status: in_progress
+status: complete
 branch: feature/phase-b-4a-python-packaging
 base: feature/phase-b-4-python
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-4a-python-packaging
@@ -240,9 +240,9 @@ which remain retained as development history, not current status.
 
 AC1-AC4's development qualification is complete per this terminal evidence.
 Lead completeness decision: **PASS** (aobs, 2026-09-18), recorded in
-`handoff-b-4a.md`. `status` above stays `in_progress` pending independent
-phase-end QA acceptance; formal API/ADR approval and publication remain
-deferred to B.7.
+`handoff-b-4a.md`. `status` above reads `complete` for this development
+scope; independent phase-end QA acceptance remains separately pending, and
+formal API/ADR approval and publication remain deferred to B.7.
 
 ## Paths to delete
 
