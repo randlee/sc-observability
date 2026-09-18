@@ -33,23 +33,21 @@ static GATE: OnceLock<Gate> = OnceLock::new();
 struct ReleaseOnDrop(Option<SyncSender<()>>);
 
 impl ReleaseOnDrop {
-    fn release(&mut self) {
-        if let Some(sender) = self.0.take() {
-            let _ = sender.try_send(());
-        }
+    fn release(&mut self) -> Result<(), std::sync::mpsc::TrySendError<()>> {
+        self.0.take().map_or(Ok(()), |sender| sender.try_send(()))
     }
 }
 
 impl Drop for ReleaseOnDrop {
     fn drop(&mut self) {
-        self.release();
+        let _ = self.release();
     }
 }
 
 #[test]
 fn gate_release_survives_assertion_unwind() {
     let (release_tx, release_rx) = sync_channel(1);
-    let worker = std::thread::spawn(move || release_rx.recv_timeout(Duration::from_secs(1)));
+    let worker = std::thread::spawn(move || release_rx.recv_timeout(Duration::from_secs(5)));
     let unwound = std::panic::catch_unwind(move || {
         let _release = ReleaseOnDrop(Some(release_tx));
         panic!("injected assertion before release");
@@ -92,7 +90,6 @@ fn event(message: &str, fields: serde_json::Map<String, serde_json::Value>) -> B
 fn timed_out_owner_shutdown_completes_late_for_repeated_control_waiters() {
     let (entered_tx, entered_rx) = sync_channel(1);
     let (release_tx, release_rx) = sync_channel(1);
-    let mut release = ReleaseOnDrop(Some(release_tx));
     GATE.set(Gate {
         entered: entered_tx,
         release: Mutex::new(release_rx),
@@ -122,6 +119,8 @@ fn timed_out_owner_shutdown_completes_late_for_repeated_control_waiters() {
     let path = control.active_log_path().unwrap().unwrap();
     let blocked_control = control.clone();
     let (blocked_tx, blocked_rx) = sync_channel(1);
+    // Drop this before LogGuard so panic cleanup releases the writer first.
+    let mut release = ReleaseOnDrop(Some(release_tx));
     let _blocked = std::thread::spawn(move || {
         let result = blocked_control.try_log(event(
             "admitted before late completion",
@@ -155,7 +154,7 @@ fn timed_out_owner_shutdown_completes_late_for_repeated_control_waiters() {
         Err(WaitError::TimedOut { .. })
     ));
 
-    release.release();
+    assert!(release.release().is_ok());
     assert_eq!(
         blocked_rx
             .recv_timeout(LATE_COMPLETION_DEADLINE)

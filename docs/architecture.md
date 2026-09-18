@@ -719,6 +719,28 @@ edges for sc-observability-binding-runtime; third-party support crates retain
 normal dependency review. Tauri and PyO3 may depend on the runtime, never the
 reverse. This proposed diagram does not claim the crate is implemented.
 
+`scripts/ci/validate_binding_runtime_dependencies.py` checks only
+`sc-observability-binding-runtime`'s own manifest edges; it does not check
+`bindings/tauri/Cargo.toml` or `bindings/python/sc-observability-py/Cargo.toml`
+against this diagram, so the two additional edges below are documented but not
+yet CI-enforced against the consumer crates' manifests.
+
+Both binding crates also declare direct `sc-observability-dto` and
+`sc-observability-types` dependencies, alongside their `Runtime` edge, not
+instead of it. This is permitted: DTO and Types are the neutral, leaf-level
+wire/contract crates plan-phase-b.md's binding architecture describes as
+depending on "public types, not Tauri or PyO3" — any consumer, including a
+binding crate, may take them directly without duplicating the Runtime's
+responsibilities. `sc-observability-py` additionally depends directly on
+`sc-observability` (core) itself, used only to construct a
+`sc_observability::LoggerConfig` value from Python-supplied inputs
+(`bindings/python/sc-observability-py/src/lib.rs`); it does not call, hold, or
+otherwise duplicate the core logger's own lifecycle/shutdown ownership, which
+the Runtime alone retains. No Tauri/PyO3-facing crate gains an independent
+shutdown-owning edge to core through either dependency; the Runtime-only rule
+is about lifecycle/shutdown ownership, not about every possible workspace
+compile-time edge.
+
 ```mermaid
 graph TD
   Runtime[sc-observability-binding-runtime] --> Core[sc-observability]
@@ -726,7 +748,12 @@ graph TD
   Runtime --> DTO[sc-observability-dto]
   Runtime --> Bridge[sc-observability-log]
   Tauri[sc-observability-tauri] --> Runtime
+  Tauri --> DTO
+  Tauri --> Types
   Python[sc-observability-py] --> Runtime
+  Python --> DTO
+  Python --> Types
+  Python -. "LoggerConfig construction only, no shutdown ownership" .-> Core
 ```
 
 ## 6.1 Query/Follow Dependency Order

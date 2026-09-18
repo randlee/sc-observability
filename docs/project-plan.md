@@ -122,9 +122,20 @@ qualification (B.4a), then Python integration/async support and binding release.
 Go remains future scope. The proposal does not reopen the accepted
 Phase A closure or claim that BTIT's currently open review findings are resolved.
 
-B.3a implementation now includes the generated TypeScript package, isolated
-Tauri adapter, IPC consumer example, and binding validation handoff; its sprint
-record remains the source of platform qualification and merge evidence.
+### B.3a — TypeScript client and Tauri host adapter
+
+[B.3a](plans/phase-b/sprint-b-3a-typescript.md) implementation now includes the
+generated TypeScript package, isolated Tauri adapter, IPC consumer example, and
+binding validation handoff (tracking evidence in
+[`handoff-b-3a.md`](plans/phase-b/handoff-b-3a.md)); its sprint record remains
+the source of platform qualification and merge evidence. Real artifact/IPC
+qualification (installed npm/Rust artifacts, cross-platform CI, and the broad
+C05 consumer matrix) is separate, in-progress work delegated to
+`bp-tauri-helper` on `feature/phase-b-tauri-qualification`, tracked in
+[`handoff-b-3a-qualification.md`](plans/phase-b/handoff-b-3a-qualification.md).
+Sprint `status: in_progress` is accurate: this remaining qualification work is
+independent Tauri/IPC verification, not the B.7 registry-publication tail, and
+is not waived by [B.7's phase-end gate amendment](plans/phase-b/plan-phase-b.md#phase-end-completeness-gate-amendment-atm-qa-103).
 
 ### B.3b — Shared native binding runtime
 
@@ -163,6 +174,21 @@ qualification artifacts passed for the recorded staged candidate; independent QA
 merge, live publication, and B.7 registry-only re-proof remain pending. B.P2
 does not publish to crates.io. B.7 owns the phase-end live release and
 registry-only consumer proof.
+
+### B.P3 — Accepted BTIT runtime-level bridge integration
+
+[B.P3](plans/phase-b/sprint-b-p3-runtime-btit.md) owns BTIT's integration and
+source acceptance of B.P2's staged runtime-level capability before B.1's
+mechanical copy. [`handoff-b-p3.md`](plans/phase-b/handoff-b-p3.md) records
+the accepted verdict: BTIT source `396a9d9f77ca1950eeb92d4f88c0eecadb5ef00b`,
+independent QA2 reporting 16/16 deliverables complete with zero remaining
+findings, and lead verification against retained CI run `35190374497`
+(13/13 jobs). Source acceptance does not grant merge or publication; runtime
+public-API acceptance remains owner-deferred to Phase B completion, and B.1
+independently re-verifies every copied file blob against this handoff's
+immutable commit. `sprint-b-p3-runtime-btit.md`'s own frontmatter `status`
+still reads `proposed`, tracking the BTIT-repository review process rather
+than this accepted-source outcome; it is not reconciled by this entry.
 
 ### B.1a — Neutral typed failure preparation
 
@@ -473,3 +499,17 @@ facade, and the Rust `rlib` embedding surface. Its
 source-wheel runtime/conformance gates, private companion-only fault proofs and
 the public API digest. B.4a separately owns wheel/sdist and platform
 qualification; B.7 retains publication.
+
+### B.4a — Python distributions and platform qualification
+
+[B.4a](plans/phase-b/sprint-b-4a-python-packaging.md) builds a self-contained
+sdist through B.3's source-bundle helper, freezes outer extension/Rust-host
+locks against that layout, and qualifies the built wheels across the platform
+matrix. Its [handoff](plans/phase-b/handoff-b-4a.md) records the packaging
+approach; no package is published from this sprint. Sprint `status:
+in_progress` is accurate qualification pending, not a publication gap:
+PHB-CI-002 (sdist manifest fix, landed on PR#144) and the still-open PHB-CI-003
+(packaged wheel test-hook symbol failure, assigned to
+`fix/phase-b-wheel-test-hooks`) are both non-publication CI findings that must
+resolve, independent of and before B.7's separately owner-deferred
+registry-publication tail.
