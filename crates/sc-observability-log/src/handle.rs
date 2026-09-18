@@ -891,23 +891,44 @@ mod tests {
     struct ReleaseOnDrop(Option<mpsc::SyncSender<()>>);
 
     impl ReleaseOnDrop {
-        fn release(&mut self) {
-            if let Some(sender) = self.0.take() {
-                let _ = sender.try_send(());
-            }
+        fn release(&mut self) -> Result<(), mpsc::TrySendError<()>> {
+            self.0.take().map_or(Ok(()), |sender| sender.try_send(()))
         }
     }
 
     impl Drop for ReleaseOnDrop {
         fn drop(&mut self) {
-            self.release();
+            let _ = self.release();
         }
+    }
+
+    fn await_shutdown_hook(entered: &mpsc::Receiver<()>, timeout: Duration) {
+        let result = entered.recv_timeout(timeout);
+        assert!(
+            result.is_ok(),
+            "shutdown worker did not enter its test hook within {timeout:?}: {result:?}"
+        );
+    }
+
+    #[test]
+    fn missing_shutdown_hook_times_out_and_releases_worker() {
+        let (_entered_tx, entered_rx) = mpsc::sync_channel::<()>(1);
+        let (release_tx, release_rx) = mpsc::sync_channel(1);
+        let worker = std::thread::spawn(move || release_rx.recv_timeout(Duration::from_secs(5)));
+        let started = Instant::now();
+        let unwound = std::panic::catch_unwind(move || {
+            let _release = ReleaseOnDrop(Some(release_tx));
+            await_shutdown_hook(&entered_rx, Duration::from_millis(10));
+        });
+        assert!(unwound.is_err());
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(matches!(worker.join(), Ok(Ok(()))));
     }
 
     #[test]
     fn shutdown_test_release_survives_assertion_unwind() {
         let (release_tx, release_rx) = mpsc::sync_channel(1);
-        let worker = std::thread::spawn(move || release_rx.recv_timeout(Duration::from_secs(1)));
+        let worker = std::thread::spawn(move || release_rx.recv_timeout(Duration::from_secs(5)));
         let unwound = std::panic::catch_unwind(move || {
             let _release = ReleaseOnDrop(Some(release_tx));
             panic!("injected assertion before normal release");
@@ -985,10 +1006,7 @@ mod tests {
         set_lifecycle(BridgeLifecycle::ShuttingDown);
         let owner =
             std::thread::spawn(move || shutdown_installed(installed, Duration::from_millis(1)));
-        assert!(
-            entered_rx.recv_timeout(Duration::from_secs(1)).is_ok(),
-            "shutdown worker did not enter its test hook within one second"
-        );
+        await_shutdown_hook(&entered_rx, Duration::from_secs(1));
         assert!(matches!(
             wait_stopped(Duration::from_millis(1)),
             Err(crate::WaitError::TimedOut { .. })
@@ -997,7 +1015,7 @@ mod tests {
             owner.join(),
             Ok(Err(ShutdownError::TimedOut { .. }))
         ));
-        release.release();
+        assert!(release.release().is_ok());
         assert!(matches!(
             wait_stopped(Duration::from_secs(1)),
             Ok(ShutdownReport {

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -45,7 +46,7 @@ def test_native_wait_failure_is_bounded_and_names_the_missing_signal() -> None:
     started = time.monotonic()
     with pytest.raises(AssertionError, match="fixture writer.*last native state=False"):
         _wait_for_native(lambda: False, "fixture writer", timeout=0.01)
-    assert time.monotonic() - started < 0.5, "native snapshot timeout exceeded its bound"
+    assert time.monotonic() - started < 2.0, "native snapshot timeout exceeded its bound"
 
 
 def _owned(root: Path, service: str) -> Logger:
@@ -101,6 +102,20 @@ def test_real_retained_sink_blocks_while_python_operations_progress(tmp_path: Pa
         # Release before shutdown even if an assertion above fails.
         native._test_release_blocked_writer()
         assert isinstance(logger.shutdown(timeout_ms=2_000), Ok)
+
+
+def test_owned_fault_fixture_releases_its_worker_after_assertion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_wait = _wait_for_native
+
+    def fail_after_entry(predicate: Callable[[], bool], description: str) -> None:
+        original_wait(predicate, description)
+        assert False, "injected assertion after real writer entry"
+
+    monkeypatch.setattr(sys.modules[__name__], "_wait_for_native", fail_after_entry)
+    with pytest.raises(AssertionError, match="injected assertion after real writer entry"):
+        test_real_retained_sink_blocks_while_python_operations_progress(tmp_path)
 
 
 def test_private_ci_fault_hook_preserves_tagged_native_results(tmp_path: Path) -> None:

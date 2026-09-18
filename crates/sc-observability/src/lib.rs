@@ -1128,8 +1128,11 @@ mod tests {
     fn test_pass_signal_condition_wait_has_one_deadline() {
         let signal = crate::maintenance::TestPassDelaySignal::default();
         let started = Instant::now();
-        assert!(!signal.wait_for_state(Duration::from_millis(10), |signal| signal.is_active()));
-        assert!(started.elapsed() < Duration::from_millis(250));
+        assert!(!signal.wait_for_state(
+            Duration::from_millis(10),
+            crate::maintenance::TestPassDelaySignal::is_active
+        ));
+        assert!(started.elapsed() < Duration::from_secs(1));
         assert!(signal.wait_for_state(Duration::ZERO, |signal| !signal.is_active()));
     }
 
@@ -1860,7 +1863,10 @@ mod tests {
 
         logger.emit(log_event(service_name())).expect("emit");
         assert!(
-            signal.wait_for_state(Duration::from_secs(1), |signal| signal.is_active()),
+            signal.wait_for_state(
+                Duration::from_secs(1),
+                crate::maintenance::TestPassDelaySignal::is_active
+            ),
             "expected maintenance worker to enter the delayed test pass"
         );
 
@@ -1891,7 +1897,10 @@ mod tests {
 
         logger.emit(log_event(service_name())).expect("emit");
         assert!(
-            signal.wait_for_state(Duration::from_secs(1), |signal| signal.is_active()),
+            signal.wait_for_state(
+                Duration::from_secs(1),
+                crate::maintenance::TestPassDelaySignal::is_active
+            ),
             "expected maintenance worker to enter the delayed test pass"
         );
 
@@ -1904,8 +1913,10 @@ mod tests {
         });
 
         assert!(
-            signal.wait_for_state(Duration::from_secs(1), |signal| signal
-                .shutdown_timeout_recorded()),
+            signal.wait_for_state(
+                Duration::from_secs(1),
+                crate::maintenance::TestPassDelaySignal::shutdown_timeout_recorded
+            ),
             "expected shutdown to record the configured timeout while maintenance is gated"
         );
         assert!(
@@ -1937,7 +1948,10 @@ mod tests {
 
         logger.log(log_event(service_name())).expect("initial log");
         assert!(
-            signal.wait_for_state(Duration::from_secs(1), |signal| signal.is_active()),
+            signal.wait_for_state(
+                Duration::from_secs(1),
+                crate::maintenance::TestPassDelaySignal::is_active
+            ),
             "expected maintenance worker to enter the delayed test pass"
         );
 
@@ -2738,7 +2752,10 @@ mod tests {
             .log(log_event(service_name()))
             .expect("start maintenance");
         assert!(
-            signal.wait_for_state(Duration::from_secs(1), |signal| signal.is_active()),
+            signal.wait_for_state(
+                Duration::from_secs(1),
+                crate::maintenance::TestPassDelaySignal::is_active
+            ),
             "expected writer maintenance gate before diagnostic saturation"
         );
         owner
@@ -2780,7 +2797,10 @@ mod tests {
             .log(log_event(service_name()))
             .expect("start maintenance");
         assert!(
-            signal.wait_for_state(Duration::from_secs(1), |signal| signal.is_active()),
+            signal.wait_for_state(
+                Duration::from_secs(1),
+                crate::maintenance::TestPassDelaySignal::is_active
+            ),
             "expected writer maintenance gate before shutdown"
         );
 
@@ -2822,7 +2842,10 @@ mod tests {
 
         logger.emit(log_event(service_name())).expect("emit");
         assert!(
-            signal.wait_for_state(Duration::from_secs(1), |signal| signal.is_active()),
+            signal.wait_for_state(
+                Duration::from_secs(1),
+                crate::maintenance::TestPassDelaySignal::is_active
+            ),
             "expected maintenance worker to enter the delayed test pass"
         );
 

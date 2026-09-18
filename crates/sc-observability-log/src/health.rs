@@ -160,7 +160,6 @@ pub(crate) fn snapshot() -> Result<BridgeHealthReport, ControlError> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
 
     use sc_observability_types::{LoggingHealthState, WriterState};
 
