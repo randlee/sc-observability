@@ -191,14 +191,23 @@ if mode == "owned":
     controls.hold()
     receipt = logger.submit(LogEvent(level="info", target="async.embed", action="shutdown.held"))
     assert isinstance(receipt, Ok)
+    from sc_observability.async_logging import _pools
+    owned_key = logger._native.observer_key()
     async def late_shutdown():
-        start_flush_calls = controls.flush_calls()
         pending = asyncio.create_task(logger.flush_async(60000))
-        # Observe native flush admission instead of guessing task readiness
-        # with a scheduler-dependent fixed sleep.
+        # Observe the real owned-mode observer and native operation admission;
+        # this deliberately exercises the embedding path, not the optional
+        # counted host backend used by attached-mode diagnostics.
         admission_deadline = time.monotonic() + 1
-        while controls.flush_calls() == start_flush_calls:
-            assert time.monotonic() < admission_deadline, "flush task did not reach native admission"
+        while True:
+            pool = _pools.get(owned_key)
+            admitted = pool is not None and any(
+                (observer := reference()) is not None and observer.operation is not None
+                for reference in pool.observers.values()
+            )
+            if admitted:
+                break
+            assert time.monotonic() < admission_deadline, "owned flush did not reach native admission"
             await asyncio.sleep(0)
         stopped = await asyncio.to_thread(logger.shutdown, 1)
         assert isinstance(stopped, Err) and stopped.error.kind == "timeout", stopped

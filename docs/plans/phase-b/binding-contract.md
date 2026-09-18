@@ -30,7 +30,9 @@ export type LevelDto = "trace" | "debug" | "info" | "warn" | "error";
 export type DecimalDto = string; // validated canonical decimal, never JSON number
 
 Rust's public `DecimalDto::new` and `DecimalDto::as_u64` constructors return
-the additive `DecimalDtoError` type. Its stable variants/codes are
+the reviewed-but-not-yet-approved `DecimalDtoError` type. This is a
+source-breaking signature change requiring scoped lead/API approval; it is
+not described as additive. Its stable variants/codes are
 `InvalidCanonical` (`SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL`),
 `SignedOverflow` (`SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW`),
 `UnsignedOverflow` (`SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW`), and

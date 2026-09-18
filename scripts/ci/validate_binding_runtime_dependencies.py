@@ -34,17 +34,25 @@ def validate_manifest(document, workspace):
     if runtime != EXPECTED | SUPPORT:
         raise ValueError(f'runtime dependency drift: {sorted(runtime)}')
 
-def manifest_names(document):
+def manifest_names(document, workspace=None):
     names = set()
     for table in [document, *document.get('target', {}).values()]:
-        for section in ('dependencies', 'build-dependencies'):
+        for section in ('dependencies', 'build-dependencies', 'dev-dependencies'):
             for alias, declaration in table.get(section, {}).items():
                 spec = declaration if isinstance(declaration, dict) else {}
+                if spec.get('workspace'):
+                    if workspace is None:
+                        raise ValueError(f'workspace dependency cannot be resolved for alias: {alias}')
+                    try:
+                        spec = workspace['workspace']['dependencies'][alias]
+                    except KeyError as error:
+                        raise ValueError(f'workspace dependency alias is undeclared: {alias}') from error
+                    spec = spec if isinstance(spec, dict) else {}
                 names.add(spec.get('package', alias))
     return names
 
-def validate_consumer_manifest(document, package):
-    actual = manifest_names(document)
+def validate_consumer_manifest(document, package, workspace=None):
+    actual = manifest_names(document, workspace)
     expected = CONSUMER_EDGES[package]
     first_party = {name for name in actual if name.startswith('sc-observability')}
     if first_party != expected:
@@ -61,7 +69,7 @@ def main():
         'sc-observability-tauri': ROOT/'bindings/tauri/Cargo.toml',
         'sc-observability-py': ROOT/'bindings/python/sc-observability-py/Cargo.toml',
     }.items():
-        validate_consumer_manifest(tomllib.loads(path.read_text()), package)
+        validate_consumer_manifest(tomllib.loads(path.read_text()), package, workspace)
     metadata = json.loads(subprocess.check_output(['cargo','metadata','--locked','--format-version','1'], cwd=ROOT, text=True))
     packages = {p['id']:p for p in metadata['packages']}
     runtime = next(p for p in packages.values() if p['name']=='sc-observability-binding-runtime')

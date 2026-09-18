@@ -1,15 +1,35 @@
-# RBP-F001 additive API evidence (approval pending)
+# RBP-F001 generated public API evidence (scoped approval pending)
 
-The integration-review fix adds the public `sc_observability_dto::DecimalDtoError`
-enum and changes only the error type of `DecimalDto::new` and
-`DecimalDto::as_u64`; the serialized DecimalDto wire representation is unchanged.
+Generated with:
 
-Stable variants and codes:
+```text
+cargo public-api --manifest-path crates/sc-observability-dto/Cargo.toml -sss
+```
 
-- InvalidCanonical — SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL
-- SignedOverflow — SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW
-- UnsignedOverflow — SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW
-- NotUnsigned — SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED
+Parent API stdout (94c02f2) SHA-256:
+`3f859bbd53695a66be5ee18c4db9cdda9d1b882f28ad4e893fcd3c109cba9cec`
 
-This is evidence for lead/API approval, not an approval record. The existing
-wire schema and generated language shapes remain canonical decimal strings.
+Current API stdout SHA-256:
+`4381d76f3741cc20f132ab5763fc9f5bb0894c3f389cd3ad2fe6862ac4c579fd`
+
+Unified generated diff SHA-256:
+`98c1d76becdb55575e771993b9ec6ec96d9b08c383732f8e23f65cc61e3f7bc6`
+
+Retained artifacts:
+
+- `decimal-api-current.txt`
+- `decimal-api-diff.txt`
+
+The generated diff records two source-breaking signature changes:
+
+```text
+- DecimalDto::as_u64(...) -> Result<u64, String>
++ DecimalDto::as_u64(...) -> Result<u64, DecimalDtoError>
+- DecimalDto::new(...) -> Result<Self, String>
++ DecimalDto::new(...) -> Result<Self, DecimalDtoError>
+```
+
+It also records the public `DecimalDtoError` enum and its stable `code()`
+method. The canonical decimal-string wire schema is unchanged. This is a
+scoped lead/API approval request, not an approval record; no approval is
+fabricated here.

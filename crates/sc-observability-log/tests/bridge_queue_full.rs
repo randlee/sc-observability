@@ -47,6 +47,24 @@ fn flood() {
     }
 }
 
+fn hold_stdout() -> (mpsc::Sender<()>, std::thread::JoinHandle<()>) {
+    let (release, receive) = mpsc::channel();
+    let (ready, entered) = mpsc::sync_channel(0);
+    let holder = std::thread::spawn(move || {
+        let stdout = std::io::stdout();
+        let lock = stdout.lock();
+        ready.send(()).expect("stdout holder ready");
+        receive
+            .recv_timeout(Duration::from_secs(30))
+            .expect("stdout holder release");
+        drop(lock);
+    });
+    entered
+        .recv_timeout(Duration::from_secs(5))
+        .expect("stdout holder entered");
+    (release, holder)
+}
+
 #[test]
 fn full_queue_drops_without_blocking() {
     let root = tempfile::tempdir().unwrap();
@@ -55,11 +73,13 @@ fn full_queue_drops_without_blocking() {
         root.path().to_path_buf(),
     );
     config.queue_capacity = 1;
+    config.enable_console_sink = true;
     let options = BridgeOptions {
         default_action: ActionName::new("log.record").unwrap(),
         parse_bracket_action: false,
     };
     let guard = sc_observability_log::init(config, options).unwrap();
+    let (release_stdout, stdout_holder) = hold_stdout();
 
     let before = guard.dropped_events();
     let started = Instant::now();
@@ -82,5 +102,7 @@ fn full_queue_drops_without_blocking() {
     // the one-slot queue was dropping admissions; retain a broad failure guard.
     assert!(elapsed < Duration::from_secs(30), "flood took {elapsed:?}");
 
+    release_stdout.send(()).unwrap();
+    stdout_holder.join().unwrap();
     guard.shutdown(Duration::from_secs(10)).unwrap();
 }
