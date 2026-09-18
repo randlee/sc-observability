@@ -3,6 +3,7 @@ set -euo pipefail
 
 python3 - <<'PY'
 from pathlib import Path
+import tempfile
 import tomllib
 
 root = Path(".")
@@ -22,6 +23,22 @@ def target_section_deps(path: Path, section: str):
         for target_name, target_data in target_tables.items()
         if section in target_data
     }
+
+def dependency_names(path: Path):
+    data = load_toml(path)
+    names = set()
+    for table in [data, *data.get("target", {}).values()]:
+        for section in ("dependencies", "build-dependencies", "dev-dependencies"):
+            names.update(table.get(section, {}).keys())
+    return names
+
+BANNED_PREFIXES = ("tauri", "pyo3", "specta")
+
+def assert_no_banned_dependencies(path: Path):
+    banned = sorted(name for name in dependency_names(path)
+                    if name.startswith(BANNED_PREFIXES))
+    if banned:
+        raise SystemExit(f"forbidden boundary dependencies in {path}: {banned}")
 
 workspace = load_toml(root / "Cargo.toml")
 members = set(workspace["workspace"]["members"])
@@ -110,6 +127,31 @@ if set(dto["dependencies"]) != {"sc-observability-types", "serde", "serde_json",
     raise SystemExit("DTO dependency closure drifted")
 if dto["dependencies"]["schemars"] != {"version": "=1.2.2", "optional": True} or dto["features"].get("schema-gen") != ["dep:schemars"]:
     raise SystemExit("DTO schema tooling must remain optional and exactly pinned")
+
+boundary_manifests = [
+    root / "crates/sc-observability-log/Cargo.toml",
+    root / "crates/sc-observability-log-macros/Cargo.toml",
+    root / "crates/sc-observability-log-consumer-check/Cargo.toml",
+]
+for path in boundary_manifests:
+    assert_no_banned_dependencies(path)
+
+# Exercise each banned prefix through the same manifest reader used above.
+# These fixtures prove the gate rejects a direct runtime, proc-macro, or
+# consumer-check boundary violation rather than only checking today's files.
+with tempfile.TemporaryDirectory(prefix="dependency-ban-fixtures-") as directory:
+    fixture_root = Path(directory)
+    for banned in BANNED_PREFIXES:
+        fixture = fixture_root / f"{banned}.toml"
+        fixture.write_text(f"[dependencies]\n{banned} = \"0.0.0\"\n", encoding="utf-8")
+        try:
+            assert_no_banned_dependencies(fixture)
+        except SystemExit as error:
+            if banned not in str(error):
+                raise SystemExit(f"negative dependency-ban fixture lost {banned}: {error}")
+        else:
+            raise SystemExit(f"negative dependency-ban fixture was accepted: {banned}")
+
 for crate in ("sc-observability-types", "sc-observability", "sc-observe", "sc-observability-otlp"):
     if section_deps(root / f"crates/{crate}/Cargo.toml", "dependencies") & {"schemars", "sc-observability-dto", "tauri", "pyo3"}:
         raise SystemExit(f"binding dependencies entered core: {crate}")
