@@ -223,7 +223,8 @@ class Sandbox:
             for index, path in enumerate(line for line in output.splitlines() if line.strip()):
                 name = f'{self.firewall}-allow-{index}'
                 self.powershell(f"New-NetFirewallRule -Name '{name}' -DisplayName '{name}' "
-                                f"-Program '{path}' -Direction Outbound -Action Allow -OverrideBlockRules $true -Profile Any | Out-Null")
+                                f"-Program '{path}' -Direction Outbound -Action Allow -OverrideBlockRules $true "
+                                "-Authentication Required -Profile Any | Out-Null")
                 self.firewall_rules.append(name)
                 self.record_recovery()
             self.powershell(f"New-NetFirewallRule -Name '{self.firewall}' -DisplayName '{self.firewall}' "

@@ -61,6 +61,7 @@ class NetworkScopeTests(unittest.TestCase):
                 pass
         self.assertTrue(any('-Direction Outbound -Action Block' in item for item in sandbox.commands))
         self.assertTrue(any('-OverrideBlockRules $true' in item for item in sandbox.commands))
+        self.assertTrue(any('-Authentication Required' in item for item in sandbox.commands))
         self.assertIn('-OverrideBlockRules', inspect.getsource(Sandbox.network_denial))
 
     def test_webview_failure_still_removes_only_own_rule(self):
