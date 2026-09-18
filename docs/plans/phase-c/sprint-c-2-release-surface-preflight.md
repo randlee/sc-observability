@@ -73,28 +73,56 @@ gap that lets the sprint close anyway.
      `cargo package --locked --allow-dirty --manifest-path bindings/tauri/Cargo.toml`
      for the standalone Tauri crate.
    - **Chained crates that depend on other not-yet-published workspace
-     members** (`preflight_check = "locked"`): `cargo package -p` cannot
-     resolve these against the public registry. Use
-     `cargo publish --dry-run --locked --no-verify -p <crate>` instead,
-     exactly as `docs/publishing.md`'s existing documented dual-mode
-     preflight pattern already specifies for the pre-first-publish case; run
-     each crate strictly in the `validate-publish-order`-confirmed publish
-     order so every earlier dependency in the chain has already been
-     dry-run-validated before its dependents are attempted. Where Phase B's
-     own staged-dependency-resolution pattern applies more precisely (crates
-     that were validated pre-merge via path/registry-substitute overrides),
-     generalize the existing
-     `scripts/ci/prepare_log_staged_packages.py` /
-     `scripts/ci/prepare_runtime_level_staged_packages.py` and
-     `scripts/ci/validate_log_staged_consumer.py` /
-     `scripts/ci/validate_runtime_level_staged_consumer.py` /
-     `scripts/ci/validate_binding_registry_consumers.sh` pattern to the full
-     ten-crate chain rather than inventing a new mechanism.
-   - **Python wheel/sdist**: `python3 scripts/ci/validate_python_distribution.py --wheel <path> --sdist <path> --policy <policy-file> --evidence <out.json>`
-     for every matrix cell, reusing `_python_distribution.py`'s
-     `inspect_wheel`/`verify_native_architecture`/`verify_source` checks
-     already built for this in Phase B — this is real, existing tooling, not
-     a new script.
+     members** (`preflight_check = "locked"`): staged local resolution is
+     **mandatory** for every such crate, not an alternative reached only
+     where it happens to apply more precisely. `cargo package -p` cannot
+     resolve these against the public registry, and a per-crate
+     `cargo publish --dry-run --locked --no-verify -p <crate>` run one crate
+     at a time hits the same unresolved-path-dependency failure for any
+     crate whose dependency has not itself been published — it is not a
+     complete pre-publication path on its own. Instead, generalize
+     `scripts/ci/prepare_log_staged_packages.py`'s actual mechanism (a
+     single `cargo package --locked --target-dir <build-dir> -p <crate-1> -p <crate-2> ... -p <crate-N>`
+     invocation naming every not-yet-published crate together, which lets
+     Cargo resolve inter-crate path dependencies from the local workspace
+     instead of the public registry, followed by `verify_stage()`-style
+     archive inspection from `scripts/ci/_log_staging.py`) into a new
+     `scripts/ci/prepare_release_staged_packages.py` that reads its crate
+     list and order from `release/publish-artifacts.toml` (every
+     `"locked"`-preflight crate, in `validate-publish-order`-confirmed
+     order) instead of the hardcoded six-package tuple the B.2-era script
+     uses. Run this staged multi-package `cargo package` command for the
+     complete `"locked"` set before any per-crate dry-run step; any crate
+     that only has `"full"`-preflight dependents may still use the simpler
+     per-crate `cargo package`/`cargo publish --dry-run` commands above.
+   - **Python wheel/sdist**: reuse Phase B's real, existing three-subcommand
+     CLI (`python3 scripts/ci/validate_python_distribution.py {build,cell,aggregate}`,
+     verified directly via `--help` against each subcommand — there is no
+     bare `--wheel`/`--sdist`/`--policy`/`--evidence` flag set on the
+     top-level command). Prefer reusing Phase B's retained evidence over
+     rebuilding:
+     - First, locate the `b4a-production-inventory` GitHub Actions artifact
+       (job `aggregate` in `.github/workflows/b4a-python-distributions.yml`,
+       containing `production-artifacts.json`) from the CI run that
+       qualified the actual post-merge `develop` commit (or a commit
+       provably identical in every qualified path, per deliverable 4).
+       Download it — `gh run download <run-id> --name b4a-production-inventory --dir <dir>`
+       — and verify `sha256sum <dir>/production-artifacts.json` matches
+       that run's recorded `inventory_sha256` output. That file **is** this
+       item's completeness PASS evidence; it is the real output of the
+       `aggregate` subcommand, not a placeholder.
+     - If no such run exists yet for the post-merge commit, produce only
+       the missing evidence: `python3 scripts/ci/validate_python_distribution.py build --sdist <sdist> --output <dir>/wheel --checkout <checkout> --platform <platform>`
+       per missing platform, then
+       `python3 scripts/ci/validate_python_distribution.py cell --sdist <sdist> --wheel <dir>/wheel/*.whl --checkout <checkout> --output <dir>/cell`
+       per missing Python version (add `--allow-incomplete-runtime` only for
+       a non-production/provisional cell), then combine retained and
+       newly-produced evidence directories under one path and run
+       `python3 scripts/ci/validate_python_distribution.py aggregate --policy release/python-platform-policy.json --sdist <sdist> --evidence <combined-dir> --source-commit <post-merge-sha> --output <dir>/production-artifacts.json`
+       — `aggregate --evidence` recursively globs for `build-result.json`/
+       `cell-result.json` under that path, so retained per-cell artifacts
+       from the GitHub Actions run can sit alongside freshly produced ones
+       in the same directory tree.
    - **npm**: `npm pack --dry-run` in `bindings/typescript/` (confirmed
      non-mutating for npm 7+: it lists the exact tarball contents without
      writing a tarball or contacting the registry) and inspect the printed
@@ -133,16 +161,38 @@ gap that lets the sprint close anyway.
    equivalent architecture/content verification, without publishing) until
    every item has PASS evidence, or it stays open pending an explicit owner
    decision to revise this sprint's scope.
-5. **Recovery/idempotency verification.** Confirm the shared package's
-   documented retry semantics — per-crate idempotent skip-if-already-published
-   behavior, immutable-GitHub-Release-then-separate-channel-upload structure
-   for PyPI — extend correctly to every inventory item added in this sprint,
-   including the npm channel adopted in C.1 (idempotent re-run against an
-   already-published version must not fail the whole run, matching the
-   shared PyPI workflow's skip-existing behavior). Verify this with a mocked
-   dry-run (for example, invoking the relevant workflow's publish step
-   against a deliberately already-published test version in a scratch/dry
-   context) rather than asserting it from the workflow's YAML alone.
+5. **Recovery/idempotency verification — named mocked harness.** Neither
+   this repository nor the pinned `../sc-publish` revision has an existing
+   mocked publish-retry test to reuse (confirmed: no `idempoten`/`retry`/
+   `skip-existing` hit in either repo's test suites other than unrelated
+   doc-claim checks). Add
+   `scripts/ci/tests/test_publish_retry_idempotency.py`, a pytest harness
+   that monkeypatches `subprocess.run`/`subprocess.Popen` for every
+   channel's publish invocation (`cargo publish`, `maturin upload`,
+   `npm publish`, `gh release create`, and the npm channel's own publish
+   step once adopted) to record the exact command line and return a canned
+   result instead of executing it, and additionally monkeypatches
+   `socket.socket` to raise if any code path under test tries to open a
+   real network connection — guaranteeing zero network writes regardless of
+   what the mocked commands would have done for real. Exercise three cases
+   per channel against the actual installed workflow/CLI invocation (not a
+   reimplementation of its logic):
+   - **missing version**: the channel's existence-check step (e.g.
+     `maturin upload`'s registry probe, `cargo publish`'s own 409 handling,
+     an `npm view <pkg>@<version>` probe) reports the version absent → the
+     publish step must be invoked and the harness asserts success.
+   - **already-present version**: the existence check reports the version
+     present → the publish step must be **skipped** (idempotent no-op) and
+     the harness asserts the run still reports overall success, matching
+     the shared PyPI workflow's `--skip-existing` behavior and the required
+     equivalent for the npm channel once adopted (a 409/"already published"
+     response treated as success, not failure).
+   - **registry error**: the existence check or publish step returns a
+     non-success, non-409 error (e.g. HTTP 500) → the harness asserts the
+     run reports failure and does not silently swallow the error as
+     success.
+   Run this harness in this sprint's own validation; it is new tooling this
+   sprint adds, since none exists upstream or in this repo to reuse as-is.
 6. **Post-publish verification design.** Because this sprint does not
    publish, specify the exact read-only commands a later, separately
    authorized publish step will run to confirm each channel actually
@@ -176,16 +226,24 @@ gap that lets the sprint close anyway.
 - `gh secret list` (repository scope, `CARGO_REGISTRY_TOKEN` only) and
   `gh secret list --env pypi` / `gh secret list --env testpypi` (names
   only), cross-checked against the documented secret-name/scope list.
-- Per-crate packaging dry runs in publish order, using
-  `cargo package --locked --allow-dirty -p <crate>` for `"full"`-preflight
-  crates and `cargo publish --dry-run --locked --no-verify -p <crate>` for
-  `"locked"`-preflight chained crates (root workspace and, for
-  `sc-observability-tauri`, `--manifest-path bindings/tauri/Cargo.toml`).
-- `python3 scripts/ci/validate_python_distribution.py` runs for every wheel/
-  sdist matrix cell, using the same policy file Phase B's B.4a sprint
-  established.
+- `scripts/ci/prepare_release_staged_packages.py` (new, generalized from
+  `scripts/ci/prepare_log_staged_packages.py`) runs the single
+  multi-package `cargo package --locked --target-dir <dir> -p ... -p ...`
+  invocation across every `"locked"`-preflight crate from
+  `release/publish-artifacts.toml`, in `validate-publish-order`-confirmed
+  order; `cargo package --locked --allow-dirty -p <crate>` (or
+  `--manifest-path bindings/tauri/Cargo.toml`) runs per-crate for every
+  `"full"`-preflight crate.
+- `python3 scripts/ci/validate_python_distribution.py build|cell|aggregate`
+  (the real three-subcommand CLI, per its `--help` output) either verifies
+  the retained `b4a-production-inventory` artifact's `production-artifacts.json`
+  against its recorded `inventory_sha256`, or runs the missing `build`/
+  `cell`/`aggregate` steps to produce it, per deliverable 2.
 - `npm pack --dry-run` in `bindings/typescript/`, output diffed against
   `package.json`'s declared `files`/`exports`/`types`.
+- `python3 -m pytest scripts/ci/tests/test_publish_retry_idempotency.py`
+  passes all three cases (missing version, already-present version,
+  registry error) per channel with zero real network connections opened.
 - The shared package's three manifest-validation commands (same as C.1) and
   `bash scripts/ci/validate_publish_workflow_action_versions.sh`, re-run
   against the post-merge `develop` state to confirm no drift was introduced

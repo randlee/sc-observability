@@ -129,7 +129,7 @@ completion leaves the sprint open.
    | `.github/workflows/{homebrew,pypi,scoop,winget}-publish.yml`, `.github/actions/**` | New paths added by the installer. |
    | `scripts/release_artifacts.py` | **Delete.** No same-path replacement exists — the shared package installs its equivalent at the different path `.github/scripts/release_artifacts.py`. Every reference to the old path in retained docs/scripts must be updated, not left dangling. |
    | `scripts/ci/validate_publish_order.sh` | **Delete, unconditionally.** Confirmed by reading `.github/scripts/release_manifest.py`'s `validate_publish_order()`: the shared `validate-publish-order` subcommand checks actual workspace dependency-graph ordering (every crate's `publish_order` exceeds every crate it depends on), which is strictly stronger than this script's own uniqueness/sortedness-only check. This is not a conditional decision. |
-   | `.claude/agents/publisher.md`'s dangling reference to a nonexistent `scripts/release_gate.sh` | Resolved by deleting the whole file above; the missing script is never created. |
+   | `.claude/agents/publisher.md`'s dangling reference to a nonexistent `scripts/release_gate.sh` | Resolved by the same-path overwrite in the row above: the installed content is the shared package's `publisher.md`, which contains no `scripts/release_gate.sh` reference. `publisher.md` itself is never deleted — only its content changes. Acceptance verifies this as a **byte-parity check** (`diff .claude/agents/publisher.md plugins/sc-publish/.claude/agents/publisher.md` reports no difference after install), kept distinct from the **absence check** for the two genuinely-deleted paths above (`test ! -e scripts/release_artifacts.py`, `test ! -e scripts/ci/validate_publish_order.sh`). |
    | `release/RELEASE-NOTES-TEMPLATE.md`, `release/release-inventory.json` | **Retain**, repository-owned — the shared package has no equivalent concept and does not touch these paths. Reconcile `release-inventory.json`'s artifact list against the newly rendered `release/publish-artifacts.toml` before this sprint closes. |
    | `docs/release-readiness-checklist.md` and other independent build/qualification checks not specific to the publish mechanism | **Retain.** |
 5. **Install and diff-verify.** Run
@@ -193,8 +193,10 @@ completion leaves the sprint open.
 - `release/publish-artifacts.toml` and `release/publish-channel-contracts.toml`
   are valid TOML and contain every crate/wheel/channel decision from
   deliverable 2, with none silently defaulted from the discovery heuristic.
-- Every path in deliverable 4's table has the disposition the table states;
-  no path is both installed and separately listed for deletion.
+- Every path in deliverable 4's table has the disposition the table states:
+  same-path overwrites pass their byte-parity diff check, and the two
+  genuinely-deleted paths pass their absence check. No path is both
+  installed/overwritten and separately listed for deletion.
 - The npm channel is either fully adopted from a landed upstream revision
   (enabled in `install.json` like any other channel, secrets documented per
   its own contract) or this sprint is explicitly held open pending the
