@@ -4,7 +4,7 @@ status: review_packet_prepared_publication_pending_owner_review
 branch: feature/phase-b-7-publish-bindings
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-7-publish-bindings
 base: develop
-generated_at: 2026-09-17T18:49:04Z
+generated_at: 2026-09-18T16:21:23Z
 ---
 
 # B.7 binding-release review packet (readiness handoff)
@@ -112,26 +112,23 @@ demand), not a committed release record.
 
 ## Public API coverage
 
-Existing approval records under `docs/api-approvals/` (note: these are
-`.md` files with required `## Scope` / `## Approval` / `## Affected Artifacts`
-headings, per `docs/api-approvals/README.md` -- there are no `.json` files in
-that directory on this branch):
+Existing approval records under `docs/api-approvals/` include Markdown records
+with required `## Scope` / `## Approval` / `## Affected Artifacts` headings,
+and machine-readable JSON records used by the API governance gate:
 
 - `docs/api-approvals/phase-a-a3-writer-runtime.md`
 - `docs/api-approvals/phase-b-log-import.md`
 - `docs/api-approvals/phase-b-runtime-level.md` (owner-deferred; not a
   current approval)
+- `docs/api-approvals/phase-b-integration-review-decimal.json` (scoped lead
+  approval for the unpublished DTO DecimalDtoError API change; public API only)
 
-None of these three specifically approves `sc-observability-dto` or
-`sc-observability-binding-runtime`'s public surface -- no dedicated approval
-record for either crate exists on this branch yet. That is a gap this
-readiness task surfaces rather than papers over: a human/API reviewer should
-confirm whether these two crates need their own approval artifact before
-first publish, consistent with the same owner-deferral pattern
-`phase-b-runtime-level.md` already records for the runtime-level contract.
-`sc-observability-tauri`, `sc-observability-py`'s API, the PyPI package, and
-the npm client have no approval coverage recorded on this branch; the latter
-two are additionally blocked on the files not existing yet.
+The DecimalDtoError record specifically approves the `sc-observability-dto`
+public surface at the exact recorded digest, limited to the enum, stable error
+codes and the two constructor Result signature changes. It does not approve
+the owner ADR/runtime contract, independent QA, publication, or any unrelated
+crate. Other binding surfaces retain their separate review and owner-deferral
+gates; this packet does not infer approval from the DTO record.
 
 ## Platform results
 
