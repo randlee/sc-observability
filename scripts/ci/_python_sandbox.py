@@ -176,11 +176,13 @@ else: raise SystemExit('network remained reachable')
 # A fresh interpreter attempts its socket before launching the next child.
 # All three generations also repeat the actual checkout/cache file probes.
 if int(sys.argv[4]):
- subprocess.run([sys.executable,'-I','-c',sys.argv[5],*sys.argv[1:4],str(int(sys.argv[4])-1),sys.argv[5]],check=True,timeout=15)
+ subprocess.run([sys.executable,'-I',__file__,*sys.argv[1:4],str(int(sys.argv[4])-1)],check=True,timeout=15)
 print('CHECKOUT_CACHE_NETWORK_DENIED')
 '''
-        output = self.run([python, '-I', '-c', code, str(checkout / 'Cargo.toml'),
-                           str(self.cache_probe), self.network_ip, '2', code], self.scratch)
+        probe = self.scratch / 'isolation-probe.py'
+        probe.write_text(code, encoding='utf-8')
+        output = self.run([python, '-I', str(probe), str(checkout / 'Cargo.toml'),
+                           str(self.cache_probe), self.network_ip, '2'], self.scratch)
         if output.count('CHECKOUT_CACHE_NETWORK_DENIED') != 3:
             raise DistributionError('missing isolation denial proof')
         return {'checkout': True, 'cargo_cache': True, 'network': True,

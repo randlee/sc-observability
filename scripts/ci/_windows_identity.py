@@ -325,6 +325,11 @@ class ProofProcess:
         executable = shutil.which(str(command[0]), path=environment.get('PATH'))
         if executable is None:
             raise FileNotFoundError(command[0])
+        command_line = subprocess.list2cmdline([executable, *map(str, command[1:])])
+        # CreateProcessWithLogonW has a smaller bound than CreateProcessW.
+        # Stage large probe scripts as files instead of passing inline source.
+        if len(command_line.encode('utf-16le')) // 2 >= 1024:
+            raise ValueError('proof command exceeds CreateProcessWithLogonW 1024-character limit; stage source as a file')
         name = identity.account + '-job-' + uuid.uuid4().hex
         identity.record['jobs'].append(name)
         identity.write()
@@ -351,7 +356,7 @@ class ProofProcess:
                 os.set_handle_inheritable(handle, True)
                 setattr(startup, field, handle)
             block = ctypes.create_unicode_buffer('\0'.join(f'{key}={value}' for key,value in sorted(environment.items()))+'\0')
-            args = ctypes.create_unicode_buffer(subprocess.list2cmdline([executable, *map(str,command[1:])]))
+            args = ctypes.create_unicode_buffer(command_line)
             self.api.check(self.api.create(identity.account, '.', identity.password, 1, executable, args,
                 0x4 | 0x400, block, str(cwd), ctypes.byref(startup), ctypes.byref(self.info)))
             self.pid = self.info.pid
