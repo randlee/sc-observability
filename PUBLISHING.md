@@ -10,7 +10,7 @@ manifest instead.
 
 ## Distribution Channels
 
-- **crates.io**: the six publishable core/bridge crates in
+- **crates.io**: all ten intended publishable Rust crates in
   `release/publish-artifacts.toml`, in dependency order
   - [`sc-observability-types`](https://crates.io/crates/sc-observability-types)
   - [`sc-observability`](https://crates.io/crates/sc-observability)
@@ -18,6 +18,10 @@ manifest instead.
   - [`sc-observability-otlp`](https://crates.io/crates/sc-observability-otlp)
   - [`sc-observability-log-macros`](https://crates.io/crates/sc-observability-log-macros)
   - [`sc-observability-log`](https://crates.io/crates/sc-observability-log)
+  - `sc-observability-dto`
+  - `sc-observability-binding-runtime`
+  - `sc-observability-tauri` (standalone host workspace)
+  - `sc-observability-py` (PyO3 support crate)
 - **GitHub Releases**: <https://github.com/randlee/sc-observability/releases>
 
 Phase B's binding and native artifacts are inventoried separately in
@@ -47,9 +51,11 @@ Both workflows are manual dispatch (`workflow_dispatch`).
    order, repo boundaries, and version consistency. It runs `cargo publish
    --dry-run` for each crate in manifest order.
 4. Merge `develop` to `main` once CI and preflight are green.
-5. Run the release workflow with `version=<X.Y.Z or vX.Y.Z>`.
-6. Release workflow tags, publishes crates in manifest order (with propagation
-   waits between crates), and creates the GitHub release.
+5. Do not run the legacy release workflow for the ten-entry Phase-B inventory:
+   its `cargo publish -p` path predates the standalone Tauri and binding
+   channels and is disabled/superseded until Phase C migrates `sc-publish`.
+6. After that migration and separate owner authorization, the shared pipeline
+   consumes both manifests and creates the appropriate registry/release records.
 
 ## Initial Publish Note
 
@@ -70,6 +76,10 @@ Crates must be published in dependency order (defined in the manifest):
 | 4 | `sc-observability-otlp` | — |
 | 5 | `sc-observability-log-macros` | 30s |
 | 6 | `sc-observability-log` | — |
+| 7 | `sc-observability-dto` | 30s |
+| 8 | `sc-observability-binding-runtime` | 30s |
+| 9 | `sc-observability-tauri` | 30s |
+| 10 | `sc-observability-py` | — |
 
 ## Local Validation Commands
 

@@ -9,10 +9,14 @@ This repo becomes the publishing source of truth for:
 - `sc-observability-otlp`
 - `sc-observability-log-macros`
 - `sc-observability-log`
+- `sc-observability-dto`
+- `sc-observability-binding-runtime`
+- `sc-observability-tauri`
+- `sc-observability-py`
 
 Binding and native artifacts are tracked in `release/bindings-artifacts.toml`
 (DTO, native runtime, Tauri host, PyO3 extension, PyPI wheel/sdist, and npm
-client). The six core crates above use `release/publish-artifacts.toml`; the
+client). The ten Rust crates above use `release/publish-artifacts.toml`; the
 binding manifest is a readiness inventory only and all publication remains
 deferred until after Phase B merge and separately authorized following the
 Phase C `sc-publish` migration; BTIT adopts the published artifacts afterward.
@@ -36,9 +40,9 @@ cutover, new releases of these crate names must come from this repo instead.
   and verification, excluding the private consumer fixture. Cargo uses its
   temporary package registry to verify unpublished chained dependencies.
   Every package is verified; none is skipped and `--no-verify` is forbidden.
-- The release manifest preserves the core order (types, logging, observation,
-  OTLP), followed by macros then bridge. The later live B.7 workflow uses this
-  same manifest. `wait_for_registry_version.py` checks the sparse index after
+- The release manifest preserves dependency order (core types/runtime,
+  observation/OTLP, macros/bridge, then binding crates). A future Phase-C
+  `sc-publish` workflow consumes this manifest. `wait_for_registry_version.py` checks the sparse index after
   each real publication with 12 bounded attempts and fails the sequence visibly
   if the exact non-yanked version does not appear. B.2 tests this gate with
   mocked responses and never invokes live publication.

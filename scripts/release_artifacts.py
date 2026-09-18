@@ -23,7 +23,10 @@ def workspace_members(workspace_toml: Path) -> set[str]:
 def is_workspace_member(cargo_toml: Path, workspace_toml: Path) -> bool:
     """Accept root members and explicitly standalone package manifests."""
     members = workspace_members(workspace_toml)
-    relative = cargo_toml.parent.as_posix()
+    try:
+        relative = cargo_toml.parent.resolve().relative_to(workspace_toml.parent.resolve()).as_posix()
+    except ValueError:
+        relative = ""
     if relative in members:
         return True
     data = tomllib.loads(cargo_toml.read_text(encoding="utf-8"))
@@ -33,6 +36,11 @@ def is_workspace_member(cargo_toml: Path, workspace_toml: Path) -> bool:
 def package_name(cargo_toml: Path) -> str:
     data = tomllib.loads(cargo_toml.read_text(encoding="utf-8"))
     return data["package"]["name"]
+
+
+def package_publish(cargo_toml: Path) -> bool:
+    data = tomllib.loads(cargo_toml.read_text(encoding="utf-8"))
+    return data.get("package", {}).get("publish", True) is not False
 
 
 def workspace_version(workspace_toml: Path) -> str:
@@ -58,6 +66,8 @@ def cmd_validate_manifest(args: argparse.Namespace) -> int:
         actual = package_name(Path(crate["cargo_toml"]))
         if actual != crate["package"]:
             raise SystemExit(f"{crate['cargo_toml']}: package mismatch: manifest={crate['package']} actual={actual}")
+        if not package_publish(Path(crate["cargo_toml"])):
+            raise SystemExit(f"{crate['cargo_toml']}: publish=false package cannot be in publish manifest")
     print("manifest validation passed")
     return 0
 

@@ -2,7 +2,7 @@ schema_version = 1
 
 # Phase-B binding-release readiness manifest (review/evidence data, not an
 # installed publish pipeline). Records publish order after
-# release/publish-artifacts.toml's 6 core/bridge crates for a future publish
+# release/publish-artifacts.toml's ten Rust crates for a future publish
 # pipeline ("sc-publish", a Phase-C follow-up after Phase-B merge) to consume;
 # nothing in this branch reads this manifest to actually publish anything.
 # See docs/plans/phase-b/handoff-b-7.md for full context.
@@ -72,7 +72,7 @@ publish_order = 3
 depends_on = ["sc-observability-binding-runtime", "sc-observability-dto"]
 wait_after_publish_seconds = 30
 status = "pending"
-pending_reason = "Tauri IPC/artifact qualification has passed in the recorded B.3a matrix; independent phase-end QA, formal API/ADR approval, Phase-C sc-publish migration and separate publication authorization remain pending"
+pending_reason = "Tauri IPC/artifact qualification and independent Phase-B QA have passed; formal API/ADR approval, Phase-C sc-publish migration and separate publication authorization remain pending"
 registry_secret = "CARGO_REGISTRY_TOKEN"
 registry_secret_configured = true
 
