@@ -587,8 +587,9 @@ def cmd_build_evidence(args: argparse.Namespace) -> int:
         elif entry["kind"] == "pypi":
             artifacts[artifact] = build_pypi_artifacts(entry, out_dir)
         else:
-            # npm: status is always "pending" today (package.json is still
-            # "private": true) -- build-evidence never builds pending entries.
+            # npm remains pending until its owner-authorized publication gate
+            # and registry credential are available; build-evidence never
+            # builds pending entries.
             continue
 
     record = {

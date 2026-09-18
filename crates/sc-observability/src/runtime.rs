@@ -251,8 +251,9 @@ fn diagnostic_identity(
 fn redact_event_with_policy(mut event: LogEvent, policy: &RedactionPolicy) -> LogEvent {
     if policy.redact_bearer_tokens
         && let Some(message) = event.message.as_mut()
+        && let std::borrow::Cow::Owned(redacted) = redact_bearer_token_text(message)
     {
-        *message = redact_bearer_token_text(message);
+        *message = redacted;
     }
     for (key, value) in &mut event.fields {
         if policy.denylist_keys.iter().any(|deny| deny == key) {

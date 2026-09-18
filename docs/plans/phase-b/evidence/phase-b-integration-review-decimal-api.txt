@@ -1,0 +1,15 @@
+# RBP-F001 additive API evidence (approval pending)
+
+The integration-review fix adds the public `sc_observability_dto::DecimalDtoError`
+enum and changes only the error type of `DecimalDto::new` and
+`DecimalDto::as_u64`; the serialized DecimalDto wire representation is unchanged.
+
+Stable variants and codes:
+
+- InvalidCanonical — SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL
+- SignedOverflow — SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW
+- UnsignedOverflow — SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW
+- NotUnsigned — SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED
+
+This is evidence for lead/API approval, not an approval record. The existing
+wire schema and generated language shapes remain canonical decimal strings.

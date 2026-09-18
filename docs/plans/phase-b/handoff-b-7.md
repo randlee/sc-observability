@@ -66,14 +66,11 @@ same version today, verified live (not hardcoded) by
 
 `sc-observability-tauri` and `@sc-observability/client` are `status = "pending"`
 in the manifest; their versions are not checked by `verify-versions`. Both
-files now exist in this branch's tree (merged forward from
-`feature/phase-b-6-python-async` after this readiness work was first
-written) and both are already pinned to `1.4.0` -- `bindings/tauri/Cargo.toml`
-literally, `bindings/typescript/package.json` literally -- but neither is
-`status = "ready"`: `sc-observability-tauri` still needs real qualification
-on `feature/phase-b-tauri-qualification` (a separate layer being prepared
-above B.7), and `bindings/typescript/package.json` still sets
-`"private": true`.
+files exist in this branch's tree and are pinned to `1.4.0`. Tauri's real
+IPC/artifact qualification has passed in the recorded B.3a matrix, while
+independent phase-end QA and formal API/ADR approval remain pending. The npm
+entry remains pending because `NPM_TOKEN` is not configured and publication
+approval is owner-deferred.
 
 ## Source commit / tag
 
@@ -146,12 +143,10 @@ is available for `sc-publish` (or any future publish pipeline) to consume
 later; `.github/workflows/release.yml` does not call it and installs no
 binding-publish jobs, per the owner scope correction above.
 
-`bindings/typescript/` and `bindings/tauri/` now exist in this branch's tree
-(merged forward from `feature/phase-b-6-python-async`). `sc-observability-tauri`
-compiles standalone (`cargo check --locked --no-default-features` inside
-`bindings/tauri/`, verified during this readiness work) but has no IPC/artifact
-platform matrix yet -- that is the explicit scope of `feature/phase-b-tauri-
-qualification`, a separate layer being prepared above B.7. TypeScript has its
+`bindings/typescript/` and `bindings/tauri/` now exist in this branch's tree.
+`sc-observability-tauri` compiles standalone and its real IPC/artifact platform
+matrix is recorded as passed in the B.3a qualification handoff. Independent
+phase-end QA and formal API/ADR approval remain separate gates. TypeScript has its
 own generation/build/pack validation (`scripts/ci/validate_typescript_bindings.sh`,
 `scripts/ci/validate_binding_schema.sh`, both merged in alongside the package)
 which is a different concern from this document's registry-publish-readiness
@@ -196,8 +191,7 @@ scope; this readiness work does not re-run or duplicate those checks.
   itself and is not exercised by this readiness work.
 - **TypeScript**: `bindings/typescript/src/test.ts` exercises the client
   today via `npm test`. `scripts/ci/validate_binding_registry_consumers.sh`
-  additionally runs `npm pack` (this works even with `"private": true` --
-  that flag only blocks `npm publish`) and installs the real resulting
+  additionally runs `npm pack` and installs the real resulting
   tarball into an isolated npm project, then runs a `node -e` smoke check
   against it. This is a genuine forward-looking structural proof of the
   packaged file set, but it is explicitly labeled as such and never as
@@ -264,7 +258,7 @@ before B.7, and does not itself install or wire any new publish pipeline.
   freshly-built bytes; (3) a real isolated Rust consumer of the extracted
   `.crate` tarballs, a real isolated Python venv install + test subset of
   the built wheel, and a real isolated npm install + smoke check of the
-  packed (still-private) TypeScript tarball; (4) an honest summary that
+  packed TypeScript tarball; (4) an honest summary that
   never prints "registry consumer validation passed" unless
   `--live-registry-check` actually queried a live registry (it did not in
   this readiness work -- nothing has been published). Verified by actually
@@ -291,10 +285,10 @@ hands off for that eventual, owner-reviewed pass (via `sc-publish` once it
 is installed, or whatever mechanism the owner review settles on) to consume:
 
 (a) `release/bindings-artifacts.toml`, a readiness manifest naming 4 crates.io
-    entries (3 `ready`, 1 `pending`: `sc-observability-tauri`, blocked on
-    `feature/phase-b-tauri-qualification` landing) and 2 package entries (1
-    `ready`-but-uncredentialed PyPI package, 1 `pending` npm client blocked on
-    `bindings/typescript/package.json`'s `"private": true`);
+    entries (3 `ready`, 1 `pending`: `sc-observability-tauri`, pending
+    independent phase-end QA/API approval) and 2 package entries (1
+    ready-but-uncredentialed PyPI package, 1 pending npm client blocked on
+    its missing `NPM_TOKEN` credential and owner publication approval);
 (b) `scripts/release_bindings_artifacts.py`'s `build-evidence`/`verify-evidence`,
     which produce and re-verify real, rebuildable candidate artifact hashes
     for every `ready` entry;

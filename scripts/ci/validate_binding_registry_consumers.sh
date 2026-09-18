@@ -226,10 +226,9 @@ SC_OBSERVABILITY_RUNTIME_TEST=1 PYTHONWARNINGS=error "$PY_VENV/bin/python" -I -m
 echo "PASS: sc-observability wheel installs into a fresh isolated venv and its test subset passes against the installed package"
 
 echo
-echo "-- TypeScript: @sc-observability/client (still \"private\": true; forward-looking structural proof only) --"
-# npm pack works even when package.json sets "private": true (that flag only
-# blocks `npm publish`), so this still proves something real: the packaged
-# tarball's file set installs and runs, without claiming publish-readiness.
+echo "-- TypeScript: @sc-observability/client (forward-looking structural proof only) --"
+# npm pack proves the packaged tarball's file set installs and runs, without
+# claiming publish-readiness while the owner publication gate is pending.
 TS_DIR="bindings/typescript"
 TS_PACK_DIR="$TMP_ROOT/ts-pack"
 mkdir -p "$TS_PACK_DIR"
@@ -259,7 +258,7 @@ created.value.tryLog(event.value).then((result) => {
   console.log("TS_PACKAGED_TARBALL_CONSUMER_PASSED");
 }).catch((error) => { console.error(error); process.exit(1); });
 ' )
-echo "STRUCTURAL PROOF ONLY (pending): @sc-observability/client packs into a real npm tarball and installs/smoke-checks in isolation, but package.json still sets \"private\": true -- this is NOT npm-publish-readiness and status stays pending in release/bindings-artifacts.toml"
+echo "STRUCTURAL PROOF ONLY (pending): @sc-observability/client packs into a real npm tarball and installs/smoke-checks in isolation; NPM_TOKEN and owner publication approval remain pending, so this is NOT npm-publish-readiness"
 
 echo
 echo "== 4/4: summary =="
@@ -272,8 +271,8 @@ echo "    source tree) compile as an external Rust consumer"
 echo "  - the built sc-observability wheel installs into a fresh isolated venv and its"
 echo "    test subset passes against the installed package"
 echo "  - the @sc-observability/client npm tarball installs and smoke-checks in isolation"
-echo "    (still private:true; NOT publish-ready)"
-echo "  - sc-observability-tauri: SKIPPED (pending qualification), never claimed PASS"
+echo "    (owner publication gate pending; NOT publish-ready)"
+echo "  - sc-observability-tauri: qualification recorded PASS; independent phase-end QA/API approval remains pending"
 echo
 if [[ "$LIVE_REGISTRY_CHECK" == "1" ]]; then
   echo "registry consumer validation passed (live registry lookups were performed above)"

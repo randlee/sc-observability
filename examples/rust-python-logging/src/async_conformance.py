@@ -192,8 +192,14 @@ if mode == "owned":
     receipt = logger.submit(LogEvent(level="info", target="async.embed", action="shutdown.held"))
     assert isinstance(receipt, Ok)
     async def late_shutdown():
+        start_flush_calls = controls.flush_calls()
         pending = asyncio.create_task(logger.flush_async(60000))
-        await asyncio.sleep(0.005)
+        # Observe native flush admission instead of guessing task readiness
+        # with a scheduler-dependent fixed sleep.
+        admission_deadline = time.monotonic() + 1
+        while controls.flush_calls() == start_flush_calls:
+            assert time.monotonic() < admission_deadline, "flush task did not reach native admission"
+            await asyncio.sleep(0)
         stopped = await asyncio.to_thread(logger.shutdown, 1)
         assert isinstance(stopped, Err) and stopped.error.kind == "timeout", stopped
         closed = logger.submit(LogEvent(level="info", target="async.embed", action="after.close"))

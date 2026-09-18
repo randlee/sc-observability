@@ -71,7 +71,7 @@ publish_order = 3
 depends_on = ["sc-observability-binding-runtime", "sc-observability-dto"]
 wait_after_publish_seconds = 30
 status = "pending"
-pending_reason = "bindings/tauri/Cargo.toml now exists in this branch's tree (merged forward from feature/phase-b-6-python-async) and builds with --no-default-features, but is unqualified for release: feature/phase-b-tauri-qualification (real Tauri artifact/IPC matrix work) is a separate layer being prepared above B.7 and must land in the final stack before this flips to ready"
+pending_reason = "Tauri IPC/artifact qualification has passed in the recorded B.3a matrix; independent phase-end QA and formal API/ADR approval remain pending before publication"
 registry_secret = "CARGO_REGISTRY_TOKEN"
 registry_secret_configured = true
 
@@ -108,6 +108,6 @@ manifest_path = "bindings/typescript/package.json"
 publish_order = 6
 depends_on = []
 status = "pending"
-pending_reason = "bindings/typescript/package.json now exists in this branch's tree (merged forward from feature/phase-b-6-python-async) but sets \"private\": true, which npm refuses to publish; must be cleared upstream before this can flip to ready. NPM_TOKEN registry credential is also not yet configured."
+pending_reason = "NPM_TOKEN registry credential is not configured; owner publication approval and the phase-end publication gate remain pending"
 registry_secret = "NPM_TOKEN"
 registry_secret_configured = false

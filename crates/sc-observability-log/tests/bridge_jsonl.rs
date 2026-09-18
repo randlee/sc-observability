@@ -9,7 +9,7 @@
 )]
 
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use sc_observability_log::{
     ActionName, BridgeOptions, InitError, LevelFilter, LogGuard, LoggerConfig, ServiceName,
@@ -99,9 +99,20 @@ fn assert_mapped(events: &[Value]) {
 }
 
 fn assert_facade_flush_is_noop() {
-    let started = Instant::now();
+    let before = log::logger().enabled(
+        &log::MetadataBuilder::new()
+            .level(log::Level::Info)
+            .target("bridge_jsonl")
+            .build(),
+    );
     log::logger().flush();
-    assert!(started.elapsed() < Duration::from_millis(250));
+    let after = log::logger().enabled(
+        &log::MetadataBuilder::new()
+            .level(log::Level::Info)
+            .target("bridge_jsonl")
+            .build(),
+    );
+    assert_eq!(before, after, "facade flush must not alter bridge state");
 }
 
 fn assert_second_init_rejected(root: &Path) {

@@ -28,6 +28,15 @@ Other counters/integers use the decimal-string newtype described below.
 ```ts
 export type LevelDto = "trace" | "debug" | "info" | "warn" | "error";
 export type DecimalDto = string; // validated canonical decimal, never JSON number
+
+Rust's public `DecimalDto::new` and `DecimalDto::as_u64` constructors return
+the additive `DecimalDtoError` type. Its stable variants/codes are
+`InvalidCanonical` (`SC_OBSERVABILITY_DTO_DECIMAL_INVALID_CANONICAL`),
+`SignedOverflow` (`SC_OBSERVABILITY_DTO_DECIMAL_SIGNED_OVERFLOW`),
+`UnsignedOverflow` (`SC_OBSERVABILITY_DTO_DECIMAL_UNSIGNED_OVERFLOW`), and
+`NotUnsigned` (`SC_OBSERVABILITY_DTO_DECIMAL_NOT_UNSIGNED`). Serde continues
+to project these errors through its normal `Error::custom` boundary; the wire
+schema remains the canonical decimal string.
 export type PathDto =
   | { kind: "utf8"; value: string }
   | { kind: "unrepresentable" }
