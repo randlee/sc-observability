@@ -289,10 +289,11 @@ hashes. It must not overwrite drift and then report success.
 
 ## Current qualification evidence (updated 2026-09-18)
 
-Status: `in_progress` is accurate; this reflects current retained CI run
-state, not the older handoff prose in `handoff-b-3a-qualification.md`
-("Status: in progress; no sprint completion or publication claim") or the
-several intermediate failed/partial runs recorded in this repository's
+Status: `complete` for this development scope, per the terminal CI run below
+and the recorded lead decision; this supersedes the older handoff prose in
+`handoff-b-3a-qualification.md` (previously "Status: in progress; no sprint
+completion or publication claim", itself since updated) and the several
+intermediate failed/partial runs recorded in this repository's
 history (`35278469028`: Windows hosted-runner communication loss;
 `35300655966`: real-IPC failure at synthetic merge SHA `f8bce021`, not the
 branch tip; `35302307302`/manifest-drift attempts), all of which predate and

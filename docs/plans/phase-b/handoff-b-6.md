@@ -1,4 +1,4 @@
-# B.6 implementation handoff — qualification in progress
+# B.6 implementation handoff — development qualification complete
 
 Branch: `feature/phase-b-6-python-async`; draft PR 138.
 Direct parent: `feature/phase-b-5-python-integration` (PR 139).
