@@ -860,6 +860,8 @@ pub(crate) fn current_installed() -> Option<Arc<Installed>> {
     reason = "the copied bridge preserves its legacy bounded flush boundary"
 )]
 pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
+    #[cfg(test)]
+    record_native_flush_call();
     if lifecycle() != BridgeLifecycle::Running {
         return Err(FlushError::NotRunning {
             phase: lifecycle_phase(),
@@ -913,8 +915,13 @@ mod tests {
     #[test]
     fn native_flush_counter_positive_control_and_facade_zero_proof() {
         reset_native_flush_calls();
-        record_native_flush_call();
-        assert_eq!(native_flush_calls(), 1);
+        let result = flush_installed(Duration::from_millis(1));
+        assert!(matches!(result, Err(FlushError::NotRunning { .. })));
+        assert_eq!(
+            native_flush_calls(),
+            1,
+            "real flush entry is the positive control"
+        );
 
         reset_native_flush_calls();
         log::Log::flush(&crate::bridge::Bridge);
