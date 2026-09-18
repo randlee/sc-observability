@@ -1,6 +1,7 @@
 # SC-Observability Architecture
 
-**Status**: Approved baseline; ADR-011–ADR-015 proposed for Phase B review
+**Status**: Approved baseline; ADR-011–ADR-015 proposed for Phase B review;
+ADR-016 proposed for Phase C review
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Related documents**:
 - [`requirements.md`](./requirements.md)
@@ -1015,6 +1016,49 @@ ADR navigation index (status is recorded in each decision below):
 - **Contracts**: PHB-002/010–014;
   [native coordinator](plans/phase-b/native-binding-runtime.md),
   [Python embedding](plans/phase-b/sprint-b-4-python.md).
+
+### ADR-016: Shared Publishing Pipeline Adoption
+
+- **Status**: Proposed for Phase C review.
+- **Context**: This repository's release implementation
+  (`.github/workflows/release.yml`/`release-preflight.yml`, the `publisher`
+  agent, `scripts/release_gate.sh`/`scripts/release_artifacts.py`, and
+  `release/publish-artifacts.toml`) is repository-specific and predates
+  Phase B's expanded release surface (npm client, Python wheels/sdist,
+  native/Tauri artifacts). `../sc-publish` is a separately-owned shared
+  package intended to be the single publishing source of truth across
+  repositories, installed verbatim via a caller-owned JSON contract rather
+  than copied and hand-modified.
+- **Proposed decision**: Adopt `../sc-publish` as the publishing
+  implementation, installed via `plugins/sc-publish/install.py --input
+  install.json` at a pinned, reviewed shared-package revision. The
+  installer's copied `.claude`/`.github`/`release` assets replace this
+  repo's bespoke release workflows, `publisher` agent and manifest scripts;
+  only the two release manifests (`release/publish-artifacts.toml`,
+  `release/publish-channel-contracts.toml`) are repository-rendered from the
+  install contract. The shared package's channel set does not include npm;
+  this repo retains a narrow, explicitly-scoped, repository-owned npm
+  publish step outside the installer's managed files rather than silently
+  dropping npm or inventing unsupported shared-package behavior.
+- **Alternatives rejected for this phase**: Continuing to maintain a
+  repository-specific release pipeline duplicates logic already centralized
+  in the shared package and diverges further as more repositories adopt it.
+  Hand-patching the installer's vendored workflow files (for example to
+  change pinned action versions) defeats the shared-source-of-truth model
+  and must instead be resolved upstream in `sc-publish` or accepted as a
+  documented, tracked gap.
+- **Consequences**: This repo's publish operating model moves from a
+  `team-lead`-directed `publisher` agent following a repo-local runbook to
+  the shared package's named ATM `publisher` teammate plus role-specific
+  background channel workers, per `.claude/skills/publishing/SKILL.md`.
+  Release-manifest schema changes (`required`, `publish`, `preflight_check`,
+  `verify_install` per crate) apply to every existing published crate, not
+  only Phase B additions. The shared package's workflows pin
+  `actions/checkout@v4`/`actions/setup-python@v5`; where this repository has
+  already adopted newer action versions elsewhere, that mismatch is an
+  explicit reconciliation item, not a silent regression. Actual publication,
+  tagging and BTIT integration tests remain out of scope for Phase C.
+- **Contracts**: PHC-001–006; [Phase C](plans/phase-c/plan-phase-c.md).
 
 ## 8. API-Design Consistency
 

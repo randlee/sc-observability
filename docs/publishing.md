@@ -1,5 +1,19 @@
 # Publishing and Version Ownership
 
+## Phase C migration (proposed, not yet executed)
+
+This document currently describes the repository-specific publishing
+implementation. [Phase C](plans/phase-c/plan-phase-c.md) proposes replacing
+that implementation with the shared `../sc-publish` package, expanding
+coverage to Phase B's full release surface (Python wheels/sdist, the npm
+client, native/Tauri artifacts), and adding an explicit npm-channel
+resolution (the shared package has no npm channel). Until Phase C's sprints
+land, this document's "Source of Truth" section below remains accurate. See
+`docs/plans/phase-c/sprint-c-1-shared-pipeline-migration.md` for the exact
+asset replacement/deletion inventory and
+`docs/plans/phase-c/sprint-c-2-release-surface-preflight.md` for the
+preflight this document will grow to reflect after C.1 lands.
+
 ## Purpose
 
 This repo becomes the publishing source of truth for:

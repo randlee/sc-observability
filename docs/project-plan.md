@@ -122,6 +122,20 @@ qualification (B.4a), then Python integration/async support and binding release.
 Go remains future scope. The proposal does not reopen the accepted
 Phase A closure or claim that BTIT's currently open review findings are resolved.
 
+## Phase C — Shared publishing migration
+
+The proposed next lettered phase is tracked in
+[`plans/phase-c/plan-phase-c.md`](./plans/phase-c/plan-phase-c.md). It replaces
+this repo's bespoke publishing implementation with the shared `../sc-publish`
+package and preflights the complete Phase B release surface (Rust crates,
+Python wheels/sdist, the npm client, and applicable native/Tauri artifacts)
+through that shared pipeline. It is planning-and-preflight scope only: it does
+not authorize publication, tag creation, or BTIT repository integration tests,
+and its planning branch does not execute until Phase B merges into `develop`.
+The npm channel gap in the shared package's installer must be explicitly
+resolved, not silently dropped. See `docs/requirements.md` §11 and
+[ADR-016](architecture.md#adr-016-shared-publishing-pipeline-adoption).
+
 ## Rule
 
 Any sprint plan added here must preserve the standalone boundary defined by:

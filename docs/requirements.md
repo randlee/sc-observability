@@ -1,6 +1,7 @@
 # SC-Observability Requirements
 
-**Status**: Approved baseline; Phase B additions in §10 proposed for review
+**Status**: Approved baseline; Phase B additions in §10 and Phase C additions
+in §11 proposed for review
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Source of truth**: [`api-design.md`](./api-design.md)
 **Related ATM adapter docs**:
@@ -487,3 +488,50 @@ record the proposed architecture. No item below asserts implementation closure.
   and subsequent language artifacts have their own release gates. Go, Node.js
   and sc-runtime process/interpreter topology remain deferred. #96 configuration
   loading is independent.
+
+## 11. Phase C Additions — Proposed for Review
+
+The user has requested this scope; its detailed design and sprint execution are
+not yet approved. Existing requirements above remain the released baseline.
+The [Phase C index](plans/phase-c/plan-phase-c.md) routes the authoritative
+sprint contracts; [ADR-016](architecture.md#adr-016-shared-publishing-pipeline-adoption)
+records the proposed architecture. No item below asserts implementation
+closure, and Phase C shall not publish, tag, or execute BTIT integration tests.
+
+- PHC-001 The repository-specific publishing implementation (release
+  workflows, the publisher agent, the manifest/gate scripts and the legacy
+  manifest schema) shall be replaced by the pinned `../sc-publish` shared
+  package, installed only through its `install.py` caller-owned JSON
+  contract. Phase C shall pin and document the exact reviewed shared-package
+  revision; an unpinned or silently-updated shared revision does not satisfy
+  this requirement.
+- PHC-002 The shared package's channel set (`github_release`, `crates_io`,
+  `pypi`, `homebrew`, `scoop`, `winget`) does not include an npm channel.
+  Phase C shall not silently drop npm publication for the TypeScript client
+  nor fabricate npm support that does not exist in the shared package. It
+  shall record an explicit resolution: either a scoped, clearly-labeled
+  repository-owned npm publish step kept outside the shared installer's
+  managed files, or an explicit deferral with owner acceptance recorded
+  before Phase C closes.
+- PHC-003 Phase C sprints preflight only. They shall not authorize or
+  execute publication to any channel, create or push a release tag, or run
+  BTIT repository integration tests. Preflight commands shall be
+  idempotent, non-mutating with respect to any external registry, and
+  independently re-runnable.
+- PHC-004 The release-surface preflight shall enumerate, without silent
+  omission, every Phase B-added publishable Rust crate, the Python
+  wheel/sdist artifacts, the npm client package, and applicable native/Tauri
+  artifacts, cross-checked against a deterministic manifest inventory. A
+  crate or package present in the merged Phase B tree but absent from the
+  preflight inventory is a defect, not an accepted gap.
+- PHC-005 Phase C shall document the exact credential/authentication model
+  required by each adopted channel (for example, the shared PyPI workflow's
+  `PYPI_API_TOKEN`/`TEST_PYPI_API_TOKEN` secrets) without assuming
+  unimplemented mechanisms such as trusted publishing, and without
+  inspecting, printing, or otherwise exposing secret values.
+- PHC-006 Installing shared-package workflows shall not silently regress
+  CI runtime/action versions already adopted elsewhere in this repository.
+  Any mismatch between the shared package's pinned action versions and this
+  repository's current baseline requires an explicit reconciliation decision
+  recorded in the sprint doc before the installed workflow is enabled for
+  real use.
