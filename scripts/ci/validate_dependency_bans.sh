@@ -46,6 +46,13 @@ def assert_no_banned_dependencies(path: Path, workspace_document=None):
     if banned:
         raise SystemExit(f"forbidden boundary dependencies in {path}: {banned}")
 
+CORE_BOUNDARY_FORBIDDEN = {"schemars", "sc-observability-dto"}
+
+def assert_no_core_boundary_dependencies(path: Path):
+    forbidden = sorted(section_deps(path, "dependencies") & CORE_BOUNDARY_FORBIDDEN)
+    if forbidden:
+        raise SystemExit(f"forbidden core boundary dependencies in {path}: {forbidden}")
+
 workspace = load_toml(root / "Cargo.toml")
 members = set(workspace["workspace"]["members"])
 artifacts = load_toml(root / "release/publish-artifacts.toml")
@@ -147,6 +154,15 @@ boundary_manifests = [
 for path in boundary_manifests:
     assert_no_banned_dependencies(path)
 
+core_manifests = {
+    "sc-observability-types": root / "crates/sc-observability-types/Cargo.toml",
+    "sc-observability": root / "crates/sc-observability/Cargo.toml",
+    "sc-observe": root / "crates/sc-observe/Cargo.toml",
+    "sc-observability-otlp": root / "crates/sc-observability-otlp/Cargo.toml",
+}
+for path in core_manifests.values():
+    assert_no_core_boundary_dependencies(path)
+
 # Exercise each banned prefix through the same manifest reader used above.
 # Keep every declaration form in an independent fixture so a partial scanner
 # cannot pass merely because another section contains the same banned package.
@@ -199,6 +215,30 @@ with tempfile.TemporaryDirectory(prefix="dependency-ban-fixtures-") as directory
             else:
                 raise SystemExit(
                     f"negative dependency-ban fixture was accepted: {banned} in {case}"
+                )
+
+# Exercise the distinct core-runtime prohibition independently for every core
+# crate and every forbidden package. These cases intentionally contain only
+# one dependency declaration so each failure identifies its own rule.
+with tempfile.TemporaryDirectory(prefix="core-boundary-fixtures-") as directory:
+    fixture_root = Path(directory)
+    for crate, _ in core_manifests.items():
+        for forbidden in sorted(CORE_BOUNDARY_FORBIDDEN):
+            fixture = fixture_root / f"{crate}-{forbidden}.toml"
+            fixture.write_text(
+                f"[dependencies]\n{forbidden} = \"0.0.0\"\n",
+                encoding="utf-8",
+            )
+            try:
+                assert_no_core_boundary_dependencies(fixture)
+            except SystemExit as error:
+                if forbidden not in str(error):
+                    raise SystemExit(
+                        f"negative core-boundary fixture lost {forbidden} for {crate}: {error}"
+                    )
+            else:
+                raise SystemExit(
+                    f"negative core-boundary fixture was accepted: {forbidden} for {crate}"
                 )
 print("dependency ban validation passed")
 PY
