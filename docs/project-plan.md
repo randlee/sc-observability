@@ -419,6 +419,11 @@ registry-publication tail.
 
 ## Phase C — Shared publishing migration
 
+Status: in progress (owner-authorized execution). Lead: `aobs`. Integration:
+`integrate/phase-c`; C.1: `fix/phase-c-1-shared-pipeline-migration`; C.2:
+`fix/phase-c-2-release-surface-preflight` (depends on C.1). Publication remains
+separately authorized; upstream prerequisites still gate installation.
+
 The proposed next lettered phase is tracked in
 [`plans/phase-c/plan-phase-c.md`](./plans/phase-c/plan-phase-c.md). It replaces
 this repo's bespoke publishing implementation with the shared `../sc-publish`
