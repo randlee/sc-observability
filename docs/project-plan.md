@@ -122,22 +122,6 @@ qualification (B.4a), then Python integration/async support and binding release.
 Go remains future scope. The proposal does not reopen the accepted
 Phase A closure or claim that BTIT's currently open review findings are resolved.
 
-## Phase C — Shared publishing migration
-
-The proposed next lettered phase is tracked in
-[`plans/phase-c/plan-phase-c.md`](./plans/phase-c/plan-phase-c.md). It replaces
-this repo's bespoke publishing implementation with the shared `../sc-publish`
-package and preflights the complete Phase B release surface (Rust crates,
-Python wheels/sdist, the npm client, and applicable native/Tauri artifacts)
-through that shared pipeline. It is planning-and-preflight scope only: it does
-not authorize publication, tag creation, or BTIT repository integration tests,
-and its planning branch does not execute until Phase B merges into `develop`.
-The shared package's missing npm channel and stale pinned action versions are
-treated as named upstream prerequisites for `../sc-publish` to satisfy at a
-reviewed pin before the affected sprint completes — not a repository-local
-publisher fork and not an accepted regression tracked only by a follow-up
-ticket. See `docs/requirements.md` §11 and
-[ADR-016](architecture.md#adr-016-shared-publishing-pipeline-adoption).
 ### B.3a — TypeScript client and Tauri host adapter
 
 [B.3a](plans/phase-b/sprint-b-3a-typescript.md) implementation now includes the
@@ -370,6 +354,86 @@ not marked complete; producing this review packet is not sprint closure. It
 prepares B.7 for its actual phase-end publication pass, deferred (not
 cancelled) until owner review authorizes it.
 
+### B.5 — Python logging and mixed-language context
+
+B.5 implements the explicit standard-library logging handler, Result-returning
+request scopes, typed examples, and shared Rust/Python request correlation in
+[`plans/phase-b/sprint-b-5-python-integration.md`](./plans/phase-b/sprint-b-5-python-integration.md).
+Implementation and installed distribution qualification are active on
+`feature/phase-b-5-python-integration`; package publication remains B.7.
+### B.2 — Six-package Rust qualification
+
+[B.2 implementation](plans/phase-b/sprint-b-2-publish-rust.md) stages the six
+public Rust packages at `1.4.0`, preserving historical B.P2 artifacts and B.1
+source provenance. The [handoff](plans/phase-b/handoff-b-2.md) pins the final
+candidate source, archives, normalized manifests, isolated platform consumers
+and scoped API approval. The [checklist](plans/phase-b/checklist-b-2-qualification.md)
+separates implementation/verification from lead completeness and independent
+QA. Publication and the later registry-only consumer proof remain B.7 gates.
+
+### B.3 — Shared neutral DTO/schema
+
+B.3 implements `sc-observability-dto`, checked core conversions, the canonical
+input/output schema, schema-only TypeScript/Python projections, frozen conformance
+fixtures and the real isolated source-bundle helper. The implementation handoff
+is [`plans/phase-b/handoff-b-3.md`](./plans/phase-b/handoff-b-3.md), including exact
+qualified B.2 archive provenance and the lead's crate-specific wire API approval.
+Implementation validation passed; consolidated Phase B QA/ordered merges and
+B.7 registry-only publication proof remain separate.
+
+### B.6 — Python immediate receipts and optional asyncio observation
+
+[B.6](plans/phase-b/sprint-b-6-python-async.md) adds synchronous context-aware
+`submit`, caller-owned resolved receipts and bounded loop-local `flush_async`
+observation for owned and attached backends. The
+[handoff](plans/phase-b/handoff-b-6.md) and
+[checklist](plans/phase-b/checklist-b-6.md) retain implementation, exact-source
+local checks and remaining gates. The final B.4/B.5/B.6 combined candidate must
+pass one immutable five-wheel/25-cell matrix, including actual embedded hosts
+per interpreter. Lead completeness, consolidated QA, ordered parent merges and
+later publication remains separate; no intermediate local result closes the matrix.
+
+### B.4 — Owned and host-attached Python runtime
+
+[B.4 Python runtime](plans/phase-b/sprint-b-4-python.md) provides the locked
+`abi3-py310` PyO3 owned and Rust-host-attached logging surface, typed `Ok`/`Err`
+facade, and the Rust `rlib` embedding surface. Its
+[handoff](plans/phase-b/handoff-b-4.md) records the tested implementation,
+source-wheel runtime/conformance gates, private companion-only fault proofs and
+the public API digest. B.4a separately owns wheel/sdist and platform
+qualification; B.7 retains publication.
+
+### B.4a — Python distributions and platform qualification
+
+[B.4a](plans/phase-b/sprint-b-4a-python-packaging.md) builds a self-contained
+sdist through B.3's source-bundle helper, freezes outer extension/Rust-host
+locks against that layout, and qualifies the built wheels across the platform
+matrix. Its [handoff](plans/phase-b/handoff-b-4a.md) records the packaging
+approach; no package is published from this sprint. Sprint `status:
+in_progress` is accurate qualification pending, not a publication gap:
+PHB-CI-002 (sdist manifest fix, landed on PR#144) and the still-open PHB-CI-003
+(packaged wheel test-hook symbol failure, assigned to
+`fix/phase-b-wheel-test-hooks`) are both non-publication CI findings that must
+resolve, independent of and before B.7's separately owner-deferred
+registry-publication tail.
+
+## Phase C — Shared publishing migration
+
+The proposed next lettered phase is tracked in
+[`plans/phase-c/plan-phase-c.md`](./plans/phase-c/plan-phase-c.md). It replaces
+this repo's bespoke publishing implementation with the shared `../sc-publish`
+package and preflights the complete Phase B release surface (Rust crates,
+Python wheels/sdist, the npm client, and applicable native/Tauri artifacts)
+through that shared pipeline. It is planning-and-preflight scope only: it does
+not authorize publication, tag creation, or BTIT repository integration tests,
+and its planning branch does not execute until Phase B merges into `develop`.
+The shared package's missing npm channel and stale pinned action versions are
+treated as named upstream prerequisites for `../sc-publish` to satisfy at a
+reviewed pin before the affected sprint completes — not a repository-local
+publisher fork and not an accepted regression tracked only by a follow-up
+ticket. See `docs/requirements.md` §11 and
+[ADR-016](architecture.md#adr-016-shared-publishing-pipeline-adoption).
+
 ## Rule
 
 Any sprint plan added here must preserve the standalone boundary defined by:
@@ -466,66 +530,3 @@ that integrate against the shipped public API.
      CLI surface precisely enough for implementation and review
    - `qm-comp` cross-document consistency review passes; all three docs are
      confirmed mutually consistent before merge
-
-### B.5 — Python logging and mixed-language context
-
-B.5 implements the explicit standard-library logging handler, Result-returning
-request scopes, typed examples, and shared Rust/Python request correlation in
-[`plans/phase-b/sprint-b-5-python-integration.md`](./plans/phase-b/sprint-b-5-python-integration.md).
-Implementation and installed distribution qualification are active on
-`feature/phase-b-5-python-integration`; package publication remains B.7.
-### B.2 — Six-package Rust qualification
-
-[B.2 implementation](plans/phase-b/sprint-b-2-publish-rust.md) stages the six
-public Rust packages at `1.4.0`, preserving historical B.P2 artifacts and B.1
-source provenance. The [handoff](plans/phase-b/handoff-b-2.md) pins the final
-candidate source, archives, normalized manifests, isolated platform consumers
-and scoped API approval. The [checklist](plans/phase-b/checklist-b-2-qualification.md)
-separates implementation/verification from lead completeness and independent
-QA. Publication and the later registry-only consumer proof remain B.7 gates.
-
-### B.3 — Shared neutral DTO/schema
-
-B.3 implements `sc-observability-dto`, checked core conversions, the canonical
-input/output schema, schema-only TypeScript/Python projections, frozen conformance
-fixtures and the real isolated source-bundle helper. The implementation handoff
-is [`plans/phase-b/handoff-b-3.md`](./plans/phase-b/handoff-b-3.md), including exact
-qualified B.2 archive provenance and the lead's crate-specific wire API approval.
-Implementation validation passed; consolidated Phase B QA/ordered merges and
-B.7 registry-only publication proof remain separate.
-
-### B.6 — Python immediate receipts and optional asyncio observation
-
-[B.6](plans/phase-b/sprint-b-6-python-async.md) adds synchronous context-aware
-`submit`, caller-owned resolved receipts and bounded loop-local `flush_async`
-observation for owned and attached backends. The
-[handoff](plans/phase-b/handoff-b-6.md) and
-[checklist](plans/phase-b/checklist-b-6.md) retain implementation, exact-source
-local checks and remaining gates. The final B.4/B.5/B.6 combined candidate must
-pass one immutable five-wheel/25-cell matrix, including actual embedded hosts
-per interpreter. Lead completeness, consolidated QA, ordered parent merges and
-later publication remains separate; no intermediate local result closes the matrix.
-
-### B.4 — Owned and host-attached Python runtime
-
-[B.4 Python runtime](plans/phase-b/sprint-b-4-python.md) provides the locked
-`abi3-py310` PyO3 owned and Rust-host-attached logging surface, typed `Ok`/`Err`
-facade, and the Rust `rlib` embedding surface. Its
-[handoff](plans/phase-b/handoff-b-4.md) records the tested implementation,
-source-wheel runtime/conformance gates, private companion-only fault proofs and
-the public API digest. B.4a separately owns wheel/sdist and platform
-qualification; B.7 retains publication.
-
-### B.4a — Python distributions and platform qualification
-
-[B.4a](plans/phase-b/sprint-b-4a-python-packaging.md) builds a self-contained
-sdist through B.3's source-bundle helper, freezes outer extension/Rust-host
-locks against that layout, and qualifies the built wheels across the platform
-matrix. Its [handoff](plans/phase-b/handoff-b-4a.md) records the packaging
-approach; no package is published from this sprint. Sprint `status:
-in_progress` is accurate qualification pending, not a publication gap:
-PHB-CI-002 (sdist manifest fix, landed on PR#144) and the still-open PHB-CI-003
-(packaged wheel test-hook symbol failure, assigned to
-`fix/phase-b-wheel-test-hooks`) are both non-publication CI findings that must
-resolve, independent of and before B.7's separately owner-deferred
-registry-publication tail.
