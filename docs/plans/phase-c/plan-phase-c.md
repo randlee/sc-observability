@@ -92,9 +92,10 @@ BTIT tests and actual publishing are not authorized by this planning request.
   does not substitute a local fork or workaround for that capability, and
   does not accept a permanent gap with only a follow-up ticket in its place.
   If the upstream work cannot land before Phase C needs to execute, the
-  sprint stops and escalates to the owner for an explicit decision (delay
-  execution, or accept a documented, owner-signed-off temporary gap) rather
-  than treating a local substitute as equivalent adoption.
+  sprint stops on the technical compatibility gate and reports the gap rather
+  than treating a local substitute as equivalent adoption. Phase C execution
+  is authorized; the lead selects the reviewed/validated upstream pin once
+  the compatibility evidence is complete.
 - Go and future sc-runtime publishing surfaces remain deferred per Phase B.
 
 Planning deliverables: complete plan and two sprint docs, requirements and
