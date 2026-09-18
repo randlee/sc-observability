@@ -228,12 +228,15 @@ This amendment does not extend to B.3a, B.5, or B.6: each of those sprints'
 own handoff records
 ([`handoff-b-3a-qualification.md`](handoff-b-3a-qualification.md),
 [`handoff-b-5.md`](handoff-b-5.md), [`handoff-b-6.md`](handoff-b-6.md))
-transparently documents real, non-publication remaining work of its own
-(B.3a's real-IPC artifact qualification; B.5/B.6's installed distribution
-matrix and lead completeness review) that this amendment does not waive.
-Phase-end QA continues to correctly report those three sprints' `status` as
-non-`complete` until that specific remaining work lands, independent of and
-in addition to the B.7 publication gate they also transitively depend on.
+transparently documents real, non-publication remaining work of its own that
+this amendment does not waive. B.3a's real-IPC artifact qualification and
+B.5/B.6's installed distribution matrix have since passed in full (terminal
+CI runs recorded in each sprint's own "Current qualification evidence"
+section and handoff); the remaining non-waived item for all three is the
+lead completeness review, a governance sign-off rather than additional
+development work. Phase-end QA continues to correctly report those three
+sprints' `status` as non-`complete` until that review lands, independent of
+and in addition to the B.7 publication gate they also transitively depend on.
 
 ## Planning validation and evidence
 

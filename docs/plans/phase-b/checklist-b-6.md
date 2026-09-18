@@ -19,12 +19,12 @@ Every row receives an implementation pass followed by an independent verificatio
 | Multiple loops, native completion before next poll and observer saturation | implemented | local pass |  clock-controlled loop with real native flushes and alias handles; atomic permit thread fixture |
 | Loop closure/interpreter teardown/late shutdown subprocess checks | implemented | local pass |  owned held-pipe interpreter exit; core/bridge actual PyO3 finalization then native completion |
 | Typed stubs/examples, debug asyncio/warnings strict, no obsolete receipt codes | implemented | local pass | root/async stubs; strict Python 3.10 fixtures/example; full gate78 tests with debug/warnings; obsolete-code scan clean |
-| Full B.4a matrix and required Python validator | source gate implemented; matrix pending parent integration | source gate pass; matrix pending | full required validator78 tests; contract opts into all three strict flags; final companion/per-cell runner awaited |
-| Parent merge, complete handoff/hash evidence and documentation | in progress | pending | direct B.5 checkpoint2f11f75 merged in2bd3e87; handoff-b-6.md retains exact remaining gates |
+| Full B.4a matrix and required Python validator | implemented | passed | run 35303039765 (source `c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18`, `conclusion: success`, all 33 jobs, `embedding_in_each_cell` enabled) -- see handoff-b-6.md "Terminal qualification" |
+| Parent merge, complete handoff/hash evidence and documentation | implemented | passed | direct B.5 checkpoint2f11f75 merged in2bd3e87; final combined-candidate evidence recorded in handoff-b-6.md "Terminal qualification" |
 
 ## Findings and follow-up verification
 
 | Finding | Implement | Verify | Evidence |
 | --- | --- | --- | --- |
 | B6-R01: async finalization dispatch pushed the shared host main above its lint size bound | implemented | pass | dispatch moved to async_conformance::finalize_if_requested; cargo fmt and host clippy --all-targets --no-deps -D warnings pass |
-| B6-P01: ignored Python caches copied into distribution inventory but omitted by maturin | packaging owner implementing tracked-source copy | pending final parent | initial prepare fails on inventoried .pyc; cache-free provisional sdist/build and installed cell pass; owner retains regression |
+| B6-P01: ignored Python caches copied into distribution inventory but omitted by maturin | fixed: source assembly now copies only Git-tracked Python/embedding inputs (`handoff-b-4a.md`) | passed in final parent | initial prepare fails on inventoried .pyc; cache-free provisional sdist/build and installed cell pass; run 35303039765's `sdist`/`installed-suite` jobs pass with the tracked-copy fix in place |

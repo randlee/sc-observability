@@ -111,10 +111,11 @@ Timed-out artifact commands terminate their process tree, including descendants
 holding captured output pipes; a real child-process regression verifies the
 bounded failure. Windows execution still needs the final combined CI proof.
 
-This handoff is incomplete. Full runtime qualification awaits the active B.4
-owner's completed contract and the final 25-cell execution. Explicit development
-runs label every result `development_only`; final aggregation rejects those
-results even when their currently available tests pass.
+This handoff recorded an incomplete state through the development runs below.
+Explicit development runs label every result `development_only`; final
+aggregation rejects those results even when their currently available tests
+pass. That final aggregation has since run to completion -- see "Terminal
+qualification" below.
 
 - Local development source `19ab74fa73a387d8a9e647c7253ef4c97a918abe`
   produced sdist SHA-256
@@ -133,5 +134,31 @@ results even when their currently available tests pass.
   [Development run 35209259060](https://github.com/randlee/sc-observability/actions/runs/35209259060)
   tests those corrections plus the latest inherited parent source.
 
+## Terminal qualification (updated 2026-09-18)
+
+[GitHub Actions run 35303039765](https://github.com/randlee/sc-observability/actions/runs/35303039765)
+at exact source SHA `c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18` completed
+`conclusion: success`: all 33 jobs passed -- `plan`, `sdist`, all 5 `wheel`
+platform builds, all 25 `installed-suite` interpreter/platform cells, and the
+`aggregate` gate. This supersedes the development-only runs recorded above,
+which remain retained as history. The production immutable artifact inventory
+(`production-artifacts.json`, artifact ID/name from that run) records the
+qualified sdist and five production wheels with their SHA-256 digests,
+including the aggregate-level inventory hash
+`ef492dc1793d68d29ddeebda4afcc9bd87557fd3d65771b08cede24cbe9852f7`
+independently reported by the Tauri specialist from that same run's artifacts.
+Platform/interpreter results and required validation logs are the 25
+`installed-suite` job logs and the `aggregate` job's cross-check of raw JUnit,
+artifact hashes, source SHA, executable headers and wheel tags in that run.
+The two-pass checklist in `checklist-b-4a-packaging.md` is updated from this
+evidence.
+
 Final immutable artifact inventory, platform/interpreter results, required
-validation logs, two-pass checklist and lead completeness decision remain open.
+validation logs and the two-pass checklist are therefore no longer open items:
+AC1-AC4's development qualification is complete per this terminal evidence.
+The one item this handoff does not resolve is the lead completeness decision:
+that is a governance sign-off owned by the phase lead, not a deliverable or
+test this evidence can satisfy, and it remains open -- distinct from, not
+blocked on, any further development work. Independent phase-end QA acceptance
+is likewise separately pending. This handoff does not claim QA acceptance,
+API/ADR approval or publication readiness.

@@ -206,10 +206,14 @@ Status: `in_progress` is accurate, not stale. The same B.4a 25-cell
 installed-distribution matrix B.5 depends on has now passed (see
 `sprint-b-4a-python-packaging.md`'s current qualification evidence): run
 `35303039765` at `c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18` completed
-`conclusion: success`, all 33 jobs. B.6's own implementation/local-check
-evidence is recorded in `handoff-b-6.md` and `checklist-b-6.md`; lead
-completeness review is separately still open, and `status` moves to
-`complete` only once that review happens.
+`conclusion: success`, all 33 jobs, with `embedding_in_each_cell` enabled as
+B.6 requires. B.6's own implementation/local-check evidence is recorded in
+`handoff-b-6.md` and `checklist-b-6.md`, both updated from this terminal run:
+no concrete deliverable, checklist item or test remains unsatisfied. `status`
+above stays `in_progress`, not `complete`, because a separate governance step
+-- the phase lead's completeness review, and independent phase-end QA -- has
+not yet happened; that step is a sign-off decision, not additional
+development work. `status` moves to `complete` only once that review happens.
 
 ## Paths to delete
 

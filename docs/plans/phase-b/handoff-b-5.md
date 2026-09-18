@@ -3,8 +3,9 @@
 Branch: `feature/phase-b-5-python-integration`.
 Direct parent: `fix/phase-b-3a-completeness`; first pushed parent `1d613bc`
 merged in `b15fff9`. This is a progress record, not a completeness claim.
-Final parent, installed distribution matrix, retained gate index, and lead
-completeness review remain required.
+The installed distribution matrix has since passed in full -- see "Terminal
+qualification" below. The lead completeness review remains required and is a
+separate governance sign-off, not a development deliverable.
 
 ## Implemented surface
 
@@ -90,8 +91,23 @@ recorded in `docs/api-approvals/phase-b-python-context.json` under ATM
 assertion to 18 and explicitly requires that constant; all 17 DTO conversion
 tests pass. Schema compiler, both generators and generation hashes are clean.
 
-Platform run `35211438801` uses `df9953e` and remains incomplete; Linux wheel
-jobs failed and require packaging-owner resolution. The next corrected parent
-will also carry per-interpreter embedding qualification. Full matrix and lead
-completeness remain outstanding; the tracked task stays open while execution
-is yielded to the Tauri specialist by explicit lead request.
+Platform run `35211438801` uses `df9953e` and remained incomplete; Linux wheel
+jobs failed and required packaging-owner resolution. That is retained as
+development history, not current status.
+
+## Terminal qualification (updated 2026-09-18)
+
+The corrected parent's final combined-candidate run has since completed:
+[run 35303039765](https://github.com/randlee/sc-observability/actions/runs/35303039765)
+at source SHA `c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18` finished
+`conclusion: success`, all 33 jobs, including all 25 `installed-suite` cells
+running the complete installed tests directory -- which includes B.5's own
+handler/context suite, not only B.4a's. This satisfies this handoff's
+"Remaining qualification" full immutable sdist/wheel and embedded-host run on
+all 25 B.4a interpreter/platform cells; see `sprint-b-4a-python-packaging.md`
+and `handoff-b-4a.md` for the shared verified detail. B.5's development
+qualification is therefore complete. The lead completeness review is a
+separate governance sign-off owned by the phase lead, not a development
+deliverable, and remains open independent of this evidence; independent
+phase-end QA acceptance is likewise separately pending. This does not claim
+QA acceptance, API/ADR approval or publication.

@@ -238,11 +238,14 @@ the earlier failed diagnostic runs recorded in this repository's history
 `35300170241` at `0e48648`: Windows async fixture deadline assertion),
 which remain retained as development history, not current status.
 
-`status` above stays `in_progress`, not `complete`: this section records that
-AC1-AC4's 25-cell matrix requirement is now met, but `handoff-b-4a.md` records
-a separate, still-open lead completeness decision that this evidence-fix task
-is not authorized to close. `status` moves to `complete` only once that
-decision is made.
+AC1-AC4's development qualification is complete per this terminal evidence;
+no concrete deliverable, checklist item or test remains unsatisfied (see the
+updated `checklist-b-4a-packaging.md`). `status` above stays `in_progress`,
+not `complete`, because a separate governance step -- the phase lead's
+completeness review recorded in `handoff-b-4a.md`, and independent
+phase-end QA -- has not yet happened; that step is a sign-off decision, not
+additional development work, and this evidence-fix task is not authorized to
+make it. `status` moves to `complete` only once that decision is made.
 
 ## Paths to delete
 
