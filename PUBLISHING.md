@@ -51,11 +51,12 @@ Both workflows are manual dispatch (`workflow_dispatch`).
    order, repo boundaries, and version consistency. It runs `cargo publish
    --dry-run` for each crate in manifest order.
 4. Merge `develop` to `main` once CI and preflight are green.
-5. Do not run the legacy release workflow for the ten-entry Phase-B inventory:
-   its `cargo publish -p` path predates the standalone Tauri and binding
-   channels and is disabled/superseded until Phase C migrates `sc-publish`.
-6. After that migration and separate owner authorization, the shared pipeline
-   consumes both manifests and creates the appropriate registry/release records.
+5. Do not dispatch the legacy release workflow for the ten-entry Phase-B
+   inventory: its `cargo publish -p` path predates the standalone Tauri and
+   binding channels and is not suitable or authorized for this surface.
+6. After Phase C migrates and preflights `sc-publish`, that caller-owned
+   contract reconciles the two readiness inventories; separate owner
+   authorization is still required before registry/release actions.
 
 ## Initial Publish Note
 

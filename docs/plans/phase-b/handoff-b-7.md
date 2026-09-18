@@ -139,8 +139,8 @@ The B.4a Python wheel matrix (`.github/workflows/b4a-python-distributions.yml`,
 policy at `release/python-platform-policy.json`) already builds and qualifies
 the full 5-platform x 5-interpreter (25-cell) matrix for the `sc-observability`
 PyPI package's sdist/wheels. That reusable workflow's `workflow_call` interface
-is available for `sc-publish` (or any future publish pipeline) to consume
-later; `.github/workflows/release.yml` does not call it and installs no
+is available as Phase-C input for the caller-owned `sc-publish` contract to
+reconcile later; `.github/workflows/release.yml` does not call it and installs no
 binding-publish jobs, per the owner scope correction above.
 
 `bindings/typescript/` and `bindings/tauri/` now exist in this branch's tree.
@@ -272,9 +272,8 @@ before B.7, and does not itself install or wire any new publish pipeline.
   `qualify-python-wheel-matrix`, `publish-python-wheel`,
   `publish-npm-client`) has been removed, and the `release` job's `needs:`
   is back to `[gate-and-tag, publish]`. A comment in the workflow points at
-  the manifest/script/validator tooling below as where B.7's review evidence
-  actually lives, and names `sc-publish` as the intended future consumer of
-  that evidence.
+  the manifest/script/validator tooling below as where the review evidence
+  lives; Phase C reconciles it into the caller-owned `sc-publish` contract.
 
 **This is a review packet, not a publication.** Nothing in this branch
 uploads to a registry, creates a release tag beyond the pre-existing

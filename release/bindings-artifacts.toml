@@ -2,9 +2,10 @@ schema_version = 1
 
 # Phase-B binding-release readiness manifest (review/evidence data, not an
 # installed publish pipeline). Records publish order after
-# release/publish-artifacts.toml's ten Rust crates for a future publish
-# pipeline ("sc-publish", a Phase-C follow-up after Phase-B merge) to consume;
-# nothing in this branch reads this manifest to actually publish anything.
+# overlapping binding subset of release/publish-artifacts.toml's ten Rust
+# entries, plus PyPI/npm readiness records. Its local order is evidence only,
+# not a second publishing plan. Phase C reconciles this subset into the
+# caller-owned sc-publish contract; nothing in this branch publishes anything.
 # See docs/plans/phase-b/handoff-b-7.md for full context.
 #
 # status = "ready": file exists in this branch's tree today, structurally valid.
