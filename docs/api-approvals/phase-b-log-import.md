@@ -83,6 +83,30 @@ Neither approval grants publication, a BTIT dependency switch, or
 runtime-contract closure (Phase B's runtime-level contract remains
 owner-deferred per `docs/api-approvals/phase-b-runtime-level.md`).
 
+## Independent QA citation and provenance limits
+
+The independent quality-manager review for the four post-import test deltas is
+the [PR148 final quality report](https://github.com/randlee/sc-observability/pull/148#issuecomment-5724132637).
+It records `PASS` for reviewed head
+`5bcc27ee8f228d396bb603fc7dfc1a1c65861fe0`, and identifies the approved QA
+delta commit `0460d6f1845b7514485c566db72c92fdf1b0a3f9`. The four
+`approved_qa_delta` entries in `docs/plans/phase-b/post-import-adaptations.json`
+are independently rechecked here: each cited after blob is present at both
+`0460d6f` and the reviewed `5bcc27e` head.
+
+| File | Verified after blob |
+| --- | --- |
+| `crates/sc-observability-log/src/handle.rs` | `113534e89240830a568742aab9452c4fb511c711` |
+| `crates/sc-observability-log/src/health.rs` | `e8a4f33a83b0ec360ff3622650d3cb26b2c33846` |
+| `crates/sc-observability-log/tests/bridge_jsonl.rs` | `96267a2c451298cebf8440b3c79bfcdafa39f568` |
+| `crates/sc-observability-log/tests/shutdown_timeout.rs` | `4b35299526fb6248a14ebc138e0a9f8df8238512` |
+
+The offline import validator proves exact content provenance: accepted-source
+blobs, destination after-blobs, and the recorded patch correspond. It does not
+prove author identity or review authenticity. The independent PR148
+quality-manager review and its `PASS` verdict are the separate QA gate; no
+signing infrastructure or additional approval is claimed here.
+
 ## Affected Artifacts
 
 - `crates/sc-observability-log/`, `crates/sc-observability-log-macros/`,
