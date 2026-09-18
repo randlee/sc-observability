@@ -83,7 +83,8 @@ boundary (32 containers accepted; the 33rd container rejected).
 The specialist checkpoint `5a3f380` reports 103 isolated macOS IPC assertions
 and 336 packed-client schema/fault cases PASS, including the exact-size
 correction. Full installed Rust/npm artifacts, platform CI, and broad C05
-qualification remain delegated to `bp-tauri-helper` on
-`feature/phase-b-tauri-qualification`; this handoff does not claim those
-gates. B.3a remains in progress pending specialist retest and explicit lead
-completeness PASS.
+qualification were delegated to `bp-tauri-helper` on
+`feature/phase-b-tauri-qualification`; this handoff does not itself claim
+those gates -- see `handoff-b-3a-qualification.md`'s "Terminal qualification"
+section, where the specialist retest passed (run 35303041402) and the lead
+recorded development completeness PASS (aobs, 2026-09-18).
