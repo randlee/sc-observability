@@ -108,8 +108,8 @@ loop.call_soon(wait.send, None)
 loop.run_until_complete(asyncio.sleep(0))
 assert len(_pools[logger._native.observer_key()].observers) == 1
 loop.close()
-sys.stderr.write("B6_TEARDOWN_HELD\n")
-sys.stderr.flush()
+sys.stderr.buffer.write(b"B6_TEARDOWN_HELD\n")
+sys.stderr.buffer.flush()
 # Module/observer teardown drops only observation. No native completion calls
 # Python or waits for this closed loop during interpreter finalization.
 '''
@@ -119,9 +119,9 @@ sys.stderr.flush()
     try:
         child.wait(timeout=15)
         assert child.stderr is not None
-        errors = child.stderr.read().decode()
+        errors = child.stderr.read()
         assert child.returncode == 0, errors
-        assert errors == "B6_TEARDOWN_HELD\n", errors
+        assert errors == b"B6_TEARDOWN_HELD\n", errors
     finally:
         if child.poll() is None:
             child.kill()
@@ -185,7 +185,8 @@ assert health.value.logging.last_writer_error.code == "SC_OBSERVABILITY_LOGGER_W
 assert submitted.value.state().admission.kind == "accepted"
 assert isinstance(asyncio.run(submitted.value.wait(0)), Ok)
 assert isinstance(logger.shutdown(), Ok)
-sys.stderr.write("B6_WRITER_FAILURE_HEALTH_PASSED\n")
+sys.stderr.buffer.write(b"B6_WRITER_FAILURE_HEALTH_PASSED\n")
+sys.stderr.buffer.flush()
 '''
     child = subprocess.Popen([sys.executable, "-I", "-W", "error", "-c", script, str(tmp_path)],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -194,9 +195,9 @@ sys.stderr.write("B6_WRITER_FAILURE_HEALTH_PASSED\n")
     try:
         child.wait(timeout=15)
         assert child.stderr is not None
-        errors = child.stderr.read().decode()
+        errors = child.stderr.read()
         assert child.returncode == 0, errors
-        assert errors == "B6_WRITER_FAILURE_HEALTH_PASSED\n", errors
+        assert errors == b"B6_WRITER_FAILURE_HEALTH_PASSED\n", errors
     finally:
         if child.poll() is None:
             child.kill()
