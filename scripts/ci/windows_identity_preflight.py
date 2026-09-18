@@ -40,6 +40,10 @@ class Probe {
     return child.ExitCode;
    }
   }
+  if(args[1]=="denyhold") {
+   System.IO.File.WriteAllText(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"leaf-ready"),Process.GetCurrentProcess().Id.ToString());
+   System.Threading.Thread.Sleep(30000);
+  }
   return 0;
  }
 }
@@ -118,6 +122,20 @@ def main():
                 shutil.rmtree(partial.control); identity=None
                 if powershell('(Get-Acl '+literal(denied)+').Sddl') != original_acl: raise RuntimeError('partial recovery ACL mismatch')
                 report['events'].append({'name':'acl_only_recovery','status':'passed'})
+                # An abruptly terminated controller owns the only job handles.
+                # The independent parent then recovers its persistent policy.
+                crash=subprocess.run([sys.executable,__file__,'--crash-worker',str(scratch),str(denied),ip],timeout=40)
+                if crash.returncode != 91: raise RuntimeError('forced worker failure was not observed')
+                leaf=int((scratch/'leaf-ready').read_text())
+                control_root=Path(os.environ['SC_WINDOWS_IDENTITY_CONTROL_ROOT'])
+                journals=list(control_root.glob('windows-identity-control-*/identity-recovery.json'))
+                if len(journals)!=1: raise RuntimeError('crashed worker recovery journal missing')
+                recover(journals[0])
+                shutil.rmtree(journals[0].parent)
+                if powershell('Get-Process -Id '+str(leaf)+' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id'):
+                    raise RuntimeError('grandchild survived worker crash and recovery')
+                if powershell('(Get-Acl '+literal(denied)+').Sddl') != original_acl: raise RuntimeError('crash recovery ACL mismatch')
+                report['events'].append({'name':'worker_crash_live_grandchild_recovery','status':'passed'})
             finally:
                 if identity is not None:
                     identity.close(); identity=None
@@ -136,4 +154,53 @@ def main():
         print(json.dumps(report),flush=True)
 
 
-if __name__=='__main__': main()
+
+def crash_worker():
+    scratch,denied,ip=Path(sys.argv[2]),Path(sys.argv[3]),sys.argv[4]
+    identity=Identity(scratch,[denied]); identity.setup(); identity.activate()
+    def interrupt():
+        deadline=time.monotonic()+20
+        while not (scratch/'leaf-ready').exists():
+            if time.monotonic()>deadline: os._exit(92)
+            time.sleep(.01)
+        os._exit(91)
+    threading.Thread(target=interrupt,daemon=True).start()
+    identity.run([str(scratch/'probe-2.exe'),ip,'denyhold','2'],timeout=35)
+    raise RuntimeError('crash worker unexpectedly returned')
+
+
+def supervise():
+    output=Path('target/windows-identity-preflight')
+    output.mkdir(parents=True,exist_ok=True)
+    result=125
+    recovered=[]
+    with tempfile.TemporaryDirectory(prefix='windows-preflight-control-') as temporary:
+        environment=dict(os.environ,SC_WINDOWS_IDENTITY_CONTROL_ROOT=temporary)
+        process=subprocess.Popen([sys.executable,__file__,'--worker',*sys.argv[1:]],env=environment)
+        try:
+            result=process.wait(timeout=240)
+        except subprocess.TimeoutExpired:
+            subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],timeout=20,check=False)
+            process.wait(timeout=10)
+            result=124
+        finally:
+            for journal in Path(temporary).glob('windows-identity-control-*/identity-recovery.json'):
+                try:
+                    recover(journal)
+                    recovered.append(str(journal))
+                finally:
+                    result=result or 125
+            report_path=output/'preflight.json'
+            if result and report_path.exists():
+                report=json.loads(report_path.read_text(encoding='utf-8'))
+                report.update(status='failed',supervisor_exit=result)
+                report_path.write_text(json.dumps(report,indent=2),encoding='utf-8')
+            (output/'supervisor.json').write_text(json.dumps({'exit':result,'recovered':recovered},indent=2),encoding='utf-8')
+    raise SystemExit(result)
+
+
+if __name__=='__main__':
+    if '--crash-worker' in sys.argv: crash_worker()
+    elif '--worker' in sys.argv:
+        sys.argv.remove('--worker'); main()
+    else: supervise()

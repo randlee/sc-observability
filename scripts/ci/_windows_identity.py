@@ -20,9 +20,14 @@ import uuid
 
 
 def powershell(script, *, sensitive=False):
+    # A pwsh workflow exports PowerShell 7 module paths; Windows PowerShell 5.1
+    # must calculate its own paths or core modules such as Get-Acl fail to load.
+    environment = {key: value for key, value in os.environ.items()
+                   if key.casefold() != 'psmodulepath'}
     result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', '-'],
                             input="$ErrorActionPreference='Stop';\n" + script,
-                            text=True, encoding='utf-8', capture_output=True, timeout=60)
+                            text=True, encoding='utf-8', capture_output=True, timeout=60,
+                            env=environment)
     if result.returncode:
         # Scripts may contain the temporary account password; never echo input.
         detail = 'account provisioning (details suppressed)' if sensitive else result.stderr[-2000:]
