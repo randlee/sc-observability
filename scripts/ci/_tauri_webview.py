@@ -8,8 +8,7 @@ from pathlib import Path
 
 
 def execute(sandbox, executable: Path, host: Path, scratch: Path, output: Path):
-    # Windows firewall policy is per-command; retain it for the whole webview
-    # lifetime just as sandbox.run does for Cargo and denial probes.
+    # The same identity and descendant policy covers Cargo and actual webviews.
     with sandbox.network_denial(executable):
         return _execute(sandbox, executable, host, scratch, output)
 
@@ -22,7 +21,7 @@ def _execute(sandbox, executable: Path, host: Path, scratch: Path, output: Path)
     stdout_path = output / 'webview-stdout.log'
     stderr_path = output / 'webview-stderr.log'
     with stdout_path.open('wb') as stdout, stderr_path.open('wb') as stderr:
-        process = subprocess.Popen(sandbox.prefix + [str(executable)], cwd=host, env=sandbox.env,
+        process = sandbox.spawn([str(executable)], cwd=host,
                                    stdout=subprocess.PIPE, stderr=stderr)
         def drain():
             while True:

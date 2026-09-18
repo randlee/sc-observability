@@ -11,15 +11,17 @@ assert isinstance(saved, Ok), saved
 async def run():
     ticks = 0
     running = True
+    heartbeat_ready = asyncio.Event()
     async def heartbeat():
         nonlocal ticks
         while running:
             ticks += 1
+            if ticks >= 3:
+                heartbeat_ready.set()
             await asyncio.sleep(0)
     heartbeat_task = asyncio.create_task(heartbeat())
     first = asyncio.create_task(logger.flush_async(2000))
-    await asyncio.sleep(0.010)
-    assert ticks >= 3, ticks
+    await asyncio.wait_for(heartbeat_ready.wait(), timeout=1.0)
     overlap = await logger.flush_async(2000)
     assert isinstance(overlap, Err) and overlap.error.code == "SC_OBSERVABILITY_BINDING_FLUSH_IN_PROGRESS", overlap
     first.cancel()
