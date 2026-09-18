@@ -145,14 +145,17 @@ def recover(journal):
     # Access is restored only after every owned job has drained.
     powershell("$p=New-Object -ComObject HNetCfg.FwPolicy2; $p.Rules.Remove(" + literal(record['rule']) + ")")
     errors = []
-    for root, saved in reversed(record.get('acls', [])):
+    for root, saved, sddl in reversed(record.get('acls', [])):
         root, saved = Path(root), Path(saved)
         if root == Path(root.anchor) or not saved.is_relative_to(journal.parent) or not re.fullmatch(r'acl-[0-9]+\.txt', saved.name):
             raise ValueError('invalid proof ACL journal')
         try:
-            subprocess.run(['icacls', str(root.parent), '/restore', str(saved), '/C'],
-                           check=True, stdout=subprocess.DEVNULL, timeout=60)
-        except (subprocess.SubprocessError, OSError) as error:
+            # icacls /restore promotes inherited ACEs into explicit ACEs on
+            # these hosted images. Restore the original descriptor instead.
+            powershell('$acl=New-Object System.Security.AccessControl.DirectorySecurity; '
+                       '$acl.SetSecurityDescriptorSddlForm(' + literal(sddl) + '); '
+                       'Set-Acl -LiteralPath ' + literal(root) + ' -AclObject $acl')
+        except (subprocess.SubprocessError, OSError, RuntimeError) as error:
             errors.append(str(error))
     # Account and profile are unique to this proof, never runner accounts.
     powershell("$u=Get-LocalUser -Name " + literal(account) + " -ErrorAction SilentlyContinue; "
@@ -201,7 +204,8 @@ class Identity:
             saved = self.control / f'acl-{index}.txt'
             subprocess.run(['icacls', str(root), '/save', str(saved), '/T', '/C'],
                            check=True, stdout=subprocess.DEVNULL, timeout=60)
-            self.record['acls'].append([str(root), str(saved)])
+            original = powershell('(Get-Acl -LiteralPath ' + literal(root) + ').Sddl')
+            self.record['acls'].append([str(root), str(saved), original])
             self.write()
             mode, rights = ('/grant', '(OI)(CI)(M)') if index == 0 else ('/deny', '(OI)(CI)(R)')
             subprocess.run(['icacls', str(root), mode, '*' + self.sid + ':' + rights, '/C'],
