@@ -91,8 +91,9 @@ It records `PASS` for reviewed head
 `5bcc27ee8f228d396bb603fc7dfc1a1c65861fe0`, and identifies the approved QA
 delta commit `0460d6f1845b7514485c566db72c92fdf1b0a3f9`. The four
 `approved_qa_delta` entries in `docs/plans/phase-b/post-import-adaptations.json`
-are independently rechecked here: each cited after blob is present at both
-`0460d6f` and the reviewed `5bcc27e` head.
+each carry the same explicit `qa_delta.review_citation` URL and reviewed
+commit. They are independently rechecked here: each cited after blob is
+present at both `0460d6f` and the reviewed `5bcc27e` head.
 
 | File | Verified after blob |
 | --- | --- |
