@@ -136,6 +136,14 @@ asyncio.run(final_barrier(), debug=True)
 loop = asyncio.new_event_loop()
 clock = [loop.time()]
 loop.time = lambda: clock[0]
+# Windows event-loop clocks can quantize a one-millisecond call_later deadline
+# to the current tick. Keep the real completion-before-next-poll race, but use
+# a coarse-clock-safe virtual interval so a timer cannot fire while observers
+# are still being admitted.
+real_call_later = loop.call_later
+def coarse_safe_call_later(delay, callback, *args, **kwargs):
+    return real_call_later(max(delay, 1.0), callback, *args, **kwargs)
+loop.call_later = coarse_safe_call_later
 waits = []
 start_count = controls.flush_calls()
 for index in range(64):
@@ -163,7 +171,7 @@ overflow = loop.run_until_complete(logger.flush_async())
 assert isinstance(overflow, Err) and overflow.error.code == "SC_OBSERVABILITY_BINDING_WAITERS_FULL", overflow
 if mode != "owned":
     assert controls.flush_calls() - start_count == 64
-clock[0] += 0.002
+clock[0] += 1.001
 for _ in range(4):
     loop.run_until_complete(asyncio.sleep(0))
 for wait in waits:
