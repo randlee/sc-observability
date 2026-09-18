@@ -193,7 +193,7 @@ class Sandbox:
                         f"$policy.Rules.Remove('{self.firewall}')")
 
     @contextmanager
-    def network_denial(self):
+    def network_denial(self, program: Path | None = None):
         """Cover one complete command or real-webview process lifetime."""
         if self.system != 'Windows':
             yield
@@ -208,8 +208,9 @@ class Sandbox:
         watchdog.daemon = True
         watchdog.start()
         try:
+            executable = (program or Path(sys.executable)).resolve()
             self.powershell(f"New-NetFirewallRule -Name '{self.firewall}' -DisplayName '{self.firewall}' "
-                            "-Direction Outbound -Action Block -Profile Any | Out-Null")
+                            f"-Program '{executable}' -Direction Outbound -Action Block -Profile Any | Out-Null")
             yield
         finally:
             try:
@@ -223,7 +224,7 @@ class Sandbox:
     def run(self, command: list[str], cwd: Path, *, expect_failure: bool = False) -> str:
         print('B4A_COMMAND ' + json.dumps(command), flush=True)
         started = time.monotonic()
-        with self.network_denial():
+        with self.network_denial(Path(command[0])):
             result = bounded_command(self.prefix + command, cwd, self.env)
         print(f'B4A_EXIT {result.returncode} after {time.monotonic() - started:.2f}s', flush=True)
         self.commands.append({'command': command, 'exit_code': result.returncode,
