@@ -1,6 +1,7 @@
 # B.3a artifact and real-IPC qualification
 
-Status: in progress; no sprint completion or publication claim.
+Status: development qualification complete (see "Terminal qualification"
+below); no publication claim.
 Owner: bp-tauri-helper. Branch: feature/phase-b-tauri-qualification.
 Direct PR parent: feature/phase-b-7-publish-bindings (PR 141). Qualification: PR 142.
 
@@ -64,10 +65,10 @@ The aggregate rejects missing/skipped cases, changed artifacts, mismatched sourc
 revisions and any absent isolation probe. Seven rejection tests exercise the
 aggregate gate; seven source-bundle tests exercise lock/confinement behavior.
 
-Final open gates are the same-source three-platform aggregate and lead
-completeness check. `--platform` is a partial platform stage and never signals
-sprint completion. No registry has been published. B.3a remains in progress until
-production and qualification evidence pass the lead's complete review.
+`--platform` is a partial platform stage and never signals sprint completion
+by itself. No registry has been published. The same-source three-platform
+aggregate and lead completeness check, once open gates, have both since
+passed -- see "Terminal qualification" below.
 
 The current fixture imports the unchanged production `requestLevelChange`
 helper into both actual webviews and an installed-client fault consumer linked
@@ -130,3 +131,19 @@ recovery itself raises after a zero worker exit. Its eight supervisor regression
 tests pass locally, including invalid recovery identity and restoration errors.
 This correction is newer than the `71215ca` platform evidence and is not claimed
 as covered by that immutable-source run.
+
+## Terminal qualification (updated 2026-09-18)
+
+[GitHub Actions run 35303041402](https://github.com/randlee/sc-observability/actions/runs/35303041402)
+at exact source SHA `c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18` completed
+`conclusion: success`: `schema-and-contract`, all three `real-ipc-artifacts`
+platform jobs (Linux/macOS/Windows) and the `all-platforms` aggregate all
+passed, including Windows actual debug/release IPC and three-generation
+isolation with the supervisor clean. This supersedes every Windows
+communication-loss run and intermediate failure recorded above, which remain
+retained as history.
+
+**Lead completeness decision: PASS** (aobs, 2026-09-18) -- development
+completeness confirmed for B.3a at this qualified source, alongside B.4a/B.5/B.6.
+Independent phase-end QA remains pending; formal API/ADR approval and
+publication remain deferred to B.7.

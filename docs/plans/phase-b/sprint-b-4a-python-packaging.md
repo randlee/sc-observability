@@ -227,24 +227,22 @@ flags through packaging fixtures; do not corrupt release artifacts for tests.
 
 ## Current qualification evidence (updated 2026-09-18)
 
-Status: `in_progress`, not `complete` -- the full 25-cell matrix has not yet
-produced a passing result. GitHub Actions run `35295219562` ("B.4a Python
-distribution qualification", `fix/phase-b-wheel-test-hooks` @ `ca23fc6`)
-completed with `conclusion: failure`. The `wheel (windows-x86_64,
-windows-2022, AMD64, win_amd64)` job's "External offline wheel and
-separate-link embedding proof" step failed: the embedded
-`rust-python-logging.exe` run raised `AssertionError(2)` inside the embedded
-interpreter, after printing `B5_MIXED_CONTEXT_OK`, `B5_ATTACHED_STOP_OK`, and
-`INFO async.embed held`, then exited 1. This is a real, concrete defect in
-the Windows embedding path, distinct from the separately tracked Windows
-process-tree isolation/recovery gaps now on `cobs`'s active task; it is not
-excused as diagnostic-only. Because that wheel job failed, the downstream
-`aggregate` job's "Require all 25 cells against the same five wheels and
-sdist" step also failed and `installed-suite` was skipped. `cobs` owns the
-fix and the corrected acceptance-grade run. Do not treat this run, or any
-prior local/partial result, as AC1-AC4 closure; every one of the 25 required
-interpreter/platform cells (see Acceptance criteria above) must actually pass
-on the corrected source before this sprint's `status` moves to `complete`.
+The 25-cell matrix has now actually passed. GitHub Actions run `35303039765`
+("B.4a Python distribution qualification") at exact source SHA
+`c6d794c5d8c12a69938b2ec3ccd1cec24d1abd18` completed `conclusion: success`:
+all 33 jobs passed -- `plan`, `sdist`, all 5 `wheel` platform builds, all 25
+`installed-suite` interpreter/platform cells, and the `aggregate` "Require
+all 25 cells against the same five wheels and sdist" gate. This supersedes
+the earlier failed diagnostic runs recorded in this repository's history
+(`35295219562` at `ca23fc6`: Windows embedding `AssertionError(2)`;
+`35300170241` at `0e48648`: Windows async fixture deadline assertion),
+which remain retained as development history, not current status.
+
+AC1-AC4's development qualification is complete per this terminal evidence.
+Lead completeness decision: **PASS** (aobs, 2026-09-18), recorded in
+`handoff-b-4a.md`. `status` above stays `in_progress` pending independent
+phase-end QA acceptance; formal API/ADR approval and publication remain
+deferred to B.7.
 
 ## Paths to delete
 
