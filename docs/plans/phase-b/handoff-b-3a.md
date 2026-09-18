@@ -69,6 +69,9 @@ Native shutdown failures retain their native diagnostic code and remediation:
 timeouts map to binding `TIMEOUT`, final-flush failures to `IO`, helper-start
 failures to `UNAVAILABLE`, and helper-loss failures to `INTERNAL`; no display
 text is parsed to classify them.
+
+Independent phase-end QA remains pending; formal API/ADR approval and publication remain deferred to B.7.
+
 The example bundle now includes a deterministic 64x64 `icons/icon.ico` derived
 from the checked-in PNG and lists it in `tauri.conf.json`, satisfying the
 Windows resource build without adding new imagery.
