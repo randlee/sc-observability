@@ -19,13 +19,14 @@ import tempfile
 import uuid
 
 
-def powershell(script):
+def powershell(script, *, sensitive=False):
     result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', '-'],
                             input="$ErrorActionPreference='Stop';\n" + script,
                             text=True, encoding='utf-8', capture_output=True, timeout=60)
     if result.returncode:
         # Scripts may contain the temporary account password; never echo input.
-        raise RuntimeError('Windows identity control operation failed: ' + result.stderr[-2000:])
+        detail = 'account provisioning (details suppressed)' if sensitive else result.stderr[-2000:]
+        raise RuntimeError('Windows identity control operation failed: ' + detail)
     return result.stdout.strip()
 
 
@@ -162,7 +163,8 @@ class Identity:
         self.denied = [Path(path).resolve() for path in denied]
         self.account = 'scp' + uuid.uuid4().hex[:16]
         self.password = secrets.token_urlsafe(32) + '!aA9'
-        self.control = Path(tempfile.mkdtemp(prefix='windows-identity-control-')).resolve()
+        self.control = Path(tempfile.mkdtemp(prefix='windows-identity-control-',
+            dir=os.environ.get('SC_WINDOWS_IDENTITY_CONTROL_ROOT'))).resolve()
         self.journal = self.control / 'identity-recovery.json'
         self.record = {'schema': 1, 'account': self.account, 'rule': 'sc-proof-' + self.account,
                        'acls': [], 'jobs': []}
@@ -177,7 +179,7 @@ class Identity:
     def setup(self):
         self.write()  # Identity and rule intent precede every mutation.
         self.sid = powershell("$p=ConvertTo-SecureString " + literal(self.password) + " -AsPlainText -Force; "
-            "$u=New-LocalUser -Name " + literal(self.account) + " -Password $p -AccountNeverExpires; $u.SID.Value")
+            "$u=New-LocalUser -Name " + literal(self.account) + " -Password $p -AccountNeverExpires; $u.SID.Value", sensitive=True)
         self.record['sid'] = self.sid
         self.write()
         for index, root in enumerate([self.scratch, *self.denied]):
