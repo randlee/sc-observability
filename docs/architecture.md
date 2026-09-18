@@ -1036,28 +1036,46 @@ ADR navigation index (status is recorded in each decision below):
   repo's bespoke release workflows, `publisher` agent and manifest scripts;
   only the two release manifests (`release/publish-artifacts.toml`,
   `release/publish-channel-contracts.toml`) are repository-rendered from the
-  install contract. The shared package's channel set does not include npm;
-  this repo retains a narrow, explicitly-scoped, repository-owned npm
-  publish step outside the installer's managed files rather than silently
-  dropping npm or inventing unsupported shared-package behavior.
+  install contract. The shared package's channel set does not include npm at
+  the pinned revision inspected while writing this ADR. This repo does not
+  build a repository-owned npm publish step as a substitute: an npm channel
+  in `../sc-publish`, owned upstream and consumed at a reviewed pin (matching
+  the existing `pypi` channel's shape — its own agent, environment-scoped
+  secret, and preflight/retry contract), is a named execution prerequisite
+  for the sprint that installs the shared package. Likewise, a `../sc-publish`
+  revision with action-runtime pins at or above this repository's current
+  floor (`actions/checkout>=v5`, `actions/setup-python>=v6`) is a named
+  execution prerequisite, verified by an added workflow action-runtime
+  validation gate, not an accepted regression. If either upstream capability
+  cannot land before Phase C needs to execute, Phase C stops and requests an
+  explicit owner decision (delay execution, or accept a documented,
+  owner-signed-off temporary gap) rather than treating a local substitute as
+  equivalent shared-package adoption.
 - **Alternatives rejected for this phase**: Continuing to maintain a
   repository-specific release pipeline duplicates logic already centralized
   in the shared package and diverges further as more repositories adopt it.
   Hand-patching the installer's vendored workflow files (for example to
-  change pinned action versions) defeats the shared-source-of-truth model
-  and must instead be resolved upstream in `sc-publish` or accepted as a
-  documented, tracked gap.
+  change pinned action versions) defeats the shared-source-of-truth model.
+  Building a repository-local npm publish workflow, or installing the
+  currently-pinned stale action versions and tracking the mismatch only as a
+  follow-up ticket, would both reintroduce the bespoke, repository-specific
+  publishing implementation this ADR replaces — rejected as contrary to the
+  owner's stated intent for this phase.
 - **Consequences**: This repo's publish operating model moves from a
   `team-lead`-directed `publisher` agent following a repo-local runbook to
   the shared package's named ATM `publisher` teammate plus role-specific
   background channel workers, per `.claude/skills/publishing/SKILL.md`.
   Release-manifest schema changes (`required`, `publish`, `preflight_check`,
   `verify_install` per crate) apply to every existing published crate, not
-  only Phase B additions. The shared package's workflows pin
-  `actions/checkout@v4`/`actions/setup-python@v5`; where this repository has
-  already adopted newer action versions elsewhere, that mismatch is an
-  explicit reconciliation item, not a silent regression. Actual publication,
-  tagging and BTIT integration tests remain out of scope for Phase C.
+  only Phase B additions, and cover the full ten-crate Phase B inventory
+  including the standalone `sc-observability-tauri` workspace and the
+  `sc-observability-py` Rust crate as a crates.io target distinct from its
+  wheel/sdist artifact. Adopting the npm channel and the current action-
+  runtime baseline as upstream prerequisites means Phase C's sprint sequence
+  may pause pending that upstream work landing, or pending an explicit owner
+  decision, rather than always completing on the originally inspected pin.
+  Actual publication, tagging and BTIT integration tests remain out of scope
+  for Phase C.
 - **Contracts**: PHC-001–006; [Phase C](plans/phase-c/plan-phase-c.md).
 
 ## 8. API-Design Consistency

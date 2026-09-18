@@ -507,12 +507,16 @@ closure, and Phase C shall not publish, tag, or execute BTIT integration tests.
   this requirement.
 - PHC-002 The shared package's channel set (`github_release`, `crates_io`,
   `pypi`, `homebrew`, `scoop`, `winget`) does not include an npm channel.
-  Phase C shall not silently drop npm publication for the TypeScript client
-  nor fabricate npm support that does not exist in the shared package. It
-  shall record an explicit resolution: either a scoped, clearly-labeled
-  repository-owned npm publish step kept outside the shared installer's
-  managed files, or an explicit deferral with owner acceptance recorded
-  before Phase C closes.
+  Phase C shall not silently drop npm publication for the TypeScript client,
+  fabricate npm support that does not exist in the shared package, or
+  substitute a repository-local npm publish workflow as if it were
+  equivalent shared-package adoption. Phase C shall treat an npm channel in
+  `../sc-publish`, owned upstream and consumed at a reviewed pin, as a named
+  execution prerequisite for the sprint that installs the shared package. If
+  that upstream capability cannot land before Phase C needs to execute,
+  Phase C shall stop and obtain an explicit owner decision (delay execution,
+  or accept a documented, owner-signed-off temporary gap) rather than
+  closing on a local workaround or a silent omission.
 - PHC-003 Phase C sprints preflight only. They shall not authorize or
   execute publication to any channel, create or push a release tag, or run
   BTIT repository integration tests. Preflight commands shall be
@@ -525,13 +529,19 @@ closure, and Phase C shall not publish, tag, or execute BTIT integration tests.
   crate or package present in the merged Phase B tree but absent from the
   preflight inventory is a defect, not an accepted gap.
 - PHC-005 Phase C shall document the exact credential/authentication model
-  required by each adopted channel (for example, the shared PyPI workflow's
-  `PYPI_API_TOKEN`/`TEST_PYPI_API_TOKEN` secrets) without assuming
-  unimplemented mechanisms such as trusted publishing, and without
-  inspecting, printing, or otherwise exposing secret values.
+  required by each adopted channel at its actual scope — for example, the
+  shared PyPI workflow's `PYPI_API_TOKEN`/`TEST_PYPI_API_TOKEN` secrets are
+  GitHub Environment-scoped (`pypi`/`testpypi`), distinct from crates.io's
+  repository-scoped `CARGO_REGISTRY_TOKEN` — without assuming unimplemented
+  mechanisms such as trusted publishing, without collapsing environment
+  scope into repository scope, and without inspecting, printing, or
+  otherwise exposing secret values. Verification shall check secret
+  presence at the correct scope (`gh secret list --env <name>` for
+  environment-scoped secrets), not merely at repository scope.
 - PHC-006 Installing shared-package workflows shall not silently regress
   CI runtime/action versions already adopted elsewhere in this repository.
-  Any mismatch between the shared package's pinned action versions and this
-  repository's current baseline requires an explicit reconciliation decision
-  recorded in the sprint doc before the installed workflow is enabled for
-  real use.
+  Phase C shall treat a `../sc-publish` revision with current, compatible
+  action-runtime pins as a named execution prerequisite for the sprint that
+  installs the shared package, verified by an added workflow action-runtime
+  validation gate — not recorded as an accepted regression closed out by a
+  follow-up ticket.

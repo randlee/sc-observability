@@ -132,8 +132,11 @@ Python wheels/sdist, the npm client, and applicable native/Tauri artifacts)
 through that shared pipeline. It is planning-and-preflight scope only: it does
 not authorize publication, tag creation, or BTIT repository integration tests,
 and its planning branch does not execute until Phase B merges into `develop`.
-The npm channel gap in the shared package's installer must be explicitly
-resolved, not silently dropped. See `docs/requirements.md` §11 and
+The shared package's missing npm channel and stale pinned action versions are
+treated as named upstream prerequisites for `../sc-publish` to satisfy at a
+reviewed pin before the affected sprint completes — not a repository-local
+publisher fork and not an accepted regression tracked only by a follow-up
+ticket. See `docs/requirements.md` §11 and
 [ADR-016](architecture.md#adr-016-shared-publishing-pipeline-adoption).
 
 ## Rule
