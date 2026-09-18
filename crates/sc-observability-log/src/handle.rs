@@ -83,21 +83,23 @@ pub(crate) static INSTALLED: AtomicBool = AtomicBool::new(false);
 // Test-only observability for the actual native flush boundary.  This remains
 // private to the crate: the public facade must not expose a test counter.
 #[cfg(test)]
-static NATIVE_FLUSH_CALLS: AtomicU64 = AtomicU64::new(0);
+thread_local! {
+    static NATIVE_FLUSH_CALLS: Cell<u64> = const { Cell::new(0) };
+}
 
 #[cfg(test)]
 pub(crate) fn reset_native_flush_calls() {
-    NATIVE_FLUSH_CALLS.store(0, Ordering::SeqCst);
+    NATIVE_FLUSH_CALLS.with(|calls| calls.set(0));
 }
 
 #[cfg(test)]
 pub(crate) fn native_flush_calls() -> u64 {
-    NATIVE_FLUSH_CALLS.load(Ordering::SeqCst)
+    NATIVE_FLUSH_CALLS.with(Cell::get)
 }
 
 #[cfg(test)]
 fn record_native_flush_call() {
-    NATIVE_FLUSH_CALLS.fetch_add(1, Ordering::SeqCst);
+    NATIVE_FLUSH_CALLS.with(|calls| calls.set(calls.get() + 1));
 }
 
 /// Encoded [`BridgeLifecycle`]; `Stopped` until `init` succeeds (no guard exists before).
@@ -860,6 +862,8 @@ pub(crate) fn current_installed() -> Option<Arc<Installed>> {
     reason = "the copied bridge preserves its legacy bounded flush boundary"
 )]
 pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
+    #[cfg(test)]
+    record_native_flush_call();
     if lifecycle() != BridgeLifecycle::Running {
         return Err(FlushError::NotRunning {
             phase: lifecycle_phase(),
@@ -876,8 +880,6 @@ pub(crate) fn flush_installed(timeout: Duration) -> Result<(), FlushError> {
     let flush = move || {
         // Released when the flush returns or unwinds, before the result is sent.
         let _flight = flight;
-        #[cfg(test)]
-        record_native_flush_call();
         installed.logger.flush()
     };
     match run_bounded(timeout, flush) {
@@ -913,7 +915,8 @@ mod tests {
     #[test]
     fn native_flush_counter_positive_control_and_facade_zero_proof() {
         reset_native_flush_calls();
-        record_native_flush_call();
+        let result = flush_installed(Duration::from_millis(1));
+        assert!(matches!(result, Err(FlushError::NotRunning { .. })));
         assert_eq!(native_flush_calls(), 1);
 
         reset_native_flush_calls();
