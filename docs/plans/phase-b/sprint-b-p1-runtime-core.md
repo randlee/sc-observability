@@ -1,21 +1,39 @@
 ---
 id: B.P1
-status: proposed
-branch: feature/phase-b-p1-runtime-core
+status: complete
+qa_status: owner_deferred_to_phase_b_completion
+merge_status: unmerged
+branch: feature/B-P1-runtime-core
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/B-P1-runtime-core
+target: integrate/phase-b
 base: develop
 ---
 
 # B.P1 — Add per-logger runtime level ownership
 
+Implementation and closeout are on the branch/worktree recorded above. QA-1
+through QA-3 remain historical FAIL records. QA-4 independently verified 17 of
+18 tracked findings at `a8951321e6b1df6044c2ee1f6f41c07a9dad7d99`; the one
+remaining item was QA-B010's manual execution stop. Coordinating lead aobs
+withdraws that added stop, following the owner's instruction relayed in the
+[runtime contract](runtime-level-contract.md). The owner deferral is recorded in
+[`api-approvals/phase-b-runtime-level.md`](../../api-approvals/phase-b-runtime-level.md).
+QA-B010 is owner-deferred rather than resolved. Historical QA verdicts remain unchanged: QA-5 scoped checks are satisfied, but
+its overall verdict at the reviewed head remains FAIL. `status: complete` means
+implementation completion only; `qa_status` and `merge_status` carry the
+separate review and merge state.
+
 ## Goal and dependencies
 
 Owner: sc-observability core team. Implement issue #97's core capability while
 preserving every published interface. This is a pre-copy prerequisite; B.1
-remains the first migration sprint. `must_follow` reviewed acceptance of the
-[runtime contract](runtime-level-contract.md). B.P2 `must_follow` B.P1 because
-it publishes these exact artifacts. No parallel-safe public-contract work is
-claimed. Pushed parent development triggers merge-forward before each child
-round; parent PR merges before child completion.
+remains the first migration sprint. `must_follow` the execution-authorized
+[runtime contract](runtime-level-contract.md), with public acceptance
+owner-deferred to Phase B completion. B.P2 `must_follow` B.P1 because
+it qualifies and stages these exact artifacts; B.7 alone publishes them. No
+parallel-safe public-contract work is claimed. Pushed parent development
+triggers merge-forward before each child round; B.P1's PR merges before
+B.P2's PR.
 
 ## Deliverables (authoritative)
 
@@ -44,7 +62,7 @@ documentation and validation artifacts; partial completion leaves the sprint ope
    scoped additive API review evidence, and execution record
    `docs/plans/phase-b/handoff-b-p1.md`. Update API-design/requirements/ADR
    implementation status only after behavior is verified. No artifact is
-   published by this sprint.
+   published by this sprint; publication is deferred until Phase B ends.
 
 ## Boundary signatures
 
@@ -114,6 +132,7 @@ None. Replace internal config.level filtering in place; remove no public API.
 
 ## Non-closure
 
-No publication, BTIT bridge implementation, DTO/bindings, settings loader,
+No live publication, BTIT bridge implementation, DTO/bindings, settings loader,
 legacy deprecation (#92), automatic expiry or sc-runtime topology. B.P2 owns
-publication; B.P3 owns BTIT integration acceptance.
+qualification/staging; B.P3 owns BTIT integration acceptance; B.7 alone
+publishes at phase end.

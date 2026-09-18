@@ -10,8 +10,8 @@ All implementation rows remain planned until their sprint acceptance is proven.
 
 | Issue/topic | Disposition | Owning sprint and closure |
 | --- | --- | --- |
-| #92 improved error interface | Included, additive with warning-only migration; no scheduled removal | B.1a types/adapters, B.1b logger, B.1c observation, B.1d telemetry, B.1e deprecation/adoption guide, B.2 publication |
-| #97 runtime level elevation | Included as pre-copy core capability | B.P1 core, B.P2 release, B.P3 BTIT integration; B.1 copies accepted reference |
+| #92 improved error interface | Included, additive with warning-only migration; no scheduled removal | B.1a types/adapters, B.1b logger, B.1c observation, B.1d telemetry, B.1e deprecation/adoption guide, B.2 qualification/staging (B.7 publishes) |
+| #97 runtime level elevation | Included as pre-copy core capability | B.P1 core, B.P2 qualification/staging, B.P3 BTIT integration; B.1 copies accepted reference; B.7 publishes |
 | #96 settings loader | Independent/deferred from Phase B | No Phase B implementation promise or dependency; baseline comes from LoggerConfig |
 | BTIT initial bridge design/review | Required before copy, not assumed finished | B.P3 accepted critical re-review/source; authoritative B.1 entry gate |
 | Shared frontend/backend logging | Included, Tauri first | B.3 schema, B.3b shared native runtime, B.3a real Tauri IPC/client; B.7 registry proof |

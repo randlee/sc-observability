@@ -1,0 +1,69 @@
+$ cargo --version
+cargo 1.94.1 (29ea6fb6a 2026-03-24)
+$ rustc --version
+rustc 1.94.1 (e408947bf 2026-03-25)
+$ cargo metadata --format-version 1
+    Updating crates.io index
+     Locking 32 packages to latest Rust 1.94.1 compatible versions
+ Downloading crates ...
+  Downloaded serde_core v1.0.229
+  Downloaded windows-link v0.2.1
+  Downloaded thiserror-impl v2.0.20
+  Downloaded zmij v1.0.23
+  Downloaded unicode-ident v1.0.26
+  Downloaded serde_derive v1.0.229
+  Downloaded serde v1.0.229
+  Downloaded proc-macro2 v1.0.107
+  Downloaded memchr v2.8.3
+  Downloaded log v0.4.34
+  Downloaded serde_json v1.0.151
+  Downloaded time-macros v0.2.32
+  Downloaded thiserror v2.0.20
+  Downloaded quote v1.0.47
+  Downloaded hostname v0.4.2
+  Downloaded deranged v0.5.8
+  Downloaded time v0.3.55
+  Downloaded time-core v0.1.9
+  Downloaded syn v3.0.6
+  Downloaded syn v2.0.119
+  Downloaded powerfmt v0.2.0
+  Downloaded num-conv v0.2.2
+  Downloaded itoa v1.0.18
+  Downloaded cfg-if v1.0.5
+  Downloaded libc v0.2.189
+  Downloaded windows-sys v0.61.2
+$ cargo run --locked -- C:\Users\runneradmin\AppData\Local\Temp\b2-isolated-consumer-0qdq02fg\logs
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.26
+   Compiling quote v1.0.47
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling serde v1.0.229
+   Compiling serde_json v1.0.151
+   Compiling thiserror v2.0.20
+   Compiling syn v3.0.6
+   Compiling num-conv v0.2.2
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+   Compiling powerfmt v0.2.0
+   Compiling time-core v0.1.9
+   Compiling windows-link v0.2.1
+   Compiling windows-sys v0.61.2
+   Compiling syn v2.0.119
+   Compiling deranged v0.5.8
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.20
+   Compiling time v0.3.55
+   Compiling cfg-if v1.0.5
+   Compiling hostname v0.4.2
+   Compiling log v0.4.34
+   Compiling sc-observability-log-macros v1.4.0 (C:\Users\runneradmin\AppData\Local\Temp\b2-isolated-consumer-0qdq02fg\packages\sc-observability-log-macros-1.4.0)
+   Compiling sc-observability-types v1.4.0 (C:\Users\runneradmin\AppData\Local\Temp\b2-isolated-consumer-0qdq02fg\packages\sc-observability-types-1.4.0)
+   Compiling sc-observability v1.4.0 (C:\Users\runneradmin\AppData\Local\Temp\b2-isolated-consumer-0qdq02fg\packages\sc-observability-1.4.0)
+   Compiling sc-observability-log v1.4.0 (C:\Users\runneradmin\AppData\Local\Temp\b2-isolated-consumer-0qdq02fg\packages\sc-observability-log-1.4.0)
+   Compiling sc-observability-otlp v1.4.0 (C:\Users\runneradmin\AppData\Local\Temp\b2-isolated-consumer-0qdq02fg\packages\sc-observability-otlp-1.4.0)
+   Compiling sc-observe v1.4.0 (C:\Users\runneradmin\AppData\Local\Temp\b2-isolated-consumer-0qdq02fg\packages\sc-observe-1.4.0)
+   Compiling b2-staged-consumer v0.0.0 (C:\Users\runneradmin\AppData\Local\Temp\b2-isolated-consumer-0qdq02fg\consumer)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 23.95s
+     Running `C:\Users\runneradmin\AppData\Local\Temp\b2-isolated-consumer-0qdq02fg\target\debug\b2-staged-consumer.exe 'C:\Users\runneradmin\AppData\Local\Temp\b2-isolated-consumer-0qdq02fg\logs'`
+B2_CONSUMER_OK enabled_macro explicit_flush explicit_shutdown jsonl_content

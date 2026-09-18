@@ -28,6 +28,22 @@ pub const SC_LOG_QUERY_DECODE: ErrorCode = ErrorCode::new_static("SC_LOG_QUERY_D
 pub const SC_LOG_QUERY_UNAVAILABLE: ErrorCode = ErrorCode::new_static("SC_LOG_QUERY_UNAVAILABLE");
 /// Error code for query shutdown failures.
 pub const SC_LOG_QUERY_SHUTDOWN: ErrorCode = ErrorCode::new_static("SC_LOG_QUERY_SHUTDOWN");
+/// Error code for a mutation attempted while logger shutdown is in progress.
+pub const LEVEL_STOPPING: ErrorCode = ErrorCode::new_static("SC_OBSERVABILITY_LEVEL_STOPPING");
+/// Error code for a mutation attempted after the logger lifetime ended.
+pub const LEVEL_STOPPED: ErrorCode = ErrorCode::new_static("SC_OBSERVABILITY_LEVEL_STOPPED");
+/// Error code for a requested level below the configured baseline.
+pub const LEVEL_BELOW_BASELINE: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LEVEL_BELOW_BASELINE");
+/// Error code for a requested level unavailable in the current build.
+pub const LEVEL_UNSUPPORTED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LEVEL_UNSUPPORTED");
+/// Error code for unavailable or poisoned runtime level state.
+pub const LEVEL_STATE_UNAVAILABLE: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LEVEL_STATE_UNAVAILABLE");
+/// Error code for a runtime-level revision that cannot be incremented.
+pub const LEVEL_REVISION_EXHAUSTED: ErrorCode =
+    ErrorCode::new_static("SC_OBSERVABILITY_LEVEL_REVISION_EXHAUSTED");
 
 /// Enumerable registry of all public `sc-observability-types` error codes.
 pub const ALL: &[ErrorCode] = &[
@@ -41,4 +57,10 @@ pub const ALL: &[ErrorCode] = &[
     SC_LOG_QUERY_DECODE,
     SC_LOG_QUERY_UNAVAILABLE,
     SC_LOG_QUERY_SHUTDOWN,
+    LEVEL_STOPPING,
+    LEVEL_STOPPED,
+    LEVEL_BELOW_BASELINE,
+    LEVEL_UNSUPPORTED,
+    LEVEL_STATE_UNAVAILABLE,
+    LEVEL_REVISION_EXHAUSTED,
 ];

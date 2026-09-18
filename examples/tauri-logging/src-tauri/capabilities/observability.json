@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "observability",
+  "description": "Routes observability commands from every app window to handler-level policy checks.",
+  "windows": ["*"],
+  "permissions": [
+    "sc-observability:default",
+    "allow-app-observability-level-change"
+  ]
+}

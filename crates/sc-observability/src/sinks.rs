@@ -5,9 +5,16 @@ use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use std::time::{Duration, SystemTime};
 
+#[cfg(feature = "fault-injection")]
+use sc_observability_types::ErrorContext;
+use sc_observability_types::typed::LogSinkFailure;
+#[allow(
+    deprecated,
+    reason = "sink compatibility implementations preserve the published LogSinkError contract"
+)]
 use sc_observability_types::{
-    Diagnostic, DiagnosticSummary, ErrorContext, Level, LogEvent, LogSinkError, Remediation,
-    SinkHealth, SinkHealthState, SinkName, Timestamp,
+    Diagnostic, DiagnosticSummary, Level, LogEvent, LogSinkError, Remediation, SinkHealth,
+    SinkHealthState, SinkName, Timestamp,
 };
 #[cfg(feature = "fault-injection")]
 use std::sync::{Arc, Mutex};
@@ -75,7 +82,7 @@ impl JsonlFileSink {
     pub(crate) fn perform_maintenance(
         &self,
         policy: &RetainedLogPolicy,
-    ) -> Result<crate::maintenance::MaintenancePassStats, LogSinkError> {
+    ) -> Result<crate::maintenance::MaintenancePassStats, LogSinkFailure> {
         let mut stats = crate::maintenance::MaintenancePassStats::default();
         self.rotate_if_needed(
             policy.rotation_max_bytes.as_u64(),
@@ -103,7 +110,7 @@ impl JsonlFileSink {
         rotation_max_bytes: u64,
         rotation_max_files: usize,
         incoming_len: u64,
-    ) -> Result<bool, LogSinkError> {
+    ) -> Result<bool, LogSinkFailure> {
         if let Ok(metadata) = fs::metadata(&self.path)
             && metadata.len().saturating_add(incoming_len) > rotation_max_bytes
         {
@@ -180,7 +187,7 @@ impl JsonlFileSink {
         rotation_max_files: usize,
         retention_max_age: RetentionMaxAge,
         maintenance_max_work_per_pass: Option<usize>,
-    ) -> Result<u64, LogSinkError> {
+    ) -> Result<u64, LogSinkFailure> {
         let Some(parent) = self.path.parent() else {
             return Ok(0);
         };
@@ -249,7 +256,7 @@ impl JsonlFileSink {
         Ok(pruned_total)
     }
 
-    fn mark_failure<E>(&self, error: E) -> LogSinkError
+    fn mark_failure<E>(&self, error: E) -> LogSinkFailure
     where
         E: std::error::Error + Send + Sync + 'static,
     {
@@ -258,20 +265,17 @@ impl JsonlFileSink {
         let mut health = self.health.write().expect("file sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
         health.last_error = Some(DiagnosticSummary::from(&diagnostic));
-        LogSinkError(Box::new(
-            ErrorContext::new(
-                error_codes::LOGGER_SINK_WRITE_FAILED,
-                "jsonl file sink write failed",
-                Remediation::not_recoverable(
-                    "file sink write failure handling is owned by the logger runtime",
-                ),
-            )
-            .cause(message)
-            .source(Box::new(error)),
-        ))
+        LogSinkFailure::write(
+            "jsonl file sink write failed",
+            Remediation::not_recoverable(
+                "repair or replace the failed standalone sink before retrying the write",
+            ),
+        )
+        .cause(message)
+        .source(Box::new(error))
     }
 
-    fn mark_maintenance_failure(&self, error: LogSinkError) -> LogSinkError {
+    fn mark_maintenance_failure(&self, error: LogSinkFailure) -> LogSinkFailure {
         let message = error.to_string();
         let diagnostic = Diagnostic {
             timestamp: Timestamp::now_utc(),
@@ -287,22 +291,19 @@ impl JsonlFileSink {
         let mut health = self.health.write().expect("file sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
         health.last_error = Some(DiagnosticSummary::from(&diagnostic));
-        LogSinkError(Box::new(
-            ErrorContext::new(
-                error_codes::LOGGER_MAINTENANCE_FAILED,
-                "retained-log maintenance failed",
-                Remediation::not_recoverable(
-                    "retained-log maintenance failure handling is owned by the logger runtime",
-                ),
-            )
-            .cause(message)
-            .source(Box::new(error)),
-        ))
+        LogSinkFailure::maintenance(
+            "retained-log maintenance failed",
+            Remediation::not_recoverable(
+                "retained-log maintenance failure handling is owned by the logger runtime",
+            ),
+        )
+        .cause(message)
+        .source(Box::new(error))
     }
 }
 
-impl LogSink for JsonlFileSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+impl crate::typed::TypedLogSink for JsonlFileSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(|err| self.mark_failure(err))?;
         }
@@ -337,6 +338,20 @@ impl LogSink for JsonlFileSink {
             .read()
             .expect("file sink health poisoned")
             .clone()
+    }
+}
+
+#[allow(
+    deprecated,
+    reason = "the legacy sink adapter preserves the published LogSinkError boundary"
+)]
+impl LogSink for JsonlFileSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        <Self as crate::typed::TypedLogSink>::write(self, event).map_err(Into::into)
+    }
+
+    fn health(&self) -> SinkHealth {
+        <Self as crate::typed::TypedLogSink>::health(self)
     }
 }
 
@@ -432,7 +447,7 @@ impl ConsoleSink {
         )
     }
 
-    fn mark_failure<E>(&self, error: E) -> LogSinkError
+    fn mark_failure<E>(&self, error: E) -> LogSinkFailure
     where
         E: std::error::Error + Send + Sync + 'static,
     {
@@ -441,22 +456,19 @@ impl ConsoleSink {
         let mut health = self.health.write().expect("console sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
         health.last_error = Some(DiagnosticSummary::from(&diagnostic));
-        LogSinkError(Box::new(
-            ErrorContext::new(
-                error_codes::LOGGER_SINK_WRITE_FAILED,
-                "console sink write failed",
-                Remediation::not_recoverable(
-                    "console sink write failure handling is owned by the logger runtime",
-                ),
-            )
-            .cause(message)
-            .source(Box::new(error)),
-        ))
+        LogSinkFailure::write(
+            "console sink write failed",
+            Remediation::not_recoverable(
+                "repair or replace the failed standalone sink before retrying the write",
+            ),
+        )
+        .cause(message)
+        .source(Box::new(error))
     }
 }
 
-impl LogSink for ConsoleSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+impl crate::typed::TypedLogSink for ConsoleSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure> {
         let line = Self::format_line(event);
         self.writer
             .write_line(&line)
@@ -471,6 +483,20 @@ impl LogSink for ConsoleSink {
             .read()
             .expect("console sink health poisoned")
             .clone()
+    }
+}
+
+#[allow(
+    deprecated,
+    reason = "the legacy sink adapter preserves the published LogSinkError boundary"
+)]
+impl LogSink for ConsoleSink {
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        <Self as crate::typed::TypedLogSink>::write(self, event).map_err(Into::into)
+    }
+
+    fn health(&self) -> SinkHealth {
+        <Self as crate::typed::TypedLogSink>::health(self)
     }
 }
 
@@ -557,6 +583,10 @@ impl FaultInjectingSink {
 }
 
 #[cfg(feature = "fault-injection")]
+#[allow(
+    deprecated,
+    reason = "fault-injection compatibility preserves the published LogSinkError boundary"
+)]
 impl LogSink for FaultInjectingSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         if let Some(state) = self.current_state() {
@@ -590,7 +620,7 @@ pub(crate) fn diagnostic_for_sink_failure(message: impl Into<Cow<'static, str>>)
         message: message.into().into_owned(),
         cause: None,
         remediation: Remediation::not_recoverable(
-            "sink failure handling is owned by the logger runtime",
+            "repair or replace the failed standalone sink before retrying the write",
         ),
         docs: None,
         details: serde_json::Map::new(),
@@ -784,7 +814,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_write_failures_mark_sink_health() {
+    fn built_in_write_failures_mark_sink_health_for_legacy_and_typed_calls() {
         let root = temp_root("legacy-write-error");
         let file_parent = root.join("logs");
         fs::create_dir_all(root.path_buf()).expect("create root");
@@ -801,6 +831,34 @@ mod tests {
             error.diagnostic().code,
             error_codes::LOGGER_SINK_WRITE_FAILED
         );
+        assert_eq!(
+            error.diagnostic().remediation,
+            Remediation::not_recoverable(
+                "repair or replace the failed standalone sink before retrying the write"
+            )
+        );
+        assert!(std::error::Error::source(&error).is_some());
+        let typed_error = crate::typed::TypedLogSink::write(&sink, &log_event())
+            .expect_err("typed write failure");
+        assert_eq!(
+            typed_error.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
+        assert_eq!(
+            typed_error.diagnostic().remediation,
+            error.diagnostic().remediation
+        );
+        assert!(std::error::Error::source(&typed_error).is_some());
         assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+    }
+
+    #[cfg(feature = "fault-injection")]
+    #[test]
+    fn fault_injected_failure_matches_owning_registry() {
+        let failure = LogSinkFailure::fault_injected("x", Remediation::not_recoverable("test"));
+        assert_eq!(
+            failure.diagnostic().code,
+            error_codes::LOGGER_SINK_FAULT_INJECTED
+        );
     }
 }

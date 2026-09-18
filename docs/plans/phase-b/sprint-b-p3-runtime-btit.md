@@ -7,15 +7,37 @@ repository: beads-task-issue-tracker
 
 # B.P3 — Accept BTIT runtime-level bridge integration before copy
 
+## Status note (ATM-QA-DEBT-001)
+
+`status: proposed` above is intentional, not stale. `handoff-b-p3.md` already
+records an accepted verdict for the BTIT *source* -- 16/16 deliverables,
+zero remaining findings, retained CI run `35190374497` (13/13 jobs) -- which
+is what makes B.1's mechanical copy of that immutable commit permissible.
+That is a narrower, already-closed gate than this sprint's own title: formal
+owner acceptance of the runtime-level public API/ADR (ADR-011, still
+"Proposed for Phase B review" per `architecture.md`) is explicitly
+owner-deferred to Phase B completion, per `runtime-level-contract.md`'s
+`owner_deferral_date`/`owner_deferral_message` (ATM `01M2PKX8R4J4VJP5V6RRV9JJPB`)
+-- deferred, not resolved, and not a development blocker. `status` moves off
+`proposed` only when that owner-level API/ADR acceptance actually happens,
+not on the strength of the source-review outcome alone.
+
 ## Goal and dependencies
 
 Owner: BTIT team implements in its repository; sc-observability reviews the
-public contract and accepts handoff. `must_follow` B.P2 registry availability
-and accepted target-bridge/runtime contracts. B.1 `must_follow` this sprint's
-accepted immutable source. No parallel-safe relationship spans these shared
-contracts. Within BTIT, merge pushed parent development before each child round
-and merge parent PR first; cross-repository dependency uses released versions
-and immutable accepted commits rather than an impossible Git merge.
+public contract and accepts handoff. `must_follow` B.P2's exact staged core
+artifacts, the target-bridge contract that B.P3 must accept before source
+handoff, and the owner-deferred runtime contract. B.1 `must_follow` this
+sprint's accepted immutable source. No parallel-safe relationship spans these
+shared contracts. Within BTIT, merge pushed parent development before each child
+round and merge parent PR first; cross-repository dependency uses B.P2's
+recorded staged package version/checksum and immutable accepted commits rather
+than an impossible Git merge.
+
+The existing released `1.2.0` core remains the published compatibility baseline;
+the additive runtime-level capability is B.P2's distinct staged `1.3.0`
+candidate, not a pre-B.P3 release. B.7 alone turns qualified staged artifacts
+into live published artifacts after the phase-end gates.
 
 ## Deliverables (authoritative)
 
@@ -23,7 +45,7 @@ Every listed deliverable must land production-ready for this sprint's stated
 scope. Completion requires evidence for every numbered item, including its code,
 documentation and validation artifacts; partial completion leaves the sprint open.
 
-1. BTIT resolves B.P2's published core capability and implements LogGuard owner
+1. BTIT resolves B.P2's staged core capability and implements LogGuard owner
    operations against its single LevelOwner. Use the shared core filter for
    direct/facade/macro producers; keep LogControl read-only. Remove independent
    threshold policy, retain a conservative fixed Trace runtime facade ceiling,
@@ -35,9 +57,10 @@ documentation and validation artifacts; partial completion leaves the sprint ope
    UnsupportedLevel. Populate bridge health with configured/effective levels
    and revision, preserving one coherent core snapshot and nonfatal diagnostics.
 3. BTIT completes initial design, implementation, target-API inventory and
-   critical review/re-review. sc-observability records approved contract commits,
-   released core version, accepted source SHA, exact removed threshold symbols,
-   feature graphs and review/test evidence in
+   critical review/re-review. sc-observability records the accepted target-contract
+   commit, the owner-deferred runtime-contract reference, B.P2's exact staged
+   core package version/checksum, accepted source SHA, exact removed threshold
+   symbols, feature graphs and review/test evidence in
    `docs/plans/phase-b/handoff-b-p3.md`. Source fixes stay in BTIT before copy.
 
 ## Bridge boundaries
@@ -78,8 +101,21 @@ BTIT runs its complete bridge/macro/API/UI consumer checks, core-sharing
 integration tests, deterministic races and fault injection, plus release-mode
 logging and capped-build tests. Record resolved Cargo feature graphs and exact
 commands/results rather than assuming debug tests prove release behavior.
-sc-observability checks the handoff against both accepted contracts and B.P2's
-registry version. B.1's independent provenance verification is still required.
+sc-observability checks the handoff against the accepted target design, the
+owner-deferred runtime contract reference, and B.P2's exact staged core
+package version/checksum, not a registry version. B.1's independent
+provenance verification is still required. B.P3's staged consumption is not
+live registry proof; B.7 owns that proof at phase end.
+
+Before B.1 copy, B.P3 must retain an immutable source-repository inspection:
+the exact BTIT commit, complete root/export and hidden-macro-support inventory,
+target disposition for every observed export, source-side commands/results, and
+the BTIT critical review/re-review path and commit. This repository's workspace
+CI cannot prove BTIT workspace tests, exports, or boundary rules; B.P3 records
+BTIT-owned evidence rather than claiming that coverage. The final inventory and
+source-review verdict remain a B.P3/B.1 gate, not a pre-implementation completion
+claim. B.P3 compile-fail coverage proves LogControl cannot acquire mutation
+authority. B.3a/B.4 add binding host-routing proof once those bindings exist.
 
 ## Paths to delete
 
@@ -90,6 +126,6 @@ removed and no BTIT files are deleted by sc-observability during this sprint.
 
 ## Non-closure
 
-No destination copy/publication, post-copy redesign, Tauri/Python adapter work,
-BTIT switch to a future published companion crate, or claim that contract
+No destination copy/live publication, post-copy redesign, Tauri/Python adapter
+work, BTIT switch to a future published companion crate, or claim that contract
 approval alone closes source implementation/review.

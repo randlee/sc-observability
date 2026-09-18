@@ -3,11 +3,8 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use sc_observability::constants::{DEFAULT_LOG_DIR_NAME, DEFAULT_LOG_FILE_SUFFIX};
-use sc_observability::{Logger, LoggerConfig};
-use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, Level, LogEvent, OutcomeLabel, ProcessIdentity, Remediation,
-    SchemaVersion, ServiceName, TargetCategory, Timestamp,
-};
+use sc_observability::typed::{TypedLogSink, legacy_sink};
+use sc_observability::*;
 use serde_json::json;
 
 struct TestRoot(tempfile::TempDir);
@@ -89,4 +86,30 @@ fn logging_only_consumer_can_emit_without_routing_or_otlp() {
     let contents = fs::read_to_string(path).expect("read log output");
     assert!(contents.contains("\"action\":\"startup\""));
     assert!(contents.contains("\"message\":\"boot complete\""));
+}
+
+#[test]
+fn typed_sink_consumer_explicitly_imports_the_opt_in_trait() {
+    struct ConsumerTypedSink;
+
+    impl TypedLogSink for ConsumerTypedSink {
+        fn write(
+            &self,
+            _event: &LogEvent,
+        ) -> Result<(), sc_observability_types::typed::LogSinkFailure> {
+            Ok(())
+        }
+
+        fn health(&self) -> SinkHealth {
+            SinkHealth {
+                name: SinkName::new("typed-consumer").expect("valid sink name"),
+                state: SinkHealthState::Healthy,
+                last_error: None,
+            }
+        }
+    }
+
+    let sink = legacy_sink(std::sync::Arc::new(ConsumerTypedSink));
+    sink.write(&event()).expect("legacy adapter write");
+    sink.flush().expect("default typed flush");
 }

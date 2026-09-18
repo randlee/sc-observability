@@ -7,16 +7,23 @@ owner: B.3b
 
 `crates/sc-observability-binding-runtime/` (proposed crates.io name
 `sc-observability-binding-runtime`) owns runtime-to-DTO conversion and bounded
-native operations for Tauri and Python. It depends on the published core, sc-observability-types, DTOs
-and `sc-observability-log`; it never depends on Tauri or PyO3. Python depends on
-this crate and thus transitively on the bridge crate, without installing its
-process-global facade. This keeps bridge constants and conversions single-owned.
+native operations for Tauri and Python. It depends on the core,
+sc-observability-types, DTOs
+and `sc-observability-log`; it never depends on Tauri or PyO3. Before B.7, its
+core and bridge inputs are the qualified staged/package-provenance artifacts,
+not a pre-phase-end publication claim. The existing released core remains the
+compatibility baseline; the additive B.P2 runtime capability is the separate
+staged candidate. Python depends on this crate and thus
+transitively on the bridge crate, without installing its process-global facade.
+This keeps bridge constants and conversions single-owned.
 
-The bridge retains its separate, already accepted pre-copy lifecycle coordinator.
-This binding coordinator handles independent core loggers; BridgeControlBackend
-uses the bridge control/lifecycle semantics and does not recreate ownership.
-This is deliberate separation of an accepted bridge lifecycle from a new
-core-host adapter, not an added core API or post-copy bridge redesign.
+The bridge retains its separate pre-copy lifecycle coordinator. B.3b consumes it
+only after B.P3 has accepted the final target/source handoff; the current B.P3
+contract/source acceptance is not implied by this proposed document. This binding
+coordinator handles independent core loggers; BridgeControlBackend uses the
+bridge control/lifecycle semantics and does not recreate ownership. This is
+deliberate separation of the accepted bridge lifecycle from a new core-host
+adapter, not an added core API or post-copy bridge redesign.
 
 ## Public Rust contract
 

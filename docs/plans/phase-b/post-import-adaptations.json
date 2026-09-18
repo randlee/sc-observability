@@ -1,0 +1,102 @@
+{
+  "historical_provenance": "docs/plans/phase-b/import-provenance.json",
+  "source_commit": "396a9d9f77ca1950eeb92d4f88c0eecadb5ef00b",
+  "adaptations": [
+    {
+      "path": "crates/sc-observability-log/src/control.rs",
+      "kind": "deprecated_warning_allowance",
+      "reason": "the copied bridge retains its legacy logger admission boundary",
+      "before_blob": "7b44fd504d9b1aec148735570d606095d9768d63",
+      "after_blob": "b6e05e61db3efd9c3609a10d63296ea3e292709c",
+      "blocks": [
+        "    #[allow(\n        deprecated,\n        reason = \"the copied bridge retains its legacy logger admission boundary\"\n    )]"
+      ]
+    },
+    {
+      "path": "crates/sc-observability-log/src/handle.rs",
+      "kind": "deprecated_warning_allowance",
+      "reason": "the copied bridge retains its legacy lifecycle compatibility boundaries",
+      "before_blob": "47fddaefc0a72f5cc4628413b1269f687e2cb0d8",
+      "after_blob": "113534e89240830a568742aab9452c4fb511c711",
+      "blocks": [
+        "#[allow(\n    deprecated,\n    reason = \"the copied bridge retains its legacy logger admission boundary\"\n)]",
+        "#[allow(\n    deprecated,\n    reason = \"the copied bridge preserves its legacy logger flush/shutdown boundary\"\n)]",
+        "#[allow(\n    deprecated,\n    reason = \"the copied bridge preserves its legacy bounded flush boundary\"\n)]",
+        "#[allow(\n    deprecated,\n    reason = \"copied bridge tests exercise retained legacy lifecycle signatures\"\n)]"
+      ],
+      "qa_delta": {
+        "commit": "0460d6f1845b7514485c566db72c92fdf1b0a3f9",
+        "reason": "approved QA concurrency fixes bound shutdown-hook waits and release worker gates during panic/unwind; source and result are recorded as an exact patch",
+        "review_citation": {
+          "url": "https://github.com/randlee/sc-observability/pull/148#issuecomment-5724132637",
+          "reviewed_commit": "5bcc27ee8f228d396bb603fc7dfc1a1c65861fe0"
+        },
+        "patch": "--- accepted/crates/sc-observability-log/src/handle.rs\n+++ approved/0460d6f1845b7514485c566db72c92fdf1b0a3f9/crates/sc-observability-log/src/handle.rs\n@@ -872,6 +872,55 @@\n     use super::*;\n     use std::time::Instant;\n \n+    struct ReleaseOnDrop(Option<mpsc::SyncSender<()>>);\n+\n+    impl ReleaseOnDrop {\n+        fn release(&mut self) -> Result<(), mpsc::TrySendError<()>> {\n+            self.0.take().map_or(Ok(()), |sender| sender.try_send(()))\n+        }\n+    }\n+\n+    impl Drop for ReleaseOnDrop {\n+        fn drop(&mut self) {\n+            let _ = self.release();\n+        }\n+    }\n+\n+    fn await_shutdown_hook(entered: &mpsc::Receiver<()>, timeout: Duration) {\n+        let result = entered.recv_timeout(timeout);\n+        assert!(\n+            result.is_ok(),\n+            \"shutdown worker did not enter its test hook within {timeout:?}: {result:?}\"\n+        );\n+    }\n+\n+    #[test]\n+    fn missing_shutdown_hook_times_out_and_releases_worker() {\n+        let (_entered_tx, entered_rx) = mpsc::sync_channel::<()>(1);\n+        let (release_tx, release_rx) = mpsc::sync_channel(1);\n+        let worker = std::thread::spawn(move || release_rx.recv_timeout(Duration::from_secs(5)));\n+        let started = Instant::now();\n+        let unwound = std::panic::catch_unwind(move || {\n+            let _release = ReleaseOnDrop(Some(release_tx));\n+            await_shutdown_hook(&entered_rx, Duration::from_millis(10));\n+        });\n+        assert!(unwound.is_err());\n+        assert!(started.elapsed() < Duration::from_secs(1));\n+        assert!(matches!(worker.join(), Ok(Ok(()))));\n+    }\n+\n+    #[test]\n+    fn shutdown_test_release_survives_assertion_unwind() {\n+        let (release_tx, release_rx) = mpsc::sync_channel(1);\n+        let worker = std::thread::spawn(move || release_rx.recv_timeout(Duration::from_secs(5)));\n+        let unwound = std::panic::catch_unwind(move || {\n+            let _release = ReleaseOnDrop(Some(release_tx));\n+            panic!(\"injected assertion before normal release\");\n+        });\n+        assert!(unwound.is_err());\n+        assert!(matches!(worker.join(), Ok(Ok(()))));\n+    }\n+\n     #[test]\n     fn run_bounded_times_out_on_blocked_work() {\n         let started = Instant::now();\n@@ -927,12 +976,13 @@\n         });\n         let (entered_tx, entered_rx) = mpsc::sync_channel(1);\n         let (release_tx, release_rx) = mpsc::sync_channel(1);\n+        let mut release = ReleaseOnDrop(Some(release_tx));\n         *SHUTDOWN_WORK_HOOK\n             .get_or_init(|| Mutex::new(None))\n             .lock()\n             .unwrap_or_else(PoisonError::into_inner) = Some(Box::new(move || {\n             let _ = entered_tx.send(());\n-            let _ = release_rx.recv();\n+            let _ = release_rx.recv_timeout(Duration::from_secs(5));\n             panic!(\"test worker failure\");\n         }));\n         assert!(reserve_shutdown_coordinator().is_ok());\n@@ -940,7 +990,7 @@\n         set_lifecycle(BridgeLifecycle::ShuttingDown);\n         let owner =\n             std::thread::spawn(move || shutdown_installed(installed, Duration::from_millis(1)));\n-        assert!(entered_rx.recv().is_ok());\n+        await_shutdown_hook(&entered_rx, Duration::from_secs(1));\n         assert!(matches!(\n             wait_stopped(Duration::from_millis(1)),\n             Err(crate::WaitError::TimedOut { .. })\n@@ -949,7 +999,7 @@\n             owner.join(),\n             Ok(Err(ShutdownError::TimedOut { .. }))\n         ));\n-        assert!(release_tx.send(()).is_ok());\n+        assert!(release.release().is_ok());\n         assert!(matches!(\n             wait_stopped(Duration::from_secs(1)),\n             Ok(ShutdownReport {\n"
+      }
+    },
+    {
+      "path": "crates/sc-observability-log/src/mapping.rs",
+      "kind": "deprecated_warning_allowance",
+      "reason": "the copied bridge preserves its legacy identity resolver boundary",
+      "before_blob": "834a05c742659bff99b03e5379d6b758c6de8b4c",
+      "after_blob": "5e5d638372a4a23f3d3a9182440e1d68a2c66465",
+      "blocks": [
+        "#[allow(\n    deprecated,\n    reason = \"the copied log-facade bridge preserves its legacy identity resolver boundary\"\n)]",
+        "#[allow(\n    deprecated,\n    reason = \"the copied log-facade bridge preserves its legacy identity resolver boundary\"\n)]",
+        "#[allow(\n    deprecated,\n    reason = \"the copied log-facade bridge preserves its legacy identity resolver boundary\"\n)]",
+        "#[allow(\n    deprecated,\n    reason = \"legacy identity wrapper assertions cover the copied bridge compatibility contract\"\n)]"
+      ]
+    },
+    {
+      "path": "crates/sc-observability-log/src/health.rs",
+      "kind": "approved_qa_delta",
+      "reason": "approved QA concurrency/lifecycle fix recorded as an exact immutable source-to-result patch; no mechanical import provenance is changed",
+      "before_blob": "281339ac2b1158eb4414fa671eb7f7e291651e03",
+      "after_blob": "e8a4f33a83b0ec360ff3622650d3cb26b2c33846",
+      "blocks": [],
+      "qa_delta": {
+        "commit": "0460d6f1845b7514485c566db72c92fdf1b0a3f9",
+        "reason": "approved QA delta retained with exact patch evidence",
+        "review_citation": {
+          "url": "https://github.com/randlee/sc-observability/pull/148#issuecomment-5724132637",
+          "reviewed_commit": "5bcc27ee8f228d396bb603fc7dfc1a1c65861fe0"
+        },
+        "patch": "--- accepted/crates/sc-observability-log/src/health.rs\n+++ approved/0460d6f1845b7514485c566db72c92fdf1b0a3f9/crates/sc-observability-log/src/health.rs\n@@ -160,7 +160,6 @@\n \n #[cfg(test)]\n mod tests {\n-    use std::path::PathBuf;\n \n     use sc_observability_types::{LoggingHealthState, WriterState};\n \n@@ -184,6 +183,7 @@\n         fn serde_bounds<T: serde::Serialize + serde::de::DeserializeOwned>() {}\n         serde_bounds::<BridgeHealthReport>();\n         assert_eq!(BRIDGE_HEALTH_SCHEMA_VERSION, 1);\n+        let active_path = std::env::temp_dir().join(\"native-health.jsonl\");\n \n         let report = BridgeHealthReport {\n             schema_version: BRIDGE_HEALTH_SCHEMA_VERSION,\n@@ -191,7 +191,7 @@\n                 state: LoggingHealthState::Healthy,\n                 dropped_events_total: 2,\n                 flush_errors_total: 3,\n-                active_log_path: PathBuf::from(\"/tmp/native-health.jsonl\"),\n+                active_log_path: active_path.clone(),\n                 sink_statuses: Vec::new(),\n                 queue_depth: 0,\n                 queue_capacity: 8,\n@@ -205,7 +205,7 @@\n             },\n             dropped: DroppedEvents::default(),\n             lifecycle: LifecyclePhase::Stopped,\n-            active_log_path: Some(PathBuf::from(\"/tmp/native-health.jsonl\")),\n+            active_log_path: Some(active_path),\n             configured_level: LevelFilter::Info,\n             effective_level: LevelFilter::Warn,\n             level_revision: 7,\n"
+      }
+    },
+    {
+      "path": "crates/sc-observability-log/tests/bridge_jsonl.rs",
+      "kind": "approved_qa_delta",
+      "reason": "approved QA concurrency/lifecycle fix recorded as an exact immutable source-to-result patch; no mechanical import provenance is changed",
+      "before_blob": "5adcf8e1aaeda7f4284519a560717dd1d2c49cb5",
+      "after_blob": "96267a2c451298cebf8440b3c79bfcdafa39f568",
+      "blocks": [],
+      "qa_delta": {
+        "commit": "0460d6f1845b7514485c566db72c92fdf1b0a3f9",
+        "reason": "approved QA delta retained with exact patch evidence",
+        "review_citation": {
+          "url": "https://github.com/randlee/sc-observability/pull/148#issuecomment-5724132637",
+          "reviewed_commit": "5bcc27ee8f228d396bb603fc7dfc1a1c65861fe0"
+        },
+        "patch": "--- accepted/crates/sc-observability-log/tests/bridge_jsonl.rs\n+++ approved/0460d6f1845b7514485c566db72c92fdf1b0a3f9/crates/sc-observability-log/tests/bridge_jsonl.rs\n@@ -111,9 +111,23 @@\n \n fn assert_shutdown_stops_writing(guard: LogGuard, root: &Path) {\n     let path = guard.active_log_path().unwrap().to_path_buf();\n+    let control = guard.control();\n     guard.shutdown(Duration::from_secs(5)).unwrap();\n+    let stopped = control.wait_stopped(Duration::from_secs(5)).unwrap();\n+    assert!(matches!(\n+        stopped.outcome,\n+        sc_observability_log::ShutdownOutcome::Stopped\n+    ));\n+    assert_eq!(\n+        stopped.health.logging.writer_state,\n+        sc_observability_types::WriterState::Stopped\n+    );\n+    assert_eq!(stopped.health.logging.queue_depth, 0);\n     log::error!(target: \"app_lib::commands\", \"after shutdown\");\n-    std::thread::sleep(Duration::from_millis(50));\n+    assert_eq!(\n+        control.health().unwrap().lifecycle,\n+        sc_observability_log::LifecyclePhase::Stopped\n+    );\n     let events = read_events(&path);\n     assert!(find(&events, \"after shutdown\").is_none());\n     assert_second_init_rejected(root);\n"
+      }
+    },
+    {
+      "path": "crates/sc-observability-log/tests/shutdown_timeout.rs",
+      "kind": "approved_qa_delta",
+      "reason": "approved QA concurrency/lifecycle fix recorded as an exact immutable source-to-result patch; no mechanical import provenance is changed",
+      "before_blob": "76d98e40f7bb41a949eec6af0d40b5697527a1e9",
+      "after_blob": "4b35299526fb6248a14ebc138e0a9f8df8238512",
+      "blocks": [],
+      "qa_delta": {
+        "commit": "0460d6f1845b7514485c566db72c92fdf1b0a3f9",
+        "reason": "approved QA delta retained with exact patch evidence",
+        "review_citation": {
+          "url": "https://github.com/randlee/sc-observability/pull/148#issuecomment-5724132637",
+          "reviewed_commit": "5bcc27ee8f228d396bb603fc7dfc1a1c65861fe0"
+        },
+        "patch": "--- accepted/crates/sc-observability-log/tests/shutdown_timeout.rs\n+++ approved/0460d6f1845b7514485c566db72c92fdf1b0a3f9/crates/sc-observability-log/tests/shutdown_timeout.rs\n@@ -29,6 +29,32 @@\n }\n \n static GATE: OnceLock<Gate> = OnceLock::new();\n+\n+struct ReleaseOnDrop(Option<SyncSender<()>>);\n+\n+impl ReleaseOnDrop {\n+    fn release(&mut self) -> Result<(), std::sync::mpsc::TrySendError<()>> {\n+        self.0.take().map_or(Ok(()), |sender| sender.try_send(()))\n+    }\n+}\n+\n+impl Drop for ReleaseOnDrop {\n+    fn drop(&mut self) {\n+        let _ = self.release();\n+    }\n+}\n+\n+#[test]\n+fn gate_release_survives_assertion_unwind() {\n+    let (release_tx, release_rx) = sync_channel(1);\n+    let worker = std::thread::spawn(move || release_rx.recv_timeout(Duration::from_secs(5)));\n+    let unwound = std::panic::catch_unwind(move || {\n+        let _release = ReleaseOnDrop(Some(release_tx));\n+        panic!(\"injected assertion before release\");\n+    });\n+    assert!(unwound.is_err());\n+    assert!(matches!(worker.join(), Ok(Ok(()))));\n+}\n \n struct BlockingRedactor;\n \n@@ -93,6 +119,8 @@\n     let path = control.active_log_path().unwrap().unwrap();\n     let blocked_control = control.clone();\n     let (blocked_tx, blocked_rx) = sync_channel(1);\n+    // Drop this before LogGuard so panic cleanup releases the writer first.\n+    let mut release = ReleaseOnDrop(Some(release_tx));\n     let _blocked = std::thread::spawn(move || {\n         let result = blocked_control.try_log(event(\n             \"admitted before late completion\",\n@@ -126,7 +154,7 @@\n         Err(WaitError::TimedOut { .. })\n     ));\n \n-    release_tx.send(()).unwrap();\n+    assert!(release.release().is_ok());\n     assert_eq!(\n         blocked_rx\n             .recv_timeout(LATE_COMPLETION_DEADLINE)\n"
+      }
+    }
+  ]
+}

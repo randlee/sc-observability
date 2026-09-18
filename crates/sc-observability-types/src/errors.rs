@@ -1,15 +1,28 @@
+#![allow(
+    deprecated,
+    reason = "this module owns the retained legacy wrapper definitions and their DiagnosticInfo implementations"
+)]
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{Diagnostic, DiagnosticInfo, ErrorContext, sealed};
 
 /// Error returned when process identity resolution fails.
+#[deprecated(
+    since = "1.4.0",
+    note = "Use sc_observability_types::typed::IdentityFailure; see migrate-error-api.md."
+)]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Error)]
 #[error("{0}")]
 pub struct IdentityError(#[source] pub Box<ErrorContext>);
 
 impl sealed::Sealed for IdentityError {}
 
+#[allow(
+    deprecated,
+    reason = "IdentityError remains a retained compatibility wrapper"
+)]
 impl DiagnosticInfo for IdentityError {
     fn diagnostic(&self) -> &Diagnostic {
         self.0.diagnostic()
@@ -23,8 +36,16 @@ macro_rules! error_wrapper {
         #[error("{0}")]
         pub struct $name(#[source] pub Box<ErrorContext>);
 
+        #[allow(
+            deprecated,
+            reason = "legacy error wrapper remains a retained compatibility boundary"
+        )]
         impl sealed::Sealed for $name {}
 
+        #[allow(
+            deprecated,
+            reason = "legacy error wrapper retains its DiagnosticInfo implementation"
+        )]
         impl DiagnosticInfo for $name {
             fn diagnostic(&self) -> &Diagnostic {
                 self.0.diagnostic()
@@ -35,34 +56,66 @@ macro_rules! error_wrapper {
 
 error_wrapper!(
     /// Initialization error returned by public construction entry points.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observability_types::typed::InitFailure; see migrate-error-api.md."
+    )]
     InitError
 );
 error_wrapper!(
     /// Event validation or lifecycle error returned during emit paths.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observability_types::typed::EventFailure; see migrate-error-api.md."
+    )]
     EventError
 );
 error_wrapper!(
     /// Flush error returned by explicit flush operations.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observability_types::typed::FlushFailure; see migrate-error-api.md."
+    )]
     FlushError
 );
 error_wrapper!(
     /// Shutdown error returned when graceful shutdown fails.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observability_types::typed::ShutdownFailure; see migrate-error-api.md."
+    )]
     ShutdownError
 );
 error_wrapper!(
     /// Projection error returned by log/span/metric projectors.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observability_types::typed::ProjectionFailure; see migrate-error-api.md."
+    )]
     ProjectionError
 );
 error_wrapper!(
     /// Subscriber error returned by observation subscribers.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observability_types::typed::SubscriberFailure; see migrate-error-api.md."
+    )]
     SubscriberError
 );
 error_wrapper!(
     /// Logging sink error returned by concrete sink implementations.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observability_types::typed::LogSinkFailure; see migrate-error-api.md."
+    )]
     LogSinkError
 );
 error_wrapper!(
     /// Export error returned by concrete telemetry exporters.
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use sc_observability_types::typed::ExportFailure; see migrate-error-api.md."
+    )]
     ExportError
 );
 

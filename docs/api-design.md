@@ -2310,13 +2310,17 @@ This draft is ready for review against these questions:
   implementation test case?
 
 
-## 21. Phase B API Evolution — Proposed for Review
+## 21. Phase B API Evolution — Scoped Runtime Implementation Proposed
 
 [PHB-001–014](requirements.md#10-phase-b-additions--proposed-for-review) and
 [ADR-011–015](architecture.md#adr-011-companion-boundaries-and-pre-copy-contract)
 record the requested scope and proposed architecture. The [Phase B index](plans/phase-b/plan-phase-b.md)
 routes authoritative sprint signatures, deliverables and validation. This section
-is a compatibility boundary, not a second competing signature inventory.
+is a compatibility boundary, not a second competing signature inventory. The
+B.P1 runtime-level core acceptance is owner-deferred to Phase B completion
+(ATM `01M2PKX8R4J4VJP5V6RRV9JJPB`); all Phase B API evolution remains proposed
+unless its own contract says otherwise. This does not approve registry
+publication, an owner signature, or an independent QA PASS.
 
 ### 21.1 Published API Preservation And Issue #92
 
@@ -2339,6 +2343,15 @@ required public-struct field, changed return type or wire-shape change is planne
 Review the [error sprint contract](plans/phase-b/sprint-b-1a-error-api.md) and its
 successors for the exact replacement inventory before implementation approval.
 
+B.1e migration implementation records that inventory in
+[`plans/phase-b/warning-inventory-b-1e.md`](plans/phase-b/warning-inventory-b-1e.md)
+and routes adopters through
+`.claude/skills/sc-observability-adopting/references/migrate-error-api.md`.
+The record activates the authorized warning attributes at the exact next-minor
+version after the B.P2 staged prerequisite; B.2 qualifies that
+result. The two B.P1 owner constructors remain method-level
+exemptions, while explicit `InitError` wrapper use is documented separately.
+
 ### 21.2 Bridge And Runtime Level Contracts
 
 The [target bridge API](plans/phase-b/target-bridge-api.md) specifies the initial
@@ -2350,11 +2363,14 @@ scoped TYP-030 exception in proposed ADR-011; core shared types remain neutral.
 The [runtime-level contract](plans/phase-b/runtime-level-contract.md) specifies
 additive core owner construction, read-only level snapshots and typed elevate/
 reset outcomes. Existing LoggerConfig and LoggingHealthReport remain unchanged.
+Its owner deferral is recorded in
+[`api-approvals/phase-b-runtime-level.md`](api-approvals/phase-b-runtime-level.md).
 The new OperationDiagnostic provides required code, message, remediation and
 timestamp for operation outcomes; existing DiagnosticSummary remains an optional
 code plus message/time summary. Conversions preserve available original data
 and use explicitly documented fallback remediation only when an operation has
-already discarded it. Core support is published before BTIT bridge integration. Existing standalone
+already discarded it. B.P2-qualified staged core support is consumed before BTIT
+bridge integration; B.7 owns later publication. Existing standalone
 constructors preserve baseline filtering without acquiring an external owner.
 The core and every adapter use the same effective admission level. Mutation is
 serialized against shutdown; diagnostic admission is reported separately and

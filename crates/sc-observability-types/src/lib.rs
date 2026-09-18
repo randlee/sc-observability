@@ -19,6 +19,7 @@ mod projection;
 mod query;
 mod span;
 mod tracing;
+pub mod typed;
 mod validation;
 
 mod sealed {
@@ -53,6 +54,10 @@ pub use diagnostic::{
     Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, RecoverableSteps, Remediation,
 };
 #[doc(inline)]
+#[allow(
+    deprecated,
+    reason = "the crate root re-exports the retained legacy wrapper names"
+)]
 pub use errors::{
     EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ObservationError,
     ProjectionError, ShutdownError, SubscriberError, TelemetryError,
@@ -67,7 +72,10 @@ pub use health::{
     SinkHealth, SinkHealthState, TelemetryHealthReport, TelemetryHealthState, WriterState,
 };
 #[doc(inline)]
-pub use level::{Level, LevelFilter};
+pub use level::{
+    AdmissionOutcome, ChangeDiagnostic, Level, LevelChange, LevelChangeError, LevelChangeSource,
+    LevelFilter, LevelState, OperationDiagnostic,
+};
 #[doc(inline)]
 pub use metric::{MetricKind, MetricRecord};
 #[doc(inline)]

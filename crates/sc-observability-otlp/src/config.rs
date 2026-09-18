@@ -20,6 +20,11 @@ use std::fmt;
 use std::path::PathBuf;
 
 use crate::{constants, error_codes};
+use sc_observability_types::typed::InitFailure;
+#[allow(
+    deprecated,
+    reason = "OTLP config retains InitError in its published compatibility signatures"
+)]
 use sc_observability_types::{DurationMs, ErrorContext, InitError, Remediation, ServiceName};
 use serde_json::{Map, Value};
 
@@ -40,16 +45,35 @@ pub struct OtlpEndpoint(String);
 
 impl OtlpEndpoint {
     /// Creates a validated OTLP endpoint using the documented HTTP(S) schemes.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use OtlpEndpoint::new_typed(); see migrate-error-api.md."
+    )]
     pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
+        Self::new_typed(value).map_err(Into::into)
+    }
+
+    /// Creates a validated OTLP endpoint with a neutral initialization failure.
+    ///
+    /// Emptiness is checked against the trimmed value, but the original,
+    /// untrimmed `value` is stored: this is intentional retained legacy
+    /// behavior, not an oversight, and both the legacy [`OtlpEndpoint::new`]
+    /// and this typed constructor preserve it identically. Callers that
+    /// require a trimmed endpoint must trim before calling.
+    pub fn new_typed(value: impl Into<String>) -> Result<Self, InitFailure> {
         let value = value.into();
         if value.trim().is_empty() {
-            return Err(invalid_transport_value(
+            return Err(invalid_transport_value_typed(
                 "endpoint must not be empty",
                 "set an explicit http:// or https:// OTLP endpoint",
             ));
         }
         if !(value.starts_with("http://") || value.starts_with("https://")) {
-            return Err(invalid_transport_value(
+            return Err(invalid_transport_value_typed(
                 "endpoint must start with http:// or https://",
                 "set an OTLP endpoint with an explicit HTTP(S) scheme",
             ));
@@ -76,23 +100,59 @@ impl AsRef<str> for OtlpEndpoint {
 }
 
 impl TryFrom<String> for OtlpEndpoint {
+    #[allow(
+        deprecated,
+        reason = "TryFrom preserves the published InitError compatibility contract"
+    )]
     type Error = InitError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new(value)
+        Self::new_typed(value).map_err(Into::into)
     }
 }
 
 /// Validated authorization header value for OTLP transport.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` redacts the wrapped credential (`AuthHeader("<redacted>")`) so it
+/// never leaks through `{:?}` formatting of this type or any config that
+/// embeds it (for example [`OtelConfig`] and [`TelemetryConfig`]). The raw
+/// value remains reachable only through the explicit, documented
+/// [`AuthHeader::as_str`], `Display`, and `AsRef<str>` accessors — callers
+/// that need the credential must opt in via one of those, not `{:?}`.
+#[derive(Clone, PartialEq, Eq)]
 pub struct AuthHeader(String);
+
+impl fmt::Debug for AuthHeader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("AuthHeader").field(&"<redacted>").finish()
+    }
+}
 
 impl AuthHeader {
     /// Creates a validated non-empty authorization header value.
+    #[allow(
+        deprecated,
+        reason = "retained compatibility constructor keeps the published InitError signature"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use AuthHeader::new_typed(); see migrate-error-api.md."
+    )]
     pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
+        Self::new_typed(value).map_err(Into::into)
+    }
+
+    /// Creates a validated authorization header with a neutral initialization failure.
+    ///
+    /// Emptiness is checked against the trimmed value, but the original,
+    /// untrimmed `value` is stored: this is intentional retained legacy
+    /// behavior, not an oversight, and both the legacy [`AuthHeader::new`]
+    /// and this typed constructor preserve it identically. Callers that
+    /// require a trimmed header value must trim before calling.
+    pub fn new_typed(value: impl Into<String>) -> Result<Self, InitFailure> {
         let value = value.into();
         if value.trim().is_empty() {
-            return Err(invalid_transport_value(
+            return Err(invalid_transport_value_typed(
                 "auth header must not be empty",
                 "set a non-empty authorization header or omit it entirely",
             ));
@@ -119,10 +179,14 @@ impl AsRef<str> for AuthHeader {
 }
 
 impl TryFrom<String> for AuthHeader {
+    #[allow(
+        deprecated,
+        reason = "TryFrom preserves the published InitError compatibility contract"
+    )]
     type Error = InitError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new(value)
+        Self::new_typed(value).map_err(Into::into)
     }
 }
 
@@ -294,45 +358,15 @@ impl TelemetryConfigBuilder {
         self
     }
 
-    /// Disables log export.
-    #[expect(
-        dead_code,
-        reason = "builder keeps explicit crate-local disable toggles for test and internal composition paths"
-    )]
-    pub(crate) fn disable_logs(mut self) -> Self {
-        self.logs = None;
-        self
-    }
-
     /// Enables trace export with the provided batch policy.
     pub fn enable_traces(mut self, config: TracesConfig) -> Self {
         self.traces = Some(config);
         self
     }
 
-    /// Disables trace export.
-    #[expect(
-        dead_code,
-        reason = "builder keeps explicit crate-local disable toggles for test and internal composition paths"
-    )]
-    pub(crate) fn disable_traces(mut self) -> Self {
-        self.traces = None;
-        self
-    }
-
     /// Enables metric export with the provided batch policy.
     pub fn enable_metrics(mut self, config: MetricsConfig) -> Self {
         self.metrics = Some(config);
-        self
-    }
-
-    /// Disables metric export.
-    #[expect(
-        dead_code,
-        reason = "builder keeps explicit crate-local disable toggles for test and internal composition paths"
-    )]
-    pub(crate) fn disable_metrics(mut self) -> Self {
-        self.metrics = None;
         self
     }
 
@@ -352,7 +386,20 @@ impl TelemetryConfigBuilder {
     ///
     /// assert_eq!(config.service_name.as_str(), "demo");
     /// ```
+    #[allow(
+        deprecated,
+        reason = "retained compatibility builder keeps the published InitError signature"
+    )]
+    #[deprecated(
+        since = "1.4.0",
+        note = "Use TelemetryConfigBuilder::build_typed(); see migrate-error-api.md."
+    )]
     pub fn build(self) -> Result<TelemetryConfig, InitError> {
+        self.build_typed().map_err(Into::into)
+    }
+
+    /// Finalizes the telemetry configuration with a neutral initialization failure.
+    pub fn build_typed(self) -> Result<TelemetryConfig, InitFailure> {
         let config = TelemetryConfig {
             service_name: self.service_name,
             resource: self.resource,
@@ -361,14 +408,23 @@ impl TelemetryConfigBuilder {
             traces: self.traces,
             metrics: self.metrics,
         };
-        validate_config(&config)?;
+        validate_config_typed(&config)?;
         Ok(config)
     }
 }
 
+#[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "OTLP config compatibility tests exercise retained constructors and builder"
+)]
 pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
+    validate_config_typed(config).map_err(Into::into)
+}
+
+pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), InitFailure> {
     if config.transport.enabled && config.transport.endpoint.is_none() {
-        return Err(InitError(Box::new(ErrorContext::new(
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "enabled telemetry requires an endpoint",
             Remediation::recoverable(
@@ -378,7 +434,7 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
         ))));
     }
     if u64::from(config.transport.timeout_ms) == 0 {
-        return Err(InitError(Box::new(ErrorContext::new(
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "timeout_ms must be greater than zero",
             Remediation::recoverable(
@@ -388,7 +444,7 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
         ))));
     }
     if config.transport.initial_backoff_ms > config.transport.max_backoff_ms {
-        return Err(InitError(Box::new(ErrorContext::new(
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "initial_backoff_ms must not exceed max_backoff_ms",
             Remediation::recoverable("fix the backoff configuration", ["use documented defaults"]),
@@ -399,7 +455,7 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
         && config.traces.is_none()
         && config.metrics.is_none()
     {
-        return Err(InitError(Box::new(ErrorContext::new(
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "at least one telemetry signal must be enabled",
             Remediation::recoverable(
@@ -414,7 +470,7 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
             .metrics
             .is_some_and(|cfg| cfg.batch_size == 0 || u64::from(cfg.export_interval_ms) == 0)
     {
-        return Err(InitError(Box::new(ErrorContext::new(
+        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
             "telemetry batch sizing and export intervals must be positive",
             Remediation::recoverable(
@@ -426,8 +482,8 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
     Ok(())
 }
 
-fn invalid_transport_value(message: &str, remediation: &str) -> InitError {
-    InitError(Box::new(ErrorContext::new(
+fn invalid_transport_value_typed(message: &str, remediation: &str) -> InitFailure {
+    InitFailure::from_context(Box::new(ErrorContext::new(
         error_codes::TELEMETRY_INVALID_CONFIG,
         message,
         Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
@@ -435,9 +491,60 @@ fn invalid_transport_value(message: &str, remediation: &str) -> InitError {
 }
 
 #[cfg(test)]
+#[allow(
+    deprecated,
+    reason = "OTLP config compatibility tests exercise retained constructors and builder"
+)]
 mod tests {
     use super::*;
-    use sc_observability_types::ServiceName;
+    use sc_observability_types::{DiagnosticInfo, ServiceName};
+
+    #[test]
+    fn typed_config_entry_points_preserve_legacy_diagnostics() {
+        fn assert_stable_diagnostic_parity(
+            legacy: &sc_observability_types::Diagnostic,
+            typed: &sc_observability_types::Diagnostic,
+        ) {
+            assert_eq!(legacy.code, typed.code);
+            assert_eq!(legacy.message, typed.message);
+            assert_eq!(legacy.cause, typed.cause);
+            assert_eq!(legacy.remediation, typed.remediation);
+            assert_eq!(legacy.docs, typed.docs);
+            assert_eq!(legacy.details, typed.details);
+        }
+
+        let legacy_endpoint = OtlpEndpoint::new("not-a-url").expect_err("legacy endpoint");
+        let typed_endpoint = OtlpEndpoint::new_typed("not-a-url").expect_err("typed endpoint");
+        assert_stable_diagnostic_parity(legacy_endpoint.diagnostic(), typed_endpoint.diagnostic());
+
+        for value in ["", "   "] {
+            let legacy_endpoint = OtlpEndpoint::new(value).expect_err("legacy empty endpoint");
+            let typed_endpoint = OtlpEndpoint::new_typed(value).expect_err("typed empty endpoint");
+            assert_stable_diagnostic_parity(
+                legacy_endpoint.diagnostic(),
+                typed_endpoint.diagnostic(),
+            );
+        }
+
+        let legacy_header = AuthHeader::new(" ").expect_err("legacy header");
+        let typed_header = AuthHeader::new_typed(" ").expect_err("typed header");
+        assert_stable_diagnostic_parity(legacy_header.diagnostic(), typed_header.diagnostic());
+
+        let transport = OtelConfig {
+            enabled: true,
+            endpoint: None,
+            ..OtelConfig::default()
+        };
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport.clone())
+            .build()
+            .expect_err("legacy configuration");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport)
+            .build_typed()
+            .expect_err("typed configuration");
+        assert_stable_diagnostic_parity(legacy.diagnostic(), typed.diagnostic());
+    }
 
     #[test]
     fn otlp_endpoint_accepts_valid_http_and_https_values() {
@@ -469,16 +576,194 @@ mod tests {
     }
 
     #[test]
+    fn endpoint_and_auth_header_legacy_and_typed_constructors_preserve_surrounding_whitespace() {
+        // Leading whitespace before the endpoint's required http(s):// scheme is
+        // rejected by the scheme check itself (unrelated to this finding); this
+        // covers the actually-reachable retained-whitespace case, trailing space.
+        let padded_endpoint = "https://otel.example.internal  ";
+        let legacy = OtlpEndpoint::new(padded_endpoint).expect("legacy endpoint");
+        let typed = OtlpEndpoint::new_typed(padded_endpoint).expect("typed endpoint");
+        assert_eq!(legacy.as_str(), padded_endpoint);
+        assert_eq!(typed.as_str(), padded_endpoint);
+
+        let padded_header = "  Bearer abc123  ";
+        let legacy_header = AuthHeader::new(padded_header).expect("legacy header");
+        let typed_header = AuthHeader::new_typed(padded_header).expect("typed header");
+        assert_eq!(legacy_header.as_str(), padded_header);
+        assert_eq!(typed_header.as_str(), padded_header);
+    }
+
+    #[test]
+    fn auth_header_debug_redacts_but_display_and_as_str_retain_the_raw_credential() {
+        let secret = "Bearer super-secret-token";
+        let header = AuthHeader::try_from(secret.to_string()).expect("valid header");
+
+        let debug_output = format!("{header:?}");
+        assert!(
+            !debug_output.contains(secret),
+            "Debug output must never contain the raw credential: {debug_output}"
+        );
+        assert_eq!(debug_output, "AuthHeader(\"<redacted>\")");
+
+        // Display and as_str remain the documented explicit raw-value accessors.
+        assert_eq!(header.to_string(), secret);
+        assert_eq!(header.as_str(), secret);
+
+        let config = OtelConfig {
+            enabled: true,
+            auth_header: Some(header),
+            ..OtelConfig::default()
+        };
+        let config_debug = format!("{config:?}");
+        assert!(
+            !config_debug.contains(secret),
+            "OtelConfig Debug must not leak the auth header credential: {config_debug}"
+        );
+    }
+
+    #[test]
     fn telemetry_config_builder_build_validates_transport() {
-        let result = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(OtelConfig {
                 enabled: true,
                 endpoint: None,
                 ..OtelConfig::default()
             })
-            .build();
+            .build()
+            .expect_err("legacy missing endpoint");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(OtelConfig {
+                enabled: true,
+                endpoint: None,
+                ..OtelConfig::default()
+            })
+            .build_typed()
+            .expect_err("typed missing endpoint");
 
-        assert!(result.is_err());
+        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
+    }
+
+    #[test]
+    fn public_builder_preserves_typed_validation_for_all_config_rejections() {
+        fn transport() -> OtelConfig {
+            OtelConfig {
+                enabled: true,
+                endpoint: Some(
+                    OtlpEndpoint::new("https://otel.example.internal").expect("endpoint"),
+                ),
+                ..OtelConfig::default()
+            }
+        }
+
+        fn assert_parity(legacy: &InitError, typed: &InitFailure) {
+            assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+            assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
+        }
+
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport())
+            .enable_logs(LogsConfig { batch_size: 0 })
+            .build()
+            .expect_err("legacy zero batch");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport())
+            .enable_logs(LogsConfig { batch_size: 0 })
+            .build_typed()
+            .expect_err("typed zero batch");
+        assert_parity(&legacy, &typed);
+
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport())
+            .enable_metrics(MetricsConfig {
+                batch_size: 1,
+                export_interval_ms: 0_u64.into(),
+            })
+            .build()
+            .expect_err("legacy zero interval");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport())
+            .enable_metrics(MetricsConfig {
+                batch_size: 1,
+                export_interval_ms: 0_u64.into(),
+            })
+            .build_typed()
+            .expect_err("typed zero interval");
+        assert_parity(&legacy, &typed);
+
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(OtelConfig {
+                timeout_ms: 0_u64.into(),
+                ..transport()
+            })
+            .enable_logs(LogsConfig::default())
+            .build()
+            .expect_err("legacy zero timeout");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(OtelConfig {
+                timeout_ms: 0_u64.into(),
+                ..transport()
+            })
+            .enable_logs(LogsConfig::default())
+            .build_typed()
+            .expect_err("typed zero timeout");
+        assert_parity(&legacy, &typed);
+
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(OtelConfig {
+                initial_backoff_ms: 2_000_u64.into(),
+                max_backoff_ms: 1_000_u64.into(),
+                ..transport()
+            })
+            .enable_logs(LogsConfig::default())
+            .build()
+            .expect_err("legacy inverted backoff");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(OtelConfig {
+                initial_backoff_ms: 2_000_u64.into(),
+                max_backoff_ms: 1_000_u64.into(),
+                ..transport()
+            })
+            .enable_logs(LogsConfig::default())
+            .build_typed()
+            .expect_err("typed inverted backoff");
+        assert_parity(&legacy, &typed);
+
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport())
+            .build()
+            .expect_err("legacy missing signal");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport())
+            .build_typed()
+            .expect_err("typed missing signal");
+        assert_parity(&legacy, &typed);
+    }
+
+    #[test]
+    fn public_builder_preserves_existing_protocol_endpoint_acceptance() {
+        // Endpoint validation intentionally admits documented HTTP(S) endpoints for
+        // every protocol. Protocol-specific transport handling is deferred to the
+        // exporter layer, so neither API invents a protocol/endpoint rejection.
+        let transport = OtelConfig {
+            enabled: true,
+            endpoint: Some(OtlpEndpoint::new("https://otel.example.internal").expect("endpoint")),
+            protocol: OtlpProtocol::Grpc,
+            ..OtelConfig::default()
+        };
+        let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport.clone())
+            .enable_logs(LogsConfig::default())
+            .build()
+            .expect("legacy accepts the transport combination");
+        let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
+            .with_transport(transport)
+            .enable_logs(LogsConfig::default())
+            .build_typed()
+            .expect("typed accepts the transport combination");
+
+        assert_eq!(legacy.transport.protocol, typed.transport.protocol);
+        assert_eq!(legacy.transport.endpoint, typed.transport.endpoint);
     }
 
     #[test]
@@ -496,7 +781,10 @@ mod tests {
             metrics: None,
         };
 
-        assert!(validate_config(&config).is_err());
+        let legacy = validate_config(&config).expect_err("legacy zero timeout");
+        let typed = validate_config_typed(&config).expect_err("typed zero timeout");
+        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
     }
 
     #[test]
@@ -515,7 +803,10 @@ mod tests {
             metrics: None,
         };
 
-        assert!(validate_config(&config).is_err());
+        let legacy = validate_config(&config).expect_err("legacy backoff inversion");
+        let typed = validate_config_typed(&config).expect_err("typed backoff inversion");
+        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
     }
 
     #[test]
@@ -536,7 +827,10 @@ mod tests {
             metrics: None,
         };
 
-        assert!(validate_config(&config).is_err());
+        let legacy = validate_config(&config).expect_err("legacy no signals");
+        let typed = validate_config_typed(&config).expect_err("typed no signals");
+        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
     }
 
     #[test]
@@ -558,7 +852,10 @@ mod tests {
             traces: None,
             metrics: None,
         };
-        assert!(validate_config(&zero_logs).is_err());
+        let legacy = validate_config(&zero_logs).expect_err("legacy zero logs batch");
+        let typed = validate_config_typed(&zero_logs).expect_err("typed zero logs batch");
+        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
 
         let zero_metrics = TelemetryConfig {
             service_name,
@@ -571,7 +868,10 @@ mod tests {
                 export_interval_ms: 0_u64.into(),
             }),
         };
-        assert!(validate_config(&zero_metrics).is_err());
+        let legacy = validate_config(&zero_metrics).expect_err("legacy zero metric interval");
+        let typed = validate_config_typed(&zero_metrics).expect_err("typed zero metric interval");
+        assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
+        assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
     }
 
     #[test]

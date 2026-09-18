@@ -1,8 +1,9 @@
 ---
 id: B.1e
-status: proposed
-branch: feature/phase-b-1e-errors
-base: develop
+status: complete
+branch: feature/phase-b-1e-migration-validation
+base: fix/phase-b-1ab-qa1
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1e-migration-validation
 ---
 
 # B.1e — Warn-only deprecations and downstream upgrade guidance
@@ -28,7 +29,8 @@ documentation and validation artifacts; partial completion leaves the sprint ope
 1. Apply the contract's exact deprecation policy to nine wrapper types and the
    mapped old methods in B.1b–B.1d except the explicit supported-method
    exemptions below. Each `since` is the selected next minor release
-   after the B.P2 publication; each `note` names its method/type replacement and the migration guide.
+   after B.P2's staged candidate version; each `note` names its method/type
+   replacement and the migration guide.
    Existing `Logger::emit` keeps its existing deprecation version and documents
    typed blocking versus nonblocking alternatives without changing behavior.
 2. Migrate first-party ordinary production use, examples and docs to recommended
@@ -58,8 +60,8 @@ legacy build unchanged and supported; its new
 build_typed counterpart adds a fallible startup boundary rather than changing
 the old signature. Logger::new_with_level_owner and
 LoggerBuilder::build_with_level_owner retain their B.P1 Result signatures and
-remain supported without method-level deprecation; avoid publishing them in
-B.P2 only to deprecate the methods in B.2. Their `_typed` counterparts are
+remain supported without method-level deprecation; avoid qualifying/staging
+them in B.P2 only to deprecate the methods in B.2. Their `_typed` counterparts are
 additive recommended alternatives, not mandatory replacements. Nine `XError`
 wrappers still recommend `XFailure`, including InitError returned by those
 supported owner constructors. Explicitly naming/constructing InitError can warn;
@@ -117,6 +119,26 @@ kind handling, custom codes, source chains, each open trait adapter and mixed
 old/new registrations, and unchanged root-glob imports. New typed traits and
 adapters are imported from explicit typed modules; no new root re-exports
 introduce same-named trait methods into legacy glob consumers. Record exact versions and results in `handoff-b-1e.md`.
+
+## Completion evidence
+
+B.1e implementation is complete on the branch recorded in the frontmatter.
+The nine legacy wrapper families and all 20 mapped methods carry actionable
+`since = "1.4.0"` warnings with exact typed replacements. The supported
+infallible `LoggerBuilder::build`, both owner-returning constructors, and the
+existing `Logger::emit` `since = "1.2.0"` policy remain unchanged. Ordinary
+routing production paths use typed logger admission and flush APIs; retained
+public trait and adapter boundaries use named, reason-bearing local allowances.
+
+The standalone validator and external fixtures are present at
+`scripts/ci/validate_error_migration.py` and
+`scripts/ci/fixtures/error-migration/`. The validator passed source-contract,
+Cargo JSON diagnostic, legacy Serde golden, migrated `deny(deprecated)`, and
+partial local-allow checks, with all three fixtures compiling and running.
+The implementation also merged the active QA1 parent before final validation.
+
+Qualification remains B.2 work and publication remains B.7 work; this sprint
+does not remove legacy APIs, set a removal schedule, or claim a major release.
 
 ## Paths to delete
 

@@ -1,109 +1,40 @@
 #!/usr/bin/env python3
-"""Validate tracked version literals with intentionally narrow scope.
-
-This check enforces version consistency for:
-- Cargo package tables
-- internal workspace dependency version pins that point at local paths
-- RELEASE-NOTES markdown files
-
-Other documentation is not scanned by this script and is governed separately by
-review/docs processes.
-"""
-
+"""Validate the active release train, including exact pins, without rewriting historical evidence."""
 import re
 import tomllib
-from collections import defaultdict
 from pathlib import Path
 
 
-root = Path(".")
-workspace = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))
-workspace_version = workspace["workspace"]["package"]["version"]
-
-version_pattern = re.compile(r'^\s*version\s*=\s*"(\d+\.\d+\.\d+)"\s*$')
-workspace_dep_version_pattern = re.compile(
-    r'^\s*([A-Za-z0-9_.-]+)\s*=\s*\{(?=.*\bversion\s*=\s*"(\d+\.\d+\.\d+)")(?=.*\bpath\s*=\s*"([^"]+)").*\}\s*$'
-)
-markdown_version_pattern = re.compile(r"(?<!\d)(\d+\.\d+\.\d+)(?!\d)")
-release_notes_globs = ("**/RELEASE-NOTES*.md",)
-skip_dirs = {".git", "target", ".claude", ".prompts"}
-
-occurrences: dict[str, list[tuple[str, int, str]]] = defaultdict(list)
-
-
-def iter_repo_files():
-    for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        if any(part in skip_dirs for part in path.parts):
-            continue
-        yield path
-
-
-def collect_toml_package_versions(path: Path) -> None:
-    current_table = None
-    for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        stripped = line.strip()
-        if stripped.startswith("[") and stripped.endswith("]"):
-            current_table = stripped[1:-1].strip()
-            continue
-        if current_table in {"package", "workspace.package"}:
-            match = version_pattern.match(line)
-            if match:
-                occurrences[match.group(1)].append(
-                    (path.relative_to(root).as_posix(), line_no, stripped)
-                )
-        elif current_table == "workspace.dependencies":
-            match = workspace_dep_version_pattern.match(line)
-            if not match:
-                continue
-            dependency_name, version, dependency_path = match.groups()
-            if not dependency_path.startswith("crates/"):
-                continue
-            occurrences[version].append(
-                (
-                    path.relative_to(root).as_posix(),
-                    line_no,
-                    f"{dependency_name} version={version} path={dependency_path}",
-                )
-            )
+def validate(root: Path) -> None:
+    workspace = tomllib.loads((root / "Cargo.toml").read_text())["workspace"]
+    version = workspace["package"]["version"]
+    manifests = [(root / member / "Cargo.toml") for member in workspace["members"]]
+    packages = {tomllib.loads(path.read_text())["package"]["name"] for path in manifests}
+    for path in [root / "Cargo.toml", *manifests]:
+        manifest = tomllib.loads(path.read_text())
+        package = manifest.get("package")
+        if package and package.get("version") not in (version, {"workspace": True}):
+            raise ValueError(f"{path}: package version differs from workspace {version}")
+        tables = [manifest, manifest.get("workspace", {})] + list(manifest.get("target", {}).values())
+        for table in tables:
+            for kind in ("dependencies", "dev-dependencies", "build-dependencies"):
+                for alias, spec in table.get(kind, {}).items():
+                    spec = {"version": spec} if isinstance(spec, str) else spec
+                    name = spec.get("package", alias)
+                    if name not in packages or spec.get("workspace"):
+                        continue
+                    if package and package.get("publish") is False and "path" in spec and "version" not in spec:
+                        continue  # CI-only workspace consumers have no distributable dependency pin.
+                    if spec.get("version") not in (version, f"={version}"):
+                        raise ValueError(f"{path}: {name} version must be {version} or ={version}")
+                    if name == "sc-observability-log-macros" and spec.get("version") != f"={version}":
+                        raise ValueError(f"{path}: macros must use exact ={version} pin")
+    for path in (root / "release").glob("RELEASE-NOTES-*.md"):
+        match = re.fullmatch(r"RELEASE-NOTES-(\d+\.\d+\.\d+)\.md", path.name)
+        if match and match[1] == version and f"{version}" not in path.read_text():
+            raise ValueError(f"{path}: release notes omit their release version")
+    print(f"version literal validation passed (workspace.package.version={version}; exact macro pin verified)")
 
 
-def collect_release_note_versions(path: Path) -> None:
-    for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        for match in markdown_version_pattern.finditer(line):
-            occurrences[match.group(1)].append(
-                (path.relative_to(root).as_posix(), line_no, line.strip())
-            )
-
-
-release_note_files = {
-    path.resolve()
-    for pattern in release_notes_globs
-    for path in root.glob(pattern)
-    if path.is_file()
-}
-
-for path in iter_repo_files():
-    if path.suffix == ".toml":
-        collect_toml_package_versions(path)
-    elif path.suffix == ".md" and path.resolve() in release_note_files:
-        collect_release_note_versions(path)
-
-violations = []
-for version, hits in sorted(occurrences.items()):
-    if version == workspace_version:
-        continue
-    rendered_hits = ", ".join(f"{path}:{line_no}" for path, line_no, _ in hits)
-    violations.append(
-        f"version literal {version!r} does not match workspace.package.version "
-        f"{workspace_version!r}: {rendered_hits}"
-    )
-
-if violations:
-    raise SystemExit("\n".join(violations))
-
-print(
-    "version literal validation passed "
-    f"(workspace.package.version={workspace_version})"
-)
+if __name__ == '__main__':
+    validate(Path(__file__).resolve().parents[2])

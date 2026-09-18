@@ -97,12 +97,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # NOTE: the plan is captured into a variable first (not read via
+          # `done < <(...)` process substitution). Under `set -euo pipefail`,
+          # a failure inside `<(...)` does NOT propagate to the enclosing
+          # while loop or this step -- the loop would just silently see
+          # zero/partial lines and the step would exit 0. Capturing via
+          # `plan="$(...)"` does propagate failure under `set -e`, so a
+          # broken manifest/script here now actually fails the job instead
+          # of silently publishing nothing.
+          plan="$(python3 scripts/release_artifacts.py list-publish-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")"
           while IFS='|' read -r package wait_secs; do
             cargo publish -p "$package" --locked
-            if [[ "$wait_secs" != "0" ]]; then
-              sleep "$wait_secs"
-            fi
-          done < <(python3 scripts/release_artifacts.py list-publish-plan --manifest "${RELEASE_ARTIFACT_MANIFEST}")
+            version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
+            python3 scripts/ci/wait_for_registry_version.py \
+              --package "$package" --version "$version" --attempts 12 --interval 10
+          done <<< "$plan"
 
   release:
     needs: [gate-and-tag, publish]
@@ -117,3 +126,19 @@ jobs:
         with:
           tag_name: ${{ needs.gate-and-tag.outputs.release_tag }}
           generate_release_notes: true
+
+  # NOTE: B.7 (bindings/tauri, bindings/typescript, bindings/python) does not
+  # install a live publish pipeline in this workflow. Per an explicit owner
+  # scope correction, Phase B ends at review readiness -- crates.io/PyPI/npm
+  # uploads, registry credentials, and a `release`-job dependency on binding
+  # publication are all out of scope here and are deferred to a separate,
+  # shared publishing pipeline ("sc-publish") to be installed as a follow-up
+  # outside Phase B. The binding-release readiness/evidence tooling this
+  # phase produced instead lives in:
+  #   - release/bindings-artifacts.toml (readiness manifest)
+  #   - scripts/release_bindings_artifacts.py (validate-manifest,
+  #     verify-versions, list-publish-plan, build-evidence, verify-evidence)
+  #   - scripts/ci/validate_binding_registry_consumers.sh (isolated
+  #     consumer-matrix qualification evidence; no live registry involved)
+  # None of these dispatch a publish action or upload anything; they only
+  # prove structural/hash/consumer readiness for sc-publish to consume later.

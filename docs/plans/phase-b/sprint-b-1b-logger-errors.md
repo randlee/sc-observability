@@ -1,8 +1,9 @@
 ---
 id: B.1b
-status: proposed
-branch: feature/phase-b-1b-errors
-base: develop
+status: complete
+branch: feature/phase-b-1b-logger-prep
+base: fix/phase-b-1-provenance-integrity
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1b-logger-prep
 ---
 
 # B.1b — Typed logger operations and sink interoperability
@@ -111,7 +112,8 @@ and receives its additive typed counterpart.
 Public query/follow/health/shutdown methods retain their signatures and are not
 deprecated: they already use named outcomes or typestate. In particular,
 `Logger<Running>::shutdown(self) -> Logger<Stopped>` is not changed to Result.
-The new runtime-level owner methods remain on their accepted B.P1 contract.
+The new runtime-level owner methods remain on the B.P1 runtime contract; its
+public acceptance remains owner-deferred to Phase B completion.
 
 ## Acceptance criteria (authoritative)
 

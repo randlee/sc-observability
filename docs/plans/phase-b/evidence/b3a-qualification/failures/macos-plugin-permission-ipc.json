@@ -1,0 +1,196 @@
+{
+  "forbidden": {
+    "error": "sc-observability.sc_observability_try_log not allowed. Plugin not found",
+    "passed": false,
+    "records": [],
+    "uncaught": []
+  },
+  "main": {
+    "error": "Error: qualification failed: try-log: {\"kind\":\"error\",\"error\":{\"kind\":\"internal\",\"at\":\"2026-09-17T10:56:05.894Z\",\"code\":\"SC_OBSERVABILITY_BINDING_INTERNAL\",\"message\":\"try_log transport: foreign operation failed\",\"remediation\":{\"kind\":\"recoverable\",\"steps\":[\"Inspect the retained status and restore the affected host or client\"]}}}",
+    "passed": false,
+    "records": [
+      {
+        "actual": {
+          "kind": "ok",
+          "value": {
+            "counts": {
+              "below_baseline": "0",
+              "cancelled": "0",
+              "closed": "0",
+              "internal": "1",
+              "io": "0",
+              "permission_denied": "0",
+              "queue_full": "0",
+              "timeout": "0",
+              "unavailable": "0",
+              "unknown_remote": "0",
+              "unsupported_level": "0",
+              "unsupported_version": "0",
+              "validation": "0"
+            },
+            "inFlight": 0,
+            "lastFailure": {
+              "at": "2026-09-17T10:56:05.894Z",
+              "code": "SC_OBSERVABILITY_BINDING_INTERNAL",
+              "kind": "internal",
+              "message": "try_log transport: foreign operation failed",
+              "remediation": {
+                "kind": "recoverable",
+                "steps": [
+                  "Inspect the retained status and restore the affected host or client"
+                ]
+              }
+            },
+            "lastResult": {
+              "error": {
+                "at": "2026-09-17T10:56:05.894Z",
+                "code": "SC_OBSERVABILITY_BINDING_INTERNAL",
+                "kind": "internal",
+                "message": "try_log transport: foreign operation failed",
+                "remediation": {
+                  "kind": "recoverable",
+                  "steps": [
+                    "Inspect the retained status and restore the affected host or client"
+                  ]
+                }
+              },
+              "kind": "error"
+            },
+            "transport": {}
+          }
+        },
+        "name": "factory",
+        "passed": true
+      },
+      {
+        "actual": {
+          "kind": "ok",
+          "value": {
+            "failures_by_kind": {
+              "below_baseline": "0",
+              "cancelled": "0",
+              "closed": "0",
+              "internal": "0",
+              "io": "0",
+              "permission_denied": "0",
+              "queue_full": "0",
+              "timeout": "0",
+              "unavailable": "0",
+              "unknown_remote": "0",
+              "unsupported_level": "0",
+              "unsupported_version": "0",
+              "validation": "0"
+            },
+            "in_flight": 0,
+            "last_failure": null,
+            "last_result": {
+              "kind": "ok",
+              "value": {
+                "kind": "idle"
+              }
+            }
+          }
+        },
+        "name": "initial-local-status",
+        "passed": true
+      },
+      {
+        "actual": {
+          "failures_by_kind": {
+            "below_baseline": "0",
+            "cancelled": "0",
+            "closed": "0",
+            "internal": "0",
+            "io": "0",
+            "permission_denied": "0",
+            "queue_full": "0",
+            "timeout": "0",
+            "unavailable": "0",
+            "unknown_remote": "0",
+            "unsupported_level": "0",
+            "unsupported_version": "0",
+            "validation": "0"
+          },
+          "in_flight": 0,
+          "last_failure": null,
+          "last_result": {
+            "kind": "ok",
+            "value": {
+              "kind": "idle"
+            }
+          }
+        },
+        "name": "initial-idle",
+        "passed": true
+      },
+      {
+        "actual": {
+          "kind": "ok",
+          "value": {
+            "action": "frontend",
+            "correlation_id": "tauri-qualification",
+            "fields": {
+              "fraction": {
+                "kind": "float",
+                "value": 1.25
+              },
+              "max": {
+                "kind": "integer",
+                "value": "18446744073709551615"
+              },
+              "min": {
+                "kind": "integer",
+                "value": "-9223372036854775808"
+              },
+              "nested": {
+                "kind": "object",
+                "value": {
+                  "secret": {
+                    "kind": "string",
+                    "value": "must-not-survive"
+                  }
+                }
+              },
+              "nil": {
+                "kind": "null"
+              },
+              "zero": {
+                "kind": "integer",
+                "value": "0"
+              }
+            },
+            "level": "info",
+            "message": null,
+            "outcome": null,
+            "request_id": null,
+            "schema_version": 1,
+            "target": "tauri-example",
+            "trace": null
+          }
+        },
+        "name": "ergonomic-event",
+        "passed": true
+      },
+      {
+        "actual": {
+          "error": {
+            "at": "2026-09-17T10:56:05.894Z",
+            "code": "SC_OBSERVABILITY_BINDING_INTERNAL",
+            "kind": "internal",
+            "message": "try_log transport: foreign operation failed",
+            "remediation": {
+              "kind": "recoverable",
+              "steps": [
+                "Inspect the retained status and restore the affected host or client"
+              ]
+            }
+          },
+          "kind": "error"
+        },
+        "name": "try-log",
+        "passed": false
+      }
+    ],
+    "uncaught": []
+  }
+}

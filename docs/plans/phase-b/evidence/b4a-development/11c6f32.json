@@ -1,0 +1,8 @@
+{
+  "source_commit": "11c6f320b5fb006f7930ca54954e72479fb6f29d",
+  "qualification": "source gate only; installed 25-cell gate pending",
+  "command": "RUSTUP_TOOLCHAIN=1.94.1 bash scripts/ci/validate_python_bindings.sh",
+  "status": "passed",
+  "log": "source-validator-11c6f32.log",
+  "sha256": "dc06988d51953562ccf5aee6bc4de7e104d0182f3fde71b729a4d779de164bb0"
+}

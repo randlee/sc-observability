@@ -1,8 +1,9 @@
 ---
 id: B.1a
-status: proposed
-branch: feature/phase-b-1a-errors
-base: develop
+status: complete
+branch: feature/phase-b-1a-neutral-prep
+base: fix/phase-b-policy-sync
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-b-1a-neutral-prep
 ---
 
 # B.1a — Typed failure values and neutral extension adapters
@@ -11,7 +12,9 @@ base: develop
 
 Implement the neutral portion of #92 with stored typed classification and
 lossless legacy conversion. `must_follow` B.1 so inventory includes the accepted
-bridge and published runtime-level prerequisite. B.1b `must_follow` this sprint.
+bridge and B.P2-qualified staged runtime-level prerequisite; runtime-contract
+acceptance remains owner-deferred to Phase B completion. B.1b `must_follow` this
+sprint.
 The normative signatures and code mapping are in [the contract](error-api-contract.md),
 which is part of this sprint's QA scope, not a future design deliverable.
 

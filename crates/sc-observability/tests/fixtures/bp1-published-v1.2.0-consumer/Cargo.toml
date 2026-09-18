@@ -1,0 +1,11 @@
+[package]
+name = "bp1-published-v1-2-0-consumer"
+version = "1.2.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+sc-observability = { path = "../../.." }
+sc-observability-types = { path = "../../../../sc-observability-types" }

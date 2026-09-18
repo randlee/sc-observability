@@ -1,18 +1,38 @@
 ---
-status: proposed_for_public_api_review
+status: accepted_target_design_not_source_acceptance
 owner: sc-observability
 implementation_source: beads-task-issue-tracker
-baseline_inspected: 5fd63ca697fb36e91d754610cb631b1ddb9a3a31
+baseline_inspected: 8d8e82ae9f8501dbbf78c76df24d943918d7a6e4
+inspection_status: reconciled_snapshot_not_source_acceptance
+target_design_accepted_revision: 84b32e9d6718418371ffd25a3de52346278725ca
+target_design_qa2: https://github.com/randlee/sc-observability/pull/111#issuecomment-5708115438
+service_hardening_coverage: scope_skipped_zero_findings
 ---
 
 # Target bridge public API contract and disposition matrix
 
-sc-observability owns this proposed public contract. It is being reviewed now so
-BTIT can complete its initial implementation against the accepted design.
-`proposed_for_public_api_review` is not approval or a completed freeze. Acceptance
-must name a committed revision of this contract; BTIT's subsequent implementation
-and critical-review closure must refer to that revision. Only then may B.1 copy
-the resulting accepted crate set. There is no post-copy bridge redesign sprint.
+sc-observability owns this target public contract. Its target design is accepted
+for BTIT's initial implementation at the committed revision recorded below.
+`accepted_target_design_not_source_acceptance` is a scoped design decision, not
+runtime public-API approval or a completed source freeze. BTIT's subsequent
+implementation and critical-review closure must refer to that revision before
+B.1 may copy the resulting accepted crate set. There is no post-copy bridge
+redesign sprint.
+
+## Scoped target-design acceptance
+
+aobs accepted this target design at
+`84b32e9d6718418371ffd25a3de52346278725ca`, based on the independent QA2 PASS
+recorded at [PR #111](https://github.com/randlee/sc-observability/pull/111#issuecomment-5708115438).
+The current status is `accepted_target_design_not_source_acceptance`: it accepts
+the reviewed target signatures and dispositions for BTIT implementation only.
+It is not runtime public-API acceptance, BTIT source acceptance, merge
+permission, or publication permission; QA-B010 remains owner-deferred. BTIT
+must still supply its immutable implementation and critical-review evidence.
+The registered service-hardening addendum recorded a scope skip with zero
+findings at [PR #111](https://github.com/randlee/sc-observability/pull/111#issuecomment-5708138146),
+completing the target-design review coverage. This does not turn the four scoped
+reviews into runtime public-API or BTIT source acceptance.
 
 BTIT's current unpublished API creates no backward-compatibility or semver
 obligation for this initial destination API. The preserve decisions below retain
@@ -22,9 +42,12 @@ crates retain their independent API guarantees.
 
 ## Exported source API disposition
 
-The inspected inventory is provisional until reconciled with the actual final
-source. Every export added during BTIT's remaining design must receive a row or
-an explicit family disposition before the contract gate is accepted.
+The inventory below was reconciled against the read-only BTIT snapshot
+`8d8e82ae9f8501dbbf78c76df24d943918d7a6e4`. It is not acceptance of that
+source, a claim that its implementation is complete, or a substitute for the
+final source/review handoff. Every export added or changed after that snapshot
+must receive a row or an explicit family disposition before the B.P3 contract
+gate and the B.1 copy gate can be accepted.
 
 | Existing exported API | Target decision | Signature/behavior consequence |
 | --- | --- | --- |
@@ -51,6 +74,29 @@ an explicit family disposition before the contract gate is accepted.
 | `error_codes` module, seven named constants, ALL | Preserve existing names/string values; extend registry | Existing code meanings remain stable; new cases get the constants listed below |
 | `__private` module and all reachable support | Retain as hidden macro support; may revise with macros in lockstep | Not a supported adapter API; exact bridge/macros version pin governs changes |
 | CI-only consumer-check crate | Preserve role, never publish | Depends directly only on bridge and exercises generated macro support externally |
+
+### Snapshot reconciliation and disposition
+
+The following groups cover every root-reachable export observed at
+`8d8e82ae9f8501dbbf78c76df24d943918d7a6e4`; the inspection command and paths
+are retained in [the B.P3 handoff record](handoff-b-p3.md). Grouping does not
+leave an export without a disposition.
+
+| Observed source export family | Target disposition |
+| --- | --- |
+| `JsonMap`, `JsonValue`, `LogControl`, `StructuredRecord`, `SubmitOutcome` | Revise to the proposed direct-result `BridgeEvent`/`EmitOutcome` control surface; retain non-owning control and no mutation/shutdown authority. |
+| `SubmitError`, `InvalidInputReason`, `DropCause`, `DroppedEvents` | Revise to `EmitError` plus nested `FieldKeyError`; preserve exactly-once rejection accounting and the existing drop-cause family. |
+| `BridgeHealthReport`, `BridgeHealthState`, `BridgeLifecycle`, `HelperHealth`, `LoggerHealth`, `QueueHealth`, `FileSinkHealth`, `SinkHealthSnapshot`, `SinkStatus`, `WriterStatus`, `HealthDiagnostic`, `BRIDGE_HEALTH_SCHEMA_VERSION` | Revise to the proposed bridge health/completion projection, retaining readable post-stop health but separating failed/unconfirmed completion from a stopped claim. |
+| `FailureReport`, `Failure`, `InitFailure`, `FlushFailure`, `ShutdownFailure`, `CONTROL_SCHEMA_VERSION` | Replace with the native result/error projection and B.3 wire contract; no source report shape becomes a destination compatibility baseline. |
+| `Timestamp` and the listed neutral re-exports | Preserve as re-exports of their defining core types; add only the target's explicitly listed runtime-level values/errors. |
+| Root macros `trace!`, `debug!`, `info!`, `warn!`, `error!`, `event!`, `#[instrument]`; macro-crate entry points | Preserve grammar/output intent and exact bridge-to-macro pin; revise internals only for the one guarded/admission path. |
+| `Level`, `BridgeOptions`, `LogGuard`, `init`, `DEFAULT_DROP_SHUTDOWN_TIMEOUT`, `error_codes` and its observed registry | Preserve only the listed public shape/meaning; revise the documented lifecycle, error payload and registry extensions before copy. |
+| `__private` reachable support (callsite, context and mapping helpers, including all public impls/derives) | Retain only as hidden exact-version macro support; inventory it in B.1's generated export report and preserve external macro fixtures, not private API compatibility. |
+
+The observed source snapshot has no `FieldKeyError`; its current field rejection
+is `SubmitError::InvalidInput(InvalidInputReason)`. The target's new nested
+reason is therefore an intentional pre-copy design revision, not a claim that
+the pinned source already implements it.
 
 The seven existing code constants are ALREADY_INITIALIZED,
 FOREIGN_LOGGER_INSTALLED, IDENTITY_RESOLUTION_FAILED, FLUSH_TIMED_OUT,
@@ -133,10 +179,17 @@ the API remain caller code.
 
 `OperationDiagnostic` is the additive neutral code/message/remediation/timestamp
 value defined by the [runtime-level contract](runtime-level-contract.md) and
-published by B.P2. The existing DiagnosticSummary has only optional code, message
-and timestamp; it cannot preserve remediation and remains unchanged. Convert
-from an original Diagnostic/ErrorContext before reducing to a summary. Where a
-core API exposes only summary data, use the explicit operation-specific fallback
+qualified as a staged artifact by B.P2. It intentionally does not replace the
+existing `Diagnostic`: both derive exactly `Debug`, `Clone`, `PartialEq`,
+`Serialize`, and `Deserialize`, but `Diagnostic` is the reusable full payload
+with `timestamp`, optional `cause`/`docs`, and `details`, whereas
+`OperationDiagnostic` is the narrow operation projection with `at` and only
+mandatory `code`, `message`, and `remediation`. It does not alter the sealed
+`DiagnosticInfo` contract or rewrite any existing public type. The existing
+`DiagnosticSummary` has only optional code, message and timestamp; it cannot
+preserve remediation and remains unchanged. Convert from an original
+`Diagnostic`/`ErrorContext` before reducing to a summary. Where a core API
+exposes only summary data, use the explicit operation-specific fallback
 remediation below rather than claiming original remediation survived.
 Replace opaque source objects in the unpublished bridge's three old error enums
 with OperationDiagnostic; no published core error or summary changes shape.
@@ -167,6 +220,7 @@ pub enum ShutdownError {
     HelperSpawn { diagnostic: OperationDiagnostic },
     HelperLost { diagnostic: OperationDiagnostic },
 }
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum FieldKeyError {
     Empty,
     ReservedPrefix,
@@ -238,11 +292,15 @@ Their nested LifecyclePhase and FieldKeyError must also implement Debug, Clone,
 Serialize and Deserialize (LifecyclePhase additionally Copy + Eq + PartialEq).
 OperationDiagnostic already supplies the required diagnostic derives. Keep the
 native tagged serialization rules in the runtime contract. Implement Display
-and std::error::Error for all six; Display is diagnostic text, never a decoding
-protocol, and source() returns None because these values retain projected
-OperationDiagnostic data rather than native source objects. Assert trait bounds,
-clone fidelity, every variant's Serde round trip and Error/Display usability in
-B.P3; B.1 reruns those accepted fixtures. No published core derive list changes.
+and std::error::Error for all six operation-error enums and for FieldKeyError.
+FieldKeyError remains a nested `EmitError::InvalidField` reason: it has no
+independent operation code, remediation method, or top-level operation-result
+role. Display is diagnostic text, never a decoding protocol, and source()
+returns None: the operation enums retain projected OperationDiagnostic data,
+while FieldKeyError contains only field-validation data, not native source
+objects. Assert trait bounds, clone fidelity, every variant's Serde round trip
+and Error/Display usability in B.P3; B.1 reruns those accepted fixtures. No
+published core derive list changes.
 
 ### Bridge variant/code and fallback remediation map
 
@@ -378,9 +436,14 @@ shutdown during flush, retained controls after owner drop, repeated wait_stopped
 helper-spawn/lost-helper failures and final-flush failure without false stopped
 claims. Fault accounting failure never replaces the original result. Include the
 runtime-level transition/diagnostic/static-cap matrix from its contract.
+Include B.P3 compile-fail proof that LogControl cannot mutate/elevate/reset or
+obtain owner authority. When bindings exist, B.3a/B.4 own host-routing fixtures
+that prove TypeScript and attached Python route level-change requests through an
+application-owned handler rather than LogControl; this requirement does not
+invent a pre-copy binding implementation.
 
-No reviewer approval, source readiness or contract freeze is asserted by the
-current proposed status.
+The scoped target-design acceptance above does not assert source readiness,
+runtime public-API acceptance, a merge permission, or a publication freeze.
 
 ## Runtime elevation extension required before copy
 
@@ -390,5 +453,7 @@ BridgeHealthReport gains configured_level, effective_level and level_revision.
 LogControl gains no mutation authority. The contract specifies the shared core
 filter, concurrency, typed outcomes, diagnostic submission and compile-time
 ceiling behavior. This extends the export disposition matrix for these methods,
-re-exported level values/errors and health fields. Review/accept it and publish
-the core prerequisite before BTIT completes the working reference.
+re-exported level values/errors and health fields. Review/accept it and qualify
+the B.P2 staged core prerequisite before BTIT completes the working reference.
+B.P3 integrates against those immutable staged artifacts; B.7 alone owns live
+publication and registry-only proof.
