@@ -32,7 +32,7 @@
     {"artifact": "sc-observability-py-wheel", "package": "sc-observability", "manifest": "bindings/python/sc-observability-py/pyproject.toml", "module": "sc_observability", "publish": "pypi"}
   ],
   "python_distributions": [
-    {"name": "sc-observability-py", "source": "bindings/python/sc-observability-py", "cargo_manifest": "bindings/python/sc-observability-py/Cargo.toml", "module_path": "sc_observability", "sdist": true, "wheels": [
+    {"name": "sc-observability", "source": "bindings/python/sc-observability-py", "cargo_manifest": "bindings/python/sc-observability-py/Cargo.toml", "module_path": "bindings/python/sc-observability-py/python/sc_observability", "sdist": true, "wheels": [
       {"id": "linux-x86_64", "os": "ubuntu-latest", "target": "x86_64-unknown-linux-gnu", "platform": "manylinux_2_28_x86_64", "manylinux": "2_28"},
       {"id": "linux-aarch64", "os": "ubuntu-24.04-arm", "target": "aarch64-unknown-linux-gnu", "platform": "manylinux_2_28_aarch64", "manylinux": "2_28"},
       {"id": "macos-x86_64", "os": "macos-15-intel", "target": "x86_64-apple-darwin", "platform": "macosx_10_13_x86_64", "deployment_target": "10.13"},
