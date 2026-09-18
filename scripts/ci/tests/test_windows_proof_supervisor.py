@@ -28,6 +28,19 @@ class SupervisorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             self.assertFalse(supervisor.recover(Path(temporary) / 'absent', set(), Path(temporary)))
 
+    def test_recovery_accepts_acl_only_partial_setup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            path, root = self.record(directory)
+            record = json.loads(path.read_text())
+            record['firewall_rules'] = []
+            path.write_text(json.dumps(record))
+            events = []
+            with patch.object(supervisor.Sandbox, 'remove_firewall', side_effect=lambda: events.append('rule')):
+                with patch.object(supervisor.Sandbox, 'restore_acls', side_effect=lambda: events.append('acl')):
+                    self.assertTrue(supervisor.recover(path, {root}, directory))
+            self.assertEqual(events, ['rule', 'acl'])
+
     def test_recovery_restores_owned_rule_and_acl_and_removes_plan(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

@@ -222,15 +222,15 @@ class Sandbox:
             output = subprocess.check_output(['powershell', '-NoProfile', '-NonInteractive', '-Command', allow_script], text=True)
             for index, path in enumerate(line for line in output.splitlines() if line.strip()):
                 name = f'{self.firewall}-allow-{index}'
+                self.firewall_rules.append(name)
+                self.record_recovery()
                 self.powershell(f"New-NetFirewallRule -Name '{name}' -DisplayName '{name}' "
                                 f"-Program '{path}' -Direction Outbound -Action Allow -OverrideBlockRules $true "
                                 "-Authentication Required -Profile Any | Out-Null")
-                self.firewall_rules.append(name)
-                self.record_recovery()
-            self.powershell(f"New-NetFirewallRule -Name '{self.firewall}' -DisplayName '{self.firewall}' "
-                            "-Direction Outbound -Action Block -Profile Any | Out-Null")
             self.firewall_rules.append(self.firewall)
             self.record_recovery()
+            self.powershell(f"New-NetFirewallRule -Name '{self.firewall}' -DisplayName '{self.firewall}' "
+                            "-Direction Outbound -Action Block -Profile Any | Out-Null")
             yield
         finally:
             try:

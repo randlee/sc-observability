@@ -21,7 +21,7 @@ def recover(path, allowed_roots, temporary_root):
         raise DistributionError('invalid proof recovery identity')
     rules = record.get('firewall_rules', [record['firewall']])
     prefix = record['firewall'] + '-allow-'
-    if (not isinstance(rules, list) or not rules or
+    if (not isinstance(rules, list) or
             any(not isinstance(name, str) or
                 (name != record['firewall'] and
                  (not name.startswith(prefix) or not name[len(prefix):].isdigit()))
