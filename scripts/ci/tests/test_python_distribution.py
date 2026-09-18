@@ -48,6 +48,25 @@ class DistributionTests(unittest.TestCase):
                 self.assertEqual([path.name for path in destination.iterdir()], ['source.py'])
                 self.assertEqual(cached.read_bytes(), b'generated cache')
 
+    def test_qualification_helper_staging_closure_supports_isolated_imports(self):
+        import shutil
+        import subprocess
+        from prepare_python_distributions import QUALIFICATION_HELPERS
+        source = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            qualification = Path(temporary) / 'qualification'
+            qualification.mkdir()
+            for filename in QUALIFICATION_HELPERS:
+                shutil.copyfile(source / filename, qualification / filename)
+            result = subprocess.run(
+                [sys.executable, '-I', '-c',
+                 'import sys; sys.path.insert(0, sys.argv[1]); '
+                 'import _python_distribution, build_binding_source_bundle; '
+                 'print("QUALIFICATION_HELPER_IMPORTS_PASSED")', str(qualification)],
+                capture_output=True, text=True, check=True,
+            )
+            self.assertIn('QUALIFICATION_HELPER_IMPORTS_PASSED', result.stdout)
+
     def test_rejects_escaping_or_linked_sdist_members(self):
         for name, kind in [('../outside', tarfile.REGTYPE), ('root/link', tarfile.SYMTYPE)]:
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:

@@ -15,6 +15,12 @@ from _python_distribution import DistributionError, confined, digest, extract_sd
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = Path('bindings/python/sc-observability-py')
+QUALIFICATION_HELPERS = (
+    '_python_distribution.py', '_python_sandbox.py', '_windows_identity.py',
+    'supervise_windows_proof.py', 'validate_python_distribution.py',
+    'build_binding_source_bundle.py', '_hashing.py', '_log_staging.py',
+    'python-packaging-requirements.txt',
+)
 
 
 def run(arguments: list[str], cwd: Path, log: Path) -> None:
@@ -160,10 +166,7 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     (staging / 'pyproject.toml').write_text(tomli_w.dumps(pyproject))
     qualification = staging / 'qualification'
     qualification.mkdir(exist_ok=True)
-    for filename in ('_python_distribution.py', '_python_sandbox.py', '_windows_identity.py',
-                     'supervise_windows_proof.py',
-                     'validate_python_distribution.py', 'build_binding_source_bundle.py',
-                     '_log_staging.py', 'python-packaging-requirements.txt'):
+    for filename in QUALIFICATION_HELPERS:
         shutil.copyfile(source / 'scripts/ci' / filename, qualification / filename)
     shutil.copyfile(source / 'release/python-platform-policy.json', qualification / 'platform-policy.json')
     shutil.copyfile(bundle / 'Cargo.lock', staging / 'Cargo.lock')
