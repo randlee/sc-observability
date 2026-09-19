@@ -399,7 +399,13 @@ class ValidateLogImportTests(unittest.TestCase):
             for item in manifest["adaptations"]
             if "qa_delta" in item
         ]
-        self.assertEqual(len(qa_deltas), 4)
+        self.assertEqual({item["path"] for item in manifest["adaptations"] if "qa_delta" in item}, {
+            "crates/sc-observability-log/src/handle.rs",
+            "crates/sc-observability-log/src/health.rs",
+            "crates/sc-observability-log/tests/bridge_jsonl.rs",
+            "crates/sc-observability-log/tests/shutdown_timeout.rs",
+            "crates/sc-observability-log/tests/bridge_queue_full.rs",
+        })
         for item in qa_deltas:
             validate_qa_delta_review_citation(item, "real-manifest-fixture")
 

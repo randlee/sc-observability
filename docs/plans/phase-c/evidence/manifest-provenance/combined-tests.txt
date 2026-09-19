@@ -1,0 +1,17 @@
+.............................................................................PASS actual accepted BTIT -> immutable Phase B -> Phase C metadata chain
+PASS rejected runtime source drift: unexplained content difference in the destination tree for crates/sc-observability-log/src/lib.rs
+PASS rejected unrelated manifest feature drift: metadata destination differs from exact after snapshot: crates/sc-observability-log/Cargo.toml
+PASS rejected consumer dependency option drift: metadata destination differs from exact after snapshot: crates/sc-observability-log-consumer-check/Cargo.toml
+PASS rejected workspace version drift: metadata destination differs from exact after snapshot: Cargo.toml
+PASS rejected forged before evidence: metadata before blob differs from immutable snapshot: crates/sc-observability-log/Cargo.toml
+PASS restored actual import after five negative mutations
+index not yet visible: sc-observability 1.4.0 (attempt 1/3)
+index not yet visible: sc-observability 1.4.0 (attempt 2/3)
+index not yet visible: sc-observability 1.4.0 (attempt 3/3)
+index not yet visible: sc-observability 1.4.0 (attempt 1/3)
+...............
+----------------------------------------------------------------------
+Ran 92 tests in 18.463s
+
+OK
+index visible: sc-observability 1.4.0 (attempt 2/3)

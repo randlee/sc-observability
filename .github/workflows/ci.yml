@@ -160,6 +160,16 @@ jobs:
             --post-import-adaptations docs/plans/phase-b/post-import-adaptations.json \
             --release-adaptations docs/plans/phase-b/release-adaptations-b-2.json
 
+      - name: Check immutable import and metadata adaptation regressions
+        env:
+          SC_LOG_IMPORT_SOURCE: /tmp/btit-source
+        run: |
+          python3 -m unittest \
+            scripts.ci.tests.test_validate_log_import \
+            scripts.ci.tests.test_log_metadata_adaptations \
+            scripts.ci.tests.test_log_metadata_real_import \
+            scripts.ci.tests.test_log_staging
+
       - name: Check imported log-bridge consumer-check crate
         run: cargo check --locked -p sc-observability-log-consumer-check
 
