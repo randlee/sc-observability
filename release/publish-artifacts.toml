@@ -8,6 +8,7 @@ homepage = "https://github.com/randlee/sc-observability"
 license = "MIT"
 readme_dependency_crate = "sc-observability"
 workspace_toml = "Cargo.toml"
+sc_lint_source_revision = "ba2d9bf622c1604e3f017c728040906b90e71bce"
 rust_toolchain = "1.94.1"
 
 [[release_targets]]

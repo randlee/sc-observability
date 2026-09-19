@@ -151,6 +151,11 @@ def load_install_values(path: Path) -> dict[str, object]:
         if field in project:
             _require_string(project[field], f"project.{field}")
 
+    if "sc_lint_source_revision" in project:
+        revision = _require_string(project["sc_lint_source_revision"], "project.sc_lint_source_revision")
+        if not re.fullmatch(r"[0-9a-f]{40}", revision):
+            raise argparse.ArgumentTypeError("project.sc_lint_source_revision must be a full lowercase 40-character commit SHA")
+
     release_targets = _require_entries(
         values.get("release_targets"), "release_targets", ("target", "os", "archive")
     )
@@ -410,6 +415,7 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
     template_project.setdefault("renderer_archive_path", "")
     template_project.setdefault("workspace_toml", "")
     template_project.setdefault("rust_toolchain", "")
+    template_project.setdefault("sc_lint_source_revision", "")
 
     return {
         "schema_version": _toml_literal(values["schema_version"]),
@@ -434,6 +440,7 @@ def template_values(values: dict[str, object]) -> dict[str, object]:
         "has_renderer_archive_path": "renderer_archive_path" in project,
         "has_workspace_toml": "workspace_toml" in project,
         "has_rust_toolchain": "rust_toolchain" in project,
+        "has_sc_lint_source_revision": "sc_lint_source_revision" in project,
         **{f"has_channel_{name}": name in channels for name in CHANNEL_NAMES},
     }
 
