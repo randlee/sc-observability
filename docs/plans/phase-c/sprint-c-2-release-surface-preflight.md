@@ -74,14 +74,16 @@ The direct qualified-path diff from that SHA to current `139e0c3` is empty,
 so this run is equivalent for every Python-qualified path; the intervening
 changes only repair shared CI manifest-validation paths.
 
-### 3. Secret scope verification (BLOCKED externally, names only)
+### 3. Secret scope verification (partial PASS; npm blocked, names only)
 
 The contract requires repository `CARGO_REGISTRY_TOKEN` and environment-scoped
 `PYPI_API_TOKEN` (`pypi`), `TEST_PYPI_API_TOKEN` (`testpypi`), and `NPM_TOKEN`
-(`npm`). `gh secret list` confirmed the repository name
-`CARGO_REGISTRY_TOKEN` without reading a value. The environment query returned
-only `crates-io` and `github-pages`; all three required environment lookups
-returned HTTP 404. No secret value was accessed. This remains an external
+(`npm`). Names-only verification confirms repository `CARGO_REGISTRY_TOKEN`,
+`pypi` environment `PYPI_API_TOKEN`, and `testpypi` environment
+`TEST_PYPI_API_TOKEN`. The `npm` environment remains absent; a repository
+`NPM_TOKEN` name was previously observed but does not satisfy the adopted
+environment-scoped contract. No secret value was accessed, and no validity or
+rotation is inferred. The missing npm environment remains an external
 owner/configuration blocker and is not being treated as PASS.
 
 ### 4. Qualification provenance (Python/Tauri PASS)
@@ -92,7 +94,9 @@ diff shows the B.4a workflow changed between that SHA and this C.2 source, so
 retained evidence is not equivalent and is not relabeled. The dispatched run
 `35408912984` is the required actual-SHA replacement and its aggregate
 artifact is recorded above. The Tauri staged package proof above is local
-nonpublishing evidence for the standalone artifact.
+nonpublishing evidence for the standalone artifact. The active Binding
+real-IPC workflow `35410593107` has Linux and macOS PASS; Windows remains
+pending in its packaged-artifact validation step.
 
 ### 5. Recovery/idempotency (PASS)
 
@@ -114,9 +118,9 @@ candidate `1.4.0` is not published; no write or credentialed command was run.
 
 ### Current closure state
 
-This sprint remains open pending the owner-controlled environment
-configuration and lead completeness PASS. The environment blocker is external
-state, not an accepted gap; the task must not be closed until it is resolved
+This sprint remains open pending the npm environment configuration, Windows
+real-IPC completion, and lead completeness PASS. These are external/terminal
+state, not accepted gaps; the task must not be closed until they are resolved
 and lead completeness PASS is received. Upstream PR95 review is tracked
 separately: the C.1 evidence retains historical pin
 `006092a305bb03bd483d79dd6b5d51bda1e545e4`; the active C.2 pin is the
