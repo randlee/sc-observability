@@ -1042,6 +1042,7 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
     )
     kit_scripts = (
         "bootstrap_sc_compose.py",
+        "setup_sc_lint_source.py",
         "release_artifacts.py",
         "release_manifest.py",
         "release_registry.py",
