@@ -1,0 +1,109 @@
+   Packaging sc-observability-types v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-types)
+    Updating crates.io index
+    Packaged 25 files, 183.7KiB (35.5KiB compressed)
+   Packaging sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability)
+    Updating crates.io index
+    Packaged 19 files, 282.5KiB (54.7KiB compressed)
+   Packaging sc-observability-dto v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-dto)
+    Updating crates.io index
+    Packaged 15 files, 103.2KiB (21.9KiB compressed)
+   Packaging sc-observability-log-macros v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-log-macros)
+    Updating crates.io index
+    Packaged 11 files, 60.7KiB (17.0KiB compressed)
+   Packaging sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-log)
+    Updating crates.io index
+    Packaged 79 files, 378.9KiB (91.1KiB compressed)
+   Packaging sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-binding-runtime)
+    Updating crates.io index
+    Packaged 18 files, 113.5KiB (26.3KiB compressed)
+   Packaging sc-observe v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observe)
+    Updating crates.io index
+    Packaged 10 files, 110.8KiB (21.6KiB compressed)
+   Packaging sc-observability-otlp v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-otlp)
+    Updating crates.io index
+    Packaged 13 files, 140.1KiB (26.4KiB compressed)
+   Packaging sc-observability-py v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/bindings/python/sc-observability-py)
+    Updating crates.io index
+    Packaged 32 files, 423.9KiB (70.8KiB compressed)
+   Verifying sc-observability-types v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-types)
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling serde_json v1.0.151
+   Compiling thiserror v2.0.20
+   Compiling serde v1.0.229
+   Compiling time-core v0.1.9
+   Compiling itoa v1.0.18
+   Compiling num-conv v0.2.2
+   Compiling powerfmt v0.2.0
+   Compiling memchr v2.8.3
+   Compiling syn v3.0.6
+   Compiling thiserror-impl v2.0.20
+   Compiling serde_derive v1.0.229
+   Compiling deranged v0.5.8
+   Compiling time v0.3.55
+   Compiling sc-observability-types v1.4.0 (/private/tmp/phase-c-final-nine-target/package/sc-observability-types-1.4.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.22s
+   Verifying sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability)
+    Updating crates.io index
+   Unpacking sc-observability-types v1.4.0 (registry `/private/tmp/phase-c-final-nine-target/package/tmp-registry`)
+   Compiling sc-observability-types v1.4.0
+   Compiling sc-observability v1.4.0 (/private/tmp/phase-c-final-nine-target/package/sc-observability-1.4.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.98s
+   Verifying sc-observability-dto v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-dto)
+    Updating crates.io index
+   Compiling sc-observability-dto v1.4.0 (/private/tmp/phase-c-final-nine-target/package/sc-observability-dto-1.4.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 11.27s
+   Verifying sc-observability-log-macros v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-log-macros)
+   Compiling syn v2.0.119
+   Compiling sc-observability-log-macros v1.4.0 (/private/tmp/phase-c-final-nine-target/package/sc-observability-log-macros-1.4.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 12.67s
+   Verifying sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-log)
+    Updating crates.io index
+   Unpacking sc-observability v1.4.0 (registry `/private/tmp/phase-c-final-nine-target/package/tmp-registry`)
+   Unpacking sc-observability-log-macros v1.4.0 (registry `/private/tmp/phase-c-final-nine-target/package/tmp-registry`)
+   Compiling libc v0.2.189
+   Compiling cfg-if v1.0.5
+   Compiling log v0.4.34
+   Compiling sc-observability-log-macros v1.4.0
+   Compiling sc-observability v1.4.0
+   Compiling hostname v0.4.2
+   Compiling sc-observability-log v1.4.0 (/private/tmp/phase-c-final-nine-target/package/sc-observability-log-1.4.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 14.83s
+   Verifying sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-binding-runtime)
+    Updating crates.io index
+   Unpacking sc-observability-dto v1.4.0 (registry `/private/tmp/phase-c-final-nine-target/package/tmp-registry`)
+   Unpacking sc-observability-log v1.4.0 (registry `/private/tmp/phase-c-final-nine-target/package/tmp-registry`)
+   Compiling rustversion v1.0.23
+   Compiling sc-observability-dto v1.4.0
+   Compiling sc-observability-log v1.4.0
+   Compiling arc-swap v1.9.2
+   Compiling sc-observability-binding-runtime v1.4.0 (/private/tmp/phase-c-final-nine-target/package/sc-observability-binding-runtime-1.4.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 16.68s
+   Verifying sc-observe v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observe)
+    Updating crates.io index
+   Compiling sc-observe v1.4.0 (/private/tmp/phase-c-final-nine-target/package/sc-observe-1.4.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 17.19s
+   Verifying sc-observability-otlp v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-otlp)
+    Updating crates.io index
+   Compiling sc-observability-otlp v1.4.0 (/private/tmp/phase-c-final-nine-target/package/sc-observability-otlp-1.4.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 17.76s
+   Verifying sc-observability-py v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/bindings/python/sc-observability-py)
+    Updating crates.io index
+   Unpacking sc-observability-binding-runtime v1.4.0 (registry `/private/tmp/phase-c-final-nine-target/package/tmp-registry`)
+   Compiling target-lexicon v0.13.5
+   Compiling heck v0.5.0
+   Compiling once_cell v1.21.4
+   Compiling syn v2.0.119
+   Compiling pyo3-build-config v0.29.2
+   Compiling pyo3-ffi v0.29.2
+   Compiling pyo3 v0.29.2
+   Compiling pyo3-macros-backend v0.29.2
+   Compiling sc-observability-log-macros v1.4.0
+   Compiling sc-observability-log v1.4.0
+   Compiling sc-observability-binding-runtime v1.4.0
+   Compiling pyo3-macros v0.29.2
+   Compiling sc-observability-py v1.4.0 (/private/tmp/phase-c-final-nine-target/package/sc-observability-py-1.4.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 23.47s

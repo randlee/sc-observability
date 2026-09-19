@@ -1,4 +1,4 @@
-# C.2 preflight correction evidence
+# C.2 preflight correction evidence — historical PR185 record
 
 Source reports: [PR184 QA report](https://github.com/randlee/sc-observability/pull/184#issuecomment-5738623032)
 and the authorized non-publishing preflight run [35415396742](https://github.com/randlee/sc-observability/actions/runs/35415396742).
@@ -27,3 +27,12 @@ sc-lint --json --root "$PWD" lint sc-boundary
 It first failed root discovery because `boundaries/` was absent; after the
 inventory was added, root discovery passed and the backend emitted the
 unsupported-impl-owner diagnostic above.
+
+## Current reconciliation
+
+This table records the PR185 point in time. Current pins, fixed23 manifest
+reports / retained18 cycle diagnostics, Linux/Windows source receipt PASS,
+resolved npm secret scope and actual preflight35423505198 are recorded in
+[final-c2-audit.md](final-c2-audit.md). Historical parser/npm-open labels above
+are not current blockers. Current Python packaging qualification and explicit
+lead completeness remain pending; no closure signoff is fabricated.

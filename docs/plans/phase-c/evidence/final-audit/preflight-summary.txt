@@ -1,0 +1,7 @@
+preflight	Deny release after complete preflight summary	2026-09-19T05:20:49.4646052Z   REPOSITORY_SECRETS: success
+preflight	Deny release after complete preflight summary	2026-09-19T05:20:49.4646306Z   ENVIRONMENT_SECRETS: success
+preflight	Deny release after complete preflight summary	2026-09-19T05:20:49.4646554Z   GITHUB_ENVIRONMENTS: success
+preflight	Deny release after complete preflight summary	2026-09-19T05:20:49.4647024Z   REGISTRY_STATE: success
+preflight	Deny release after complete preflight summary	2026-09-19T05:20:49.4649389Z   RELEASE_CANDIDATE_PROVENANCE: success
+preflight	Deny release after complete preflight summary	2026-09-19T05:20:49.4649890Z   PACKAGE_CHECKS: success
+preflight	Deny release after complete preflight summary	2026-09-19T05:20:49.4722652Z Preflight complete: failed=[] blocked=[]

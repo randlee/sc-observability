@@ -1,0 +1,78 @@
+{
+  "source_installer": {
+    "from": "3fb321acc08c55e331cad2503019726974598157",
+    "to": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+    "command": [
+      "git",
+      "diff",
+      "--name-only",
+      "3fb321acc08c55e331cad2503019726974598157",
+      "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "--",
+      ".github/actions/setup-sc-lint",
+      ".github/scripts/setup_sc_lint_source.py",
+      ".github/scripts/verify_sc_lint_source_receipt.py",
+      ".github/scripts/tests/test_verify_sc_lint_source_receipt.py",
+      ".github/workflows/sc-lint-source-preflight.yml",
+      "install.json",
+      "release/sc-publish-pin.toml"
+    ],
+    "changed_paths": []
+  },
+  "consumer_lint": {
+    "from": "06c3e594a2dbfa6d110bf5c8a2ab0d8a8b79eb91",
+    "to": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+    "command": [
+      "git",
+      "diff",
+      "--name-only",
+      "06c3e594a2dbfa6d110bf5c8a2ab0d8a8b79eb91",
+      "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "--",
+      "Cargo.toml",
+      "crates",
+      "bindings/python/sc-observability-py/Cargo.toml",
+      "boundaries",
+      "planning.toml"
+    ],
+    "changed_paths": []
+  },
+  "python_package": {
+    "from": "340f8aae522c9cd10296748aa6d82c764bc196e5",
+    "to": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+    "command": [
+      "git",
+      "diff",
+      "--name-only",
+      "340f8aae522c9cd10296748aa6d82c764bc196e5",
+      "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "--",
+      "Cargo.toml",
+      "Cargo.lock",
+      "crates",
+      "bindings/python",
+      "examples/rust-python-logging",
+      "scripts/ci/prepare_python_distributions.py",
+      "scripts/ci/validate_python_distribution.py",
+      "scripts/ci/_python_distribution.py",
+      "scripts/ci/_python_sandbox.py",
+      "scripts/ci/build_binding_source_bundle.py",
+      ".github/workflows/b4a-python-distributions.yml",
+      "release/python-platform-policy.json"
+    ],
+    "changed_paths": [
+      "Cargo.toml",
+      "bindings/python/sc-observability-py/Cargo.toml",
+      "crates/sc-observability-binding-runtime/Cargo.toml",
+      "crates/sc-observability-dto/Cargo.toml",
+      "crates/sc-observability-log-consumer-check/Cargo.toml",
+      "crates/sc-observability-log-macros/Cargo.toml",
+      "crates/sc-observability-log/Cargo.toml",
+      "crates/sc-observability-otlp/Cargo.toml",
+      "crates/sc-observability-types/Cargo.toml",
+      "crates/sc-observability/Cargo.toml",
+      "crates/sc-observe/Cargo.toml",
+      "examples/rust-python-logging/Cargo.toml"
+    ]
+  }
+}

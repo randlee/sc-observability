@@ -1,0 +1,275 @@
+{
+  "ok": true,
+  "command": "lint.sc-boundary",
+  "data": {
+    "findings": [
+      {
+        "kind": "multi_owner_architectural_cycle",
+        "message": "architectural cycle across owners: crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::BackendPermit, crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Dispatcher, crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Job, crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Payload",
+        "node_ids": [
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::BackendPermit",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::BackendPermit::field::0",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Dispatcher",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Dispatcher::field::queue",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Dispatcher::new",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Dispatcher::reserve",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Job",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Job::field::dispatcher",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Job::field::payload",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Payload",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Payload::field::_backend"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::BackendPermit",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Dispatcher",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Job",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Payload"
+        ],
+        "rule_id": "SCB-CYCLE-001"
+      },
+      {
+        "kind": "multi_owner_architectural_cycle",
+        "message": "architectural cycle across owners: crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Admission, crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Coordinator",
+        "node_ids": [
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Admission",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Admission::field::0",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Coordinator",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Coordinator::create",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Coordinator::enter"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Admission",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Coordinator"
+        ],
+        "rule_id": "SCB-CYCLE-001"
+      },
+      {
+        "kind": "multi_owner_architectural_cycle",
+        "message": "architectural cycle across owners: crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Operation, crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Registration",
+        "node_ids": [
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Operation",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Operation::clone",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Operation::new",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Operation::register",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Registration",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Registration::field::operation"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Operation",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Registration"
+        ],
+        "rule_id": "SCB-CYCLE-001"
+      },
+      {
+        "kind": "multi_owner_architectural_cycle",
+        "message": "architectural cycle across owners: crate::sc-observability-log::sc_observability_log::module::crate::context::CallSpan, crate::sc-observability-log::sc_observability_log::module::crate::context::Entered",
+        "node_ids": [
+          "crate::sc-observability-log::sc_observability_log::module::crate::context::CallSpan",
+          "crate::sc-observability-log::sc_observability_log::module::crate::context::CallSpan::enter",
+          "crate::sc-observability-log::sc_observability_log::module::crate::context::CallSpan::new",
+          "crate::sc-observability-log::sc_observability_log::module::crate::context::Entered",
+          "crate::sc-observability-log::sc_observability_log::module::crate::context::Entered::field::span"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-log::sc_observability_log::module::crate::context::CallSpan",
+          "crate::sc-observability-log::sc_observability_log::module::crate::context::Entered"
+        ],
+        "rule_id": "SCB-CYCLE-001"
+      },
+      {
+        "kind": "multi_owner_architectural_cycle",
+        "message": "architectural cycle across owners: crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelayReleaseGuard, crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelaySignal",
+        "node_ids": [
+          "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelayReleaseGuard",
+          "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelayReleaseGuard::field::0",
+          "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelaySignal",
+          "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelaySignal::release_on_drop",
+          "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelaySignal::wait_for_state"
+        ],
+        "owner_ids": [
+          "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelayReleaseGuard",
+          "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelaySignal"
+        ],
+        "rule_id": "SCB-CYCLE-001"
+      },
+      {
+        "kind": "multi_owner_architectural_cycle",
+        "message": "architectural cycle across owners: crate::sc-observe::sc_observe::module::crate::Observability, crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder",
+        "node_ids": [
+          "crate::sc-observe::sc_observe::module::crate::Observability",
+          "crate::sc-observe::sc_observe::module::crate::Observability::builder",
+          "crate::sc-observe::sc_observe::module::crate::Observability::emit",
+          "crate::sc-observe::sc_observe::module::crate::Observability::new",
+          "crate::sc-observe::sc_observe::module::crate::Observability::new_typed",
+          "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder",
+          "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder::build",
+          "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder::build_typed",
+          "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder::register_projection",
+          "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder::register_subscriber",
+          "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder::with_observability_health_provider"
+        ],
+        "owner_ids": [
+          "crate::sc-observe::sc_observe::module::crate::Observability",
+          "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder"
+        ],
+        "rule_id": "SCB-CYCLE-001"
+      },
+      {
+        "kind": "type_method_self_loop",
+        "message": "type/method self-loop on owner crate::sc-observability-otlp::sc_observability_otlp::module::crate::Telemetry",
+        "node_ids": [
+          "crate::sc-observability-otlp::sc_observability_otlp::module::crate::Telemetry::emit_metric",
+          "crate::sc-observability-otlp::sc_observability_otlp::module::crate::Telemetry::emit_span"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-otlp::sc_observability_otlp::module::crate::Telemetry"
+        ],
+        "rule_id": "SCB-CYCLE-002"
+      },
+      {
+        "kind": "type_method_self_loop",
+        "message": "type/method self-loop on owner crate::sc-observability::sc_observability::module::crate::runtime::Logger",
+        "node_ids": [
+          "crate::sc-observability::sc_observability::module::crate::runtime::Logger::builder",
+          "crate::sc-observability::sc_observability::module::crate::runtime::Logger::builder_typed"
+        ],
+        "owner_ids": [
+          "crate::sc-observability::sc_observability::module::crate::runtime::Logger"
+        ],
+        "rule_id": "SCB-CYCLE-002"
+      },
+      {
+        "kind": "trait_impl_self_loop",
+        "message": "trait-impl self-loop on owner crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::BridgeControlBackend via Clone",
+        "node_ids": [
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::BridgeControlBackend",
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::BridgeControlBackend::clone"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::BridgeControlBackend"
+        ],
+        "rule_id": "SCB-CYCLE-003"
+      },
+      {
+        "kind": "trait_impl_self_loop",
+        "message": "trait-impl self-loop on owner crate::sc-observability-log::sc_observability_log::module::crate::handle::DropCause via Rejection",
+        "node_ids": [
+          "crate::sc-observability-log::sc_observability_log::module::crate::handle::DropCause",
+          "crate::sc-observability-log::sc_observability_log::module::crate::handle::DropCause::panicked",
+          "crate::sc-observability-log::sc_observability_log::module::crate::handle::DropCause::reentrant"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-log::sc_observability_log::module::crate::handle::DropCause"
+        ],
+        "rule_id": "SCB-CYCLE-003"
+      },
+      {
+        "kind": "trait_impl_self_loop",
+        "message": "trait-impl self-loop on owner crate::sc-observability-log::sc_observability_log::module::crate::handle::EmitError via Rejection",
+        "node_ids": [
+          "crate::sc-observability-log::sc_observability_log::module::crate::handle::EmitError",
+          "crate::sc-observability-log::sc_observability_log::module::crate::handle::EmitError::panicked",
+          "crate::sc-observability-log::sc_observability_log::module::crate::handle::EmitError::reentrant"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-log::sc_observability_log::module::crate::handle::EmitError"
+        ],
+        "rule_id": "SCB-CYCLE-003"
+      },
+      {
+        "kind": "trait_impl_self_loop",
+        "message": "trait-impl self-loop on owner crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedLogProjector via TypedLogProjector",
+        "node_ids": [
+          "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedLogProjector",
+          "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedLogProjector::project_logs"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedLogProjector"
+        ],
+        "rule_id": "SCB-CYCLE-003"
+      },
+      {
+        "kind": "trait_impl_self_loop",
+        "message": "trait-impl self-loop on owner crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedMetricProjector via TypedMetricProjector",
+        "node_ids": [
+          "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedMetricProjector",
+          "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedMetricProjector::project_metrics"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedMetricProjector"
+        ],
+        "rule_id": "SCB-CYCLE-003"
+      },
+      {
+        "kind": "trait_impl_self_loop",
+        "message": "trait-impl self-loop on owner crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedSpanProjector via TypedSpanProjector",
+        "node_ids": [
+          "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedSpanProjector",
+          "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedSpanProjector::project_spans"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedSpanProjector"
+        ],
+        "rule_id": "SCB-CYCLE-003"
+      },
+      {
+        "kind": "trait_impl_self_loop",
+        "message": "trait-impl self-loop on owner crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp via Add",
+        "node_ids": [
+          "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp::add",
+          "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp::from_offset_date_time"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp"
+        ],
+        "rule_id": "SCB-CYCLE-003"
+      },
+      {
+        "kind": "trait_impl_self_loop",
+        "message": "trait-impl self-loop on owner crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp via Sub",
+        "node_ids": [
+          "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp",
+          "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp::from_offset_date_time",
+          "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp::sub"
+        ],
+        "owner_ids": [
+          "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp"
+        ],
+        "rule_id": "SCB-CYCLE-003"
+      },
+      {
+        "kind": "trait_impl_self_loop",
+        "message": "trait-impl self-loop on owner crate::sc-observability::sc_observability::module::crate::sinks::ConsoleSink via crate::typed::TypedLogSink",
+        "node_ids": [
+          "crate::sc-observability::sc_observability::module::crate::sinks::ConsoleSink",
+          "crate::sc-observability::sc_observability::module::crate::sinks::ConsoleSink::format_line",
+          "crate::sc-observability::sc_observability::module::crate::sinks::ConsoleSink::health",
+          "crate::sc-observability::sc_observability::module::crate::sinks::ConsoleSink::write"
+        ],
+        "owner_ids": [
+          "crate::sc-observability::sc_observability::module::crate::sinks::ConsoleSink"
+        ],
+        "rule_id": "SCB-CYCLE-003"
+      },
+      {
+        "kind": "trait_impl_self_loop",
+        "message": "trait-impl self-loop on owner crate::sc-observability::sc_observability::module::crate::sinks::JsonlFileSink via crate::typed::TypedLogSink",
+        "node_ids": [
+          "crate::sc-observability::sc_observability::module::crate::sinks::JsonlFileSink",
+          "crate::sc-observability::sc_observability::module::crate::sinks::JsonlFileSink::health",
+          "crate::sc-observability::sc_observability::module::crate::sinks::JsonlFileSink::write"
+        ],
+        "owner_ids": [
+          "crate::sc-observability::sc_observability::module::crate::sinks::JsonlFileSink"
+        ],
+        "rule_id": "SCB-CYCLE-003"
+      }
+    ],
+    "scanned_crates": 9,
+    "schema_version": "0.1.0",
+    "status": "fail",
+    "tool": "sc-lint-boundary",
+    "version": "0.6.0"
+  },
+  "diagnostics": []
+}
