@@ -1,4 +1,4 @@
-# Exact upstream publish-kit revision used for this installed C.1 layer.
+# Exact upstream publish-kit revision used for this C.2 source-installer layer.
 [sc-publish]
 repository = "https://github.com/randlee/sc-publish"
 revision = "be1705401d58008f862dd0829996fc50667e4ab1"
