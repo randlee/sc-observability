@@ -115,6 +115,7 @@ class ReleaseScriptTests(unittest.TestCase):
             ["bash", "-n", str(SCRIPTS / "release_gate.sh")],
             text=True,
             capture_output=True,
+        timeout=60,
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -165,6 +166,7 @@ class ReleaseScriptTests(unittest.TestCase):
                 cwd=repo,
                 text=True,
                 capture_output=True,
+        timeout=60,
                 check=True,
             ).stdout.strip()
             gate_output = root / "github-output"
@@ -184,6 +186,7 @@ class ReleaseScriptTests(unittest.TestCase):
                 env={**os.environ, "GITHUB_OUTPUT": str(gate_output)},
                 text=True,
                 capture_output=True,
+        timeout=60,
                 check=False,
             )
             emitted_output = gate_output.read_text(encoding="utf-8")
@@ -237,6 +240,7 @@ class ReleaseScriptTests(unittest.TestCase):
                 cwd=repo,
                 text=True,
                 capture_output=True,
+        timeout=60,
                 check=False,
             )
 
@@ -250,6 +254,7 @@ class ReleaseScriptTests(unittest.TestCase):
             cwd=cwd,
             text=True,
             capture_output=True,
+        timeout=60,
             check=False,
         )
         if result.returncode:
@@ -260,6 +265,7 @@ class ReleaseScriptTests(unittest.TestCase):
             [sys.executable, str(SCRIPTS / "release_artifacts.py"), "--help"],
             text=True,
             capture_output=True,
+        timeout=60,
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)

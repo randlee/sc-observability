@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Binding-aware release manifest helper, parallel to scripts/release_artifacts.py.
+"""Binding-aware release manifest helper, parallel to .github/scripts/release_artifacts.py.
 
 release_artifacts.py's cmd_validate_manifest hard-requires every crate's
 cargo_toml directory to be a root-workspace member. That does not hold for
@@ -31,6 +31,8 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+COMMAND_TIMEOUT_SECONDS = 900
 
 
 class ManifestError(SystemExit):
@@ -357,7 +359,10 @@ def cmd_verify_versions(args: argparse.Namespace) -> int:
 
 
 def git_head_commit() -> str:
-    result = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True,
+        timeout=COMMAND_TIMEOUT_SECONDS,
+    )
     if result.returncode != 0:
         raise ManifestError(f"git rev-parse HEAD failed: {result.stderr.strip()}")
     return result.stdout.strip()
@@ -451,7 +456,7 @@ def build_crate_artifact(entry: dict[str, Any], dest_dir: Path) -> dict[str, Any
             cmd += ["-p", package]
         else:
             cmd += ["--manifest-path", str(cargo_toml)]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=COMMAND_TIMEOUT_SECONDS)
         if result.returncode != 0:
             raise ManifestError(
                 f"{artifact}: cargo package failed (exit {result.returncode}):\n"
@@ -513,7 +518,7 @@ def build_pypi_artifacts(entry: dict[str, Any], dest_dir: Path) -> dict[str, Any
         "uvx", "--from", "maturin==1.10.2", "maturin", "sdist",
         "--manifest-path", str(cargo_manifest), "--out", str(artifacts_dir),
     ]
-    sdist_result = subprocess.run(sdist_cmd, capture_output=True, text=True)
+    sdist_result = subprocess.run(sdist_cmd, capture_output=True, text=True, timeout=COMMAND_TIMEOUT_SECONDS)
     if sdist_result.returncode != 0:
         raise ManifestError(
             f"{artifact}: maturin sdist failed (exit {sdist_result.returncode}):\n"
@@ -528,7 +533,7 @@ def build_pypi_artifacts(entry: dict[str, Any], dest_dir: Path) -> dict[str, Any
         "uvx", "--from", "maturin==1.10.2", "maturin", "build", "--release", "--locked",
         "--manifest-path", str(cargo_manifest), "--out", str(artifacts_dir),
     ]
-    wheel_result = subprocess.run(wheel_cmd, capture_output=True, text=True)
+    wheel_result = subprocess.run(wheel_cmd, capture_output=True, text=True, timeout=COMMAND_TIMEOUT_SECONDS)
     if wheel_result.returncode != 0:
         raise ManifestError(
             f"{artifact}: maturin build (wheel) failed (exit {wheel_result.returncode}):\n"

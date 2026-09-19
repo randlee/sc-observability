@@ -109,13 +109,13 @@ Before the ATM workspace switches to crates.io dependencies from this repo:
 - Release exit checklist:
   [docs/release-readiness-checklist.md](./release-readiness-checklist.md)
 
-### Shared-pipeline credential scopes (planned)
+### Shared-pipeline credential scopes
 
 The shared contract requires repository-scoped `CARGO_REGISTRY_TOKEN` for
 `crates_io`. PyPI uses environment-scoped `PYPI_API_TOKEN` in the `pypi`
 environment and `TEST_PYPI_API_TOKEN` in `testpypi`; no values are documented
-here. npm secret names remain an upstream contract decision and are not
-invented locally while the npm channel prerequisite is unmet.
+here. npm uses environment-scoped `NPM_TOKEN` in the GitHub `npm` environment;
+no credential values are documented here.
 
 ## Public API Visibility
 

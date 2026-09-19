@@ -97,7 +97,7 @@ violation regardless of functional justification. This includes:
 - Adding a banned dependency or an ATM adapter edge without updating the
   boundary record and lead approval
 - Removing or bypassing enforcement layers: `scripts/ci/validate_repo_boundaries.sh`,
-  `scripts/ci/validate_dependency_bans.sh`, `scripts/ci/validate_publish_order.sh`,
+  `scripts/ci/validate_dependency_bans.sh`, `.github/scripts/release_artifacts.py validate-publish-order`,
   or CI checks
 
 The correct path for any boundary relaxation is:

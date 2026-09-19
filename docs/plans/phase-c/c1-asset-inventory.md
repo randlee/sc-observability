@@ -1,8 +1,9 @@
 # C.1 legacy publish asset inventory
 
-This is the C.1 disposition inventory for the validated upstream kit at
-`61568d813550ac7faab0fd9c887c731d975d1264`. The kit is now installed on the
-C.1 layer; `release/sc-publish-pin.toml` records the immutable source revision.
+This is the C.1 disposition inventory. The superseded C.1 qualification pin
+was `61568d813550ac7faab0fd9c887c731d975d1264`; the current installed and
+qualified pin is `b2f18cf56aa4488376fdef6b2cab30e382f32dbd`, recorded in
+`release/sc-publish-pin.toml`.
 The remaining acceptance evidence is the repeat no-drift parity and consumer
 compatibility qualification described by the sprint checklist.
 

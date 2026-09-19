@@ -225,6 +225,7 @@ def run_validate_manifest(
         cwd=tmp_path,
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -299,6 +300,7 @@ def run_release_archive_packager(
         },
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
     assert output.read_text(encoding="utf-8").startswith("ARCHIVE=fixture_1.5.0_")
@@ -397,6 +399,7 @@ def run_release_preflight_registry_step(
         },
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -488,6 +491,7 @@ def run_release_gate_readiness(
         env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"},
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -565,6 +569,7 @@ def run_release_tag_step(
         },
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -576,6 +581,7 @@ def git_fixture_command(repository: Path, *arguments: str) -> str:
         cwd=repository,
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
     assert result.returncode == 0, result.stderr
@@ -646,6 +652,7 @@ def run_release_tag_step_in_git_fixture(repository: Path) -> subprocess.Complete
         env={**os.environ, "GITHUB_OUTPUT": str(repository / "github-output")},
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -687,6 +694,7 @@ def run_release_preflight_channel_results_shell(
         env=environment,
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -755,6 +763,7 @@ def run_fixture_command(
         cwd=tmp_path,
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -1267,6 +1276,7 @@ release_track = "prerelease"
             cwd=tmp_path,
             text=True,
             capture_output=True,
+        timeout=60,
             check=False,
         )
         assert result.returncode == 0, result.stderr
@@ -1327,6 +1337,7 @@ def test_homebrew_legacy_binary_normalizes_to_a_single_binary_list(tmp_path: Pat
         cwd=tmp_path,
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -1357,6 +1368,7 @@ def test_validate_manifest_rejects_unknown_homebrew_formula_binary(tmp_path: Pat
         cwd=tmp_path,
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -1387,6 +1399,7 @@ def test_validate_manifest_rejects_unknown_channel_target(tmp_path: Path) -> Non
         cwd=tmp_path,
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
     assert result.returncode != 0
@@ -1414,6 +1427,7 @@ def test_validate_manifest_requires_manifest_driven_scoop_channel_inputs(tmp_pat
         cwd=tmp_path,
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -1444,6 +1458,7 @@ def test_validate_manifest_rejects_unknown_renderer_target(tmp_path: Path) -> No
         cwd=tmp_path,
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -1473,6 +1488,7 @@ def test_validate_manifest_requires_explicit_homebrew_bundle_destination(tmp_pat
         cwd=tmp_path,
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -1506,6 +1522,7 @@ def test_verify_python_release_assets_accepts_manifest_declared_wheels_and_sdist
         cwd=tmp_path,
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -1542,6 +1559,7 @@ def run_manifest_command(*args: str) -> subprocess.CompletedProcess[str]:
         cwd=repo_root(),
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -2089,6 +2107,7 @@ def test_registry_status_cli_uses_the_fail_closed_shared_registry_probe(
         ],
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -2587,6 +2606,7 @@ ScCompose.new.install
         input=formula,
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
     assert execution.returncode == 0, execution.stderr
@@ -3128,6 +3148,7 @@ def run_sync_readme_version(
         cwd=Path(__file__).resolve().parents[2],
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -3150,6 +3171,7 @@ def run_verify_readme_version(
         cwd=Path(__file__).resolve().parents[2],
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 
@@ -3249,6 +3271,7 @@ def run_verify_version_lockstep(workspace: Path, manifest: Path) -> subprocess.C
         cwd=Path(__file__).resolve().parents[2],
         text=True,
         capture_output=True,
+        timeout=60,
         check=False,
     )
 

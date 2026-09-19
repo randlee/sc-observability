@@ -13,15 +13,36 @@ import hashlib
 import json
 import shutil
 import subprocess
-import tarfile
 import tempfile
 import tomllib
 import urllib.error
 import urllib.request
-from pathlib import Path, PurePosixPath
+from pathlib import Path
+
+from _log_staging import inspect_archive as inspect_shared_archive
 
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = "https://crates.io/api/v1/crates"
+COMMAND_TIMEOUT_SECONDS = 900
+
+
+def inspect_archive(
+    archive: Path,
+    name: str,
+    version: str,
+    source_commit: str,
+    package_names: tuple[str, ...] = (),
+) -> dict:
+    """Compatibility wrapper over the shared archive inspector."""
+    return inspect_shared_archive(
+        archive,
+        name,
+        version,
+        source_commit,
+        package_names=package_names,
+        private_package=None,
+        require_macro_pin=False,
+    )
 
 
 def sha256(path: Path) -> str:
@@ -29,13 +50,13 @@ def sha256(path: Path) -> str:
 
 
 def git(source: Path, *arguments: str) -> str:
-    return subprocess.check_output(["git", *arguments], cwd=source, text=True).strip()
+    return subprocess.check_output(["git", *arguments], cwd=source, text=True, timeout=COMMAND_TIMEOUT_SECONDS).strip()
 
 
 def metadata(source: Path) -> dict:
     return json.loads(subprocess.check_output(
         ["cargo", "metadata", "--locked", "--no-deps", "--format-version", "1"],
-        cwd=source,
+        cwd=source, timeout=COMMAND_TIMEOUT_SECONDS,
     ))
 
 
@@ -122,49 +143,6 @@ def package_command(packages: list[str], target_dir: Path) -> list[str]:
     return command
 
 
-def _safe_archive_member(root: str, member: str) -> bool:
-    path = PurePosixPath(member)
-    return member.startswith(root) and path.is_relative_to(PurePosixPath(root)) and ".." not in path.parts and "\\" not in member
-
-
-def inspect_archive(archive: Path, name: str, version: str, source_commit: str) -> dict:
-    prefix = f"{name}-{version}/"
-    files: dict[str, bytes] = {}
-    with tarfile.open(archive, "r:gz") as contents:
-        for member in contents.getmembers():
-            if not member.isfile() or not _safe_archive_member(prefix, member.name) or member.name in files:
-                raise ValueError(f"unsafe or duplicate archive member: {member.name}")
-            stream = contents.extractfile(member)
-            if stream is None:
-                raise ValueError(f"cannot read archive member: {member.name}")
-            files[member.name] = stream.read()
-    manifest_bytes = files.get(prefix + "Cargo.toml")
-    vcs_bytes = files.get(prefix + ".cargo_vcs_info.json")
-    if manifest_bytes is None or vcs_bytes is None:
-        raise ValueError(f"{name}: archive lacks Cargo.toml or VCS provenance")
-    manifest = tomllib.loads(manifest_bytes.decode())
-    package = manifest.get("package", {})
-    if package.get("name") != name or package.get("version") != version or package.get("publish") is False:
-        raise ValueError(f"{name}: archive identity/version/publish mismatch")
-    if package.get("license") != "MIT" or not any(key.endswith("/LICENSE") for key in files):
-        raise ValueError(f"{name}: missing MIT license file")
-    vcs = json.loads(vcs_bytes)
-    if vcs.get("git", {}).get("sha1") != source_commit or vcs.get("git", {}).get("dirty", False):
-        raise ValueError(f"{name}: archive source provenance mismatch")
-    for table in [manifest, *manifest.get("target", {}).values()]:
-        for kind in ("dependencies", "dev-dependencies", "build-dependencies"):
-            for dependency, spec in table.get(kind, {}).items():
-                if isinstance(spec, str):
-                    spec = {"version": spec}
-                if any(key in spec for key in ("path", "git", "workspace")):
-                    raise ValueError(f"{name}: ambient {kind} dependency remains: {dependency}")
-    return {
-        "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
-        "normalized_manifest": manifest_bytes.decode(),
-        "files": {key: hashlib.sha256(value).hexdigest() for key, value in sorted(files.items())},
-    }
-
-
 def inspect_stage(stage: Path, version: str) -> dict:
     evidence = json.loads((stage / "stage-manifest.json").read_text())
     if evidence.get("schema_version") != 1 or evidence.get("candidate_version") != version:
@@ -176,7 +154,15 @@ def inspect_stage(stage: Path, version: str) -> dict:
         archive = stage / item["archive"]
         if not archive.resolve().is_relative_to(stage.resolve()) or sha256(archive) != item["archive_sha256"]:
             raise ValueError(f"stage archive checksum mismatch: {item.get('name')}")
-        inspected = inspect_archive(archive, item["name"], version, source_commit)
+        inspected = inspect_shared_archive(
+            archive,
+            item["name"],
+            version,
+            source_commit,
+            package_names=tuple(record["name"] for record in evidence.get("packages", [])),
+            private_package=None,
+            require_macro_pin=False,
+        )
         for key in ("files", "normalized_manifest", "manifest_sha256"):
             if inspected[key] != item[key]:
                 raise ValueError(f"stage archive inspection mismatch: {item['name']}")
@@ -223,7 +209,10 @@ def main() -> int:
     command = package_command(ordered, target_dir)
     log_path = output / "cargo-package.log"
     with log_path.open("w", encoding="utf-8") as log:
-        result = subprocess.run(command, cwd=source, stdout=log, stderr=subprocess.STDOUT, text=True)
+        result = subprocess.run(
+            command, cwd=source, stdout=log, stderr=subprocess.STDOUT, text=True,
+            timeout=COMMAND_TIMEOUT_SECONDS,
+        )
     if result.returncode:
         raise SystemExit(f"Cargo package verification failed; see {log_path}")
     archives = output / "archives"
@@ -235,7 +224,15 @@ def main() -> int:
             raise SystemExit(f"cargo package did not produce expected archive: {archive}")
         destination = archives / archive.name
         shutil.copyfile(archive, destination)
-        inspected = inspect_archive(destination, name, args.version, source_commit)
+        inspected = inspect_shared_archive(
+            destination,
+            name,
+            args.version,
+            source_commit,
+            package_names=tuple(item["package"] for item in roster),
+            private_package=None,
+            require_macro_pin=False,
+        )
         records.append({"name": name, "version": args.version, "archive": destination.relative_to(output).as_posix(),
                         "archive_sha256": sha256(destination), **inspected})
     evidence = {

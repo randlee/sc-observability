@@ -118,8 +118,9 @@ candidate `1.4.0` is not published; no write or credentialed command was run.
 
 ### Current closure state
 
-This sprint remains open pending the npm environment configuration, Windows
-real-IPC completion, and lead completeness PASS. These are external/terminal
+This sprint remains open pending the npm environment configuration and lead
+completeness PASS. Windows real-IPC qualification is complete: the actual
+three-platform run and all real-ipc-artifacts jobs passed. These are external/terminal
 state, not accepted gaps; the task must not be closed until they are resolved
 and lead completeness PASS is received. Upstream PR95 review is tracked
 separately: the C.1 evidence retains historical pin
