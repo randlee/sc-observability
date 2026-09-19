@@ -62,7 +62,7 @@ def inspect_archive(
             raise ValueError(f"missing package license: {name}")
         vcs = json.loads(files[prefix + ".cargo_vcs_info.json"])
         if vcs["git"]["sha1"] != source_commit or vcs["git"].get("dirty", False):
-            raise ValueError(f"archive source provenance mismatch or dirty source: {name}")
+            raise ValueError(f"archive source commit/provenance mismatch or dirty source: {name}")
         if "workspace" in manifest or package.get("workspace"):
             raise ValueError(f"archive inherits workspace: {name}")
         tables = [manifest] + list(manifest.get("target", {}).values())
