@@ -1,4 +1,6 @@
 [package]
+homepage.workspace = true
+authors.workspace = true
 name = "sc-observability-log-macros"
 version.workspace = true
 edition.workspace = true
