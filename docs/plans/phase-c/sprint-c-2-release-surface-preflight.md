@@ -12,7 +12,7 @@ base: fix/phase-c-1-shared-pipeline-migration
 
 The C.1 parent was merge-forwarded before this round and is present through
 `7797606105055f67e937203eaa3a4b5adf41e3dd`; the current C.2 evidence source is
-`340f8aae522c9cd10296748aa6d82c764bc196e5`. No publish, upload, tag, release
+`8343def7b5355160a250acd45f3b52643bc5da43`. No publish, upload, tag, release
 dispatch, or BTIT test has been run.
 
 ### 1. Deterministic inventory (PASS)
@@ -49,8 +49,8 @@ root stage was created and re-verified with:
 
 ```text
 python3 scripts/ci/prepare_release_staged_packages.py --version 1.4.0 --output <temporary-stage> --target-dir <temporary-target>
-  staged and verified 9 root release packages at 340f8aae522c9cd10296748aa6d82c764bc196e5
-  stage-manifest.json SHA256: def46c0558a19eb317e50e980e7c204805d6762129889fc61d01d1b06e20d2d5
+  staged and verified 9 root release packages at 8343def7b5355160a250acd45f3b52643bc5da43
+  stage-manifest.json SHA256: 3e7bae5cf590c5bc46f9fdc103f8836736ee6a7ce868598f14fccbe15992a8be
 python3 scripts/ci/prepare_release_staged_packages.py --version 1.4.0 --output <temporary-stage> --verify-existing
   verified immutable root release stage
 python3 scripts/ci/validate_tauri_staged_package.py --stage <temporary-stage> --version 1.4.0 --output <temporary-tauri>.crate
@@ -64,7 +64,9 @@ runs `cargo package --locked --manifest-path ...`; the repository lockfile is
 not modified. The Python CLI is confirmed to be exactly the three subcommands
 `build`, `cell`, and `aggregate`. The actual post-merge five-platform workflow
 was dispatched non-publishing at run `35408912984` for source SHA
-`340f8aae522c9cd10296748aa6d82c764bc196e5`; its final aggregate result is
+`340f8aae522c9cd10296748aa6d82c764bc196e5`; the direct qualified-path diff
+from that SHA to the current `8343def7` is empty, so this run is equivalent
+for every Python-qualified path; its final aggregate result is
 required before this deliverable can become PASS.
 
 ### 3. Secret scope verification (BLOCKED externally, names only)
