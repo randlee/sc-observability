@@ -41,7 +41,7 @@ def main() -> int:
     stage, source, output = args.stage.resolve(), args.source.resolve(), args.output.resolve()
     evidence = inspect_stage(stage, args.version)
     staged = {item["name"]: item for item in evidence["packages"]}
-    missing = PATCHED_DEPENDENCIES - staged
+    missing = PATCHED_DEPENDENCIES - set(staged)
     if missing:
         raise SystemExit(f"root stage lacks Tauri dependencies: {sorted(missing)}")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -59,16 +59,27 @@ def main() -> int:
             archive = stage / item["archive"]
             subprocess.run(["tar", "-xzf", str(archive), "-C", str(extracted)], check=True)
         patch_lines = ["[patch.crates-io]"]
-        for name in sorted(PATCHED_DEPENDENCIES):
+        # The three direct Tauri dependencies bring the remainder of the
+        # staged root closure transitively (for example binding-runtime
+        # depends on sc-observability). Patch every staged root archive so
+        # Cargo never falls back to an older registry version.
+        for name in sorted(staged):
             patch_lines.append(f'{name} = {{ path = "{(extracted / f"{name}-{args.version}").as_posix()}" }}')
-        config = checkout / ".cargo" / "config.toml"
+        # Cargo's package verification runs from its extracted temporary
+        # directory. Keep the patch config at the scratch working-directory
+        # ancestor so that both the initial package command and verification
+        # resolve the staged archives, without altering the checkout.
+        config = scratch / ".cargo" / "config.toml"
         config.parent.mkdir()
         config.write_text("\n".join(patch_lines) + "\n", encoding="utf-8")
         log_path = output.with_suffix(".log")
+        update_command = ["cargo", "update", "--offline", "--manifest-path", str(checkout / "Cargo.toml")]
         command = ["cargo", "package", "--locked", "--manifest-path", str(checkout / "Cargo.toml"),
                    "--target-dir", str(scratch / "target")]
         with log_path.open("w", encoding="utf-8") as log:
-            result = subprocess.run(command, cwd=scratch, stdout=log, stderr=subprocess.STDOUT, text=True)
+            result = subprocess.run(update_command, cwd=scratch, stdout=log, stderr=subprocess.STDOUT, text=True)
+            if result.returncode == 0:
+                result = subprocess.run(command, cwd=scratch, stdout=log, stderr=subprocess.STDOUT, text=True)
         if result.returncode:
             raise SystemExit(f"standalone Tauri package verification failed; see {log_path}")
         archives = sorted((scratch / "target" / "package").glob("sc-observability-tauri-*.crate"))
