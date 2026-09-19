@@ -178,11 +178,34 @@ jobs:
       - name: Install release manifest test runner
         run: python3 -m pip install --disable-pip-version-check --quiet pytest==8.4.2
 
+      - name: Provision pinned publish-kit renderer
+        run: |
+          python="$(python3 .github/scripts/bootstrap_sc_compose.py --venv "${RUNNER_TEMP}/sc-compose-renderer")"
+          echo "SC_COMPOSE_PYTHON=${python}" >> "$GITHUB_ENV"
+
+      - name: Install publish-kit test dependencies
+        run: '"$SC_COMPOSE_PYTHON" -m pip install --quiet pytest==8.3.5 PyYAML==6.0.3'
+
+      - name: Run complete installed publish-kit test suite
+        run: '"$SC_COMPOSE_PYTHON" -m pytest .github/scripts/tests -q'
+
+      - name: Run staged-package and retry idempotency tests
+        run: |
+          python3 -m unittest \
+            scripts.ci.tests.test_prepare_release_staged_packages \
+            scripts.ci.tests.test_publish_retry_idempotency
+
       - name: Validate manifest completeness
         run: |
           python3 .github/scripts/release_artifacts.py validate-manifest \
             --manifest release/publish-artifacts.toml \
             --workspace-toml Cargo.toml
+
+      - name: Validate publish action versions
+        run: bash scripts/ci/validate_publish_workflow_action_versions.sh
+
+      - name: Validate install contract semantics
+        run: python3 scripts/ci/validate_phase_c_install_contract.py
 
       - name: Run release manifest regression tests
         run: python3 -m pytest .github/scripts/tests/test_release_artifacts.py -q -k 'manifest or publish_order'

@@ -3,6 +3,7 @@ import hashlib
 import socket
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -56,15 +57,16 @@ class InvocationShapeTests(NoNetworkMixin, unittest.TestCase):
 class NpmOwnedPreflightTests(NoNetworkMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.archive = Path("client-1.4.0.tgz")
+        self.tempdir = tempfile.TemporaryDirectory(prefix="npm-retry-")
+        self.archive = Path(self.tempdir.name) / "client-1.4.0.tgz"
         self.archive.write_bytes(b"immutable npm bytes")
         self.verified = [("@sc-observability/client", self.archive)]
         self.verify_patch = patch.object(npm_release, "verify", return_value=self.verified)
         self.verify_patch.start()
 
     def tearDown(self):
-        self.archive.unlink(missing_ok=True)
         self.verify_patch.stop()
+        self.tempdir.cleanup()
         super().tearDown()
 
     def _integrity(self):

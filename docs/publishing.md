@@ -12,7 +12,7 @@ upstream prerequisites that `../sc-publish` must satisfy at a reviewed pin —
 not a repository-local publisher fork and not an accepted regression.
 The reviewed caller contract is `install.json`. Phase C migration is installed
 and qualified from the immutable `sc-publish` revision recorded in
-`release/sc-publish-pin.toml` (`b2f18cf56aa4488376fdef6b2cab30e382f32dbd`).
+`release/sc-publish-pin.toml` (`7b899fea2325b6bda55a5d061f2c507366246974`).
 No publication, tag, or release dispatch is authorized. See
 `docs/plans/phase-c/sprint-c-1-shared-pipeline-migration.md` for the exact
 asset replacement/removal/retention table and
@@ -109,13 +109,13 @@ Before the ATM workspace switches to crates.io dependencies from this repo:
 - Release exit checklist:
   [docs/release-readiness-checklist.md](./release-readiness-checklist.md)
 
-### Shared-pipeline credential scopes (planned)
+### Shared-pipeline credential scopes
 
 The shared contract requires repository-scoped `CARGO_REGISTRY_TOKEN` for
 `crates_io`. PyPI uses environment-scoped `PYPI_API_TOKEN` in the `pypi`
 environment and `TEST_PYPI_API_TOKEN` in `testpypi`; no values are documented
-here. npm secret names remain an upstream contract decision and are not
-invented locally while the npm channel prerequisite is unmet.
+here. npm uses environment-scoped `NPM_TOKEN` in the GitHub `npm` environment;
+no credential values are documented here.
 
 ## Public API Visibility
 

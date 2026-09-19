@@ -13,6 +13,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 
+# Local fixture commands should finish quickly; bound hangs on every platform.
+TEST_COMMAND_TIMEOUT_SECONDS = 30
+
+
 PACKAGE_ROOT = next(path for path in Path(__file__).resolve().parents if (path / "install.py").is_file())
 SCRIPTS = PACKAGE_ROOT / ".github" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -116,6 +120,7 @@ class ReleaseScriptTests(unittest.TestCase):
             text=True,
             capture_output=True,
             check=False,
+            timeout=TEST_COMMAND_TIMEOUT_SECONDS,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -166,6 +171,7 @@ class ReleaseScriptTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
                 check=True,
+                timeout=TEST_COMMAND_TIMEOUT_SECONDS,
             ).stdout.strip()
             gate_output = root / "github-output"
 
@@ -185,6 +191,7 @@ class ReleaseScriptTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
                 check=False,
+                timeout=TEST_COMMAND_TIMEOUT_SECONDS,
             )
             emitted_output = gate_output.read_text(encoding="utf-8")
 
@@ -238,6 +245,7 @@ class ReleaseScriptTests(unittest.TestCase):
                 text=True,
                 capture_output=True,
                 check=False,
+                timeout=TEST_COMMAND_TIMEOUT_SECONDS,
             )
 
         self.assertNotEqual(result.returncode, 0)
@@ -251,6 +259,7 @@ class ReleaseScriptTests(unittest.TestCase):
             text=True,
             capture_output=True,
             check=False,
+            timeout=TEST_COMMAND_TIMEOUT_SECONDS,
         )
         if result.returncode:
             raise AssertionError(f"git {' '.join(args)} failed: {result.stderr}")
@@ -261,6 +270,7 @@ class ReleaseScriptTests(unittest.TestCase):
             text=True,
             capture_output=True,
             check=False,
+            timeout=TEST_COMMAND_TIMEOUT_SECONDS,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("public-registry-inquiry-plan", result.stdout)

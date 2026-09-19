@@ -10,12 +10,14 @@ base: develop
 
 ## Completion evidence
 
-The validated immutable upstream kit is pinned in
-`release/sc-publish-pin.toml` at
-`006092a305bb03bd483d79dd6b5d51bda1e545e4`. Its installer reports
-`Publish-kit assets are in sync.` on the repeat dry-run. The installed suite
-passes `157 passed, 11 skipped, 0 failed`; the retained evidence and exact
-command are in `docs/plans/phase-c/evidence/c1-installed-suite-006092a.txt`.
+The superseded C.1 qualification kit was `006092a305bb03bd483d79dd6b5d51bda1e545e4`;
+the current validated immutable kit is pinned in `release/sc-publish-pin.toml`
+at `7b899fea2325b6bda55a5d061f2c507366246974`. Its installer reports
+`Publish-kit assets are in sync.` on the repeat dry-run. The historical C.1
+suite passed `157 passed, 11 skipped, 0 failed`; that retained evidence and
+exact command are in `docs/plans/phase-c/evidence/c1-installed-suite-006092a.txt`.
+The current 7b899fea regeneration passes `168 passed, 11 skipped`; see
+`docs/plans/phase-c/evidence/c2-sc-publish-7b899fea.txt`.
 Manifest, dependency-order, action-floor, docs, rustdoc, semantic-contract,
 and locked workspace-test gates pass. No publication, tag, or release dispatch
 was performed.
@@ -116,8 +118,9 @@ completion leaves the sprint open.
      description since this sprint cannot edit `../sc-publish`) an npm
      channel in the shared `publish-channel-contracts.toml.j2`, modeled on
      the existing `pypi` channel's shape: `stage = "post_release"`, a
-     dedicated `npm-publisher` agent, `environment_secrets` (for example an
-     `npm` environment holding `NPM_TOKEN`), `public_registry_checks = true`
+     dedicated `npm-publisher` agent, and `environment_secrets = [{ environment =
+     "npm", name = "NPM_TOKEN" }]` (the GitHub `npm` environment must hold
+     that secret), `public_registry_checks = true`
      against the npm registry API, and a `.github/workflows/npm-publish.yml`
      that publishes already-built artifacts from an immutable GitHub
      Release, matching `pypi-publish.yml`'s pattern.
@@ -142,6 +145,8 @@ completion leaves the sprint open.
    | `.claude/agents/publisher.md`'s dangling reference to a nonexistent `scripts/release_gate.sh` | Resolved by the same-path overwrite in the row above: the installed content is the shared package's `publisher.md`, which contains no `scripts/release_gate.sh` reference. `publisher.md` itself is never deleted — only its content changes. The **authoritative** byte-parity gate is `install.py`'s own `--dry-run` (deliverable 5: it reports "Publish-kit assets are in sync." only when every installer-managed path, `publisher.md` included, already matches the pinned revision's copy — this is the installer's own diff logic, not a re-derived one). An independent manual spot-check, if needed, must use an explicit absolute path to the reviewed sibling checkout — never a bare `../sc-publish`-style relative path or a `plugins/sc-publish/...` path assumed nested inside this consumer repo, since neither resolves correctly from an arbitrary nested worktree: `diff .claude/agents/publisher.md "$SC_PUBLISH_CHECKOUT/plugins/sc-publish/.claude/agents/publisher.md"`, where `$SC_PUBLISH_CHECKOUT` is set to the absolute path of the sibling checkout pinned at the exact reviewed revision (deliverable 1) before running the command. This is kept distinct from the **absence check** for the two genuinely-deleted paths above (`test ! -e scripts/release_artifacts.py`, `test ! -e scripts/ci/validate_publish_order.sh`). |
    | `release/RELEASE-NOTES-TEMPLATE.md`, `release/release-inventory.json` | **Retain**, repository-owned — the shared package has no equivalent concept and does not touch these paths. Reconcile `release-inventory.json`'s artifact list against the newly rendered `release/publish-artifacts.toml` before this sprint closes. |
    | `docs/release-readiness-checklist.md` and other independent build/qualification checks not specific to the publish mechanism | **Retain.** |
+   | `release/bindings-artifacts.toml`, `release/bp2-publish-artifacts.toml`, `release/public-api-policy.json`, `release/python-platform-policy.json`, `release/runtime-level-qualification.toml` | **Retain**, Phase B companion qualification/policy manifests; reconcile their current status fields independently and do not merge them into the shared publish manifest. |
+   | `scripts/release_bindings_artifacts.py`, `scripts/ci/tests/test_release_bindings_artifacts.py`, `scripts/ci/tests/test_bindings_evidence.py`, `scripts/ci/_log_release_adaptations.py` | **Retain**, Phase B binding/evidence tooling outside shared publish-channel plumbing; keep its tests and references intact. |
 5. **Install and diff-verify.** Run
    `install.py --dry-run --input install.json .` first and review every
    printed diff; then run the real install; then re-run `--dry-run` and
@@ -194,8 +199,9 @@ completion leaves the sprint open.
   passes for all ten crates (every publishable workspace crate present,
   including `sc-observability-tauri` via its explicit `bindings/tauri/Cargo.toml`
   path and `sc-observability-py`'s crates.io entry).
-- `python3 .github/scripts/release_artifacts.py validate-preflight-checks --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml`
-  passes (chained crates use `"locked"`).
+- The installed CLI has no `validate-preflight-checks` subcommand; the
+  equivalent manifest, publish-order, version-lockstep, and rendered workflow
+  checks pass as recorded by C.2 evidence.
 - `python3 .github/scripts/release_artifacts.py validate-publish-order --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml`
   passes (dependency-graph-correct publish order for all ten crates).
 - `bash scripts/ci/validate_publish_workflow_action_versions.sh` passes

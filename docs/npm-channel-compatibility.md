@@ -126,3 +126,36 @@ Full source: **166 passed, 10 skipped**; generic installed: **162 passed,
 14 skipped**; isolated actual consumer: **165 passed, 11 skipped**. The existing
 sc-compose and atm-core compatibility comparison remains unchanged. No
 credential convention, registry write, tag, or live dispatch is part of this fix.
+
+## PHC-QA-013: bounded subprocess tests
+
+An AST audit found all 26 `subprocess.run` calls in
+`test_release_artifacts.py` and all six in `test_publish_kit_scripts.py` lacked
+a timeout. Each now passes an explicit 30-second timeout. These commands run
+local fixture Git operations, CLI helpers, shell checks, and mocked registry
+flows; they do not perform real builds or publication. Python's native
+`TimeoutExpired` identifies the command and deadline and kills/reaps the direct
+child. This is not a portable descendant-process-tree termination guarantee.
+
+The upstream CI job also has an explicit 15-minute aggregate deadline. Previously
+it inherited GitHub's [360-minute default job limit](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idtimeout-minutes);
+local runs had no command deadline. Consumer-owned CI limits remain caller-owned.
+
+Three regressions substitute a real sleeping child into the artifact CLI,
+artifact Git, and kit Git helpers, reduce the deadline to 0.2 seconds, and verify
+the reported timeout/command and that the child has been reaped. They preserve
+the helper's options and fail immediately if its timeout is missing.
+
+Validation (ambient `RELEASE_TAG` removed, Bash 5.3): full source **169 passed,
+10 skipped**; generic installed **165 passed, 14 skipped**; isolated
+sc-observability installed **168 passed, 11 skipped**. The two changed test files
+pass **85 passed, 10 skipped**. Peer compatibility checks against the pinned
+develop baseline retain identical sc-compose and atm-core manifests, contracts,
+matrices, plans, and assets. No release behavior or authentication was changed.
+
+Reproduce the focused and full runs with the renderer environment provisioned:
+
+```sh
+python -m pytest plugins/sc-publish/.github/scripts/tests/test_release_artifacts.py plugins/sc-publish/.github/scripts/tests/test_publish_kit_scripts.py -q
+python -m pytest plugins/sc-publish/.github/scripts/tests -q
+```

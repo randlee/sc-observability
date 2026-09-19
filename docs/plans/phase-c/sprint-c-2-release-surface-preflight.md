@@ -118,15 +118,17 @@ candidate `1.4.0` is not published; no write or credentialed command was run.
 
 ### Current closure state
 
-This sprint remains open pending the npm environment configuration, Windows
-real-IPC completion, and lead completeness PASS. These are external/terminal
+This sprint remains open pending the npm environment configuration and lead
+completeness PASS. Windows real-IPC qualification is complete: the actual
+three-platform run and all real-ipc-artifacts jobs passed. These are external/terminal
 state, not accepted gaps; the task must not be closed until they are resolved
 and lead completeness PASS is received. Upstream PR95 review is tracked
 separately: the C.1 evidence retains historical pin
 `006092a305bb03bd483d79dd6b5d51bda1e545e4`; the active C.2 pin is the
 independently approved npm-metadata correction
-`b2f18cf56aa4488376fdef6b2cab30e382f32dbd`, with exact-head upstream CI
-`35410283861` passed. This C.2 evidence does not claim end-to-end
+`7b899fea2325b6bda55a5d061f2c507366246974`, with its follow-up exact-head
+upstream CI `35413991243` passed. The prior independent approval run
+`35410283861` targeted the superseded b2f18cf head. This C.2 evidence does not claim end-to-end
 publisher-agent readiness or authorized publication.
 
 ## Goal and dependencies

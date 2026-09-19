@@ -16,6 +16,10 @@ from threading import Thread
 import pytest
 
 
+# Local fixture commands should finish quickly; bound hangs on every platform.
+TEST_COMMAND_TIMEOUT_SECONDS = 30
+
+
 def write_repo_fixture(
     tmp_path: Path,
     *,
@@ -226,6 +230,7 @@ def run_validate_manifest(
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
 
@@ -300,6 +305,7 @@ def run_release_archive_packager(
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
     assert output.read_text(encoding="utf-8").startswith("ARCHIVE=fixture_1.5.0_")
     return result
@@ -398,6 +404,7 @@ def run_release_preflight_registry_step(
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
 
@@ -489,6 +496,7 @@ def run_release_gate_readiness(
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
 
@@ -566,6 +574,7 @@ def run_release_tag_step(
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
 
@@ -577,6 +586,7 @@ def git_fixture_command(repository: Path, *arguments: str) -> str:
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
     assert result.returncode == 0, result.stderr
     return result.stdout.strip()
@@ -597,8 +607,18 @@ def write_real_release_tag_fixture(tmp_path: Path, scenario: str) -> Path:
     tmp_path.mkdir()
     remote = tmp_path / "origin.git"
     repository = tmp_path / "repository"
-    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True)
-    subprocess.run(["git", "init", str(repository)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "init", "--bare", str(remote)],
+        check=True,
+        capture_output=True,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
+    )
+    subprocess.run(
+        ["git", "init", str(repository)],
+        check=True,
+        capture_output=True,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
+    )
     git_fixture_command(repository, "config", "user.name", "Release Test")
     git_fixture_command(repository, "config", "user.email", "release-test@example.invalid")
     git_fixture_command(repository, "checkout", "-b", "main")
@@ -647,6 +667,7 @@ def run_release_tag_step_in_git_fixture(repository: Path) -> subprocess.Complete
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
 
@@ -688,6 +709,7 @@ def run_release_preflight_channel_results_shell(
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
 
@@ -756,6 +778,7 @@ def run_fixture_command(
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
 
@@ -1268,6 +1291,7 @@ release_track = "prerelease"
             text=True,
             capture_output=True,
             check=False,
+            timeout=TEST_COMMAND_TIMEOUT_SECONDS,
         )
         assert result.returncode == 0, result.stderr
         return json.loads(result.stdout)
@@ -1328,6 +1352,7 @@ def test_homebrew_legacy_binary_normalizes_to_a_single_binary_list(tmp_path: Pat
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
     assert result.returncode == 0, result.stderr
@@ -1358,6 +1383,7 @@ def test_validate_manifest_rejects_unknown_homebrew_formula_binary(tmp_path: Pat
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
     assert result.returncode != 0
@@ -1388,6 +1414,7 @@ def test_validate_manifest_rejects_unknown_channel_target(tmp_path: Path) -> Non
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
     assert result.returncode != 0
     assert "references unknown release target" in result.stderr
@@ -1415,6 +1442,7 @@ def test_validate_manifest_requires_manifest_driven_scoop_channel_inputs(tmp_pat
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
     assert result.returncode != 0
@@ -1445,6 +1473,7 @@ def test_validate_manifest_rejects_unknown_renderer_target(tmp_path: Path) -> No
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
     assert result.returncode != 0
@@ -1474,6 +1503,7 @@ def test_validate_manifest_requires_explicit_homebrew_bundle_destination(tmp_pat
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
     assert result.returncode != 0
@@ -1507,6 +1537,7 @@ def test_verify_python_release_assets_accepts_manifest_declared_wheels_and_sdist
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
     assert result.returncode == 0, result.stderr
@@ -1543,6 +1574,7 @@ def run_manifest_command(*args: str) -> subprocess.CompletedProcess[str]:
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
 
@@ -2090,6 +2122,7 @@ def test_registry_status_cli_uses_the_fail_closed_shared_registry_probe(
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
     assert result.returncode == 0, result.stderr
@@ -2541,7 +2574,8 @@ def render_release_template(
 def assert_homebrew_formula_install_executes(formula: str) -> None:
     """Parse and execute a rendered formula against the Homebrew path helper shape."""
     ruby = subprocess.run(
-        ["ruby", "-c"], input=formula, text=True, capture_output=True, check=False
+        ["ruby", "-c"], input=formula, text=True, capture_output=True, check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
     assert ruby.returncode == 0, ruby.stderr
 
@@ -2588,6 +2622,7 @@ ScCompose.new.install
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
     assert execution.returncode == 0, execution.stderr
 
@@ -3129,6 +3164,7 @@ def run_sync_readme_version(
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
 
@@ -3151,6 +3187,7 @@ def run_verify_readme_version(
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
 
@@ -3250,6 +3287,7 @@ def run_verify_version_lockstep(workspace: Path, manifest: Path) -> subprocess.C
         text=True,
         capture_output=True,
         check=False,
+        timeout=TEST_COMMAND_TIMEOUT_SECONDS,
     )
 
 
@@ -3538,3 +3576,40 @@ def test_package_only_release_has_no_binary_asset_expectations(tmp_path):
     result = run_fixture_command(tmp_path, 'release-asset-patterns', manifest=manifest)
     assert result.returncode == 0
     assert result.stdout == ''
+
+
+@pytest.mark.parametrize("helper", ["artifact_cli", "artifact_git", "script_git"])
+def test_fixture_command_timeout_terminates_stalled_child(tmp_path, monkeypatch, helper):
+    """Exercise the helpers' deadline against a real sleeping child process."""
+    import test_publish_kit_scripts as kit_tests
+
+    real_run = subprocess.run
+    real_popen = subprocess.Popen
+    children = []
+    deadline = 0.2
+    monkeypatch.setattr(sys.modules[__name__], "TEST_COMMAND_TIMEOUT_SECONDS", deadline)
+    monkeypatch.setattr(kit_tests, "TEST_COMMAND_TIMEOUT_SECONDS", deadline)
+
+    def track_child(*args, **kwargs):
+        child = real_popen(*args, **kwargs)
+        children.append(child)
+        return child
+
+    def run_stalled_child(command, **kwargs):
+        # Fail promptly if a helper loses its deadline, then exercise real cleanup.
+        assert kwargs["timeout"] == deadline
+        return real_run([sys.executable, "-c", "import time; time.sleep(60)"], **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", track_child)
+    monkeypatch.setattr(subprocess, "run", run_stalled_child)
+    with pytest.raises(subprocess.TimeoutExpired) as caught:
+        if helper == "artifact_cli":
+            run_fixture_command(tmp_path, "--help", manifest=tmp_path / "unused.toml")
+        elif helper == "artifact_git":
+            git_fixture_command(tmp_path, "status")
+        else:
+            kit_tests.ReleaseScriptTests._git(tmp_path, "status")
+    assert caught.value.timeout == deadline
+    assert "time.sleep(60)" in str(caught.value)
+    assert len(children) == 1
+    assert children[0].poll() is not None, "timed-out child must be killed and reaped"
