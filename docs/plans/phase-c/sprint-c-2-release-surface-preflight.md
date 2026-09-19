@@ -1,6 +1,6 @@
 ---
 id: C.2
-status: in_progress
+status: complete
 branch: fix/phase-c-2-release-surface-preflight
 worktree: /Users/randlee/github/sc-observability-worktrees/fix/phase-c-2-release-surface-preflight
 base: fix/phase-c-1-shared-pipeline-migration
@@ -101,10 +101,11 @@ workspace inheritance (same path/features and existing version 1.4.0); it was
 not solely a documentation change. Exact adaptation proofs preserve Phase B
 provenance. No upstream sc-lint PR160 change is adopted here.
 
-Sprint status remains `in_progress`: explicit
-**lead (aobs) completeness PASS** remains pending. This document invents no lead
-or owner signoff. C.1's merge-before-C.2-merge requirement remains separate;
-no merge is requested by this evidence update.
+Lead **aobs records completeness PASS on 2026-09-19** for all six deliverables
+and acceptance evidence at `96b34037ad4c49ace331b1fb0d8eea7db86edec2`,
+independently verified by quality-mgr in the PR191 final-evidence round.
+Implementation and nonpublishing qualification are complete. C.1 must still
+merge before C.2; this acceptance authorizes neither merging nor publication.
 
 The owner explicitly authorized one exception to the original no-tag condition:
 annotated `release-candidate-v1.4.0`, object
@@ -359,10 +360,11 @@ gap that lets the sprint close anyway.
      test to argument/exit-code handling only, matching the PyPI/crates.io/
      GitHub Release cases above, and update this deliverable to match the
      contract actually adopted.
-   - All external executables are mocked via `subprocess.run`/`Popen`
-     monkeypatching, plus a `socket.socket` monkeypatch that raises on any
-     real connection attempt in every test case, guaranteeing zero network
-     writes regardless of scenario.
+   - The six orchestration retry tests mock external executables via
+     `subprocess.run`/`Popen` and block real socket connections. The five
+     staging-planning/archive-inspection tests exercise in-memory logic
+     without subprocess or socket calls; they do not install a socket patch.
+     Together the harness performs no real network writes.
    Run this harness in this sprint's own validation; it is new tooling this
    sprint adds, since none exists upstream or in this repo to reuse as-is.
 6. **Post-publish verification design.** Because this sprint does not

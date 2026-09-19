@@ -432,16 +432,18 @@ Python wheels/sdist, the npm client, and applicable native/Tauri artifacts)
 through that shared pipeline. It is planning-and-preflight scope only: it does
 not authorize publication, tag creation, or BTIT repository integration tests,
 and its planning branch does not execute until Phase B merges into `develop`.
-The active C.2 preflight worktree records its deterministic inventory and
-nonpublishing evidence in
-[`plans/phase-c/sprint-c-2-release-surface-preflight.md`](plans/phase-c/sprint-c-2-release-surface-preflight.md);
-its closure remains in progress until actual post-merge Python qualification,
-required environment-scope checks, and terminal native qualification checks
-pass.
-The reviewed shared package npm correction is now adopted at the active pin;
-the remaining npm environment scope is still an owner-controlled prerequisite,
-not a repository-local publisher fork or an accepted regression tracked only by
-a follow-up ticket. See `docs/requirements.md` §11 and
+C.2 implementation and nonpublishing qualification are complete, with lead
+completeness PASS recorded on 2026-09-19 in
+[`final-c2-audit.md`](plans/phase-c/evidence/final-c2-audit.md).
+Current Python qualification passed all 33 jobs; native qualification, package
+completeness, required environment scopes, and actual release preflight passed.
+The final documentation correction awaits independent QA registry closure.
+The shared installer and immutable sc-lint source pins are adopted; npm scope
+is configured. The owner separately authorized only the annotated candidate tag
+recorded in the audit. Phase C integration/ordered merges and publication remain
+separate from completed sprint implementation; nothing here authorizes release
+publication or BTIT post-publication integration tests. See
+`docs/requirements.md` §11 and
 [ADR-016](architecture.md#adr-016-shared-publishing-pipeline-adoption).
 
 ## Rule

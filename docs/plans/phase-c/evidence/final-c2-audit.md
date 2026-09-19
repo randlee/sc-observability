@@ -1,4 +1,4 @@
-# Final C.2 acceptance audit — no inferred signoff
+# Final C.2 acceptance audit — lead completeness PASS
 
 Audited production source: frozen PR190
 `09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8`. This child edits only documentation
@@ -18,12 +18,15 @@ by [quality-mgr](https://github.com/randlee/sc-observability/pull/190#issuecomme
 | 5 retries | PASS | `retry-tests.txt`: 11 staged-package/retry tests. Tests mock subprocesses and forbid sockets; they establish orchestration argument/exit/existence decisions, not internals of third-party clients. |
 | 6 later read-only acceptance | Specified; no publish | `npm view @sc-observability/client versions`; per-crate crates.io version API or `cargo search <crate> --limit 1`; `python3 -m pip index versions sc-observability`. Registry absence before release is expected and is not success after release. Earlier scoped QA accepted the command probes; no write credentials are required. |
 
-**Required package/platform evidence is now PASS; lead acceptance remains pending.**
-The current Python aggregate and downloaded artifacts have been verified.
-Root/aobs must still explicitly review the full audit and record lead completeness.
-No lead/owner signoff is invented. No separate owner signoff is invented as a sprint
-closure requirement. The existing C.1-before-C.2 merge dependency remains a
-merge/completion condition, not permission for this child to merge anything.
+**Lead completeness PASS — aobs, 2026-09-19.** I accept all six deliverables
+and their acceptance evidence at `96b34037ad4c49ace331b1fb0d8eea7db86edec2`.
+I verified the current Python inventory SHA256, all 33 successful jobs, and
+zero non-documentation differences from qualified source `09e0ce3`; the
+nine-root/Tauri/npm evidence, scope checks, retry harness and actual preflight
+are recorded below. Quality-mgr independently verified 6/6 deliverables and
+all 18 diagnostic dispositions in its PR191 final-evidence round.
+This is implementation/preflight acceptance, not authorization to merge or
+publish. Ordered C.1-before-C.2 merging remains a separate condition.
 
 ## Actual preflight and CI scope
 
@@ -154,10 +157,9 @@ PR160 adoption/review is part of this work. Architecture rules: docs/architectur
 section 6; docs/requirements.md OBS-024 and PHB-011/013; the cited boundary files.
 The structured record links pinned upstream policy/analysis and relevant tests.
 
-## Remaining evidence before closure
+## Administrative closeout
 
-- Explicit root/aobs lead acceptance of all six deliverables and ACs; until then
-  frontmatter stays in_progress. The documented C.1 merge prerequisite also
-  remains in force for sprint completion/mergeability.
-- Scoped independent QA of this evidence layer. No additional upstream sc-lint
-  review or owner-signoff requirement is invented.
+Lead completeness is recorded above; C.2 frontmatter is complete. Quality-mgr
+owns final registry closure and verification of this documentation correction.
+No upstream sc-lint review, merge, publication, or additional owner signoff is
+required to record this implementation/preflight acceptance.
