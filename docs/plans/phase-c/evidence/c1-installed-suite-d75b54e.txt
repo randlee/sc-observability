@@ -1,0 +1,30 @@
+C.1 installed-suite evidence
+============================
+
+Consumer commit: d75b54e10b7af8e7899aa3891c9c901ac6949140
+Upstream publish-kit pin: 61568d813550ac7faab0fd9c887c731d975d1264
+Python environment: /private/tmp/scpub-venv.Jz9AMi/bin/python
+Dependencies: pytest 8.3.5, PyYAML 6.0.3, sc-compose 1.5.0
+
+Command:
+
+    /private/tmp/scpub-venv.Jz9AMi/bin/python -m pytest -q .github/scripts/tests
+
+Result:
+
+    154 passed, 11 skipped, 2 failed
+
+Failures (upstream test-harness findings, routed to the publish-kit owner):
+
+1. ``test_node24_runtime_floors`` raises ``KeyError: configure-pages`` because
+   the upstream floor map omits the retained ``actions/configure-pages`` action.
+   All recognized retained action pins are at the current floor after
+   d75b54e.
+2. ``test_python_package_metadata_uses_local_readme_for_sdist`` opens the
+   nonexistent ``bindings/python/pyproject.toml``. This consumer's declared
+   Python manifest is the nested
+   ``bindings/python/sc-observability-py/pyproject.toml`` in ``install.json``.
+
+The failures are not waived. They remain open upstream corrections. The
+immutable installer repeat check independently reports ``Publish-kit assets
+are in sync.``; no publication, tag, or release dispatch was performed.
