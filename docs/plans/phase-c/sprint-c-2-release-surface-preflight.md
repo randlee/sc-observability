@@ -12,7 +12,7 @@ base: fix/phase-c-1-shared-pipeline-migration
 
 The C.1 parent was merge-forwarded before this round and is present through
 `7797606105055f67e937203eaa3a4b5adf41e3dd`; the current C.2 evidence source is
-`8343def7b5355160a250acd45f3b52643bc5da43`. No publish, upload, tag, release
+`debd74e3b6a44c59dd15696229433306b6619d59`. No publish, upload, tag, release
 dispatch, or BTIT test has been run.
 
 ### 1. Deterministic inventory (PASS)
@@ -41,7 +41,7 @@ npm pack --dry-run (bindings/typescript)
   @sc-observability/client@1.4.0; four files: README.md, package.json, src/generated/index.ts, src/generated/package.json
 ```
 
-### 2. Package completeness (root/Tauri PASS; Python pending actual run)
+### 2. Package completeness (root/Tauri/Python PASS)
 
 The registry API returned HTTP 404 for all nine root crates at `1.4.0`, so the
 metadata-derived unpublished closure is all nine root crates. The immutable
@@ -64,10 +64,15 @@ runs `cargo package --locked --manifest-path ...`; the repository lockfile is
 not modified. The Python CLI is confirmed to be exactly the three subcommands
 `build`, `cell`, and `aggregate`. The actual post-merge five-platform workflow
 was dispatched non-publishing at run `35408912984` for source SHA
-`340f8aae522c9cd10296748aa6d82c764bc196e5`; the direct qualified-path diff
-from that SHA to the current `8343def7` is empty, so this run is equivalent
-for every Python-qualified path; its final aggregate result is
-required before this deliverable can become PASS.
+`340f8aae522c9cd10296748aa6d82c764bc196e5`; it completed 33/33 jobs green,
+including five production builds and all 25 installed-runtime cells. The
+downloaded `b4a-production-inventory/production-artifacts.json` contains one
+sdist and five production ABI wheels and has SHA256
+`d986bf059561d2115cd6babb4135444f60d7ae7aa2f41edd838dfa6d307b0ef1`.
+The aggregate step writes this same digest to its `inventory_sha256` output.
+The direct qualified-path diff from that SHA to current `debd74e` is empty,
+so this run is equivalent for every Python-qualified path; the intervening
+changes only repair shared CI manifest-validation paths.
 
 ### 3. Secret scope verification (BLOCKED externally, names only)
 
@@ -79,14 +84,15 @@ only `crates-io` and `github-pages`; all three required environment lookups
 returned HTTP 404. No secret value was accessed. This remains an external
 owner/configuration blocker and is not being treated as PASS.
 
-### 4. Qualification provenance (Python pending; Tauri PASS)
+### 4. Qualification provenance (Python/Tauri PASS)
 
 The retained successful B.4a run is `35309806941`, source
 `7c981226477266f3c09adce4d7fac910be3f0afe`, conclusion `success`. A direct
 diff shows the B.4a workflow changed between that SHA and this C.2 source, so
 retained evidence is not equivalent and is not relabeled. The dispatched run
-`35408912984` is the required actual-SHA replacement. The Tauri staged package
-proof above is local nonpublishing evidence for the standalone artifact.
+`35408912984` is the required actual-SHA replacement and its aggregate
+artifact is recorded above. The Tauri staged package proof above is local
+nonpublishing evidence for the standalone artifact.
 
 ### 5. Recovery/idempotency (PASS)
 
@@ -108,10 +114,12 @@ candidate `1.4.0` is not published; no write or credentialed command was run.
 
 ### Current closure state
 
-This sprint remains open pending the actual-SHA B.4a aggregate result and the
-owner-controlled environment configuration. The two blockers are recorded as
-external state, not accepted gaps; the task must not be closed until both are
-resolved and lead completeness PASS is received.
+This sprint remains open pending the owner-controlled environment
+configuration and lead completeness PASS. The environment blocker is external
+state, not an accepted gap; the task must not be closed until it is resolved
+and lead completeness PASS is received. Upstream PR95 review is tracked
+separately: this C.2 evidence does not claim end-to-end publisher-agent
+readiness or upstream final readiness.
 
 ## Goal and dependencies
 
