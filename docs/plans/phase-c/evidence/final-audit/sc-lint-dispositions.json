@@ -1,0 +1,676 @@
+{
+  "schema_version": 1,
+  "review_status": "developer evidence for lead/quality review; no invented approval",
+  "consumer_source": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+  "tool_source": "ba2d9bf622c1604e3f017c728040906b90e71bce",
+  "tool_status": "fail",
+  "raw_sha256": "70f69b2d546e2ba0c612992e4f386fa3ed14cff28f0c00f43eee9f6789dfe2a8",
+  "historical_counts": {
+    "SCB-MANIFEST-001": 22,
+    "SCB-MANIFEST-002": 1,
+    "SCB-CYCLE-001": 6,
+    "SCB-CYCLE-002": 2,
+    "SCB-CYCLE-003": 10
+  },
+  "rules": [
+    "docs/architecture.md:693",
+    "docs/architecture.md:718",
+    "docs/architecture.md:728",
+    "docs/requirements.md:305",
+    "docs/requirements.md:475",
+    "boundaries/sc-observability-binding-runtime/runtime.toml:8",
+    "boundaries/sc-observe/observe.toml:8",
+    "https://github.com/randlee/sc-lint/blob/ba2d9bf622c1604e3f017c728040906b90e71bce/docs/sc-lint/mvp.md#L258",
+    "https://github.com/randlee/sc-lint/blob/ba2d9bf622c1604e3f017c728040906b90e71bce/crates/sc-lint-boundary/src/analysis.rs#L7"
+  ],
+  "fixed_manifest_findings": [
+    {
+      "kind": "package_workspace_field_required",
+      "message": "bindings/python/sc-observability-py/Cargo.toml: set [package].authors.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "bindings/python/sc-observability-py/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "bindings/python/sc-observability-py/Cargo.toml: set [package].homepage.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "bindings/python/sc-observability-py/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "bindings/python/sc-observability-py/Cargo.toml: set [package].repository.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "bindings/python/sc-observability-py/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-binding-runtime/Cargo.toml: set [package].authors.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-binding-runtime/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-binding-runtime/Cargo.toml: set [package].homepage.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-binding-runtime/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-binding-runtime/Cargo.toml: set [package].repository.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-binding-runtime/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-dto/Cargo.toml: set [package].authors.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-dto/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-dto/Cargo.toml: set [package].homepage.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-dto/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-dto/Cargo.toml: set [package].repository.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-dto/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-log-consumer-check/Cargo.toml: set [package].authors.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-log-consumer-check/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-log-consumer-check/Cargo.toml: set [package].homepage.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-log-consumer-check/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-log-macros/Cargo.toml: set [package].authors.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-log-macros/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-log-macros/Cargo.toml: set [package].homepage.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-log-macros/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-log/Cargo.toml: set [package].authors.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-log/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-log/Cargo.toml: set [package].homepage.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-log/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-otlp/Cargo.toml: set [package].authors.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-otlp/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability-types/Cargo.toml: set [package].authors.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-types/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observability/Cargo.toml: set [package].authors.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "crates/sc-observe/Cargo.toml: set [package].authors.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observe/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "examples/rust-python-logging/Cargo.toml: set [package].authors.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "examples/rust-python-logging/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "examples/rust-python-logging/Cargo.toml: set [package].homepage.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "examples/rust-python-logging/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "package_workspace_field_required",
+      "message": "examples/rust-python-logging/Cargo.toml: set [package].repository.workspace = true",
+      "node_ids": [],
+      "owner_ids": [
+        "examples/rust-python-logging/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-001"
+    },
+    {
+      "kind": "internal_path_dependency_version_mismatch",
+      "message": "crates/sc-observability-log-consumer-check/Cargo.toml [dependencies.sc-observability-log]: path dependency version must match target crate version \"1.4.0\"",
+      "node_ids": [],
+      "owner_ids": [
+        "crates/sc-observability-log-consumer-check/Cargo.toml"
+      ],
+      "rule_id": "SCB-MANIFEST-002"
+    }
+  ],
+  "remaining_findings": [
+    {
+      "kind": "multi_owner_architectural_cycle",
+      "message": "architectural cycle across owners: crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::BackendPermit, crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Dispatcher, crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Job, crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Payload",
+      "node_ids": [
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::BackendPermit",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::BackendPermit::field::0",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Dispatcher",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Dispatcher::field::queue",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Dispatcher::new",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Dispatcher::reserve",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Job",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Job::field::dispatcher",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Job::field::payload",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Payload",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Payload::field::_backend"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::BackendPermit",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Dispatcher",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Job",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::callback::Payload"
+      ],
+      "rule_id": "SCB-CYCLE-001",
+      "triage_id": "PHC-LINT-01",
+      "classification": "bounded callback retention",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "No forbidden crate edge or demonstrated leak. A queued payload has a transient strong Dispatcher->Job->Payload->BackendPermit->Dispatcher cycle. Worker pop/take or cancellation removes it; this is not justified merely by the weak Job.dispatcher field. Reservation is capped at128 and callbacks run outside queue/payload locks.",
+      "source_citations": [
+        "crates/sc-observability-binding-runtime/src/callback.rs:8",
+        "crates/sc-observability-binding-runtime/src/callback.rs:63",
+        "crates/sc-observability-binding-runtime/src/callback.rs:83",
+        "crates/sc-observability-binding-runtime/src/callback.rs:133",
+        "crates/sc-observability-binding-runtime/src/tests.rs:343",
+        "crates/sc-observability-binding-runtime/src/tests.rs:383",
+        "crates/sc-observability-binding-runtime/src/tests.rs:750"
+      ],
+      "scope": "generic intra-crate type-owner SCC, not a declared cross-crate boundary violation"
+    },
+    {
+      "kind": "multi_owner_architectural_cycle",
+      "message": "architectural cycle across owners: crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Admission, crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Coordinator",
+      "node_ids": [
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Admission",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Admission::field::0",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Coordinator",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Coordinator::create",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Coordinator::enter"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Admission",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::coordinator::Coordinator"
+      ],
+      "rule_id": "SCB-CYCLE-001",
+      "triage_id": "PHC-LINT-02",
+      "classification": "borrowed admission guard",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Coordinator creates Admission borrowing &Coordinator. Drop decrements admission; the coordinator does not retain the guard. Constructor/borrow references do not imply recursive admission or mutual ownership.",
+      "source_citations": [
+        "crates/sc-observability-binding-runtime/src/coordinator.rs:50",
+        "crates/sc-observability-binding-runtime/src/coordinator.rs:167",
+        "crates/sc-observability-binding-runtime/src/tests.rs:553"
+      ],
+      "scope": "generic intra-crate type-owner SCC, not a declared cross-crate boundary violation"
+    },
+    {
+      "kind": "multi_owner_architectural_cycle",
+      "message": "architectural cycle across owners: crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Operation, crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Registration",
+      "node_ids": [
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Operation",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Operation::clone",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Operation::new",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Operation::register",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Registration",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Registration::field::operation"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Operation",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::operation::Registration"
+      ],
+      "rule_id": "SCB-CYCLE-001",
+      "triage_id": "PHC-LINT-03",
+      "classification": "observer registration guard",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Registration owns an Operation handle; Operation stores weak waiter signals, not Registration. Drop removes observer and timer entries and releases the permit. Tests check observer/timer bounds and return to zero.",
+      "source_citations": [
+        "crates/sc-observability-binding-runtime/src/operation.rs:32",
+        "crates/sc-observability-binding-runtime/src/operation.rs:254",
+        "crates/sc-observability-binding-runtime/src/tests.rs:288"
+      ],
+      "scope": "generic intra-crate type-owner SCC, not a declared cross-crate boundary violation"
+    },
+    {
+      "kind": "multi_owner_architectural_cycle",
+      "message": "architectural cycle across owners: crate::sc-observability-log::sc_observability_log::module::crate::context::CallSpan, crate::sc-observability-log::sc_observability_log::module::crate::context::Entered",
+      "node_ids": [
+        "crate::sc-observability-log::sc_observability_log::module::crate::context::CallSpan",
+        "crate::sc-observability-log::sc_observability_log::module::crate::context::CallSpan::enter",
+        "crate::sc-observability-log::sc_observability_log::module::crate::context::CallSpan::new",
+        "crate::sc-observability-log::sc_observability_log::module::crate::context::Entered",
+        "crate::sc-observability-log::sc_observability_log::module::crate::context::Entered::field::span"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-log::sc_observability_log::module::crate::context::CallSpan",
+        "crate::sc-observability-log::sc_observability_log::module::crate::context::Entered"
+      ],
+      "rule_id": "SCB-CYCLE-001",
+      "triage_id": "PHC-LINT-04",
+      "classification": "borrowed context guard",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "CallSpan.enter returns Entered borrowing &CallSpan. Drop removes only its own thread-local entry, including during unwinding. This is the explicitly documented context contract.",
+      "source_citations": [
+        "crates/sc-observability-log/src/context.rs:4",
+        "crates/sc-observability-log/src/context.rs:338",
+        "crates/sc-observability-log/src/context.rs:427",
+        "crates/sc-observability-log/src/context.rs:455",
+        "crates/sc-observability-log/src/context.rs:482"
+      ],
+      "scope": "generic intra-crate type-owner SCC, not a declared cross-crate boundary violation"
+    },
+    {
+      "kind": "multi_owner_architectural_cycle",
+      "message": "architectural cycle across owners: crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelayReleaseGuard, crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelaySignal",
+      "node_ids": [
+        "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelayReleaseGuard",
+        "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelayReleaseGuard::field::0",
+        "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelaySignal",
+        "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelaySignal::release_on_drop",
+        "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelaySignal::wait_for_state"
+      ],
+      "owner_ids": [
+        "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelayReleaseGuard",
+        "crate::sc-observability::sc_observability::module::crate::maintenance::TestPassDelaySignal"
+      ],
+      "rule_id": "SCB-CYCLE-001",
+      "triage_id": "PHC-LINT-05",
+      "classification": "test-only release guard",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Both types are cfg(test). Signal returns a guard holding Arc<Signal>; Signal contains no guard. Drop releases the gate. The graph cycle is constructor/reference structure, not an owning cycle.",
+      "source_citations": [
+        "crates/sc-observability/src/maintenance.rs:836",
+        "crates/sc-observability/src/maintenance.rs:860",
+        "crates/sc-observability/src/maintenance.rs:885",
+        "crates/sc-observability/src/lib.rs:1157"
+      ],
+      "scope": "generic intra-crate type-owner SCC, not a declared cross-crate boundary violation"
+    },
+    {
+      "kind": "multi_owner_architectural_cycle",
+      "message": "architectural cycle across owners: crate::sc-observe::sc_observe::module::crate::Observability, crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder",
+      "node_ids": [
+        "crate::sc-observe::sc_observe::module::crate::Observability",
+        "crate::sc-observe::sc_observe::module::crate::Observability::builder",
+        "crate::sc-observe::sc_observe::module::crate::Observability::emit",
+        "crate::sc-observe::sc_observe::module::crate::Observability::new",
+        "crate::sc-observe::sc_observe::module::crate::Observability::new_typed",
+        "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder",
+        "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder::build",
+        "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder::build_typed",
+        "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder::register_projection",
+        "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder::register_subscriber",
+        "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder::with_observability_health_provider"
+      ],
+      "owner_ids": [
+        "crate::sc-observe::sc_observe::module::crate::Observability",
+        "crate::sc-observe::sc_observe::module::crate::ObservabilityBuilder"
+      ],
+      "rule_id": "SCB-CYCLE-001",
+      "triage_id": "PHC-LINT-06",
+      "classification": "consuming builder",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Observability.builder constructs a builder; build_typed consumes that builder and moves registrations into Observability. Neither struct stores the other. Routing and concurrent/shutdown tests exercise the resulting object.",
+      "source_citations": [
+        "crates/sc-observe/src/lib.rs:178",
+        "crates/sc-observe/src/lib.rs:303",
+        "crates/sc-observe/src/lib.rs:714",
+        "crates/sc-observe/src/lib.rs:1016",
+        "crates/sc-observe/src/lib.rs:1297",
+        "crates/sc-observe/src/lib.rs:1499"
+      ],
+      "scope": "generic intra-crate type-owner SCC, not a declared cross-crate boundary violation"
+    },
+    {
+      "kind": "type_method_self_loop",
+      "message": "type/method self-loop on owner crate::sc-observability-otlp::sc_observability_otlp::module::crate::Telemetry",
+      "node_ids": [
+        "crate::sc-observability-otlp::sc_observability_otlp::module::crate::Telemetry::emit_metric",
+        "crate::sc-observability-otlp::sc_observability_otlp::module::crate::Telemetry::emit_span"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-otlp::sc_observability_otlp::module::crate::Telemetry"
+      ],
+      "rule_id": "SCB-CYCLE-002",
+      "triage_id": "PHC-LINT-07",
+      "classification": "inherent/trait forwarding identity",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Trait emit_span/emit_metric forward explicitly to inherent Telemetry methods; inherent implementations export signals instead of calling the trait method again. Collapsing method identities produces this self-loop, not an execution recursion.",
+      "source_citations": [
+        "crates/sc-observability-otlp/src/lib.rs:255",
+        "crates/sc-observability-otlp/src/lib.rs:297",
+        "crates/sc-observability-otlp/src/lib.rs:578"
+      ],
+      "scope": "documented nonfatal self-loop signal; not an architectural hard failure"
+    },
+    {
+      "kind": "type_method_self_loop",
+      "message": "type/method self-loop on owner crate::sc-observability::sc_observability::module::crate::runtime::Logger",
+      "node_ids": [
+        "crate::sc-observability::sc_observability::module::crate::runtime::Logger::builder",
+        "crate::sc-observability::sc_observability::module::crate::runtime::Logger::builder_typed"
+      ],
+      "owner_ids": [
+        "crate::sc-observability::sc_observability::module::crate::runtime::Logger"
+      ],
+      "rule_id": "SCB-CYCLE-002",
+      "triage_id": "PHC-LINT-08",
+      "classification": "inherent construction forwarding",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Logger.builder delegates once to builder_typed, which calls LoggerBuilder.new_typed. A return/construction reference within the owner does not demonstrate recursive execution.",
+      "source_citations": [
+        "crates/sc-observability/src/runtime.rs:352",
+        "crates/sc-observability/src/runtime.rs:359"
+      ],
+      "scope": "documented nonfatal self-loop signal; not an architectural hard failure"
+    },
+    {
+      "kind": "trait_impl_self_loop",
+      "message": "trait-impl self-loop on owner crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::BridgeControlBackend via Clone",
+      "node_ids": [
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::BridgeControlBackend",
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::BridgeControlBackend::clone"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-binding-runtime::sc_observability_binding_runtime::module::crate::BridgeControlBackend"
+      ],
+      "rule_id": "SCB-CYCLE-003",
+      "triage_id": "PHC-LINT-09",
+      "classification": "Clone value construction",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Clone increments the shared handle count and constructs Self with a cloned Arc; Drop decrements and closes on the last handle. It does not call BridgeControlBackend.clone recursively.",
+      "source_citations": [
+        "crates/sc-observability-binding-runtime/src/lib.rs:136",
+        "crates/sc-observability-binding-runtime/src/lib.rs:144"
+      ],
+      "scope": "documented nonfatal self-loop signal; not an architectural hard failure"
+    },
+    {
+      "kind": "trait_impl_self_loop",
+      "message": "trait-impl self-loop on owner crate::sc-observability-log::sc_observability_log::module::crate::handle::DropCause via Rejection",
+      "node_ids": [
+        "crate::sc-observability-log::sc_observability_log::module::crate::handle::DropCause",
+        "crate::sc-observability-log::sc_observability_log::module::crate::handle::DropCause::panicked",
+        "crate::sc-observability-log::sc_observability_log::module::crate::handle::DropCause::reentrant"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-log::sc_observability_log::module::crate::handle::DropCause"
+      ],
+      "rule_id": "SCB-CYCLE-003",
+      "triage_id": "PHC-LINT-10",
+      "classification": "enum value construction",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Rejection methods return DropCause enum variants or copy a value, with no recursive call.",
+      "source_citations": [
+        "crates/sc-observability-log/src/handle.rs:37"
+      ],
+      "scope": "documented nonfatal self-loop signal; not an architectural hard failure"
+    },
+    {
+      "kind": "trait_impl_self_loop",
+      "message": "trait-impl self-loop on owner crate::sc-observability-log::sc_observability_log::module::crate::handle::EmitError via Rejection",
+      "node_ids": [
+        "crate::sc-observability-log::sc_observability_log::module::crate::handle::EmitError",
+        "crate::sc-observability-log::sc_observability_log::module::crate::handle::EmitError::panicked",
+        "crate::sc-observability-log::sc_observability_log::module::crate::handle::EmitError::reentrant"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-log::sc_observability_log::module::crate::handle::EmitError"
+      ],
+      "rule_id": "SCB-CYCLE-003",
+      "triage_id": "PHC-LINT-11",
+      "classification": "enum value construction",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Rejection methods return EmitError enum variants; drop_cause pattern-matches to a DropCause. No self-recursive call exists.",
+      "source_citations": [
+        "crates/sc-observability-log/src/handle.rs:51"
+      ],
+      "scope": "documented nonfatal self-loop signal; not an architectural hard failure"
+    },
+    {
+      "kind": "trait_impl_self_loop",
+      "message": "trait-impl self-loop on owner crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedLogProjector via TypedLogProjector",
+      "node_ids": [
+        "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedLogProjector",
+        "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedLogProjector::project_logs"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedLogProjector"
+      ],
+      "rule_id": "SCB-CYCLE-003",
+      "triage_id": "PHC-LINT-12",
+      "classification": "typed/legacy projector forwarding",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Legacy LogProjector explicitly invokes Self as TypedLogProjector. Typed implementation calls inner projector then telemetry; it does not return to the legacy adapter.",
+      "source_citations": [
+        "crates/sc-observability-otlp/src/projectors.rs:132",
+        "crates/sc-observability-otlp/src/projectors.rs:154",
+        "crates/sc-observability-otlp/tests/full_stack_integration.rs:280"
+      ],
+      "scope": "documented nonfatal self-loop signal; not an architectural hard failure"
+    },
+    {
+      "kind": "trait_impl_self_loop",
+      "message": "trait-impl self-loop on owner crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedMetricProjector via TypedMetricProjector",
+      "node_ids": [
+        "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedMetricProjector",
+        "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedMetricProjector::project_metrics"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedMetricProjector"
+      ],
+      "rule_id": "SCB-CYCLE-003",
+      "triage_id": "PHC-LINT-13",
+      "classification": "typed/legacy projector forwarding",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Legacy MetricProjector explicitly invokes Self as TypedMetricProjector. Typed implementation calls inner projector and telemetry, not the legacy adapter.",
+      "source_citations": [
+        "crates/sc-observability-otlp/src/projectors.rs:205",
+        "crates/sc-observability-otlp/src/projectors.rs:227",
+        "crates/sc-observability-otlp/tests/full_stack_integration.rs:280"
+      ],
+      "scope": "documented nonfatal self-loop signal; not an architectural hard failure"
+    },
+    {
+      "kind": "trait_impl_self_loop",
+      "message": "trait-impl self-loop on owner crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedSpanProjector via TypedSpanProjector",
+      "node_ids": [
+        "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedSpanProjector",
+        "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedSpanProjector::project_spans"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-otlp::sc_observability_otlp::module::crate::projectors::AttachedSpanProjector"
+      ],
+      "rule_id": "SCB-CYCLE-003",
+      "triage_id": "PHC-LINT-14",
+      "classification": "typed/legacy projector forwarding",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Legacy SpanProjector explicitly invokes Self as TypedSpanProjector. Typed implementation calls inner projector and telemetry, not the legacy adapter.",
+      "source_citations": [
+        "crates/sc-observability-otlp/src/projectors.rs:167",
+        "crates/sc-observability-otlp/src/projectors.rs:189",
+        "crates/sc-observability-otlp/tests/full_stack_integration.rs:280"
+      ],
+      "scope": "documented nonfatal self-loop signal; not an architectural hard failure"
+    },
+    {
+      "kind": "trait_impl_self_loop",
+      "message": "trait-impl self-loop on owner crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp via Add",
+      "node_ids": [
+        "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp::add",
+        "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp::from_offset_date_time"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp"
+      ],
+      "rule_id": "SCB-CYCLE-003",
+      "triage_id": "PHC-LINT-15",
+      "classification": "arithmetic value construction",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Timestamp Add<Duration> applies addition to its wrapped OffsetDateTime and constructs Timestamp from that result; it does not call Timestamp.add recursively.",
+      "source_citations": [
+        "crates/sc-observability-types/src/primitives.rs:80"
+      ],
+      "scope": "documented nonfatal self-loop signal; not an architectural hard failure"
+    },
+    {
+      "kind": "trait_impl_self_loop",
+      "message": "trait-impl self-loop on owner crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp via Sub",
+      "node_ids": [
+        "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp",
+        "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp::from_offset_date_time",
+        "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp::sub"
+      ],
+      "owner_ids": [
+        "crate::sc-observability-types::sc_observability_types::module::crate::primitives::Timestamp"
+      ],
+      "rule_id": "SCB-CYCLE-003",
+      "triage_id": "PHC-LINT-16",
+      "classification": "arithmetic value construction",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Timestamp Sub applies subtraction to wrapped values and constructs a timestamp or returns Duration; no self-recursive Timestamp.sub call.",
+      "source_citations": [
+        "crates/sc-observability-types/src/primitives.rs:88"
+      ],
+      "scope": "documented nonfatal self-loop signal; not an architectural hard failure"
+    },
+    {
+      "kind": "trait_impl_self_loop",
+      "message": "trait-impl self-loop on owner crate::sc-observability::sc_observability::module::crate::sinks::ConsoleSink via crate::typed::TypedLogSink",
+      "node_ids": [
+        "crate::sc-observability::sc_observability::module::crate::sinks::ConsoleSink",
+        "crate::sc-observability::sc_observability::module::crate::sinks::ConsoleSink::format_line",
+        "crate::sc-observability::sc_observability::module::crate::sinks::ConsoleSink::health",
+        "crate::sc-observability::sc_observability::module::crate::sinks::ConsoleSink::write"
+      ],
+      "owner_ids": [
+        "crate::sc-observability::sc_observability::module::crate::sinks::ConsoleSink"
+      ],
+      "rule_id": "SCB-CYCLE-003",
+      "triage_id": "PHC-LINT-17",
+      "classification": "typed/legacy sink forwarding",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Legacy ConsoleSink LogSink explicitly forwards to TypedLogSink; typed implementation writes console output and does not call the legacy adapter.",
+      "source_citations": [
+        "crates/sc-observability/src/sinks.rs:471",
+        "crates/sc-observability/src/sinks.rs:493"
+      ],
+      "scope": "documented nonfatal self-loop signal; not an architectural hard failure"
+    },
+    {
+      "kind": "trait_impl_self_loop",
+      "message": "trait-impl self-loop on owner crate::sc-observability::sc_observability::module::crate::sinks::JsonlFileSink via crate::typed::TypedLogSink",
+      "node_ids": [
+        "crate::sc-observability::sc_observability::module::crate::sinks::JsonlFileSink",
+        "crate::sc-observability::sc_observability::module::crate::sinks::JsonlFileSink::health",
+        "crate::sc-observability::sc_observability::module::crate::sinks::JsonlFileSink::write"
+      ],
+      "owner_ids": [
+        "crate::sc-observability::sc_observability::module::crate::sinks::JsonlFileSink"
+      ],
+      "rule_id": "SCB-CYCLE-003",
+      "triage_id": "PHC-LINT-18",
+      "classification": "typed/legacy sink forwarding",
+      "disposition": "no consumer defect demonstrated by this diagnostic; retain visible tool output",
+      "rationale": "Legacy JsonlFileSink LogSink explicitly forwards to TypedLogSink; typed implementation performs file writing without returning to the legacy adapter.",
+      "source_citations": [
+        "crates/sc-observability/src/sinks.rs:306",
+        "crates/sc-observability/src/sinks.rs:348"
+      ],
+      "scope": "documented nonfatal self-loop signal; not an architectural hard failure"
+    }
+  ]
+}

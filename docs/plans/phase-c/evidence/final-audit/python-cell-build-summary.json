@@ -1,0 +1,805 @@
+{
+  "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+  "run_id": 35458975629,
+  "download_command": "gh run download 35458975629 --repo randlee/sc-observability --pattern 'b4a-cell-*' --pattern 'b4a-wheel-*' --dir /tmp/phase-c-python-final-results",
+  "raw_results_location": "/tmp/phase-c-python-final-results",
+  "cells": [
+    {
+      "platform": "linux-aarch64",
+      "python": "3.10",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "10df7c650b0ec38098cf018727cb34805e0937c82b27a34e4bb355a9901ea82d",
+      "wheel_sha256": "6da9dc19905043fceca9a3f53d30472bbce6826d22e88703d2bde78057dd7f9e",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "linux-aarch64",
+      "python": "3.11",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "d8a4273a3e9208c0bb50a886e10cbfd37bb5334c11191ea3226b917f8f7cb5ea",
+      "wheel_sha256": "6da9dc19905043fceca9a3f53d30472bbce6826d22e88703d2bde78057dd7f9e",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "linux-aarch64",
+      "python": "3.12",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "02460809ad6e11e6e5d7799683d19f52264acd7b93421c556852f04e3ee272ed",
+      "wheel_sha256": "6da9dc19905043fceca9a3f53d30472bbce6826d22e88703d2bde78057dd7f9e",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "linux-aarch64",
+      "python": "3.13",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "3c456bc44be2ffc6e2d5d7c8f81f15fdd0785930081eedec78a724b48111c00f",
+      "wheel_sha256": "6da9dc19905043fceca9a3f53d30472bbce6826d22e88703d2bde78057dd7f9e",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "linux-aarch64",
+      "python": "3.14",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "15896d6c9a1d743b6bd1573145d0b0fed8cb1fc49b636aba23e5199483dc3768",
+      "wheel_sha256": "6da9dc19905043fceca9a3f53d30472bbce6826d22e88703d2bde78057dd7f9e",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "linux-x86_64",
+      "python": "3.10",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "b9b543f91781f406993cbd8a7941f9c56123495b09738222975a58d21491e243",
+      "wheel_sha256": "483a04f3bfa1faf805ee9d0d0eac93455f1845a706ecf76cc333774cb2eecc68",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "linux-x86_64",
+      "python": "3.11",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "f24d66be7f75d3d292e2110241eb8e3549ebccb323a886e276594c7b19d0d62a",
+      "wheel_sha256": "483a04f3bfa1faf805ee9d0d0eac93455f1845a706ecf76cc333774cb2eecc68",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "linux-x86_64",
+      "python": "3.12",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "4cb86f99b528681c50dd4c71d72580371f2cfaf28dcc2c4401545fc934f4c1f3",
+      "wheel_sha256": "483a04f3bfa1faf805ee9d0d0eac93455f1845a706ecf76cc333774cb2eecc68",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "linux-x86_64",
+      "python": "3.13",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "ee23da484b69367458228b4c7ab4debaced9859ef5350282c3ef8714a1edc7b9",
+      "wheel_sha256": "483a04f3bfa1faf805ee9d0d0eac93455f1845a706ecf76cc333774cb2eecc68",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "linux-x86_64",
+      "python": "3.14",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "db50dfe857068dde4272f70f21eb85486076e57c6d5a8bba00086c7f0bad94a3",
+      "wheel_sha256": "483a04f3bfa1faf805ee9d0d0eac93455f1845a706ecf76cc333774cb2eecc68",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "macos-arm64",
+      "python": "3.10",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "83b55ef6e53a231640d63548c8f876b63666a0bb0ff83f7913cf0cd747f79068",
+      "wheel_sha256": "26a02c387034ee31b587b9f4843bbbe450b2170260e8a29134926534fb0449e7",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "macos-arm64",
+      "python": "3.11",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "5dadd6e68f5cd9275f22f8fb4f2c6af36ac11cc1e52c212be2d08505fefa83bc",
+      "wheel_sha256": "26a02c387034ee31b587b9f4843bbbe450b2170260e8a29134926534fb0449e7",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "macos-arm64",
+      "python": "3.12",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "2df4ecc3f95dc3934bc050b2c0b69a7c288ba0d2997cdca5f0675b6fa5725518",
+      "wheel_sha256": "26a02c387034ee31b587b9f4843bbbe450b2170260e8a29134926534fb0449e7",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "macos-arm64",
+      "python": "3.13",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "5e69780c8d1c33fd3bcc7a5edc135e4d55f117dc58bbe2205b4d0231e1ff4cf1",
+      "wheel_sha256": "26a02c387034ee31b587b9f4843bbbe450b2170260e8a29134926534fb0449e7",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "macos-arm64",
+      "python": "3.14",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "4287f516224b2a7cba14aa44f4187829ef3124c352b6192dff17298e8b2471bf",
+      "wheel_sha256": "26a02c387034ee31b587b9f4843bbbe450b2170260e8a29134926534fb0449e7",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "macos-x86_64",
+      "python": "3.10",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "7d6f65b69532cb3c6b8d3246d26d6273f8b7a2a14c8f152596ce5ffcd35e3a0d",
+      "wheel_sha256": "7c677a8b409dccc04dda8e0ee6a841177e35474165c56edfc7ca376d1ba25d13",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "macos-x86_64",
+      "python": "3.11",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "6bbe19d548852ed9cbf4a3a356e539496dae5fb288a160697ac0b9213f0d5d69",
+      "wheel_sha256": "7c677a8b409dccc04dda8e0ee6a841177e35474165c56edfc7ca376d1ba25d13",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "macos-x86_64",
+      "python": "3.12",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "ed58aa0f8bcb36e08443d7124432aa05baa5d2e905c4e5b3b4e4f73cf788f216",
+      "wheel_sha256": "7c677a8b409dccc04dda8e0ee6a841177e35474165c56edfc7ca376d1ba25d13",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "macos-x86_64",
+      "python": "3.13",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "82a7344b52a630e67880da96ee017dd8ab1b049b94732fbe1f940e2d870423e4",
+      "wheel_sha256": "7c677a8b409dccc04dda8e0ee6a841177e35474165c56edfc7ca376d1ba25d13",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "macos-x86_64",
+      "python": "3.14",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "6a6ff13ae53e66edc60fb341d6e72fa765fdd85718261bf43211dbf63c43c5a4",
+      "wheel_sha256": "7c677a8b409dccc04dda8e0ee6a841177e35474165c56edfc7ca376d1ba25d13",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "windows-x86_64",
+      "python": "3.10",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "619c6ade7390025c7541f4ec17e971951dc78203efc4b711fbcb71c2bb7a7bb3",
+      "wheel_sha256": "ecae05f94dfa4e8c80cfd5a2fdabd67d1055cbcaa1a8a2c5a011adcc833206e4",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "windows-x86_64",
+      "python": "3.11",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "f8c4edd0d7c00f5e3382d793d657e0b606d6e352f58e47eb0ab23a0b6420145e",
+      "wheel_sha256": "ecae05f94dfa4e8c80cfd5a2fdabd67d1055cbcaa1a8a2c5a011adcc833206e4",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "windows-x86_64",
+      "python": "3.12",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "86779fcbf1069c3b8b4acac06bbda565ed378d686aa23234eeae73f9f236fcfa",
+      "wheel_sha256": "ecae05f94dfa4e8c80cfd5a2fdabd67d1055cbcaa1a8a2c5a011adcc833206e4",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "windows-x86_64",
+      "python": "3.13",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "c8f549e288e1300b0032e2ad971f1155f0ba5c6b77fdcdd705758761c787cba5",
+      "wheel_sha256": "ecae05f94dfa4e8c80cfd5a2fdabd67d1055cbcaa1a8a2c5a011adcc833206e4",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    },
+    {
+      "platform": "windows-x86_64",
+      "python": "3.14",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "test_count": 83,
+      "production_hooks_absent": true,
+      "typecheck": "passed",
+      "interpreter_flags": [
+        "-I",
+        "-X",
+        "dev",
+        "-W",
+        "error"
+      ],
+      "runtime_environment": {
+        "PYTHONASYNCIODEBUG": "1",
+        "PYTHONWARNINGS": "error"
+      },
+      "result_sha256": "8628b38358e124ee4c659260895f734123465e7daed6b4aba2a58711ed6d555d",
+      "wheel_sha256": "ecae05f94dfa4e8c80cfd5a2fdabd67d1055cbcaa1a8a2c5a011adcc833206e4",
+      "embedding_status": "passed",
+      "fault_companion": {
+        "status": "passed",
+        "role": "instrumented",
+        "publication": "never",
+        "test_count": 6
+      }
+    }
+  ],
+  "builds": [
+    {
+      "platform": "linux-aarch64",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "embedding": "passed",
+      "native_runtime_tests": "passed",
+      "result_sha256": "5e5fab47776095e1b34f5a7dc95be40ccad0eba4bc3a0e409c0e2e07d4acb610"
+    },
+    {
+      "platform": "linux-x86_64",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "embedding": "passed",
+      "native_runtime_tests": "passed",
+      "result_sha256": "97fa7087f52392f48096e25160b352a37c6bcc016adfe0c8cba151b275e1cb1d"
+    },
+    {
+      "platform": "macos-arm64",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "embedding": "passed",
+      "native_runtime_tests": "passed",
+      "result_sha256": "44c646b5b5afb0834407432b3b38afdff7ddee22c6cd9f70686336c75a5634cd"
+    },
+    {
+      "platform": "macos-x86_64",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "embedding": "passed",
+      "native_runtime_tests": "passed",
+      "result_sha256": "2f38d3de86ed3616dd3f77df9f0ceef2edda91554ce51b5927c084d827740509"
+    },
+    {
+      "platform": "windows-x86_64",
+      "status": "passed",
+      "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "development_only": false,
+      "embedding": "passed",
+      "native_runtime_tests": "passed",
+      "result_sha256": "af399880c905a0c3271db49777d70a84707292062d6e2222e27f28d7516bb80b"
+    }
+  ]
+}

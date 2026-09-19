@@ -1,0 +1,4 @@
+PASS nine-root archive hashes and raw package-log digest
+PASS standalone Tauri archive hash and distinct helper/driver log; recorded log digest matches exact retained bytes
+PASS raw18 unchanged;18 individual dispositions preserve every original field;23 historical manifest reports retained
+PASS frozen09e0ce3 to evidence child: no changes outside docs (installer/runtime/package-qualified inputs identical)

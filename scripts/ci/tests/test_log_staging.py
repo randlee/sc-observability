@@ -123,6 +123,18 @@ class StageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'ambient dependency'):
             inspect_archive(path, PACKAGES[0], VERSION, SOURCE)
 
+    def test_rejects_workspace_inheritance_in_nine_crate_validation(self):
+        path = self.root / 'workspace.crate'
+        archive(path, PACKAGES[0], extra={'Cargo.toml': b'[workspace]\n[package]\nname = "sc-observability-types"\nversion = "1.4.0"\nlicense = "MIT"\n'})
+        with self.assertRaisesRegex(ValueError, 'inherits workspace'):
+            inspect_archive(path, PACKAGES[0], VERSION, SOURCE, package_names=PACKAGES + ('sc-observability-dto', 'sc-observability-binding-runtime', 'sc-observability-tauri'))
+
+    def test_rejects_inconsistent_first_party_version_in_nine_crate_validation(self):
+        path = self.root / 'mismatch.crate'
+        archive(path, PACKAGES[0], dependency=f'\n[dependencies.{PACKAGES[1]}]\nversion = "1.3.0"\n')
+        with self.assertRaisesRegex(ValueError, 'first-party version mismatch'):
+            inspect_archive(path, PACKAGES[0], VERSION, SOURCE, package_names=PACKAGES + ('sc-observability-dto', 'sc-observability-binding-runtime', 'sc-observability-tauri'))
+
     def test_rejects_archive_traversal(self):
         path = self.root / 'unsafe.crate'
         archive(path, PACKAGES[0], extra={'../../outside': b'bad'})

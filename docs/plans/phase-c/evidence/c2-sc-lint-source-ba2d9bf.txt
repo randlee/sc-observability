@@ -1,0 +1,69 @@
+# C.2 immutable sc-lint source adoption — current and historical evidence
+
+Current pins: sc-publish `be1705401d58008f862dd0829996fc50667e4ab1`;
+sc-lint `ba2d9bf622c1604e3f017c728040906b90e71bce`, version 0.6.0.
+The original local adoption narrative is retained in
+`final-audit/historical-source-adoption.txt`; its Windows-pending and 41-findings
+statements describe that earlier point, not current closure state.
+
+## Actual Linux and Windows source qualification
+
+Run https://github.com/randlee/sc-observability/actions/runs/35422997225
+completed SUCCESS at `3fb321acc08c55e331cad2503019726974598157`, with both
+`source consumer (ubuntu-latest)` and `source consumer (windows-2022)` SUCCESS.
+Each job ran seven receipt-rejection tests, installed the exact source revision,
+verified all four CLI/backend hashes plus the wheel, and executed the isolated
+Python package to verify version/location. Platform receipts and complete smoke
+stdout are retained in `final-audit/sc-lint-receipt-*.json` and
+`final-audit/sc-lint-historical-41-*.txt`; the actual run/job metadata is in
+`final-audit/source-qualification-run.json`.
+
+The relevant installer, verifier, verifier tests, workflow, install.json and
+shared pin have an empty Git diff from that successful ancestor to frozen
+`09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8`; exact paths/command/output appear
+in `final-audit/qualified-path-comparisons.json`. This proves installer receipt
+reuse; it does not pretend the old smoke analyzed the later manifest changes.
+No new workflow path trigger or redundant installation run is required.
+
+## Historical41 versus current 18
+
+The retained hosted smoke actually reports `ok=true`, `data.status=fail`,
+**41 findings**: 22 SCB-MANIFEST-001, 1 SCB-MANIFEST-002, 6 SCB-CYCLE-001,
+2 SCB-CYCLE-002 and 10 SCB-CYCLE-003. The source parser no longer crashes on
+`&FieldValue<'_, T>`. Execution success is not lint-policy success.
+
+Commit `aec16d67ccf6fd9c85f3de75ceeb825da6ddbdf1` fixes all 23 manifest
+reports across 12 Cargo manifests: root authors, 22 inherited package metadata
+fields, and the private consumer-check dependency's workspace inheritance.
+That dependency edit adds the existing workspace version 1.4.0 while preserving
+the resolved sibling path and options/features; it is disclosed explicitly,
+not described as documentation-only. `manifest-provenance.md` and the separate
+Phase C metadata record prove exact before/after blobs without altering Phase B
+import/release evidence.
+
+Current raw output is `final-audit/sc-lint-current-18.json`, originally captured
+at `06c3e594a2dbfa6d110bf5c8a2ab0d8a8b79eb91`. Its Cargo/Rust/boundary
+inputs have zero relevant diff to 09e0ce3, recorded in the comparison evidence.
+It reports **ok=true, status=fail,18 cycle findings, zero manifest findings**.
+Nothing is suppressed or relabeled clean. `final-audit/sc-lint-dispositions.json`
+retains each original diagnostic, an individual source/config citation set,
+its graph/ownership explanation and applicability assessment.
+
+The six hard SCCs are within single crates; repo boundaries are crate-owned
+with `outside_owner_crate` reference scope, not a universal ban on type-reference
+cycles. Borrowed/consuming RAII/builders do not create the alleged architectural
+edge. The callback SCC additionally has real transient strong retention, so its
+bounded 128 reservation, worker pop/take, cancellation and lifecycle/race tests
+are cited individually rather than dismissed merely because one field is Weak.
+The twelve self-loop signals are nonfatal under the pinned tool's own documented
+002/003 policy. Source inspection identifies enum/self construction, arithmetic
+on wrapped timestamps and explicit typed/legacy forwarding rather than recursive
+execution. These are developer triage conclusions for lead/quality review,
+not invented tool changes, blanket suppressions or approval metadata.
+
+No sc-lint PR160 changes are adopted, no sc-lint team review is requested, and
+no upstream source is changed by this consumer evidence layer. The actual
+publisher preflight 35423505198 passed with 18 diagnostics still visible;
+its smoke contract proves root discovery/backend execution, not clean lint.
+Sprint completion remains subject to the complete C.2 audit and explicit lead
+completeness PASS, recorded separately.

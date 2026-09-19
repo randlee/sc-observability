@@ -1,4 +1,6 @@
 [package]
+homepage.workspace = true
+authors.workspace = true
 name = "sc-observability-log-consumer-check"
 version.workspace = true
 edition.workspace = true
@@ -9,7 +11,7 @@ description = "Compile-only proof that the event macros need only the sc-observa
 publish = false
 
 [dependencies]
-sc-observability-log = { path = "../sc-observability-log" }
+sc-observability-log.workspace = true
 
 [lints]
 workspace = true

@@ -1,0 +1,9 @@
+test_shallow_history_fails_closed_and_full_history_passes (test_generation_provenance.CheckoutHistoryTests.test_shallow_history_fails_closed_and_full_history_passes) ... ok
+test_input_and_matching_hash_cannot_replace_pinned_source (test_generation_provenance.GenerationProofTests.test_input_and_matching_hash_cannot_replace_pinned_source) ... ok
+test_output_drift_remains_rejected (test_generation_provenance.GenerationProofTests.test_output_drift_remains_rejected) ... ok
+test_valid_generation_evidence (test_generation_provenance.GenerationProofTests.test_valid_generation_evidence) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 1.060s
+
+OK

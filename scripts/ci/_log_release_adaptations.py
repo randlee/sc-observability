@@ -15,7 +15,15 @@ def blob(content: bytes) -> str:
 
 
 def apply_release_adaptations(expected: dict[str, str], destination: Path, record_path: Path) -> dict[str, str]:
-    """Prove only root-license additions and false-to-true public package flags."""
+    """Prove release changes, then separately prove any recorded Phase C metadata.
+
+    When the later record exists, verify its Git snapshots and narrow semantic
+    delta first; the ORIGINAL release proof still compares exact historical
+    before/after blobs using those independently verified pre-Phase-C bytes.
+    """
+    from _log_metadata_adaptations import MetadataAdaptations, RECORD
+    metadata_path = destination / RECORD
+    metadata = MetadataAdaptations(destination, metadata_path) if metadata_path.exists() else None
     record = json.loads(record_path.read_text())
     if record.get('schema_version') != 1 or record.get('candidate_version') != '1.4.0':
         raise ValueError('unsupported B.2 release adaptation record')
@@ -41,7 +49,7 @@ def apply_release_adaptations(expected: dict[str, str], destination: Path, recor
         path = destination / relative
         if path.is_symlink():
             raise ValueError('release manifest may not be a symlink')
-        after = path.read_bytes()
+        after = metadata.before[relative] if metadata is not None else path.read_bytes()
         if after.count(b'publish = true\n') != 1:
             raise ValueError(f'missing singular public release flag: {relative}')
         before = after.replace(b'publish = true\n', b'publish = false\n', 1)
@@ -49,7 +57,7 @@ def apply_release_adaptations(expected: dict[str, str], destination: Path, recor
                 or blob(after) != item['after_blob']):
             raise ValueError(f'change exceeds approved publish-only adaptation: {relative}')
         result[relative] = item['after_blob']
-    return result
+    return metadata.apply(result) if metadata is not None else result
 
 
 def main() -> None:
@@ -61,7 +69,7 @@ def main() -> None:
     provenance = json.loads((args.destination / 'docs/plans/phase-b/import-provenance.json').read_text())
     expected = validate_adaptations(provenance.get('adaptations', []), provenance['file_inventory'], args.destination)
     apply_release_adaptations(expected, args.destination, args.destination / 'docs/plans/phase-b/release-adaptations-b-2.json')
-    print('B.2 release-only LICENSE and publish-flag adaptations verified; historical provenance unchanged')
+    print('B.2 LICENSE/publish proof and any separately recorded Phase C metadata verified; historical provenance unchanged')
 
 
 if __name__ == '__main__':

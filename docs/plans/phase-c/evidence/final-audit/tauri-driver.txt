@@ -1,0 +1,1 @@
+verified standalone Tauri package against staged root archives: /private/tmp/phase-c-final-tauri-proof.crate

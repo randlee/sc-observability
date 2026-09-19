@@ -3,9 +3,18 @@ set -euo pipefail
 
 python3 - <<'PY'
 from pathlib import Path
+import sys
 import tempfile
 import tomllib
-from scripts.release_artifacts import is_workspace_member
+sys.path.insert(0, str(Path('.github/scripts').resolve()))
+from release_manifest import workspace_members
+
+def is_release_manifest(path: Path, workspace_toml: Path):
+    data = load_toml(path)
+    if "workspace" in data:
+        return True
+    root = workspace_toml.parent.resolve()
+    return path.resolve() in {(root / member / "Cargo.toml").resolve() for member in workspace_members(workspace_toml)}
 
 root = Path(".")
 
@@ -62,7 +71,7 @@ if len(required_manifests) != len(artifacts["crates"]):
 
 missing = sorted(path for path in required_manifests
                  if not (root / path).exists()
-                 or not is_workspace_member(root / path, root / "Cargo.toml"))
+                 or not is_release_manifest(root / path, root / "Cargo.toml"))
 if missing:
     raise SystemExit(f"missing workspace members or standalone manifests: {missing}")
 

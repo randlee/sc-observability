@@ -31,7 +31,16 @@ def safe_path(root: Path, relative: str) -> Path:
     return path
 
 
-def inspect_archive(archive: Path, name: str, version: str, source_commit: str) -> dict:
+def inspect_archive(
+    archive: Path,
+    name: str,
+    version: str,
+    source_commit: str,
+    *,
+    package_names: tuple[str, ...] = PACKAGES,
+    private_package: str | None = PRIVATE_PACKAGE,
+    require_macro_pin: bool = True,
+) -> dict:
     """Inspect every archive member; reject unsafe, ambient or mismatched content."""
     prefix = f"{name}-{version}/"
     with tarfile.open(archive, "r:gz") as contents:
@@ -53,7 +62,7 @@ def inspect_archive(archive: Path, name: str, version: str, source_commit: str) 
             raise ValueError(f"missing package license: {name}")
         vcs = json.loads(files[prefix + ".cargo_vcs_info.json"])
         if vcs["git"]["sha1"] != source_commit or vcs["git"].get("dirty", False):
-            raise ValueError(f"archive source commit mismatch or dirty source: {name}")
+            raise ValueError(f"archive source commit/provenance mismatch or dirty source: {name}")
         if "workspace" in manifest or package.get("workspace"):
             raise ValueError(f"archive inherits workspace: {name}")
         tables = [manifest] + list(manifest.get("target", {}).values())
@@ -65,11 +74,11 @@ def inspect_archive(archive: Path, name: str, version: str, source_commit: str) 
                     actual = spec.get("package", dependency)
                     if any(key in spec for key in ("path", "git", "workspace")):
                         raise ValueError(f"ambient dependency in {name}: {dependency}")
-                    if actual == PRIVATE_PACKAGE:
+                    if private_package and actual == private_package:
                         raise ValueError("CI-only package leaked into staged dependencies")
-                    if actual in PACKAGES and spec.get("version", "").lstrip("=") != version:
+                    if actual in package_names and spec.get("version", "").lstrip("=") != version:
                         raise ValueError(f"first-party version mismatch in {name}: {dependency}")
-        if name == "sc-observability-log" and manifest["dependencies"]["sc-observability-log-macros"]["version"] != f"={version}":
+        if require_macro_pin and name == "sc-observability-log" and manifest["dependencies"]["sc-observability-log-macros"]["version"] != f"={version}":
             raise ValueError("bridge must pin the macros crate exactly")
         return {
             "normalized_manifest": manifest_bytes.decode(),

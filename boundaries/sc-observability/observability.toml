@@ -1,0 +1,28 @@
+boundary_id = "BOUNDARY-ScObservability"
+owner_package = "sc-observability"
+owner_crate_path = "sc_observability"
+name = "ScObservability"
+[public]
+facade = "crate_root"
+[implementation]
+type = "crate"
+module = "sc_observability"
+visibility = "public"
+constructor = "none"
+[composition]
+roots = []
+[dependencies]
+allowed_dependents = ["rust-python-logging", "sc-observability-binding-runtime", "sc-observability-log", "sc-observability-otlp", "sc-observability-py", "sc-observe"]
+allowed_dependencies = ["sc-observability-types"]
+forbidden_edges = []
+[references]
+scope = "outside_owner_crate"
+forbidden = []
+[testing]
+allowed_test_double_paths = []
+forbidden_test_bypasses = []
+[enforcement]
+lint_rules = ["LINT-SC-OBSERVABILITY-BOUNDARY"]
+review_gates = ["workspace_dependency_policy"]
+[status]
+state = "concrete_landed"

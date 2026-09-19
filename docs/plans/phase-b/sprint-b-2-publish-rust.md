@@ -100,7 +100,7 @@ cargo fmt --all -- --check
 cargo test --locked --workspace --all-targets
 cargo test --locked --workspace --doc
 cargo clippy --locked --workspace --all-targets -- -D warnings
-bash scripts/ci/validate_publish_order.sh
+python3 .github/scripts/release_artifacts.py validate-publish-order --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml
 python3 scripts/ci/validate_version_literals.py
 bash scripts/ci/validate_public_api_diff.sh
 python3 scripts/ci/validate_public_api_semver.py

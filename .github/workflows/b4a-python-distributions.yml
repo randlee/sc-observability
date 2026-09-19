@@ -42,7 +42,7 @@ jobs:
       platforms: ${{ steps.matrix.outputs.platforms }}
       cells: ${{ steps.matrix.outputs.cells }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source_commit }}
       - id: source
@@ -70,10 +70,10 @@ jobs:
     timeout-minutes: 20
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source_commit }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
@@ -88,7 +88,7 @@ jobs:
           flags=()
           if [[ "$B4A_DEVELOPMENT" == true ]]; then flags+=(--allow-incomplete-runtime); fi
           python scripts/ci/prepare_python_distributions.py --output target/b4a-sdist "${flags[@]}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: b4a-sdist
@@ -108,16 +108,16 @@ jobs:
         include: ${{ fromJSON(needs.plan.outputs.platforms) }}
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source_commit }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.10'
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: b4a-sdist
           path: ${{ runner.temp }}/b4a-source
@@ -147,7 +147,7 @@ jobs:
             bash scripts/ci/validate_python_bindings.sh --distribution build --sdist "${sdist[0]}" \
               --platform "$B4A_PLATFORM" --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/b4a-result/wheel"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: b4a-wheel-${{ matrix.id }}
           path: ${{ runner.temp }}/b4a-result/wheel/
@@ -163,20 +163,20 @@ jobs:
         include: ${{ fromJSON(needs.plan.outputs.cells) }}
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source_commit }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: b4a-sdist
           path: ${{ runner.temp }}/b4a-source
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: b4a-wheel-${{ matrix.id }}
           path: ${{ runner.temp }}/b4a-wheel
@@ -206,7 +206,7 @@ jobs:
             bash scripts/ci/validate_python_bindings.sh --distribution cell --sdist "${sdist[0]}" --wheel "${wheel[0]}" \
               --checkout "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/b4a-cell" "${flags[@]}"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: b4a-cell-${{ matrix.id }}-${{ matrix.python }}
           path: ${{ runner.temp }}/b4a-cell/
@@ -222,14 +222,14 @@ jobs:
       inventory_artifact_id: ${{ steps.inventory.outputs.artifact-id }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.source_commit }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: python -m pip install -r scripts/ci/python-packaging-requirements.txt
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: b4a-*
           path: ${{ runner.temp }}/b4a-evidence
@@ -250,7 +250,7 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('sha256=' + hashlib.sha256(inventory.read_bytes()).hexdigest() + '\n')
           PYTHON
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         id: inventory
         with:
           name: b4a-production-inventory
