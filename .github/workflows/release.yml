@@ -102,6 +102,12 @@ jobs:
           ALREADY_PUBLISHED_CHANNELS: ${{ inputs.already_published_channels }}
         run: .github/scripts/release_gate.sh final origin/main "release-candidate-${{ steps.meta.outputs.release_tag }}" '${{ steps.meta.outputs.release_version }}' "${RELEASE_ARTIFACT_MANIFEST}" '${{ steps.build_plan.outputs.workspace_toml }}' "${ALREADY_PUBLISHED_CHANNELS}"
 
+      - name: Verify npm source at resolved release commit
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+          RELEASE_SHA: ${{ steps.release_gate.outputs.release_sha }}
+        run: python3 .github/scripts/npm_release.py check-source --manifest "$RELEASE_ARTIFACT_MANIFEST" --tag "$RELEASE_TAG" --source-ref "$RELEASE_SHA"
+
       - name: Ensure tag is correct or create it
         id: release-ref
         shell: bash

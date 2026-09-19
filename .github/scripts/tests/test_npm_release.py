@@ -224,3 +224,51 @@ def test_download_step_requires_immutable_release(tmp_path, immutable, expected)
     result = subprocess.run(['bash', '-c', step['run']], cwd=tmp_path, env=env, capture_output=True)
     assert result.returncode == expected
     assert (tmp_path / 'downloaded').exists() is immutable
+
+
+@pytest.mark.parametrize('override', [{'version':'0.0.1'}, {'name':'other'}, {'private':True}, {'publishConfig':{'access':'restricted'}}, {'publishConfig':{'registry':'https://other.invalid'}}])
+def test_lockstep_blocks_unsuitable_npm_sources_before_tag(tmp_path, override):
+    source = tmp_path / 'bindings/client'
+    source.mkdir(parents=True)
+    (source / 'package.json').write_text(json.dumps({'name':'@example/client','version':'1.2.3',**override}))
+    (tmp_path / 'Cargo.toml').write_text('[workspace.package]\nversion="1.2.3"\n')
+    manifest = tmp_path / 'publish.toml'
+    manifest.write_text('[[npm_packages]]\nname="@example/client"\nsource="bindings/client"\n[channels.npm]\nworkflow="npm-publish.yml"\ndispatch_inputs={}\n')
+    result = subprocess.run([sys.executable,str(INSTALL.PACKAGE_ROOT/'.github/scripts/release_artifacts.py'),'verify-version-lockstep','--manifest',str(manifest),'--workspace-toml',str(tmp_path/'Cargo.toml')],cwd=tmp_path,capture_output=True,text=True)
+    assert result.returncode != 0
+    assert 'source npm package' in result.stderr
+
+
+def test_lockstep_accepts_public_matching_npm_source(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path/'package.json').write_text(json.dumps({'name':'example','version':'1.2.3','private':False}))
+    npm.validate_sources({'npm_packages':[{'name':'example','source':'.'}],'channels':{'npm':{}}},'1.2.3')
+
+
+def test_exact_release_commit_is_checked_instead_of_dispatch_checkout():
+    manifest = '[[npm_packages]]\nname="example"\nsource="client"\n[channels.npm]\nworkflow="npm-publish.yml"\ndispatch_inputs={}\n'
+    sha = 'a' * 40
+    with patch.object(npm.subprocess,'check_output',side_effect=[manifest,json.dumps({'name':'example','version':'0.0.1'})]) as git:
+        with pytest.raises(ValueError,match='identity/version/private'):
+            npm.check_release_source('release/publish-artifacts.toml','v1.2.3',sha)
+    assert git.call_args_list[0].args[0] == ['git','show',sha+':release/publish-artifacts.toml']
+    assert git.call_args_list[1].args[0] == ['git','show',sha+':client/package.json']
+
+
+def test_npm_checks_precede_tag_creation_and_registry_jobs():
+    import yaml
+    workflow = yaml.safe_load((INSTALL.PACKAGE_ROOT/'.github/workflows/release.yml').read_text())
+    steps = workflow['jobs']['gate-and-tag']['steps']
+    lockstep = next(i for i,step in enumerate(steps) if 'verify-version-lockstep' in step.get('run',''))
+    tag_index = next(i for i,step in enumerate(steps) if step.get('id') == 'release-ref')
+    assert lockstep < tag_index
+    script = steps[tag_index]['run']
+    exact_source = next(i for i,step in enumerate(steps) if 'npm_release.py check-source' in step.get('run',''))
+    assert lockstep < exact_source < tag_index
+    assert steps[exact_source]['env']['RELEASE_SHA'] == '${{ steps.release_gate.outputs.release_sha }}'
+    assert '--source-ref "$RELEASE_SHA"' in steps[exact_source]['run']
+    assert script.index('git tag "$tag"') < script.index('git push origin "$tag"')
+    assert 'continue-on-error' not in steps[exact_source]
+    for name in ['build-npm','publish']:
+        needs = workflow['jobs'][name]['needs']
+        assert needs == 'gate-and-tag' or 'gate-and-tag' in needs

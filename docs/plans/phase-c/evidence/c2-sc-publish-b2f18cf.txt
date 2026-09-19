@@ -1,0 +1,52 @@
+C.2 sc-publish correction adoption evidence
+==============================================
+
+Active consumer source commit: 139e0c390a534aed6e27908a3682e632da96c631
+Active release/sc-publish-pin.toml revision:
+  b2f18cf56aa4488376fdef6b2cab30e382f32dbd
+Upstream: https://github.com/randlee/sc-publish/pull/95
+Exact-head upstream CI: 35410283861, success
+Independent reviewer: arch-ctm approval reported by aobs; no publication was authorized.
+
+Conflict check and regeneration:
+
+  python3 "$SC_PUBLISH_CHECKOUT/plugins/sc-publish/install.py" \
+    --dry-run --input install.json .
+  -> expected managed-file diff only: npm source gate, shared release-artifact
+     validator, managed tests/workflow, README, and npm compatibility docs;
+     no C.2-local edits existed on those installer-managed paths.
+
+  python3 "$SC_PUBLISH_CHECKOUT/plugins/sc-publish/install.py" \
+    --input install.json .
+  -> copied six managed files from the exact b2f18cf checkout.
+
+  python3 "$SC_PUBLISH_CHECKOUT/plugins/sc-publish/install.py" \
+    --dry-run --input install.json .
+  -> Publish-kit assets are in sync.
+
+Post-install checks (nonpublishing):
+
+  python3 .github/scripts/release_artifacts.py validate-manifest \
+    --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml
+  -> manifest validation passed
+
+  python3 .github/scripts/release_artifacts.py validate-publish-order \
+    --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml
+  -> ok: publish_order matches the workspace dependency graph
+
+  python3 .github/scripts/release_artifacts.py verify-version-lockstep \
+    --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml
+  -> version lockstep verification passed
+
+  bash scripts/ci/validate_publish_workflow_action_versions.sh
+  -> publish workflow action version floor passed (9 workflows)
+
+  <candidate-venv>/bin/python -m pytest -q \
+    .github/scripts/tests
+  -> 165 passed, 11 skipped, 0 failed
+
+The historical C.1 evidence remains in c1-installed-suite-006092a.txt. The
+old C.1-only validate-preflight-checks command is not exposed by the reviewed
+b2f18cf release_artifacts CLI; current manifest/order/lockstep commands above
+are the active contract. No registry write, tag, release dispatch, or
+credential value access occurred.

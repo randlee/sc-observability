@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-sc-observability-try-log"
+description = "Enables the sc_observability_try_log command without any pre-configured scope."
+commands.allow = ["sc_observability_try_log"]
+
+[[permission]]
+identifier = "deny-sc-observability-try-log"
+description = "Denies the sc_observability_try_log command without any pre-configured scope."
+commands.deny = ["sc_observability_try_log"]
