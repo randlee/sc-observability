@@ -34,5 +34,6 @@ This table records the PR185 point in time. Current pins, fixed23 manifest
 reports / retained18 cycle diagnostics, Linux/Windows source receipt PASS,
 resolved npm secret scope and actual preflight35423505198 are recorded in
 [final-c2-audit.md](final-c2-audit.md). Historical parser/npm-open labels above
-are not current blockers. Current Python packaging qualification and explicit
-lead completeness remain pending; no closure signoff is fabricated.
+are not current blockers. Current Python qualification 35458975629 now passes
+all 33 jobs, with downloaded production inventory/archive hashes verified.
+Explicit lead completeness remains pending; no closure signoff is fabricated.

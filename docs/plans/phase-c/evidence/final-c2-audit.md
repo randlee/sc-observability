@@ -12,16 +12,16 @@ by [quality-mgr](https://github.com/randlee/sc-observability/pull/190#issuecomme
 | Deliverable | Current result | Concrete evidence / remaining condition |
 | --- | --- | --- |
 | 1 inventory | PASS | Locked root/standalone Cargo metadata cross-check ten Rust crates; manifest separately lists Python sdist + five wheel targets and npm client. `inventory.json` records the exact surface. |
-| 2 complete packages | Rust/Tauri/npm PASS; Python pending | `nine-root-stage.json` and full package log prove 9 root archives at 09e0ce3; `tauri-package.json`/log prove standalone verification against that stage; `npm-build-pack.txt` lists 16 files after build. Python full replacement35458975629 is pending, not replaced by B.2six or preflight checks. |
+| 2 complete packages | PASS | `nine-root-stage.json` and full package log prove 9 root archives at 09e0ce3; `tauri-package.json`/log prove standalone verification against that stage; `npm-build-pack.txt` lists 16 files after build. Python run 35458975629 passes all 5 builds / 25 cells; downloaded production sdist/five-wheel hashes verified. |
 | 3 secret scopes | PASS names-only | `secret-names.json`: repository CARGO_REGISTRY_TOKEN; npm/NPM_TOKEN; pypi/PYPI_API_TOKEN; testpypi/TEST_PYPI_API_TOKEN. Missing npm environment is resolved. No secret value read or printed. |
-| 4 platforms | Tauri PASS; Python pending | PR190 run 35423459204 passes Linux/macOS/Windows real IPC/artifact gates at 09e0ce3. Historical Python340f8aae manifests differ; new 5-platform/25-cell run 35458975629 must supply successful aggregate/inventory proof. |
+| 4 platforms | PASS | PR190 run 35423459204 passes Linux/macOS/Windows real IPC/artifact gates at 09e0ce3. Current Python 35458975629 passes all 33 jobs, including the 5-platform/25-cell aggregate, at the same 09e0ce3 source. |
 | 5 retries | PASS | `retry-tests.txt`: 11 staged-package/retry tests. Tests mock subprocesses and forbid sockets; they establish orchestration argument/exit/existence decisions, not internals of third-party clients. |
 | 6 later read-only acceptance | Specified; no publish | `npm view @sc-observability/client versions`; per-crate crates.io version API or `cargo search <crate> --limit 1`; `python3 -m pip index versions sc-observability`. Registry absence before release is expected and is not success after release. Earlier scoped QA accepted the command probes; no write credentials are required. |
 
-**Lead completeness is not yet justified by all required PASS evidence:**
-the new Python matrix is pending. No lead/owner signoff is invented. Once its
-actual aggregate is verified, root/aobs must explicitly review the full audit
-and record lead completeness. No separate owner signoff is invented as a sprint
+**Required package/platform evidence is now PASS; lead acceptance remains pending.**
+The current Python aggregate and downloaded artifacts have been verified.
+Root/aobs must still explicitly review the full audit and record lead completeness.
+No lead/owner signoff is invented. No separate owner signoff is invented as a sprint
 closure requirement. The existing C.1-before-C.2 merge dependency remains a
 merge/completion condition, not permission for this child to merge anything.
 
@@ -79,8 +79,28 @@ through Cargo packaging, bundle manifests and the embedding manifest. Therefore
 unchanged runtime source alone is insufficient for the literal qualified-path
 identity criterion. The lead dispatched non-publishing production run
 [35458975629](https://github.com/randlee/sc-observability/actions/runs/35458975629)
-with source_commit 09e0ce3 and development=false. Pending: all 5 builds, all 25
-cells, successful aggregate and its immutable production inventory digest.
+with source_commit 09e0ce3 and development=false. It completed SUCCESS: all
+33 jobs, including 5 builds, 25 installed full-suite cells and the aggregate.
+The raw aggregate log records `B4A_QUALIFIED`; its production-only artifact
+10589791842 was downloaded and all six archive hashes verified against the
+retained `python-production-artifacts.json`. Inventory SHA256 computed from
+those exact bytes is
+`97716f4363997422f9bd0a69feb8e5031be89cb7407f8b64d7b73e92cc2d2c70`;
+sdist SHA256 is
+`341f1a12050753f7afafe71494c6828fc34913daf9b26d0386a4e3067641dade`.
+The hosted log records calculation of the inventory output, not its value;
+`python-qualification-proof.json` distinguishes that inventory digest from the
+uploaded ZIP digest and records all wheel hashes. `python-qualification-run.json`
+retains actual job outcomes. The downloaded five build results and 25 cell
+results also pass a local replay of the unchanged aggregate validator, including
+raw JUnit and production/companion separation checks. Every cell has 83 production
+tests, strict typing, production hooks absent and per-interpreter embedding PASS;
+`python-cell-build-summary.json` records cell results and raw result hashes.
+
+The qualified source remains 09e0ce3. A recorded Git diff from that source to
+the docs child d14943a returns zero changed paths outside docs, conservatively
+covering all packaging, runtime, manifest, lock, policy and workflow inputs.
+This follow-up also edits only docs/evidence. No artifact source SHA is relabeled.
 
 ## Source installer and diagnostic disposition
 
@@ -136,7 +156,6 @@ The structured record links pinned upstream policy/analysis and relevant tests.
 
 ## Remaining evidence before closure
 
-- Successful current-source Python matrix aggregate/inventory and hash validation.
 - Explicit root/aobs lead acceptance of all six deliverables and ACs; until then
   frontmatter stays in_progress. The documented C.1 merge prerequisite also
   remains in force for sprint completion/mergeability.

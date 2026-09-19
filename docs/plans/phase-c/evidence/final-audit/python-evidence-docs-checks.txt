@@ -1,0 +1,20 @@
+docs consistency validation passed
+SHARED_DIGEST_HELPER_CHECK_PASSED: 5 consumers
+phase-b publication-claim self-test and doc scan passed
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability_types/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observe/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability_otlp/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability_log/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability_log_macros/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.01s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability_dto/index.html
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability_binding_runtime/index.html
+rustdoc missing-docs validation passed

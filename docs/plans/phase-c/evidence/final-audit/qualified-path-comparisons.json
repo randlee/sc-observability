@@ -74,5 +74,21 @@
       "crates/sc-observe/Cargo.toml",
       "examples/rust-python-logging/Cargo.toml"
     ]
+  },
+  "current_python_to_evidence_child": {
+    "from": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+    "to": "d14943a2101a17042c33ab88fa33726cc5241643",
+    "command": [
+      "git",
+      "diff",
+      "--name-only",
+      "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+      "d14943a2101a17042c33ab88fa33726cc5241643",
+      "--",
+      ".",
+      ":(exclude)docs/**"
+    ],
+    "changed_paths": [],
+    "scope": "All tracked paths outside docs; this follow-up changes only docs/evidence, so qualified inputs stay identical."
   }
 }

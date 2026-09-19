@@ -1,0 +1,445 @@
+aggregate	UNKNOWN STEP	﻿2026-09-19T17:55:43.4866010Z Current runner version: '2.337.0'
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4882269Z ##[group]Runner Image Provisioner
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4882779Z Hosted Compute Agent
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4883208Z Version: 20260828.587
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4883574Z Commit: abac92662cab4cc7352de4f9f9d2e2419aad9c29
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4884040Z Build Date: 2026-08-28T16:44:25Z
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4884444Z Worker ID: {4227e640-52bf-4926-a4b7-69bc3b3cfc70}
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4884843Z Azure Region: westus3
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4885283Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4886200Z ##[group]Operating System
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4886554Z Ubuntu
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4886910Z 24.04.5
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4887202Z LTS
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4887548Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4887918Z ##[group]Runner Image
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4888269Z Image: ubuntu-24.04
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4888639Z Version: 20260907.300.1
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4889481Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260907.300/images/ubuntu/Ubuntu2404-Readme.md
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4890345Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260907.300
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4890848Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4891744Z ##[group]GITHUB_TOKEN Permissions
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4893035Z Contents: read
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4893519Z Metadata: read
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4893968Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4895777Z Secret source: Actions
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4896616Z Cache mode: write
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.4897376Z Prepare workflow directory
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.5097738Z Prepare all required actions
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.5127861Z Getting action download info
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.8052212Z Download action repository 'actions/checkout@v5' (SHA:fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:43.9776226Z Download action repository 'actions/setup-python@v6' (SHA:ece7cb06caefa5fff74198d8649806c4678c61a1)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:44.0660020Z Download action repository 'actions/download-artifact@v7' (SHA:37930b1c2abaa49bbe596cd826c3c89aef350131)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:44.9306333Z Download action repository 'actions/upload-artifact@v6' (SHA:b7c566a772e6b6bfb58ed0dc250532a479d7789f)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.4970056Z Complete job name: aggregate
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5393359Z ##[group]Run actions/checkout@v5
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5393645Z with:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5393807Z   ref: 09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5394009Z   repository: randlee/sc-observability
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5395324Z   token: ***
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5395464Z   ssh-strict: true
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5395607Z   ssh-user: git
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5395750Z   persist-credentials: true
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5395912Z   clean: true
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5396063Z   sparse-checkout-cone-mode: true
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5396232Z   fetch-depth: 1
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5396368Z   fetch-tags: false
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5396521Z   show-progress: true
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5396672Z   lfs: false
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5396801Z   submodules: false
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5396948Z   set-safe-directory: true
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5397126Z   allow-unsafe-pr-checkout: false
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.5397363Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.6007259Z Syncing repository: randlee/sc-observability
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.6008159Z ##[group]Getting Git version info
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.6008426Z Working directory is '/home/runner/work/sc-observability/sc-observability'
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.6009003Z [command]/usr/bin/git version
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8501450Z git version 2.55.0
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8514827Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8525987Z Temporarily overriding HOME='/home/runner/work/_temp/700ba295-1244-47e7-9fa7-4968f60aeadf' before making global git config changes
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8526750Z Adding repository directory to the temporary git global config as a safe directory
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8530325Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/sc-observability/sc-observability
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8578693Z Deleting the contents of '/home/runner/work/sc-observability/sc-observability'
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8581763Z ##[group]Initializing the repository
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8584685Z [command]/usr/bin/git init /home/runner/work/sc-observability/sc-observability
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8690789Z hint: Using 'master' as the name for the initial branch. This default branch name
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8691194Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8691508Z hint: to use in all of your new repositories, which will suppress this warning,
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8691757Z hint: call:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8691895Z hint:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8692132Z hint: 	git config --global init.defaultBranch <name>
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8692346Z hint:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8692559Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8692878Z hint: 'development'. The just-created branch can be renamed via this command:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8693119Z hint:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8693266Z hint: 	git branch -m <name>
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8693496Z hint:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8693845Z hint: Disable this message with "git config set advice.defaultBranchName false"
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8694354Z Initialized empty Git repository in /home/runner/work/sc-observability/sc-observability/.git/
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8701666Z [command]/usr/bin/git remote add origin https://github.com/randlee/sc-observability
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8743890Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8744203Z ##[group]Disabling automatic garbage collection
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8746424Z [command]/usr/bin/git config --local gc.auto 0
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8773030Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8773446Z ##[group]Setting up auth
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8777989Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+aggregate	UNKNOWN STEP	2026-09-19T17:55:45.8806165Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+aggregate	UNKNOWN STEP	2026-09-19T17:55:46.0140117Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+aggregate	UNKNOWN STEP	2026-09-19T17:55:46.0172252Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+aggregate	UNKNOWN STEP	2026-09-19T17:55:46.0360939Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:46.0389529Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+aggregate	UNKNOWN STEP	2026-09-19T17:55:46.0561321Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+aggregate	UNKNOWN STEP	2026-09-19T17:55:46.0590757Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:46.0591168Z ##[group]Fetching the repository
+aggregate	UNKNOWN STEP	2026-09-19T17:55:46.0596297Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin 09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.5747695Z From https://github.com/randlee/sc-observability
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.5748418Z  * branch            09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8 -> FETCH_HEAD
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.5751950Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.5752291Z ##[group]Determining the checkout info
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.5752976Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.5759005Z [command]/usr/bin/git sparse-checkout disable
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.5803585Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.5829074Z ##[group]Checking out the ref
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.5833397Z [command]/usr/bin/git checkout --progress --force 09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6842274Z Note: switching to '09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8'.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6842602Z 
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6842803Z You are in 'detached HEAD' state. You can look around, make experimental
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6843244Z changes and commit them, and you can discard any commits you make in this
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6843657Z state without impacting any branches by switching back to a branch.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6844155Z 
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6844370Z If you want to create a new branch to retain commits you create, you may
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6844743Z do so (now or later) by using -c with the switch command. Example:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6844960Z 
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6845058Z   git switch -c <new-branch-name>
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6845205Z 
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6845303Z Or undo this operation with:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6845433Z 
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6845510Z   git switch -
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6845655Z 
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6845853Z Turn off this advice by setting config variable advice.detachedHead to false
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6846102Z 
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6846298Z HEAD is now at 09e0ce3 Record generation and package history qualification
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6852493Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6891499Z [command]/usr/bin/git log -1 --format=%H
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.6913100Z 09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.7143999Z ##[group]Run actions/setup-python@v6
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.7144188Z with:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.7144315Z   python-version: 3.12
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.7144436Z   check-latest: false
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.7145710Z   token: ***
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.7145827Z   update-environment: true
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.7145965Z   allow-prereleases: false
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.7146121Z   freethreaded: false
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.7146240Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.7966347Z ##[group]Installed versions
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8030636Z Successfully set up CPython (3.12.14)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8031025Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8139456Z ##[group]Run python -m pip install -r scripts/ci/python-packaging-requirements.txt
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8139870Z ^[[36;1mpython -m pip install -r scripts/ci/python-packaging-requirements.txt^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8186604Z shell: /usr/bin/bash -e {0}
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8186981Z env:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8187331Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8187946Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8188350Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8188684Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8189199Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8189441Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+aggregate	UNKNOWN STEP	2026-09-19T17:55:47.8189632Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.3436469Z Ignoring tomli: markers 'python_version < "3.11"' don't match your environment
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.3437118Z Ignoring pefile: markers 'sys_platform == "win32"' don't match your environment
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.5023182Z Collecting maturin==1.10.2 (from -r scripts/ci/python-packaging-requirements.txt (line 1))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.5472792Z   Downloading maturin-1.10.2-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl.metadata (16 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.5761682Z Collecting packaging==25.0 (from -r scripts/ci/python-packaging-requirements.txt (line 2))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.5790735Z   Downloading packaging-25.0-py3-none-any.whl.metadata (3.3 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.6012900Z Collecting pytest==8.4.2 (from -r scripts/ci/python-packaging-requirements.txt (line 3))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.6041232Z   Downloading pytest-8.4.2-py3-none-any.whl.metadata (7.7 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.6978696Z Collecting mypy==1.18.2 (from -r scripts/ci/python-packaging-requirements.txt (line 4))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.7018657Z   Downloading mypy-1.18.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.2 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.7778888Z Collecting tomli-w==1.2.0 (from -r scripts/ci/python-packaging-requirements.txt (line 6))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.7809644Z   Downloading tomli_w-1.2.0-py3-none-any.whl.metadata (5.7 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.8290640Z Collecting auditwheel==6.4.2 (from -r scripts/ci/python-packaging-requirements.txt (line 8))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.8333450Z   Downloading auditwheel-6.4.2-py3-none-any.whl.metadata (7.4 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.8492192Z Collecting iniconfig>=1 (from pytest==8.4.2->-r scripts/ci/python-packaging-requirements.txt (line 3))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.8522961Z   Downloading iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.8680488Z Collecting pluggy<2,>=1.5 (from pytest==8.4.2->-r scripts/ci/python-packaging-requirements.txt (line 3))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.8711182Z   Downloading pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.9089585Z Collecting pygments>=2.7.2 (from pytest==8.4.2->-r scripts/ci/python-packaging-requirements.txt (line 3))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.9117654Z   Downloading pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.9297542Z Collecting typing_extensions>=4.6.0 (from mypy==1.18.2->-r scripts/ci/python-packaging-requirements.txt (line 4))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.9326123Z   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.9489526Z Collecting mypy_extensions>=1.0.0 (from mypy==1.18.2->-r scripts/ci/python-packaging-requirements.txt (line 4))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:50.9519809Z   Downloading mypy_extensions-1.1.0-py3-none-any.whl.metadata (1.1 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.1264262Z Collecting pathspec>=0.9.0 (from mypy==1.18.2->-r scripts/ci/python-packaging-requirements.txt (line 4))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.1294346Z   Downloading pathspec-1.1.1-py3-none-any.whl.metadata (14 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.1467512Z Collecting pyelftools>=0.24 (from auditwheel==6.4.2->-r scripts/ci/python-packaging-requirements.txt (line 8))
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.1495632Z   Downloading pyelftools-0.33-py3-none-any.whl.metadata (1.0 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.1567169Z Downloading maturin-1.10.2-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl (9.2 MB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.3041936Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.2/9.2 MB 64.5 MB/s  0:00:00
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.3078091Z Downloading packaging-25.0-py3-none-any.whl (66 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.3134265Z Downloading pytest-8.4.2-py3-none-any.whl (365 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.3189001Z Downloading mypy-1.18.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (13.3 MB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.4450292Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 13.3/13.3 MB 107.2 MB/s  0:00:00
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.4484018Z Downloading tomli_w-1.2.0-py3-none-any.whl (6.7 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.4548618Z Downloading auditwheel-6.4.2-py3-none-any.whl (50 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.4596202Z Downloading pluggy-1.6.0-py3-none-any.whl (20 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.4660488Z Downloading iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.4875479Z Downloading mypy_extensions-1.1.0-py3-none-any.whl (5.0 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.4946354Z Downloading pathspec-1.1.1-py3-none-any.whl (57 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.4993195Z Downloading pyelftools-0.33-py3-none-any.whl (201 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.5043122Z Downloading pygments-2.21.0-py3-none-any.whl (1.3 MB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.5094159Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 288.3 MB/s  0:00:00
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.5122198Z Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:51.5991163Z Installing collected packages: typing_extensions, tomli-w, pygments, pyelftools, pluggy, pathspec, packaging, mypy_extensions, maturin, iniconfig, pytest, mypy, auditwheel
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.2877115Z 
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.2887879Z Successfully installed auditwheel-6.4.2 iniconfig-2.3.0 maturin-1.10.2 mypy-1.18.2 mypy_extensions-1.1.0 packaging-25.0 pathspec-1.1.1 pluggy-1.6.0 pyelftools-0.33 pygments-2.21.0 pytest-8.4.2 tomli-w-1.2.0 typing_extensions-4.16.0
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3394907Z ##[group]Run actions/download-artifact@v7
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3395073Z with:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3395185Z   pattern: b4a-*
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3395317Z   path: /home/runner/work/_temp/b4a-evidence
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3395481Z   merge-multiple: false
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3395619Z   repository: randlee/sc-observability
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3395767Z   run-id: 35458975629
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3395885Z env:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3396160Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3396399Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3396633Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3396845Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3397055Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3397269Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.3397449Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6492196Z Found 31 artifact(s)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6492471Z Filtering artifacts by pattern 'b4a-*'
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6504538Z Preparing to download the following artifacts:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6505113Z - b4a-cell-macos-arm64-3.13 (ID: 10589850361, Size: 34723, Expected Digest: sha256:306d3a0d8ad805c7c7c0889b67cec2962d3db3ff78d2439e54ed25a94e1479b6)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6505932Z - b4a-cell-macos-arm64-3.12 (ID: 10589850264, Size: 34749, Expected Digest: sha256:1010297ccc09c415e3b6f259d1c1476d03110accf5b8d9290d0a5a76c583a1bb)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6506732Z - b4a-cell-windows-x86_64-3.12 (ID: 10589766797, Size: 36230, Expected Digest: sha256:f4a65109c400f90b702a20e44345a11edd3508fc31e1fe6b8c810af49be45a1c)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6507526Z - b4a-cell-linux-aarch64-3.14 (ID: 10589731727, Size: 36832, Expected Digest: sha256:a18f71668d6dea9a19d8a036823f4dca8793702a07ebc79167219baef439d0dc)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6508107Z - b4a-cell-windows-x86_64-3.13 (ID: 10589706826, Size: 36103, Expected Digest: sha256:31295a8efbb54642aa157897448322ba07c3948c456cbaf0ce587486154db5fe)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6508587Z - b4a-cell-linux-x86_64-3.12 (ID: 10589691845, Size: 37024, Expected Digest: sha256:c6439d7c220b737f0c2c7cf4ac9f33372a0fb854958ae41e69de1cc5c84a4530)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6509314Z - b4a-cell-macos-arm64-3.11 (ID: 10589682118, Size: 34797, Expected Digest: sha256:6ae8fc200287e17cca9c1d3b0bf932e57cf205d924d2021f09d8afa41b1c6d70)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6509806Z - b4a-cell-linux-x86_64-3.11 (ID: 10589636876, Size: 37025, Expected Digest: sha256:108fef70a13305ed8ed2a910eda3270ebc8144e65eb6120c636371d586cee8b2)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6510296Z - b4a-cell-linux-aarch64-3.11 (ID: 10589626903, Size: 36844, Expected Digest: sha256:0b81f7597ca63667951f10630359aeade3c64de91a6562fea422f848587a239c)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6510933Z - b4a-cell-windows-x86_64-3.14 (ID: 10589617075, Size: 35976, Expected Digest: sha256:5783491b905fbc0e603a4b96b9a6e14cfdb3b1857080631db991f6cff3f8da9a)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6511489Z - b4a-cell-macos-arm64-3.14 (ID: 10589541896, Size: 34779, Expected Digest: sha256:c9a52deb59e8b1712d2e9f8d71b6fbad6db00a29367f6331aa207458ac55e702)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6512346Z - b4a-wheel-macos-arm64 (ID: 10589516750, Size: 1938853, Expected Digest: sha256:17c775f1e20e2ecf1fe7aa2518dc32dd3def37637d51f4b10fb2e73abc9cb83b)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6512988Z - b4a-cell-macos-x86_64-3.10 (ID: 10589502203, Size: 35539, Expected Digest: sha256:19c254729e76fe0ecee331229d88bf591b748fa7af0f1d04d35ddadb9ca493fe)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6513732Z - b4a-cell-windows-x86_64-3.11 (ID: 10589442224, Size: 36195, Expected Digest: sha256:84ad57823753e483bbd326189734fb733918dd085fe90136fef21fcee8cfbccf)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6514216Z - b4a-cell-linux-aarch64-3.10 (ID: 10589407088, Size: 36875, Expected Digest: sha256:0e0bfe30e2282e13b8e59941cee4fe766ecc27e548d2b4670fc2f0269974ecb2)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6514704Z - b4a-cell-linux-x86_64-3.10 (ID: 10589377196, Size: 36951, Expected Digest: sha256:7efae3707f194c521b66414d2de6ca975fb80c12d1d6e1d89fffff7a237b84e1)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6515536Z - b4a-wheel-linux-x86_64 (ID: 10589366861, Size: 2115457, Expected Digest: sha256:76e92c7288f4ccb8c0db3534977327b47ac8edaeb7e3104c5f7014af25ef2f7f)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6516021Z - b4a-cell-linux-x86_64-3.13 (ID: 10589247328, Size: 37103, Expected Digest: sha256:89e428621c08587dccdc79d273974f96808061f02860d12cbcd64180186252dd)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6516485Z - b4a-cell-linux-x86_64-3.14 (ID: 10589232399, Size: 37071, Expected Digest: sha256:0f7061790d2a20a3f2c26fee89259269c65b15df92b544f58b589f5dff345fc2)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6517060Z - b4a-cell-windows-x86_64-3.10 (ID: 10589157801, Size: 36533, Expected Digest: sha256:52082269351735b8b71b50b7ea2d332786e805de61039e4aff3ae502f770d8ae)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6517541Z - b4a-cell-macos-x86_64-3.14 (ID: 10589082213, Size: 35548, Expected Digest: sha256:b3b2f1f3e44c87824e950e7f261f86134bd5c312eebfcc2abda73846ff477695)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6518037Z - b4a-wheel-macos-x86_64 (ID: 10589027023, Size: 1995204, Expected Digest: sha256:ccd61c584f17ddecb92f8c4251631041a6c4afc1837c9c345c7b6b82977f0224)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6518519Z - b4a-cell-macos-x86_64-3.13 (ID: 10589017240, Size: 34914, Expected Digest: sha256:54b463289f578e255f9d277886ff78f76d222d4a3e61ee024142ae96ec012131)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6519072Z - b4a-wheel-linux-aarch64 (ID: 10588961999, Size: 2084107, Expected Digest: sha256:26f1faa50a5eebc66ba6056a61675971a6053121060deb338f4ef994183ddfa5)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6519553Z - b4a-cell-macos-arm64-3.10 (ID: 10588932169, Size: 34874, Expected Digest: sha256:759f928c841d13e0c1b07b9753f9f9e16ebd17858658021995c2ec2dce916fd8)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6520046Z - b4a-wheel-windows-x86_64 (ID: 10588862167, Size: 1672506, Expected Digest: sha256:dfeed75ab550b43e7f0de9e461ea615e6b14b1bb8da69ccb00ab25bf818353a5)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6520535Z - b4a-cell-macos-x86_64-3.11 (ID: 10588842340, Size: 35599, Expected Digest: sha256:1558d20d3a8809689c9b0b2689d7a4d3e4b98f50e0f3937c6884cf0511fdf1de)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6521024Z - b4a-cell-linux-aarch64-3.13 (ID: 10588792381, Size: 36905, Expected Digest: sha256:9e4a098c1ece4ebe03b5d1b53726af07cf5bdb6ba67789c3bff2a001a0f3aa12)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6521489Z - b4a-sdist (ID: 10588781987, Size: 15028200, Expected Digest: sha256:e15799c67173544c50c370e00f7ca0f6b676724dbe09b68248d0e3659526b117)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6521946Z - b4a-cell-linux-aarch64-3.12 (ID: 10588717510, Size: 36850, Expected Digest: sha256:1c1aeffa5e3fbfb15189e035605f25b77f4eceb780cd4650eac748f3707f20eb)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:53.6522516Z - b4a-cell-macos-x86_64-3.12 (ID: 10588697570, Size: 35384, Expected Digest: sha256:30aec173292d1f95b9e8ae8cc5c52de26bb1c99ab0eb65a476edcd6df822abac)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.0939246Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-20a898fb-4221-559e-9806-59ea95b78156/artifacts/a5f7d95a6bf2fcf171f3ae3e78c300f5a6974afbfd18a8db006e776902b9141c.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.0940572Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-macos-arm64-3.12
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1036523Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-f9df00da-ec58-5549-9f24-15ba49c028b4/artifacts/ea80772544479c9ab4270947b44da7cad585e409b7788c1c6a36aefc03d46d43.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1037226Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-windows-x86_64-3.11
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1043984Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-a2d30df1-222b-5486-b794-dc0017fced2f/artifacts/917c774212d44b8486988551b0fa721a449cf0a352d4f64024a24283ba802a03.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1045180Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-linux-aarch64-3.11
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1091463Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-db37ab0e-f834-56e2-a992-d1fc6f5c2b49/artifacts/64a2c473c40d11b8d24bbdbd3103a86e271b6575da11d0ec934b095604afa630.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1100160Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-windows-x86_64-3.14
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1102661Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-c2f78bbb-2a41-5275-9e20-9638db1cc885/artifacts/9bc98dc8178c2fb3e841050388f7bcebd7da4e709cdbe3262e953839df460a09.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1103929Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-macos-arm64-3.14
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1107355Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-6e05c15c-d7c6-5e7c-aa5f-05a2dc3cbeda/artifacts/7029d6b6b5e5d7bc8880e1037453f0156e45f25bd86440f86cd0be9d99113674.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1108059Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-macos-arm64-3.11
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1134679Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-0278d3cf-524c-56ba-b6ab-182534d4a0d0/artifacts/be0ac8153c2f3ed806e2920656d6cadca916d805644c9ce29389b965fbfb5b9e.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1135587Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-linux-x86_64-3.11
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1166990Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-13c3f7e3-7097-5c35-a3ef-c26dc4d63f61/artifacts/2b36b955181a0db0be553bfd4211fbcd0b502d2bb815d94d8ade7ba7e54f27c3.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1167690Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-wheel-macos-arm64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1222462Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-c1e87f3a-c680-5e87-a08e-8625f0f5f3aa/artifacts/cf989d70fc7514436b4f862cc7fbb4ce5dc531cc5b0c8bacd3cd2ec8f454758f.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1223191Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-wheel-linux-x86_64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1263636Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-54f06f95-0f5f-5e38-8a18-9773ca428dec/artifacts/53fe2990d33dee09b09a007c03276a8e6aa4374a9394a6158c4f6abae9a4dae9.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1264525Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-macos-arm64-3.13
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1271555Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-0ba11363-2e30-521c-99ad-09937ce6de5d/artifacts/d810d1de5c500d57b714b07be0a24e0b26d9278dcd0dcf20bbe82ece761c7733.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1272286Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-linux-x86_64-3.14
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1298350Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-b939f369-8a92-5ab0-872f-12b2001f0955/artifacts/949bf273e34f5de5098c8658ac3218ca664c0c5f83b4f8c9f2cd666c5d60d49c.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1299232Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-linux-x86_64-3.10
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1343443Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-458076c0-71c2-5759-91ed-1489af71d811/artifacts/247dd3d4060971b9446b5421a716dbde649ef18a135f5eb0c2afef553a9ccb15.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1344481Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-macos-x86_64-3.10
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1358183Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-a23cde44-c471-57fb-bba7-41c04f3540a1/artifacts/a09b2e8f9c1d01de85aa778c46fea88a827d9e2ccb9c8a3239c5e0ad2f24bbe1.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1359061Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-macos-x86_64-3.11
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1394230Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-d59a997e-0173-52d8-8e5d-4e6b4319080e/artifacts/845734359617fbaf5f3859ba9fc43c97a2fd669eafe77c23a11816c8e93a72ab.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1394970Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-wheel-linux-aarch64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1401127Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-01dd9f57-c7e9-5dfd-99e2-3898d09fc75e/artifacts/dabcd6905f1365e1acb4c2e0a69f9565d253f2affe705a72484467c9f891660b.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1401866Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-windows-x86_64-3.12
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1425063Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-e20060fc-9cee-5403-8ee7-7fb22cdb2547/artifacts/d30c2112f5ffb0c02ef6c47be60e730830eca6fbb3295404817e11dfab84a75e.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1426063Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-linux-aarch64-3.14
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1443855Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-5beac382-f4d0-554e-ad48-8e415150c0ba/artifacts/68ff3d5e4360c88a69ef4c8b74cce1f32157e643137915cb9aeb10cbcc4c0884.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1445294Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-wheel-windows-x86_64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1458706Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-a9d2d132-3804-53b4-9aaf-39fb4114fcc7/artifacts/022c8818fc1dd47365046804f1f796d37f555ebaaacc4e9c3ed345758510c87e.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1460194Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-linux-x86_64-3.13
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1469799Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-d5dc74b6-3003-5059-a2f8-1971943c37e1/artifacts/2a66d2fd63ee76ffd52dab27af134d7aab2bcc96d7603ad4606b8e4b20787980.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1471130Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-windows-x86_64-3.10
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1482152Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-440c529e-2209-5afa-8490-af182c829f4e/artifacts/08d04fc9274e957f45b0dd40012d9fb4d5a826bb202787d3445bbafc67631f16.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1483592Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-linux-aarch64-3.10
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1528633Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-63cfc3f0-0e9c-51d3-ad91-a6d4973b4b11/artifacts/810cbfe4169d026e721180875d5dc31dae2c7e99c36b0960101d4d93cc3d121b.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1530146Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-macos-arm64-3.10
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1540683Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-194afb45-a4bb-56d5-a18d-165ba7cf030a/artifacts/dedca768dfe5313adca7ba2d3954ab2337a799e9c0e18e206dc48a2696e0f6a7.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1542189Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-linux-aarch64-3.13
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1571656Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-2d2cad6c-4500-523a-bda8-f9cc19d999f9/artifacts/6097826848372908e90a713e35ffb7901c376aabf72599b9a546951dc6e3ec39.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1573268Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-linux-aarch64-3.12
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1608129Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-85e74e50-0441-5a41-994b-fadccba64bc0/artifacts/9a47a939c0e6d1a86999029134e805437dc69f175d53a1a955010a1f696ba9a6.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1609706Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-macos-x86_64-3.14
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1681732Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-d0902c7a-465b-5277-a7f3-dbd1f3b68cb3/artifacts/1d07f1447aec826a076a100d610baaf00f850e6601f1c24b87788eb384f078cc.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1683105Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-macos-x86_64-3.13
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1713710Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-5e811e21-e8b1-5864-8b30-4ae1050bcc40/artifacts/94c6b783ef59f601a0ded7b0ccc96811a3e8a7a77e99b7e6820c8b4ac18e9707.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1715090Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-macos-x86_64-3.12
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1727383Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-7e9cbe3e-9784-5a41-ad77-7e3f82d367ab/artifacts/12ec8207c28af341f67a99097d0393d8d114ca5eb9918aea72ae958d65a409af.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1732313Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-windows-x86_64-3.13
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1783168Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-0504965e-9c0a-5354-b81c-9ea70da833e5/artifacts/1003163024f9fb97c21180e4edab62ea8992ad09d0da8833559ea46c896136fc.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1784689Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-wheel-macos-x86_64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1827568Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-8bff0eb6-70f4-5777-82f7-f6c02a191c7d/artifacts/d1ee3c97174d7c06266c612d4a63bef66b54e43adff9d364de0f102b6623f11d.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1828401Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-sdist
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1860297Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/b5171b03-36d1-4dd0-b2be-3e7c372f5dfa/workflow-job-run-fe41377b-733a-5cc2-8e4c-a84176be020a/artifacts/5b314532aba52295fb5d6d35eefd6e2b98bce1fd091ff53bc6ac1d18b53a3094.zip
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.1861141Z Starting download of artifact to: /home/runner/work/_temp/b4a-evidence/b4a-cell-linux-x86_64-3.12
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.2946104Z (node:2070) [DEP0005] DeprecationWarning: Buffer() is deprecated due to security and usability issues. Please use the Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() methods instead.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.2947262Z (Use `node --trace-deprecation ...` to show where the warning was created)
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3397226Z SHA256 digest of downloaded artifact is 1010297ccc09c415e3b6f259d1c1476d03110accf5b8d9290d0a5a76c583a1bb
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3397869Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3491343Z SHA256 digest of downloaded artifact is 5783491b905fbc0e603a4b96b9a6e14cfdb3b1857080631db991f6cff3f8da9a
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3491860Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3746167Z SHA256 digest of downloaded artifact is 108fef70a13305ed8ed2a910eda3270ebc8144e65eb6120c636371d586cee8b2
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3746753Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3759984Z SHA256 digest of downloaded artifact is 6ae8fc200287e17cca9c1d3b0bf932e57cf205d924d2021f09d8afa41b1c6d70
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3760866Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3764715Z SHA256 digest of downloaded artifact is 0b81f7597ca63667951f10630359aeade3c64de91a6562fea422f848587a239c
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3765332Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3765789Z SHA256 digest of downloaded artifact is c9a52deb59e8b1712d2e9f8d71b6fbad6db00a29367f6331aa207458ac55e702
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3766248Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3767488Z SHA256 digest of downloaded artifact is 0f7061790d2a20a3f2c26fee89259269c65b15df92b544f58b589f5dff345fc2
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3768053Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3774038Z SHA256 digest of downloaded artifact is 84ad57823753e483bbd326189734fb733918dd085fe90136fef21fcee8cfbccf
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3774661Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3779874Z SHA256 digest of downloaded artifact is 306d3a0d8ad805c7c7c0889b67cec2962d3db3ff78d2439e54ed25a94e1479b6
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3780526Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3796622Z SHA256 digest of downloaded artifact is 1558d20d3a8809689c9b0b2689d7a4d3e4b98f50e0f3937c6884cf0511fdf1de
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3797049Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3799960Z SHA256 digest of downloaded artifact is 19c254729e76fe0ecee331229d88bf591b748fa7af0f1d04d35ddadb9ca493fe
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3800358Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3862802Z SHA256 digest of downloaded artifact is a18f71668d6dea9a19d8a036823f4dca8793702a07ebc79167219baef439d0dc
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3863201Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3934912Z SHA256 digest of downloaded artifact is 7efae3707f194c521b66414d2de6ca975fb80c12d1d6e1d89fffff7a237b84e1
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3935300Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3978231Z SHA256 digest of downloaded artifact is f4a65109c400f90b702a20e44345a11edd3508fc31e1fe6b8c810af49be45a1c
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.3979051Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4003911Z SHA256 digest of downloaded artifact is 0e0bfe30e2282e13b8e59941cee4fe766ecc27e548d2b4670fc2f0269974ecb2
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4004383Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4006746Z SHA256 digest of downloaded artifact is 52082269351735b8b71b50b7ea2d332786e805de61039e4aff3ae502f770d8ae
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4007431Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4056798Z SHA256 digest of downloaded artifact is 1c1aeffa5e3fbfb15189e035605f25b77f4eceb780cd4650eac748f3707f20eb
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4057462Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4061288Z SHA256 digest of downloaded artifact is 89e428621c08587dccdc79d273974f96808061f02860d12cbcd64180186252dd
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4061824Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4114780Z SHA256 digest of downloaded artifact is b3b2f1f3e44c87824e950e7f261f86134bd5c312eebfcc2abda73846ff477695
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4115473Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4116101Z SHA256 digest of downloaded artifact is 759f928c841d13e0c1b07b9753f9f9e16ebd17858658021995c2ec2dce916fd8
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4116494Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4116883Z SHA256 digest of downloaded artifact is 9e4a098c1ece4ebe03b5d1b53726af07cf5bdb6ba67789c3bff2a001a0f3aa12
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4117637Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4150350Z SHA256 digest of downloaded artifact is 30aec173292d1f95b9e8ae8cc5c52de26bb1c99ab0eb65a476edcd6df822abac
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4151149Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4160086Z SHA256 digest of downloaded artifact is 54b463289f578e255f9d277886ff78f76d222d4a3e61ee024142ae96ec012131
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4160665Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4209128Z SHA256 digest of downloaded artifact is 31295a8efbb54642aa157897448322ba07c3948c456cbaf0ce587486154db5fe
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4209828Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4286707Z SHA256 digest of downloaded artifact is c6439d7c220b737f0c2c7cf4ac9f33372a0fb854958ae41e69de1cc5c84a4530
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.4287250Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.7739161Z SHA256 digest of downloaded artifact is 26f1faa50a5eebc66ba6056a61675971a6053121060deb338f4ef994183ddfa5
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.7740030Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.7809748Z SHA256 digest of downloaded artifact is dfeed75ab550b43e7f0de9e461ea615e6b14b1bb8da69ccb00ab25bf818353a5
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.7810187Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.8057138Z SHA256 digest of downloaded artifact is 17c775f1e20e2ecf1fe7aa2518dc32dd3def37637d51f4b10fb2e73abc9cb83b
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.8057577Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.8186863Z SHA256 digest of downloaded artifact is 76e92c7288f4ccb8c0db3534977327b47ac8edaeb7e3104c5f7014af25ef2f7f
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.8187446Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.8392573Z SHA256 digest of downloaded artifact is ccd61c584f17ddecb92f8c4251631041a6c4afc1837c9c345c7b6b82977f0224
+aggregate	UNKNOWN STEP	2026-09-19T17:55:54.8393288Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3300171Z SHA256 digest of downloaded artifact is e15799c67173544c50c370e00f7ca0f6b676724dbe09b68248d0e3659526b117
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3300649Z Artifact download completed successfully.
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3300929Z Total of 31 artifact(s) downloaded
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3309471Z Download artifact has finished successfully
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3419925Z ##[group]Run sdist=( "$RUNNER_TEMP"/b4a-evidence/b4a-sdist/dist/*.tar.gz )
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3420615Z ^[[36;1msdist=( "$RUNNER_TEMP"/b4a-evidence/b4a-sdist/dist/*.tar.gz )^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3420999Z ^[[36;1mpython scripts/ci/validate_python_distribution.py aggregate \^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3421410Z ^[[36;1m  --policy release/python-platform-policy.json --sdist "${sdist[0]}" \^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3421881Z ^[[36;1m  --evidence "$RUNNER_TEMP/b4a-evidence" --source-commit "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8" \^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3422320Z ^[[36;1m  --publication-dir "$RUNNER_TEMP/b4a-production" \^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3422686Z ^[[36;1m  --output "$RUNNER_TEMP/b4a-production/production-artifacts.json"^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3423002Z ^[[36;1mpython - <<'PYTHON'^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3423240Z ^[[36;1mimport hashlib, os^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3423484Z ^[[36;1mfrom pathlib import Path^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3423863Z ^[[36;1minventory = Path(os.environ['RUNNER_TEMP']) / 'b4a-production/production-artifacts.json'^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3424267Z ^[[36;1mwith open(os.environ['GITHUB_OUTPUT'], 'a') as output:^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3424646Z ^[[36;1m    output.write('sha256=' + hashlib.sha256(inventory.read_bytes()).hexdigest() + '\n')^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3424971Z ^[[36;1mPYTHON^[[0m
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3455683Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3455963Z env:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3456207Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3456547Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3456883Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3457200Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3457526Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3457856Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+aggregate	UNKNOWN STEP	2026-09-19T17:55:55.3458146Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.7778626Z B4A_QUALIFIED: five ABI wheels, 25 installed full-suite cells, offline sdist and embedding
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8118083Z ##[group]Run actions/upload-artifact@v6
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8118346Z with:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8118557Z   name: b4a-production-inventory
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8119137Z   path: /home/runner/work/_temp/b4a-production/
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8119410Z   if-no-files-found: error
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8119641Z   retention-days: 90
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8119862Z   compression-level: 6
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8120082Z   overwrite: false
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8120301Z   include-hidden-files: false
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8120535Z env:
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8120771Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8121114Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib/pkgconfig
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8121445Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8121760Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8122074Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.14/x64
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8122409Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.14/x64/lib
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.8122689Z ##[endgroup]
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.9125465Z With the provided path, there will be 7 files uploaded
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.9126187Z Artifact name is valid!
+aggregate	UNKNOWN STEP	2026-09-19T17:55:57.9126547Z Root directory input is valid!
+aggregate	UNKNOWN STEP	2026-09-19T17:55:58.2681443Z Beginning upload of artifact content to blob storage
+aggregate	UNKNOWN STEP	2026-09-19T17:55:59.2816848Z Uploaded bytes 8388608
+aggregate	UNKNOWN STEP	2026-09-19T17:55:59.3344749Z Uploaded bytes 16777216
+aggregate	UNKNOWN STEP	2026-09-19T17:55:59.4534511Z Uploaded bytes 19642209
+aggregate	UNKNOWN STEP	2026-09-19T17:55:59.5086629Z Finished uploading artifact content to blob storage!
+aggregate	UNKNOWN STEP	2026-09-19T17:55:59.5087373Z SHA256 digest of uploaded artifact zip is f427e94bbe97db0ca1dea8a6b5db69e8119f1ea2ddc23541103b2884d463d25f
+aggregate	UNKNOWN STEP	2026-09-19T17:55:59.5088705Z Finalizing artifact upload
+aggregate	UNKNOWN STEP	2026-09-19T17:55:59.8509078Z Artifact b4a-production-inventory.zip successfully finalized. Artifact ID 10589791842
+aggregate	UNKNOWN STEP	2026-09-19T17:55:59.8509937Z Artifact b4a-production-inventory has been successfully uploaded! Final size is 19642209 bytes. Artifact ID is 10589791842
+aggregate	UNKNOWN STEP	2026-09-19T17:55:59.8512732Z Artifact download URL: https://github.com/randlee/sc-observability/actions/runs/35458975629/artifacts/10589791842
+aggregate	UNKNOWN STEP	2026-09-19T17:55:59.8653383Z Post job cleanup.
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.1106038Z Post job cleanup.
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.1646462Z [command]/usr/bin/git version
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.1672903Z git version 2.55.0
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.1697425Z Temporarily overriding HOME='/home/runner/work/_temp/7dfb46d7-3b65-4257-89c4-7a2fd3792a82' before making global git config changes
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.1698031Z Adding repository directory to the temporary git global config as a safe directory
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.1701355Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/sc-observability/sc-observability
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.1730756Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.1763427Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.1965731Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.1990875Z http.https://github.com/.extraheader
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.1999438Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.2028362Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.2221537Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.2251049Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.2529957Z Evaluate and set job outputs
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.2534797Z Set output 'source_commit'
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.2536021Z Set output 'inventory_sha256'
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.2536652Z Set output 'inventory_artifact_id'
+aggregate	UNKNOWN STEP	2026-09-19T17:56:00.2537355Z Cleaning up orphan processes
