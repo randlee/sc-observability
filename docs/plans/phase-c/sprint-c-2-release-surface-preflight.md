@@ -118,10 +118,12 @@ This sprint remains open pending the owner-controlled environment
 configuration and lead completeness PASS. The environment blocker is external
 state, not an accepted gap; the task must not be closed until it is resolved
 and lead completeness PASS is received. Upstream PR95 review is tracked
-separately: the validated C.1 pin remains `006092a305bb03bd483d79dd6b5d51bda1e545e4`,
-while its newer npm-metadata correction `b2f18cf56aa4488376fdef6b2cab30e382f32dbd`
-still awaits exact-head CI and reviewer re-verification. This C.2 evidence does
-not claim end-to-end publisher-agent readiness or upstream final readiness.
+separately: the C.1 evidence retains historical pin
+`006092a305bb03bd483d79dd6b5d51bda1e545e4`; the active C.2 pin is the
+independently approved npm-metadata correction
+`b2f18cf56aa4488376fdef6b2cab30e382f32dbd`, with exact-head upstream CI
+`35410283861` passed. This C.2 evidence does not claim end-to-end
+publisher-agent readiness or authorized publication.
 
 ## Goal and dependencies
 

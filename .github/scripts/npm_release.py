@@ -11,6 +11,7 @@ import re
 import subprocess
 import tarfile
 import tempfile
+import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -61,15 +62,47 @@ def metadata(path):
         return json.load(archive.extractfile(members[0]))
 
 
-def check_metadata(path, name, release_version):
-    data = metadata(path)
-    if data.get("name") != name or data.get("version") != release_version or data.get("private"):
-        raise ValueError("npm archive identity/version/private mismatch")
+def check_package_metadata(data, name, release_version, label):
+    if not isinstance(data, dict) or data.get("name") != name or data.get("version") != release_version or data.get("private", False) is not False:
+        raise ValueError(f"{label}: identity/version/private mismatch")
     config = data.get("publishConfig", {})
-    if config.get("access", "public") != "public" or "tag" in config:
-        raise ValueError("npm publishConfig conflicts with shared public/tag policy")
-    if config.get("registry", REGISTRY).rstrip("/") != REGISTRY:
-        raise ValueError("npm archive redirects publication to another registry")
+    if not isinstance(config, dict) or config.get("access", "public") != "public" or "tag" in config:
+        raise ValueError(f"{label}: publishConfig conflicts with shared public/tag policy")
+    registry = config.get("registry", REGISTRY)
+    if not isinstance(registry, str) or registry.rstrip("/") != REGISTRY:
+        raise ValueError(f"{label}: redirects publication to another registry")
+
+
+def check_metadata(path, name, release_version):
+    check_package_metadata(metadata(path), name, release_version, "npm archive")
+
+
+def validate_sources(manifest, release_version, source_ref=None):
+    """Fail before release writes when any declared npm source is unsuitable."""
+    for entry in packages(manifest):
+        package_path = Path(entry["source"]) / "package.json"
+        if source_ref:
+            data = json.loads(subprocess.check_output(["git", "show", f"{source_ref}:{package_path.as_posix()}"], text=True))
+        else:
+            source = package_path.resolve()
+            if not source.is_relative_to(Path.cwd().resolve()):
+                raise ValueError("npm source escapes checkout")
+            data = json.loads(source.read_text())
+        check_package_metadata(data, entry["name"], release_version, f"source npm package {package_path}")
+
+
+def check_release_source(manifest_path, tag, source_ref=None):
+    if source_ref:
+        if not re.fullmatch(r"[0-9a-f]{40}", source_ref):
+            raise ValueError("npm source ref must be an exact commit SHA")
+        path = Path(manifest_path)
+        if path.is_absolute() or ".." in path.parts:
+            raise ValueError("npm source manifest must be repository-relative")
+        manifest = tomllib.loads(subprocess.check_output(["git", "show", f"{source_ref}:{path.as_posix()}"], text=True))
+    else:
+        manifest = load_manifest(Path(manifest_path))
+    if packages(manifest):
+        validate_sources(manifest, version(tag), source_ref)
 
 
 def build(manifest, tag, asset_dir):
@@ -77,14 +110,10 @@ def build(manifest, tag, asset_dir):
     if not entries:
         return
     release_version = version(tag)
+    validate_sources(manifest, release_version)
     asset_dir.mkdir(parents=True, exist_ok=True)
     for entry in entries:
         source = Path(entry["source"]).resolve()
-        if not source.is_relative_to(Path.cwd().resolve()):
-            raise ValueError("npm source escapes checkout")
-        data = json.loads((source / "package.json").read_text())
-        if data.get("name") != entry["name"] or data.get("version") != release_version or data.get("private"):
-            raise ValueError("source npm package must match release name/version and be public")
         subprocess.run(["npm", "ci"], cwd=source, check=True)
         subprocess.run(["npm", "run", "build", "--if-present"], cwd=source, check=True)
         subprocess.run(["npm", "pack", "--ignore-scripts", "--pack-destination", str(asset_dir.resolve())], cwd=source, check=True)
@@ -161,11 +190,15 @@ def publish(manifest, tag, asset_dir, dry_run=True):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("build", "verify", "preflight", "publish"))
+    parser.add_argument("command", choices=("build", "verify", "preflight", "publish", "check-source"))
     parser.add_argument("--manifest", default="release/publish-artifacts.toml")
     parser.add_argument("--tag", required=True)
+    parser.add_argument("--source-ref", help="Exact commit to check before creating a release tag")
     parser.add_argument("--asset-dir", type=Path, default=Path("npm-dist"))
     args = parser.parse_args()
+    if args.command == "check-source":
+        check_release_source(args.manifest, args.tag, args.source_ref)
+        return
     manifest = load_manifest(Path(args.manifest))
     if args.command == "build":
         build(manifest, args.tag, args.asset_dir)

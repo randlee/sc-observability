@@ -45,8 +45,8 @@ platform assertions. Legacy runner-string matrix JSON remains identical.
 ## Validation
 
 - Source suite: `python -m pytest plugins/sc-publish/.github/scripts/tests -q`:
-  158 passed, 10 skipped on Python 3.12 with sc-compose 1.5.0 and PyYAML 6.0.3.
-- Installed suite: 154 passed, 14 skipped after a clean installer overlay
+  166 passed, 10 skipped on Python 3.12 with sc-compose 1.5.0 and PyYAML 6.0.3.
+- Installed suite: 162 passed, 14 skipped after a clean installer overlay
   and repeat drift check. Both source and installed suites ran with ambient
   `RELEASE_TAG` removed; mocked publication fixtures set their own tag. The
   installed suite is now also a GitHub CI gate. Source tests cover
@@ -108,3 +108,21 @@ its full installed suite: **157 passed, 11 skipped**, with a clean repeat dry-ru
 Source suite: **158 passed, 10 skipped**. Both retained peer compatibility
 comparisons pass unchanged. This correction changes shared tests/documentation,
 not publication behavior or consumer-owned workflows.
+
+## Pre-tag npm source gate
+
+Review identified that npm source versions were checked only during the later
+build job. `verify-version-lockstep` now validates every declared npm source
+name/version, rejects private packages, and enforces the same public registry
+and publishConfig policy used for archived packages. The build reuses this
+validator. Before the tag step, a separate failing gate reads the declared npm
+manifest and each package.json from the exact resolved release commit, so a
+valid dispatch checkout cannot conceal stale metadata in the tree being tagged.
+
+Regression tests reject stale versions, mismatched names, private packages,
+restricted access, and registry overrides. They assert exact-commit reads and
+workflow ordering before tag creation and downstream build/publication jobs.
+Full source: **166 passed, 10 skipped**; generic installed: **162 passed,
+14 skipped**; isolated actual consumer: **165 passed, 11 skipped**. The existing
+sc-compose and atm-core compatibility comparison remains unchanged. No
+credential convention, registry write, tag, or live dispatch is part of this fix.

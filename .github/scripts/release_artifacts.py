@@ -734,6 +734,8 @@ def cmd_verify_version_lockstep(args: argparse.Namespace) -> int:
             version,
             cargo_manifest=distribution["cargo_manifest"] if distribution else None,
         )
+    from npm_release import validate_sources
+    validate_sources(manifest, version)
     print("version lockstep verification passed")
     return 0
 

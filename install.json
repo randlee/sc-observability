@@ -46,8 +46,8 @@
     "npm": {"workflow": "npm-publish.yml", "dispatch_inputs": {}}
   },
   "review_notes": {
-    "npm": "Blocked pending upstream sc-publish npm channel; do not install or claim adoption until landed.",
+    "npm": "Adopted from reviewed sc-publish revision b2f18cf; publication remains separately authorized and credential-gated.",
     "publication": "No publication, tag, or release dispatch is authorized by C.1.",
-    "schema": "This contract follows sc-publish develop a4206dc caller-owned JSON; the selected pin remains pending upstream prerequisite completion."
+    "schema": "This contract follows the reviewed sc-publish npm-channel contract at b2f18cf; publication remains separately authorized."
   }
 }

@@ -135,7 +135,9 @@ Declare `npm_packages` (optional, defaults to empty) together with `channels.npm
 Merge this fragment into the complete installer input. Do not declare npm as an
 `enabled` flag. Each source must have a committed `package-lock.json` and public
 `package.json` whose name and version match the release tag (without `v`). The
-release build runs `npm ci`, `npm run build --if-present`, and `npm pack
+pre-tag lockstep gate validates every declared npm package name/version and
+public publication settings; an additional gate reads the exact resolved release
+commit before creating its tag. The release build runs `npm ci`, `npm run build --if-present`, and `npm pack
 --ignore-scripts`; commit any generated inputs needed for the build. The release
 attaches the resulting `.tgz` files and includes them in `checksums.txt`.
 
