@@ -457,6 +457,7 @@ def run_release_gate_readiness(
         "release_artifacts.py",
         "release_manifest.py",
         "release_registry.py",
+        "release_credentials.py",
         "npm_release.py",
         "release_python.py",
         "release_gate.sh",
@@ -1044,6 +1045,7 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
         "release_artifacts.py",
         "release_manifest.py",
         "release_registry.py",
+        "release_credentials.py",
         "npm_release.py",
         "release_python.py",
         "release_gate.sh",
@@ -2203,8 +2205,8 @@ def test_release_preflight_requires_each_standardized_secret() -> None:
     assert "Environment-secret metadata is unavailable to GITHUB_TOKEN" in text
     assert "Verify repository credential liveness" in text
     assert "https://crates.io/api/v1/me" not in text
-    assert 'Authorization: Bearer ${token}' in text
-    assert "https://api.github.com/user" in text
+    assert 'python3 .github/scripts/release_credentials.py' in text
+    assert "https://api.github.com/user" in (scripts_root() / "release_credentials.py").read_text()
     assert "rotate or replace it" not in text
     assert 'echo "${token}"' not in text
     assert 'echo "${!secret_name}"' not in text

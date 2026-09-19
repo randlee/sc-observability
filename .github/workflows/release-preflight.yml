@@ -162,6 +162,7 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           SECRET_PLAN: ${{ steps.secret_plan.outputs.plan }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
@@ -171,20 +172,11 @@ jobs:
           failures=()
           channel_outcomes='{}'
           while IFS=$'\t' read -r channel secret_name check_kind; do
-            token="${!secret_name:-}"
             channel_status=success
-            case "${check_kind}" in
-              github)
-                command=(curl --fail --silent --show-error --header "Authorization: Bearer ${token}" --header "Accept: application/vnd.github+json" https://api.github.com/user)
-                ;;
-              *)
-                failures+=("Unsupported credential liveness check kind: ${check_kind}")
-                channel_status=failure
-                continue
-                ;;
-            esac
-            if ! "${command[@]}" >/dev/null; then
-              failures+=("GitHub Actions secret ${secret_name} is present but rejected by its publish service.")
+            if ! python3 .github/scripts/release_credentials.py \
+              --manifest "${RELEASE_ARTIFACT_MANIFEST}" --channel "${channel}" \
+              --kind "${check_kind}" --secret-name "${secret_name}"; then
+              failures+=("Credential authentication not established for channel ${channel} (${secret_name}).")
               channel_status=failure
             fi
             channel_outcomes="$(jq -c --arg channel "${channel}" --arg status "${channel_status}" '.[$channel]=$status' <<<"${channel_outcomes}")"
@@ -194,7 +186,7 @@ jobs:
             printf '%s\n' "${failures[@]}" >&2
             exit 1
           fi
-          echo "All manifest-required repository credentials are accepted by their publish services."
+          echo "All manifest-required repository credentials authenticated; publish permissions require channel verification."
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -379,6 +371,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          plan="$(python3 .github/scripts/release_artifacts.py package-check-plan --include-manifest \
+            --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
+            --workspace-toml '${{ steps.build_plan.outputs.workspace_toml }}')"
           while IFS='|' read -r package mode earlier_release_dependencies cargo_manifest; do
             case "${mode}" in
               verify)
@@ -387,16 +382,19 @@ jobs:
               no_verify)
                 printf 'Validating %s without registry verification; waiting for earlier release crate(s): %s\n' \
                   "$package" "$earlier_release_dependencies"
-                cargo package --manifest-path "$cargo_manifest" --locked --allow-dirty --no-verify
+                # Check the real local dependency graph, including standalone crates.
+                cargo check --manifest-path "$cargo_manifest" --locked
+                # --no-verify alone still resolves registry versions for Cargo.lock.
+                # This preflight-only archive is never uploaded; publication retains
+                # normal lockfile generation and registry-backed verification.
+                cargo package --manifest-path "$cargo_manifest" --locked --allow-dirty --no-verify --exclude-lockfile
                 ;;
               *)
                 printf 'Unknown package-check mode for %s: %s\n' "$package" "$mode" >&2
                 exit 1
                 ;;
             esac
-          done < <(python3 .github/scripts/release_artifacts.py package-check-plan --include-manifest \
-            --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
-            --workspace-toml '${{ steps.build_plan.outputs.workspace_toml }}')
+          done <<<"${plan}"
 
       - id: github_release_permissions
         name: Verify GitHub Release workflow permissions

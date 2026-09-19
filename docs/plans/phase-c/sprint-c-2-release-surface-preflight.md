@@ -126,9 +126,11 @@ state, not accepted gaps; the task must not be closed until they are resolved
 and lead completeness PASS is received. Upstream PR95 review is tracked
 separately: the C.1 evidence retains historical pin
 `006092a305bb03bd483d79dd6b5d51bda1e545e4`; the active C.2 pin is the
-independently approved npm-metadata correction
-`7b899fea2325b6bda55a5d061f2c507366246974`, with its follow-up exact-head
-upstream CI `35413991243` passed. The prior independent approval run
+independently approved credential/package-preflight correction
+`cb29cb4926e09a5a4f4609e118429a2e14f69827`, with upstream CI
+`35416135181` passed. The prior npm-metadata correction
+`7b899fea2325b6bda55a5d061f2c507366246974` and its follow-up exact-head
+upstream CI `35413991243` remain historical. The prior independent approval run
 `35410283861` targeted the superseded b2f18cf head. This C.2 evidence does not claim end-to-end
 publisher-agent readiness or authorized publication.
 
