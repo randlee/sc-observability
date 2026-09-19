@@ -8,8 +8,8 @@ against its own manifest shape while preserving the shared release contract.
 No entry in release/bindings-artifacts.toml carries a literal version field.
 Versions are always resolved live from each artifact's own manifest
 (Cargo.toml's `[package].version`, pyproject.toml's `[project].version`,
-package.json's `.version`) at validate/verify time, exactly as
-release_artifacts.py already does for the 6-crate manifest.
+package.json's `.version`) at validate/verify time, matching the shared
+`.github/scripts/release_artifacts.py` behavior for the six-crate manifest.
 """
 
 from __future__ import annotations

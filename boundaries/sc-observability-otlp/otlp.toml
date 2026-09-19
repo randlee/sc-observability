@@ -1,0 +1,28 @@
+boundary_id = "BOUNDARY-ScObservabilityOtlp"
+owner_package = "sc-observability-otlp"
+owner_crate_path = "sc_observability_otlp"
+name = "ScObservabilityOtlp"
+[public]
+facade = "crate_root"
+[implementation]
+type = "crate"
+module = "sc_observability_otlp"
+visibility = "public"
+constructor = "none"
+[composition]
+roots = []
+[dependencies]
+allowed_dependents = []
+allowed_dependencies = ["sc-observability", "sc-observability-types", "sc-observe"]
+forbidden_edges = []
+[references]
+scope = "outside_owner_crate"
+forbidden = []
+[testing]
+allowed_test_double_paths = []
+forbidden_test_bypasses = []
+[enforcement]
+lint_rules = ["LINT-SC-OBSERVABILITY-OTLP-BOUNDARY"]
+review_gates = ["workspace_dependency_policy"]
+[status]
+state = "concrete_landed"

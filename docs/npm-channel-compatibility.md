@@ -159,3 +159,49 @@ Reproduce the focused and full runs with the renderer environment provisioned:
 python -m pytest plugins/sc-publish/.github/scripts/tests/test_release_artifacts.py plugins/sc-publish/.github/scripts/tests/test_publish_kit_scripts.py -q
 python -m pytest plugins/sc-publish/.github/scripts/tests -q
 ```
+
+## PHC-QA-017/018: actual nonpublishing preflight corrections
+
+Consumer run [35415396742](https://github.com/randlee/sc-observability/actions/runs/35415396742)
+exposed a missing crates.io credential probe and Cargo's registry resolution
+while generating an archive lockfile. Both were reproduced independently.
+
+The liveness step now wires the contract-declared `CARGO_REGISTRY_TOKEN` and
+uses `release_credentials.py` for manifest-authorized read-only probes. Every
+failure, including unsupported checks, records its channel outcome. The helper
+bounds requests to 20 seconds, refuses redirects/unexpected endpoints, and
+never prints credentials or service response bodies.
+
+The existing crates.io contract names `/api/v1/me`, which is now cookie-only.
+Official crates.io [AuthCheck implementation](https://github.com/rust-lang/crates.io/blob/6b53ae9cebcfcdc19c81ff9a87664959a2285914/src/auth.rs)
+authenticates first and only then returns its specific cookie-only diagnostic;
+the [endpoint implementation](https://github.com/rust-lang/crates.io/blob/6b53ae9cebcfcdc19c81ff9a87664959a2285914/src/controllers/user/me.rs)
+uses that check. We accept a valid user identity or that exact HTTP 403 JSON
+response as evidence of authentication only. Other 403 responses, authentication
+failures, malformed responses, redirects, and transport errors fail closed.
+The output explicitly does **not** establish crate ownership or publish scope.
+A future change to the service diagnostic will fail closed and require review.
+No live token probe was performed: all HTTP responses were synthetic.
+
+Cargo's [`--no-verify`](https://doc.rust-lang.org/cargo/commands/cargo-package.html)
+skips the archive build, not registry resolution for its lockfile. For dependent
+release crates only, preflight now runs `cargo check --locked` against the real
+manifest and packages a normalized source archive with `--no-verify
+--exclude-lockfile`. That archive is never published. Independent crates retain
+full archive verification, and publication retains normal lockfile generation
+and registry verification. Plan-generation errors now stop the step instead of
+being hidden by process substitution.
+
+A real fixture with two workspace crates and a standalone crate reproduces the
+old failure with an isolated Cargo home and offline mode. The corrected workflow
+creates both dependent archives with normalized versioned dependencies; the
+independent crate still undergoes archive build verification. Compiler errors,
+missing source files, and invalid release plans fail. Tested with the default
+Cargo **1.94.1**; the packaging flag also exists in Cargo **1.93.0**.
+
+Validation: new regressions **25 passed**; full source **194 passed, 10 skipped**;
+generic installed **190 passed, 14 skipped**; isolated actual sc-observability
+installed **193 passed, 11 skipped**. Existing sc-compose and atm-core
+baseline/candidate comparisons remain identical for manifests, existing channel
+contracts, matrices, publish plans, credential plans, and release assets.
+No credential was read, publication attempted, or release workflow dispatched.
