@@ -12,7 +12,7 @@ base: fix/phase-c-1-shared-pipeline-migration
 
 The C.1 parent was merge-forwarded before this round and is present through
 `7797606105055f67e937203eaa3a4b5adf41e3dd`; the current C.2 evidence source is
-`debd74e3b6a44c59dd15696229433306b6619d59`. No publish, upload, tag, release
+`139e0c390a534aed6e27908a3682e632da96c631`. No publish, upload, tag, release
 dispatch, or BTIT test has been run.
 
 ### 1. Deterministic inventory (PASS)
@@ -70,7 +70,7 @@ downloaded `b4a-production-inventory/production-artifacts.json` contains one
 sdist and five production ABI wheels and has SHA256
 `d986bf059561d2115cd6babb4135444f60d7ae7aa2f41edd838dfa6d307b0ef1`.
 The aggregate step writes this same digest to its `inventory_sha256` output.
-The direct qualified-path diff from that SHA to current `debd74e` is empty,
+The direct qualified-path diff from that SHA to current `139e0c3` is empty,
 so this run is equivalent for every Python-qualified path; the intervening
 changes only repair shared CI manifest-validation paths.
 
