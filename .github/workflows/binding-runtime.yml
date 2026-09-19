@@ -12,13 +12,13 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12.10'
       - name: Complete debug and release native contract
@@ -26,7 +26,7 @@ jobs:
         run: bash scripts/ci/validate_binding_runtime.sh --platform-only
       - name: Retain complete platform proof
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: binding-runtime-${{ matrix.os }}
           path: target/binding-runtime-platforms
@@ -34,18 +34,18 @@ jobs:
   packaged-consumer:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12.10'
       - name: Verify offline packaged core and bridge consumer in sandbox
         run: bash scripts/ci/validate_binding_runtime.sh --consumer-only
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: binding-runtime-consumer
           path: |
@@ -56,19 +56,19 @@ jobs:
     needs: [native-contract, packaged-consumer]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12.10'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           pattern: binding-runtime-*-latest
           path: target/binding-runtime-platforms
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: binding-runtime-consumer
           path: target

@@ -19,7 +19,7 @@ jobs:
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - name: Verify qualification metadata and fixture formatting
         run: |
@@ -35,7 +35,7 @@ jobs:
           candidate_version="$(python3 scripts/ci/_runtime_level_common.py --candidate-version)"
           python3 scripts/ci/prepare_runtime_level_staged_packages.py --version "$candidate_version" --output "$STAGE_DIR"
       - name: Retain immutable candidate bytes
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: bp2-candidate-stage
           path: ${{ runner.temp }}/bp2-stage
@@ -54,10 +54,10 @@ jobs:
             evidence: windows
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - name: Download the shared immutable candidate
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: bp2-candidate-stage
           path: ${{ runner.temp }}/bp2-stage
@@ -70,7 +70,7 @@ jobs:
           python3 scripts/ci/validate_runtime_level_staged_consumer.py --version "$candidate_version" --stage "$STAGE_DIR" --platform ${{ matrix.evidence }} --result-file bp2-evidence/${{ matrix.evidence }}.json
       - name: Retain platform qualification output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: bp2-${{ matrix.evidence }}-qualification
           path: bp2-evidence
@@ -79,8 +79,8 @@ jobs:
     needs: staged-consumer
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with:
           pattern: bp2-*-qualification
           path: bp2-evidence-download

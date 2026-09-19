@@ -3,7 +3,7 @@
 This repo uses a single source of truth for release artifacts:
 
 - Manifest: `release/publish-artifacts.toml`
-- Loader/validator: `scripts/release_artifacts.py`
+- Loader/validator: `.github/scripts/release_artifacts.py`
 
 Do not hardcode crate lists or publish order in docs or workflows. Update the
 manifest instead.
@@ -86,16 +86,16 @@ Crates must be published in dependency order (defined in the manifest):
 
 ```bash
 # Show publish plan
-python3 scripts/release_artifacts.py list-publish-plan \
+python3 .github/scripts/release_artifacts.py list-publish-plan \
   --manifest release/publish-artifacts.toml
 
 # Validate manifest completeness against workspace
-python3 scripts/release_artifacts.py validate-manifest \
+python3 .github/scripts/release_artifacts.py validate-manifest \
   --manifest release/publish-artifacts.toml \
   --workspace-toml Cargo.toml
 
 # Verify version matches workspace
-python3 scripts/release_artifacts.py verify-version \
+python3 .github/scripts/release_artifacts.py verify-version \
   --manifest release/publish-artifacts.toml \
   --workspace-toml Cargo.toml \
   --version "$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
