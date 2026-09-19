@@ -12,7 +12,7 @@ base: develop
 
 The superseded C.1 qualification kit was `006092a305bb03bd483d79dd6b5d51bda1e545e4`;
 the current validated immutable kit is pinned in `release/sc-publish-pin.toml`
-at `b2f18cf56aa4488376fdef6b2cab30e382f32dbd`. Its installer reports
+at `7b899fea2325b6bda55a5d061f2c507366246974`. Its installer reports
 `Publish-kit assets are in sync.` on the repeat dry-run. The installed suite
 passes `157 passed, 11 skipped, 0 failed`; the retained evidence and exact
 command are in `docs/plans/phase-c/evidence/c1-installed-suite-006092a.txt`.

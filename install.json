@@ -46,8 +46,8 @@
     "npm": {"workflow": "npm-publish.yml", "dispatch_inputs": {}}
   },
   "review_notes": {
-    "npm": "Adopted from reviewed sc-publish revision b2f18cf; publication remains separately authorized and credential-gated.",
+    "npm": "Adopted from reviewed sc-publish revision 7b899fea; publication remains separately authorized and credential-gated.",
     "publication": "No publication, tag, or release dispatch is authorized by C.1.",
-    "schema": "This contract follows the reviewed sc-publish npm-channel contract at b2f18cf; publication remains separately authorized."
+    "schema": "This contract follows the reviewed sc-publish npm-channel contract at 7b899fea; publication remains separately authorized."
   }
 }

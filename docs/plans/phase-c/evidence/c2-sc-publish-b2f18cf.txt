@@ -2,7 +2,7 @@ C.2 sc-publish correction adoption evidence
 ==============================================
 
 Active consumer source commit: 139e0c390a534aed6e27908a3682e632da96c631
-Active release/sc-publish-pin.toml revision:
+Historical release/sc-publish-pin.toml revision (superseded by the QA correction):
   b2f18cf56aa4488376fdef6b2cab30e382f32dbd
 Upstream: https://github.com/randlee/sc-publish/pull/95
 Exact-head upstream CI: 35410283861, success

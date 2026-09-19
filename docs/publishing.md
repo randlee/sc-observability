@@ -12,7 +12,7 @@ upstream prerequisites that `../sc-publish` must satisfy at a reviewed pin —
 not a repository-local publisher fork and not an accepted regression.
 The reviewed caller contract is `install.json`. Phase C migration is installed
 and qualified from the immutable `sc-publish` revision recorded in
-`release/sc-publish-pin.toml` (`b2f18cf56aa4488376fdef6b2cab30e382f32dbd`).
+`release/sc-publish-pin.toml` (`7b899fea2325b6bda55a5d061f2c507366246974`).
 No publication, tag, or release dispatch is authorized. See
 `docs/plans/phase-c/sprint-c-1-shared-pipeline-migration.md` for the exact
 asset replacement/removal/retention table and

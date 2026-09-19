@@ -126,7 +126,7 @@ and lead completeness PASS is received. Upstream PR95 review is tracked
 separately: the C.1 evidence retains historical pin
 `006092a305bb03bd483d79dd6b5d51bda1e545e4`; the active C.2 pin is the
 independently approved npm-metadata correction
-`b2f18cf56aa4488376fdef6b2cab30e382f32dbd`, with exact-head upstream CI
+`7b899fea2325b6bda55a5d061f2c507366246974`, with exact-head upstream CI
 `35410283861` passed. This C.2 evidence does not claim end-to-end
 publisher-agent readiness or authorized publication.
 

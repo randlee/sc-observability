@@ -2,7 +2,7 @@
 
 This is the C.1 disposition inventory. The superseded C.1 qualification pin
 was `61568d813550ac7faab0fd9c887c731d975d1264`; the current installed and
-qualified pin is `b2f18cf56aa4488376fdef6b2cab30e382f32dbd`, recorded in
+qualified pin is `7b899fea2325b6bda55a5d061f2c507366246974`, recorded in
 `release/sc-publish-pin.toml`.
 The remaining acceptance evidence is the repeat no-drift parity and consumer
 compatibility qualification described by the sprint checklist.
