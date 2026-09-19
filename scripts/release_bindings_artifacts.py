@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""Binding-aware release manifest helper, parallel to .github/scripts/release_artifacts.py.
+"""Validate and build the mixed bindings artifact manifest.
 
-release_artifacts.py's cmd_validate_manifest hard-requires every crate's
-cargo_toml directory to be a root-workspace member. That does not hold for
-release/bindings-artifacts.toml: sc-observability-tauri is deliberately its
-own standalone Cargo workspace (an empty `[workspace]` table in its own
-Cargo.toml, not a member of the root workspace's `members` list), and the
-`[[packages]]` entries (pypi/npm) are not Cargo crates at all. This script
-implements the equivalent validation for that mixed manifest shape instead of
-bending release_artifacts.py to fit it.
+The manifest includes a standalone Tauri Cargo workspace and non-Cargo PyPI/npm
+packages alongside root-workspace crates, so this helper validates each entry
+against its own manifest shape while preserving the shared release contract.
 
 No entry in release/bindings-artifacts.toml carries a literal version field.
 Versions are always resolved live from each artifact's own manifest

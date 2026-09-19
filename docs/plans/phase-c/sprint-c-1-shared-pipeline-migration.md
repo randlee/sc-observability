@@ -13,9 +13,11 @@ base: develop
 The superseded C.1 qualification kit was `006092a305bb03bd483d79dd6b5d51bda1e545e4`;
 the current validated immutable kit is pinned in `release/sc-publish-pin.toml`
 at `7b899fea2325b6bda55a5d061f2c507366246974`. Its installer reports
-`Publish-kit assets are in sync.` on the repeat dry-run. The installed suite
-passes `157 passed, 11 skipped, 0 failed`; the retained evidence and exact
-command are in `docs/plans/phase-c/evidence/c1-installed-suite-006092a.txt`.
+`Publish-kit assets are in sync.` on the repeat dry-run. The historical C.1
+suite passed `157 passed, 11 skipped, 0 failed`; that retained evidence and
+exact command are in `docs/plans/phase-c/evidence/c1-installed-suite-006092a.txt`.
+The current 7b899fea regeneration passes `168 passed, 11 skipped`; see
+`docs/plans/phase-c/evidence/c2-sc-publish-7b899fea.txt`.
 Manifest, dependency-order, action-floor, docs, rustdoc, semantic-contract,
 and locked workspace-test gates pass. No publication, tag, or release dispatch
 was performed.

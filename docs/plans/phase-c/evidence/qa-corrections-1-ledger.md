@@ -20,7 +20,7 @@ provides evidence.
 | PHC-QA-008 | fixed-candidate | Binding manifest records current Tauri/PyPI status and the npm `NPM_TOKEN` contract with only owner authorization/environment pending. |
 | PHC-QA-009 | fixed-candidate | Staging archive inspection is shared through `_log_staging.inspect_archive` with explicit package/macro parameters. |
 | PHC-QA-010 | fixed-candidate | CI and `just lint` run action-version and install-contract validators. |
-| PHC-QA-011 | fixed-candidate | CI and `just test` run the installed script suite plus the staged-package and retry-idempotency suites. |
+| PHC-QA-011 | fixed-candidate | CI runs the full installed script suite; `just test` runs the caller-owned staged-package and retry-idempotency suites. |
 | PHC-QA-012 | fixed-candidate | npm retry fixture archives are created under a per-test temporary directory. |
 | PHC-QA-013 | fixed-candidate/upstream-verified | Immutable installer regeneration from upstream `7b899fea2325b6bda55a5d061f2c507366246974` replaced local timeout edits; repeat `install.py --dry-run` reports `Publish-kit assets are in sync.` Upstream CI 35413991243 and source/consumer suites are recorded by the lead. |
 | PHC-QA-014 | fixed-candidate | `scripts/release_bindings_artifacts.py` now names the shared `.github/scripts/release_artifacts.py` helper in its module docstring. |
