@@ -1,9 +1,10 @@
 # C.1 legacy publish asset inventory
 
-This is a read-only disposition inventory for the candidate upstream kit at
-`31328970dbb77f8a686ab85fbe1ae5840b65f245`. It is intentionally not an install
-receipt: no consumer asset is overwritten or deleted until the lead selects a
-reviewed/validated upstream pin and the technical compatibility gates pass.
+This is the C.1 disposition inventory for the validated upstream kit at
+`61568d813550ac7faab0fd9c887c731d975d1264`. The kit is now installed on the
+C.1 layer; `release/sc-publish-pin.toml` records the immutable source revision.
+The remaining acceptance evidence is the repeat no-drift parity and consumer
+compatibility qualification described by the sprint checklist.
 
 | Consumer path | Current state | Planned disposition |
 | --- | --- | --- |

@@ -1,0 +1,4 @@
+# Exact upstream publish-kit revision used for this installed C.1 layer.
+[sc-publish]
+repository = "https://github.com/randlee/sc-publish"
+revision = "61568d813550ac7faab0fd9c887c731d975d1264"
