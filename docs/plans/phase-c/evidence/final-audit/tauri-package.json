@@ -13,11 +13,11 @@
     "package",
     "--locked",
     "--manifest-path",
-    "/var/folders/3q/0f7c3v_j6ps28gtz8xfz99km0000gn/T/c2-tauri-package-oqgeofgq/tauri/Cargo.toml",
+    "/var/folders/3q/0f7c3v_j6ps28gtz8xfz99km0000gn/T/c2-tauri-package-z1gqh14s/tauri/Cargo.toml",
     "--target-dir",
-    "/var/folders/3q/0f7c3v_j6ps28gtz8xfz99km0000gn/T/c2-tauri-package-oqgeofgq/target"
+    "/var/folders/3q/0f7c3v_j6ps28gtz8xfz99km0000gn/T/c2-tauri-package-z1gqh14s/target"
   ],
   "archive_sha256": "3825a1ddfbed1d9fff46164a6edca7f30a534e806e89abb62ac44ab471b9a06d",
-  "log_sha256": "61c0c6d437375e488d1ba304566a48cca96ccb5f0f72ca0f7ea6569139d37c58",
+  "log_sha256": "fbf33bc75364a84ec80d0341136f24df639faa67ab3f313b9da6993726c1d626",
   "publication": "preflight_only"
 }

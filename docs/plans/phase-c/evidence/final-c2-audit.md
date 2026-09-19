@@ -51,7 +51,7 @@ archives. Python Rust-crate packaging is distinct from Python wheel/sdist proof.
 
 ```sh
 python3 scripts/ci/prepare_release_staged_packages.py --source /Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata --version 1.4.0 --output /tmp/phase-c-final-nine-stage --target-dir /tmp/phase-c-final-nine-target
-python3 scripts/ci/validate_tauri_staged_package.py --source /Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata --stage /tmp/phase-c-final-nine-stage --version 1.4.0 --output /tmp/phase-c-final-tauri.crate
+python3 scripts/ci/validate_tauri_staged_package.py --source /Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata --stage /tmp/phase-c-final-nine-stage --version 1.4.0 --output /tmp/phase-c-final-tauri-proof.crate > /tmp/phase-c-final-tauri-driver.txt 2>&1
 # In bindings/typescript:
 npm ci --ignore-scripts && npm run build && npm pack --dry-run --json
 ```
