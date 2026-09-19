@@ -65,6 +65,15 @@ is not claimed by this local macOS evidence; the smallest follow-up is a
 Windows-2022 release-preflight consumer job executing that existing action path
 and archiving `.sc-lint/source-install.json` plus the smoke JSON.
 
+PR187 adds that bounded consumer-owned qualification workflow at
+`.github/workflows/sc-lint-source-preflight.yml`. It runs the existing
+composite action on `ubuntu-latest` and `windows-2022` with `contents: read`, a
+35-minute job timeout, exact-revision receipt/version assertions, and
+artifact retention for the receipt and full smoke output. The local harness
+ran the same receipt verifier against the source-built consumer and reported
+`ok=true`, `status=fail`, `finding_count=41`, version `0.6.0`, and matching
+binary/wheel digests. Actual Windows CI results remain pending.
+
 No credentials, tags, merges, or publication were used. PHC-QA-019 source
 adoption is implemented here; the 41 visible diagnostics and final preflight
 closure remain open.

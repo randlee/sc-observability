@@ -1,0 +1,63 @@
+name: sc-lint source preflight
+
+on:
+  pull_request:
+    paths:
+      - ".github/actions/setup-sc-lint/**"
+      - ".github/scripts/setup_sc_lint_source.py"
+      - ".github/scripts/verify_sc_lint_source_receipt.py"
+      - ".github/workflows/sc-lint-source-preflight.yml"
+      - "boundaries/**"
+      - "install.json"
+      - "release/publish-artifacts.toml"
+      - "release/sc-publish-pin.toml"
+      - "crates/**"
+
+permissions:
+  contents: read
+
+jobs:
+  source-consumer:
+    name: source consumer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-2022]
+    steps:
+      - name: Check out consumer
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94.1"
+
+      - name: Install immutable source sc-lint
+        uses: ./.github/actions/setup-sc-lint
+
+      - name: Verify source receipt and retain full diagnostics
+        shell: bash
+        env:
+          SOURCE_REVISION: ba2d9bf622c1604e3f017c728040906b90e71bce
+        run: |
+          python .github/scripts/verify_sc_lint_source_receipt.py \
+            --revision "$SOURCE_REVISION"
+
+      - name: Upload source receipt and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sc-lint-source-${{ matrix.os }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            .sc-lint/source-install.json
+            sc-lint-smoke.json
+            sc-lint-smoke.stderr
