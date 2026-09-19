@@ -18,6 +18,16 @@ from prepare_release_staged_packages import (  # noqa: E402
 
 
 class ReleaseStagePlanningTests(unittest.TestCase):
+    def test_cargo_workspace_members_are_package_id_strings(self):
+        from prepare_release_staged_packages import root_packages
+
+        metadata = {
+            "workspace_members": ["id:leaf"],
+            "packages": [{"id": "id:leaf", "name": "leaf", "manifest_path": "/tmp/leaf/Cargo.toml", "publish": None}],
+        }
+        roster = [{"package": "leaf", "cargo_toml": "/tmp/leaf/Cargo.toml", "publish_order": 1}]
+        self.assertEqual(root_packages(Path("/"), metadata, roster), {"leaf": metadata["packages"][0]})
+
     def test_transitive_path_closure_is_not_limited_to_locked_labels(self):
         graph = {
             "leaf": set(),

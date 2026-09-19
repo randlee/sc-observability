@@ -45,7 +45,7 @@ def release_roster(source: Path) -> list[dict]:
 
 
 def root_packages(source: Path, cargo_metadata: dict, roster: list[dict]) -> dict[str, dict]:
-    members = {item["id"] for item in cargo_metadata["workspace_members"]}
+    members = set(cargo_metadata["workspace_members"])
     packages = {
         item["name"]: item for item in cargo_metadata["packages"]
         if item["id"] in members
