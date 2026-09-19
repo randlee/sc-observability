@@ -45,6 +45,9 @@ def main() -> int:
     wheel = receipt.get("wheel_sha256")
     if not isinstance(wheel, str) or not re.fullmatch(r"[0-9a-f]{64}", wheel):
         raise SystemExit("source receipt wheel digest is invalid")
+    wheel_path = Path(receipt.get("wheel", ""))
+    if not wheel_path.is_file() or hashlib.sha256(wheel_path.read_bytes()).hexdigest() != wheel:
+        raise SystemExit("source receipt wheel digest does not match the built wheel")
     binary_directory = Path(receipt.get("binary_directory", ""))
     if not binary_directory.is_dir():
         raise SystemExit("source receipt binary directory is missing")
