@@ -1,0 +1,64 @@
+# C.2 sc-publish correction evidence
+
+Reviewed upstream revision: `cb29cb4926e09a5a4f4609e118429a2e14f69827`.
+
+The candidate was checked out detached from the upstream repository and the
+consumer-owned `install.json` was used unchanged:
+
+```sh
+git -C /tmp/sc-publish-candidate.ideHqb rev-parse HEAD
+# cb29cb4926e09a5a4f4609e118429a2e14f69827
+python3 /tmp/sc-publish-candidate.ideHqb/plugins/sc-publish/install.py \
+  --input install.json /tmp/phase-c-preflight-evidence.0YPgmu/consumer
+# exit 0; copied 64 unchanged assets and rendered 2 caller manifests
+python3 /tmp/sc-publish-candidate.ideHqb/plugins/sc-publish/install.py \
+  --dry-run --input install.json /tmp/phase-c-preflight-evidence.0YPgmu/consumer
+# Publish-kit assets are in sync.
+# exit 0
+```
+
+The isolated consumer was empty before installation. A deterministic parity
+comparison then enumerated all 66 installer-managed outputs from the exact
+candidate `package_files()` set plus the two rendered manifests and compared
+each byte against this worktree:
+
+```text
+managed_file_count=66
+mismatch_count=0
+```
+
+This proves that the active pin's installer output, including
+`release-preflight.yml`, `release_credentials.py`, tests, workflows, and both
+rendered manifests, matches the candidate source/output. No installer-managed
+file was hand-edited in this layer; the only source correction here is the
+consumer-owned `scripts/release_bindings_artifacts.py` module docstring, which
+is outside the sc-publish package file set.
+
+Upstream CI evidence is recorded separately from local validation:
+
+- run [35416135181](https://github.com/randlee/sc-publish/actions/runs/35416135181),
+  exact head `cb29cb4926e09a5a4f4609e118429a2e14f69827`: source publish-kit
+  suite **194 passed, 10 skipped**; installed consumer suite **190 passed,
+  14 skipped**.
+- local installed source suite on this worktree: **193 passed, 11 skipped**.
+- local focused preflight regressions: **25 passed**.
+
+These counts are not conflated: upstream CI validates the candidate package,
+while local counts validate the installed sc-observability consumer.
+
+PHC-QA-017 and PHC-QA-018 are **candidate-adopted** here. The candidate is
+the sole source of the credential probe and dependent-package preflight
+behavior; the local worktree contains no managed-file edits for those changes.
+The functional behavior was independently exercised by the local 25-test
+regression suite and the upstream run above. Publication, credentials, tags,
+and release dispatch were not attempted.
+
+Proposed PR185 QA wording (for the lead's frozen-parent update):
+
+> PHC-QA-017/018 are candidate-adopted and functionally verified. The exact
+> `sc-publish` pin `cb29cb49` was installed from a detached checkout using the
+> caller-owned `install.json`; a repeat dry-run was clean and all 66 managed
+> outputs matched byte-for-byte with zero local managed edits. Upstream run
+> 35416135181 reports 194/10 source and 190/14 installed-consumer results;
+> local validation reports 193/11. PHC-QA-019 remains upstream-owned.
+
