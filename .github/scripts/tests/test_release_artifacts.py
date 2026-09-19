@@ -731,14 +731,6 @@ def renderer_binary() -> str | None:
     return binaries[0].get("name") if binaries else None
 
 
-def python_pyproject_text() -> str:
-    return (repo_root() / "bindings" / "python" / "pyproject.toml").read_text(encoding="utf-8")
-
-
-def python_cargo_toml_text() -> str:
-    return (repo_root() / "bindings" / "python" / "Cargo.toml").read_text(encoding="utf-8")
-
-
 def test_validate_manifest_accepts_matching_python_release_shape(tmp_path: Path) -> None:
     result = run_validate_manifest(
         tmp_path,
@@ -3012,16 +3004,52 @@ def test_release_workflow_checks_out_repo_before_local_python_setup_action() -> 
     assert "matrix.pyproject" in text
 
 
-def test_python_package_metadata_uses_local_readme_for_sdist() -> None:
-    if not (repo_root() / "bindings" / "python").is_dir():
-        pytest.skip("consumer does not include a Python binding")
-    pyproject_text = python_pyproject_text()
-    cargo_toml_text = python_cargo_toml_text()
+def assert_declared_python_readmes(root: Path, manifest: dict) -> None:
+    """Validate optional file metadata at the caller-declared package paths."""
+    packages = {entry["package"]: entry for entry in manifest.get("python_packages", [])}
+    for distribution in manifest.get("python_distributions", []):
+        package = packages[distribution["name"]]
+        paths = [(root / package["manifest"], "project")]
+        if distribution.get("cargo_manifest"):
+            paths.append((root / distribution["cargo_manifest"], "package"))
+        for path, table in paths:
+            metadata = tomllib.loads(path.read_text(encoding="utf-8"))
+            readme = metadata.get(table, {}).get("readme")
+            # Readmes are optional; inline Python text and inherited Cargo
+            # metadata do not declare a package-local file to check here.
+            if isinstance(readme, dict):
+                readme = readme.get("file")
+            if isinstance(readme, str):
+                assert (path.parent / readme).is_file(), f"{path}: missing declared readme {readme}"
 
-    assert 'readme = "README.md"' in pyproject_text
-    assert 'readme = "README.md"' in cargo_toml_text
-    assert "../../README.md" not in pyproject_text
-    assert "../../README.md" not in cargo_toml_text
+
+def test_python_package_metadata_uses_declared_manifest_paths() -> None:
+    path = repo_root() / "release" / "publish-artifacts.toml"
+    if not path.is_file():
+        pytest.skip("package source has no consumer-specific rendered manifest")
+    manifest = release_manifest()
+    if not manifest.get("python_distributions"):
+        pytest.skip("consumer does not declare Python distributions")
+    assert_declared_python_readmes(repo_root(), manifest)
+
+
+def test_nested_python_readme_paths_and_optional_metadata(tmp_path: Path) -> None:
+    source = tmp_path / "bindings/python/nested-package"
+    source.mkdir(parents=True)
+    pyproject = source / "pyproject.toml"
+    cargo = source / "Cargo.toml"
+    manifest = {"python_packages": [{"package": "nested", "manifest": "bindings/python/nested-package/pyproject.toml"}],
+                "python_distributions": [{"name": "nested", "cargo_manifest": "bindings/python/nested-package/Cargo.toml"}]}
+    pyproject.write_text('[project]\nname="nested"\n')
+    cargo.write_text('[package]\nname="nested"\n')
+    assert_declared_python_readmes(tmp_path, manifest)
+    pyproject.write_text('[project]\nname="nested"\nreadme={file="docs/README.md", content-type="text/markdown"}\n')
+    (source / "docs").mkdir()
+    (source / "docs/README.md").write_text("Nested package documentation")
+    assert_declared_python_readmes(tmp_path, manifest)
+    (source / "docs/README.md").unlink()
+    with pytest.raises(AssertionError, match="missing declared readme"):
+        assert_declared_python_readmes(tmp_path, manifest)
 
 
 def write_readme_fixture(

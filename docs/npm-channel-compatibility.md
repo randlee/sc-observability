@@ -45,8 +45,8 @@ platform assertions. Legacy runner-string matrix JSON remains identical.
 ## Validation
 
 - Source suite: `python -m pytest plugins/sc-publish/.github/scripts/tests -q`:
-  157 passed, 10 skipped on Python 3.12 with sc-compose 1.5.0 and PyYAML 6.0.3.
-- Installed suite: 153 passed, 14 skipped after a clean installer overlay
+  158 passed, 10 skipped on Python 3.12 with sc-compose 1.5.0 and PyYAML 6.0.3.
+- Installed suite: 154 passed, 14 skipped after a clean installer overlay
   and repeat drift check. Both source and installed suites ran with ambient
   `RELEASE_TAG` removed; mocked publication fixtures set their own tag. The
   installed suite is now also a GitHub CI gate. Source tests cover
@@ -91,3 +91,20 @@ planning, build command, archive verification, and retry behavior; they do not
 replace live release qualification or the consumer's 25-cell wheel import gate.
 The npm workflow requires GitHub immutable releases to be enabled and a valid
 `NPM_TOKEN` in the `npm` environment; this work does not provision either.
+
+## Consumer test portability correction
+
+An independent sc-observability install exposed two test assumptions: scanning
+caller-owned workflows applied the kit runtime floor to unrelated actions, and
+Python README checks assumed `bindings/python/pyproject.toml`. The runtime test
+now selects only shared workflows/composites; README checks follow declared
+Python and Cargo manifests and validate optional file references where present.
+A nested-package regression covers absent README metadata, a declared local
+README, and a missing declared file.
+
+An isolated copy of sc-observability at
+`d75b54e10b7af8e7899aa3891c9c901ac6949140`, overlaid through the installer, passed
+its full installed suite: **157 passed, 11 skipped**, with a clean repeat dry-run.
+Source suite: **158 passed, 10 skipped**. Both retained peer compatibility
+comparisons pass unchanged. This correction changes shared tests/documentation,
+not publication behavior or consumer-owned workflows.

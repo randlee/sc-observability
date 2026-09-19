@@ -195,7 +195,17 @@ def test_workflow_credential_and_artifact_contract():
 def test_node24_runtime_floors():
     import re
     floors = {"checkout": 5, "setup-python": 6, "setup-node": 6, "cache": 5, "upload-artifact": 6, "download-artifact": 7}
-    for path in (INSTALL.PACKAGE_ROOT / ".github").rglob("*.yml"):
+    # Consumers retain independent workflows/actions outside the vendored kit.
+    # The source inventory guard in test_release_artifacts keeps these shared
+    # inventories complete without imposing kit policy on caller-owned CI.
+    workflows = ("release", "release-candidate", "release-preflight", "crates-publish",
+                 "pypi-publish", "npm-publish", "homebrew-publish", "scoop-publish", "winget-publish")
+    actions = ("extract-published-renderer", "install-linux-native-deps", "setup-lint-toolchain",
+               "setup-python-release-build", "setup-renderer", "setup-sc-lint", "verify-published-release")
+    github = INSTALL.PACKAGE_ROOT / ".github"
+    paths = [*(github / "workflows" / f"{name}.yml" for name in workflows),
+             *(github / "actions" / name / "action.yml" for name in actions)]
+    for path in paths:
         for name, major in re.findall(r"uses:\s*actions/([\w-]+)@v(\d+)", path.read_text()):
             assert int(major) >= floors[name], str(path)
     assert "softprops/action-gh-release@v3" in (INSTALL.PACKAGE_ROOT / ".github/workflows/release.yml").read_text()
