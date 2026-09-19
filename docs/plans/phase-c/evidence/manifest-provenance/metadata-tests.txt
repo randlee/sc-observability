@@ -1,0 +1,25 @@
+test_accepts_metadata_and_equivalent_inherited_dependency (test_log_metadata_adaptations.DeltaTests.test_accepts_metadata_and_equivalent_inherited_dependency) ... ok
+test_rejects_dependency_options_features_path_and_version_drift (test_log_metadata_adaptations.DeltaTests.test_rejects_dependency_options_features_path_and_version_drift) ... ok
+test_rejects_literal_metadata_and_overwriting_existing_metadata (test_log_metadata_adaptations.DeltaTests.test_rejects_literal_metadata_and_overwriting_existing_metadata) ... ok
+test_rejects_publish_or_package_version_change (test_log_metadata_adaptations.DeltaTests.test_rejects_publish_or_package_version_change) ... ok
+test_rejects_undeclared_comments_and_non_boolean_inheritance (test_log_metadata_adaptations.DeltaTests.test_rejects_undeclared_comments_and_non_boolean_inheritance) ... ok
+test_rejects_unrelated_manifest_changes_with_consistent_snapshots (test_log_metadata_adaptations.DeltaTests.test_rejects_unrelated_manifest_changes_with_consistent_snapshots) ... ok
+test_exact_history_and_inventory_chain (test_log_metadata_adaptations.ImmutableEvidenceTests.test_exact_history_and_inventory_chain) ... ok
+test_rejects_floating_commit_and_symlinked_manifest (test_log_metadata_adaptations.ImmutableEvidenceTests.test_rejects_floating_commit_and_symlinked_manifest) ... ok
+test_rejects_forged_before_and_after_blobs (test_log_metadata_adaptations.ImmutableEvidenceTests.test_rejects_forged_before_and_after_blobs) ... ok
+test_rejects_live_drift_even_with_matching_recorded_hash (test_log_metadata_adaptations.ImmutableEvidenceTests.test_rejects_live_drift_even_with_matching_recorded_hash) ... ok
+test_rejects_runtime_change_in_evidence_commit (test_log_metadata_adaptations.ImmutableEvidenceTests.test_rejects_runtime_change_in_evidence_commit) ... ok
+test_rejects_runtime_path_in_record (test_log_metadata_adaptations.ImmutableEvidenceTests.test_rejects_runtime_path_in_record) ... ok
+test_historical_import_and_five_negative_mutations (test_log_metadata_real_import.RealImportTests.test_historical_import_and_five_negative_mutations) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 4.968s
+
+OK
+PASS actual accepted BTIT -> immutable Phase B -> Phase C metadata chain
+PASS rejected runtime source drift: unexplained content difference in the destination tree for crates/sc-observability-log/src/lib.rs
+PASS rejected unrelated manifest feature drift: metadata destination differs from exact after snapshot: crates/sc-observability-log/Cargo.toml
+PASS rejected consumer dependency option drift: metadata destination differs from exact after snapshot: crates/sc-observability-log-consumer-check/Cargo.toml
+PASS rejected workspace version drift: metadata destination differs from exact after snapshot: Cargo.toml
+PASS rejected forged before evidence: metadata before blob differs from immutable snapshot: crates/sc-observability-log/Cargo.toml
+PASS restored actual import after five negative mutations
