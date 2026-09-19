@@ -1,12 +1,24 @@
 ---
 id: C.1
-status: in_progress
+status: complete
 branch: fix/phase-c-1-shared-pipeline-migration
 worktree: /Users/randlee/github/sc-observability-worktrees/fix/phase-c-1-shared-pipeline-migration
 base: develop
 ---
 
 # C.1 — Shared publishing pipeline migration
+
+## Completion evidence
+
+The validated immutable upstream kit is pinned in
+`release/sc-publish-pin.toml` at
+`006092a305bb03bd483d79dd6b5d51bda1e545e4`. Its installer reports
+`Publish-kit assets are in sync.` on the repeat dry-run. The installed suite
+passes `157 passed, 11 skipped, 0 failed`; the retained evidence and exact
+command are in `docs/plans/phase-c/evidence/c1-installed-suite-006092a.txt`.
+Manifest, dependency-order, action-floor, docs, rustdoc, semantic-contract,
+and locked workspace-test gates pass. No publication, tag, or release dispatch
+was performed.
 
 ## Goal and dependencies
 

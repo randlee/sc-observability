@@ -1,6 +1,6 @@
 # Publishing and Version Ownership
 
-## Phase C migration (C.1 preparation; installation held)
+## Phase C migration (C.1 installed and qualified)
 
 This document currently describes the repository-specific publishing
 implementation. [Phase C](plans/phase-c/plan-phase-c.md) proposes replacing
@@ -10,11 +10,9 @@ the npm client, the standalone Tauri workspace), and treating the shared
 package's missing npm channel and stale pinned action versions as named
 upstream prerequisites that `../sc-publish` must satisfy at a reviewed pin —
 not a repository-local publisher fork and not an accepted regression.
-The reviewed caller contract is `install.json`. Phase C migration is authorized;
-installation remains held only for the technical compatibility gates until a
-reviewed/validated `sc-publish` revision provides both an npm channel and
-current action-major pins. The sibling revision inspected for C.1
-(`3a57926b3e939835644aad944a614cbb48e4d5fc`) satisfies neither prerequisite.
+The reviewed caller contract is `install.json`. Phase C migration is installed
+and qualified from the immutable `sc-publish` revision recorded in
+`release/sc-publish-pin.toml` (`006092a305bb03bd483d79dd6b5d51bda1e545e4`).
 No publication, tag, or release dispatch is authorized. See
 `docs/plans/phase-c/sprint-c-1-shared-pipeline-migration.md` for the exact
 asset replacement/removal/retention table and
