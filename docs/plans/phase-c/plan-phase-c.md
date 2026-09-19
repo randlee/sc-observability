@@ -9,8 +9,9 @@ worktree: /Users/randlee/github/sc-observability-worktrees/integrate/phase-c
 Owner scope: two sprints, executed only after Phase B merges into develop.
 Execution authorized by the owner after Phase B and the Phase C plan merged into
 `develop` at `28e4ee6`. Lead: `aobs`. Publication remains unauthorized.
-C.1 begins with inventory and prerequisite verification; installation requires
-a shared-package revision satisfying the upstream npm/action-runtime gates.
+C.1 completed inventory, installation, and compatibility qualification against
+the immutable shared-package revision recorded in its pin file. Publication
+remains separately unauthorized.
 
 Sprints:
 
