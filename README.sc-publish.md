@@ -195,3 +195,36 @@ column with `--include-manifest`.
 and binary archive expectations are skipped; declared Python and npm build
 failures still prevent release creation. Rust crate and Python distribution
 artifact IDs must remain distinct even when they share a source crate.
+
+### Optional immutable sc-lint source installation
+
+The shared `setup-sc-lint` action retains its released `0.4.0` default. Consumers
+can opt into a reviewed source commit through `project.sc_lint_source_revision`
+in `install.json` (rendered into `release/publish-artifacts.toml`), or the action's
+`source-revision` input. `setup-lint-toolchain` forwards `sc-lint-source-revision`.
+Use a full lowercase 40-character commit SHA; tags, branches, shortened hashes,
+and conflicting action/manifest pins fail. The release `version` input applies
+only when source mode is absent. Default release resolution adds no Python
+requirement and does not invoke the source installer.
+
+Source mode requires Git, Cargo/the checked source's Rust toolchain, and Python
+3.11+ with venv/pip. It verifies the exact checkout, builds all four binaries
+and a locked maturin wheel from that checkout, then installs the wheel into a
+fresh consumer `.sc-lint/venv`. Python helpers use the current package layout;
+source mode never copies historical `.just` helpers or obtains sc-lint from PyPI.
+Build commands have a 30-minute limit, setup/fetch/pip commands a five-minute
+limit, and version probes a 30-second limit; timeout errors identify the command
+and never select a fallback. Maturin is pinned to 1.9.4; declared third-party Python dependencies may be fetched
+from the configured package index. CLI/backend/Python crate versions must agree
+with Cargo metadata; both installed CLI and Python versions are checked.
+
+Existing consumer venvs are rejected instead of mixing revisions. The action
+records commit, version and binary/wheel SHA256 values in
+`.sc-lint/source-install.json`, sets `SC_LINT_BIN`, and adds the matching sibling
+binaries to PATH. A source-installed consumer cannot silently switch back to
+release mode. Use a fresh CI checkout/environment for each installation.
+
+Both modes retain the existing root-discovery/backend-execution smoke contract.
+Source mode prints its full JSON report and lint status: successful execution
+can still report lint findings. This installer does not change caller lint
+policy or claim that an `ok:true` report with `data.status=fail` is clean.
