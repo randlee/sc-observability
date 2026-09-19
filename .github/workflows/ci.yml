@@ -175,17 +175,23 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Install release manifest test runner
+        run: python3 -m pip install --disable-pip-version-check --quiet pytest==8.4.2
+
       - name: Validate manifest completeness
         run: |
-          python3 scripts/release_artifacts.py validate-manifest \
+          python3 .github/scripts/release_artifacts.py validate-manifest \
             --manifest release/publish-artifacts.toml \
             --workspace-toml Cargo.toml
 
       - name: Run release manifest regression tests
-        run: python3 -m unittest scripts/ci/tests/test_release_artifacts.py
+        run: python3 -m pytest .github/scripts/tests/test_release_artifacts.py -q -k 'manifest or publish_order'
 
       - name: Validate publish_order dependency graph
-        run: bash scripts/ci/validate_publish_order.sh
+        run: |
+          python3 .github/scripts/release_artifacts.py validate-publish-order \
+            --manifest release/publish-artifacts.toml \
+            --workspace-toml Cargo.toml
 
       - name: Validate docs consistency
         run: bash scripts/ci/validate_docs_consistency.sh
