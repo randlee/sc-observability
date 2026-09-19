@@ -22,12 +22,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> int:
-    args = parse_args()
-    if not re.fullmatch(r"[0-9a-f]{40}", args.revision):
+def verify_receipt(receipt: dict, revision: str, cli: Path, *, windows: bool) -> None:
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise SystemExit("expected a full lowercase source revision")
-    receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
-    if receipt.get("source_revision") != args.revision:
+    if receipt.get("source_revision") != revision:
         raise SystemExit("source receipt revision mismatch")
     if receipt.get("repository") != "randlee/sc-lint":
         raise SystemExit("source receipt repository mismatch")
@@ -36,11 +34,11 @@ def main() -> int:
         raise SystemExit("source receipt version is invalid")
     binaries = receipt.get("binaries")
     expected_binaries = {"sc-lint", "sc-lint-boundary", "sc-lint-portability", "sc-lint-runtime"}
-    if not isinstance(binaries, dict) or {
-        Path(name).stem for name in binaries
-    } != expected_binaries:
+    suffix = ".exe" if windows else ""
+    expected_binaries = {name + suffix for name in expected_binaries}
+    if not isinstance(binaries, dict) or set(binaries) != expected_binaries:
         raise SystemExit("source receipt sibling binary set is incomplete")
-    if any(not re.fullmatch(r"[0-9a-f]{64}", value) for value in binaries.values()):
+    if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value) for value in binaries.values()):
         raise SystemExit("source receipt contains an invalid binary digest")
     wheel = receipt.get("wheel_sha256")
     if not isinstance(wheel, str) or not re.fullmatch(r"[0-9a-f]{64}", wheel):
@@ -60,9 +58,8 @@ def main() -> int:
     python_path = Path(receipt.get("python", ""))
     if not python_path.is_file():
         raise SystemExit("source receipt Python interpreter is missing")
-    cli = Path(os.environ.get("SC_LINT_BIN", ""))
-    if not cli.is_file():
-        raise SystemExit("SC_LINT_BIN is missing")
+    if not cli.is_file() or cli.resolve() != (binary_directory / ("sc-lint" + suffix)).resolve():
+        raise SystemExit("SC_LINT_BIN does not match the verified receipt CLI")
     version_result = subprocess.run(
         [str(cli), "version", "--json"], check=True, capture_output=True, text=True, timeout=30
     )
@@ -70,6 +67,23 @@ def main() -> int:
     data = version_value.get("data", {})
     if version_value.get("ok") is not True or data.get("version") != version or data.get("status") != "pass":
         raise SystemExit("source CLI version receipt mismatch")
+    python_result = subprocess.run(
+        [str(python_path), "-I", "-c",
+         "import json,sc_lint; print(json.dumps({'version':sc_lint.__version__,'path':sc_lint.__file__}))"],
+        check=True, capture_output=True, text=True, timeout=30,
+    )
+    installed = json.loads(python_result.stdout)
+    if installed.get("version") != version or not Path(installed.get("path", "")).resolve().is_relative_to(python_path.parent.parent.resolve()):
+        raise SystemExit("source Python package version/path receipt mismatch")
+
+
+def main() -> int:
+    args = parse_args()
+    receipt = json.loads(args.receipt.read_text(encoding="utf-8"))
+    cli = Path(os.environ.get("SC_LINT_BIN", ""))
+    verify_receipt(receipt, args.revision, cli, windows=os.name == "nt")
+    version = receipt["version"]
+    wheel = receipt["wheel_sha256"]
     smoke = subprocess.run(
         [sys.executable, ".github/scripts/setup_sc_lint_source.py", "smoke"],
         capture_output=True, text=True, timeout=120,
