@@ -18,9 +18,9 @@ python3 /tmp/sc-publish-candidate.ideHqb/plugins/sc-publish/install.py \
 ```
 
 The isolated consumer was empty before installation. A deterministic parity
-comparison then enumerated all 66 installer-managed outputs from the exact
-candidate `package_files()` set plus the two rendered manifests and compared
-each byte against this worktree:
+comparison then enumerated exactly 64 installer package outputs plus 2 rendered
+manifests (66 total), using the candidate `package_files()` set and the two
+rendered manifests, and compared each byte against this worktree:
 
 ```text
 managed_file_count=66
