@@ -130,6 +130,9 @@ def install(repository: str, sha: str, workspace: Path, temporary: Path) -> dict
               'wheel_sha256': digest(archives[0]), 'wheel': str(archives[0]),
               'binaries': {p.name: digest(p) for p in install_dir.iterdir()},
               'binary_directory': str(install_dir), 'python': str(consumer_python)}
+    retained_wheel = workspace / '.sc-lint/source-wheel.whl'
+    shutil.copy2(archives[0], retained_wheel)
+    record['wheel'] = str(retained_wheel)
     (workspace / '.sc-lint/source-install.json').write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
     return record
 

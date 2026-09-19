@@ -44,6 +44,18 @@ def main() -> int:
     wheel = receipt.get("wheel_sha256")
     if not isinstance(wheel, str) or not re.fullmatch(r"[0-9a-f]{64}", wheel):
         raise SystemExit("source receipt wheel digest is invalid")
+    wheel_path = Path(receipt.get("wheel", ""))
+    if not wheel_path.is_file() or hashlib.sha256(wheel_path.read_bytes()).hexdigest() != wheel:
+        raise SystemExit("source receipt wheel digest does not match the retained wheel")
+    binary_directory = Path(receipt.get("binary_directory", ""))
+    if not binary_directory.is_dir():
+        raise SystemExit("source receipt binary directory is missing")
+    for name, expected_digest in binaries.items():
+        binary_path = binary_directory / name
+        if not binary_path.is_file():
+            raise SystemExit(f"source receipt binary is missing: {name}")
+        if hashlib.sha256(binary_path.read_bytes()).hexdigest() != expected_digest:
+            raise SystemExit(f"source receipt binary digest does not match: {name}")
     python_path = Path(receipt.get("python", ""))
     if not python_path.is_file():
         raise SystemExit("source receipt Python interpreter is missing")
@@ -63,6 +75,11 @@ def main() -> int:
     )
     args.smoke_output.write_text(smoke.stdout, encoding="utf-8")
     args.smoke_stderr.write_text(smoke.stderr, encoding="utf-8")
+    print("--- sc-lint smoke stdout ---")
+    print(smoke.stdout, end="")
+    if smoke.stderr:
+        print("--- sc-lint smoke stderr ---")
+        print(smoke.stderr, end="")
     if smoke.returncode:
         raise SystemExit(f"source smoke command failed with {smoke.returncode}")
     value, _ = json.JSONDecoder().raw_decode(smoke.stdout)
