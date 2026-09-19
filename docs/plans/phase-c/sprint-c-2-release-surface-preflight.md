@@ -95,8 +95,9 @@ retained evidence is not equivalent and is not relabeled. The dispatched run
 `35408912984` is the required actual-SHA replacement and its aggregate
 artifact is recorded above. The Tauri staged package proof above is local
 nonpublishing evidence for the standalone artifact. The active Binding
-real-IPC workflow `35410593107` has Linux and macOS PASS; Windows remains
-pending in its packaged-artifact validation step.
+real-IPC workflow `35410593107` has Linux, macOS, and Windows real-IPC
+qualification complete; remaining packaged-release closure is tracked
+separately under the external npm/lead-completeness gates.
 
 ### 5. Recovery/idempotency (PASS)
 

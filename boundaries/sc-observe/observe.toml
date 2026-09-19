@@ -1,0 +1,28 @@
+boundary_id = "BOUNDARY-ScObserve"
+owner_package = "sc-observe"
+owner_crate_path = "sc_observe"
+name = "ScObserve"
+[public]
+facade = "crate_root"
+[implementation]
+type = "crate"
+module = "sc_observe"
+visibility = "public"
+constructor = "none"
+[composition]
+roots = []
+[dependencies]
+allowed_dependents = ["sc-observability-otlp"]
+allowed_dependencies = ["sc-observability", "sc-observability-types"]
+forbidden_edges = []
+[references]
+scope = "outside_owner_crate"
+forbidden = []
+[testing]
+allowed_test_double_paths = []
+forbidden_test_bypasses = []
+[enforcement]
+lint_rules = ["LINT-SC-OBSERVE-BOUNDARY"]
+review_gates = ["workspace_dependency_policy"]
+[status]
+state = "concrete_landed"
