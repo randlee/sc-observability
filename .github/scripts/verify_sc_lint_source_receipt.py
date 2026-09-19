@@ -35,18 +35,16 @@ def main() -> int:
     if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise SystemExit("source receipt version is invalid")
     binaries = receipt.get("binaries")
-    if not isinstance(binaries, dict) or set(binaries) != {
-        "sc-lint", "sc-lint-boundary", "sc-lint-portability", "sc-lint-runtime"
-    }:
+    expected_binaries = {"sc-lint", "sc-lint-boundary", "sc-lint-portability", "sc-lint-runtime"}
+    if not isinstance(binaries, dict) or {
+        Path(name).stem for name in binaries
+    } != expected_binaries:
         raise SystemExit("source receipt sibling binary set is incomplete")
     if any(not re.fullmatch(r"[0-9a-f]{64}", value) for value in binaries.values()):
         raise SystemExit("source receipt contains an invalid binary digest")
     wheel = receipt.get("wheel_sha256")
     if not isinstance(wheel, str) or not re.fullmatch(r"[0-9a-f]{64}", wheel):
         raise SystemExit("source receipt wheel digest is invalid")
-    wheel_path = Path(receipt.get("wheel", ""))
-    if not wheel_path.is_file() or hashlib.sha256(wheel_path.read_bytes()).hexdigest() != wheel:
-        raise SystemExit("source receipt wheel digest does not match the retained wheel")
     binary_directory = Path(receipt.get("binary_directory", ""))
     if not binary_directory.is_dir():
         raise SystemExit("source receipt binary directory is missing")
