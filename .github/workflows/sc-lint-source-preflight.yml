@@ -34,6 +34,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Test receipt rejection cases
+        run: python -m unittest discover -s .github/scripts/tests -p test_verify_sc_lint_source_receipt.py
+
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@master
         with:
@@ -49,3 +52,15 @@ jobs:
         run: |
           python .github/scripts/verify_sc_lint_source_receipt.py \
             --revision "$SOURCE_REVISION"
+
+      - name: Upload source receipt and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: sc-lint-source-${{ matrix.os }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            .sc-lint/source-install.json
+            sc-lint-smoke.json
+            sc-lint-smoke.stderr

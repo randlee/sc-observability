@@ -77,3 +77,16 @@ binary/wheel digests. Actual Windows CI results remain pending.
 No credentials, tags, merges, or publication were used. PHC-QA-019 source
 adoption is implemented here; the 41 visible diagnostics and final preflight
 closure remain open.
+
+Lead receipt-verifier correction (following historical Windows failure
+35422419041): the consumer-owned verifier now requires the exact platform
+binary names, compares all four binary hashes and the built wheel hash, binds
+SC_LINT_BIN to the verified CLI, and independently executes the isolated Python
+package to verify version and environment location. Seven focused tests cover
+both Unix/Windows receipt shapes and reject tampered binaries/wheel, substituted
+CLI, Python-version mismatch, arbitrary suffixes, and wrong source revision.
+The same tests run before source installation on both qualification platforms.
+Artifact retention uses upload-artifact v6. The immutable managed installer is
+unchanged; a detached be170540 archive repeat install dry-run remains in sync.
+Actual existing source-built macOS receipt verification passed. Fresh hosted
+qualification remains required; no final-head Windows PASS is claimed here.
