@@ -19,23 +19,23 @@
       "kind": "lib"
     },
     "sc-observability-log-macros": {
-      "baseline_version": null,
+      "baseline_version": "1.4.0",
       "kind": "proc-macro"
     },
     "sc-observability-log": {
-      "baseline_version": null,
+      "baseline_version": "1.4.0",
       "kind": "lib"
     },
     "sc-observability-dto": {
-      "baseline_version": null,
+      "baseline_version": "1.4.0",
       "kind": "lib"
     },
     "sc-observability-binding-runtime": {
-      "baseline_version": null,
+      "baseline_version": "1.4.0",
       "kind": "lib"
     },
     "sc-observability-py": {
-      "baseline_version": null,
+      "baseline_version": "1.4.0",
       "kind": "rlib"
     }
   }
