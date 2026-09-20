@@ -1,6 +1,7 @@
 # SC-Observability Requirements
 
-**Status**: Approved
+**Status**: Approved baseline; Phase B additions in §10 and Phase C additions
+in §11 proposed for review
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Source of truth**: [`api-design.md`](./api-design.md)
 **Related ATM adapter docs**:
@@ -67,7 +68,7 @@ This crate owns shared neutral contracts only.
 - TYP-003 `ErrorCode` shall be a stable string-like type using namespace prefixes and `SCREAMING_SNAKE_CASE`.
 - TYP-004 `Diagnostic` shall carry code, message, optional cause, mandatory remediation, optional docs reference, and structured details.
 - TYP-005 One `Diagnostic` shall be reusable across CLI rendering, JSON error rendering, log attachment, span attachment, and health summaries.
-- TYP-006 `DiagnosticInfo` shall be an open trait implemented by public error surfaces that can expose a `Diagnostic`.
+- TYP-006 `DiagnosticInfo` shall retain its published sealed trait contract for workspace-defined errors that expose a `Diagnostic`; Phase B shall not change its sealing or add required methods.
 - TYP-007 `ErrorContext` shall not be directly constructible without remediation.
 - TYP-008 `Timestamp` shall be a UTC-enforcing public newtype. Public constructors and serde input shall normalize to UTC, serde output shall use stable UTC-only RFC3339 form, and raw non-UTC `OffsetDateTime` values shall not cross the public API boundary.
 - TYP-009 `TraceContext` shall be limited to generic W3C-style trace correlation only.
@@ -91,7 +92,7 @@ This crate owns shared neutral contracts only.
 - TYP-027 `ServiceName` shall be owned by `sc-observability-types`, wrap a validated string identifier, and represent the service name carried in logs and telemetry.
 - TYP-028 `TargetCategory` shall be owned by `sc-observability-types`, wrap a validated dotted or snake-compatible category identifier, and represent the stable subsystem namespace on `LogEvent`.
 - TYP-029 `ActionName` shall be owned by `sc-observability-types`, wrap a validated dotted or snake-compatible action identifier, and represent the stable event action name on `LogEvent`.
-- TYP-030 All shared error types, health report types, and shared constants shall be owned by `sc-observability-types` as a single source of truth. Crate-specific error enums and concrete health report types are defined here and re-exported by their respective crates where needed.
+- TYP-030 All shared error types, health report types, and shared constants shall be owned by `sc-observability-types` as a single source of truth. Crate-specific error enums and concrete health report types are defined here and re-exported by their respective crates where needed. The proposed companion-only exception is scoped in PHB-002 and ADR-011; it does not relocate any published core type.
 - TYP-031 Per-crate `constants.rs` files in higher-layer crates may exist only for crate-local values that are not shared across crate boundaries.
 - TYP-032 `sc-observability-types` shall own the stable historical/follow query contracts: `LogQuery`, `LogOrder`, and `LogFieldMatch`.
 - TYP-033 `LogQuery` shall support filtering by `service`, `levels`, `target`, `action`, `request_id`, `correlation_id`, `since`, `until`, `field_matches`, `limit`, and `order`.
@@ -396,3 +397,158 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
 - OOS-006 ATM mailbox, plugin, and session contracts
 - OOS-007 application-specific event taxonomies in the shared crates
 - OOS-008 CLI success envelopes and exit-code conventions
+
+
+## 10. Phase B Additions — Proposed for Review
+
+The user has requested this scope; its detailed design and sprint execution are
+not yet approved. Existing requirements above remain the released baseline.
+The [Phase B index](plans/phase-b/plan-phase-b.md) routes the authoritative sprint
+contracts; [ADR-011 through ADR-015](architecture.md#adr-011-companion-boundaries-and-pre-copy-contract)
+record the proposed architecture. No item below asserts implementation closure.
+
+- PHB-001 sc-observability shall own and review the target bridge contract before
+  BTIT completes its initial implementation. All foreseeable bridge changes,
+  including runtime-level integration, shall be implemented and accepted in BTIT
+  before B.1 mechanically copies the working reference. Contract approval, source
+  SHA, accepted critical review and provenance are separate required evidence.
+- PHB-002 The existing core dependency graph shall remain intact. The new bridge
+  may own companion-specific lifecycle errors, health and facade constants;
+  macros remain independent of the bridge. The DTO crate may own wire projections
+  only. These are scoped TYP-030 exceptions, not permission to duplicate core
+  diagnostics, move published definitions, or introduce Tauri/PyO3/log/runtime
+  dependencies into neutral types. Runtime adapters convert companion failures
+  to neutral DTOs without a reverse dependency from DTOs to the bridge. A shared
+  native binding-runtime crate owns core/bridge backends and conversions for both
+  Tauri and Python; language adapters do not repeat those runtime mappings.
+- PHB-003 Phase B shall schedule no breaking change to a published API. Preserve
+  existing signatures, trait implementability/object safety and method resolution,
+  public struct construction, error variants, serialization and lifecycle behavior. New error
+  types/methods/traits coexist with old ones; no existing enum gains
+  `#[non_exhaustive]`. An API approval artifact cannot waive this requirement.
+- PHB-004 Issue #92 shall provide improved typed error implementations and usable
+  improved operation/extension entry points, with total typed classification and
+  mandatory diagnostic/remediation preservation. Unknown/custom legacy codes
+  remain explicit unclassified failures. Existing source/backtrace data shall
+  survive adapters; new code shall construct typed failures at their origin.
+  Conversion shall not claim recovery of data already discarded by the original
+  operation. DiagnosticSummary remains its existing optional-code/message/time
+  shape; new OperationDiagnostic carries required code/message/remediation/time.
+- PHB-005 Legacy interfaces shall remain functional with actionable compiler
+  deprecation warnings only after working replacements exist. Removal and a
+  breaking representation conversion remain unscheduled. Default-lint legacy
+  consumer fixtures shall still work; migrated fixtures shall deny deprecated
+  usage. Strict consumer warning policies may reject deprecations and shall be
+  explained in upgrade guidance rather than suppressed globally.
+- PHB-006 Existing adoption guidance shall cover incremental upgrades, exact
+  symbol mappings, custom extension adapters, typed matching, diagnostic
+  preservation and verification. A downstream fixture shall execute that guide.
+
+The B.1e implementation record supplies the exact migration routing, warning
+inventory, downstream Cargo fixtures and JSON diagnostic validator for
+PHB-005/PHB-006. The typed methods and failures remain additive, and the
+warning rollout is active at the selected `1.4.0` next-minor candidate. B.2
+qualifies the B.1e result; B.7 alone publishes it. No removal schedule or
+major-release claim is introduced.
+- PHB-007 Issue #97 shall add one core-owned effective level shared by every
+  producer path, with immutable LoggerConfig baseline and owner-only temporary
+  elevate/reset operations. Attached handles have read access only. Existing
+  constructors retain behavior; additional construction paths convey the sole
+  mutation capability. Public core configuration/health structs stay unchanged;
+  expose new state through additive accessors.
+- PHB-008 Runtime changes shall return typed results, serialize against admission
+  and shutdown, expose coherent baseline/effective/revision state, preserve
+  admitted records, and reject below-baseline, unsupported, lifecycle and revision
+  overflow requests without mutation. Repeated effective values are unchanged.
+  No configuration persistence, timer or lease stack is implied.
+- PHB-009 A committed change shall attempt bounded nonrecursive diagnostic
+  admission and separately report its outcome. Diagnostic failure shall not
+  roll back the change or become fatal. Redaction, sink policy and queue limits
+  remain enforced. Runtime filtering shall not promise recovery of compiled-out
+  sites; supported release builds and typed ceiling failures require evidence.
+- PHB-010 New operational APIs shall use Rust Results or language discriminated
+  unions for creation, validation, submission, observation and lifecycle.
+  Expected failures shall not use deliberate panic/throw/raise/rejection control
+  flow. Foreign failures shall be converted at boundaries. Existing infallible
+  Rust accessors retain their signatures; standard log/Python logging protocols
+  may keep required unit returns with inspectable best-effort failure accounting.
+- PHB-011 Default emission shall be nonblocking and nonfatal; callers may ignore
+  results. Dispatch, accepted admission, filtered admission, flush and persistence
+  shall remain distinct. No failure shall be converted into success, recursively
+  logged or allowed to create unbounded retries, helper threads or queues.
+- PHB-012 TypeScript shall support the Tauri frontend first. The host owns policy,
+  initialization, level-change authorization and shutdown; all front/backend
+  records share its writer. Command operational failures resolve tagged envelopes,
+  with explicit schema, integer, path and unknown-variant conversion rules.
+- PHB-013 Python shall be first-class in owned and Rust-host-attached modes, using
+  shared DTO/error contracts and one writer per owner. Attachment shall not gain
+  lifecycle/level ownership. Standard logging/context integration and optional
+  optional receipt/flush awaits shall preserve nonfatal typed outcomes and
+  bounded work. Admission receipts are resolved on submit return; async flush
+  observer timeout/cancellation does not cancel native work. Retained shutdown
+  results are observable; timed-out flush has no prior-result retrieval API,
+  and bridge-native timeout follows the documented separate adapter/native slots.
+- PHB-014 Release closure shall require downloadable immutable artifacts and
+  registry-only consumer evidence. B.P2 shall qualify immutable staged
+  runtime-level artifacts before B.P3 BTIT integration; B.7 alone publishes
+  those artifacts and runs registry-only consumer proof. Migrated Rust companions
+  and subsequent language artifacts have their own release gates. Go, Node.js
+  and sc-runtime process/interpreter topology remain deferred. #96 configuration
+  loading is independent.
+
+## 11. Phase C Additions — Proposed for Review
+
+The user has requested this scope; its detailed design and sprint execution are
+not yet approved. Existing requirements above remain the released baseline.
+The [Phase C index](plans/phase-c/plan-phase-c.md) routes the authoritative
+sprint contracts; [ADR-016](architecture.md#adr-016-shared-publishing-pipeline-adoption)
+records the proposed architecture. No item below asserts implementation
+closure, and Phase C shall not publish, tag, or execute BTIT integration tests.
+
+- PHC-001 The repository-specific publishing implementation (release
+  workflows, the publisher agent, the manifest/gate scripts and the legacy
+  manifest schema) shall be replaced by the pinned `../sc-publish` shared
+  package, installed only through its `install.py` caller-owned JSON
+  contract. Phase C shall pin and document the exact reviewed shared-package
+  revision; an unpinned or silently-updated shared revision does not satisfy
+  this requirement.
+- PHC-002 The shared package's channel set (`github_release`, `crates_io`,
+  `pypi`, `homebrew`, `scoop`, `winget`) does not include an npm channel.
+  Phase C shall not silently drop npm publication for the TypeScript client,
+  fabricate npm support that does not exist in the shared package, or
+  substitute a repository-local npm publish workflow as if it were
+  equivalent shared-package adoption. Phase C shall treat an npm channel in
+  `../sc-publish`, owned upstream and consumed at a reviewed pin, as a named
+  execution prerequisite for the sprint that installs the shared package. If
+  that upstream capability cannot land before Phase C needs to execute,
+  Phase C shall stop and obtain an explicit owner decision (delay execution,
+  or accept a documented, owner-signed-off temporary gap) rather than
+  closing on a local workaround or a silent omission.
+- PHC-003 Phase C sprints preflight only. They shall not authorize or
+  execute publication to any channel, create or push a release tag, or run
+  BTIT repository integration tests. Preflight commands shall be
+  idempotent, non-mutating with respect to any external registry, and
+  independently re-runnable.
+- PHC-004 The release-surface preflight shall enumerate, without silent
+  omission, every Phase B-added publishable Rust crate, the Python
+  wheel/sdist artifacts, the npm client package, and applicable native/Tauri
+  artifacts, cross-checked against a deterministic manifest inventory. A
+  crate or package present in the merged Phase B tree but absent from the
+  preflight inventory is a defect, not an accepted gap.
+- PHC-005 Phase C shall document the exact credential/authentication model
+  required by each adopted channel at its actual scope — for example, the
+  shared PyPI workflow's `PYPI_API_TOKEN`/`TEST_PYPI_API_TOKEN` secrets are
+  GitHub Environment-scoped (`pypi`/`testpypi`), distinct from crates.io's
+  repository-scoped `CARGO_REGISTRY_TOKEN` — without assuming unimplemented
+  mechanisms such as trusted publishing, without collapsing environment
+  scope into repository scope, and without inspecting, printing, or
+  otherwise exposing secret values. Verification shall check secret
+  presence at the correct scope (`gh secret list --env <name>` for
+  environment-scoped secrets), not merely at repository scope.
+- PHC-006 Installing shared-package workflows shall not silently regress
+  CI runtime/action versions already adopted elsewhere in this repository.
+  Phase C shall treat a `../sc-publish` revision with current, compatible
+  action-runtime pins as a named execution prerequisite for the sprint that
+  installs the shared package, verified by an added workflow action-runtime
+  validation gate — not recorded as an accepted regression closed out by a
+  follow-up ticket.

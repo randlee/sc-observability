@@ -1,0 +1,5 @@
+error: empty field key is not supported
+ --> tests/ui/event_empty_key.rs:5:11
+  |
+5 |     info!("" = 1, "message");
+  |           ^^

@@ -1,0 +1,107 @@
+name: B.2 staged package qualification
+
+on:
+  pull_request:
+    paths:
+      - 'Cargo.*'
+      - 'crates/**'
+      - 'scripts/ci/**'
+      - 'release/**'
+      - '.github/workflows/b2-staged-consumer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  package-stage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Validate release inventory and integrity negatives
+        run: |
+          python3 .github/scripts/release_artifacts.py validate-publish-order \
+            --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml
+          python3 scripts/ci/validate_version_literals.py
+          python3 -m unittest discover -s scripts/ci/tests -p 'test_log_staging.py'
+          python3 -m unittest discover -s scripts/ci/tests -p 'test_generation_provenance.py'
+      - name: Build and verify all six immutable Cargo packages
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+          python3 scripts/ci/prepare_log_staged_packages.py --version "$version" --output "${{ runner.temp }}/b2-stage"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: b2-candidate-stage
+          path: ${{ runner.temp }}/b2-stage
+          if-no-files-found: error
+          retention-days: 30
+  staged-consumer:
+    needs: package-stage
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            evidence: macos
+          - os: ubuntu-latest
+            evidence: ubuntu
+          - os: windows-latest
+            evidence: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v7
+        with:
+          name: b2-candidate-stage
+          path: ${{ runner.temp }}/b2-stage
+      - name: Consume exactly the shared immutable six-package stage
+        shell: bash
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+          python3 scripts/ci/validate_log_staged_consumer.py --version "$version" --stage "${{ runner.temp }}/b2-stage" --source-commit "${{ github.sha }}" --result-file "b2-evidence/${{ matrix.evidence }}.json"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: b2-${{ matrix.evidence }}-qualification
+          path: b2-evidence
+          if-no-files-found: error
+          retention-days: 30
+  aggregate-platform-evidence:
+    needs: staged-consumer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v7
+        with:
+          name: b2-candidate-stage
+          path: b2-stage
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: b2-*-qualification
+          path: b2-evidence
+          merge-multiple: true
+      - name: Reject missing platforms or mixed source/archive evidence
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+          python3 scripts/ci/validate_log_platform_evidence.py --stage b2-stage --evidence-dir b2-evidence --version "$version" --source-commit "${{ github.sha }}"

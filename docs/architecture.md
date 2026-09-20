@@ -1,6 +1,7 @@
 # SC-Observability Architecture
 
-**Status**: Approved
+**Status**: Approved baseline; ADR-011–ADR-015 proposed for Phase B review;
+ADR-016 proposed for Phase C review
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Related documents**:
 - [`requirements.md`](./requirements.md)
@@ -77,8 +78,8 @@ Owns:
 - `LogSnapshot`, `QueryError`, `QueryHealthState`, `QueryHealthReport`
 - `MaintenanceHealthReport`, `MaintenanceWorkerState`, `WriterState`
 - health report contracts
-- shared open traits such as `Observable`, `DiagnosticInfo`,
-  subscribers, filters, and projectors
+- shared open traits such as `Observable`, subscribers, filters, and projectors
+- the published sealed `DiagnosticInfo` diagnostic contract
 
 Must not own:
 
@@ -697,6 +698,63 @@ Important boundary:
 | `sc-observability` | `sc-observability-types` | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | lightweight logging, sinks, legacy direct rotation helpers, `RetainedLogPolicy`, queue-backed writer runtime, `Logger`, `JsonlLogReader`, follow session runtime, and logging health/maintenance re-exports including `MaintenanceHealthReport`, `MaintenanceWorkerState`, and `WriterState` |
 | `sc-observe` | `sc-observability-types`, `sc-observability` | `sc-observability-otlp`, `agent-team-mail-*` | observation routing, subscribers, projectors, top-level health re-exports |
 | `sc-observability-otlp` | `sc-observability-types`, `sc-observability` (`sc-observe` dev-only for integration tests) | `agent-team-mail-*` | OTel/OTLP transport, telemetry services, exporters, telemetry health re-exports |
+| `sc-observability-log`† | `sc-observability`, `sc-observability-types`, `sc-observability-log-macros` (exact-pinned) | `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*`, Tauri/Specta/PyO3 | `log`-facade bridge and tracing-compatible event/`#[instrument]` macros re-exports; `LogGuard`/`LogControl` lifecycle; `InitError`/`FlushError`/`ShutdownError` are a scoped TYP-030 companion exception (PHB-002); B.1 mechanical copy, unpublished |
+| `sc-observability-dto`† | `sc-observability-types`, `serde`, `serde_json`; optional exact-pinned Schemars tooling | core runtime, bridge, Tauri, PyO3, ownership capabilities | B.3 schema-v1 wire projections and checked conversions; scoped TYP-030 wire-only exception, no native type replacement |
+| `sc-observability-log-macros`† | third-party proc-macro support only (`syn`, `quote`, `proc-macro2`) | `sc-observability-log` (no reverse dependency back to the bridge), `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | procedural macro expansion only for `sc-observability-log`'s event/`#[instrument]` forms; no runtime types; B.1 mechanical copy, unpublished |
+| `sc-observability-log-consumer-check`† | `sc-observability-log` only (direct path dependency) | `sc-observability-log-macros` (macro expansion is exercised only through the bridge, preserving the external macro-expansion hygiene check), `agent-team-mail-*` | CI-only compile-time proof that macro consumers need only the bridge dependency; never published |
+
+† This crate's ADR-011 companion-boundary placement (including its TYP-030 companion/wire-only exception scoping above) is provisional pending ADR-011's formal acceptance — see ADR-011's own Status line below.
+
+### Phase B Binding Runtime Edges
+
+The shared native runtime provides core and bridge backends, bounded operations
+and the unique core shutdown owner. `arc-swap` publishes immutable health and
+logger references without an admission mutex; `serde_json` supports checked DTO
+conversion. These support crates add no host/framework dependency. The resolved
+workspace allowlist and aliased/target host edges are checked by
+`scripts/ci/validate_binding_runtime_dependencies.py`.
+
+
+B.3b structural/dependency CI enforces this exact set of workspace
+edges for sc-observability-binding-runtime; third-party support crates retain
+normal dependency review. Tauri and PyO3 may depend on the runtime, never the
+reverse. This proposed diagram does not claim the crate is implemented.
+
+`scripts/ci/validate_binding_runtime_dependencies.py` resolves and checks the
+shared runtime manifest plus both consumer manifests. It includes ordinary,
+build, dev, target-specific and aliased workspace declarations, so a renamed
+workspace dependency cannot evade the first-party or forbidden-host policy.
+
+Both binding crates also declare direct `sc-observability-dto` and
+`sc-observability-types` dependencies, alongside their `Runtime` edge, not
+instead of it. This is permitted: DTO and Types are the neutral, leaf-level
+wire/contract crates plan-phase-b.md's binding architecture describes as
+depending on "public types, not Tauri or PyO3" — any consumer, including a
+binding crate, may take them directly without duplicating the Runtime's
+responsibilities. `sc-observability-py` additionally depends directly on
+`sc-observability` (core) itself, used only to construct a
+`sc_observability::LoggerConfig` value from Python-supplied inputs
+(`bindings/python/sc-observability-py/src/lib.rs`); it does not call, hold, or
+otherwise duplicate the core logger's own lifecycle/shutdown ownership, which
+the Runtime alone retains. No Tauri/PyO3-facing crate gains an independent
+shutdown-owning edge to core through either dependency; the Runtime-only rule
+is about lifecycle/shutdown ownership, not about every possible workspace
+compile-time edge.
+
+```mermaid
+graph TD
+  Runtime[sc-observability-binding-runtime] --> Core[sc-observability]
+  Runtime --> Types[sc-observability-types]
+  Runtime --> DTO[sc-observability-dto]
+  Runtime --> Bridge[sc-observability-log]
+  Tauri[sc-observability-tauri] --> Runtime
+  Tauri --> DTO
+  Tauri --> Types
+  Python[sc-observability-py] --> Runtime
+  Python --> DTO
+  Python --> Types
+  Python -. "LoggerConfig construction only, no shutdown ownership" .-> Core
+```
 
 ## 6.1 Query/Follow Dependency Order
 
@@ -719,6 +777,24 @@ Consequences:
 - the public signatures above must remain stable across that sequence
 
 ## 7. ADRs
+
+ADR navigation index (status is recorded in each decision below):
+
+- [ADR-001: Observation-First Producers](#adr-001-observation-first-producers)
+- [ADR-002: Linear Dependency Order](#adr-002-linear-dependency-order)
+- [ADR-003: Logging Is Self-Contained](#adr-003-logging-is-self-contained)
+- [ADR-004: OTel Belongs Only At The Top](#adr-004-otel-belongs-only-at-the-top)
+- [ADR-005: Centralized Registries For Error Codes And Constants](#adr-005-centralized-registries-for-error-codes-and-constants)
+- [ADR-006: ATM Adapter Boundary](#adr-006-atm-adapter-boundary)
+- [ADR-007: Boot-Phase Observability Precedes Plugin Registration](#adr-007-boot-phase-observability-precedes-plugin-registration)
+- [ADR-008: Shared Approval Is Not ATM Migration Approval](#adr-008-shared-approval-is-not-atm-migration-approval)
+- [ADR-009: Boundary CI Must Enforce Shared-Repo Purity](#adr-009-boundary-ci-must-enforce-shared-repo-purity)
+- [ADR-010: Queue-Backed Writer Thread Owns Logging And Maintenance](#adr-010-queue-backed-writer-thread-owns-logging-and-maintenance)
+- [ADR-011: Companion Boundaries And Pre-Copy Contract](#adr-011-companion-boundaries-and-pre-copy-contract)
+- [ADR-012: Additive Typed Errors And Warning-Only Migration](#adr-012-additive-typed-errors-and-warning-only-migration)
+- [ADR-013: Owner-Controlled Shared Runtime Level](#adr-013-owner-controlled-shared-runtime-level)
+- [ADR-014: Result-Preserving Language Boundaries](#adr-014-result-preserving-language-boundaries)
+- [ADR-015: Embedded Python And Shared Binding Runtime](#adr-015-embedded-python-and-shared-binding-runtime)
 
 ### ADR-001: Observation-First Producers
 
@@ -848,11 +924,199 @@ Consequences:
   than silently dropping records
 - queue-full drops, writer degradation, and last-writer-error reporting are
   part of `LoggingHealthReport`
-  - `Logger::shutdown()` now drains queued events and joins the writer thread
-    within a bounded timeout rather than joining a separate maintenance worker
+  - `Logger::shutdown()` drains queued events and waits for definitive writer
+    completion; exceeding the configured timeout records degraded health but
+    does not return a stopped logger while the writer remains detached
   - `MaintenanceWorkerState` remains the retained-log maintenance health
     vocabulary, but its semantics describe writer-owned maintenance execution
     rather than an independently joinable background thread
+
+### ADR-011: Companion Boundaries And Pre-Copy Contract
+
+- **Status**: Proposed for Phase B review; does not amend accepted ADRs yet.
+- **Context**: The log bridge is being extracted from BTIT for public reuse,
+  while TypeScript and Python need shared logging without lower-layer runtime
+  dependencies. TYP-030 currently centralizes core errors and health.
+- **Proposed decision**: Keep the existing four-crate layering unchanged. Add
+  bridge/macros above core; the bridge owns only its facade/lifecycle errors,
+  health and constants. Add a neutral DTO crate for versioned wire projections,
+  with Tauri and PyO3 conversion/transport implementations above those contracts.
+  Neither DTOs nor neutral types depend on bridge runtime, Tauri, PyO3 or OTLP.
+  This is a scoped TYP-030 companion exception; existing core definitions keep
+  their owner. sc-observability accepts its target contract first, BTIT implements
+  and reviews every foreseeable bridge change before the mechanical B.1 copy.
+- **Consequences**: One host-owned writer/control boundary serves backend,
+  frontend and attached Python. Bridge ownership is unique, producer controls
+  cannot initiate shutdown. Shutdown waiters can retrieve the retained terminal
+  result through wait_stopped. A timed-out flush has no prior-result accessor;
+  its native operation continues and later health/slot availability reflect
+  completion without treating a new flush as observation of the old one. Core shutdown still waits for definitive completion (ADR-010); bridge
+  timeout bounds the caller's wait, not writer completion. No post-copy bridge
+  redesign or BTIT dependency switch is scheduled here. The bridge retains its
+  accepted coordinator; a separate shared binding-runtime coordinator handles
+  core-only hosts, reused by Tauri/Python rather than duplicated per language.
+  EmitOutcome is an alias of core AdmissionOutcome, not a duplicate enum.
+- **Contracts**: PHB-001/002/014; [target API](plans/phase-b/target-bridge-api.md).
+
+### ADR-012: Additive Typed Errors And Warning-Only Migration
+
+- **Status**: Proposed for Phase B review.
+- **Context**: Issue #92 requests typed failure handling without a forced
+  migration of consumers of published diagnostic wrappers and extension traits.
+- **Proposed decision**: Add improved failure types, classification and operation/
+  extension entry points. Preserve the published DiagnosticInfo seal and existing
+  trait implementations/signatures and existing method-call resolution. New
+  typed extension traits must not make old unqualified calls ambiguous. Legacy
+  adapters retain metadata and wire
+  shape, and deprecation warnings identify working replacements. Never replace
+  published structs in place, add required legacy trait methods or mark existing
+  enums non-exhaustive. Total unclassified handling preserves custom diagnostics.
+- **Consequences**: One runtime implementation serves both APIs. Existing
+  consumers continue with warnings under default lints; strict warning policies
+  require deliberate migration. A practical adoption guide and old/new/custom
+  trait fixtures are release gates. No removal version or major conversion is
+  planned. The newly published B.P1 owner constructors remain exempt from
+  B.1e method deprecation, avoiding publish-then-deprecate churn. InitError
+  wrapper warnings remain distinct; explicit legacy type users may need narrow
+  lint allowances, while typed alternatives are available. Scoped API approvals
+  review additions; they cannot authorize a break.
+- **Contracts**: PHB-003–006; [error migration](plans/phase-b/sprint-b-1a-error-api.md).
+
+### ADR-013: Owner-Controlled Shared Runtime Level
+
+- **Status**: Proposed for Phase B review.
+- **Context**: Issue #97 requires runtime verbosity changes across core, facade
+  and bindings; a bridge-only threshold cannot override core config filtering.
+- **Proposed decision**: Core owns effective state and serializes its transitions
+  with admission/shutdown. Add a separate mutation capability, read-only state
+  accessors and typed elevate/reset outcomes without changing published health
+  or config construction. Baseline is immutable; overrides are nonpersistent,
+  above-or-equal to baseline, and explicitly reset by the owner. Attached clients
+  request authorized changes from the application rather than gaining ownership.
+- **Consequences**: B.P2-qualified staged core support must be available before
+  accepted BTIT integration and copy; B.7 owns later live publication. One
+  coherent revision identifies each actual transition. Queued events
+  are not retroactively filtered. Failed diagnostic admission is distinct from a
+  successful change and preserves queue/redaction/sink policy. Supported release
+  feature graphs retain required sites; runtime changes cannot undo compile-time
+  filtering. #96 is not a dependency; no timer/lease stack is introduced.
+- **Contracts**: PHB-007–009; [runtime contract](plans/phase-b/runtime-level-contract.md).
+
+### ADR-014: Result-Preserving Language Boundaries
+
+- **Status**: Proposed for Phase B review.
+- **Context**: Mixed Rust/Python and Tauri frontend applications need first-class
+  logging that cannot make application work fail when a log cannot be recorded.
+- **Proposed decision**: Use discriminated operational results through public
+  Rust/TypeScript/Python boundaries, versioned neutral wire values and explicit
+  checked conversions. Tauri handlers resolve tagged envelopes; Python factories
+  and waits return tagged data. Expected failures do not intentionally throw,
+  raise or panic. Convert foreign failures at the boundary. Default submissions
+  are nonblocking; optional waits never turn admission into persistence claims.
+- **Consequences**: Ignored errors are caller omissions, not hidden success.
+  Required unit-return protocol adapters retain results in bounded status.
+  Python supports owned and attached modes with explicit context transfer and
+  bounded optional flush waits; receipt admission is synchronously resolved
+  before submit returns. Observer timeout/cancellation ends observation, not the
+  native operation. Bridge-native timeout can complete an adapter call while the
+  bridge flush continues; the shared runtime contract distinguishes those slots. Existing infallible Rust accessors and source contracts stay intact.
+  Node.js, Go, sc-runtime IPC/interpreters and durable receipts are deferred.
+  Shared native backends own runtime conversions and bounded core-host operations;
+  language wrappers own transport/extraction only. Canonical schema-v1 JSON drives
+  both generated language models, with Rust Serde/schema agreement checked in CI.
+- **Contracts**: PHB-010–014; [Phase B](plans/phase-b/plan-phase-b.md).
+
+### ADR-015: Embedded Python And Shared Binding Runtime
+
+- **Status**: Proposed for Phase B review.
+- **Context**: Attached Python must share a Rust host logger and its typed
+  operations without exchanging Rust trait objects between independently linked
+  libraries or building a new process transport before sc-runtime is specified.
+- **Proposed decision**: Hosts link the `sc-observability-py` rlib and register
+  its module in an embedded GIL-enabled interpreter. `install_host_logger` stores
+  one immutable backend per module; repeated/racing installations return typed
+  failures. Hosts install provided core/bridge backends from
+  `sc-observability-binding-runtime`, which owns native DTO conversion and the
+  bounded core-host operation coordinator. Python-owned mode uses the same core
+  backend with a unique owner; attached mode never owns shutdown/level mutation.
+  A standalone extension wheel is a separate loading mode, not a mechanism to
+  exchange Rust objects with an independently compiled host extension.
+- **Alternatives rejected for this phase**: C ABI/capsule/integer-pointer handles
+  require a separate lifetime and ABI contract; separate wheel plus host shared
+  library cannot safely assume Rust ABI/type identity; IPC introduces transport,
+  ordering and supervisor semantics absent from the current runtime specification.
+- **Consequences**: No replacement/reset installation, raw pointer or cross-dylib
+  trait-object transfer. Python teardown releases loop-local flush observers,
+  timers and module references; native completion never calls Python or acquires
+  its GIL. Teardown
+  cannot shut down the attached host. External-process attachment is deferred
+  with the future Go/sc-runtime transport decision. This does not promise
+  subinterpreter or free-threaded support. Shared backend policy and provenance
+  apply equally to core-only and bridge hosts.
+- **Contracts**: PHB-002/010–014;
+  [native coordinator](plans/phase-b/native-binding-runtime.md),
+  [Python embedding](plans/phase-b/sprint-b-4-python.md).
+
+### ADR-016: Shared Publishing Pipeline Adoption
+
+- **Status**: Proposed for Phase C review.
+- **Context**: This repository's release implementation
+  (`.github/workflows/release.yml`/`release-preflight.yml`, the `publisher`
+  agent, `.github/scripts/release_gate.sh`/`.github/scripts/release_artifacts.py`, and
+  `release/publish-artifacts.toml`) is repository-specific and predates
+  Phase B's expanded release surface (npm client, Python wheels/sdist,
+  native/Tauri artifacts). `../sc-publish` is a separately-owned shared
+  package intended to be the single publishing source of truth across
+  repositories, installed verbatim via a caller-owned JSON contract rather
+  than copied and hand-modified.
+- **Proposed decision**: Adopt `../sc-publish` as the publishing
+  implementation, installed via `plugins/sc-publish/install.py --input
+  install.json` at a pinned, reviewed shared-package revision. The
+  installer's copied `.claude`/`.github`/`release` assets replace this
+  repo's bespoke release workflows, `publisher` agent and manifest scripts;
+  only the two release manifests (`release/publish-artifacts.toml`,
+  `release/publish-channel-contracts.toml`) are repository-rendered from the
+  install contract. The shared package's channel set does not include npm at
+  the pinned revision inspected while writing this ADR. This repo does not
+  build a repository-owned npm publish step as a substitute: an npm channel
+  in `../sc-publish`, owned upstream and consumed at a reviewed pin (matching
+  the existing `pypi` channel's shape — its own agent, environment-scoped
+  secret, and preflight/retry contract), is a named execution prerequisite
+  for the sprint that installs the shared package. Likewise, a `../sc-publish`
+  revision with action-runtime pins at or above this repository's current
+  floor (`actions/checkout>=v5`, `actions/setup-python>=v6`) is a named
+  execution prerequisite, verified by an added workflow action-runtime
+  validation gate, not an accepted regression. If either upstream capability
+  cannot land before Phase C needs to execute, Phase C stops and requests an
+  explicit owner decision (delay execution, or accept a documented,
+  owner-signed-off temporary gap) rather than treating a local substitute as
+  equivalent shared-package adoption.
+- **Alternatives rejected for this phase**: Continuing to maintain a
+  repository-specific release pipeline duplicates logic already centralized
+  in the shared package and diverges further as more repositories adopt it.
+  Hand-patching the installer's vendored workflow files (for example to
+  change pinned action versions) defeats the shared-source-of-truth model.
+  Building a repository-local npm publish workflow, or installing the
+  currently-pinned stale action versions and tracking the mismatch only as a
+  follow-up ticket, would both reintroduce the bespoke, repository-specific
+  publishing implementation this ADR replaces — rejected as contrary to the
+  owner's stated intent for this phase.
+- **Consequences**: This repo's publish operating model moves from a
+  `team-lead`-directed `publisher` agent following a repo-local runbook to
+  the shared package's named ATM `publisher` teammate plus role-specific
+  background channel workers, per `.claude/skills/publishing/SKILL.md`.
+  Release-manifest schema changes (`required`, `publish`, `preflight_check`,
+  `verify_install` per crate) apply to every existing published crate, not
+  only Phase B additions, and cover the full ten-crate Phase B inventory
+  including the standalone `sc-observability-tauri` workspace and the
+  `sc-observability-py` Rust crate as a crates.io target distinct from its
+  wheel/sdist artifact. Adopting the npm channel and the current action-
+  runtime baseline as upstream prerequisites means Phase C's sprint sequence
+  may pause pending that upstream work landing, or pending an explicit owner
+  decision, rather than always completing on the originally inspected pin.
+  Actual publication, tagging and BTIT integration tests remain out of scope
+  for Phase C.
+- **Contracts**: PHC-001–006; [Phase C](plans/phase-c/plan-phase-c.md).
 
 ## 8. API-Design Consistency
 

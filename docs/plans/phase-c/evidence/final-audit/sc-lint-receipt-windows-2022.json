@@ -1,0 +1,15 @@
+{
+  "source_revision": "ba2d9bf622c1604e3f017c728040906b90e71bce",
+  "repository": "randlee/sc-lint",
+  "version": "0.6.0",
+  "wheel_sha256": "b679e7e37a446c1b220757e49352412e5da356d260d96e95478fd147afa34640",
+  "wheel": "D:\\a\\_temp\\sc-lint-source-bvha2z5x\\wheels\\sc_lint-0.6.0-cp39-abi3-win_amd64.whl",
+  "binaries": {
+    "sc-lint-boundary.exe": "2ab988f919a197bca4678c6f444f1311474c3ec6e58a2f23d5b181142f409166",
+    "sc-lint-portability.exe": "6805cf7d3cb8f4ca33a4750f4f1f4673ff32e078530d039062e97a8d2326ba10",
+    "sc-lint-runtime.exe": "b518523cab9f0329b4370b68a0ec035b5c2f2883dd4f64ff589c0cc70a6c4284",
+    "sc-lint.exe": "04dbce4fed50ff75f817afe3eaeb1ab28f3583f8c268dd18ac68ce46721b6405"
+  },
+  "binary_directory": "D:\\a\\_temp\\sc-lint-source-bvha2z5x\\bin",
+  "python": "D:\\a\\sc-observability\\sc-observability\\.sc-lint\\venv\\Scripts\\python.exe"
+}

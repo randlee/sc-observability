@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "source_commit": "2bd3e87ba7ec7fccf081d21049f7123749ded944",
+  "scope": "incremental local macOS ARM64 qualification, not the final distribution matrix",
+  "checks": [
+    {
+      "command": "bash scripts/ci/validate_python_bindings.sh",
+      "exit_code": 0,
+      "log": "full-python-validator.log",
+      "log_sha256": "32aef7a17672d1fbd184b7228e6e6d641d7bfb1fb8e639facafb40e79dff4cac"
+    },
+    {
+      "command": "PYO3_PYTHON=/opt/homebrew/bin/python3.14 PYTHONHOME=/opt/homebrew/opt/python@3.14/Frameworks/Python.framework/Versions/3.14 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error cargo run --locked -p rust-python-logging",
+      "exit_code": 0,
+      "log": "embedding-cpython314.log",
+      "log_sha256": "dcf3a47345996afb6135b0a2803055847e381af56d3807477451e88ff69c83cf"
+    },
+    {
+      "command": "cargo test --locked -p sc-observability-dto",
+      "exit_code": 0,
+      "log": "dto-tests.log",
+      "log_sha256": "bad5ff52ae5ccb18297ef9ef8c1a9dd7970ad8daebb9f75b69f9cd5c3bf5cb6b"
+    }
+  ],
+  "remaining": [
+    "final parent propagation",
+    "B.4 inherited Rust clippy cleanup",
+    "immutable source bundle and five-wheel/25-cell qualification with per-cell embedding",
+    "lead completeness"
+  ],
+  "provisional_distribution": {
+    "source_commit": "98203459bb8779b29b610be4649d55cb4063b07f",
+    "scope": "single macOS ARM64 preflight; final combined matrix and per-cell embedding remain open",
+    "records": [
+      {
+        "record": "provisional-macos-build.json.gz",
+        "sha256": "7a0cd51267935869961b92ab3f5281ac83c9277cd26fb6456a29e2041d302915",
+        "uncompressed_sha256": "e5aac3a4521e06bc2cdcaa4e6a2bf9615978bf2fab40efa8c13fd91bc914c409"
+      },
+      {
+        "record": "provisional-macos-py314-cell.json.gz",
+        "sha256": "69e0343abebbf225ebf65375fe1edc89bf1a5d0b9019a91599ae319fd2943244",
+        "uncompressed_sha256": "b2a327e237e52ec8f97f2bb2df93d54bcfc063fc2da4317b68ab1da95363ca32"
+      }
+    ]
+  }
+}

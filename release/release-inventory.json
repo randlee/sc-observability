@@ -53,5 +53,23 @@
         "cargo search sc-observability-otlp --limit 1 | grep -F 'sc-observability-otlp = \"1.1.0\"'"
       ]
     }
-  ]
+  ],
+  "qualificationCandidate": {
+    "version": "1.4.0",
+    "publication": "pending_phase_c_sc_publish_and_owner_authorization",
+    "packages": [
+      "sc-observability-types",
+      "sc-observability",
+      "sc-observe",
+      "sc-observability-otlp",
+      "sc-observability-log-macros",
+      "sc-observability-log"
+    ],
+    "bindingInventory": "release/bindings-artifacts.toml",
+    "bindingChannels": ["crates.io", "pypi", "npm"],
+    "bindingPublication": "pending_phase_c_sc_publish_and_owner_authorization",
+    "handoff": "docs/plans/phase-b/handoff-b-2.md",
+    "stageManifest": "stage-manifest.json",
+    "qualificationSource": "recorded immutably in each stage manifest; not an authorized publication source"
+  }
 }

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "candidate_version": "1.4.0",
+  "source_commit": "698df4db1eada347b2537b49d06d6689488efc66",
+  "approved_at": "2026-09-18T15:39:12.062789+00:00",
+  "crates": {
+    "sc-observability-dto": {
+      "status": "approved",
+      "reviewer": "aobs (appointed Phase B lead)",
+      "scope": ["public-api"],
+      "evidence": "docs/plans/phase-b/evidence/phase-b-integration-completeness/decimal-api-current.txt",
+      "api_sha256": "4381d76f3741cc20f132ab5763fc9f5bb0894c3f389cd3ad2fe6862ac4c579fd"
+    }
+  },
+  "approval_scope": "Independently generated and reviewed DecimalDtoError enum, stable codes, Display/Error implementations and two source-breaking Result error-type signature changes to DecimalDto::new/as_u64 in the unpublished DTO crate. Decimal wire representation remains unchanged. This is scoped lead API approval only; no owner ADR/runtime-contract acceptance or publication approval."
+}

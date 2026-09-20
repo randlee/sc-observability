@@ -1,0 +1,28 @@
+boundary_id = "BOUNDARY-ScObservabilityLogConsumerCheck"
+owner_package = "sc-observability-log-consumer-check"
+owner_crate_path = "sc_observability_log_consumer_check"
+name = "ScObservabilityLogConsumerCheck"
+[public]
+facade = "crate_root"
+[implementation]
+type = "crate"
+module = "sc_observability_log_consumer_check"
+visibility = "public"
+constructor = "none"
+[composition]
+roots = []
+[dependencies]
+allowed_dependents = []
+allowed_dependencies = ["sc-observability-log"]
+forbidden_edges = []
+[references]
+scope = "outside_owner_crate"
+forbidden = []
+[testing]
+allowed_test_double_paths = []
+forbidden_test_bypasses = []
+[enforcement]
+lint_rules = ["LINT-SC-OBSERVABILITY-LOG-CONSUMER-BOUNDARY"]
+review_gates = ["workspace_dependency_policy"]
+[status]
+state = "concrete_landed"

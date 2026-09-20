@@ -1,0 +1,72 @@
+pub mod sc_observability_binding_runtime
+pub enum sc_observability_binding_runtime::OperationState<T>
+pub sc_observability_binding_runtime::OperationState::Completed
+pub sc_observability_binding_runtime::OperationState::Completed::result: core::result::Result<T, sc_observability_dto::wire::operations::Failure>
+pub sc_observability_binding_runtime::OperationState::Pending
+pub enum sc_observability_binding_runtime::ProducerOrigin
+pub sc_observability_binding_runtime::ProducerOrigin::Python
+pub sc_observability_binding_runtime::ProducerOrigin::RustHost
+pub sc_observability_binding_runtime::ProducerOrigin::TauriFrontend
+pub struct sc_observability_binding_runtime::BridgeControlBackend
+impl core::clone::Clone for sc_observability_binding_runtime::BridgeControlBackend
+pub fn sc_observability_binding_runtime::BridgeControlBackend::clone(&self) -> Self
+impl core::fmt::Debug for sc_observability_binding_runtime::BridgeControlBackend
+pub fn sc_observability_binding_runtime::BridgeControlBackend::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for sc_observability_binding_runtime::BridgeControlBackend
+pub fn sc_observability_binding_runtime::BridgeControlBackend::drop(&mut self)
+impl sc_observability_binding_runtime::HostLoggingBackend for sc_observability_binding_runtime::BridgeControlBackend
+pub fn sc_observability_binding_runtime::BridgeControlBackend::health(&self) -> core::result::Result<sc_observability_dto::wire::health::LogHealthDto, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::BridgeControlBackend::start_flush(&self, core::time::Duration) -> core::result::Result<sc_observability_binding_runtime::Operation<sc_observability_dto::wire::operations::CompletionDto>, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::BridgeControlBackend::start_query(&self, sc_observability_dto::wire::events::LogQueryDto) -> core::result::Result<sc_observability_binding_runtime::Operation<sc_observability_dto::wire::events::LogSnapshotDto>, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::BridgeControlBackend::try_log(&self, sc_observability_dto::wire::events::LogEventDto, sc_observability_binding_runtime::ProducerOrigin) -> core::result::Result<sc_observability_dto::wire::operations::AdmissionDto, sc_observability_dto::wire::operations::Failure>
+pub struct sc_observability_binding_runtime::CompletionSubscription
+impl core::fmt::Debug for sc_observability_binding_runtime::CompletionSubscription
+pub fn sc_observability_binding_runtime::CompletionSubscription::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for sc_observability_binding_runtime::CompletionSubscription
+pub fn sc_observability_binding_runtime::CompletionSubscription::drop(&mut self)
+pub struct sc_observability_binding_runtime::CoreLoggerBackend
+impl core::fmt::Debug for sc_observability_binding_runtime::CoreLoggerBackend
+pub fn sc_observability_binding_runtime::CoreLoggerBackend::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl sc_observability_binding_runtime::HostLoggingBackend for sc_observability_binding_runtime::CoreLoggerBackend
+pub fn sc_observability_binding_runtime::CoreLoggerBackend::health(&self) -> core::result::Result<sc_observability_dto::wire::health::LogHealthDto, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::CoreLoggerBackend::start_flush(&self, core::time::Duration) -> core::result::Result<sc_observability_binding_runtime::Operation<sc_observability_dto::wire::operations::CompletionDto>, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::CoreLoggerBackend::start_query(&self, sc_observability_dto::wire::events::LogQueryDto) -> core::result::Result<sc_observability_binding_runtime::Operation<sc_observability_dto::wire::events::LogSnapshotDto>, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::CoreLoggerBackend::try_log(&self, sc_observability_dto::wire::events::LogEventDto, sc_observability_binding_runtime::ProducerOrigin) -> core::result::Result<sc_observability_dto::wire::operations::AdmissionDto, sc_observability_dto::wire::operations::Failure>
+pub struct sc_observability_binding_runtime::CoreLoggerOwner
+impl sc_observability_binding_runtime::CoreLoggerOwner
+pub fn sc_observability_binding_runtime::CoreLoggerOwner::elevate_level(&mut self, sc_observability_types::level::LevelFilter, sc_observability_types::level::LevelChangeSource) -> core::result::Result<sc_observability_dto::wire::operations::LevelChangeDto, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::CoreLoggerOwner::reset_level(&mut self, sc_observability_types::level::LevelChangeSource) -> core::result::Result<sc_observability_dto::wire::operations::LevelChangeDto, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::CoreLoggerOwner::shutdown(&self, core::time::Duration) -> core::result::Result<sc_observability_dto::wire::health::LogHealthDto, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::CoreLoggerOwner::start_shutdown(&self) -> core::result::Result<sc_observability_binding_runtime::Operation<sc_observability_dto::wire::health::LogHealthDto>, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::CoreLoggerOwner::wait_stopped(&self, core::time::Duration) -> core::result::Result<sc_observability_dto::wire::health::LogHealthDto, sc_observability_dto::wire::operations::Failure>
+impl core::fmt::Debug for sc_observability_binding_runtime::CoreLoggerOwner
+pub fn sc_observability_binding_runtime::CoreLoggerOwner::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for sc_observability_binding_runtime::CoreLoggerOwner
+pub fn sc_observability_binding_runtime::CoreLoggerOwner::drop(&mut self)
+pub struct sc_observability_binding_runtime::Operation<T>
+impl<T: core::clone::Clone + core::marker::Send + core::marker::Sync + 'static> sc_observability_binding_runtime::Operation<T>
+pub fn sc_observability_binding_runtime::Operation<T>::completion(&self, core::time::Duration) -> impl core::future::future::Future<Output = core::result::Result<T, sc_observability_dto::wire::operations::Failure>> + core::marker::Send + 'static
+pub fn sc_observability_binding_runtime::Operation<T>::state(&self) -> sc_observability_binding_runtime::OperationState<T>
+pub fn sc_observability_binding_runtime::Operation<T>::subscribe(&self, alloc::boxed::Box<(dyn core::ops::function::FnOnce(core::result::Result<T, sc_observability_dto::wire::operations::Failure>) + core::marker::Send)>) -> core::result::Result<sc_observability_binding_runtime::CompletionSubscription, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::Operation<T>::wait(&self, core::time::Duration) -> core::result::Result<T, sc_observability_dto::wire::operations::Failure>
+impl<T: core::clone::Clone + core::marker::Send + core::marker::Sync + 'static> core::fmt::Debug for sc_observability_binding_runtime::Operation<T>
+pub fn sc_observability_binding_runtime::Operation<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T> core::clone::Clone for sc_observability_binding_runtime::Operation<T>
+pub fn sc_observability_binding_runtime::Operation<T>::clone(&self) -> Self
+pub trait sc_observability_binding_runtime::HostLoggingBackend: core::marker::Send + core::marker::Sync
+pub fn sc_observability_binding_runtime::HostLoggingBackend::health(&self) -> core::result::Result<sc_observability_dto::wire::health::LogHealthDto, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::HostLoggingBackend::start_flush(&self, core::time::Duration) -> core::result::Result<sc_observability_binding_runtime::Operation<sc_observability_dto::wire::operations::CompletionDto>, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::HostLoggingBackend::start_query(&self, sc_observability_dto::wire::events::LogQueryDto) -> core::result::Result<sc_observability_binding_runtime::Operation<sc_observability_dto::wire::events::LogSnapshotDto>, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::HostLoggingBackend::try_log(&self, sc_observability_dto::wire::events::LogEventDto, sc_observability_binding_runtime::ProducerOrigin) -> core::result::Result<sc_observability_dto::wire::operations::AdmissionDto, sc_observability_dto::wire::operations::Failure>
+impl sc_observability_binding_runtime::HostLoggingBackend for sc_observability_binding_runtime::BridgeControlBackend
+pub fn sc_observability_binding_runtime::BridgeControlBackend::health(&self) -> core::result::Result<sc_observability_dto::wire::health::LogHealthDto, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::BridgeControlBackend::start_flush(&self, core::time::Duration) -> core::result::Result<sc_observability_binding_runtime::Operation<sc_observability_dto::wire::operations::CompletionDto>, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::BridgeControlBackend::start_query(&self, sc_observability_dto::wire::events::LogQueryDto) -> core::result::Result<sc_observability_binding_runtime::Operation<sc_observability_dto::wire::events::LogSnapshotDto>, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::BridgeControlBackend::try_log(&self, sc_observability_dto::wire::events::LogEventDto, sc_observability_binding_runtime::ProducerOrigin) -> core::result::Result<sc_observability_dto::wire::operations::AdmissionDto, sc_observability_dto::wire::operations::Failure>
+impl sc_observability_binding_runtime::HostLoggingBackend for sc_observability_binding_runtime::CoreLoggerBackend
+pub fn sc_observability_binding_runtime::CoreLoggerBackend::health(&self) -> core::result::Result<sc_observability_dto::wire::health::LogHealthDto, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::CoreLoggerBackend::start_flush(&self, core::time::Duration) -> core::result::Result<sc_observability_binding_runtime::Operation<sc_observability_dto::wire::operations::CompletionDto>, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::CoreLoggerBackend::start_query(&self, sc_observability_dto::wire::events::LogQueryDto) -> core::result::Result<sc_observability_binding_runtime::Operation<sc_observability_dto::wire::events::LogSnapshotDto>, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::CoreLoggerBackend::try_log(&self, sc_observability_dto::wire::events::LogEventDto, sc_observability_binding_runtime::ProducerOrigin) -> core::result::Result<sc_observability_dto::wire::operations::AdmissionDto, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::bridge_backend(sc_observability_log::control::LogControl) -> core::result::Result<sc_observability_binding_runtime::BridgeControlBackend, sc_observability_dto::wire::operations::Failure>
+pub fn sc_observability_binding_runtime::create_core_backend(sc_observability::LoggerConfig) -> core::result::Result<(sc_observability_binding_runtime::CoreLoggerOwner, sc_observability_binding_runtime::CoreLoggerBackend), sc_observability_dto::wire::operations::Failure>

@@ -1,0 +1,9 @@
+{
+  "commands": [],
+  "error": "BUNDLE_REGISTRY_DRIFT: staged registry name/version/source/checksum closure differs from reviewed source lock",
+  "platform": "Darwin",
+  "publication": "pending_B.7",
+  "schema_version": 1,
+  "source_commit": "f248976706c69d4b7793b7fc49bd6fdcb8acb8eb",
+  "status": "failed"
+}

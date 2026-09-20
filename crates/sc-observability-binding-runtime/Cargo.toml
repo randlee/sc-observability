@@ -1,0 +1,27 @@
+[package]
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+name = "sc-observability-binding-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Bounded native logging backends for language bindings"
+
+[features]
+test-hooks = ["sc-observability/fault-injection"]
+
+[dependencies]
+sc-observability.workspace = true
+sc-observability-types.workspace = true
+sc-observability-dto.workspace = true
+sc-observability-log.workspace = true
+arc-swap = "1.7"
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

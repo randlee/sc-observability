@@ -1,0 +1,219 @@
+name: TypeScript/Tauri bindings
+
+on:
+  pull_request:
+    paths:
+      - "bindings/**"
+      - "crates/**"
+      - "examples/tauri-logging/**"
+      - "scripts/ci/**"
+      - "scripts/generate_typescript_bindings.py"
+      - ".github/workflows/bindings-typescript.yml"
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        type: string
+        required: false
+        description: Exact source SHA; defaults to the selected ref
+  workflow_call:
+    inputs:
+      source_commit:
+        type: string
+        required: true
+        description: Exact immutable source SHA to qualify
+    outputs:
+      qualified_source_commit:
+        description: Exact successfully qualified source SHA
+        value: ${{ jobs.all-platforms.outputs.source_commit }}
+      inventory_sha256:
+        description: SHA256 of tauri-qualification-summary.json
+        value: ${{ jobs.all-platforms.outputs.inventory_sha256 }}
+      inventory_artifact_id:
+        description: Actions artifact ID containing the qualification summary
+        value: ${{ jobs.all-platforms.outputs.inventory_artifact_id }}
+      npm_artifact_name:
+        description: Canonical npm archive and producer manifest
+        value: tauri-shared-npm
+      rust_bundle_artifact_name:
+        description: Canonical Rust source bundle containing qualified crate archives
+        value: tauri-shared-rust-bundle
+
+env:
+  PYTHONUTF8: "1"
+  QUALIFICATION_SOURCE: ${{ inputs.source_commit || github.sha }}
+
+jobs:
+  schema-and-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.source_commit || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+      - run: echo "BINDING_RUNTIME_PYTHON=$(command -v python)" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.10"
+      - run: python -m pip install mypy==2.3.1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+      - name: Install isolation helper
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Full schema and shared contracts
+        run: |
+          [[ "$QUALIFICATION_SOURCE" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$QUALIFICATION_SOURCE"
+          bash scripts/ci/validate_binding_schema.sh
+          bash scripts/ci/validate_dependency_bans.sh
+          bash scripts/ci/validate_repo_boundaries.sh
+          bash scripts/ci/validate_docs_consistency.sh
+      - name: Pack the one npm artifact consumed on every platform
+        shell: bash
+        run: |
+          mkdir -p target/tauri-npm
+          npm --prefix bindings/typescript ci --ignore-scripts
+          npm --prefix bindings/typescript run build
+          npm pack ./bindings/typescript --pack-destination "$PWD/target/tauri-npm"
+          python - <<'PYTHON'
+          import hashlib,json,os
+          from pathlib import Path
+          directory=Path('target/tauri-npm')
+          archive,=directory.glob('*.tgz')
+          (directory/'npm-producer.json').write_text(json.dumps({'source_commit':os.environ['QUALIFICATION_SOURCE'],'filename':archive.name,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest()},indent=2)+'\n')
+          PYTHON
+      - name: Package canonical Rust adapter source bundle
+        run: |
+          python scripts/ci/build_binding_source_bundle.py --root-manifest bindings/tauri/Cargo.toml --output target/tauri-rust-bundle
+          tar -czf target/tauri-rust-bundle.tar.gz -C target tauri-rust-bundle
+      - uses: actions/upload-artifact@v6
+        with:
+          name: tauri-shared-rust-bundle
+          path: target/tauri-rust-bundle.tar.gz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v6
+        with:
+          name: tauri-shared-npm
+          path: target/tauri-npm/
+          if-no-files-found: error
+  real-ipc-artifacts:
+    needs: schema-and-contract
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - name: Preserve canonical source bytes on Windows
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_commit || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.10"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            bindings/typescript/package-lock.json
+            scripts/ci/fixtures/tauri-qualification/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+      - name: Install Linux webview and isolation dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xvfb bubblewrap
+          if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - uses: actions/download-artifact@v7
+        with:
+          name: tauri-shared-npm
+          path: target/tauri-npm
+      - uses: actions/download-artifact@v7
+        with:
+          name: tauri-shared-rust-bundle
+          path: target/tauri-rust-shared
+      - name: Verify Windows isolation setup and cleanup before compilation
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          python scripts/ci/supervise_windows_proof.py --evidence target/tauri-qualification/isolation-preflight -- python - <<'PYTHON'
+          import json,sys,tempfile
+          from pathlib import Path
+          sys.path.insert(0,str(Path('scripts/ci').resolve()))
+          from _python_sandbox import Sandbox,registered_checkouts
+          root=Path.cwd()
+          with tempfile.TemporaryDirectory(prefix='tauri-isolation-preflight-') as temporary:
+              sandbox=Sandbox(Path(temporary),registered_checkouts(root))
+              with sandbox:
+                  result=sandbox.prove_denials(sys.executable,root)
+              print('WINDOWS_ISOLATION_RESTORED '+json.dumps(result),flush=True)
+          PYTHON
+      - name: Validate real IPC from packaged artifacts
+        shell: bash
+        run: |
+          export TAURI_NPM_ARCHIVE="$PWD/target/tauri-npm/$(python -c 'import json; print(json.load(open("target/tauri-npm/npm-producer.json"))["filename"])')"
+          tar -xzf target/tauri-rust-shared/tauri-rust-bundle.tar.gz -C target
+          export TAURI_RUST_BUNDLE="$PWD/target/tauri-rust-bundle"
+          export TAURI_NPM_MANIFEST="$PWD/target/tauri-npm/npm-producer.json"
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a bash scripts/ci/validate_typescript_bindings.sh --platform
+          elif [ "$RUNNER_OS" = Windows ]; then
+            python scripts/ci/supervise_windows_proof.py -- "$(cygpath -w "$BASH")" scripts/ci/validate_typescript_bindings.sh --platform
+          else
+            bash scripts/ci/validate_typescript_bindings.sh --platform
+          fi
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: tauri-qualification-${{ runner.os }}
+          path: target/tauri-qualification/
+          if-no-files-found: error
+  all-platforms:
+    outputs:
+      source_commit: ${{ steps.summary.outputs.source_commit }}
+      inventory_sha256: ${{ steps.summary.outputs.inventory_sha256 }}
+      inventory_artifact_id: ${{ steps.inventory.outputs.artifact-id }}
+    needs: [schema-and-contract, real-ipc-artifacts]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_commit || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.10"
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: tauri-qualification-*
+          path: target/tauri-platforms
+      - name: Reject missing, stale, failed, or altered qualification
+        id: summary
+        run: |
+          python scripts/ci/validate_tauri_platform_evidence.py target/tauri-platforms --source "$QUALIFICATION_SOURCE" --output target/tauri-qualification-summary.json
+          echo "source_commit=$QUALIFICATION_SOURCE" >> "$GITHUB_OUTPUT"
+          python -c "import hashlib,os; from pathlib import Path; print('inventory_sha256='+hashlib.sha256(Path('target/tauri-qualification-summary.json').read_bytes()).hexdigest(),file=open(os.environ['GITHUB_OUTPUT'],'a'))"
+      - uses: actions/upload-artifact@v6
+        id: inventory
+        with:
+          name: tauri-production-inventory
+          path: target/tauri-qualification-summary.json
+          if-no-files-found: error

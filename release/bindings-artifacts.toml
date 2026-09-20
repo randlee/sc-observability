@@ -1,0 +1,115 @@
+schema_version = 1
+
+# Phase-B binding-release readiness manifest (review/evidence data, not an
+# installed publish pipeline). Records publish order after
+# overlapping binding subset of release/publish-artifacts.toml's ten Rust
+# entries, plus PyPI/npm readiness records. Its local order is evidence only,
+# not a second publishing plan. Phase C reconciles this subset into the
+# caller-owned sc-publish contract; nothing in this branch publishes anything.
+# See docs/plans/phase-b/handoff-b-7.md for full context.
+#
+# status = "ready": file exists in this branch's tree today, structurally valid.
+# status = "pending": file does not exist in this branch's tree yet; blocked on
+# a named, already-tracked parent-checkpoint merge, not cancelled scope.
+#
+# No crate/package here carries a literal version field on purpose: versions
+# are always read live from each artifact's own Cargo.toml/pyproject.toml/
+# package.json at validate/verify time (mirrors release/publish-artifacts.toml,
+# and keeps scripts/ci/validate_version_literals.py's [package]/
+# [workspace.package]-only scan blind to this file, as intended).
+#
+# publish_order is a single shared numeric space across [[crates]] and
+# [[packages]] in this manifest (crates.io Rust crates publish first, in
+# their own dependency order, then pypi/npm packages that consume them).
+#
+# registry_secret / registry_secret_configured: the workflow configuration key
+# and owner-deferred readiness marker for a future sc-publish setup. This file
+# does not probe live credentials or make a claim about their presence.
+# `scripts/release_bindings_artifacts.py list-publish-plan --require-secrets`
+# fails closed (blocked-on-auth) if any status="ready" entry needs a secret
+# that is not registry_secret_configured=true. Credential provisioning and
+# publication approval remain owner-deferred.
+#
+# platform_matrix_ref / platform_policy_ref (pypi entry only): the workflow
+# that runs the platform matrix, and the JSON policy file it reads
+# (release/python-platform-policy.json). `validate-manifest` fails closed
+# (missing-platform rejection) if either file is missing or the policy
+# declares an empty platforms/interpreters matrix.
+#
+# See scripts/release_bindings_artifacts.py's `build-evidence`/`verify-evidence`
+# subcommands for real candidate artifact bytes/hashes (release/evidence/) and
+# their wrong-source/changed-byte fail-closed checks.
+
+[[crates]]
+artifact = "sc-observability-dto"
+package = "sc-observability-dto"
+cargo_toml = "crates/sc-observability-dto/Cargo.toml"
+workspace_member = true
+publish_order = 1
+depends_on = []
+wait_after_publish_seconds = 30
+status = "ready"
+registry_secret = "CARGO_REGISTRY_TOKEN"
+registry_secret_configured = true
+
+[[crates]]
+artifact = "sc-observability-binding-runtime"
+package = "sc-observability-binding-runtime"
+cargo_toml = "crates/sc-observability-binding-runtime/Cargo.toml"
+workspace_member = true
+publish_order = 2
+depends_on = ["sc-observability-dto"]
+wait_after_publish_seconds = 30
+status = "ready"
+registry_secret = "CARGO_REGISTRY_TOKEN"
+registry_secret_configured = true
+
+[[crates]]
+artifact = "sc-observability-tauri"
+package = "sc-observability-tauri"
+cargo_toml = "bindings/tauri/Cargo.toml"
+workspace_member = false
+publish_order = 3
+depends_on = ["sc-observability-binding-runtime", "sc-observability-dto"]
+wait_after_publish_seconds = 30
+status = "pending"
+pending_reason = "Tauri IPC/artifact qualification and Phase-C sc-publish migration are complete; formal API/ADR approval and separate publication authorization remain pending"
+registry_secret = "CARGO_REGISTRY_TOKEN"
+registry_secret_configured = true
+
+[[crates]]
+artifact = "sc-observability-py"
+package = "sc-observability-py"
+cargo_toml = "bindings/python/sc-observability-py/Cargo.toml"
+workspace_member = true
+publish_order = 4
+depends_on = ["sc-observability-binding-runtime"]
+wait_after_publish_seconds = 0
+status = "ready"
+registry_secret = "CARGO_REGISTRY_TOKEN"
+registry_secret_configured = true
+
+[[packages]]
+artifact = "sc-observability-python-wheel"
+kind = "pypi"
+package = "sc-observability"
+manifest_path = "bindings/python/sc-observability-py/pyproject.toml"
+publish_order = 5
+depends_on = ["sc-observability-py"]
+platform_matrix_ref = ".github/workflows/b4a-python-distributions.yml"
+platform_policy_ref = "release/python-platform-policy.json"
+status = "ready"
+registry_secret = "PYPI_API_TOKEN"
+registry_secret_configured = true
+
+[[packages]]
+artifact = "sc-observability-typescript-client"
+kind = "npm"
+package = "@sc-observability/client"
+manifest_path = "bindings/typescript/package.json"
+publish_order = 6
+depends_on = []
+status = "pending"
+pending_reason = "Phase-C sc-publish migration is complete; the npm GitHub Environment/secret and separate owner publication authorization remain pending"
+registry_secret = "NPM_TOKEN"
+registry_secret_configured = false

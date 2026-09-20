@@ -34,8 +34,8 @@ work.
    cross-repo reviews do not rely on inferred layering or stale assumptions.
 8. Keep completed sprint records archived without leaving root `docs/`
    cluttered.
-9. Stage the post-`v1.1.0` logging-runtime thread optimization work through a
-   dedicated phase-A sprint plan before implementation begins.
+9. Preserve the completed `v1.2.0` Phase A record and route new migration,
+   additive API and binding work through the proposed Phase B plan.
 
 ## Issue #70 / v1.1.0
 
@@ -71,16 +71,16 @@ Historical sequence:
 
 ## Thread Optimization / v1.2.0 Phase A
 
-The next logging-runtime workstream after retained-log maintenance is the
-phase-A thread optimization effort for `sc-observability`.
+The completed logging-runtime workstream after retained-log maintenance was
+the Phase A thread optimization effort, released in `v1.2.0`.
 
 Controlling phase folder:
 
-- [`phase-A/readiness.md`](./phase-A/readiness.md)
-- [`phase-A/sprint-A1.md`](./phase-A/sprint-A1.md)
-- [`phase-A/sprint-A2.md`](./phase-A/sprint-A2.md)
-- [`phase-A/sprint-A3.md`](./phase-A/sprint-A3.md)
-- [`phase-A/sprint-A4.md`](./phase-A/sprint-A4.md)
+- [`plans/phase-a/readiness.md`](./plans/phase-a/readiness.md)
+- [`plans/phase-a/sprint-A1.md`](./plans/phase-a/sprint-A1.md)
+- [`plans/phase-a/sprint-A2.md`](./plans/phase-a/sprint-A2.md)
+- [`plans/phase-a/sprint-A3.md`](./plans/phase-a/sprint-A3.md)
+- [`plans/phase-a/sprint-A4.md`](./plans/phase-a/sprint-A4.md)
 
 Planned sequence:
 
@@ -102,11 +102,349 @@ Planned sequence:
 Phase A exit criteria:
 
 - `A.1` through `A.4` each record an accepted commit and verdict in
-  `docs/phase-A/readiness.md`
+  `docs/plans/phase-a/readiness.md`
 - the final accepted runtime uses one writer-owned queue-backed logging model
   rather than a maintenance-only background worker
 - public API changes are documented and CI-visible
 - consumer docs teach `log()` / `try_log()` as the preferred logging APIs
+
+## Phase B — Log bridge publication and language bindings
+
+The proposed next lettered phase is tracked in
+[`plans/phase-b/plan-phase-b.md`](./plans/phase-b/plan-phase-b.md).
+Its first migration sprint copies the review-corrected generic BTIT crates.
+Explicit prerequisite sprints implement/qualify additive core runtime elevation
+and obtain accepted BTIT integration before that copy. Bounded core error
+migration sprints add improved methods and warning-only legacy adapters before
+Rust publication, followed by separately gated shared schema (B.3),
+shared native runtime (B.3b), TypeScript/Tauri (B.3a), Python runtime (B.4) and Python distribution/platform
+qualification (B.4a), then Python integration/async support and binding release.
+Go remains future scope. The proposal does not reopen the accepted
+Phase A closure or claim that BTIT's currently open review findings are resolved.
+
+### B.3a — TypeScript client and Tauri host adapter
+
+[B.3a](plans/phase-b/sprint-b-3a-typescript.md) implementation now includes the
+generated TypeScript package, isolated Tauri adapter, IPC consumer example, and
+binding validation handoff (tracking evidence in
+[`handoff-b-3a.md`](plans/phase-b/handoff-b-3a.md)); its sprint record remains
+the source of platform qualification and merge evidence. Real artifact/IPC
+qualification (installed npm/Rust artifacts, cross-platform CI, and the broad
+C05 consumer matrix) is recorded as passed in
+[`handoff-b-3a-qualification.md`](plans/phase-b/handoff-b-3a-qualification.md).
+Independent phase-end QA and formal API/ADR approval remain separate gates; this
+qualification is not the B.7 registry-publication tail and is not waived by
+[B.7's phase-end gate amendment](plans/phase-b/plan-phase-b.md#phase-end-completeness-gate-amendment-atm-qa-103).
+
+### B.3b — Shared native binding runtime
+
+Implementation and developer qualification are complete on
+`feature/phase-b-3b-native-runtime` (worktree
+`/Users/randlee/github/sc-observability-worktrees/feature/phase-b-3b-native-runtime`).
+The [handoff](plans/phase-b/handoff-b-3b.md) records both native backends,
+bounded helpers/operations/observers, all 26 contract cases in debug/release on
+Linux/macOS/Windows, and the isolated packaged consumer. Public API scope is
+independently reviewed; consolidated QA, owner-deferred contract acceptance and
+later publication remains separate gates.
+
+### B.P1 — Per-logger runtime level core
+
+B.P1 implements the additive neutral runtime-level state, weak ownership, and
+admission-outcome core described by
+[`plans/phase-b/sprint-b-p1-runtime-core.md`](./plans/phase-b/sprint-b-p1-runtime-core.md).
+It follows the execution-authorized runtime-level contract; B.P2 develops
+from B.P1's pushed, independently verified implementation, and B.P1's PR
+merges before B.P2's PR, to qualify staged artifacts. QA-4 independently verified 17/18 tracked B.P1 findings at
+`a8951321e6b1df6044c2ee1f6f41c07a9dad7d99`; the remaining manual governance
+hold was withdrawn by coordinating lead aobs following the owner's direction
+to complete Phase B with publication delayed until the end. Public-API review
+status remains proposed for public API review and is owner-deferred to Phase B
+completion; historical QA verdicts remain
+unchanged (QA-5 scoped checks satisfied; overall historical verdict FAIL), and
+B.P1 remains unmerged and not live-published. Sprint `status: complete` denotes
+implementation completion, with QA and merge state tracked separately.
+
+### B.P2 — Staged runtime-level package qualification
+
+B.P2 selects the `1.3.0` four-crate candidate, retains deterministic `.crate`
+archive checksums and normalized package inventories, and validates separate
+published-baseline and extracted-candidate consumers. Retained macOS/Linux/Windows
+qualification artifacts passed for the recorded staged candidate; independent QA,
+merge, live publication, and B.7 registry-only re-proof remain pending. B.P2
+does not publish to crates.io. B.7 owns the phase-end live release and
+registry-only consumer proof.
+
+### B.P3 — Accepted BTIT runtime-level bridge integration
+
+[B.P3](plans/phase-b/sprint-b-p3-runtime-btit.md) owns BTIT's integration and
+source acceptance of B.P2's staged runtime-level capability before B.1's
+mechanical copy. [`handoff-b-p3.md`](plans/phase-b/handoff-b-p3.md) records
+the accepted verdict: BTIT source `396a9d9f77ca1950eeb92d4f88c0eecadb5ef00b`,
+independent QA2 reporting 16/16 deliverables complete with zero remaining
+findings, and lead verification against retained CI run `35190374497`
+(13/13 jobs). Source acceptance does not grant merge or publication; runtime
+public-API acceptance remains owner-deferred to Phase B completion, and B.1
+independently re-verifies every copied file blob against this handoff's
+immutable commit. `sprint-b-p3-runtime-btit.md`'s own frontmatter `status`
+still reads `proposed`, tracking the BTIT-repository review process rather
+than this accepted-source outcome; it is not reconciled by this entry.
+
+### B.1a — Neutral typed failure preparation
+
+The scoped neutral preparation layer is recorded in
+[`plans/phase-b/task-b-1a-neutral-prep.md`](./plans/phase-b/task-b-1a-neutral-prep.md).
+It adds opt-in typed failure values and explicit resolver/subscriber/projector
+adapters inside `sc-observability-types`, while retaining the published root
+APIs and legacy serialization. Runtime adoption, copied-bridge reconciliation,
+and warning policy remain owned by the subsequent B.1 layers.
+
+### B.1b — Typed logger preparation
+
+The scoped logger preparation layer is tracked in
+[`plans/phase-b/task-b-1b-logger-prep.md`](./plans/phase-b/task-b-1b-logger-prep.md).
+It adds opt-in typed logger construction, admission and sink interoperability
+while retaining every existing logger entry point and its bridge behavior.
+Warning rollout, copied-bridge integration, observation/telemetry adoption,
+publication, and B.1 closure remain separately gated.
+
+### B.1c — Typed observation preparation
+
+The scoped observation preparation layer is tracked in
+[`plans/phase-b/task-b-1c-observation-prep.md`](./plans/phase-b/task-b-1c-observation-prep.md).
+It adds typed configuration, construction, observation routing, flush, and
+shutdown entry points over the existing `sc-observe` runtime while exercising
+the neutral subscriber/projector adapters through unchanged registration
+boundaries. Full B.1c integration, copied-bridge acceptance, and independent
+QA remain pending.
+
+### B.1d — Typed telemetry preparation
+
+The scoped telemetry preparation layer is tracked in
+[`plans/phase-b/task-b-1d-telemetry-prep.md`](./plans/phase-b/task-b-1d-telemetry-prep.md).
+It adds opt-in typed OTLP configuration, assembly, construction, flush, and
+shutdown operations while retaining existing exporters, telemetry lifecycle,
+projector registration, serialization, and public error surfaces. Copied-bridge
+integration, warning rollout, publication, and independent QA remain separate.
+
+### B.1a/B.1b — QA1 reconciled corrections
+
+The six scoped QA1 corrections are recorded in
+[`plans/phase-b/task-b-1ab-qa1-fixes.md`](./plans/phase-b/task-b-1ab-qa1-fixes.md).
+They harden test-only concurrency controls, preserve standalone sink diagnostic
+remediation/source semantics, and use the canonical typed identity code without
+changing the retained logger configuration, shutdown behavior, or root exports.
+Coordinator completeness passed at
+`57176ba4c263a6cf603ef4d78a7e3be94b5d1568`; independent QA remains separate.
+
+### B.1 — Copy the corrected generic BTIT crates
+
+The mechanical copy sprint is tracked in
+[`plans/phase-b/sprint-b-1-copy.md`](./plans/phase-b/sprint-b-1-copy.md). It
+copies `crates/sc-observability-log`, `crates/sc-observability-log-macros`,
+and CI-only `crates/sc-observability-log-consumer-check` from the accepted
+BTIT source `396a9d9f77ca1950eeb92d4f88c0eecadb5ef00b` (`docs/plans/phase-b/handoff-b-p3.md`),
+wires them into the workspace with `publish = false`, and records exact
+per-file provenance and permitted mechanical adaptations in
+`docs/plans/phase-b/import-provenance.json`, verified by
+`scripts/ci/validate_log_import.py`. All 85 copied source files are
+byte-identical to the accepted source by Git blob ID; the only content
+adaptations are workspace-inherited `[package]` metadata and four
+toolchain-drift `trybuild` `.stderr` fixtures (this workspace pins Rust
+`1.94.1`, BTIT pins `1.98.1`), recorded as a disposition in the sprint doc.
+Independent QA and API approval remain pending; publication remains deferred
+to B.7.
+
+### B.1e — Typed error migration and warning rollout
+
+The completed implementation and validation layer is tracked in
+[`plans/phase-b/task-b-1e-migration-prep.md`](./plans/phase-b/task-b-1e-migration-prep.md)
+and is based on the authoritative
+[`sprint-b-1e-error-adoption.md`](./plans/phase-b/sprint-b-1e-error-adoption.md)
+and [error contract](./plans/phase-b/error-api-contract.md). It records the
+exact legacy-wrapper and method replacements, supported owner-constructor
+exemptions, typed matching/source-retention guidance and narrow warning policy
+against the merged B.1d API. The implementation activates the nine wrapper
+and 20 method warnings at `1.4.0`, migrates ordinary routing call sites,
+preserves narrow compatibility boundaries, and validates legacy/migrated/
+partial external Cargo consumers with JSON diagnostics and a Serde golden.
+B.2 qualification and later publication remain separately gated; no removal
+schedule is introduced. Publication follows Phase-C `sc-publish` migration and
+separate authorization.
+
+### B.1 integration — Combined B.1a-B.1d reconciliation and registry parity
+
+The integration layer closing the preparation sprints is tracked in
+[`plans/phase-b/task-b-1-integration.md`](./plans/phase-b/task-b-1-integration.md),
+built on the merged B.1a-B.1e preparation layers and cobs's pushed
+`fix/phase-b-1c-qa1` observation fixes. It replaces the preliminary
+`error-api-inventory.md` with a checked nine-family inventory (every
+production constructor, feature-gated path, open trait, private exporter, and
+copied-bridge use, each with an explicit typed-production or named-
+compatibility disposition) backed by an executable workspace parity test
+(`crates/sc-observability-otlp/tests/error_registry_parity.rs`) that asserts
+every typed constructor's diagnostic code against its owning crate's
+`error_codes` registry constant. It also addresses a genuine gap the B.1e
+warning activation exposed: the frozen B.1 BTIT bridge import legitimately
+still uses the newly-deprecated legacy wrapper types (`IdentityError` in
+`mapping.rs`; `InitError`/`FlushError` via `Logger::new`/`Logger::flush` in
+`handle.rs`; `EventError` via `Logger::try_log_with_outcome`'s `TryLogError`
+compatibility path in `control.rs`/`handle.rs`) and cannot be edited without
+violating `import-provenance.json`'s
+pinned source bytes. A workspace- or bridge-wide clippy `-A deprecated`
+suppression was rejected as too broad; the landed replacement is narrow,
+per-call-site `#[allow(deprecated, reason = ...)]` annotations recorded as
+post-import adaptations in a separate `docs/plans/phase-b/
+post-import-adaptations.json` manifest (owned by lobs), validated via
+`validate_log_import.py --post-import-adaptations`, without altering
+`import-provenance.json`'s original pinned import manifest.
+`.github/workflows/ci.yml`'s clippy job remains a single `-D warnings` step.
+Broader AC-by-AC reconciliation and the four handoffs' final integration-status
+update are complete; independent QA/coordinator completeness review remains
+pending. This entry does not itself claim that review.
+
+### B.1 provenance-prep — Import/acceptance validator built ahead of B.1
+
+[`plans/phase-b/task-b-1-provenance-prep.md`](./plans/phase-b/task-b-1-provenance-prep.md)
+built and proved `scripts/ci/validate_log_import.py` (B.1 deliverable 3) in
+parallel with B.P3's then-active source corrections, ahead of B.1 having an
+accepted source to copy. At the time it was preparation tooling only: no
+BTIT source was copied, no source approval was granted, and no real
+`import-provenance.json` existed. B.P3's source handoff has since been
+accepted, and the B.1 copy section above records that this validator's real
+`import-provenance.json` now exists and B.1 has copied the accepted source.
+
+### B.7 — Binding publication readiness machinery (publication deferred beyond Phase B)
+
+The phase-end publication sprint is tracked in
+[`plans/phase-b/sprint-b-7-publish-bindings.md`](./plans/phase-b/sprint-b-7-publish-bindings.md),
+built from `feature/phase-b-6-python-async`. **Owner sequencing correction:
+no mid-phase publication.** B.P2/B.2 are reviewed immutable release
+candidates, B.3-B.6 and these bindings consume prepublication bundles, and
+B.7 readiness packet covers all of Phase B (core, bridge/macros, and bindings)
+-- but Phase B records readiness only. Until the
+phase merges, no publication workflow is dispatched and no registry
+credentials are sought. Phase C migrates and preflights `sc-publish`; separate
+owner authorization follows, then BTIT adopts the published artifacts.
+
+This entry records the review-readiness machinery built instead:
+`release/bindings-artifacts.toml` (manifest for the 4 binding crates.io
+crates plus the PyPI and npm packages, parallel to the existing
+`release/publish-artifacts.toml`), `scripts/release_bindings_artifacts.py`
+(`validate-manifest`/`verify-versions`/`list-publish-plan`, plus
+`build-evidence`/`verify-evidence` for real rebuildable candidate artifact
+hashes), `scripts/ci/validate_binding_registry_consumers.sh` (real isolated
+Rust/Python/TypeScript consumer-matrix checks against those built artifacts,
+never a live registry), a pytest/unittest negative-path harness (29 cases,
+`scripts/ci/tests/test_release_bindings_artifacts.py` and
+`test_bindings_evidence.py`), and
+[`plans/phase-b/handoff-b-7.md`](./plans/phase-b/handoff-b-7.md), which is
+the review packet. `.github/workflows/release.yml` installs none of this:
+it keeps only the 6-core-crate `gate-and-tag`/`publish`/`release` jobs that
+predate B.7.
+
+`sc-observability-tauri` (qualification passed; independent phase-end QA/API
+approval remains pending) and the npm client (awaiting owner-deferred
+sc-publish credential provisioning and owner publication approval) are correctly
+and honestly reported as `pending` with named reasons, not treated as failures or
+given fabricated placeholder files. Live npm/PyPI credential state is not
+asserted by this review packet, and
+the crates.io/PyPI/npm name-preflight only proved the 6 target names are
+currently unclaimed, not that namespace control is secured. This sprint is
+not marked complete; producing this review packet is not sprint closure. It
+prepares B.7 for its actual phase-end publication pass, deferred (not
+cancelled) until owner review authorizes it.
+
+### B.5 — Python logging and mixed-language context
+
+B.5 implements the explicit standard-library logging handler, Result-returning
+request scopes, typed examples, and shared Rust/Python request correlation in
+[`plans/phase-b/sprint-b-5-python-integration.md`](./plans/phase-b/sprint-b-5-python-integration.md).
+Implementation and installed distribution qualification are active on
+`feature/phase-b-5-python-integration`; package publication remains B.7.
+### B.2 — Six-package Rust qualification
+
+[B.2 implementation](plans/phase-b/sprint-b-2-publish-rust.md) stages the six
+public Rust packages at `1.4.0`, preserving historical B.P2 artifacts and B.1
+source provenance. The [handoff](plans/phase-b/handoff-b-2.md) pins the final
+candidate source, archives, normalized manifests, isolated platform consumers
+and scoped API approval. The [checklist](plans/phase-b/checklist-b-2-qualification.md)
+separates implementation/verification from lead completeness and independent
+QA. Publication and the later registry-only consumer proof remain B.7 gates.
+
+### B.3 — Shared neutral DTO/schema
+
+B.3 implements `sc-observability-dto`, checked core conversions, the canonical
+input/output schema, schema-only TypeScript/Python projections, frozen conformance
+fixtures and the real isolated source-bundle helper. The implementation handoff
+is [`plans/phase-b/handoff-b-3.md`](./plans/phase-b/handoff-b-3.md), including exact
+qualified B.2 archive provenance and the lead's crate-specific wire API approval.
+Implementation validation passed; consolidated Phase B QA/ordered merges and
+B.7 registry-only publication proof remain separate.
+
+### B.6 — Python immediate receipts and optional asyncio observation
+
+[B.6](plans/phase-b/sprint-b-6-python-async.md) adds synchronous context-aware
+`submit`, caller-owned resolved receipts and bounded loop-local `flush_async`
+observation for owned and attached backends. The
+[handoff](plans/phase-b/handoff-b-6.md) and
+[checklist](plans/phase-b/checklist-b-6.md) retain implementation, exact-source
+local checks and remaining gates. The final B.4/B.5/B.6 combined candidate must
+pass one immutable five-wheel/25-cell matrix, including actual embedded hosts
+per interpreter. Lead completeness, consolidated QA, ordered parent merges and
+later publication remains separate; no intermediate local result closes the matrix.
+
+### B.4 — Owned and host-attached Python runtime
+
+[B.4 Python runtime](plans/phase-b/sprint-b-4-python.md) provides the locked
+`abi3-py310` PyO3 owned and Rust-host-attached logging surface, typed `Ok`/`Err`
+facade, and the Rust `rlib` embedding surface. Its
+[handoff](plans/phase-b/handoff-b-4.md) records the tested implementation,
+source-wheel runtime/conformance gates, private companion-only fault proofs and
+the public API digest. B.4a separately owns wheel/sdist and platform
+qualification; B.7 retains publication.
+
+### B.4a — Python distributions and platform qualification
+
+[B.4a](plans/phase-b/sprint-b-4a-python-packaging.md) builds a self-contained
+sdist through B.3's source-bundle helper, freezes outer extension/Rust-host
+locks against that layout, and qualifies the built wheels across the platform
+matrix. Its [handoff](plans/phase-b/handoff-b-4a.md) records the packaging
+approach; no package is published from this sprint. Sprint `status:
+in_progress` is accurate qualification pending, not a publication gap:
+PHB-CI-002 (sdist manifest fix, landed on PR#144) and the still-open PHB-CI-003
+(packaged wheel test-hook symbol failure, assigned to
+`fix/phase-b-wheel-test-hooks`) are both non-publication CI findings that must
+resolve, independent of and before B.7's separately owner-deferred
+registry-publication tail.
+
+## Phase C — Shared publishing migration
+
+Status: in progress (owner-authorized execution). Lead: `aobs`. Integration:
+`integrate/phase-c`; C.1: `fix/phase-c-1-shared-pipeline-migration`; C.2:
+`fix/phase-c-2-release-surface-preflight` (depends on C.1). Publication remains
+separately authorized; upstream prerequisites still gate installation.
+
+The proposed next lettered phase is tracked in
+[`plans/phase-c/plan-phase-c.md`](./plans/phase-c/plan-phase-c.md). It replaces
+this repo's bespoke publishing implementation with the shared `../sc-publish`
+package and preflights the complete Phase B release surface (Rust crates,
+Python wheels/sdist, the npm client, and applicable native/Tauri artifacts)
+through that shared pipeline. It is planning-and-preflight scope only: it does
+not authorize publication, tag creation, or BTIT repository integration tests,
+and its planning branch does not execute until Phase B merges into `develop`.
+C.2 implementation and nonpublishing qualification are complete, with lead
+completeness PASS recorded on 2026-09-19 in
+[`final-c2-audit.md`](plans/phase-c/evidence/final-c2-audit.md).
+Current Python qualification passed all 33 jobs; native qualification, package
+completeness, required environment scopes, and actual release preflight passed.
+The final documentation correction awaits independent QA registry closure.
+The shared installer and immutable sc-lint source pins are adopted; npm scope
+is configured. The owner separately authorized only the annotated candidate tag
+recorded in the audit. Phase C integration/ordered merges and publication remain
+separate from completed sprint implementation; nothing here authorizes release
+publication or BTIT post-publication integration tests. See
+`docs/requirements.md` §11 and
+[ADR-016](architecture.md#adr-016-shared-publishing-pipeline-adoption).
 
 ## Rule
 

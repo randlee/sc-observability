@@ -1,0 +1,18 @@
+ARG BASE_IMAGE=quay.io/pypa/manylinux_2_28_x86_64
+FROM ${BASE_IMAGE}
+RUN dnf install -y bubblewrap git && dnf clean all
+ENV PATH=/opt/python/cp310-cp310/bin:/root/.cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.94.1
+# manylinux's extension interpreters intentionally omit embedding libraries.
+# Provision a pinned standalone CPython with libpython before isolation.
+RUN python -m pip install --disable-pip-version-check uv==0.9.6
+ENV UV_PYTHON_INSTALL_DIR=/opt/b4a-python
+RUN uv python install 3.10.19 && mkdir -p /opt/b4a-bin && \
+    ln -s "$(uv python find 3.10.19)" /opt/b4a-bin/python && \
+    ln -s "$(uv python find 3.10.19)" /opt/b4a-bin/python3
+ENV PATH=/opt/b4a-bin:/root/.cargo/bin:$PATH
+RUN python -c "import pathlib,sysconfig; assert pathlib.Path(sysconfig.get_config_var('LIBDIR'), sysconfig.get_config_var('LDLIBRARY')).is_file()"
+RUN python -m venv /opt/b4a-tools
+ENV PATH=/opt/b4a-tools/bin:/root/.cargo/bin:$PATH
+COPY scripts/ci/python-packaging-requirements.txt /tmp/qualification-requirements.txt
+RUN python -m pip install --disable-pip-version-check -r /tmp/qualification-requirements.txt

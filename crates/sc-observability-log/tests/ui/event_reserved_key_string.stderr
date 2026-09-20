@@ -1,0 +1,5 @@
+error: field keys starting with `sc_observability_log.` are reserved
+ --> tests/ui/event_reserved_key_string.rs:5:13
+  |
+5 |     info!({ "sc_observability_log.x" = 1 }, "message");
+  |             ^^^^^^^^^^^^^^^^^^^^^^^^

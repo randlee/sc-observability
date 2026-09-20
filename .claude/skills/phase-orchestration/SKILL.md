@@ -14,7 +14,7 @@ This skill defines how the team-lead (ARCH-ATM) orchestrates a development phase
 Before starting a phase:
 1. Phase plan document exists (e.g., `docs/phase-{N}-*.md`) with sprint specs
 2. Integration branch `integrate/phase-{N}` exists and is up to date with `develop`
-3. Claude Code team exists (e.g., `sc-observability`) — do NOT recreate between phases
+3. Claude Code team exists (e.g., `sc-obs`) — do NOT recreate between phases
 4. cobs (Codex) is running and reachable via ATM CLI
 
 ## Phase Execution Loop

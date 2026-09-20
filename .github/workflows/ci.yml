@@ -12,7 +12,7 @@ jobs:
     name: Format check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -27,7 +27,7 @@ jobs:
     needs: [fmt]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -36,32 +36,32 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/registry
           key: ubuntu-clippy-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache cargo index
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/git
           key: ubuntu-clippy-cargo-index-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache cargo build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: target
           key: ubuntu-clippy-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
   docs-consistency:
     name: docs-consistency (ubuntu)
     needs: [clippy]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Validate docs consistency
         run: bash scripts/ci/validate_docs_consistency.sh
@@ -71,7 +71,7 @@ jobs:
     needs: [clippy]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Validate dependency bans
         run: bash scripts/ci/validate_dependency_bans.sh
@@ -81,10 +81,10 @@ jobs:
     needs: [clippy]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -96,7 +96,7 @@ jobs:
     needs: [clippy, docs-consistency, version-literals]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -124,33 +124,107 @@ jobs:
 
       - name: Upload public API governance reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: public-api-governance-${{ github.run_id }}-${{ github.sha }}
           path: target/public-api/
           if-no-files-found: error
           retention-days: 14
 
+  log-bridge-import-integrity:
+    name: log-bridge-import-integrity (ubuntu)
+    needs: [clippy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.94.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Clone accepted BTIT source for provenance comparison
+        run: git clone https://github.com/randlee/beads-task-issue-tracker.git /tmp/btit-source
+
+      - name: Validate log bridge import provenance
+        run: |
+          python3 scripts/ci/validate_log_import.py \
+            --source-repo /tmp/btit-source \
+            --post-import-adaptations docs/plans/phase-b/post-import-adaptations.json \
+            --release-adaptations docs/plans/phase-b/release-adaptations-b-2.json
+
+      - name: Check immutable import and metadata adaptation regressions
+        env:
+          SC_LOG_IMPORT_SOURCE: /tmp/btit-source
+        run: |
+          python3 -m unittest \
+            scripts.ci.tests.test_validate_log_import \
+            scripts.ci.tests.test_log_metadata_adaptations \
+            scripts.ci.tests.test_log_metadata_real_import \
+            scripts.ci.tests.test_log_staging
+
+      - name: Check imported log-bridge consumer-check crate
+        run: cargo check --locked -p sc-observability-log-consumer-check
+
   manifest-validation:
     name: manifest-validation (ubuntu)
     needs: [clippy, docs-consistency, dependency-bans, version-literals]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.x"
 
+      - name: Install release manifest test runner
+        run: python3 -m pip install --disable-pip-version-check --quiet pytest==8.4.2
+
+      - name: Provision pinned publish-kit renderer
+        run: |
+          python="$(python3 .github/scripts/bootstrap_sc_compose.py --venv "${RUNNER_TEMP}/sc-compose-renderer")"
+          echo "SC_COMPOSE_PYTHON=${python}" >> "$GITHUB_ENV"
+
+      - name: Install publish-kit test dependencies
+        run: '"$SC_COMPOSE_PYTHON" -m pip install --quiet pytest==8.3.5 PyYAML==6.0.3'
+
+      - name: Run complete installed publish-kit test suite
+        run: '"$SC_COMPOSE_PYTHON" -m pytest .github/scripts/tests -q'
+
+      - name: Run staged-package and retry idempotency tests
+        run: |
+          python3 -m unittest \
+            scripts.ci.tests.test_prepare_release_staged_packages \
+            scripts.ci.tests.test_publish_retry_idempotency
+
       - name: Validate manifest completeness
         run: |
-          python3 scripts/release_artifacts.py validate-manifest \
+          python3 .github/scripts/release_artifacts.py validate-manifest \
             --manifest release/publish-artifacts.toml \
             --workspace-toml Cargo.toml
 
+      - name: Validate publish action versions
+        run: bash scripts/ci/validate_publish_workflow_action_versions.sh
+
+      - name: Validate install contract semantics
+        run: python3 scripts/ci/validate_phase_c_install_contract.py
+
+      - name: Run release manifest regression tests
+        run: python3 -m pytest .github/scripts/tests/test_release_artifacts.py -q -k 'manifest or publish_order'
+
       - name: Validate publish_order dependency graph
-        run: bash scripts/ci/validate_publish_order.sh
+        run: |
+          python3 .github/scripts/release_artifacts.py validate-publish-order \
+            --manifest release/publish-artifacts.toml \
+            --workspace-toml Cargo.toml
 
       - name: Validate docs consistency
         run: bash scripts/ci/validate_docs_consistency.sh
@@ -172,7 +246,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -181,22 +255,34 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-test-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache cargo index
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-test-cargo-index-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Cache cargo build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: target
           key: ${{ runner.os }}-test-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run workspace tests
-        run: cargo test --workspace
+        run: cargo test --locked --workspace --all-targets
+
+      - name: Run workspace doctests
+        run: cargo test --locked --workspace --doc
+
+      - name: Run imported log bridge test_hooks feature
+        run: cargo test --locked -p sc-observability-log --all-targets --features test_hooks
+
+      - name: Run imported log bridge release static-level-cap fixture
+        run: cargo test --locked -p sc-observability-log --release --features static_level_cap_test --test static_level_cap
+
+      - name: Run imported log bridge release runtime-level fixture
+        run: cargo test --locked -p sc-observability-log --release --test runtime_level_bridge

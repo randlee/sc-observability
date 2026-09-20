@@ -1,0 +1,284 @@
+{
+  "conclusion": "success",
+  "createdAt": "2026-09-19T05:16:14Z",
+  "headSha": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+  "jobs": [
+    {
+      "completedAt": "2026-09-19T05:20:52Z",
+      "conclusion": "success",
+      "databaseId": 105845335362,
+      "name": "preflight",
+      "startedAt": "2026-09-19T05:16:19Z",
+      "status": "completed",
+      "steps": [
+        {
+          "completedAt": "2026-09-19T05:16:21Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "startedAt": "2026-09-19T05:16:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:16:22Z",
+          "conclusion": "success",
+          "name": "Run actions/checkout@v5",
+          "number": 2,
+          "startedAt": "2026-09-19T05:16:21Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:16:22Z",
+          "conclusion": "success",
+          "name": "Enforce publisher ownership input",
+          "number": 3,
+          "startedAt": "2026-09-19T05:16:22Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:16:22Z",
+          "conclusion": "success",
+          "name": "Read non-disclosing credential plan from release manifest",
+          "number": 4,
+          "startedAt": "2026-09-19T05:16:22Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:16:22Z",
+          "conclusion": "success",
+          "name": "Read build plan from release manifest",
+          "number": 5,
+          "startedAt": "2026-09-19T05:16:22Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:16:22Z",
+          "conclusion": "success",
+          "name": "Verify required release secrets are available",
+          "number": 6,
+          "startedAt": "2026-09-19T05:16:22Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:16:23Z",
+          "conclusion": "success",
+          "name": "Inspect protected Python environment secret metadata (informational)",
+          "number": 7,
+          "startedAt": "2026-09-19T05:16:22Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:16:24Z",
+          "conclusion": "success",
+          "name": "Verify contract-declared GitHub environments exist",
+          "number": 8,
+          "startedAt": "2026-09-19T05:16:23Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:16:24Z",
+          "conclusion": "success",
+          "name": "Verify repository credential liveness",
+          "number": 9,
+          "startedAt": "2026-09-19T05:16:24Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:16:24Z",
+          "conclusion": "success",
+          "name": "Set up Python",
+          "number": 10,
+          "startedAt": "2026-09-19T05:16:24Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:18:01Z",
+          "conclusion": "success",
+          "name": "Set up lint toolchain",
+          "number": 11,
+          "startedAt": "2026-09-19T05:16:24Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:18:01Z",
+          "conclusion": "success",
+          "name": "Install Rust toolchain",
+          "number": 12,
+          "startedAt": "2026-09-19T05:18:01Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:18:20Z",
+          "conclusion": "success",
+          "name": "Install Linux native build deps",
+          "number": 13,
+          "startedAt": "2026-09-19T05:18:01Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:18:20Z",
+          "conclusion": "success",
+          "name": "Normalize version input",
+          "number": 14,
+          "startedAt": "2026-09-19T05:18:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:18:21Z",
+          "conclusion": "success",
+          "name": "Check formatting",
+          "number": 15,
+          "startedAt": "2026-09-19T05:18:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:18:39Z",
+          "conclusion": "success",
+          "name": "Run clippy",
+          "number": 16,
+          "startedAt": "2026-09-19T05:18:21Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:19:20Z",
+          "conclusion": "success",
+          "name": "Run workspace tests",
+          "number": 17,
+          "startedAt": "2026-09-19T05:18:39Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:19:20Z",
+          "conclusion": "success",
+          "name": "Validate manifest completeness",
+          "number": 18,
+          "startedAt": "2026-09-19T05:19:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:19:20Z",
+          "conclusion": "success",
+          "name": "Validate publish_order dependency graph",
+          "number": 19,
+          "startedAt": "2026-09-19T05:19:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:19:20Z",
+          "conclusion": "success",
+          "name": "Verify release helper files exist",
+          "number": 20,
+          "startedAt": "2026-09-19T05:19:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:19:20Z",
+          "conclusion": "success",
+          "name": "Verify requested version matches workspace",
+          "number": 21,
+          "startedAt": "2026-09-19T05:19:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:19:20Z",
+          "conclusion": "success",
+          "name": "Verify release version lockstep",
+          "number": 22,
+          "startedAt": "2026-09-19T05:19:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:19:21Z",
+          "conclusion": "success",
+          "name": "Verify release-candidate provenance",
+          "number": 23,
+          "startedAt": "2026-09-19T05:19:20Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:19:22Z",
+          "conclusion": "success",
+          "name": "Verify release version is unpublished on crates.io",
+          "number": 24,
+          "startedAt": "2026-09-19T05:19:21Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:19:27Z",
+          "conclusion": "success",
+          "name": "Verify registry versions and new names",
+          "number": 25,
+          "startedAt": "2026-09-19T05:19:22Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:20:49Z",
+          "conclusion": "success",
+          "name": "Run dependency-aware package checks",
+          "number": 26,
+          "startedAt": "2026-09-19T05:19:27Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:20:49Z",
+          "conclusion": "success",
+          "name": "Verify GitHub Release workflow permissions",
+          "number": 27,
+          "startedAt": "2026-09-19T05:20:49Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:20:49Z",
+          "conclusion": "success",
+          "name": "Emit manifest-derived per-channel preflight results",
+          "number": 28,
+          "startedAt": "2026-09-19T05:20:49Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:20:49Z",
+          "conclusion": "success",
+          "name": "Deny release after complete preflight summary",
+          "number": 29,
+          "startedAt": "2026-09-19T05:20:49Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:20:49Z",
+          "conclusion": "success",
+          "name": "Post Set up lint toolchain",
+          "number": 56,
+          "startedAt": "2026-09-19T05:20:49Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:20:49Z",
+          "conclusion": "success",
+          "name": "Post Set up Python",
+          "number": 57,
+          "startedAt": "2026-09-19T05:20:49Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:20:49Z",
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@v5",
+          "number": 58,
+          "startedAt": "2026-09-19T05:20:49Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-09-19T05:20:49Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 59,
+          "startedAt": "2026-09-19T05:20:49Z",
+          "status": "completed"
+        }
+      ],
+      "url": "https://github.com/randlee/sc-observability/actions/runs/35423505198/job/105845335362"
+    }
+  ],
+  "name": "Release Preflight",
+  "url": "https://github.com/randlee/sc-observability/actions/runs/35423505198"
+}

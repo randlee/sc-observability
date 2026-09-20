@@ -1,0 +1,62 @@
+docs consistency validation passed
+SHARED_DIGEST_HELPER_CHECK_PASSED: 5 consumers
+phase-b publication-claim self-test and doc scan passed
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling thiserror v2.0.20
+   Compiling serde_json v1.0.151
+   Compiling serde v1.0.229
+    Checking powerfmt v0.2.0
+    Checking time-core v0.1.9
+    Checking num-conv v0.2.2
+    Checking memchr v2.8.3
+    Checking itoa v1.0.18
+   Compiling syn v3.0.6
+    Checking deranged v0.5.8
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.20
+    Checking time v0.3.55
+ Documenting sc-observability-types v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observability-types)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.76s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability_types/index.html
+    Checking sc-observability-types v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observability-types)
+ Documenting sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observability)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.94s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability/index.html
+    Checking sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observability)
+ Documenting sc-observe v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observe)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.44s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observe/index.html
+ Documenting sc-observability-otlp v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observability-otlp)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability_otlp/index.html
+   Compiling libc v0.2.189
+    Checking cfg-if v1.0.5
+    Checking log v0.4.34
+   Compiling syn v2.0.119
+    Checking hostname v0.4.2
+   Compiling sc-observability-log-macros v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observability-log-macros)
+ Documenting sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observability-log)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.90s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability_log/index.html
+    Checking unicode-ident v1.0.26
+    Checking proc-macro2 v1.0.107
+    Checking quote v1.0.47
+    Checking syn v2.0.119
+ Documenting sc-observability-log-macros v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observability-log-macros)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.02s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability_log_macros/index.html
+ Documenting sc-observability-dto v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observability-dto)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.43s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability_dto/index.html
+   Compiling rustversion v1.0.23
+    Checking sc-observability-dto v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observability-dto)
+    Checking sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observability-log)
+    Checking arc-swap v1.9.2
+ Documenting sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/crates/sc-observability-binding-runtime)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.13s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-final-evidence/target/doc/sc_observability_binding_runtime/index.html
+rustdoc missing-docs validation passed

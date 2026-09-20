@@ -1,6 +1,6 @@
 # SC-Observability Public API Checklist
 
-**Status**: Approved
+**Status**: Approved released baseline; all Phase B additions below remain proposed.
 **Purpose**: Track the intended public API so implementation does not invent or
 change the public surface opportunistically.
 
@@ -170,7 +170,7 @@ Internal-only:
 
 Phase-A rule:
 
-- these additions are design-locked by `docs/phase-A/sprint-A1.md` and become
+- these additions are design-locked by `docs/plans/phase-a/sprint-A1.md` and become
   `[x]` only after `A.3` lands and `A.2` public-API governance gates accept
   the resulting public surface
 
@@ -250,7 +250,7 @@ API freeze is progressive by crate and sprint, not global at Sprint 1.
   that crate.
 - Sprint 3 closes only when the `sc-observe` and
   `sc-observability-otlp` recovery-scope public APIs are frozen together.
-- Sprint 4 / pre-release closes only when all four crate API surfaces are
+- Sprint 4 / pre-release closes only when all six core/bridge crate API surfaces are
   confirmed finalized together.
 
 At each crate freeze gate:
@@ -286,3 +286,34 @@ Steady-state rule:
 
 - when no public API diff exists, `docs/api-approvals/README.md` may be the
   only file under `docs/api-approvals/`
+
+## 8. Phase B additions
+
+The [phase index](plans/phase-b/plan-phase-b.md) routes authoritative sprint
+contracts. Except where explicitly marked implemented below, these pending
+entries do not alter the finalized items above.
+
+- [ ] Neutral runtime level state/results and an opaque core mutation capability,
+  owner-deferred to Phase B completion; see the
+  [runtime contract](plans/phase-b/runtime-level-contract.md) and
+  [approval record](api-approvals/phase-b-runtime-level.md). Preserve
+  existing LoggerConfig and health struct shapes and constructor signatures.
+- [ ] Initial companion bridge/control/error/health API and exact-pinned macros;
+  see [target matrix](plans/phase-b/target-bridge-api.md). BTIT implements the
+  reviewed initial design before copy; this is not a published compatibility
+  baseline or authority to redesign after copy.
+- [ ] Additive typed errors, classified diagnostics and improved entry points;
+  see [error migration](plans/phase-b/sprint-b-1a-error-api.md) and its successors.
+  Preserve legacy names, signatures, trait implementability, source metadata and
+  serialized representations. Deprecation warns with a concrete replacement;
+  existing consumer code remains buildable with ordinary warning settings.
+- [ ] Independent DTO schema and Tauri/Python APIs with discriminated operational
+  results, including accepted versus filtered admission and full remediation.
+  Runtime/tooling dependencies stay out of the four published core contracts.
+
+No Phase B sprint may remove/rename a published item, add required methods to
+consumer-implemented traits, change existing enum exhaustiveness or public struct
+fields, or alter legacy serialization. An approval artifact is not a waiver for
+a breaking change in this phase. New trait/type names coexist with old interfaces.
+All new contracts are approved per affected crate before implementation closure;
+no entry becomes implemented merely because a plan or approval document exists.

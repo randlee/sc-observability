@@ -1,0 +1,28 @@
+name: Python binding runtime
+
+on:
+  pull_request:
+  push:
+    branches: [feature/phase-b-4-python, develop, main, 'integrate/*']
+  workflow_dispatch:
+
+jobs:
+  python-source-runtime:
+    name: Python source runtime (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.94.1'
+          components: rustfmt, clippy
+      - uses: astral-sh/setup-uv@v5
+      - name: Install exact B.4 interpreters
+        run: uv python install 3.10 3.12.10
+      - name: Validate Python source runtime
+        run: |
+          B4_PYTHON="$(uv python find 3.10)" \
+          B4_GENERATOR_PYTHON="$(uv python find 3.12.10)" \
+          bash scripts/ci/validate_python_bindings.sh

@@ -1,0 +1,17 @@
+[package]
+homepage.workspace = true
+authors.workspace = true
+name = "sc-observability-log-consumer-check"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Compile-only proof that the event macros need only the sc-observability-log dependency."
+publish = false
+
+[dependencies]
+sc-observability-log.workspace = true
+
+[lints]
+workspace = true

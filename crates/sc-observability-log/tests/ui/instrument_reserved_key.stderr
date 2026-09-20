@@ -1,0 +1,5 @@
+error: field keys starting with `sc_observability_log.` are reserved
+ --> tests/ui/instrument_reserved_key.rs:4:21
+  |
+4 | #[instrument(fields(sc_observability_log.x = 1))]
+  |                     ^^^^^^^^^^^^^^^^^^^^^^

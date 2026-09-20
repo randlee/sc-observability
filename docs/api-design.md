@@ -1094,7 +1094,9 @@ pub struct DiagnosticSummary {
 
 ### 9.11 Public Error Type Pattern
 
-Public crate-surface errors should be structured around diagnostics.
+The published baseline uses diagnostic wrappers as described below. Phase B
+proposes additive improved errors and warning-only migration in §21; these
+baseline definitions are preserved, not replaced in place.
 
 Design direction:
 
@@ -1147,14 +1149,14 @@ Required pattern:
 - errors that always carry diagnostics implement `DiagnosticInfo`
 - `ObservationError` and `TelemetryError` expose optional diagnostic access only
   on their contextual variants
-- `DiagnosticInfo` is defined in `sc-observability-types` as an open trait so
-  crate-local public error types can implement it
+- `DiagnosticInfo` is defined in `sc-observability-types` as a sealed trait;
+  preserve that published seal and its existing workspace implementations
 - named error newtypes in each crate implement `DiagnosticInfo` by delegating to
   their inner `ErrorContext`
 - `ObservationError::Shutdown` and `TelemetryError::Shutdown` do not carry
   `ErrorContext` and therefore do not implement `DiagnosticInfo` directly
-- stable machine/actionable meaning is carried by `Diagnostic.code`, not by a
-  growing public enum surface
+- baseline machine/actionable meaning is carried by `Diagnostic.code`; the
+  proposed additive API also exposes typed classification without changing codes
 - callers may render the diagnostic directly for CLI output and also attach it
   to logs and spans
 - `ErrorContext` is not directly constructible without `Remediation`
@@ -2269,7 +2271,9 @@ The standalone API must not reintroduce:
 
 ## 19. Implementation-Readiness Summary
 
-The public API shape is now specified to implementation-readiness level.
+The baseline public API shape is specified below; this readiness statement
+applies to the original core scope only. Proposed Phase B additions in §21
+require their own contract review and do not inherit baseline approval.
 
 The remaining effort after this document is:
 
@@ -2277,7 +2281,8 @@ The remaining effort after this document is:
 - integration tests for the required ATM-shaped proving case
 - ATM-owned adapter implementation against the shared contracts
 
-No unresolved design TBDs remain in this document.
+This baseline statement does not assert Phase B contract approval or execution
+readiness.
 
 ## 20. Review Checklist
 
@@ -2303,3 +2308,97 @@ This draft is ready for review against these questions:
   observations?
 - Is the `AgentInfoEvent` pattern defined strongly enough to serve as a required
   implementation test case?
+
+
+## 21. Phase B API Evolution — Scoped Runtime Implementation Proposed
+
+[PHB-001–014](requirements.md#10-phase-b-additions--proposed-for-review) and
+[ADR-011–015](architecture.md#adr-011-companion-boundaries-and-pre-copy-contract)
+record the requested scope and proposed architecture. The [Phase B index](plans/phase-b/plan-phase-b.md)
+routes authoritative sprint signatures, deliverables and validation. This section
+is a compatibility boundary, not a second competing signature inventory. The
+B.P1 runtime-level core acceptance is owner-deferred to Phase B completion
+(ATM `01M2PKX8R4J4VJP5V6RRV9JJPB`); all Phase B API evolution remains proposed
+unless its own contract says otherwise. This does not approve registry
+publication, an owner signature, or an independent QA PASS.
+
+### 21.1 Published API Preservation And Issue #92
+
+The nine diagnostic wrappers (Identity, Init, Event, Flush, Shutdown, Projection,
+Subscriber, LogSink and Export) remain available with their existing construction,
+trait implementations, metadata and Serde representation. New typed failure
+implementations and distinctly named operation/extension entry points coexist.
+Classification of custom/unknown legacy diagnostics is total and preserves the
+original error. DiagnosticInfo stays sealed; no new required method or bound is
+added to an existing consumer-implemented trait. New trait implementations must
+not make existing unqualified method calls ambiguous, including glob-import
+consumers; compatibility fixtures exercise unchanged source.
+
+Improved methods use typed errors from the failure site and share the runtime
+with legacy adapters. Working replacements precede actionable compiler
+`#[deprecated]` warnings; removal has no scheduled release. Rust warning-denial
+policies may require migration, which the adoption guide explains explicitly.
+No in-place struct-to-enum conversion, existing-enum non-exhaustive annotation,
+required public-struct field, changed return type or wire-shape change is planned.
+Review the [error sprint contract](plans/phase-b/sprint-b-1a-error-api.md) and its
+successors for the exact replacement inventory before implementation approval.
+
+B.1e migration implementation records that inventory in
+[`plans/phase-b/warning-inventory-b-1e.md`](plans/phase-b/warning-inventory-b-1e.md)
+and routes adopters through
+`.claude/skills/sc-observability-adopting/references/migrate-error-api.md`.
+The record activates the authorized warning attributes at the exact next-minor
+version after the B.P2 staged prerequisite; B.2 qualifies that
+result. The two B.P1 owner constructors remain method-level
+exemptions, while explicit `InitError` wrapper use is documented separately.
+
+### 21.2 Bridge And Runtime Level Contracts
+
+The [target bridge API](plans/phase-b/target-bridge-api.md) specifies the initial
+unpublished companion contract; revisions to BTIT's unpublished design do not
+permit changes to published core APIs. Accept that contract and BTIT's resulting
+reviewed implementation before copy. Bridge-specific errors and health are the
+scoped TYP-030 exception in proposed ADR-011; core shared types remain neutral.
+
+The [runtime-level contract](plans/phase-b/runtime-level-contract.md) specifies
+additive core owner construction, read-only level snapshots and typed elevate/
+reset outcomes. Existing LoggerConfig and LoggingHealthReport remain unchanged.
+Its owner deferral is recorded in
+[`api-approvals/phase-b-runtime-level.md`](api-approvals/phase-b-runtime-level.md).
+The new OperationDiagnostic provides required code, message, remediation and
+timestamp for operation outcomes; existing DiagnosticSummary remains an optional
+code plus message/time summary. Conversions preserve available original data
+and use explicitly documented fallback remediation only when an operation has
+already discarded it. B.P2-qualified staged core support is consumed before BTIT
+bridge integration; B.7 owns later publication. Existing standalone
+constructors preserve baseline filtering without acquiring an external owner.
+The core and every adapter use the same effective admission level. Mutation is
+serialized against shutdown; diagnostic admission is reported separately and
+cannot convert a successful transition into a failure or defeat redaction.
+
+### 21.3 Binding And Nonfatal Result Contracts
+
+[Shared DTO/schema](plans/phase-b/sprint-b-3-schema.md) owns the wire contract;
+[Tauri TypeScript](plans/phase-b/sprint-b-3a-typescript.md) and
+[Python runtime](plans/phase-b/sprint-b-4-python.md) consume it.
+[Shared native backends](plans/phase-b/native-binding-runtime.md) own runtime
+conversion and bounded core-host operations for both adapters; the bridge keeps
+its accepted pre-copy coordinator. [Python packaging](plans/phase-b/sprint-b-4a-python-packaging.md) separately
+qualifies distributions on the full support matrix. Adapters, not core,
+own runtime integration. New operational paths return tagged values; foreign
+exceptions are converted at boundaries, and ordinary failures do not throw,
+raise or reject. Existing infallible accessors retain plain values. Standard
+facade/handler protocol methods retain required unit returns with inspectable
+bounded outcome accounting.
+
+A filtered event is a distinct successful no-enqueue outcome, not accepted
+admission. Local scheduling is not host admission; neither is persistence.
+Attached Python and TypeScript cannot shut down or mutate the host logger.
+Python-owned handles may hold the corresponding owner capabilities. Optional
+receipt awaits inspect synchronous admission; async flush observer waits do
+not cancel native operations on timeout/cancellation. Shutdown retains its
+terminal result, while an earlier timed-out flush has no result accessor. A
+bridge-native timeout ends its adapter call only; the native slot may still
+reject a new explicit flush until completion. Wire variants, diagnostic projections, integer/path
+conversion, unknown-result handling and package versions follow the sprint
+schema contract without changing native published serialization.

@@ -5,9 +5,11 @@ use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use sc_observability_types::typed::ClassifiedError;
+use sc_observability_types::typed::FlushFailure;
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, ErrorContext, FileCount, FlushError,
-    MaintenanceHealthReport, MaintenanceWorkerState, Remediation, Timestamp, WriterState,
+    DiagnosticInfo, DiagnosticSummary, ErrorContext, FileCount, MaintenanceHealthReport,
+    MaintenanceWorkerState, Remediation, Timestamp, WriterState,
 };
 
 use crate::sinks::JsonlFileSink;
@@ -37,13 +39,26 @@ pub(crate) enum TryEnqueueError {
     Disconnected,
 }
 
+/// Failure possible from the blocking sender path.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BlockingEnqueueError {
+    Disconnected,
+}
+
+pub(crate) type DiagnosticAdmitter =
+    Arc<dyn Fn(LogEvent) -> Result<(), TryEnqueueError> + Send + Sync>;
+
 pub(crate) struct WriterRuntime {
     sender: mpsc::SyncSender<WriterCommand>,
+    // `mpsc::Receiver` is not Sync. Shutdown receives completion through
+    // shared runtime state, so this mutex supplies that synchronization.
     done_rx: Mutex<mpsc::Receiver<()>>,
     join_handle: JoinHandle<()>,
     join_timeout: Duration,
     writer_tracker: Arc<WriterTracker>,
     maintenance_tracker: Option<Arc<MaintenanceTracker>>,
+    #[cfg(test)]
+    test_pass_signal: Option<Arc<TestPassDelaySignal>>,
 }
 
 impl WriterRuntime {
@@ -54,7 +69,7 @@ impl WriterRuntime {
             reason = "writer runtime construction bundles sink ownership, queue state, health trackers, and test-only harness hooks at one runtime boundary"
         )
     )]
-    pub(crate) fn new(
+    pub(crate) fn try_new(
         sinks: Vec<SinkRegistration>,
         file_sink: Option<Arc<JsonlFileSink>>,
         policy: RetainedLogPolicy,
@@ -63,7 +78,12 @@ impl WriterRuntime {
         last_error: Arc<Mutex<Option<DiagnosticSummary>>>,
         #[cfg(test)] test_pass_delay: Option<Duration>,
         #[cfg(test)] test_pass_signal: Option<Arc<TestPassDelaySignal>>,
-    ) -> Self {
+        #[cfg(test)] writer_start_should_fail: bool,
+    ) -> std::io::Result<Self> {
+        #[cfg(test)]
+        if writer_start_should_fail {
+            return Err(std::io::Error::other("injected writer start failure"));
+        }
         let writer_tracker = Arc::new(WriterTracker::new(queue_capacity));
         let maintenance_tracker = file_sink
             .as_ref()
@@ -73,6 +93,8 @@ impl WriterRuntime {
 
         let worker_writer_tracker = writer_tracker.clone();
         let worker_maintenance_tracker = maintenance_tracker.clone();
+        #[cfg(test)]
+        let shutdown_test_pass_signal = test_pass_signal.clone();
         let join_handle = thread::Builder::new()
             .name("sc-observability-writer".to_string())
             .spawn(move || {
@@ -91,75 +113,80 @@ impl WriterRuntime {
                     #[cfg(test)]
                     test_pass_signal,
                 );
-            })
-            .expect("writer thread should spawn");
+            })?;
 
-        Self {
+        Ok(Self {
             sender,
             done_rx: Mutex::new(done_rx),
             join_handle,
             join_timeout: policy.writer_shutdown_timeout.as_duration(),
             writer_tracker,
             maintenance_tracker,
-        }
+            #[cfg(test)]
+            test_pass_signal: shutdown_test_pass_signal,
+        })
     }
 
-    pub(crate) fn enqueue_blocking(&self, event: LogEvent) -> Result<(), TryEnqueueError> {
+    pub(crate) fn enqueue_blocking(&self, event: LogEvent) -> Result<(), BlockingEnqueueError> {
         self.writer_tracker.record_enqueue();
         self.sender.send(WriterCommand::Log(event)).map_err(|_| {
             self.writer_tracker.record_write_completion(1);
-            TryEnqueueError::Disconnected
+            BlockingEnqueueError::Disconnected
         })?;
         Ok(())
     }
 
     pub(crate) fn enqueue_nonblocking(&self, event: LogEvent) -> Result<(), TryEnqueueError> {
-        self.writer_tracker.record_enqueue();
-        self.sender
-            .try_send(WriterCommand::Log(event))
-            .map_err(|error| match error {
-                mpsc::TrySendError::Full(_) => {
-                    self.writer_tracker.record_write_completion(1);
-                    TryEnqueueError::Full
-                }
-                mpsc::TrySendError::Disconnected(_) => {
-                    self.writer_tracker.record_write_completion(1);
-                    TryEnqueueError::Disconnected
-                }
-            })?;
-        Ok(())
+        enqueue_nonblocking(&self.sender, &self.writer_tracker, event)
+    }
+
+    pub(crate) fn diagnostic_admitter(&self) -> DiagnosticAdmitter {
+        let sender = self.sender.clone();
+        let tracker = self.writer_tracker.clone();
+        Arc::new(move |event| enqueue_nonblocking(&sender, &tracker, event))
     }
 
     pub(crate) fn record_queue_full_drop(&self) -> DiagnosticSummary {
         self.writer_tracker.record_queue_full_drop()
     }
 
-    pub(crate) fn flush(&self) -> Result<(), FlushError> {
+    pub(crate) fn flush(&self) -> Result<(), FlushFailure> {
         let (tx, rx) = mpsc::channel();
         self.sender.send(WriterCommand::Flush(tx)).map_err(|_| {
-            FlushError(Box::new(crate::writer_degraded_error_context(
+            FlushFailure::writer_degraded(
                 "writer thread is not available for flush",
-            )))
+                Remediation::recoverable(
+                    "inspect logger writer-thread health",
+                    [
+                        "inspect logger.health().writer_state",
+                        "inspect logger.health().last_writer_error",
+                    ],
+                ),
+            )
         })?;
         match rx.recv() {
             Ok(Ok(())) => Ok(()),
-            Ok(Err(summary)) => Err(FlushError(Box::new(
-                ErrorContext::new(
-                    error_codes::LOGGER_FLUSH_FAILED,
-                    "writer flush failed",
-                    Remediation::recoverable(
-                        "inspect the writer-thread flush failure",
-                        [
-                            "inspect logger.health().last_writer_error",
-                            "retry the flush after the writer recovers",
-                        ],
-                    ),
-                )
-                .cause(summary.message.clone()),
-            ))),
-            Err(_) => Err(FlushError(Box::new(crate::writer_degraded_error_context(
+            Ok(Err(summary)) => Err(FlushFailure::logger_flush(
+                "writer flush failed",
+                Remediation::recoverable(
+                    "inspect the writer-thread flush failure",
+                    [
+                        "inspect logger.health().last_writer_error",
+                        "retry the flush after the writer recovers",
+                    ],
+                ),
+            )
+            .cause(summary.message.clone())),
+            Err(_) => Err(FlushFailure::writer_degraded(
                 "writer thread disconnected during flush",
-            )))),
+                Remediation::recoverable(
+                    "inspect logger writer-thread health",
+                    [
+                        "inspect logger.health().writer_state",
+                        "inspect logger.health().last_writer_error",
+                    ],
+                ),
+            )),
         }
     }
 
@@ -178,6 +205,10 @@ impl WriterRuntime {
                 timed_out = true;
                 self.writer_tracker
                     .record_shutdown_timeout(self.join_timeout);
+                #[cfg(test)]
+                if let Some(signal) = self.test_pass_signal.as_ref() {
+                    signal.record_shutdown_timeout();
+                }
                 if let Some(tracker) = self.maintenance_tracker.as_ref() {
                     tracker.record_failure(&ErrorContext::new(
                         error_codes::LOGGER_SHUTDOWN_TIMED_OUT,
@@ -242,6 +273,26 @@ impl WriterRuntime {
             .as_ref()
             .is_some_and(|tracker| tracker.pass_active())
     }
+}
+
+fn enqueue_nonblocking(
+    sender: &mpsc::SyncSender<WriterCommand>,
+    tracker: &WriterTracker,
+    event: LogEvent,
+) -> Result<(), TryEnqueueError> {
+    tracker.record_enqueue();
+    sender
+        .try_send(WriterCommand::Log(event))
+        .map_err(|error| match error {
+            mpsc::TrySendError::Full(_) => {
+                tracker.record_write_completion(1);
+                TryEnqueueError::Full
+            }
+            mpsc::TrySendError::Disconnected(_) => {
+                tracker.record_write_completion(1);
+                TryEnqueueError::Disconnected
+            }
+        })
 }
 
 fn snapshot_from_trackers(
@@ -767,7 +818,7 @@ fn run_maintenance_if_due(
         );
         match file_sink.perform_maintenance(policy) {
             Ok(stats) => tracker.record_pass(stats),
-            Err(error) => tracker.record_failure(error.0.as_ref()),
+            Err(error) => tracker.record_failure(error.context()),
         }
         tracker.mark_pass_active(false);
     } else {
@@ -785,19 +836,128 @@ fn run_maintenance_if_due(
 #[cfg(test)]
 #[derive(Debug, Default)]
 pub(crate) struct TestPassDelaySignal {
-    active: Mutex<bool>,
+    active: AtomicBool,
+    block_until_released: AtomicBool,
+    released: AtomicBool,
+    wait_timed_out: AtomicBool,
+    shutdown_timeout_recorded: AtomicBool,
+    gate: Mutex<()>,
     changed: Condvar,
+}
+
+#[cfg(test)]
+pub(crate) struct TestPassDelayReleaseGuard(Arc<TestPassDelaySignal>);
+
+#[cfg(test)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TestPassDelayWait {
+    NotBlocked,
+    Released,
+    TimedOut,
+}
+
+#[cfg(test)]
+impl Drop for TestPassDelayReleaseGuard {
+    fn drop(&mut self) {
+        self.0.release_delay();
+    }
 }
 
 #[cfg(test)]
 impl TestPassDelaySignal {
     fn set_active(&self, active: bool) {
-        *self.active.lock().expect("test signal poisoned") = active;
+        let _gate = self.gate.lock().expect("test gate poisoned");
+        self.active.store(active, Ordering::SeqCst);
         self.changed.notify_all();
     }
 
     pub(crate) fn is_active(&self) -> bool {
-        *self.active.lock().expect("test signal poisoned")
+        self.active.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn block_delay_until_released(&self) {
+        let _gate = self.gate.lock().expect("test gate poisoned");
+        self.released.store(false, Ordering::SeqCst);
+        self.wait_timed_out.store(false, Ordering::SeqCst);
+        self.block_until_released.store(true, Ordering::SeqCst);
+    }
+
+    pub(crate) fn release_on_drop(self: &Arc<Self>) -> TestPassDelayReleaseGuard {
+        TestPassDelayReleaseGuard(self.clone())
+    }
+
+    pub(crate) fn wait_until_released(&self) -> TestPassDelayWait {
+        self.wait_until_released_for(Duration::from_secs(1))
+    }
+
+    pub(crate) fn wait_until_released_for(&self, timeout: Duration) -> TestPassDelayWait {
+        if !self.block_until_released.load(Ordering::SeqCst) {
+            return TestPassDelayWait::NotBlocked;
+        }
+
+        let deadline = Instant::now() + timeout;
+        let mut gate = self.gate.lock().expect("test gate poisoned");
+        while !self.released.load(Ordering::SeqCst) {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                self.wait_timed_out.store(true, Ordering::SeqCst);
+                self.block_until_released.store(false, Ordering::SeqCst);
+                return TestPassDelayWait::TimedOut;
+            }
+            let (next_gate, timeout) = self
+                .changed
+                .wait_timeout(gate, remaining)
+                .expect("test gate poisoned");
+            gate = next_gate;
+            if timeout.timed_out() && !self.released.load(Ordering::SeqCst) {
+                self.wait_timed_out.store(true, Ordering::SeqCst);
+                self.block_until_released.store(false, Ordering::SeqCst);
+                return TestPassDelayWait::TimedOut;
+            }
+        }
+        self.block_until_released.store(false, Ordering::SeqCst);
+        TestPassDelayWait::Released
+    }
+
+    pub(crate) fn release_delay(&self) {
+        let _gate = self.gate.lock().expect("test gate poisoned");
+        self.released.store(true, Ordering::SeqCst);
+        self.changed.notify_all();
+    }
+
+    fn record_shutdown_timeout(&self) {
+        let _gate = self.gate.lock().expect("test gate poisoned");
+        self.shutdown_timeout_recorded.store(true, Ordering::SeqCst);
+        self.changed.notify_all();
+    }
+
+    pub(crate) fn shutdown_timeout_recorded(&self) -> bool {
+        self.shutdown_timeout_recorded.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn wait_for_state(
+        &self,
+        timeout: Duration,
+        mut predicate: impl FnMut(&Self) -> bool,
+    ) -> bool {
+        let deadline = Instant::now() + timeout;
+        let mut gate = self.gate.lock().expect("test gate poisoned");
+        while !predicate(self) {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return false;
+            }
+            let (next_gate, _) = self
+                .changed
+                .wait_timeout(gate, remaining)
+                .expect("test gate poisoned");
+            gate = next_gate;
+        }
+        true
+    }
+
+    pub(crate) fn wait_timed_out(&self) -> bool {
+        self.wait_timed_out.load(Ordering::SeqCst)
     }
 }
 
@@ -815,9 +975,15 @@ fn maybe_run_test_delay(
 
     if let Some(signal) = test_pass_signal {
         signal.set_active(true);
-    }
-    thread::sleep(delay);
-    if let Some(signal) = test_pass_signal {
+        match signal.wait_until_released() {
+            TestPassDelayWait::NotBlocked => thread::sleep(delay),
+            TestPassDelayWait::Released => {}
+            TestPassDelayWait::TimedOut => {
+                panic!("test maintenance delay release gate timed out")
+            }
+        }
         signal.set_active(false);
+    } else {
+        thread::sleep(delay);
     }
 }

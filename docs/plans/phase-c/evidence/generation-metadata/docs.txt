@@ -1,0 +1,56 @@
+docs consistency validation passed
+SHARED_DIGEST_HELPER_CHECK_PASSED: 5 consumers
+phase-b publication-claim self-test and doc scan passed
+    Checking time-core v0.1.9
+    Checking num-conv v0.2.2
+    Checking itoa v1.0.18
+    Checking memchr v2.8.3
+    Checking powerfmt v0.2.0
+    Checking serde_core v1.0.229
+    Checking zmij v1.0.23
+    Checking thiserror v2.0.20
+    Checking deranged v0.5.8
+    Checking serde v1.0.229
+    Checking serde_json v1.0.151
+    Checking time v0.3.55
+ Documenting sc-observability-types v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-types)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.63s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/target/doc/sc_observability_types/index.html
+    Checking sc-observability-types v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-types)
+ Documenting sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.73s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/target/doc/sc_observability/index.html
+    Checking sc-observability v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability)
+ Documenting sc-observe v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observe)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.35s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/target/doc/sc_observe/index.html
+ Documenting sc-observability-otlp v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-otlp)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/target/doc/sc_observability_otlp/index.html
+   Compiling libc v0.2.189
+    Checking cfg-if v1.0.5
+    Checking log v0.4.34
+   Compiling syn v2.0.119
+    Checking hostname v0.4.2
+   Compiling sc-observability-log-macros v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-log-macros)
+ Documenting sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-log)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.49s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/target/doc/sc_observability_log/index.html
+    Checking unicode-ident v1.0.26
+    Checking proc-macro2 v1.0.107
+    Checking quote v1.0.47
+    Checking syn v2.0.119
+ Documenting sc-observability-log-macros v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-log-macros)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.81s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/target/doc/sc_observability_log_macros/index.html
+ Documenting sc-observability-dto v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-dto)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.33s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/target/doc/sc_observability_dto/index.html
+   Compiling rustversion v1.0.23
+    Checking sc-observability-dto v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-dto)
+    Checking sc-observability-log v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-log)
+    Checking arc-swap v1.9.2
+ Documenting sc-observability-binding-runtime v1.4.0 (/Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/crates/sc-observability-binding-runtime)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.92s
+   Generated /Users/randlee/github/sc-observability-worktrees/fix/phase-c-generation-metadata/target/doc/sc_observability_binding_runtime/index.html
+rustdoc missing-docs validation passed
