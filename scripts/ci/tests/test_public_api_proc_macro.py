@@ -14,29 +14,38 @@ import validate_public_api as gate
 
 
 class PublishedProcMacroTests(unittest.TestCase):
-    def check(self, stdout, exit_code=0):
+    def check(self, stdout, exit_code=0, kind="proc-macro", baseline="1.4.0"):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'release').mkdir()
             (root / 'release/public-api-policy.json').write_text(json.dumps({
                 'candidate_version': '1.4.0', 'crates': {'example-macros': {
-                    'baseline_version': '1.4.0', 'kind': 'proc-macro'}}}))
+                    'baseline_version': baseline, 'kind': kind}}}))
             commands = []
             def run(command):
                 commands.append(command)
                 if command[:2] == ['cargo', 'metadata']:
                     output = json.dumps({'packages': [{'name': 'example-macros',
                         'version': '1.4.0', 'publish': None, 'manifest_path': 'Cargo.toml',
-                        'targets': [{'kind': ['proc-macro']}]}]})
+                        'targets': [{'kind': [kind]}]}]})
                     return subprocess.CompletedProcess(command, 0, output, '')
                 if command[0] == 'git':
                     return subprocess.CompletedProcess(command, 0, 'head', '')
                 return subprocess.CompletedProcess(command, exit_code, stdout, '')
             with patch.object(gate, 'ROOT', root), patch.object(gate, 'CACHE', root / 'cache'), patch.object(gate, 'run', run), patch.object(sys, 'argv', ['gate', 'semver']), contextlib.redirect_stdout(io.StringIO()):
                 result = gate.main()
-            self.assertIn(['cargo', 'public-api', '--manifest-path', 'Cargo.toml', '-sss', 'diff', '1.4.0'], commands)
-            self.assertFalse(any('semver-checks' in c for c in commands))
+            if kind == 'proc-macro':
+                self.assertIn(['cargo', 'public-api', '--manifest-path', 'Cargo.toml', '-sss', 'diff', baseline], commands)
+                self.assertFalse(any('semver-checks' in c for c in commands))
+            else:
+                self.assertIn(['cargo', 'semver-checks', '--manifest-path', 'Cargo.toml', '--baseline-version', baseline, '--release-type', 'patch' if baseline == '1.4.0' else 'minor', '--default-features'], commands)
             return result
+
+    def test_same_version_library_uses_stricter_patch_checks(self):
+        self.assertEqual(self.check('checked', kind='lib'), 0)
+
+    def test_historical_library_retains_minor_checks(self):
+        self.assertEqual(self.check('checked', kind='lib', baseline='1.2.0'), 0)
 
     def output(self, removal='(none)'):
         return f'Removed items from the public API\n{removal}\nChanged items in the public API\n(none)\nAdded items to the public API\n(none)\n'
