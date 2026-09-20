@@ -3,7 +3,11 @@ name: B.P2 staged consumer
 on:
   pull_request:
     paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - 'crates/**'
+      - 'release/bp2-publish-artifacts.toml'
+      - 'scripts/ci/tests/test_*runtime_level*'
       - 'release/publish-artifacts.toml'
       - 'release/runtime-level-qualification.toml'
       - 'scripts/ci/_runtime_level_common.py'
@@ -25,6 +29,7 @@ jobs:
         run: |
           python3 scripts/ci/validate_runtime_level_qualification_metadata.py
           python3 scripts/ci/tests/test_validate_runtime_level_qualification_metadata.py
+          python3 scripts/ci/tests/test_prepare_runtime_level_staged_packages.py
           rustfmt --check scripts/ci/fixtures/runtime-level-consumer/*.rs
           python3 scripts/ci/tests/test_validate_runtime_level_platform_evidence.py
       - name: Build one immutable candidate stage

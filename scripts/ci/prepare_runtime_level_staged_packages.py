@@ -20,6 +20,7 @@ from _runtime_level_common import release_packages, sha256, validate_version
 
 PACKAGES = release_packages()
 WORKSPACE_VALUES = {
+    "authors": '["Rand Lee"]',
     "edition": '"2024"', "license": '"MIT"', "rust-version": '"1.94.1"',
     "repository": '"https://github.com/randlee/sc-observability"',
     "homepage": '"https://github.com/randlee/sc-observability"',
