@@ -1,7 +1,7 @@
 {
   "inputs": {
     "bindings/generation-toolchain.toml": "5d8b2341cb3a28e59c44b5f2de6e9636eebcc88807249b2e431ce77a33a0a5db",
-    "bindings/schema-generator/Cargo.lock": "7d0b2f103efc6decdc4af926c3e69c453e7faede65eebd8ad1b3e6ca8e36f029",
+    "bindings/schema-generator/Cargo.lock": "59d1d48371203ca896963f26e33de624f2bb77d2cb6021e4ffe426af05f52247",
     "bindings/schema-generator/Cargo.toml": "cb679f7d4a3f14144d7baf64d13278cbdaefecdc56e03312978dde2c9c79d1bf",
     "bindings/schema-generator/src/main.rs": "6683364b37003b8e01308cdce3de2c4d0ee0532120ccc9094efa236f9dceebc7",
     "crates/sc-observability-dto/Cargo.toml": "869e38d8bc7934303663cdaa0647f6df298707037b2e7e50050baf00b52a00a6",
