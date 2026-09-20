@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -21,6 +22,7 @@ class RealImportTests(unittest.TestCase):
         provenance = json.loads((ROOT / 'docs/plans/phase-b/import-provenance.json').read_text())
         post = json.loads((ROOT / 'docs/plans/phase-b/post-import-adaptations.json').read_text())
         handoff = (ROOT / 'docs/plans/phase-b/handoff-b-p3.md').read_text()
+        candidate_version = tomllib.loads((ROOT / 'Cargo.toml').read_text())['workspace']['package']['version']
         with tempfile.TemporaryDirectory(prefix='phase-c-provenance-proof-') as temp:
             destination = Path(temp) / 'destination'
             subprocess.run(['git', 'clone', '--shared', '--no-checkout', str(ROOT), str(destination)],
@@ -52,7 +54,8 @@ class RealImportTests(unittest.TestCase):
                  lambda data: data.replace(b'sc-observability-log.workspace = true',
                      b'sc-observability-log = { workspace = true, default-features = false }')),
                 ('workspace version drift', 'Cargo.toml',
-                 lambda data: data.replace(b'version = "1.4.0"', b'version = "2.0.0"')),
+                 lambda data: data.replace(
+                     f'version = "{candidate_version}"'.encode(), b'version = "2.0.0"')),
                 ('forged before evidence', str(RECORD), lambda _: json.dumps(record).encode()),
             ]
             for label, path, change in cases:
