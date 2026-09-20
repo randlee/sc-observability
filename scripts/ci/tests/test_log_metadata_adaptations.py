@@ -157,6 +157,11 @@ class ImmutableEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'historical/release proof'):
             stage.apply(expected)
 
+    def test_accepts_scoped_release_version_bump_on_live_manifests(self):
+        for path, content in self.after.items():
+            (self.root / path).write_bytes(content.replace(b"1.4.0", b"1.4.1"))
+        self.validate()
+
     def test_rejects_forged_before_and_after_blobs(self):
         original = copy.deepcopy(self.record)
         for side in ('before_blob', 'after_blob'):
