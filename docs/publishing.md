@@ -49,7 +49,7 @@ cutover, new releases of these crate names must come from this repo instead.
 - All published crates in this repo must share that version.
 - The initial standalone release must be strictly higher than the last version
   published from the ATM workspace for these crate names.
-- Verification uses the workspace candidate version (currently `1.4.0`),
+- Verification uses the workspace candidate version (currently `1.4.1`),
   rather than a hard-coded historical `1.0.0` example.
 - Release workflows verify that the requested release version matches:
   - workspace version
@@ -76,8 +76,8 @@ cutover, new releases of these crate names must come from this repo instead.
 ### B.2 candidate workflow (no publication)
 
 ```sh
-python3 scripts/ci/prepare_log_staged_packages.py --version 1.4.0 --output target/b2-stage/<source-sha>
-python3 scripts/ci/validate_log_staged_consumer.py --version 1.4.0 --stage target/b2-stage/<source-sha> --source-commit <source-sha> --result-file target/b2-evidence/macos.json
+python3 scripts/ci/prepare_log_staged_packages.py --version 1.4.1 --output target/b2-stage/<source-sha>
+python3 scripts/ci/validate_log_staged_consumer.py --version 1.4.1 --stage target/b2-stage/<source-sha> --source-commit <source-sha> --result-file target/b2-evidence/macos.json
 ```
 
 The source must be clean and committed. Existing stage directories are immutable

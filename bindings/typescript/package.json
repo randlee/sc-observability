@@ -1,6 +1,6 @@
 {
   "name": "@sc-observability/client",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Nonthrowing TypeScript client for sc-observability host bindings",
   "type": "commonjs",
   "main": "dist/index.js",

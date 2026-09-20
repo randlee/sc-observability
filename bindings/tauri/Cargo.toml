@@ -1,6 +1,6 @@
 [package]
 name = "sc-observability-tauri"
-version = "1.4.0"
+version = "1.4.1"
 edition = "2024"
 build = "build.rs"
 links = "tauri-plugin-sc-observability"
@@ -16,9 +16,9 @@ tauri = ["dep:tauri"]
 test = ["tauri/test"]
 
 [dependencies]
-sc-observability-binding-runtime = { version = "1.4.0", path = "../../crates/sc-observability-binding-runtime" }
-sc-observability-dto = { version = "1.4.0", path = "../../crates/sc-observability-dto" }
-sc-observability-types = { version = "1.4.0", path = "../../crates/sc-observability-types" }
+sc-observability-binding-runtime = { version = "1.4.1", path = "../../crates/sc-observability-binding-runtime" }
+sc-observability-dto = { version = "1.4.1", path = "../../crates/sc-observability-dto" }
+sc-observability-types = { version = "1.4.1", path = "../../crates/sc-observability-types" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", optional = true, default-features = false }

@@ -34,7 +34,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Candidate `1.4.0` is staged only; it is not published or approved for release.
+Candidate `1.4.1` is prepared on the release branch; publication remains a
+separate lead-owned step.
+
+## [1.4.1] - 2026-09-20
+
+This maintenance release carries the qualified 1.4.0 public API surface into
+the coordinated 1.4.1 publication train. Rust, Python, and TypeScript package
+metadata and internal dependency pins are aligned at 1.4.1; the historical
+1.4.0 qualification evidence and API baselines remain unchanged.
+
+### Changed
+
+- Regenerated release manifests and lockfiles for the 1.4.1 package train.
+- Preserved the existing additive typed-error and binding contracts without
+  introducing unrelated runtime or API changes.
 
 ### Added
 

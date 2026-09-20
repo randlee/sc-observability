@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "sc-observability"
-version = "1.4.0"
+version = "1.4.1"
 description = "Typed Python runtime bindings for sc-observability"
 requires-python = ">=3.10"
 license = "MIT"
