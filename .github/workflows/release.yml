@@ -401,6 +401,7 @@ jobs:
           python -m pip install build==1.3.0
           python -m build --wheel --outdir dist '${{ matrix.source }}'
       - name: Verify declared wheel platform
+        shell: bash
         if: ${{ matrix.platform != '' }}
         env:
           WHEEL_PLATFORM: ${{ matrix.platform }}
