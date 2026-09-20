@@ -1,4 +1,4 @@
-# Exact upstream publish-kit revision used for this C.2 source-installer layer.
+# Exact upstream revision for v1.4.0 wheel-release recovery.
 [sc-publish]
 repository = "https://github.com/randlee/sc-publish"
-revision = "be1705401d58008f862dd0829996fc50667e4ab1"
+revision = "232c69597dd789c743fffc5fabab31228a450614"

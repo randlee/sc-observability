@@ -46,6 +46,16 @@ runs:
       if: ${{ inputs.build_system == 'maturin' }}
       with:
         toolchain: ${{ inputs.rust_toolchain }}
+    - name: Select installed release Rust toolchain
+      if: ${{ inputs.build_system == 'maturin' }}
+      shell: bash
+      env:
+        RELEASE_RUST_TOOLCHAIN: ${{ inputs.rust_toolchain }}
+      run: |
+        # A default toolchain does not override repository rust-toolchain.toml.
+        # Select the installed release toolchain for rustup and maturin's Cargo
+        # subprocesses without changing the repository's development policy.
+        echo "RUSTUP_TOOLCHAIN=${RELEASE_RUST_TOOLCHAIN}" >> "$GITHUB_ENV"
     - name: Install maturin
       if: ${{ inputs.build_system == 'maturin' && inputs.install_maturin_zig != 'true' }}
       shell: bash
