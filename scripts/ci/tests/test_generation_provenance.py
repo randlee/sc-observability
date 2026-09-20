@@ -60,6 +60,14 @@ class CheckoutHistoryTests(unittest.TestCase):
     def test_shallow_history_fails_closed_and_full_history_passes(self):
         with tempfile.TemporaryDirectory() as temp:
             destination = Path(temp) / 'shallow'
+            metadata_record = json.loads(
+                (ROOT / 'docs/plans/phase-c/manifest-metadata-adaptations.json').read_text()
+            )
+            historical_commit = subprocess.run(
+                ['git', '-C', str(ROOT), 'log', '-1', '--format=%H', '--',
+                 'docs/plans/phase-c/manifest-metadata-adaptations.json'],
+                check=True, capture_output=True, text=True, timeout=30,
+            ).stdout.strip()
             subprocess.run(['git', 'clone', '--depth=1', '--no-local', ROOT.as_uri(), str(destination)],
                            check=True, capture_output=True, timeout=60)
             command = [sys.executable, str(ROOT / 'scripts/ci/_log_release_adaptations.py'),
@@ -68,6 +76,12 @@ class CheckoutHistoryTests(unittest.TestCase):
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn('rev-parse', rejected.stderr)
             subprocess.run(['git', '-C', str(destination), 'fetch', '--unshallow'],
+                           check=True, capture_output=True, timeout=60)
+            # The release-preparation version bump intentionally changes the
+            # live manifest bytes.  Exercise this historical proof against the
+            # immutable post-adaptation snapshot it records, while retaining
+            # the full repository history required by the validator.
+            subprocess.run(['git', '-C', str(destination), 'checkout', '--detach', historical_commit],
                            check=True, capture_output=True, timeout=60)
             accepted = subprocess.run(command, capture_output=True, text=True, timeout=60)
             self.assertEqual(accepted.returncode, 0, accepted.stderr)

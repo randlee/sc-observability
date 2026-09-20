@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "candidate_version": "1.4.0",
+  "candidate_version": "1.4.1",
   "abi": "abi3",
   "minimum_python": "3.10",
   "interpreters": [
@@ -47,5 +47,5 @@
       "wheel_platform": "win_amd64"
     }
   ],
-  "publication": "pending_B.7"
+  "publication": "pending_release_owner_authorization"
 }

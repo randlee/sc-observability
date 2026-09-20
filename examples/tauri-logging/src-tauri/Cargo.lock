@@ -2905,7 +2905,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "sc-observability-types",
  "serde",
@@ -2916,7 +2916,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-binding-runtime"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "arc-swap",
  "sc-observability",
@@ -2928,7 +2928,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-dto"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "sc-observability-types",
  "serde",
@@ -2937,7 +2937,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-log"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "hostname",
  "log",
@@ -2951,7 +2951,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-log-macros"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2960,7 +2960,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-tauri"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "sc-observability-binding-runtime",
  "sc-observability-dto",
@@ -2974,7 +2974,7 @@ dependencies = [
 
 [[package]]
 name = "sc-observability-types"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -3656,7 +3656,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-logging-example"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "sc-observability",
  "sc-observability-binding-runtime",

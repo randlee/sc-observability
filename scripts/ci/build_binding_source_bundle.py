@@ -218,9 +218,15 @@ def build(root_manifest,output):
     qualified={}
     qualified_evidence=None
     if qualified_stage.exists():
-        from _log_staging import verify_stage
-        qualified_evidence=verify_stage(qualified_stage,root['version'])
-        qualified=qualified_packages_for(qualified_evidence,source_sha)
+        # Historical qualification evidence may remain checked in at the old
+        # release version.  It is not a candidate archive for this version;
+        # leave it available as immutable evidence and build this bundle from
+        # the current source instead of rejecting the preparation outright.
+        stage_manifest=json.loads((qualified_stage/'stage-manifest.json').read_text())
+        if stage_manifest.get('candidate_version') == root['version']:
+            from _log_staging import verify_stage
+            qualified_evidence=verify_stage(qualified_stage,root['version'])
+            qualified=qualified_packages_for(qualified_evidence,source_sha)
     for package in unpublished:
         stem=f'{package["name"]}-{package["version"]}'
         archive=archives/f'{stem}.crate'

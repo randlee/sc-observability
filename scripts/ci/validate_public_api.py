@@ -92,7 +92,8 @@ def main() -> int:
             if not initial:
                 command.extend(['diff', baseline])
         else:
-            command = ['cargo', 'semver-checks', '--manifest-path', package['manifest_path'], '--baseline-version', baseline, '--release-type', 'patch' if baseline == package['version'] else 'minor', '--default-features']
+            same_minor = baseline.split('.')[:2] == package['version'].split('.')[:2]
+            command = ['cargo', 'semver-checks', '--manifest-path', package['manifest_path'], '--baseline-version', baseline, '--release-type', 'patch' if same_minor else 'minor', '--default-features']
         result = run(command)
         output = result.stdout + result.stderr
         log_name = f'{crate}-{args.mode}.log'

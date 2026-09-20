@@ -37,6 +37,17 @@ work.
 9. Preserve the completed `v1.2.0` Phase A record and route new migration,
    additive API and binding work through the proposed Phase B plan.
 
+## v1.4.1 release preparation
+
+The coordinated 1.4.1 preparation is complete on
+`release/v1.4.1-preparation`, targeting `main` through PR197 per the owner
+correction. It aligns every publishable
+Rust, Python, and npm package plus internal dependency pin at 1.4.1, regenerates
+the lockfile, and records the release notes and inventory without rewriting the
+qualified 1.4.0 evidence. Publication, immutable-release settings, and final
+main preflight remain lead-owned follow-through items in
+[`docs/releases/v1.4.1-checklist.md`](releases/v1.4.1-checklist.md).
+
 ## Issue #70 / v1.1.0
 
 Retained-log rotation, pruning, and maintenance was the additive `v1.1.0`
