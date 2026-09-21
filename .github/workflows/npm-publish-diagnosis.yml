@@ -1,0 +1,67 @@
+name: Diagnose npm publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Immutable release tag to diagnose
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - name: Download immutable release archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${{ github.repository }}/releases/tags/${RELEASE_TAG}" \
+            --jq 'select(.immutable == true and .draft == false) | .tag_name' >/dev/null
+          mkdir npm-dist
+          gh release download "$RELEASE_TAG" --repo "${{ github.repository }}" \
+            --pattern '*.tgz' --pattern checksums.txt --dir npm-dist
+          python3 .github/scripts/npm_release.py verify --tag "$RELEASE_TAG"
+      - name: Run npm publish with sanitized diagnostic
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          archive = next(Path("npm-dist").glob("*.tgz"))
+          result = subprocess.run(
+              ["npm", "publish", str(archive.resolve()), "--ignore-scripts", "--access", "public",
+               "--registry", "https://registry.npmjs.org", "--tag", "latest", "--loglevel", "verbose"],
+              text=True,
+              capture_output=True,
+          )
+          output = result.stdout + result.stderr
+          patterns = [
+              r"npm_[A-Za-z0-9_-]+",
+              r"(?i)(NODE_AUTH_TOKEN|_authToken|authorization)\\s*[:=]\\s*[^\\s]+",
+              r"(?i)bearer\\s+[^\\s]+",
+          ]
+          for pattern in patterns:
+              output = re.sub(pattern, "[REDACTED]", output)
+          print(f"npm_publish_exit_status={result.returncode}")
+          print("sanitized_npm_output_begin")
+          print(output.rstrip())
+          print("sanitized_npm_output_end")
+          sys.exit(result.returncode)
+          PY
