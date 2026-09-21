@@ -134,7 +134,7 @@ candidate evidence, and isolated consumer-matrix results.
 The intended channels are crates.io for the DTO, native-runtime, and (after
 its independent Tauri workspace qualification) host crate; PyPI for the
 `sc-observability` wheel and sdist across the checked platform/interpreter
-matrix; and npm for `@sc-observability/client`. Tauri/native binaries are
+matrix; and npm for `@synaptic-canvas/sc-observability`. Tauri/native binaries are
 qualification artifacts consumed by the host and are not a second registry
 channel. Phase B records readiness only; publication is separately authorized
 after the Phase C `sc-publish` migration, and BTIT adoption follows publication.

@@ -165,7 +165,7 @@ def main():
             run(['npm', 'ci', '--ignore-scripts'], consumer, commands)
             run(['npm', 'install', '--ignore-scripts', '--no-save', archive], consumer, commands)
             shutil.copyfile(ROOT / 'bindings/conformance/v1/schema-cases.json', consumer / 'schema-cases.json')
-            run(['node', 'node_modules/esbuild/bin/esbuild', 'host-client.ts', '--bundle', '--platform=node', '--format=esm', '--external:@sc-observability/client', '--external:@tauri-apps/api/core', '--outfile=host-client.mjs'], consumer, commands)
+            run(['node', 'node_modules/esbuild/bin/esbuild', 'host-client.ts', '--bundle', '--platform=node', '--format=esm', '--external:@synaptic-canvas/sc-observability', '--external:@tauri-apps/api/core', '--outfile=host-client.mjs'], consumer, commands)
             try:
                 run(['node', 'faults.mjs'], consumer, commands)
             except RuntimeError as error:

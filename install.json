@@ -41,7 +41,7 @@
       {"id": "windows-x86_64", "os": "windows-2022", "target": "x86_64-pc-windows-msvc", "platform": "win_amd64"}
     ]}
   ],
-  "npm_packages": [{"name": "@sc-observability/client", "source": "bindings/typescript"}],
+  "npm_packages": [{"name": "@synaptic-canvas/sc-observability", "source": "bindings/typescript"}],
   "channels": {
     "pypi": {"workflow": "pypi-publish.yml", "dispatch_inputs": {}, "credential_rehearsal_inputs": {}, "test_repository": "testpypi", "production_repository": "pypi"},
     "npm": {"workflow": "npm-publish.yml", "dispatch_inputs": {}}

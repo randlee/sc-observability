@@ -25,15 +25,20 @@ def packages(manifest):
     entries = manifest.get("npm_packages", [])
     names = set()
     assets = set()
+    scopes = set()
     for entry in entries:
         name, source = entry["name"], Path(entry["source"])
         if not re.fullmatch(r"(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*", name):
             raise ValueError("invalid npm package name")
+        if name.startswith("@"):
+            scopes.add(name.split("/", 1)[0])
         asset = filename(name, "")
         if name in names or asset in assets or source.is_absolute() or ".." in source.parts:
             raise ValueError("duplicate npm package or unsafe source path")
         names.add(name)
         assets.add(asset)
+    if len(scopes) > 1:
+        raise ValueError("npm packages must use one consistent scope")
     if bool(entries) != ("npm" in manifest.get("channels", {})):
         raise ValueError("npm_packages and channels.npm must be declared together")
     return entries
@@ -81,14 +86,22 @@ def validate_sources(manifest, release_version, source_ref=None):
     """Fail before release writes when any declared npm source is unsuitable."""
     for entry in packages(manifest):
         package_path = Path(entry["source"]) / "package.json"
+        lock_path = package_path.parent / "package-lock.json"
         if source_ref:
             data = json.loads(subprocess.check_output(["git", "show", f"{source_ref}:{package_path.as_posix()}"], text=True))
+            lock_data = json.loads(subprocess.check_output(["git", "show", f"{source_ref}:{lock_path.as_posix()}"], text=True))
         else:
             source = package_path.resolve()
             if not source.is_relative_to(Path.cwd().resolve()):
                 raise ValueError("npm source escapes checkout")
             data = json.loads(source.read_text())
+            lock_data = json.loads(lock_path.resolve().read_text())
         check_package_metadata(data, entry["name"], release_version, f"source npm package {package_path}")
+        if lock_data.get("name") != entry["name"] or lock_data.get("version") != release_version:
+            raise ValueError(f"source npm lockfile {lock_path}: top-level identity/version mismatch")
+        lock_root = lock_data.get("packages", {}).get("", {})
+        if lock_root.get("name") != entry["name"] or lock_root.get("version") != release_version:
+            raise ValueError(f"source npm lockfile {lock_path}: packages root identity/version mismatch")
 
 
 def check_release_source(manifest_path, tag, source_ref=None):

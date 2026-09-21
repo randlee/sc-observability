@@ -9,7 +9,7 @@ import {
   type LevelChangeDto,
   type LevelRequestDto,
   type Result,
-} from "@sc-observability/client";
+} from "@synaptic-canvas/sc-observability";
 
 const transport = createTauriTransport(invoke);
 

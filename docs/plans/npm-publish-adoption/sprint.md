@@ -31,4 +31,16 @@ Publication evidence: https://github.com/randlee/sc-observability/pull/198#issue
 
 Upstream reporting fix: https://github.com/randlee/sc-publish/pull/103
 
+Upstream npm scope/lock identity follow-up: https://github.com/randlee/sc-publish/pull/104
+validated at head `8225a6228b4982a9089684b5e3d11ce95ff24d29`; its adopted
+publisher rules reject mixed scopes and require both package-lock identity
+fields before artifact freeze. Open sc-publish PRs 99, 100, 101, and 104 were
+reviewed as mergeable/compatible in their dependency chain; PR103 remains a
+conflicting historical reporting branch and was not imported.
+
+Installer/render evidence: `install.py` rendered both
+`release/publish-channel-contracts.toml` and `release/publish-artifacts.toml`
+byte-for-byte from `install.json`; active consumers and manifests now use
+`@synaptic-canvas/sc-observability`, while historical evidence is unchanged.
+
 The corrected archive SHA-256 is d93d38568f8f86b56266fafc12e802de579666ba5ed6c1922492bb9dce0916c9. Public version, tarball integrity, and latest=1.4.1 were independently verified.

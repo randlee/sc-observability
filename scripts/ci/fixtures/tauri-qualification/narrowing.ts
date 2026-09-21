@@ -1,4 +1,4 @@
-import type { Result, Failure, ClientOutcome, ClientStatus, ValueDto, RemediationDto, LevelChangeDto, ChangeDiagnosticDto } from '@sc-observability/client';
+import type { Result, Failure, ClientOutcome, ClientStatus, ValueDto, RemediationDto, LevelChangeDto, ChangeDiagnosticDto } from '@synaptic-canvas/sc-observability';
 const unreachable = (value: never): never => { throw new Error(String(value)); };
 export function failureTag(failure: Failure): string {
   switch (failure.kind) {

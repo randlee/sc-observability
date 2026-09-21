@@ -30,6 +30,9 @@ renderer contract.
   authorization failure is evaluated negative evidence.
 - Never ask for, inspect, print, or substitute a token.
 - Dispatch only the assigned channel workflow. A passed channel is immutable.
+- For npm, preserve manifest package identity and scope/access checks through
+  artifact freeze and recovery; a successful channel retry must not rebuild or
+  rename an already-published package.
 - For an authorized retry, re-check current state and retry only the failed
   channel on the same tag/ref.
 
