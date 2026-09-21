@@ -546,3 +546,5 @@ that integrate against the shipped public API.
      CLI surface precisely enough for implementation and review
    - `qm-comp` cross-document consistency review passes; all three docs are
      confirmed mutually consistent before merge
+
+Follow-up: [complete immutable installer adoption](plans/npm-publish-adoption/followup.md), lead aobs, developer cobs; child of PR199.
