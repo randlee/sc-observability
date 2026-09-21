@@ -52,4 +52,36 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: python3 .github/scripts/npm_release.py publish --tag "$RELEASE_TAG"
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import subprocess
+          import sys
+          import tempfile
+          from pathlib import Path
+
+          archive = next(Path("npm-dist").glob("*.tgz"))
+          command = [
+              "npm", "publish", str(archive.resolve()), "--ignore-scripts", "--access", "public",
+              "--registry", "https://registry.npmjs.org", "--tag", "latest", "--loglevel", "verbose",
+          ]
+          with tempfile.TemporaryDirectory() as temporary:
+              result = subprocess.run(command, cwd=temporary, text=True, capture_output=True)
+          output = result.stdout + result.stderr
+          token = os.environ.get("NODE_AUTH_TOKEN", "")
+          if token:
+              output = output.replace(token, "[REDACTED]")
+          for pattern in (
+              r"npm_[A-Za-z0-9_-]+",
+              r"(?i)(NODE_AUTH_TOKEN|_authToken|authorization)\s*[:=]\s*[^\s]+",
+              r"(?i)bearer\s+[^\s]+",
+          ):
+              output = re.sub(pattern, "[REDACTED]", output)
+          print(f"npm_publish_command={' '.join(command[:2])} <immutable archive> --ignore-scripts --access public --registry https://registry.npmjs.org --tag latest --loglevel verbose")
+          print(f"npm_publish_exit_status={result.returncode}")
+          print("sanitized_npm_output_begin")
+          print(output.rstrip())
+          print("sanitized_npm_output_end")
+          sys.exit(result.returncode)
+          PY
