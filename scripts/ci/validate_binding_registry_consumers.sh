@@ -222,8 +222,14 @@ python3 -m venv "$PY_VENV"
 TESTS_COPY="$TMP_ROOT/py-tests"
 cp -R bindings/python/sc-observability-py/tests "$TESTS_COPY"
 rm -rf "$TESTS_COPY/typing"  # mypy strict-typing gate is B.4's own scope (validate_python_bindings.sh), not this validator's
+# The production wheel deliberately omits the private native test hooks used by
+# test_runtime_faults.py.  Keep that suite out of the public consumer proof;
+# validate_python_distribution.py runs it separately against the instrumented
+# companion wheel and proves the companion never enters publication inventory.
+rm -f "$TESTS_COPY/test_runtime_faults.py"
 SC_OBSERVABILITY_RUNTIME_TEST=1 PYTHONWARNINGS=error "$PY_VENV/bin/python" -I -m pytest "$TESTS_COPY" -ra
 echo "PASS: sc-observability wheel installs into a fresh isolated venv and its test subset passes against the installed package"
+echo "PRIVATE_FAULT_SUITE: delegated to the separately-built instrumented companion wheel; production wheel remains hook-free"
 
 echo
 echo "-- TypeScript: @synaptic-canvas/sc-observability (forward-looking structural proof only) --"
