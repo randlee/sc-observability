@@ -10,6 +10,10 @@ on:
         description: Verify assets and registry state without publication
         type: boolean
         default: true
+      corrected_scope_recovery:
+        description: Build and attest a corrected-scope npm artifact from this recovery ref
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -22,12 +26,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ inputs.corrected_scope_recovery && github.sha || inputs.tag }}
           persist-credentials: false
       - uses: ./.github/actions/verify-published-release
         with:
           release_tag: ${{ inputs.tag }}
       - name: Download immutable release assets
+        if: ${{ !inputs.corrected_scope_recovery }}
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_REPOSITORY: ${{ github.repository }}
@@ -43,13 +48,78 @@ jobs:
           node-version: '24'
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - name: Attest corrected-scope recovery artifact
+        if: ${{ inputs.corrected_scope_recovery }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          release_json="$(gh api "repos/${RELEASE_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
+          jq -e '.immutable == true and .draft == false' <<< "$release_json" >/dev/null
+          mkdir -p npm-dist
+          python3 .github/scripts/npm_release.py build --tag "$RELEASE_TAG" --asset-dir npm-dist
+          sha256sum npm-dist/*.tgz > npm-dist/checksums.txt
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          archive = next(Path("npm-dist").glob("*.tgz"))
+          package = json.loads(__import__("tarfile").open(archive, "r:gz").extractfile("package/package.json").read())
+          Path("npm-dist/corrected-artifact-provenance.json").write_text(json.dumps({
+              "base_release_tag": "v1.4.1",
+              "base_release_immutable": True,
+              "recovery_source_commit": __import__("subprocess").check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+              "package": package["name"],
+              "version": package["version"],
+              "archive": archive.name,
+              "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+          }, indent=2) + "\n")
+          PY
       - name: Nonpublishing preflight
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: python3 .github/scripts/npm_release.py preflight --tag "$RELEASE_TAG"
+      - name: Publish corrected-scope recovery archive
+        if: ${{ inputs.corrected_scope_recovery && !inputs.dry_run }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import subprocess
+          import sys
+          import tempfile
+          from pathlib import Path
+          archive = next(Path("npm-dist").glob("*.tgz"))
+          command = ["npm", "publish", str(archive.resolve()), "--ignore-scripts", "--access", "public", "--registry", "https://registry.npmjs.org", "--tag", "latest", "--loglevel", "verbose"]
+          with tempfile.TemporaryDirectory() as temporary:
+              result = subprocess.run(command, cwd=temporary, text=True, capture_output=True)
+          output = result.stdout + result.stderr
+          token = os.environ.get("NODE_AUTH_TOKEN", "")
+          if token:
+              output = output.replace(token, "[REDACTED]")
+          for pattern in (r"npm_[A-Za-z0-9_-]+", r"(?i)(NODE_AUTH_TOKEN|_authToken|authorization)\s*[:=]\s*[^\s]+", r"(?i)bearer\s+[^\s]+"):
+              output = re.sub(pattern, "[REDACTED]", output)
+          print(f"npm_publish_command={' '.join(command[:2])} <attested recovery archive> --ignore-scripts --access public --registry https://registry.npmjs.org --tag latest --loglevel verbose")
+          print(f"npm_publish_exit_status={result.returncode}")
+          print("sanitized_npm_output_begin")
+          print(output.rstrip())
+          print("sanitized_npm_output_end")
+          sys.exit(result.returncode)
+          PY
       - name: Publish verified archives
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && !inputs.corrected_scope_recovery }}
         env:
           RELEASE_TAG: ${{ inputs.tag }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: python3 .github/scripts/npm_release.py publish --tag "$RELEASE_TAG"
+      - name: Retain corrected recovery artifact evidence
+        if: ${{ always() && inputs.corrected_scope_recovery }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: corrected-npm-recovery-${{ inputs.tag }}-${{ github.sha }}
+          path: npm-dist/
+          if-no-files-found: error

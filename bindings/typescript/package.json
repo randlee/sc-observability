@@ -1,5 +1,5 @@
 {
-  "name": "@sc-observability/client",
+  "name": "@synaptic-canvas/sc-observability",
   "version": "1.4.1",
   "description": "Nonthrowing TypeScript client for sc-observability host bindings",
   "type": "commonjs",
