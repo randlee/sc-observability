@@ -1,4 +1,4 @@
-# sc-observability v1.4.0 — Typed Error APIs and First-Class Language Bindings
+# sc-observability v1.4.0 + v1.4.1 — Typed Error APIs, First-Class Language Bindings, and Publication-Train Recovery
 
 **Released:** September 20, 2026 · **Install:** add `sc-observability = "1.4"` to `Cargo.toml` (nine crates on [crates.io](https://crates.io/search?q=sc-observability)); Python bindings via `pip install sc-observability` from [PyPI](https://pypi.org/project/sc-observability/)
 
@@ -39,6 +39,16 @@ A neutral binding schema drives deterministic language projections, and CI now e
 ## Skipped / noted
 
 - **TypeScript client (`@sc-observability/client`)** — generated and qualified, but its npm publication is deferred pending Phase C `sc-publish` migration and owner credential authorization; the `sc-observability-tauri` adapter crate is published to crates.io. The SSOT (`user-stories.md`) has no dedicated TypeScript/Tauri persona, so no section is included this release.
+
+---
+
+## v1.4.1 — bug-fix note (shipped September 20, 2026)
+
+**v1.4.0 shipped with publication defects — prefer 1.4.1.**
+
+v1.4.1, released about a day after v1.4.0, carries the same qualified 1.4.0 public API surface into a corrected, coordinated publication train. The 1.4.0 artifacts went out with broken wheel-build recovery and API baselines recorded against stale metadata; 1.4.1 regenerates release manifests and lockfiles, aligns the Rust, Python, and TypeScript package metadata and dependency pins at 1.4.1, re-records API baselines against the published 1.4.0 surface, and adopts shared wheel-release recovery.
+
+There are no runtime or API changes — the additive typed-error and binding contracts are identical to 1.4.0. If you already installed 1.4.0, upgrading is a metadata-only bump. ([v1.4.1 release notes](https://github.com/randlee/sc-observability/releases/tag/v1.4.1))
 
 ---
 
