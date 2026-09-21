@@ -116,6 +116,22 @@ def test_failed_publish_rechecks_registry_for_retry(release, accepted):
                 npm.publish(manifest, "v1.2.3", directory, dry_run=False)
 
 
+def test_failed_publish_preserves_redacted_diagnostic(release):
+    manifest, directory, _ = release
+    failed = subprocess.CompletedProcess([], 1, stdout="", stderr="upstream denied token=synthetic-secret Bearer bearer-secret Authorization: Bearer auth-secret")
+    with patch.object(npm, "registry_version", side_effect=[None, None]), patch.object(npm.subprocess, "run", return_value=failed):
+        with pytest.raises(RuntimeError) as error:
+            npm.publish(manifest, "v1.2.3", directory, dry_run=False)
+    message = str(error.value)
+    assert "NPM.PUBLISH_FAILED" in message
+    assert "upstream denied" in message
+    assert "synthetic-secret" not in message
+    assert "bearer-secret" not in message
+    assert "auth-secret" not in message
+    assert "Bearer <redacted>" in message
+    assert "Authorization=<redacted>" in message
+
+
 @pytest.mark.parametrize("stream", ["stdout", "stderr"])
 def test_failed_publish_redacts_quoted_json_credentials(release, stream):
     manifest, directory, _ = release
@@ -133,6 +149,42 @@ def test_failed_publish_redacts_quoted_json_credentials(release, stream):
     assert '\\"token\\": \\"<redacted>\\"' in message
     assert '\\"authorization\\":\\"<redacted>\\"' in message
     assert "unrelated diagnostic" in message
+
+
+def test_failed_publish_preserves_stdout_and_stderr(release):
+    manifest, directory, _ = release
+    failed = subprocess.CompletedProcess([], 1, stdout="upstream response body", stderr="cli warning")
+    with patch.object(npm, "registry_version", side_effect=[None, None]), patch.object(npm.subprocess, "run", return_value=failed):
+        with pytest.raises(RuntimeError) as error:
+            npm.publish(manifest, "v1.2.3", directory, dry_run=False)
+    message = str(error.value)
+    assert "upstream response body" in message
+    assert "cli warning" in message
+
+
+def test_failed_publish_preserves_full_diagnostic_without_truncation(release):
+    manifest, directory, _ = release
+    detail = "upstream diagnostic " + ("x" * 5000)
+    failed = subprocess.CompletedProcess([], 1, stdout="", stderr=detail)
+    with patch.object(npm, "registry_version", side_effect=[None, None]), patch.object(npm.subprocess, "run", return_value=failed):
+        with pytest.raises(RuntimeError) as error:
+            npm.publish(manifest, "v1.2.3", directory, dry_run=False)
+    assert detail in str(error.value)
+
+
+def test_failed_publish_preserves_npm_scope_not_found_diagnostic(release):
+    manifest, directory, _ = release
+    failed = subprocess.CompletedProcess(
+        [], 1, stdout="",
+        stderr="npm error code E404\\nnpm error 404 PUT https://registry.npmjs.org/@sc-observability%2fclient - Scope not found",
+    )
+    with patch.object(npm, "registry_version", side_effect=[None, None]), patch.object(npm.subprocess, "run", return_value=failed):
+        with pytest.raises(RuntimeError) as error:
+            npm.publish(manifest, "v1.2.3", directory, dry_run=False)
+    message = str(error.value)
+    assert "E404" in message
+    assert "Scope not found" in message
+    assert "registry.npmjs.org/@sc-observability%2fclient" in message
 
 
 @pytest.mark.parametrize("code", [401, 403, 429, 500])
@@ -155,9 +207,8 @@ def test_unsafe_source_rejected():
 
 
 def test_mixed_scopes_rejected():
-    manifest = {"npm_packages": [{"name": "@example/client", "source": "a"}, {"name": "@other/server", "source": "b"}], "channels": {"npm": {}}}
     with pytest.raises(ValueError, match="consistent scope"):
-        npm.packages(manifest)
+        npm.packages({"npm_packages": [{"name": "@one/a", "source": "a"}, {"name": "@two/b", "source": "b"}], "channels": {"npm": {}}})
 
 
 def test_source_lockfile_identity_must_match(release, monkeypatch):
@@ -188,7 +239,7 @@ def test_build_uses_lockfile_and_never_publishes(release, monkeypatch):
     source = directory / "bindings/typescript"
     source.mkdir(parents=True)
     (source / "package.json").write_text(json.dumps({"name": "@example/client", "version": "1.2.3"}))
-    (source / "package-lock.json").write_text(json.dumps({"name": "@example/client", "version": "1.2.3", "lockfileVersion": 3, "packages": {"": {"name": "@example/client", "version": "1.2.3"}}}))
+    (source / "package-lock.json").write_text(json.dumps({"name": "@example/client", "version": "1.2.3", "packages": {"": {"name": "@example/client", "version": "1.2.3"}}}))
     with patch.object(npm.subprocess, "run") as run:
         npm.build(manifest, "v1.2.3", directory)
     assert [call.args[0][:2] for call in run.call_args_list] == [["npm", "ci"], ["npm", "run"], ["npm", "pack"]]
@@ -201,7 +252,7 @@ def test_version_mismatch_fails_before_build(release, monkeypatch):
     source = directory / "bindings/typescript"
     source.mkdir(parents=True)
     (source / "package.json").write_text(json.dumps({"name": "@example/client", "version": "0.0.1"}))
-    (source / "package-lock.json").write_text(json.dumps({"name": "@example/client", "version": "0.0.1", "lockfileVersion": 3, "packages": {"": {"name": "@example/client", "version": "0.0.1"}}}))
+    (source / "package-lock.json").write_text(json.dumps({"name": "@example/client", "version": "0.0.1", "packages": {"": {"name": "@example/client", "version": "0.0.1"}}}))
     with patch.object(npm.subprocess, "run") as run:
         with pytest.raises(ValueError, match="source npm"):
             npm.build(manifest, "v1.2.3", directory)
@@ -280,7 +331,7 @@ def test_lockstep_blocks_unsuitable_npm_sources_before_tag(tmp_path, override):
     source = tmp_path / 'bindings/client'
     source.mkdir(parents=True)
     (source / 'package.json').write_text(json.dumps({'name':'@example/client','version':'1.2.3',**override}))
-    (source / 'package-lock.json').write_text(json.dumps({'name':'@example/client','version':'1.2.3','lockfileVersion':3,'packages':{'':{'name':'@example/client','version':'1.2.3'}}}))
+    (source / 'package-lock.json').write_text(json.dumps({'name':'@example/client','version':'1.2.3','packages': {'': {'name':'@example/client','version':'1.2.3'}}}))
     (tmp_path / 'Cargo.toml').write_text('[workspace.package]\nversion="1.2.3"\n')
     manifest = tmp_path / 'publish.toml'
     manifest.write_text('[[npm_packages]]\nname="@example/client"\nsource="bindings/client"\n[channels.npm]\nworkflow="npm-publish.yml"\ndispatch_inputs={}\n')
@@ -292,20 +343,18 @@ def test_lockstep_blocks_unsuitable_npm_sources_before_tag(tmp_path, override):
 def test_lockstep_accepts_public_matching_npm_source(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path/'package.json').write_text(json.dumps({'name':'example','version':'1.2.3','private':False}))
-    (tmp_path/'package-lock.json').write_text(json.dumps({'name':'example','version':'1.2.3','lockfileVersion':3,'packages':{'':{'name':'example','version':'1.2.3'}}}))
+    (tmp_path/'package-lock.json').write_text(json.dumps({'name':'example','version':'1.2.3','packages': {'': {'name':'example','version':'1.2.3'}}}))
     npm.validate_sources({'npm_packages':[{'name':'example','source':'.'}],'channels':{'npm':{}}},'1.2.3')
 
 
 def test_exact_release_commit_is_checked_instead_of_dispatch_checkout():
     manifest = '[[npm_packages]]\nname="example"\nsource="client"\n[channels.npm]\nworkflow="npm-publish.yml"\ndispatch_inputs={}\n'
     sha = 'a' * 40
-    lock = json.dumps({'name':'example','version':'0.0.1','lockfileVersion':3,'packages':{'':{'name':'example','version':'0.0.1'}}})
-    with patch.object(npm.subprocess,'check_output',side_effect=[manifest,json.dumps({'name':'example','version':'1.2.3'}),lock]) as git:
-        with pytest.raises(ValueError,match='identity/version'):
+    with patch.object(npm.subprocess,'check_output',side_effect=[manifest,json.dumps({'name':'example','version':'0.0.1'}),json.dumps({'packages': {'': {'name':'example','version':'0.0.1'}}})]) as git:
+        with pytest.raises(ValueError,match='identity/version/private'):
             npm.check_release_source('release/publish-artifacts.toml','v1.2.3',sha)
     assert git.call_args_list[0].args[0] == ['git','show',sha+':release/publish-artifacts.toml']
     assert git.call_args_list[1].args[0] == ['git','show',sha+':client/package.json']
-    assert git.call_args_list[2].args[0] == ['git','show',sha+':client/package-lock.json']
 
 
 def test_npm_checks_precede_tag_creation_and_registry_jobs():
@@ -325,3 +374,10 @@ def test_npm_checks_precede_tag_creation_and_registry_jobs():
     for name in ['build-npm','publish']:
         needs = workflow['jobs'][name]['needs']
         assert needs == 'gate-and-tag' or 'gate-and-tag' in needs
+
+
+@pytest.mark.parametrize('scheme', ['Basic', 'token', 'Bearer'])
+def test_diagnostic_redacts_entire_authorization_value(scheme):
+    text = npm._safe_diagnostic(f'Authorization: {scheme} SYNTHETIC_SECRET\nE403 permission denied')
+    assert 'SYNTHETIC_SECRET' not in text
+    assert 'E403 permission denied' in text

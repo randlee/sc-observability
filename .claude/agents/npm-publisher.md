@@ -16,8 +16,8 @@ and the root `package-lock.json`, require public access settings, and reject
 mixed scoped organizations. Preserve the manifest-owned scope; never rename a
 package or hardcode an organization. The verified
 `@synaptic-canvas/sc-observability@1.4.1` recovery is a concrete identity
-receipt, not a default for other consumers. Do not request or display
-credential values. `NPM_TOKEN` belongs to the `npm` GitHub
+receipt, not a default for other consumers. Do not
+request or display credential values. `NPM_TOKEN` belongs to the `npm` GitHub
 environment and is passed only to the publication step.
 
 Run `npm-publish.yml` with `tag` and `dry_run=true` for nonpublishing preflight.

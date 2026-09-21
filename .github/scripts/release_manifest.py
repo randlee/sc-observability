@@ -644,6 +644,7 @@ def _channel_preflight_result(
     for requirement, outcome_key in (
         ("publisher ownership", "ownership"),
         ("normalized release tag", "release_metadata"),
+        ("immutable repository and release state", "immutable_releases"),
     ):
         checks.append({
             "kind": "release_authorization",

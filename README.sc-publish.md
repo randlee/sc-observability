@@ -125,7 +125,7 @@ Declare `npm_packages` (optional, defaults to empty) together with `channels.npm
 
 ```json
 {
-  "npm_packages": [{"name": "@example/client", "source": "bindings/typescript"}],
+  "npm_packages": [{"name": "@synaptic-canvas/sc-observability", "source": "bindings/typescript"}],
   "channels": {
     "npm": {"workflow": "npm-publish.yml", "dispatch_inputs": {"dry_run": "false"}}
   }
@@ -134,7 +134,12 @@ Declare `npm_packages` (optional, defaults to empty) together with `channels.npm
 
 Merge this fragment into the complete installer input. Do not declare npm as an
 `enabled` flag. Each source must have a committed `package-lock.json` and public
-`package.json` whose name and version match the release tag (without `v`). The
+`package.json` and root `package-lock.json` whose name and version match the
+manifest and release tag (without `v`). Scoped packages in one manifest must
+share one scope; the scope is manifest-owned and is never inferred or renamed
+by the shared kit. For example, the recovered
+`@synaptic-canvas/sc-observability@1.4.1` publication is evidence for that
+specific manifest identity, not a default organization for other consumers. The
 pre-tag lockstep gate validates every declared npm package name/version and
 public publication settings; an additional gate reads the exact resolved release
 commit before creating its tag. The release build runs `npm ci`, `npm run build --if-present`, and `npm pack
@@ -228,3 +233,75 @@ Both modes retain the existing root-discovery/backend-execution smoke contract.
 Source mode prints its full JSON report and lint status: successful execution
 can still report lint findings. This installer does not change caller lint
 policy or claim that an `ok:true` report with `data.status=fail` is clean.
+
+## Immutable release prerequisite and rollout
+
+New publication requires the repository's immutable releases setting to be
+verifiably enabled. Shared Release Preflight and Release fail closed when it
+is disabled, inaccessible, or indeterminate. Release checks before tag or
+registry publication, rechecks before asset upload, and requires the published
+release's `immutable` field to be exactly `true` before its release job succeeds
+and downstream publication may proceed. Existing published mutable releases
+are unsupported by this pipeline; automatic conversion is not implemented.
+Draft releases may resume asset upload. Complete immutable releases may be
+reused; missing assets require a new version, and `replace_release_assets=true`
+is rejected. No setting, release, asset, or tag is changed by the checker.
+
+**Credential limitation: adoption is pending credential design and QA.** GitHub's
+[immutable-releases endpoint](https://docs.github.com/en/rest/repos/repos#check-if-immutable-releases-are-enabled-for-a-repository)
+requires repository **Administration (read)**. Stock Actions `GITHUB_TOKEN`
+cannot request this permission in workflow YAML. The shared workflows currently
+use that existing token and therefore block when the endpoint is inaccessible;
+this PR does not provision a new secret or claim a stock-token rollout works.
+An existing immutable release proves only its own state, not today's repository
+setting. A local saved boolean or prior admin check cannot authorize a later
+workflow run. HTTP 404 is reported as disabled-or-inaccessible/indeterminate,
+because GitHub may mask permission failures. Explicit `enabled:false` is disabled.
+
+Publisher/admin bootstrap is a separate, authorized setup operation:
+
+1. An administrator enables **immutable releases** in repository Settings →
+   General → Releases (or through GitHub's separately authorized administration
+   API). Never disable it to retry a release. The installer and checker do not
+   perform this operation.
+2. With an existing suitably authorized GitHub CLI session, run this read-only
+   check from the installed consumer: `python3 .github/scripts/release_immutability.py
+   --repository OWNER/REPO --tag v1.2.3`. Use the actual candidate
+   tag. It emits only sanitized state and exits nonzero on failure. No token
+   value should be included in commands, logs, reports, or manifests.
+3. Resolve the workflow credential design before adoption: the runtime must be
+   able to perform the same fresh administration-read check. Any separately
+   approved narrow GitHub App/credential integration belongs in a reviewed
+   follow-up, not a stale attestation or an exemption from this prerequisite.
+4. Publish future releases with all assets staged before finalization (the
+   shared `softprops/action-gh-release@v3` path uploads before publishing).
+   Run the checker with `--finalized` for recovery/downstream admission. Historical
+   mutable releases remain historical; use a new version when immutability is
+   required. Never delete/recreate a release or move its tag to convert it.
+
+Read-only inventory supplied by the rollout lead on 2026-09-20 found
+`enabled:false,enforced_by_owner:false` on all six repositories below. This is
+an observation, not evidence of enablement or a settings change:
+
+| Repository | Existing installation evidence | Adoption route |
+| --- | --- | --- |
+| atm-core | `release/sc-publish-pin.toml` at `25668ecc…`; mixed assets documented, update tracked in #1486 | Resolve tracked drift, regenerate with its actual input |
+| wyvern | Flat `release/sc-publish-pin.toml` at `25668ecc…` | Preserve flat pin layout; regenerate actual input |
+| sc-observability | Pin at `232c695…` | Reviewed full SHA advance and installer regeneration |
+| sc-compose | Vendors `plugins/sc-publish`; `release/sc-publish-install.json`, `README.sc-publish.md` | Follow vendored layout; absence of standard pin path is not absence of installation |
+| sc-lint | Installed manifest and preflight workflow; no standard pin path found | sc-lint team owns adoption; provide instructions only |
+| sc-publish | Shared kit source | Qualify source and its own publication setup separately |
+
+Rollout checklist, per consumer (not performed by this change):
+
+- Verify settings freshly with the administrator and resolve runtime read access.
+- Record a reviewed immutable full upstream commit in the consumer's actual pin
+  or vendored-source mechanism; use an isolated checkout of that commit.
+- Regenerate every installer-managed asset using the existing consumer input;
+  repeat `--dry-run` and require zero drift. Do not fork shared workflow files.
+- Run installed tests and independent QA, including disabled, API-denied,
+  existing-mutable, absent/draft, and finalized-immutable scenarios.
+- Run real nonpublishing Release Preflight with the intended runtime identity.
+  Require a successful immutability check, not merely an admin's earlier result.
+- Review the consumer PR before adoption. Publication is a separate authorization;
+  verify final `immutable:true` before authorizing post-release channels.

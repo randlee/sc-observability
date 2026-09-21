@@ -108,7 +108,3 @@ for nonpublishing preflight and `dry_run=false` only with publication authority.
 The read-only check proves artifact and registry state, not token validity.
 Retry by tag; exact existing SHA512 integrity skips, differing content blocks.
 The source package version must already match the tag, including prerelease.
-Each source must also have a root `package-lock.json` whose top-level and
-`packages[""]` name/version match the manifest and tag. A single manifest must
-use one scoped organization; preserve that manifest-owned scope without
-hardcoding or renaming it.

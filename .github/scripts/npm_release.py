@@ -17,25 +17,12 @@ import urllib.parse
 import urllib.request
 
 from release_manifest import load_manifest
+from worker_result import redact_diagnostic
 
 REGISTRY = "https://registry.npmjs.org"
-_SENSITIVE = re.compile(r"(?i)authorization\s*:\s*bearer\s+[^\s,;]+|(?:npm[_-]?token|token|authorization)\s*[:=]\s*[^\s,;]+|bearer\s+[^\s,;]+")
-_SENSITIVE_JSON = re.compile(
-    r'''(?i)(["'](?:npm[_-]?token|token|authorization)["']\s*:\s*)["'](?:\\.|[^"'\\])*["']'''
-)
-
-
 def _safe_diagnostic(value: bytes | str | None) -> str:
     text = value.decode("utf-8", "replace") if isinstance(value, bytes) else (value or "")
-    text = _SENSITIVE_JSON.sub(r'\1"<redacted>"', text)
-    def redact(match: re.Match[str]) -> str:
-        value = match.group(0)
-        if value.lower().startswith("authorization"):
-            return "Authorization=<redacted>"
-        if value.lower().startswith("bearer "):
-            return "Bearer <redacted>"
-        return value.split("=")[0].split(":")[0] + "=<redacted>"
-    return _SENSITIVE.sub(redact, text) or "<no diagnostic output>"
+    return redact_diagnostic(text) or "<no diagnostic output>"
 
 
 def packages(manifest):
@@ -47,13 +34,13 @@ def packages(manifest):
         name, source = entry["name"], Path(entry["source"])
         if not re.fullmatch(r"(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*", name):
             raise ValueError("invalid npm package name")
-        if name.startswith("@"):
-            scopes.add(name.split("/", 1)[0])
         asset = filename(name, "")
         if name in names or asset in assets or source.is_absolute() or ".." in source.parts:
             raise ValueError("duplicate npm package or unsafe source path")
         names.add(name)
         assets.add(asset)
+        if name.startswith("@"):
+            scopes.add(name.split("/", 1)[0])
     if len(scopes) > 1:
         raise ValueError("npm packages must use one consistent scope")
     if bool(entries) != ("npm" in manifest.get("channels", {})):
@@ -103,21 +90,24 @@ def validate_sources(manifest, release_version, source_ref=None):
     """Fail before release writes when any declared npm source is unsuitable."""
     for entry in packages(manifest):
         package_path = Path(entry["source"]) / "package.json"
-        lock_path = package_path.parent / "package-lock.json"
         if source_ref:
             data = json.loads(subprocess.check_output(["git", "show", f"{source_ref}:{package_path.as_posix()}"], text=True))
-            lock_data = json.loads(subprocess.check_output(["git", "show", f"{source_ref}:{lock_path.as_posix()}"], text=True))
+            lock_path = package_path.parent / "package-lock.json"
         else:
             source = package_path.resolve()
             if not source.is_relative_to(Path.cwd().resolve()):
                 raise ValueError("npm source escapes checkout")
             data = json.loads(source.read_text())
-            lock_data = json.loads(lock_path.resolve().read_text())
+            lock_path = package_path.parent / "package-lock.json"
         check_package_metadata(data, entry["name"], release_version, f"source npm package {package_path}")
+        if source_ref:
+            lock_data = json.loads(subprocess.check_output(["git", "show", f"{source_ref}:{lock_path.as_posix()}"], text=True))
+        else:
+            lock_data = json.loads(lock_path.read_text())
         if lock_data.get("name") != entry["name"] or lock_data.get("version") != release_version:
             raise ValueError(f"source npm lockfile {lock_path}: top-level identity/version mismatch")
-        lock_root = lock_data.get("packages", {}).get("", {})
-        if lock_root.get("name") != entry["name"] or lock_root.get("version") != release_version:
+        root = lock_data.get("packages", {}).get("", {})
+        if root.get("name") != entry["name"] or root.get("version") != release_version:
             raise ValueError(f"source npm lockfile {lock_path}: packages root identity/version mismatch")
 
 
