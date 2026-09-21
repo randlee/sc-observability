@@ -36,10 +36,10 @@ validated at head `8225a6228b4982a9089684b5e3d11ce95ff24d29`; its adopted
 publisher rules reject mixed scopes and require both package-lock identity
 fields before artifact freeze. Open sc-publish PRs 99, 100, 101, and 104 were
 reviewed in their dependency chain; PR103 remains a conflicting historical
-reporting branch and was not imported. Combined upstream review is currently
-blocked by a P1 in PR104's `_safe_diagnostic` JSON-secret redaction; the local
-vendored kit has no such helper and therefore imports only the safe scope/lock
-identity changes while this external correction is pending.
+reporting branch and was not imported. The final PR104 head
+`917b5cf3daf38028a87b2053b0f352069ee7975d` includes the quoted-JSON
+credential-redaction correction; that helper and its regressions are adopted
+locally alongside the scope/lock identity changes.
 
 Installer/render evidence: `install.py` rendered both
 `release/publish-channel-contracts.toml` and `release/publish-artifacts.toml`

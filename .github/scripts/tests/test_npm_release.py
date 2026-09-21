@@ -116,6 +116,25 @@ def test_failed_publish_rechecks_registry_for_retry(release, accepted):
                 npm.publish(manifest, "v1.2.3", directory, dry_run=False)
 
 
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+def test_failed_publish_redacts_quoted_json_credentials(release, stream):
+    manifest, directory, _ = release
+    failed = subprocess.CompletedProcess(
+        [], 1,
+        **{stream: '{"token": "synthetic-token", "authorization":"Bearer synthetic-bearer"}',
+           "stderr" if stream == "stdout" else "stdout": "unrelated diagnostic"},
+    )
+    with patch.object(npm, "registry_version", side_effect=[None, None]), patch.object(npm.subprocess, "run", return_value=failed):
+        with pytest.raises(RuntimeError) as error:
+            npm.publish(manifest, "v1.2.3", directory, dry_run=False)
+    message = str(error.value)
+    assert "synthetic-token" not in message
+    assert "synthetic-bearer" not in message
+    assert '\\"token\\": \\"<redacted>\\"' in message
+    assert '\\"authorization\\":\\"<redacted>\\"' in message
+    assert "unrelated diagnostic" in message
+
+
 @pytest.mark.parametrize("code", [401, 403, 429, 500])
 def test_registry_errors_not_absence(code):
     error = urllib.error.HTTPError("https://registry.npmjs.org", code, "error", {}, None)

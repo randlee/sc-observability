@@ -19,6 +19,23 @@ import urllib.request
 from release_manifest import load_manifest
 
 REGISTRY = "https://registry.npmjs.org"
+_SENSITIVE = re.compile(r"(?i)authorization\s*:\s*bearer\s+[^\s,;]+|(?:npm[_-]?token|token|authorization)\s*[:=]\s*[^\s,;]+|bearer\s+[^\s,;]+")
+_SENSITIVE_JSON = re.compile(
+    r'''(?i)(["'](?:npm[_-]?token|token|authorization)["']\s*:\s*)["'](?:\\.|[^"'\\])*["']'''
+)
+
+
+def _safe_diagnostic(value: bytes | str | None) -> str:
+    text = value.decode("utf-8", "replace") if isinstance(value, bytes) else (value or "")
+    text = _SENSITIVE_JSON.sub(r'\1"<redacted>"', text)
+    def redact(match: re.Match[str]) -> str:
+        value = match.group(0)
+        if value.lower().startswith("authorization"):
+            return "Authorization=<redacted>"
+        if value.lower().startswith("bearer "):
+            return "Bearer <redacted>"
+        return value.split("=")[0].split(":")[0] + "=<redacted>"
+    return _SENSITIVE.sub(redact, text) or "<no diagnostic output>"
 
 
 def packages(manifest):
@@ -191,13 +208,28 @@ def publish(manifest, tag, asset_dir, dry_run=True):
         # No lifecycle scripts, project npmrc, or rebuild in the credentialed leg.
         with tempfile.TemporaryDirectory() as temporary:
             command = ["npm", "publish", str(path.resolve()), "--ignore-scripts", "--access", "public", "--registry", REGISTRY, "--tag", "next" if "-" in release_version else "latest"]
-            result = subprocess.run(command, cwd=temporary, capture_output=True)
+            result = subprocess.run(command, cwd=temporary, capture_output=True, text=True)
         if result.returncode:
             # A race or a response lost after acceptance is recoverable only
             # when the registry confirms the exact bytes. Never print npm output.
             existing = registry_version(name, release_version)
             if existing is None:
-                raise RuntimeError("npm publication failed; retry this channel by tag")
+                diagnostic = {
+                    "channel": "npm", "status": "failed", "tag": tag,
+                    "commit": "unavailable", "command": command,
+                    "exit_status": result.returncode,
+                    "error": {"code": "NPM.PUBLISH_FAILED", "message": _safe_diagnostic(
+                        "stdout: " + (result.stdout or "") + "\nstderr: " + (result.stderr or "")
+                    )},
+                    "attempts": 1, "workflow_url": "unavailable", "job_url": "unavailable",
+                    "evidence": "npm subprocess output",
+                    "registry_outcome": "version absent after failed publication",
+                    "verification": ["registry version lookup returned absent"],
+                    "sanitized_diagnostic": _safe_diagnostic(
+                        "stdout: " + (result.stdout or "") + "\nstderr: " + (result.stderr or "")
+                    ),
+                }
+                raise RuntimeError("npm publication failed; retry this channel by tag: " + json.dumps(diagnostic, sort_keys=True))
             identical(existing, path)
 
 
