@@ -9,12 +9,24 @@ Lead: aobs. Developer: cobs. Parent: PR199/fix/npm-scope-publish-adoption at db4
 
 ## Checklist
 
-- [ ] Correct the inherited production-wheel consumer harness discovery error: five tests in test_runtime_faults.py require a distinct test-hooks wheel. Follow the existing validate_python_distribution.py production/private companion separation. Preserve production tests and prove private hooks absent; preserve feature-wheel fault validation separately. Do not enable private hooks in publication artifacts or merely suppress legitimate failures.
-- [ ] Run the production consumer harness and focused feature-wheel validation, retain exact commands/status and distinguish inherited baseline failures. This work can proceed before upstream is approved.
-- [ ] Adopt the eventual corrected combined sc-publish revision through its actual immutable installer. Current917b5cf is rejected, not a final pin. No hand-copying managed assets. Upstream child fix/combined-publish-review is active; source candidate may be installed in the worktree for validation, but final completion requires aobs/solar/clint exact-pin agreement.
-- [ ] Update release/sc-publish-pin.toml plus all installer-managed assets/provenance consistently. Keep corrected @synaptic-canvas/sc-observability identity, active docs and local configuration.
-- [ ] Repeat installer dry-run reports in sync; complete installed publish-kit suite, relevant manifests/docs/tests pass; no unaccounted drift or mismatched pin.
-- [ ] Open a ready PR above PR199, register stack and report exact head/PR immediately. Send QA handoff immediately once implemented. Parent remains unchanged.
+- [x] Correct the inherited production-wheel consumer harness discovery error: production validation excludes `test_runtime_faults.py`, while the six-test private suite runs against a distinct `maturin --features test-hooks` companion wheel. Production publication remains hook-free.
+- [x] Run the production consumer harness and focused feature-wheel validation. `bash scripts/ci/validate_binding_registry_consumers.sh` passes its 83 production Python tests; isolated CPython 3.10.21 companion execution passes all 6 private fault tests.
+- [x] Adopt final scoped combined sc-publish revision `22137c2da13bf4638b4267b69c6c2f021617da73` through its actual immutable installer; no hand-copying managed assets.
+- [x] Update `release/sc-publish-pin.toml` and all installer-managed assets/provenance consistently, retaining corrected `@synaptic-canvas/sc-observability` identity.
+- [x] Repeat installer dry-run with zero drift; installed publish-kit suite passes 273 tests (14 skipped, 43 subtests). Relevant package/consumer checks pass; no publication or registry mutation performed.
+- [x] Opened ready child PR200 above frozen PR199; current head is reported in the handoff. Parent remains unchanged.
+
+## Evidence
+
+- Immutable installer source: `https://github.com/randlee/sc-publish` at
+  `22137c2da13bf4638b4267b69c6c2f021617da73`.
+- Installer command: `python3 plugins/sc-publish/install.py --input install.json .`;
+  repeat `--dry-run` exits 0 with `Publish-kit assets are in sync.`
+- Installed suite: `pytest -q .github/scripts/tests` => 273 passed, 14 skipped,
+  43 subtests.
+- Companion command: `maturin build --locked --features test-hooks` under
+  CPython 3.10.21, then isolated `pytest test_runtime_faults.py` => 6 passed.
+- Child PR: https://github.com/randlee/sc-observability/pull/200.
 
 ## Boundaries
 
