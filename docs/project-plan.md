@@ -15,6 +15,10 @@ Historical recovery and pre-publish planning documents remain valuable
 reference material, but they are no longer the controlling phase for current
 work.
 
+## npm publishing follow-up
+
+Active: [npm scope and shared publishing adoption](plans/npm-publish-adoption/sprint.md). Lead: aobs; developer: cobs. Correct the active package identity and adopt reviewed shared publishing updates on a branch from develop, without another publication.
+
 ## Near-Term Work
 
 1. Keep repo workflow and review discipline aligned with ATM.
