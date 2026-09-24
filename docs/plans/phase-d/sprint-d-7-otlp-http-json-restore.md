@@ -48,7 +48,12 @@ Tokio-hosted consumers.
 
 ### B. Restored synchronous HTTP/JSON path — required companion path
 
-Port the legacy `reqwest::blocking` exporter into the current neutral model.
+Perform a source-preserving transplant of the legacy `reqwest::blocking`
+exporter into the current neutral model. This is a copy-and-adapt delivery,
+not a rewrite: retain the established endpoint normalization, request assembly,
+HTTP client construction, auth/CA handling, retry/backoff algorithm, and its
+collector tests unless a current public type/config incompatibility requires a
+small adapter at the boundary.
 
 - It is a proven route to `/v1/logs`, `/v1/traces`, and `/v1/metrics`, keeps a
   synchronous `reqwest` footprint, and fits directly below today's facade.
@@ -58,6 +63,10 @@ Port the legacy `reqwest::blocking` exporter into the current neutral model.
   the hand-rolled implementation went unflagged across four QA review passes.
 - It must not become a weaker, untested fallback; the same public signal and
   failure contracts apply to both paths.
+- The implementation record must identify the exact legacy source revision,
+  source paths, copied tests, and every changed/deleted line category. A new
+  transport architecture, alternate HTTP client, or rewritten retry/payload
+  algorithm is out of scope for this companion path.
 
 ## Deliverables
 
@@ -82,11 +91,13 @@ Port the legacy `reqwest::blocking` exporter into the current neutral model.
    processor flush occurs exactly once. Support the SDK-selected OTLP protocol
    and collector endpoint with an in-repository Tokio-hosted consumer fixture.
 4. **Synchronous HTTP/JSON implementation.** Port the legacy behavior using
-   `reqwest::blocking`, adapted to current `TelemetryConfig.service_name`,
-   resources and neutral signals. Normalize endpoint suffixes exactly once;
-   honor `AuthHeader`, CA file, insecure TLS flag, timeout and bounded retry/
-   exponential backoff. Do not log secrets or hold the telemetry runtime lock
-   during blocking network/retry work.
+   `reqwest::blocking` as a source-preserving copy. Adapt only the boundary to
+   current `TelemetryConfig.service_name`, resources and neutral signals.
+   Retain its endpoint suffix normalization, `AuthHeader`, CA file, insecure
+   TLS flag, timeout, and bounded exponential retry/backoff behavior; record a
+   source-to-destination disposition for every necessary adaptation. Do not
+   log secrets or hold the telemetry runtime lock during blocking network/retry
+   work.
 5. **Cross-path conformance suite.** Run both modes against hermetic loopback
    collectors. Validate request method/path/content type/authorization,
    resource/scope metadata, log severity/body/attributes, trace parent/status/
@@ -122,6 +133,9 @@ Port the legacy `reqwest::blocking` exporter into the current neutral model.
   bucket counts, count and sum are all present and correct.
 - Neither mode creates a silent no-op for enabled telemetry; unsupported
   protocol/mode combinations fail at construction with a stable typed error.
+- The synchronous implementation has a committed source-to-destination matrix
+  and retains every relevant legacy collector fixture; any behavior not copied
+  has an explicit current-API incompatibility disposition. It is not a rewrite.
 - SDK batching/provider shutdown and synchronous retry/flush each occur once
   under the facade's documented ownership rules; neither blocks or deadlocks
   the host runtime, and failure health/dropped accounting is consistent.
@@ -147,4 +161,5 @@ Port the legacy `reqwest::blocking` exporter into the current neutral model.
 
 No Python OTEL binding work (#88), registry publication, or silent removal of
 either supported path. Additional protocols beyond those explicitly selected
-and tested by the two implementations require a later authorized sprint.
+and tested by the two implementations require a later authorized sprint. A
+structural rewrite of the synchronous exporter is explicitly out of scope.
