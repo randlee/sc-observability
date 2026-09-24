@@ -4,9 +4,14 @@
   "source_commit": "7b39f4e7f72b6845edec4eab4cd671611661445f",
   "destination_hash_policy": {
     "planned": "destination_sha256 must be null; implementation must replace it with the final file hash before sprint closure, including every destination_children entry",
-    "transplanted-or-translated": "destination_sha256 is required and must equal the final destination bytes",
+    "transplanted": "closed state for transplant-and-adapt: destination_sha256 is required and must equal the final destination bytes",
+    "translated": "closed state for translate-current-schema: destination_sha256 is required and must equal the final destination bytes",
     "reference-and-disposition-only": "destination_sha256 remains null; validate that the disposition document cites source commit, blob, sha256, and disposition",
     "dependency-reference-only": "destination_sha256 remains null; validate the dependency/version/features disposition rather than byte equality"
+  },
+  "planned_status_transitions": {
+    "transplant-and-adapt": "transplanted",
+    "translate-current-schema": "translated"
   },
   "entries": [
     {

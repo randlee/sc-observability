@@ -6,7 +6,7 @@ base: develop
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7c-otlp-http-json-transplant
 depends_on: [D.7b]
 relation: must_follow
-owned_docs: [docs/requirements.md, docs/architecture.md, docs/plans/phase-d/legacy-otlp-provenance.json]
+owned_docs: [docs/requirements.md, docs/architecture.md, docs/api-design.md, docs/migrate-error-api.md, docs/plans/phase-d/legacy-otlp-provenance.json]
 release_train: '2.0'
 recommended_agent: rust-developer
 recommended_model: deep-reasoning
@@ -91,7 +91,7 @@ are authorized deltas—not claims about the legacy implementation:
 | Legacy behavior | Authorized transplant delta | Required matrix disposition |
 | --- | --- | --- |
 | retry every non-success status | retry connection errors, 408, 429, and 5xx; terminate other 4xx | `changed: retry classification` |
-| capped exponential delay only | honor bounded `Retry-After`; otherwise add deterministic bounded jitter | `changed: server pacing/jitter` |
+| capped exponential delay only | honor bounded `Retry-After`; otherwise add per-instance-seeded bounded jitter (deterministic under an injected test seed) | `changed: server pacing/jitter` |
 | `thread::sleep` cannot be interrupted | use worker-owned cancelable wait woken by shutdown | `changed: shutdown cancellation` |
 | per-request timeout but no overall bound | add finite sequence deadline covering attempts and waits | `changed: retry deadline` |
 
@@ -101,16 +101,25 @@ algorithm. It explicitly carves out only the four safety deltas above. The
 source-to-destination matrix must name each delta and preserve copied tests
 alongside new delta-specific fixtures.
 
-The authorized retry configuration adds `OtelConfig::retry_sequence_timeout_ms`
-(default `30_000`), `OtelConfig::retry_after_cap_ms` (default `5_000`), and
-`OtelConfig::retry_jitter_percent` (default `20`, a symmetric ±20% interval around
-the capped exponential delay). Validate `timeout_ms > 0`,
+The authorized retry configuration adds optional flat wire fields
+`OtelConfig::retry_sequence_timeout_ms`,
+`OtelConfig::retry_after_cap_ms`, and `OtelConfig::retry_jitter_percent`.
+For `LegacyHttpJson`, absence resolves defaults `30_000`, `5_000`, and `20`
+(a symmetric ±20% interval around the capped exponential delay). Supplying any
+of these fields for `OpenTelemetrySdk` returns `ConfigFieldNotApplicable`; the
+SDK never ignores them. `ValidatedTransportBounds::try_from_config` alone
+validates `timeout_ms > 0`,
 `retry_sequence_timeout_ms >= timeout_ms`, `0 < retry_after_cap_ms <=
 retry_sequence_timeout_ms`, and `retry_jitter_percent <= 100`, with checked
 duration arithmetic. Delta-seconds and HTTP-date `Retry-After` values are
 supported and clamped to the cap/remaining sequence deadline. Negative,
-malformed, or past-date values are ignored with an attempt diagnostic and use
-the jittered exponential fallback; huge values clamp rather than overflow.
+malformed, or past-date values are ignored with a bounded categorical attempt
+diagnostic and use the jittered exponential fallback; huge values clamp rather
+than overflow. Parse at most 128 header bytes and never retain the raw value;
+diagnostics contain only `negative`, `malformed`, `past`, `oversized`, or
+`clamped`. If the clamped delay consumes the remaining sequence budget,
+terminate as `RetryDeadlineExhausted` without sleeping or making a zero-budget
+attempt.
 
 Production jitter is seeded independently per exporter from OS-backed entropy
 so instances do not synchronize against a recovering collector. The retry
@@ -126,6 +135,8 @@ own a runtime. The feature/dependency evidence must explicitly show
 reqwest's transitive Tokio/hyper/rustls graph and the absence of
 `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp`, and tonic in the
 legacy-only build.
+Pin `httpdate = "=1.0.3"` for RFC 7231 HTTP-date `Retry-After` parsing, record
+its license/dependency disposition, and keep it inside the legacy-only feature.
 
 Each transplanted exporter implements the same crate-private `LogExporter`,
 `TraceExporter`, or `MetricExporter` trait used by D.7b, and its backend state
@@ -158,7 +169,8 @@ Each request/retry sequence has a finite overall deadline. Shutdown enters
 `Closing`, cancels retry backoff, and drains only work before its barrier.
 Connection errors, 408, 429, and 5xx are retryable; other 4xx are terminal.
 Honor bounded `Retry-After`, otherwise use capped exponential backoff with
-deterministic testable jitter. No request, backoff, barrier, join, or client
+per-instance-seeded bounded jitter (deterministic under an injected test seed).
+No request, backoff, barrier, join, or client
 drop is unbounded.
 
 Shutdown cancellation of a pre-barrier retry sequence is terminal
@@ -179,6 +191,24 @@ counted as dropped exactly once only if the sequence exhausts/terminates; a
 successful retry is not a drop. Transient attempts affect only
 `retry_attempt_failures`; terminal exhaustion writes `last_terminal_failure`,
 which the next successful open-state batch clears.
+
+## Stable failure inventory
+
+The D.7b-L inventory and `migrate-error-api.md` must contain these exact D.7c
+codes; diagnostics are bounded/redacted and preserve their typed source:
+
+| Variant | Stable code | Cause | Recovery |
+| --- | --- | --- | --- |
+| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | legacy construction/sync lifecycle entered Tokio | construct/call on a plain thread or select SDK/async lifecycle |
+| `WorkerTerminated` | `OTLP_WORKER_TERMINATED` | init failure, panic, channel closure, or unexpected exit | create a new telemetry instance after correcting the worker cause |
+| `ShutdownCancelledRetry` | `OTLP_SHUTDOWN_CANCELLED_RETRY` | shutdown cancels a retryable pre-barrier sequence | inspect terminal health; resend only if duplicates are acceptable |
+| `RetryDeadlineExhausted` | `OTLP_RETRY_DEADLINE_EXHAUSTED` | no sequence budget remains for another delay/attempt | increase the validated sequence bound or restore collector health |
+| `LifecycleTimeout` | `OTLP_LIFECYCLE_TIMEOUT` | flush/shutdown exceeds its monotonic deadline | preserve terminal evidence and investigate stuck transport/provider |
+| `ZeroDuration` | `OTLP_CONFIG_ZERO_DURATION` | a required duration is zero | provide a positive value |
+| `DurationOverflow` | `OTLP_CONFIG_DURATION_OVERFLOW` | raw milliseconds cannot convert safely | reduce the field to the documented range |
+| `InvalidBoundOrdering` | `OTLP_CONFIG_BOUND_ORDER` | cap/sequence/request/lifecycle ordering is invalid | satisfy the documented cross-field inequalities |
+| `InvalidJitterPercent` | `OTLP_CONFIG_JITTER_PERCENT` | jitter exceeds 100 | use `0..=100` |
+| `ConfigFieldNotApplicable` | `OTLP_CONFIG_FIELD_NOT_APPLICABLE` | a legacy-only retry field is present for SDK | omit it or select the legacy backend |
 
 ## Deliverables
 
@@ -215,6 +245,10 @@ which the next successful open-state batch clears.
    `payload` modules plus tests; enforce the repository line-count check.
    Update both dependency-boundary scripts and architecture §6 with the exact
    legacy allowlist and automated graph assertions.
+8. Update OTLP-020/config requirements, API design, rustdoc, and the migration
+   guide with every flat field, backend applicability rule, default,
+   `ValidatedTransportBounds` conversion, stable failure above, and validation
+   inequality. D.7d docs consistency must compare all four owners.
 
 ## Acceptance criteria
 
@@ -246,9 +280,13 @@ which the next successful open-state batch clears.
 - Retry bound fixtures cover delta-seconds and HTTP-date, negative, malformed,
   past, and huge `Retry-After` values; zero/overflow/cross-field validation;
   distinct production instance seeds; and deterministic injected seeds.
-- Shutdown-during-backoff and shutdown-during-request fixtures assert one
-  `ShutdownCancelledRetry` drop, degraded terminal health, first-caller
-  `ShutdownFailure`, prompt backoff wake, and the documented worst-case bound.
+- Shutdown-during-backoff asserts one `ShutdownCancelledRetry` drop, degraded
+  terminal health, first-caller `ShutdownFailure`, and prompt wake.
+- Shutdown-during-request has three fixtures: a successful in-flight response
+  completes with no drop; an ordinary terminal response fails/drops once with
+  its terminal code; a retryable response becomes `ShutdownCancelledRetry` and
+  drops once. Every case is accounted exactly once and shutdown returns by
+  `lifecycle_shutdown_timeout_ms` (or the typed lifecycle timeout).
 - A response-loss fixture proves at-least-once duplicate delivery, separate
   attempt accounting, one terminal drop after exhaustion, and zero drops after
   a retried-then-successful batch.

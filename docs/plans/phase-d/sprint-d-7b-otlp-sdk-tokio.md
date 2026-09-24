@@ -98,6 +98,31 @@ lifecycle call is admitted, and are testable through an injected clock. Zero,
 overflowing duration conversion, or a shutdown bound below the per-request
 timeout fails construction with a stable configuration error.
 
+All raw serialized millisecond/percent fields are converted exactly once:
+
+```rust
+pub(crate) struct ValidatedTransportBounds {
+    request_timeout: NonZeroDuration,
+    lifecycle: LifecycleBounds,
+    legacy_retry: Option<RetryPolicy>,
+}
+
+impl ValidatedTransportBounds {
+    fn try_from_config(
+        config: &OtelConfig,
+        backend: ExporterBackend,
+    ) -> Result<Self, ConfigFailure>;
+}
+```
+
+`LifecycleBounds` holds checked `Duration` values for flush/shutdown;
+`RetryPolicy` holds checked sequence/cap durations and a `BoundedPercent`.
+Both backend factories receive only `ValidatedTransportBounds` and may not
+reparse raw fields. Legacy-only flat `retry_*` fields are optional on the wire:
+absence resolves the D.7c defaults only for `LegacyHttpJson`; explicitly
+supplying any of them with `OpenTelemetrySdk` returns
+`ConfigFieldNotApplicable` before provider construction, never ignores them.
+
 ## 2.0 lifecycle decision
 
 Synchronous `emit_*` remains admission-only for the SDK backend. Construction
@@ -187,6 +212,8 @@ into an unreviewable single change.
    common `ExporterSet`, official SDK signal adapters and outcome sink. Convert D.7a
    neutral signals without losing resource/scope metadata, kind, flags, links,
    events, status, or histogram content.
+   D.7b-L owns `ValidatedTransportBounds`, `LifecycleBounds`, `RetryPolicy`,
+   `BoundedPercent`, and the sole backend-aware validation constructor.
 3. Implement the exact ordering/state/cancellation contract above without
    `block_on`, a hidden runtime, a process-global provider, mutex-held network
    waits, or executor-worker blocking.
@@ -194,8 +221,8 @@ into an unreviewable single change.
    terminal export, runtime cancellation, and lifecycle failures. Invalid or
    unsupported combinations fail construction with stable typed errors.
    Health exposes bounded queue depth/capacity, worker/provider state,
-   `last_terminal_failure`, per-signal overflow counts, and transient-attempt
-   counts without credentials. Transient attempts never overwrite the terminal
+   `last_terminal_failure`, per-signal overflow counts, and
+   `retry_attempt_failures` without credentials. Transient attempts never overwrite the terminal
    field; the next successful export while `Open` clears it and records
    recovery, while `Closing`/`Shutdown` retains it. D.7c uses the same model.
 5. Add an in-repository Tokio-hosted public consumer and loopback collector

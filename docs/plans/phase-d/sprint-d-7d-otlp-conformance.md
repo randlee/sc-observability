@@ -100,6 +100,9 @@ wire/protocol differences are allowed, signal meaning loss is not.
   legacy repository names from shipped docs/scripts.
 - Requirements, architecture, API, migration, release, and operational docs
   agree; no enabled configuration is documented or implemented as no-op.
+- OTLP-020/config requirements, API design, rustdoc, and migration docs list
+  identical retry/lifecycle fields, defaults, backend applicability, stable
+  errors, validated value types, and cross-field inequalities.
 - ADR-018 is accepted and OTLP-021 is active: neither document retains
   proposed/"until that acceptance" wording at sprint closure.
 
