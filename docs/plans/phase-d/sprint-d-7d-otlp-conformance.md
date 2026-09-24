@@ -75,8 +75,9 @@ wire/protocol differences are allowed, signal meaning loss is not.
 
 - Both backends export all three signal families from the shared corpus and
   decoded collector output is semantically equivalent for every required field.
-- Every lifecycle/failure negative case has observable health/dropped-count
-  assertions and no credential leakage.
+- Every lifecycle/failure negative case asserts equivalent queue
+  depth/capacity, worker/exporter state, last terminal failure, and per-signal
+  overflow/drop fields for both backends, with no credential leakage.
 - Awaited SDK shutdown surfaces the actual final-export failure on both
   current-thread and multi-thread runtimes; after successful await the host can
   tear its runtime down immediately without losing an admitted export.

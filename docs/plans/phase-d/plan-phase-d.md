@@ -140,6 +140,10 @@ its authoritative acceptance list and retains exact command/evidence output.
 - Source restoration uses
   [`legacy-otlp-provenance.json`](legacy-otlp-provenance.json). The Phase B
   `validate_log_import.py` mechanism is extended to verify the source commit,
-  Git blob ids, destination hashes/dispositions, and to reject scratch paths,
+  Git blob ids, and disposition-aware destination evidence. Planned imported
+  files carry `destination_sha256: null` until they land, then must record and
+  match their final hash; reference/dependency-only rows remain null and are
+  validated through their cited disposition instead of byte equality. The
+  validator also rejects scratch paths,
   `/tmp` literals, ATM imports, ATM-only labels, and stale repository names in
   imported production/docs output.

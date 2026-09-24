@@ -81,9 +81,25 @@ struct LegacyHttpWorker {
 ```
 
 Retain legacy endpoint normalization, request assembly, HTTP client/auth/CA
-configuration, timeout, bounded exponential retry/backoff, and loopback request
-tests. Only current-type/config adapters and necessary module extraction are
-authorized changes.
+configuration, per-request timeout, attempt limit, capped exponential-backoff
+shape, and loopback request tests. Commit `7b39f4e` retries every transport
+error and every non-success HTTP status, sleeps the whole backoff on the worker
+thread, has no `Retry-After` handling or jitter, and has no sequence-wide
+deadline or shutdown cancellation. The following bounded safety corrections
+are authorized deltas—not claims about the legacy implementation:
+
+| Legacy behavior | Authorized transplant delta | Required matrix disposition |
+| --- | --- | --- |
+| retry every non-success status | retry connection errors, 408, 429, and 5xx; terminate other 4xx | `changed: retry classification` |
+| capped exponential delay only | honor bounded `Retry-After`; otherwise add deterministic bounded jitter | `changed: server pacing/jitter` |
+| `thread::sleep` cannot be interrupted | use worker-owned cancelable wait woken by shutdown | `changed: shutdown cancellation` |
+| per-request timeout but no overall bound | add finite sequence deadline covering attempts and waits | `changed: retry deadline` |
+
+The no-redesign rule applies to payload encoding, endpoints, client/auth/CA
+construction, request execution, maximum attempts, and the exponential/cap
+algorithm. It explicitly carves out only the four safety deltas above. The
+source-to-destination matrix must name each delta and preserve copied tests
+alongside new delta-specific fixtures.
 
 Pin the transplanted client to the legacy tested selection
 `reqwest = "=0.12.28"` with `default-features = false` and features
@@ -114,12 +130,24 @@ unexpected exit, or sender closure stores one terminal `WorkerTerminated`
 result, resolves every pending barrier, accounts abandoned admissions once,
 and never hangs.
 
+Legacy health exposes the same fields as the SDK path: queue depth/capacity,
+worker/exporter state, last terminal failure, and per-signal overflow/drop
+counts. No field contains credentials.
+
 Each request/retry sequence has a finite overall deadline. Shutdown enters
 `Closing`, cancels retry backoff, and drains only work before its barrier.
 Connection errors, 408, 429, and 5xx are retryable; other 4xx are terminal.
 Honor bounded `Retry-After`, otherwise use capped exponential backoff with
 deterministic testable jitter. No request, backoff, barrier, join, or client
 drop is unbounded.
+
+Delivery is **at least once across retries**: a collector may accept an
+attempt whose response is lost, after which the identical batch is retried and
+observed twice. The exporter supplies no idempotency key and does not promise
+deduplication. Attempts are recorded separately, while an admitted batch is
+counted as dropped exactly once only if the sequence exhausts/terminates; a
+successful retry is not a drop. Health retains the last attempt failure until
+the subsequent success/recovery transition.
 
 ## Deliverables
 
@@ -128,10 +156,13 @@ drop is unbounded.
 2. Commit a source-to-destination matrix naming every copied symbol/test and
    every changed, omitted, or newly wrapped behavior with its exact current-API
    incompatibility rationale. The worker is an ownership/context adapter around
-   copied transport code; no HTTP/client configuration/retry redesign is
-   permitted.
+   copied transport code; no HTTP/client configuration/retry redesign beyond
+   the four enumerated safety deltas is permitted.
    Extend `scripts/ci/validate_log_import.py` to validate the Phase D manifest,
-   Git blob ids and destination hashes, and reject scratch/`/tmp` paths, ATM
+   Git blob ids and disposition-aware destination evidence. Planned import
+   hashes are null until files land and become mandatory before closure;
+   reference/dependency-only rows keep null hashes and validate their cited
+   disposition rather than byte identity. Reject scratch/`/tmp` paths, ATM
    imports/labels, or the stale repository name in imported outputs.
 3. Adapt inputs to current `TelemetryConfig`, D.7a signal types, diagnostic
    errors, D.7b backend selector, and common crate-private exporter traits while
@@ -173,10 +204,15 @@ drop is unbounded.
 - Any behavior/assertion not copied is identified by a concrete API
   incompatibility; structural rewrite or alternate HTTP/retry logic fails QA.
 - Failures remain fail-open at the facade and update health/dropped counts.
+- Legacy health reports queue depth/capacity, worker/exporter state, last
+  terminal failure, and per-signal overflow/drop counts equivalently to SDK.
 - Capacity-one saturation cannot block or starve flush/shutdown; injected
   worker panic/exit resolves every sync/async waiter within the deadline.
 - Retry fixtures freeze classification, bounded `Retry-After`, jitter/backoff,
   overall deadline, and prompt shutdown cancellation.
+- A response-loss fixture proves at-least-once duplicate delivery, separate
+  attempt accounting, one terminal drop after exhaustion, and zero drops after
+  a retried-then-successful batch.
 
 ## Required validation
 

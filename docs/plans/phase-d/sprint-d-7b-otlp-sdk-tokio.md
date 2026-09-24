@@ -153,8 +153,8 @@ keep its Tokio runtime alive until `shutdown_async_typed().await` completes;
 after completion it may tear the runtime down immediately. If the host runtime
 terminates first, dispatcher/task drop guards resolve waiters with a typed
 `RuntimeTerminated` failure and account every uncompleted admitted record as
-dropped/degraded. The plan records this decision in the architecture/ADR and
-amends OTLP-021 and the 1.x-to-2.0 migration guide accordingly.
+dropped/degraded. Accepted ADR-018 activates and verifies the conditional
+OTLP-021 contract; the sprint also updates the 1.x-to-2.0 migration guide.
 
 ## Mandatory two-stage implementation
 

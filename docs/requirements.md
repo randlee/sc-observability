@@ -341,7 +341,9 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
   - `initial_backoff_ms = 250`
   - `max_backoff_ms = 5000`
   - logs, traces, and metrics disabled unless explicitly configured
-- OTLP-021 `Telemetry` lifecycle behavior shall be explicit:
+- OTLP-021 Upon technical-lead acceptance of ADR-018, `Telemetry` lifecycle
+  behavior shall be explicit as follows; until that acceptance these bullets
+  are the gated Phase D candidate contract rather than an active requirement:
   - synchronous emit admission remains available for both backends; emit methods
     after async shutdown begins return `TelemetryError::Shutdown`
   - `flush_async_typed().await` completes only after every export admitted
