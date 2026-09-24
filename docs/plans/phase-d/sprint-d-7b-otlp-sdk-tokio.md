@@ -197,7 +197,11 @@ retry state unrepresentable for SDK. Validation, using checked arithmetic, is:
 - for legacy, `max_backoff_ms >= initial_backoff_ms`;
 - for legacy, `retry_sequence_timeout_ms >= timeout_ms`;
 - for legacy, `0 < retry_after_cap_ms <= retry_sequence_timeout_ms`;
-- for legacy, `retry_jitter_percent <= 100`.
+- for legacy, `retry_jitter_percent <= 100`;
+- reject every explicit field inapplicable to disabled transport or the
+  selected backend with `ConfigFieldNotApplicable`;
+- reject a requested insecure verification override when the selected backend
+  does not explicitly support it with `InsecureTransportRejected`.
 
 Checks execute in exactly this listed order and return the first failure; they
 are not aggregated. Within the first bullet, fields are checked in the wire
@@ -209,7 +213,7 @@ reparse raw fields. Deadlines use a monotonic injectable clock and start when
 the public operation is admitted.
 
 Construction order is fixed: resolve defaults and create `ResolvedField`
-values; run checked conversion, ordering, and applicability validation; build
+values; run the ordered validation list above; build
 `ValidatedTransportBounds`; then check feature/backend/protocol availability.
 Thus a malformed legacy config fails deterministically before D.7b's reserved
 `UnsupportedBackend`. Disabled transport still validates explicitly supplied
@@ -241,10 +245,13 @@ owns these variants, codes, owning types, mappings, and documentation; later
 sprints consume this table without adding or restating rows. Configuration
 rows are construction-only `ConfigFailure` variants. Every runtime/lifecycle
 variant except `Shutdown` is owned by `ExportFailure`; `Shutdown` is owned by
-`TelemetryError`. Construction may preserve a runtime failure as the source of
-`ConfigFailure::Transport`, and emit/lifecycle façades convert it to
-`TelemetryError`, `FlushFailure`, or `ShutdownFailure` without changing its
-stable code or typed source. In particular, `QueueFull` is created as an
+`TelemetryError`. Construction never uses an additional wrapper variant: it
+returns the named `ConfigFailure` rows below. A legacy async-context failure
+during construction is the redacted `Diagnostic` source of
+`TransportConstructionFailed`; the same condition during synchronous lifecycle
+is `BlockingBackendInAsyncContext` directly. Emit/lifecycle façades convert
+runtime failures to `TelemetryError`, `FlushFailure`, or `ShutdownFailure`
+without changing their stable code or typed source. In particular, `QueueFull` is created as an
 `ExportFailure`; emit converts it through `From<ExportFailure> for
 TelemetryError`, while lifecycle converts the same source through the
 corresponding typed lifecycle failure.
@@ -261,7 +268,7 @@ corresponding typed lifecycle failure.
 | `UnsupportedBackend` | `OTLP_UNSUPPORTED_BACKEND` | `ConfigFailure` | feature/backend unavailable | enable/select a supported backend | enum values only | after build/config correction |
 | `UnsupportedProtocol` | `OTLP_UNSUPPORTED_PROTOCOL` | `ConfigFailure` | protocol invalid for backend | select a matrix-supported protocol | enum values only | after config correction |
 | `TokioRuntimeRequired` | `OTLP_TOKIO_RUNTIME_REQUIRED` | `ConfigFailure` | SDK construction lacks an entered Tokio runtime | construct inside the host runtime | no dynamic data | after entering a runtime |
-| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | `ExportFailure` | legacy construction or synchronous lifecycle entered Tokio | use a plain thread or async lifecycle; construction preserves this source | no dynamic data | in a supported context |
+| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | `ExportFailure` | legacy synchronous lifecycle entered Tokio; construction preserves this condition as the redacted source of `TransportConstructionFailed` | use a plain thread or async lifecycle | no dynamic data | in a supported context |
 | `AsyncLifecycleRequired` | `OTLP_ASYNC_LIFECYCLE_REQUIRED` | `ExportFailure` | SDK synchronous completion requested | await the typed async operation | no dynamic data | through async lifecycle |
 | `RuntimeTerminated` | `OTLP_RUNTIME_TERMINATED` | `ExportFailure` | host runtime ended before completion | keep the runtime alive through awaited shutdown | bounded state/counts | with a live replacement runtime/instance |
 | `LifecycleTimeout` | `OTLP_LIFECYCLE_TIMEOUT` | `ExportFailure` | monotonic lifecycle deadline elapsed | inspect terminal health and transport/provider | duration/state only | operation-specific |
@@ -408,6 +415,11 @@ into an unreviewable single change.
   Pin disabled transport with `backend = LegacyHttpJson` and explicit
   `max_retries`; it returns `ConfigFieldNotApplicable` with target `Disabled`,
   not the otherwise-applicable backend target.
+- Freeze combined violations in the same ordered pipeline. SDK with explicit
+  `initial_backoff_ms = 0` returns `ZeroDuration` before the later
+  backend-applicability failure. Disabled legacy selection with explicit
+  `max_retries` plus `lifecycle_shutdown_timeout_ms = 2_000` returns the shared
+  `InvalidBoundOrdering` failure before the later disabled-target failure.
 - Freeze independent legacy delay caps: fallback delay is
   `min(jittered_exponential, max_backoff, remaining_sequence_budget)`, whereas
   a valid server delay is `min(retry_after, retry_after_cap,
