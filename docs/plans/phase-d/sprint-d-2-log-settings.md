@@ -19,6 +19,11 @@ It has no internal sprint dependency and must merge before D.1.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct LogSettings {
+    #[serde(
+        default,
+        serialize_with = "settings_level_wire::serialize_option",
+        deserialize_with = "settings_level_wire::deserialize_option"
+    )]
     pub level: Option<LevelFilter>,
     pub log_root: Option<PathBuf>,
     pub enable_file_sink: Option<bool>,
@@ -67,6 +72,15 @@ impl ResolvedLogSettings {
 }
 ```
 
+`settings_level_wire` is a crate-private, field-local adapter. Its serializer
+maps `LevelFilter::{Off,Error,Warn,Info,Debug,Trace}` to lowercase strings. Its
+deserializer accepts those six tokens case-insensitively (and accepts `null`
+for `Option`) before converting to the existing `LevelFilter`. Environment
+parsing calls the same settings-only token parser. The adapter is attached only
+to `LogSettings.level`: the existing `Serialize`/`Deserialize` implementation
+for `LevelFilter` remains unchanged and continues to emit/accept its published
+native variant names such as `"Info"`.
+
 `LogEnvPrefix::shared()` is exactly `SC_`. An application prefix must match
 `[A-Z][A-Z0-9_]*_`; `LogEnvPrefix::application("BTIT_")`, for example, maps
 the same suffixes to `BTIT_LOG_*`. Resolution is field-wise
@@ -103,7 +117,8 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
 ## Deliverables
 
 1. Add the public source and resolved types, prefix type, typed errors, stable
-   codes, rustdoc, serde behavior, and signatures above.
+   codes, rustdoc, field-local level adapter, serde behavior, and signatures
+   above. Do not change shared `LevelFilter` serde.
 2. Implement deterministic environment parsing for the complete inventory and
    field-wise resolution in the documented four-layer order. Parsing uses a
    captured environment snapshot so one resolution cannot mix process states.
@@ -125,7 +140,9 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
   and unknown selected-prefix environment key returns its documented typed
   failure and code.
 - Serde uses exactly the camelCase keys and typed level values in the table;
-  round-trip fixtures freeze the representation.
+  settings round-trip fixtures freeze lowercase output and case-insensitive
+  input. The pre-existing native `LevelFilter` fixture still round-trips
+  `"Info"` unchanged outside `LogSettings`.
 - Configuration is fully resolved before logger construction; no setter,
   watcher, or late reload is introduced.
 
@@ -133,6 +150,9 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
 
 - Table-driven unit tests generated from the authoritative inventory for JSON,
   environment, precedence, defaults, validation, and conversion parity.
+- A paired serde regression proves `LogSettings { level: Info }` emits
+  `{"level":"info"}` while standalone `LevelFilter::Info` still emits
+  `"Info"` and consumes the existing published fixture.
 - Public consumer compile fixture plus `cargo test --workspace --locked`.
 - Docs consistency, rustdoc, public API, and semver gates used by the repository
   at execution time.

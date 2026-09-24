@@ -353,9 +353,12 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
     made after terminal completion are idempotent and return `Ok(())`, so only
     the first/in-flight caller set observes a terminal failure
   - the synchronous legacy backend retains final-result
-    `flush_typed()`/`shutdown_typed()` compatibility; the SDK backend returns a
-    typed `AsyncLifecycleRequired` from those synchronous methods before state
-    change, because it cannot block a Tokio worker for async completion
+    `flush_typed()`/`shutdown_typed()` compatibility on plain threads; it
+    returns `BlockingBackendInAsyncContext` before buffer/state mutation when
+    called from an entered Tokio runtime
+  - the SDK backend returns a typed `AsyncLifecycleRequired` from synchronous
+    lifecycle before buffer/state mutation because it cannot block a Tokio
+    worker for async completion
   - callers of the SDK backend keep the host runtime alive through awaited
     shutdown; premature runtime termination yields `RuntimeTerminated`, never
     false success, and accounts admitted-but-incomplete records as dropped

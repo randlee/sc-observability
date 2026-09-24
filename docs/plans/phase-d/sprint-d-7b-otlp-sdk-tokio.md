@@ -37,6 +37,7 @@ type LifecycleFuture = Pin<
 >;
 
 pub(crate) trait ExporterLifecycle: Send + Sync {
+    fn blocking_preflight(&self) -> Result<(), ExportFailure>;
     fn flush_async(&self) -> LifecycleFuture;
     fn shutdown_async(&self) -> LifecycleFuture;
     fn flush_blocking(&self) -> Result<(), ExportFailure>;
@@ -87,12 +88,13 @@ impl Telemetry {
 ```
 
 The existing synchronous `flush_typed`/`shutdown_typed` compatibility methods
-call `ExporterLifecycle::*_blocking` without inspecting the backend enum. The
-legacy implementation completes there synchronously. The SDK implementation
-returns the stable typed `AsyncLifecycleRequired` failure **before** enqueueing
-a barrier or changing lifecycle state; callers then use the async method. This
-avoids returning success before a future collector failure is known and avoids
-blocking a Tokio worker.
+call `ExporterLifecycle::blocking_preflight` before removing buffers, changing
+lifecycle state, or calling any signal exporter, then call `*_blocking`, all
+without inspecting the backend enum. The legacy implementation completes there
+synchronously from supported plain threads. The SDK preflight returns the
+stable typed `AsyncLifecycleRequired` failure before any mutation; callers then
+use the async method. This avoids returning success before a future collector
+failure is known and avoids blocking a Tokio worker.
 
 The dispatcher linearizes every export and lifecycle command under one short
 admission lock with a monotonic sequence. A flush barrier completes only after
@@ -141,8 +143,9 @@ amends OTLP-021 and the 1.x-to-2.0 migration guide accordingly.
 - The public facade exports all three signals through the official SDK from an
   existing Tokio runtime and calls only common exporter/lifecycle traits.
 - SDK synchronous lifecycle methods return `AsyncLifecycleRequired` without
-  changing state; the async lifecycle returns the actual final collector/
-  provider failure and rejects emit synchronously once shutdown begins.
+  draining buffers or changing state; the async lifecycle returns the actual
+  final collector/provider failure and rejects emit synchronously once shutdown
+  begins.
 - Barrier-order tests prove the disposition of emission racing flush/shutdown;
   provider shutdown occurs exactly once for concurrent/repeated callers.
 - Current-thread and multi-thread Tokio tests complete without deadlock,

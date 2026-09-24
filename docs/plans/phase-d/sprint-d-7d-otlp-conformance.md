@@ -46,8 +46,8 @@ wire/protocol differences are allowed, signal meaning loss is not.
    output. Add negative cases for disabled no-network, unsupported selections,
    invalid models, auth redaction, timeout, retry exhaustion, partial signal
    failure, recovery, flush, and idempotent shutdown. SDK cases must use and
-   await D.7b's async lifecycle; legacy cases must exercise both its ready async
-   completion and synchronous compatibility lifecycle.
+   await D.7b's async lifecycle; legacy cases must exercise both its async
+   worker-barrier completion and synchronous compatibility lifecycle.
 3. Add CI jobs/features proving both backends from the same immutable source
    SHA, with exact commands, dependency features, collector versions, redacted
    receipts, and no hidden external service requirement.
