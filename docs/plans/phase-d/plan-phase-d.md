@@ -17,6 +17,7 @@ deliverables, acceptance criteria, validation, and explicit non-closure.
 | D.2 | [Serde-stable startup `LogSettings`](sprint-d-2-log-settings.md) | [#96](https://github.com/randlee/sc-observability/issues/96) |
 | D.3 | [Typed sink registration ergonomics](sprint-d-3-typed-sink-registration.md) | [#203](https://github.com/randlee/sc-observability/issues/203) |
 | D.4 | [2.0 discriminated error enums and migration](sprint-d-4-error-enums-2-0.md) | [#92](https://github.com/randlee/sc-observability/issues/92) |
+| D.7 | [Restore real HTTP/JSON OTLP export](sprint-d-7-otlp-http-json-restore.md) | Split regression |
 | D.5 | [Windows ARM64 Python wheel qualification](sprint-d-5-windows-arm64-wheel.md) | New platform gap |
 | D.6 | [Open-ended Python ABI/metadata CI guard](sprint-d-6-python-open-ended-guard.md) | New regression guard |
 
@@ -30,7 +31,8 @@ release, tag, registry publication, or a change to the supported Python floor.
 | D.1 `must_follow` D.2 | Both alter public logger construction/configuration semantics; D.2 establishes the one resolved startup configuration input before D.1 attaches a host-owned logger. |
 | D.3 `must_follow` D.1 | Both change public logger integration surfaces; merge-forward D.1 before the typed registration API is finalized. |
 | D.4 `must_follow` D.3 | D.4 removes the legacy `LogSinkError` boundary that D.3 makes avoidable in 1.x; its migration guide must name D.3's ergonomic replacement. |
-| D.5 `must_follow` D.4 | The release/version and public API baseline must be settled before adding a new published wheel platform. |
+| D.7 `must_follow` D.4 | The restored OTLP data-model contract is a 2.0 change and must use D.4's accepted error/version/migration baseline. |
+| D.5 `must_follow` D.7 | The release/version and public API baseline, including the restored telemetry package, must be settled before adding a new published wheel platform. |
 | D.6 `must_follow` D.5 | The guard validates the final six-platform distribution configuration, including the ARM64 Windows entry. |
 
 For every `must_follow` edge, merge the parent's pushed development into the
@@ -42,8 +44,8 @@ consumer fixtures.
 ## Phase-wide constraints
 
 - #88 (Python OTEL/structured logging) is explicitly out of scope. Do not add
-  OTEL exporter work, a new Python structured logging surface, or a plan for it
-  under this phase.
+  a new Python OTEL/structured logging surface. D.7 restores the existing Rust
+  OTLP exporter regression only; it is not #88 work.
 - D.4 is a breaking **2.0** sprint. It requires a versioning decision,
   migration guide, public-API approval, semver fixture updates, and consumer
   migration evidence; it may not masquerade as a 1.x additive release.
@@ -67,10 +69,10 @@ consumer fixtures.
 - Windows ARM64 runner availability and maturin/PyO3 target support are an
   execution prerequisite for D.5; if hosted ARM64 execution is unavailable,
   keep D.5 open rather than claiming x86 cross-build evidence is equivalent.
-- Informational only, not a Phase D deliverable: a later OTLP-export sprint
-  must address `sc-observability-otlp` model gaps against OTel—no `SpanKind`,
-  no trace sampled flag or links, and `MetricRecord`'s single `f64` cannot
-  represent histogram bucket boundaries, counts, sum, and count.
+- D.7 must repair OTLP data-model prerequisites before emitting to a collector:
+  `SpanKind`, trace sampled flag and links, plus a histogram representation
+  with bucket boundaries/counts/sum/count. The old single-`f64` histogram
+  placeholder is not spec-correct and cannot be exported as one.
 
 ## Planning deliverables
 
