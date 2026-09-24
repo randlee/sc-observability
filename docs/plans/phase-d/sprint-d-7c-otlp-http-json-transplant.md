@@ -44,12 +44,14 @@ and exits. No caller directly creates or drops a reqwest blocking client.
 
 Construction synchronously waits for worker/client initialization and is
 supported only from a plain thread. If a Tokio runtime is entered, construction
-returns `BlockingBackendInAsyncContext` before spawning the worker or calling
-reqwest. Likewise, synchronous flush/shutdown preflight the calling context
-before removing buffered records or sending commands and return that typed
-error on Tokio. The nonblocking signal-admission methods and async lifecycle
-may be used from either context because all blocking transport work stays on
-the owned worker. Tokio-first hosts should normally select D.7b.
+returns the D.7b-L transport-construction failure whose redacted diagnostic
+source is its blocking-backend-in-async-context outcome, before spawning the
+worker or calling reqwest. Synchronous flush/shutdown instead return that
+D.7b-L runtime outcome directly after preflighting the calling context and
+before removing buffered records or sending commands. The nonblocking
+signal-admission methods and async lifecycle may be used from either context
+because all blocking transport work stays on the owned worker. Tokio-first
+hosts should normally select D.7b.
 
 Authoritative source evidence is commit
 `7b39f4e7f72b6845edec4eab4cd671611661445f`, path
@@ -241,6 +243,9 @@ D.7c owns no error variant, stable code, mapping, or error documentation.
 - Plain-thread construction plus sync flush/shutdown return real results.
   Construction and synchronous lifecycle from current-thread/multi-thread
   Tokio reject before worker creation, buffer drain, or command admission.
+  The construction fixture asserts the D.7b-L wrapped construction form and
+  redacted blocking-context diagnostic source; lifecycle fixtures assert its
+  direct runtime-failure form.
 - Async lifecycle from Tokio remains responsive while the plain worker performs
   transport; dropping the final exporter handle on Tokio merely closes the
   sender, and instrumentation proves the reqwest client is ultimately dropped
