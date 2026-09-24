@@ -9,9 +9,12 @@ base: develop
 
 ## Goal and dependency
 
-After D.4, extend the qualified Python distribution platform matrix from five
-to six wheels by adding native Windows ARM64 support. The Rust target is
-`aarch64-pc-windows-msvc`; the wheel tag is `win_arm64`.
+D.5 `must_follow`s D.7d (and therefore transitively follows the D.4 2.0
+version baseline). Merge-forward the final pushed D.7d source/version baseline
+before implementation and every fix round. Extend that qualified Python
+distribution platform matrix from five to six wheels by adding native Windows
+ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
+`win_arm64`.
 
 ## Deliverables
 
@@ -33,7 +36,8 @@ to six wheels by adding native Windows ARM64 support. The Rust target is
 
 - An immutable-source CI run has one successful native wheel build and five
   successful installed-suite cells for `windows-arm64`; all six wheel builds
-  and 30 cells pass aggregate validation.
+  and 30 cells pass aggregate validation from the final D.7d source/version
+  baseline.
 - The ARM64 wheel installs in an isolated ARM64 Windows environment and passes
   the same public suite, typing, embedding, negative/offline, and private
   companion checks as the other Windows wheel where applicable.

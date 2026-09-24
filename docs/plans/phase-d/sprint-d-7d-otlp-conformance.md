@@ -45,7 +45,9 @@ wire/protocol differences are allowed, signal meaning loss is not.
 2. Run both backends against hermetic collectors and compare decoded semantic
    output. Add negative cases for disabled no-network, unsupported selections,
    invalid models, auth redaction, timeout, retry exhaustion, partial signal
-   failure, recovery, flush, and idempotent shutdown.
+   failure, recovery, flush, and idempotent shutdown. SDK cases must use and
+   await D.7b's async lifecycle; legacy cases must exercise both its ready async
+   completion and synchronous compatibility lifecycle.
 3. Add CI jobs/features proving both backends from the same immutable source
    SHA, with exact commands, dependency features, collector versions, redacted
    receipts, and no hidden external service requirement.
@@ -55,7 +57,10 @@ wire/protocol differences are allowed, signal meaning loss is not.
    ATM-only label is presented as a generic contract.
 5. Finalize OTLP-001–022, architecture, migration guide, API approvals,
    dependency/license inventory, release notes, and operational docs for both
-   backends and the no-enabled-noop rule.
+   backends and the no-enabled-noop rule. The requirements and migration guide
+   must state the D.7b 2.0 lifecycle decision, barrier ordering, runtime-lifetime
+   obligation, typed premature-runtime-termination outcome, and SDK synchronous
+   lifecycle rejection.
 
 ## Acceptance criteria
 
@@ -63,8 +68,16 @@ wire/protocol differences are allowed, signal meaning loss is not.
   decoded collector output is semantically equivalent for every required field.
 - Every lifecycle/failure negative case has observable health/dropped-count
   assertions and no credential leakage.
+- Awaited SDK shutdown surfaces the actual final-export failure on both
+  current-thread and multi-thread runtimes; after successful await the host can
+  tear its runtime down immediately without losing an admitted export.
+- Runtime teardown before async completion returns/records
+  `RuntimeTerminated`, never false success, and accounts pending admissions;
+  concurrent emit/flush/shutdown follows D.7b's sequence/barrier contract.
 - CI retains complete, redacted, same-SHA receipts for both paths; feature
-  isolation proves the synchronous path does not require Tokio.
+  isolation proves the synchronous path needs no caller-owned Tokio runtime and
+  no official OTel SDK/tonic dependency while explicitly recording reqwest's
+  internal transitive Tokio graph.
 - Restored dashboards/queries work against the current collector fixture and
   have a complete legacy-to-current disposition inventory.
 - Requirements, architecture, API, migration, release, and operational docs
@@ -74,7 +87,7 @@ wire/protocol differences are allowed, signal meaning loss is not.
 
 - Shared dual-backend conformance suite and negative matrix.
 - Feature-isolated tests for `otlp-sdk` and `legacy-http-json`, plus combined
-  feature tests.
+  feature tests and `cargo tree -e features` assertions for both graphs.
 - `cargo test --workspace --locked`, clippy with warnings denied, rustdoc,
   public API/semver, docs consistency, dependency/license, and CI workflow
   validation.

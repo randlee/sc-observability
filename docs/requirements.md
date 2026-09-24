@@ -342,10 +342,24 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
   - `max_backoff_ms = 5000`
   - logs, traces, and metrics disabled unless explicitly configured
 - OTLP-021 `Telemetry` lifecycle behavior shall be explicit:
-  - emit methods after `shutdown()` return `TelemetryError::Shutdown`
-  - `flush()` attempts to export ready batches and drops incomplete spans only at shutdown/final flush
-  - the first `shutdown()` surfaces any final flush failure as `ShutdownError`
-  - repeated `shutdown()` calls are idempotent and return `Ok(())`
+  - synchronous emit admission remains available for both backends; emit methods
+    after async shutdown begins return `TelemetryError::Shutdown`
+  - `flush_async_typed().await` completes only after every export admitted
+    before its ordered barrier has a terminal outcome
+  - `shutdown_async_typed().await` closes admission, drains every prior
+    admission, performs provider/exporter shutdown exactly once, and surfaces
+    any final export failure as `ShutdownFailure`
+  - concurrent or repeated async shutdown callers share one completion; calls
+    made after terminal completion are idempotent and return `Ok(())`, so only
+    the first/in-flight caller set observes a terminal failure
+  - the synchronous legacy backend retains final-result
+    `flush_typed()`/`shutdown_typed()` compatibility; the SDK backend returns a
+    typed `AsyncLifecycleRequired` from those synchronous methods before state
+    change, because it cannot block a Tokio worker for async completion
+  - callers of the SDK backend keep the host runtime alive through awaited
+    shutdown; premature runtime termination yields `RuntimeTerminated`, never
+    false success, and accounts admitted-but-incomplete records as dropped
+  - incomplete spans are dropped only at shutdown/final flush
 - OTLP-022 `sc-observability-otlp` shall own crate-local sealed signal-emitter traits for direct telemetry injection where needed.
 
 ## 6.1 ATM Out-Of-The-Box Baseline
