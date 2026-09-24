@@ -6,7 +6,7 @@ base: develop
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7d-otlp-conformance
 depends_on: [D.7c]
 relation: must_follow
-owned_docs: [docs/requirements.md, docs/architecture.md, docs/observability/otlp]
+owned_docs: [docs/observability/otlp]
 release_train: '2.0'
 recommended_agent: rust-developer
 recommended_model: deep-reasoning
@@ -62,33 +62,25 @@ wire/protocol differences are allowed, signal meaning loss is not.
    destinations in `legacy-otlp-provenance.json`, including
    `docs/observability/otlp/` and `scripts/ci/`; validate the import manifest
    and every final destination hash.
-5. After D.7b records technical-lead acceptance of ADR-018, verify OTLP-021 as
-   an active requirement alongside OTLP-001–020/022. As a closure gate, remove
-   the requirements text saying "until that acceptance" and fail docs
-   consistency if ADR-018 remains proposed or OTLP-021 remains conditional.
-   Update architecture, migration guide, API approvals,
-   dependency/license inventory, release notes, and operational docs for both
-   backends and the no-enabled-noop rule. The requirements and migration guide
-   must state the D.7b 2.0 lifecycle decision, barrier ordering, runtime-lifetime
-   obligation, typed premature-runtime-termination outcome, and SDK synchronous
-   lifecycle rejection.
+5. After D.7b records technical-lead acceptance of ADR-018, verify D.7b-L's
+   owned requirement/API/rustdoc/migration closure and fail docs consistency if
+   the ADR or requirement remains conditional. D.7d edits only its operational
+   docs; architecture, dependency/license, release, and D.7b-owned contract
+   corrections are reported to their owning sprint rather than restated here.
 
 ## Acceptance criteria
 
 - Both backends export all three signal families from the shared corpus and
   decoded collector output is semantically equivalent for every required field.
-- Every lifecycle/failure negative case asserts equivalent queue
-  depth/capacity, worker/exporter state, last terminal failure, and per-signal
-  overflow/drop fields for both backends, with no credential leakage. A
-  transient retry increments only `retry_attempt_failures`; a terminal failure
-  populates `last_terminal_failure`; the next successful batch while `Open`
-  clears it and records recovery; closing/shutdown retains it.
+- Every lifecycle/failure negative case asserts the exact D.7b-L health and
+  accounting contract for both backends, with no credential leakage; D.7d
+  neither extends nor restates that model.
 - Awaited SDK shutdown surfaces the actual final-export failure on both
   current-thread and multi-thread runtimes; after successful await the host can
   tear its runtime down immediately without losing an admitted export.
-- Runtime teardown before async completion returns/records
-  `RuntimeTerminated`, never false success, and accounts pending admissions;
-  concurrent emit/flush/shutdown follows D.7b's sequence/barrier contract.
+- Runtime teardown before async completion asserts the corresponding D.7b-L
+  failure-table outcome and accounting; concurrent emit/flush/shutdown follows
+  D.7b's sequence/barrier contract.
 - CI retains complete, redacted, same-SHA receipts for both paths; feature
   isolation proves the synchronous path needs no caller-owned Tokio runtime and
   no official OTel SDK/tonic dependency while explicitly recording reqwest's
@@ -100,11 +92,10 @@ wire/protocol differences are allowed, signal meaning loss is not.
   legacy repository names from shipped docs/scripts.
 - Requirements, architecture, API, migration, release, and operational docs
   agree; no enabled configuration is documented or implemented as no-op.
-- OTLP-020/config requirements, API design, rustdoc, and migration docs list
-  identical retry/lifecycle fields, defaults, backend applicability, stable
-  errors, validated value types, and cross-field inequalities. The stable-error
-  check compares the full union of D.7b-L common/config errors and D.7c
-  legacy-runtime errors, with no missing or duplicate code.
+- Docs-consistency checks verify that requirements, API design, rustdoc, and
+  migration docs reference the single D.7b-L config/error contract and do not
+  redefine its fields, defaults, checked types, ordering, fixtures, or complete
+  stable-error table.
 - ADR-018 is accepted and OTLP-021 is active: neither document retains
   proposed/"until that acceptance" wording at sprint closure.
 

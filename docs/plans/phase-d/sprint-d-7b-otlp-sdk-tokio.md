@@ -6,7 +6,7 @@ base: develop
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7b-otlp-sdk-tokio
 depends_on: [D.7a]
 relation: must_follow
-owned_docs: [docs/requirements.md, docs/architecture.md, docs/migrate-error-api.md]
+owned_docs: [docs/requirements.md, docs/architecture.md, docs/api-design.md, docs/migrate-error-api.md]
 release_train: '2.0'
 recommended_agent: rust-developer
 recommended_model: deep-reasoning
@@ -33,7 +33,8 @@ pub enum ExporterBackend {
 pub struct OtelConfig {
     pub backend: ExporterBackend,
     pub protocol: OtlpProtocol,
-    // existing endpoint/auth/TLS/timeout/retry fields remain explicit
+    // endpoint/auth/TLS and timeout fields remain explicit;
+    // legacy-only retry fields are optional (authoritative D.7b-L table below)
 }
 
 type LifecycleFuture = Pin<
@@ -121,6 +122,14 @@ therefore deterministic and reviewable.
 All raw serialized millisecond/percent fields are converted exactly once:
 
 ```rust
+pub(crate) enum ValueOrigin { Default, Explicit }
+
+pub(crate) struct ResolvedField<T> {
+    field: &'static str,
+    value: T,
+    origin: ValueOrigin,
+}
+
 pub(crate) struct PositiveDuration(Duration);
 
 impl PositiveDuration {
@@ -151,6 +160,7 @@ pub(crate) struct ValidatedTransportBounds {
 }
 
 pub(crate) enum BackendTransportBounds {
+    Disabled,
     Sdk,
     Legacy(RetryPolicy),
 }
@@ -160,7 +170,8 @@ impl ValidatedTransportBounds {
 }
 ```
 
-The constructor derives the backend only from `config.backend`.
+The constructor derives `Disabled` from `config.enabled == false`; otherwise
+it derives the backend only from `config.backend`.
 `LifecycleBounds` holds checked positive flush/shutdown durations;
 `RetryPolicy` holds `max_retries`, checked initial/max/sequence/Retry-After
 durations, and `BoundedPercent(0..=100)`. `BackendTransportBounds` makes legacy
@@ -177,24 +188,63 @@ Both factories receive only `ValidatedTransportBounds` and cannot inspect or
 reparse raw fields. Deadlines use a monotonic injectable clock and start when
 the public operation is admitted.
 
+Construction order is fixed: resolve defaults and create `ResolvedField`
+values; run checked conversion, ordering, and applicability validation; build
+`ValidatedTransportBounds`; then check feature/backend/protocol availability.
+Thus a malformed legacy config fails deterministically before D.7b's reserved
+`UnsupportedBackend`. Disabled transport still validates explicitly supplied
+shared fields, rejects every explicit legacy-only retry field with
+`ConfigFieldNotApplicable`, yields `BackendTransportBounds::Disabled`, and
+never constructs a network provider/worker.
+
+Configuration variants carry reviewable payloads:
+
+```rust
+ZeroDuration { field: &'static str, origin: ValueOrigin }
+DurationOverflow { field: &'static str, raw: u64, origin: ValueOrigin }
+InvalidBoundOrdering {
+    lower: ResolvedField<u64>,
+    upper: ResolvedField<u64>,
+}
+InvalidJitterPercent { field: &'static str, raw: u8, origin: ValueOrigin }
+ConfigFieldNotApplicable { field: &'static str, backend: ExporterBackend }
+```
+
 ### D.7b-L stable failure inventory
 
-This table owns common/config failures; the complete Phase D OTLP inventory is
-this table union D.7c's legacy-runtime table.
+This is the complete Phase D OTLP stable-error inventory. D.7b-L exclusively
+owns these variants, codes, owning types, mappings, and documentation; later
+sprints consume this table without adding or restating rows. Every operational
+variant is owned by `ExportFailure`. Construction may preserve one as the
+source of `ConfigFailure::Transport`, and emit/lifecycle façades convert it to
+`TelemetryError`, `FlushFailure`, or `ShutdownFailure` without changing its
+stable code or typed source. In particular, `QueueFull` is created as an
+`ExportFailure`; emit converts it through `From<ExportFailure> for
+TelemetryError`, while lifecycle converts the same source through the
+corresponding typed lifecycle failure.
 
-| Variant | Stable code | Owning error type | Cause | Recovery |
-| --- | --- | --- | --- | --- |
-| `ZeroDuration` | `OTLP_CONFIG_ZERO_DURATION` | `ConfigFailure` | required duration is zero | provide a positive value |
-| `DurationOverflow` | `OTLP_CONFIG_DURATION_OVERFLOW` | `ConfigFailure` | milliseconds cannot convert safely | reduce the field |
-| `InvalidBoundOrdering` | `OTLP_CONFIG_BOUND_ORDER` | `ConfigFailure` | resolved ordering rule fails | correct the named explicit/defaulted fields |
-| `InvalidJitterPercent` | `OTLP_CONFIG_JITTER_PERCENT` | `ConfigFailure` | jitter exceeds 100 | use `0..=100` |
-| `ConfigFieldNotApplicable` | `OTLP_CONFIG_FIELD_NOT_APPLICABLE` | `ConfigFailure` | legacy-only field supplied for SDK | omit it or select legacy |
-| `UnsupportedBackend` | `OTLP_UNSUPPORTED_BACKEND` | `ConfigFailure` | feature/backend unavailable | enable/select a supported backend |
-| `UnsupportedProtocol` | `OTLP_UNSUPPORTED_PROTOCOL` | `ConfigFailure` | protocol invalid for backend | select a matrix-supported protocol |
-| `AsyncLifecycleRequired` | `OTLP_ASYNC_LIFECYCLE_REQUIRED` | `FlushFailure` / `ShutdownFailure` | SDK sync completion requested | await the typed async operation |
-| `RuntimeTerminated` | `OTLP_RUNTIME_TERMINATED` | `ShutdownFailure` | host runtime ended before completion | keep runtime alive through awaited shutdown |
-| `LifecycleTimeout` | `OTLP_LIFECYCLE_TIMEOUT` | `FlushFailure` / `ShutdownFailure` | monotonic lifecycle deadline elapsed | inspect terminal health and transport/provider |
-| `QueueFull` | `OTLP_QUEUE_FULL` | `TelemetryError` | bounded admission queue saturated | preserve fail-open behavior and inspect health |
+| Variant | Stable code | Owning error type | Cause | Recovery | Redaction | Retryability |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ZeroDuration` | `OTLP_CONFIG_ZERO_DURATION` | `ConfigFailure` | required duration is zero | provide a positive value | field/value only | after config correction |
+| `DurationOverflow` | `OTLP_CONFIG_DURATION_OVERFLOW` | `ConfigFailure` | milliseconds cannot convert safely | reduce the field | field/value only | after config correction |
+| `InvalidBoundOrdering` | `OTLP_CONFIG_BOUND_ORDER` | `ConfigFailure` | resolved ordering rule fails | correct the named explicit/defaulted fields | field/value/origin only | after config correction |
+| `InvalidJitterPercent` | `OTLP_CONFIG_JITTER_PERCENT` | `ConfigFailure` | jitter exceeds 100 | use `0..=100` | field/value only | after config correction |
+| `ConfigFieldNotApplicable` | `OTLP_CONFIG_FIELD_NOT_APPLICABLE` | `ConfigFailure` | legacy-only field supplied for SDK | omit it or select legacy | field/backend only | after config correction |
+| `UnsupportedBackend` | `OTLP_UNSUPPORTED_BACKEND` | `ConfigFailure` | feature/backend unavailable | enable/select a supported backend | enum values only | after build/config correction |
+| `UnsupportedProtocol` | `OTLP_UNSUPPORTED_PROTOCOL` | `ConfigFailure` | protocol invalid for backend | select a matrix-supported protocol | enum values only | after config correction |
+| `TokioRuntimeRequired` | `OTLP_TOKIO_RUNTIME_REQUIRED` | `ConfigFailure` | SDK construction lacks an entered Tokio runtime | construct inside the host runtime | no dynamic data | after entering a runtime |
+| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | `ExportFailure` | legacy construction or synchronous lifecycle entered Tokio | use a plain thread or async lifecycle; construction preserves this source | no dynamic data | in a supported context |
+| `AsyncLifecycleRequired` | `OTLP_ASYNC_LIFECYCLE_REQUIRED` | `ExportFailure` | SDK synchronous completion requested | await the typed async operation | no dynamic data | through async lifecycle |
+| `RuntimeTerminated` | `OTLP_RUNTIME_TERMINATED` | `ExportFailure` | host runtime ended before completion | keep the runtime alive through awaited shutdown | bounded state/counts | with a live replacement runtime/instance |
+| `LifecycleTimeout` | `OTLP_LIFECYCLE_TIMEOUT` | `ExportFailure` | monotonic lifecycle deadline elapsed | inspect terminal health and transport/provider | duration/state only | operation-specific |
+| `QueueFull` | `OTLP_QUEUE_FULL` | `ExportFailure` | bounded admission queue saturated | preserve fail-open behavior and inspect health | capacity/depth only | yes, later admission |
+| `WorkerTerminated` | `OTLP_WORKER_TERMINATED` | `ExportFailure` | SDK dispatcher or legacy worker terminated unexpectedly | correct the terminal cause and construct a new instance | bounded typed source; no credentials | only with a new instance |
+| `ShutdownCancelledRetry` | `OTLP_SHUTDOWN_CANCELLED_RETRY` | `ExportFailure` | shutdown cancelled a retryable pre-barrier legacy sequence | inspect terminal health; resend only if duplicates are acceptable | attempt/count only | caller decision; duplicates possible |
+| `RetryDeadlineExhausted` | `OTLP_RETRY_DEADLINE_EXHAUSTED` | `ExportFailure` | no legacy sequence budget remains | increase the validated sequence bound or restore collector health | budget/attempt only | new operation after recovery |
+| `NonRetryableHttpStatus` | `OTLP_HTTP_STATUS_TERMINAL` | `ExportFailure` | collector returned a non-retryable HTTP status | correct request/auth/config before retrying | status/category only; no body/headers | after cause correction |
+| `RetryAttemptsExhausted` | `OTLP_RETRY_ATTEMPTS_EXHAUSTED` | `ExportFailure` | legacy maximum attempts ended before success | restore collector health or adjust the validated policy | attempt/count only | new operation after recovery |
+| `TerminalExportFailure` | `OTLP_EXPORT_TERMINAL` | `ExportFailure` | SDK or legacy provider returned a terminal export failure | inspect the preserved source and collector state | bounded typed source; no credentials | source-dependent |
+| `Shutdown` | `OTLP_TELEMETRY_SHUTDOWN` | `TelemetryError` | emit was attempted after shutdown began | construct a new telemetry instance | no dynamic data | only on a new instance |
 
 ## 2.0 lifecycle decision
 
@@ -285,8 +335,10 @@ into an unreviewable single change.
    common `ExporterSet`, official SDK signal adapters and outcome sink. Convert D.7a
    neutral signals without losing resource/scope metadata, kind, flags, links,
    events, status, or histogram content.
-   D.7b-L owns `ValidatedTransportBounds`, `LifecycleBounds`, `RetryPolicy`,
-   `BoundedPercent`, and the sole backend-aware validation constructor.
+   D.7b-L owns `PositiveDuration`, `LifecycleBounds`, `RetryPolicy`,
+   `BoundedPercent`, `BackendTransportBounds`, `ValidatedTransportBounds`,
+   `ValueOrigin`, `ResolvedField`, the sole backend-aware validation
+   constructor, and the complete stable-error inventory above.
 3. Implement the exact ordering/state/cancellation contract above without
    `block_on`, a hidden runtime, a process-global provider, mutex-held network
    waits, or executor-worker blocking.
@@ -303,9 +355,29 @@ into an unreviewable single change.
    late failure, flush barriers, concurrent admission, shutdown, cancellation,
    and immediate post-completion host teardown.
    Its fixture crate is `publish = false` and excluded from publish rosters.
-6. Record the lifecycle ADR, OTLP-021 revision, API approval, and migration from
-   synchronous 1.x lifecycle to the backend-neutral async 2.0 completion API.
+6. Record the lifecycle ADR, OTLP-020/021 revisions, API approval, rustdoc, and
+   migration from synchronous 1.x lifecycle to the backend-neutral async 2.0
+   completion API. D.7b-L owns those config/error/lifecycle documents and their
+   shared validation fixtures; D.7c may only verify them by reference.
    The technical lead must accept ADR-018 before D.7b-L production code.
+
+## D.7b-L validation fixtures
+
+- Resolve every field through the one constructor and assert its value and
+  `ValueOrigin`; cover each field absent and explicitly supplied.
+- Freeze partial overrides: an explicit legacy `timeout_ms = 40_000` conflicts
+  with the defaulted `retry_sequence_timeout_ms = 30_000`, and an explicit
+  `lifecycle_shutdown_timeout_ms = 2_000` conflicts with the defaulted
+  `timeout_ms = 3_000`; both diagnostics name values and origins. Exercise each
+  legacy-only field alone through the same constructor.
+- Prove malformed values and ordering fail before unsupported backend/protocol
+  checks, while disabled transport validates explicit shared values, rejects
+  explicit legacy-only fields, and never constructs network state.
+- Freeze independent legacy delay caps: fallback delay is
+  `min(jittered_exponential, max_backoff, remaining_sequence_budget)`, whereas
+  a valid server delay is `min(retry_after, retry_after_cap,
+  remaining_sequence_budget)`. Cover both `max_backoff < retry_after_cap` and
+  `retry_after_cap < max_backoff`; neither cap silently truncates the other.
 
 ## Acceptance criteria
 

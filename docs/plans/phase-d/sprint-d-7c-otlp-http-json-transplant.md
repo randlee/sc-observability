@@ -6,7 +6,7 @@ base: develop
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7c-otlp-http-json-transplant
 depends_on: [D.7b]
 relation: must_follow
-owned_docs: [docs/requirements.md, docs/architecture.md, docs/api-design.md, docs/migrate-error-api.md, docs/plans/phase-d/legacy-otlp-provenance.json]
+owned_docs: [docs/architecture.md, docs/plans/phase-d/legacy-otlp-provenance.json]
 release_train: '2.0'
 recommended_agent: rust-developer
 recommended_model: deep-reasoning
@@ -91,7 +91,7 @@ are authorized deltas—not claims about the legacy implementation:
 | Legacy behavior | Authorized transplant delta | Required matrix disposition |
 | --- | --- | --- |
 | retry every non-success status | retry connection errors, 408, 429, and 5xx; terminate other 4xx | `changed: retry classification` |
-| capped exponential delay only | honor bounded `Retry-After`; otherwise add per-instance-seeded bounded jitter (deterministic under an injected test seed) | `changed: server pacing/jitter` |
+| capped exponential delay only | honor bounded `Retry-After`; otherwise add per-instance-seeded bounded jitter (deterministic under an injected test seed), consuming D.7b-L's independently capped server/fallback paths | `changed: server pacing/jitter and independent caps` |
 | `thread::sleep` cannot be interrupted | use worker-owned cancelable wait woken by shutdown | `changed: shutdown cancellation` |
 | per-request timeout but no overall bound | add finite sequence deadline covering attempts and waits | `changed: retry deadline` |
 
@@ -101,13 +101,10 @@ algorithm. It explicitly carves out only the four safety deltas above. The
 source-to-destination matrix must name each delta and preserve copied tests
 alongside new delta-specific fixtures.
 
-D.7c consumes the D.7b-L-owned `ValidatedTransportBounds` and the
-`BackendTransportBounds::Legacy(RetryPolicy)` payload. D.7b-L is authoritative
-for every raw field, default, applicability rule, checked type, ordering rule,
-config error, and defaults-before-validation/`ValueOrigin` behavior; D.7c does
-not redefine them. A partial-override fixture sets each legacy field alone and
-proves resolution/validation uses that single constructor and names any
-conflicting defaulted field.
+D.7c consumes the validated legacy payload defined by D.7b-L. D.7b-L is
+authoritative for every raw field, default, applicability rule, checked type,
+ordering rule, config error, origin metadata, and shared validation fixture;
+D.7c does not redefine them.
 
 Delta-seconds and HTTP-date `Retry-After` values are parsed at most up to 128
 header bytes; raw values are never retained. Invalid values produce only the
@@ -145,61 +142,49 @@ full/closed fails open, records exactly one per-signal drop and health change,
 and never waits. Barriers have a reserved control path so saturated data cannot
 starve them; async waiters use a Tokio `oneshot` completed by the plain worker,
 never a blocking receive on an executor. Initialization failure, panic,
-unexpected exit, or sender closure stores one terminal `WorkerTerminated`
-result, resolves every pending barrier, accounts abandoned admissions once,
-and never hangs.
+unexpected exit, or sender closure stores the corresponding D.7b-L
+worker-termination outcome, resolves every pending barrier, accounts abandoned
+admissions once, and never hangs.
 
-Legacy and SDK health use one field model: queue depth/capacity,
-worker/exporter state, `last_terminal_failure`, per-signal overflow/drop counts,
-and a `retry_attempt_failures` counter. Transient failed attempts increment the
-counter but never overwrite `last_terminal_failure`. Exhaustion, admission
-failure, worker/provider death, or lifecycle failure writes the terminal field.
-The next successfully exported batch while `Open` clears it and records
-recovery; `Closing`/`Shutdown` retains it. No field contains credentials.
+Legacy uses the authoritative D.7b-L health/accounting contract without adding
+fields or transitions. The legacy worker consumes D.7b-L's shared fixtures
+unchanged, including redaction coverage.
 
 Each request/retry sequence has a finite overall deadline. Shutdown enters
 `Closing`, cancels retry backoff, and drains only work before its barrier.
 Connection errors, 408, 429, and 5xx are retryable; other 4xx are terminal.
-For every retry, compute the server delay or jittered exponential fallback,
-then clamp the final delay—including positive jitter—to
-`min(retry_after_cap, remaining_sequence_budget)`. If no positive budget
-remains, terminate as `RetryDeadlineExhausted` without sleeping or issuing a
+For every retry, choose exactly one delay path and apply either the validated
+D.7b-L fallback cap or its independent server-delay cap, then the remaining
+sequence budget. D.7c consumes the cap semantics and ordering frozen by the
+D.7b-L matrix/fixtures without redefining them. If no positive budget remains,
+return the D.7b-L retry-deadline outcome without sleeping or issuing a
 zero-budget attempt. No request, backoff, barrier, join, or client drop is
 unbounded.
 
-Shutdown cancellation of a pre-barrier retry sequence is terminal
-`ShutdownCancelledRetry`: account that admitted batch as dropped exactly once,
-set degraded health/`last_terminal_failure`, and return the failure from the
+Shutdown cancellation of a pre-barrier retry sequence returns the D.7b-L
+shutdown-cancelled-retry outcome: account that admitted batch as dropped
+exactly once, apply D.7b-L terminal-health accounting, and return the failure from the
 first/in-flight shutdown completion. Cancelable backoff wakes immediately. A
 currently blocking reqwest call cannot be interrupted, but its remaining wait
-is at most `min(timeout_ms, remaining retry_sequence_timeout_ms)`; the public
-shutdown call still returns no later than `lifecycle_shutdown_timeout_ms`, or
-returns `LifecycleTimeout`. Cross-field validation requires the lifecycle
-shutdown bound to be at least `timeout_ms`.
+is bounded by the D.7b-L request and sequence budgets; public shutdown is
+bounded by the D.7b-L lifecycle budget or returns its lifecycle-timeout
+outcome. All timing bounds arrive already validated; D.7c performs no second
+validation.
 
 Delivery is **at least once across retries**: a collector may accept an
 attempt whose response is lost, after which the identical batch is retried and
 observed twice. The exporter supplies no idempotency key and does not promise
 deduplication. Attempts are recorded separately, while an admitted batch is
 counted as dropped exactly once only if the sequence exhausts/terminates; a
-successful retry is not a drop. Transient attempts affect only
-`retry_attempt_failures`; terminal exhaustion writes `last_terminal_failure`,
-which the next successful open-state batch clears.
+successful retry is not a drop. Transient, terminal, and recovery accounting
+follow the D.7b-L health contract without additional D.7c fields or
+transitions.
 
-## Legacy-runtime failure inventory
+## Failure contract
 
-The complete inventory is the union of D.7b-L's common/config table and these
-D.7c-only rows. `migrate-error-api.md` records both; diagnostics are
-bounded/redacted and preserve their typed source.
-
-| Variant | Stable code | Owning error type | Cause | Recovery |
-| --- | --- | --- | --- | --- |
-| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | `ConfigFailure` / lifecycle failure | legacy construction/sync lifecycle entered Tokio | construct/call on a plain thread or select SDK/async lifecycle |
-| `WorkerTerminated` | `OTLP_WORKER_TERMINATED` | `ExportFailure` / lifecycle failure | init failure, panic, channel closure, or unexpected exit | create a new telemetry instance after correcting the worker cause |
-| `ShutdownCancelledRetry` | `OTLP_SHUTDOWN_CANCELLED_RETRY` | `ShutdownFailure` | shutdown cancels a retryable pre-barrier sequence | inspect terminal health; resend only if duplicates are acceptable |
-| `RetryDeadlineExhausted` | `OTLP_RETRY_DEADLINE_EXHAUSTED` | `ExportFailure` | no sequence budget remains for another delay/attempt | increase the validated sequence bound or restore collector health |
-| `NonRetryableHttpStatus` | `OTLP_HTTP_STATUS_TERMINAL` | `ExportFailure` | collector returned a non-retryable status | correct request/auth/config before retrying |
-| `RetryAttemptsExhausted` | `OTLP_RETRY_ATTEMPTS_EXHAUSTED` | `ExportFailure` | maximum attempts ended before success | restore collector health or adjust the validated policy |
+D.7c uses the complete D.7b-L stable-failure table. Runtime paths return its
+named outcomes through the owning types and façade mappings defined there;
+D.7c owns no error variant, stable code, mapping, or error documentation.
 
 ## Deliverables
 
@@ -239,10 +224,10 @@ bounded/redacted and preserve their typed source.
    `payload` modules plus tests; enforce the repository line-count check.
    Update both dependency-boundary scripts and architecture §6 with the exact
    legacy allowlist and automated graph assertions.
-8. Update OTLP-020/config requirements, API design, rustdoc, and the migration
-   guide from the single D.7b-L authoritative contract, including every field,
-   applicability rule, default, checked type, unioned stable failure, and
-   inequality without redefining them in D.7c. D.7d compares all four owners.
+8. Verify that D.7b-L-owned requirements, API design, rustdoc, and migration
+   guide cover the implemented legacy behavior and report any correction to
+   D.7b-L. D.7c owns only legacy runtime/provenance and architecture-boundary
+   documentation; it does not edit or restate config/error contracts.
 
 ## Acceptance criteria
 
@@ -265,24 +250,25 @@ bounded/redacted and preserve their typed source.
   incompatibility; structural rewrite or alternate HTTP/retry logic beyond the
   four authorized safety deltas fails QA.
 - Failures remain fail-open at the facade and update health/dropped counts.
-- Legacy health reports queue depth/capacity, worker/exporter state, last
-  terminal failure, and per-signal overflow/drop counts equivalently to SDK.
+- Legacy health satisfies the complete D.7b-L health/accounting contract
+  equivalently to SDK, without adding or restating fields.
 - Capacity-one saturation cannot block or starve flush/shutdown; injected
   worker panic/exit resolves every sync/async waiter within the deadline.
 - Retry fixtures freeze classification, bounded `Retry-After`, jitter/backoff,
   overall deadline, and prompt shutdown cancellation.
 - Retry bound fixtures cover delta-seconds and HTTP-date, negative, malformed,
   past, and huge `Retry-After` values; zero/overflow/cross-field validation;
-  distinct production instance seeds; deterministic injected seeds; partial
-  overrides; and positive jitter at the sequence deadline proving the final
-  delay clamp and no zero-budget attempt.
-- Shutdown-during-backoff asserts one `ShutdownCancelledRetry` drop, degraded
-  terminal health, first-caller `ShutdownFailure`, and prompt wake.
+  distinct production instance seeds; deterministic injected seeds; and
+  positive jitter at the sequence deadline proving the D.7b-L fallback clamp
+  and no zero-budget attempt. The shared cap-ordering fixture remains owned by
+  D.7b-L and is consumed unchanged.
+- Shutdown-during-backoff asserts the D.7b-L cancellation outcome, its exact
+  accounting/facade mapping, and prompt wake.
 - Shutdown-during-request has three fixtures: a successful in-flight response
   completes with no drop; an ordinary terminal response fails/drops once with
-  its terminal code; a retryable response becomes `ShutdownCancelledRetry` and
-  drops once. Every case is accounted exactly once and shutdown returns by
-  `lifecycle_shutdown_timeout_ms` (or the typed lifecycle timeout).
+  its D.7b-L terminal outcome; a retryable response becomes the D.7b-L
+  cancellation outcome and drops once. Every case is accounted exactly once
+  and finishes within the D.7b-L lifecycle contract.
 - A response-loss fixture proves at-least-once duplicate delivery, separate
   attempt accounting, one terminal drop after exhaustion, and zero drops after
   a retried-then-successful batch.

@@ -34,7 +34,7 @@ deliverables, acceptance criteria, validation, and explicit non-closure.
 | D.3 | API design and error migration |
 | D.4 | ADR-017, requirements, API design, error migration, release notes |
 | D.7a | requirements, architecture, API design, generated model inventories |
-| D.7b | ADR-018, OTLP lifecycle requirements, migration guide |
+| D.7b | ADR-018; OTLP-020/lifecycle requirements; API design/rustdoc for async lifecycle and the D.7b-L transport contract; migration guide |
 | D.7c | source provenance manifest, architecture dependency boundary |
 | D.7d | OTLP operational docs under `docs/observability/otlp/` |
 | D.5 | Python distribution docs and platform policy |
@@ -131,12 +131,10 @@ its authoritative acceptance list and retains exact command/evidence output.
   `scripts/ci/validate_dependency_bans.sh`, and architecture §6 with exact,
   feature-gated OTLP dependency allowlists. Automated SDK-only, legacy-only,
   combined, and no-exporter graphs replace manual `cargo tree` inspection.
-- D.1 and D.7a–D.7c add every new failure to the central error inventory with
-  stable code, cause, remediation, redaction, and retryability. Required codes
-  include policy rejection, detach timeout, invalid histogram, unsupported
-  backend/protocol, async lifecycle required, runtime terminated, blocking
-  backend in async context, queue full, lifecycle timeout, and worker
-  terminated.
+- D.1 and D.7a add their failures to the central inventory. D.7b-L exclusively
+  owns the complete OTLP stable-error table—including later legacy-runtime
+  rows—with owning type, cause, remediation, redaction, and retryability;
+  D.7c/D.7d reference that table and do not restate it.
 - Source restoration uses
   [`legacy-otlp-provenance.json`](legacy-otlp-provenance.json). The Phase B
   `validate_log_import.py` mechanism is extended to verify the source commit,
