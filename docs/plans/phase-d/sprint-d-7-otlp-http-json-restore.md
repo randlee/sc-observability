@@ -1,110 +1,150 @@
 ---
 id: D.7
 status: proposed
-branch: feature/phase-d-7-otlp-http-json-restore
+branch: feature/phase-d-7-otlp-export-restore
 base: develop
 release_train: '2.0'
 ---
 
-# D.7 — Restore real HTTP/JSON OTLP export
+# D.7 — Restore real OTLP export through SDK and synchronous paths
 
 ## Goal and dependency
 
-Restore a regressed, working capability from the pre-split `agent-team-mail`
-repository into this repository's `sc-observability-otlp` crate. The source
-was a 920-line hand-built HTTP/JSON exporter using `reqwest::blocking`, not the
-official `opentelemetry` crate: it posted real payloads to `/v1/logs`,
-`/v1/traces`, and `/v1/metrics`; handled authorization headers, CA bundles,
-timeouts, and bounded retries; and powered Grafana/LogQL dashboard workflows.
-The current crate has no HTTP transport dependency and wires
-`Telemetry::new_typed` to `NoopLogExporter`, `NoopTraceExporter`, and
-`NoopMetricExporter`, making this a restoration, not a deferred v1 choice.
+Restore a regressed real collector pipeline in `sc-observability-otlp` through
+**both** implementation paths. The primary present consumer is `atm-core`,
+which already has a Tokio runtime, so the official SDK path is required—not
+deferred by the current crate's synchronous facade. The retained synchronous
+HTTP/JSON path is also required for direct compatibility with the real
+pre-split exporter and for environments that do not host Tokio.
 
-D.7 `must_follow`s D.4 and is part of its 2.0 train because the OTLP-correct
-signal models require breaking public type changes. The scratchpad legacy clone
-is evidence-only: extract behavior and tests during implementation, but do not
-retain a dependency on its path or copy ATM-specific types/attributes.
+The pre-split `agent-team-mail` source was a 920-line `reqwest::blocking`
+HTTP/JSON exporter that posted to `/v1/logs`, `/v1/traces`, and `/v1/metrics`,
+handled auth headers, CA bundles, timeouts and bounded retry, and supported
+Grafana/LogQL dashboards. The current crate has no HTTP transport dependency
+and constructs three `Noop*Exporter`s. This is a regression restoration, not
+a deferred v1 scope decision.
+
+D.7 `must_follow`s D.4 and belongs to the 2.0 train: spec-correct signals need
+breaking type/migration changes. The scratchpad legacy clone is evidence-only;
+extract behavior/tests now but retain no dependency on its path or ATM-specific
+data schema.
+
+## Why both paths are in scope
+
+### A. Official OpenTelemetry SDK path — required primary path
+
+Adopt `opentelemetry-otlp`, `opentelemetry`, and `opentelemetry_sdk` for the
+Tokio-hosted integration used by `atm-core`.
+
+- The SDK supplies native models for `SpanKind`, trace sampling, links, and
+  proper histogram points instead of recreating all OTLP semantics by hand.
+- Its default gRPC transport through `tonic` requires Tokio, which `atm-core`
+  already provides. The larger footprint—protobuf generation, tonic and
+  Tokio—and reconciliation with SDK provider/batch-processor lifecycle remain
+  real implementation work.
+- The existing synchronous `Telemetry::emit_log`/`emit_span`/`emit_metric`,
+  buffering, health and flush/shutdown API must remain the public façade. D.7
+  specifies an explicit adapter/ownership model rather than leaking SDK
+  providers into callers or allowing two independent batch owners.
+
+### B. Restored synchronous HTTP/JSON path — required companion path
+
+Port the legacy `reqwest::blocking` exporter into the current neutral model.
+
+- It is a proven route to `/v1/logs`, `/v1/traces`, and `/v1/metrics`, keeps a
+  synchronous `reqwest` footprint, and fits directly below today's facade.
+- It requires manual source-model work for kind, sampling, links and real
+  histogram data. The legacy implementation has no historical ADR or QA record
+  justifying its deviation: its own old plan anticipated the official SDK, but
+  the hand-rolled implementation went unflagged across four QA review passes.
+- It must not become a weaker, untested fallback; the same public signal and
+  failure contracts apply to both paths.
 
 ## Deliverables
 
-1. **Spec-correct source models first.** Extend the current neutral shared
-   types and projectors so a completed span contains a typed `SpanKind`, trace
-   flags including sampled state, and typed links; extend metrics so histogram
-   points carry explicit bounds, bucket counts, count, and sum rather than
-   encoding a single `f64` as a synthetic one-bucket histogram. Define serde,
-   validation, conversion, and 2.0 migration dispositions for every changed
-   type. Preserve non-histogram counter/gauge behavior and reject malformed
-   histogram invariants before export.
-2. **Concrete exporter selection.** Add a private real HTTP/JSON exporter
-   using `reqwest::blocking` and instantiate it when transport is enabled with
-   `OtlpProtocol::HttpJson`, a valid endpoint, and at least one enabled signal.
-   Its endpoint normalization must append/select exactly `/v1/logs`,
-   `/v1/traces`, and `/v1/metrics` without duplicate suffixes. Disabled
-   telemetry may remain no-op; enabled telemetry must never silently use a
-   no-op exporter. `HttpBinary` and `Grpc` are not implemented by this restore:
-   construction must return a typed unsupported-protocol failure when enabled,
-   rather than claim functional transport.
-3. **Transport parity adapted to current `OtelConfig`.** Honor the current
-   typed endpoint, `AuthHeader`, CA file, insecure TLS flag, timeout,
-   `max_retries`, and initial/max backoff. Parse a validated header name/value
-   without logging credentials. Retry only bounded transient transport/HTTP
-   failures, preserve fail-open `Telemetry` health and dropped-export accounting
-   after exhaustion, and do not sleep/hold the telemetry runtime lock while
-   performing network I/O.
-4. **OTLP/HTTP JSON encoding.** Encode resource attributes, scope metadata,
-   log severity/body/attributes, trace parent/status/kind/flags/links/events,
-   and counter/gauge/histogram points into collector-valid JSON. Use the
-   current `TelemetryConfig.service_name`/resource and neutral records rather
-   than legacy ATM fields. Document exact timestamp, integer-as-string, and
-   attribute-value conversion rules. A missing required OTLP field is a test
-   failure, not a permissive best effort.
-5. **Real collector evidence and docs.** Add hermetic loopback collector
-   integration tests that capture and validate HTTP method/path, content type,
-   authorization, each signal's JSON envelope, retry behavior, CA-bundle
-   handling, failure health, and no-network disabled behavior. Restore
-   repository-owned Grafana dashboard/LogQL recipes only after rewriting them
-   to the current neutral resource/attribute schema; do not revive ATM-specific
-   labels as a compatibility fiction. Include a runnable local collector smoke
-   recipe and a redacted evidence record.
-6. **Contracts and migration.** Update OTLP-001–022, architecture, public API
-   inventory, 2.0 release notes, and migration guide to say that HTTP/JSON is
-   implemented, `HttpBinary`/`Grpc` are explicitly unsupported, no exporter
-   is silently no-op when enabled, and the signal model has changed. Add public
-   consumer and wire-fixture coverage for the new models and exporter behavior.
+1. **Spec-correct 2.0 signal contract.** Extend shared neutral types/projectors
+   with a typed `SpanKind`, sampled trace flags, typed span links, and histogram
+   points containing explicit bounds, bucket counts, count and sum. Define
+   serde, validation, conversions, and migration dispositions. Preserve valid
+   counter/gauge behavior; reject malformed histogram invariants before either
+   exporter sees them.
+2. **One public façade, explicit exporter mode.** Add a typed transport/mode
+   selection to `OtelConfig` that selects the SDK-backed path or synchronous
+   HTTP/JSON path without exposing provider ownership to callers. Valid enabled
+   configuration plus an enabled signal must install a real selected exporter;
+   disabled telemetry alone may be no-op. No enabled configuration may silently
+   retain a no-op exporter. Unsupported protocol/mode combinations fail
+   construction with a stable typed error.
+3. **SDK implementation for Tokio hosts.** Integrate `opentelemetry`,
+   `opentelemetry_sdk`, and `opentelemetry-otlp` with required features locked
+   in the workspace. Map the public façade's batches into the selected SDK
+   providers/exporters, use the host's Tokio runtime without creating an
+   uncontrolled second runtime, and define flush/shutdown ownership so SDK
+   processor flush occurs exactly once. Support the SDK-selected OTLP protocol
+   and collector endpoint with an end-to-end `atm-core` Tokio fixture.
+4. **Synchronous HTTP/JSON implementation.** Port the legacy behavior using
+   `reqwest::blocking`, adapted to current `TelemetryConfig.service_name`,
+   resources and neutral signals. Normalize endpoint suffixes exactly once;
+   honor `AuthHeader`, CA file, insecure TLS flag, timeout and bounded retry/
+   exponential backoff. Do not log secrets or hold the telemetry runtime lock
+   during blocking network/retry work.
+5. **Cross-path conformance suite.** Run both modes against hermetic loopback
+   collectors. Validate request method/path/content type/authorization,
+   resource/scope metadata, log severity/body/attributes, trace parent/status/
+   kind/flags/links/events, and counter/gauge/histogram data. Assert equivalent
+   observable signal semantics from a shared fixture corpus while allowing the
+   expected protocol/wire transport differences.
+6. **Lifecycle and failure parity.** For both modes test disabled no-network,
+   invalid config, unsupported selection, transient and terminal collector
+   failures, bounded retries, custom CA, timeout, health state, dropped-export
+   counts, fail-open flush, and idempotent shutdown. SDK async work must not
+   block a Tokio worker; synchronous work must remain outside async executor
+   critical paths or use a documented bridge that preserves caller semantics.
+7. **Consumer evidence and observability docs.** Add an `atm-core` integration
+   fixture exercising the SDK path from its existing Tokio runtime. Restore
+   Grafana dashboard/LogQL recipes only after translating them to current
+   neutral resource/attribute schema; never revive ATM-only labels as a
+   compatibility fiction. Include runnable local collector smoke commands and
+   redacted receipts for both paths.
+8. **Contracts and migration.** Update OTLP-001–022, architecture, public API
+   inventory, 2.0 release notes, migration guide, and dependency/license
+   inventory. Document both modes, their intended runtime environments,
+   protocol support, chosen owner model, no-enabled-noop rule, and all source
+   model changes.
 
 ## Acceptance criteria
 
-- With `enabled=true`, `HttpJson`, a valid endpoint, and configured signals,
-  `Telemetry::new_typed` installs real exporters and a loopback collector
-  receives valid POSTs to all three `/v1/*` endpoints; this is demonstrated
-  through the public runtime/projector path, not direct private exporter calls.
-- Disabled telemetry performs no HTTP request; enabled `HttpBinary`/`Grpc`
-  fail construction with a stable typed error and are never represented as
-  successful no-op export.
-- Captured trace JSON contains kind, sampled trace flags, parent/link/event
-  data and status; captured histogram JSON contains bounds, counts, count, and
-  sum from a valid source point. Counter/gauge semantics remain correct.
-- Authorization is sent but never appears in debug/error/docs evidence; custom
-  CA, timeout, bounded retry/backoff, transient failure exhaustion, health,
-  dropped count, flush, and idempotent shutdown all have direct fixtures.
-- The 2.0 model/migration/API docs and restored dashboard recipes use current
-  service/resource schema and contain no stale ATM-only fields or scratchpad
-  path dependency.
+- The public `Telemetry` facade sends logs, traces and metrics to real
+  loopback collectors through **both** SDK/Tokio and synchronous HTTP/JSON
+  modes. The SDK proof runs through `atm-core`'s Tokio-hosted integration.
+- A shared corpus yields equivalent resource/signal semantics in both modes:
+  trace kind/sampled flags/parent/links/events/status and histogram bounds,
+  bucket counts, count and sum are all present and correct.
+- Neither mode creates a silent no-op for enabled telemetry; unsupported
+  protocol/mode combinations fail at construction with a stable typed error.
+- SDK batching/provider shutdown and synchronous retry/flush each occur once
+  under the facade's documented ownership rules; neither blocks or deadlocks
+  the host runtime, and failure health/dropped accounting is consistent.
+- No credentials appear in `Debug`, errors, docs or retained evidence. Every
+  dashboard recipe/current contract refers only to current neutral schema.
+- The 2.0 migration and API approval explicitly cover the new signal models,
+  added dependencies, dual exporter modes, and consumer impact.
 
 ## Required validation
 
-- `cargo test -p sc-observability-types -p sc-observability-otlp --locked`,
-  including model negative cases, loopback collector integration fixtures, and
-  retry/CA/auth redaction cases.
+- `cargo test -p sc-observability-types -p sc-observability-otlp --locked`
+  with source-model negative cases, dual-mode loopback collectors, retry/CA/
+  auth-redaction and lifecycle cases.
+- Tokio-hosted `atm-core` SDK integration fixture; synchronous external
+  consumer fixture with no Tokio runtime; shared cross-path conformance corpus.
 - `cargo test --workspace --locked`, clippy with warnings denied, rustdoc,
-  public-API/semver validation against the declared 1.x baseline, and docs
-  consistency.
-- A local collector smoke command that emits logs/traces/metrics through
-  `TelemetryProjectors`, captures all three JSON requests, validates them, and
-  writes only redacted evidence; retain exact command and source SHA.
+  public-API/semver validation against the declared 1.x baseline, dependency/
+  license inventory validation, and docs consistency.
+- Retain exact source SHA and redacted local collector receipts for all three
+  signals in both modes.
 
 ## Non-closure
 
-Do not add the official `opentelemetry` SDK merely to claim parity, implement
-gRPC or HTTP/protobuf, add Python OTEL binding work (#88), or publish a
-registry release. Those protocols and #88 need separately authorized sprints.
+No Python OTEL binding work (#88), registry publication, or silent removal of
+either supported path. Additional protocols beyond those explicitly selected
+and tested by the two implementations require a later authorized sprint.

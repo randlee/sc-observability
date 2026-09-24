@@ -7,7 +7,7 @@ base: develop
 
 # Phase D — Host logging ergonomics, configuration, and distribution completion
 
-Phase D closes six bounded, user-visible gaps in the logging and Python
+Phase D closes seven bounded, user-visible gaps in the logging and Python
 distribution surface.  The linked sprint documents are authoritative for
 deliverables, acceptance criteria, validation, and explicit non-closure.
 
@@ -17,7 +17,7 @@ deliverables, acceptance criteria, validation, and explicit non-closure.
 | D.2 | [Serde-stable startup `LogSettings`](sprint-d-2-log-settings.md) | [#96](https://github.com/randlee/sc-observability/issues/96) |
 | D.3 | [Typed sink registration ergonomics](sprint-d-3-typed-sink-registration.md) | [#203](https://github.com/randlee/sc-observability/issues/203) |
 | D.4 | [2.0 discriminated error enums and migration](sprint-d-4-error-enums-2-0.md) | [#92](https://github.com/randlee/sc-observability/issues/92) |
-| D.7 | [Restore real HTTP/JSON OTLP export](sprint-d-7-otlp-http-json-restore.md) | Split regression |
+| D.7 | [Restore real OTLP export through SDK and synchronous paths](sprint-d-7-otlp-http-json-restore.md) | Split regression |
 | D.5 | [Windows ARM64 Python wheel qualification](sprint-d-5-windows-arm64-wheel.md) | New platform gap |
 | D.6 | [Open-ended Python ABI/metadata CI guard](sprint-d-6-python-open-ended-guard.md) | New regression guard |
 
@@ -71,11 +71,13 @@ consumer fixtures.
   keep D.5 open rather than claiming x86 cross-build evidence is equivalent.
 - D.7 must repair OTLP data-model prerequisites before emitting to a collector:
   `SpanKind`, trace sampled flag and links, plus a histogram representation
-  with bucket boundaries/counts/sum/count. The old single-`f64` histogram
-  placeholder is not spec-correct and cannot be exported as one.
+  with bucket boundaries/counts/sum/count. It scopes both the official SDK
+  integration (the primary path for Tokio-hosted `atm-core`) and the restored
+  synchronous legacy HTTP/JSON path. The old single-`f64` histogram placeholder
+  is not spec-correct and cannot be exported as one.
 
 ## Planning deliverables
 
-This index and the six sprint docs, plus requirements/ADR/migration and CI
+This index and the seven sprint docs, plus requirements/ADR/migration and CI
 updates explicitly owned by those docs. Each sprint requires direct QA against
 its authoritative acceptance list and retains exact command/evidence output.
