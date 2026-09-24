@@ -85,43 +85,116 @@ The factory validates this closed matrix before allocating providers/workers:
 Delete public/production `Noop*Exporter` fallbacks; disabled construction is an
 explicit private disabled set and an enabled selection can never reach it.
 Every existing `OtelConfig` field receives one disposition: endpoint,
-headers/auth, CA/TLS, timeout and retry map to the selected builder;
+headers/auth, CA/TLS and `timeout_ms` map to the SDK/legacy builders;
 `debug_local_export` is a separate diagnostic mirror outside exporter
 selection; `insecure_skip_verify` is either implemented by the backend with an
 explicit security warning or rejected at construction—never ignored.
 
-Lifecycle bounds are explicit `OtelConfig` fields shared by both backends:
-`lifecycle_flush_timeout_ms` and `lifecycle_shutdown_timeout_ms`, each defaulting
-to `30_000`. Both must be nonzero; the shutdown value must also be at least the
-transport `timeout_ms`. Deadlines use a monotonic clock, begin when the public
-lifecycle call is admitted, and are testable through an injected clock. Zero,
-overflowing duration conversion, or a shutdown bound below the per-request
-timeout fails construction with a stable configuration error.
+### D.7b-L-owned validated transport contract
+
+D.7b-L is the sole owner of every transport-bound field, default, validation,
+and configuration error. The flat 2.0 wire surface is:
+
+| Field | Applicability | Default when absent |
+| --- | --- | --- |
+| `timeout_ms` | both backends; maps to request/export timeout | `3_000` |
+| `lifecycle_flush_timeout_ms` | both backends | `30_000` |
+| `lifecycle_shutdown_timeout_ms` | both backends | `30_000` |
+| `max_retries` | legacy only, optional on wire | `3` |
+| `initial_backoff_ms` | legacy only, optional on wire | `250` |
+| `max_backoff_ms` | legacy only, optional on wire | `5_000` |
+| `retry_sequence_timeout_ms` | legacy only, optional on wire | `30_000` |
+| `retry_after_cap_ms` | legacy only, optional on wire | `5_000` |
+| `retry_jitter_percent` | legacy only, optional on wire | `20` |
+
+For `OpenTelemetrySdk`, the three shared timeout fields map to SDK lifecycle /
+export construction. Any explicit legacy-only field—including the pre-existing
+`max_retries`, `initial_backoff_ms`, and `max_backoff_ms`—returns
+`ConfigFieldNotApplicable`. Nothing is ignored. This 2.0 optional-field change
+and its migration from the former unconditional retry defaults are documented.
+
+Defaults are resolved **before** validation. Each resolved value retains
+`ValueOrigin::{Default, Explicit}` so an error identifies both the offending
+field and whether a conflicting peer was defaulted. Partial overrides are
+therefore deterministic and reviewable.
 
 All raw serialized millisecond/percent fields are converted exactly once:
 
 ```rust
+pub(crate) struct PositiveDuration(Duration);
+
+impl PositiveDuration {
+    fn try_from_millis(field: &'static str, value: u64)
+        -> Result<Self, ConfigFailure>;
+}
+
+pub(crate) struct LifecycleBounds {
+    flush: PositiveDuration,
+    shutdown: PositiveDuration,
+}
+
+pub(crate) struct BoundedPercent(u8); // checked 0..=100
+
+pub(crate) struct RetryPolicy {
+    max_retries: u32,
+    initial_backoff: PositiveDuration,
+    max_backoff: PositiveDuration,
+    sequence_timeout: PositiveDuration,
+    retry_after_cap: PositiveDuration,
+    jitter: BoundedPercent,
+}
+
 pub(crate) struct ValidatedTransportBounds {
-    request_timeout: NonZeroDuration,
+    request_timeout: PositiveDuration,
     lifecycle: LifecycleBounds,
-    legacy_retry: Option<RetryPolicy>,
+    backend: BackendTransportBounds,
+}
+
+pub(crate) enum BackendTransportBounds {
+    Sdk,
+    Legacy(RetryPolicy),
 }
 
 impl ValidatedTransportBounds {
-    fn try_from_config(
-        config: &OtelConfig,
-        backend: ExporterBackend,
-    ) -> Result<Self, ConfigFailure>;
+    fn try_from_config(config: &OtelConfig) -> Result<Self, ConfigFailure>;
 }
 ```
 
-`LifecycleBounds` holds checked `Duration` values for flush/shutdown;
-`RetryPolicy` holds checked sequence/cap durations and a `BoundedPercent`.
-Both backend factories receive only `ValidatedTransportBounds` and may not
-reparse raw fields. Legacy-only flat `retry_*` fields are optional on the wire:
-absence resolves the D.7c defaults only for `LegacyHttpJson`; explicitly
-supplying any of them with `OpenTelemetrySdk` returns
-`ConfigFieldNotApplicable` before provider construction, never ignores them.
+The constructor derives the backend only from `config.backend`.
+`LifecycleBounds` holds checked positive flush/shutdown durations;
+`RetryPolicy` holds `max_retries`, checked initial/max/sequence/Retry-After
+durations, and `BoundedPercent(0..=100)`. `BackendTransportBounds` makes legacy
+retry state unrepresentable for SDK. Validation, using checked arithmetic, is:
+
+- every millisecond duration is positive and convertible to `Duration`;
+- `lifecycle_shutdown_timeout_ms >= timeout_ms`;
+- for legacy, `max_backoff_ms >= initial_backoff_ms`;
+- for legacy, `retry_sequence_timeout_ms >= timeout_ms`;
+- for legacy, `0 < retry_after_cap_ms <= retry_sequence_timeout_ms`;
+- for legacy, `retry_jitter_percent <= 100`.
+
+Both factories receive only `ValidatedTransportBounds` and cannot inspect or
+reparse raw fields. Deadlines use a monotonic injectable clock and start when
+the public operation is admitted.
+
+### D.7b-L stable failure inventory
+
+This table owns common/config failures; the complete Phase D OTLP inventory is
+this table union D.7c's legacy-runtime table.
+
+| Variant | Stable code | Owning error type | Cause | Recovery |
+| --- | --- | --- | --- | --- |
+| `ZeroDuration` | `OTLP_CONFIG_ZERO_DURATION` | `ConfigFailure` | required duration is zero | provide a positive value |
+| `DurationOverflow` | `OTLP_CONFIG_DURATION_OVERFLOW` | `ConfigFailure` | milliseconds cannot convert safely | reduce the field |
+| `InvalidBoundOrdering` | `OTLP_CONFIG_BOUND_ORDER` | `ConfigFailure` | resolved ordering rule fails | correct the named explicit/defaulted fields |
+| `InvalidJitterPercent` | `OTLP_CONFIG_JITTER_PERCENT` | `ConfigFailure` | jitter exceeds 100 | use `0..=100` |
+| `ConfigFieldNotApplicable` | `OTLP_CONFIG_FIELD_NOT_APPLICABLE` | `ConfigFailure` | legacy-only field supplied for SDK | omit it or select legacy |
+| `UnsupportedBackend` | `OTLP_UNSUPPORTED_BACKEND` | `ConfigFailure` | feature/backend unavailable | enable/select a supported backend |
+| `UnsupportedProtocol` | `OTLP_UNSUPPORTED_PROTOCOL` | `ConfigFailure` | protocol invalid for backend | select a matrix-supported protocol |
+| `AsyncLifecycleRequired` | `OTLP_ASYNC_LIFECYCLE_REQUIRED` | `FlushFailure` / `ShutdownFailure` | SDK sync completion requested | await the typed async operation |
+| `RuntimeTerminated` | `OTLP_RUNTIME_TERMINATED` | `ShutdownFailure` | host runtime ended before completion | keep runtime alive through awaited shutdown |
+| `LifecycleTimeout` | `OTLP_LIFECYCLE_TIMEOUT` | `FlushFailure` / `ShutdownFailure` | monotonic lifecycle deadline elapsed | inspect terminal health and transport/provider |
+| `QueueFull` | `OTLP_QUEUE_FULL` | `TelemetryError` | bounded admission queue saturated | preserve fail-open behavior and inspect health |
 
 ## 2.0 lifecycle decision
 

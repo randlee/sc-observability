@@ -102,7 +102,9 @@ wire/protocol differences are allowed, signal meaning loss is not.
   agree; no enabled configuration is documented or implemented as no-op.
 - OTLP-020/config requirements, API design, rustdoc, and migration docs list
   identical retry/lifecycle fields, defaults, backend applicability, stable
-  errors, validated value types, and cross-field inequalities.
+  errors, validated value types, and cross-field inequalities. The stable-error
+  check compares the full union of D.7b-L common/config errors and D.7c
+  legacy-runtime errors, with no missing or duplicate code.
 - ADR-018 is accepted and OTLP-021 is active: neither document retains
   proposed/"until that acceptance" wording at sprint closure.
 

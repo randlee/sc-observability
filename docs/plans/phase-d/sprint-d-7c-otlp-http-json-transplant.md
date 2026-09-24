@@ -101,25 +101,17 @@ algorithm. It explicitly carves out only the four safety deltas above. The
 source-to-destination matrix must name each delta and preserve copied tests
 alongside new delta-specific fixtures.
 
-The authorized retry configuration adds optional flat wire fields
-`OtelConfig::retry_sequence_timeout_ms`,
-`OtelConfig::retry_after_cap_ms`, and `OtelConfig::retry_jitter_percent`.
-For `LegacyHttpJson`, absence resolves defaults `30_000`, `5_000`, and `20`
-(a symmetric ±20% interval around the capped exponential delay). Supplying any
-of these fields for `OpenTelemetrySdk` returns `ConfigFieldNotApplicable`; the
-SDK never ignores them. `ValidatedTransportBounds::try_from_config` alone
-validates `timeout_ms > 0`,
-`retry_sequence_timeout_ms >= timeout_ms`, `0 < retry_after_cap_ms <=
-retry_sequence_timeout_ms`, and `retry_jitter_percent <= 100`, with checked
-duration arithmetic. Delta-seconds and HTTP-date `Retry-After` values are
-supported and clamped to the cap/remaining sequence deadline. Negative,
-malformed, or past-date values are ignored with a bounded categorical attempt
-diagnostic and use the jittered exponential fallback; huge values clamp rather
-than overflow. Parse at most 128 header bytes and never retain the raw value;
-diagnostics contain only `negative`, `malformed`, `past`, `oversized`, or
-`clamped`. If the clamped delay consumes the remaining sequence budget,
-terminate as `RetryDeadlineExhausted` without sleeping or making a zero-budget
-attempt.
+D.7c consumes the D.7b-L-owned `ValidatedTransportBounds` and the
+`BackendTransportBounds::Legacy(RetryPolicy)` payload. D.7b-L is authoritative
+for every raw field, default, applicability rule, checked type, ordering rule,
+config error, and defaults-before-validation/`ValueOrigin` behavior; D.7c does
+not redefine them. A partial-override fixture sets each legacy field alone and
+proves resolution/validation uses that single constructor and names any
+conflicting defaulted field.
+
+Delta-seconds and HTTP-date `Retry-After` values are parsed at most up to 128
+header bytes; raw values are never retained. Invalid values produce only the
+bounded categories `negative`, `malformed`, `past`, `oversized`, or `clamped`.
 
 Production jitter is seeded independently per exporter from OS-backed entropy
 so instances do not synchronize against a recovering collector. The retry
@@ -168,10 +160,12 @@ recovery; `Closing`/`Shutdown` retains it. No field contains credentials.
 Each request/retry sequence has a finite overall deadline. Shutdown enters
 `Closing`, cancels retry backoff, and drains only work before its barrier.
 Connection errors, 408, 429, and 5xx are retryable; other 4xx are terminal.
-Honor bounded `Retry-After`, otherwise use capped exponential backoff with
-per-instance-seeded bounded jitter (deterministic under an injected test seed).
-No request, backoff, barrier, join, or client
-drop is unbounded.
+For every retry, compute the server delay or jittered exponential fallback,
+then clamp the final delay—including positive jitter—to
+`min(retry_after_cap, remaining_sequence_budget)`. If no positive budget
+remains, terminate as `RetryDeadlineExhausted` without sleeping or issuing a
+zero-budget attempt. No request, backoff, barrier, join, or client drop is
+unbounded.
 
 Shutdown cancellation of a pre-barrier retry sequence is terminal
 `ShutdownCancelledRetry`: account that admitted batch as dropped exactly once,
@@ -192,23 +186,20 @@ successful retry is not a drop. Transient attempts affect only
 `retry_attempt_failures`; terminal exhaustion writes `last_terminal_failure`,
 which the next successful open-state batch clears.
 
-## Stable failure inventory
+## Legacy-runtime failure inventory
 
-The D.7b-L inventory and `migrate-error-api.md` must contain these exact D.7c
-codes; diagnostics are bounded/redacted and preserve their typed source:
+The complete inventory is the union of D.7b-L's common/config table and these
+D.7c-only rows. `migrate-error-api.md` records both; diagnostics are
+bounded/redacted and preserve their typed source.
 
-| Variant | Stable code | Cause | Recovery |
-| --- | --- | --- | --- |
-| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | legacy construction/sync lifecycle entered Tokio | construct/call on a plain thread or select SDK/async lifecycle |
-| `WorkerTerminated` | `OTLP_WORKER_TERMINATED` | init failure, panic, channel closure, or unexpected exit | create a new telemetry instance after correcting the worker cause |
-| `ShutdownCancelledRetry` | `OTLP_SHUTDOWN_CANCELLED_RETRY` | shutdown cancels a retryable pre-barrier sequence | inspect terminal health; resend only if duplicates are acceptable |
-| `RetryDeadlineExhausted` | `OTLP_RETRY_DEADLINE_EXHAUSTED` | no sequence budget remains for another delay/attempt | increase the validated sequence bound or restore collector health |
-| `LifecycleTimeout` | `OTLP_LIFECYCLE_TIMEOUT` | flush/shutdown exceeds its monotonic deadline | preserve terminal evidence and investigate stuck transport/provider |
-| `ZeroDuration` | `OTLP_CONFIG_ZERO_DURATION` | a required duration is zero | provide a positive value |
-| `DurationOverflow` | `OTLP_CONFIG_DURATION_OVERFLOW` | raw milliseconds cannot convert safely | reduce the field to the documented range |
-| `InvalidBoundOrdering` | `OTLP_CONFIG_BOUND_ORDER` | cap/sequence/request/lifecycle ordering is invalid | satisfy the documented cross-field inequalities |
-| `InvalidJitterPercent` | `OTLP_CONFIG_JITTER_PERCENT` | jitter exceeds 100 | use `0..=100` |
-| `ConfigFieldNotApplicable` | `OTLP_CONFIG_FIELD_NOT_APPLICABLE` | a legacy-only retry field is present for SDK | omit it or select the legacy backend |
+| Variant | Stable code | Owning error type | Cause | Recovery |
+| --- | --- | --- | --- | --- |
+| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | `ConfigFailure` / lifecycle failure | legacy construction/sync lifecycle entered Tokio | construct/call on a plain thread or select SDK/async lifecycle |
+| `WorkerTerminated` | `OTLP_WORKER_TERMINATED` | `ExportFailure` / lifecycle failure | init failure, panic, channel closure, or unexpected exit | create a new telemetry instance after correcting the worker cause |
+| `ShutdownCancelledRetry` | `OTLP_SHUTDOWN_CANCELLED_RETRY` | `ShutdownFailure` | shutdown cancels a retryable pre-barrier sequence | inspect terminal health; resend only if duplicates are acceptable |
+| `RetryDeadlineExhausted` | `OTLP_RETRY_DEADLINE_EXHAUSTED` | `ExportFailure` | no sequence budget remains for another delay/attempt | increase the validated sequence bound or restore collector health |
+| `NonRetryableHttpStatus` | `OTLP_HTTP_STATUS_TERMINAL` | `ExportFailure` | collector returned a non-retryable status | correct request/auth/config before retrying |
+| `RetryAttemptsExhausted` | `OTLP_RETRY_ATTEMPTS_EXHAUSTED` | `ExportFailure` | maximum attempts ended before success | restore collector health or adjust the validated policy |
 
 ## Deliverables
 
@@ -224,7 +215,10 @@ codes; diagnostics are bounded/redacted and preserve their typed source:
    hashes are null until files land and become mandatory before closure;
    the parent module and each split child file have independent hashes;
    reference/dependency-only rows keep null hashes and validate their cited
-   disposition rather than byte identity. Reject scratch/`/tmp` paths, ATM
+   disposition rather than byte identity. Enforce
+   `planned_status_transitions`; closure fails if any transplant/translation
+   parent or child remains `planned`, lacks its closed literal status, or has a
+   null/mismatched hash. Reject scratch/`/tmp` paths, ATM
    imports/labels, or the stale repository name in imported outputs.
 3. Adapt inputs to current `TelemetryConfig`, D.7a signal types, diagnostic
    errors, D.7b backend selector, and common crate-private exporter traits while
@@ -246,9 +240,9 @@ codes; diagnostics are bounded/redacted and preserve their typed source:
    Update both dependency-boundary scripts and architecture §6 with the exact
    legacy allowlist and automated graph assertions.
 8. Update OTLP-020/config requirements, API design, rustdoc, and the migration
-   guide with every flat field, backend applicability rule, default,
-   `ValidatedTransportBounds` conversion, stable failure above, and validation
-   inequality. D.7d docs consistency must compare all four owners.
+   guide from the single D.7b-L authoritative contract, including every field,
+   applicability rule, default, checked type, unioned stable failure, and
+   inequality without redefining them in D.7c. D.7d compares all four owners.
 
 ## Acceptance criteria
 
@@ -279,7 +273,9 @@ codes; diagnostics are bounded/redacted and preserve their typed source:
   overall deadline, and prompt shutdown cancellation.
 - Retry bound fixtures cover delta-seconds and HTTP-date, negative, malformed,
   past, and huge `Retry-After` values; zero/overflow/cross-field validation;
-  distinct production instance seeds; and deterministic injected seeds.
+  distinct production instance seeds; deterministic injected seeds; partial
+  overrides; and positive jitter at the sequence deadline proving the final
+  delay clamp and no zero-budget attempt.
 - Shutdown-during-backoff asserts one `ShutdownCancelledRetry` drop, degraded
   terminal health, first-caller `ShutdownFailure`, and prompt wake.
 - Shutdown-during-request has three fixtures: a successful in-flight response
