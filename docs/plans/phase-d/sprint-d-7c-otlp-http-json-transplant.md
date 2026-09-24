@@ -101,6 +101,22 @@ algorithm. It explicitly carves out only the four safety deltas above. The
 source-to-destination matrix must name each delta and preserve copied tests
 alongside new delta-specific fixtures.
 
+The authorized retry configuration adds `OtelConfig::retry_sequence_timeout_ms`
+(default `30_000`), `OtelConfig::retry_after_cap_ms` (default `5_000`), and
+`OtelConfig::retry_jitter_percent` (default `20`, a symmetric ±20% interval around
+the capped exponential delay). Validate `timeout_ms > 0`,
+`retry_sequence_timeout_ms >= timeout_ms`, `0 < retry_after_cap_ms <=
+retry_sequence_timeout_ms`, and `retry_jitter_percent <= 100`, with checked
+duration arithmetic. Delta-seconds and HTTP-date `Retry-After` values are
+supported and clamped to the cap/remaining sequence deadline. Negative,
+malformed, or past-date values are ignored with an attempt diagnostic and use
+the jittered exponential fallback; huge values clamp rather than overflow.
+
+Production jitter is seeded independently per exporter from OS-backed entropy
+so instances do not synchronize against a recovering collector. The retry
+component accepts a crate-private injected seed/source for deterministic tests;
+the seed is neither public configuration nor serialized evidence.
+
 Pin the transplanted client to the legacy tested selection
 `reqwest = "=0.12.28"` with `default-features = false` and features
 `["blocking", "json", "rustls-tls"]`, subject only to a separately reviewed
@@ -130,9 +146,13 @@ unexpected exit, or sender closure stores one terminal `WorkerTerminated`
 result, resolves every pending barrier, accounts abandoned admissions once,
 and never hangs.
 
-Legacy health exposes the same fields as the SDK path: queue depth/capacity,
-worker/exporter state, last terminal failure, and per-signal overflow/drop
-counts. No field contains credentials.
+Legacy and SDK health use one field model: queue depth/capacity,
+worker/exporter state, `last_terminal_failure`, per-signal overflow/drop counts,
+and a `retry_attempt_failures` counter. Transient failed attempts increment the
+counter but never overwrite `last_terminal_failure`. Exhaustion, admission
+failure, worker/provider death, or lifecycle failure writes the terminal field.
+The next successfully exported batch while `Open` clears it and records
+recovery; `Closing`/`Shutdown` retains it. No field contains credentials.
 
 Each request/retry sequence has a finite overall deadline. Shutdown enters
 `Closing`, cancels retry backoff, and drains only work before its barrier.
@@ -141,13 +161,24 @@ Honor bounded `Retry-After`, otherwise use capped exponential backoff with
 deterministic testable jitter. No request, backoff, barrier, join, or client
 drop is unbounded.
 
+Shutdown cancellation of a pre-barrier retry sequence is terminal
+`ShutdownCancelledRetry`: account that admitted batch as dropped exactly once,
+set degraded health/`last_terminal_failure`, and return the failure from the
+first/in-flight shutdown completion. Cancelable backoff wakes immediately. A
+currently blocking reqwest call cannot be interrupted, but its remaining wait
+is at most `min(timeout_ms, remaining retry_sequence_timeout_ms)`; the public
+shutdown call still returns no later than `lifecycle_shutdown_timeout_ms`, or
+returns `LifecycleTimeout`. Cross-field validation requires the lifecycle
+shutdown bound to be at least `timeout_ms`.
+
 Delivery is **at least once across retries**: a collector may accept an
 attempt whose response is lost, after which the identical batch is retried and
 observed twice. The exporter supplies no idempotency key and does not promise
 deduplication. Attempts are recorded separately, while an admitted batch is
 counted as dropped exactly once only if the sequence exhausts/terminates; a
-successful retry is not a drop. Health retains the last attempt failure until
-the subsequent success/recovery transition.
+successful retry is not a drop. Transient attempts affect only
+`retry_attempt_failures`; terminal exhaustion writes `last_terminal_failure`,
+which the next successful open-state batch clears.
 
 ## Deliverables
 
@@ -161,6 +192,7 @@ the subsequent success/recovery transition.
    Extend `scripts/ci/validate_log_import.py` to validate the Phase D manifest,
    Git blob ids and disposition-aware destination evidence. Planned import
    hashes are null until files land and become mandatory before closure;
+   the parent module and each split child file have independent hashes;
    reference/dependency-only rows keep null hashes and validate their cited
    disposition rather than byte identity. Reject scratch/`/tmp` paths, ATM
    imports/labels, or the stale repository name in imported outputs.
@@ -202,7 +234,8 @@ the subsequent success/recovery transition.
 - `Telemetry` uses the same trait-object call sites for both backends; only
   construction/injection selects the synchronous implementations.
 - Any behavior/assertion not copied is identified by a concrete API
-  incompatibility; structural rewrite or alternate HTTP/retry logic fails QA.
+  incompatibility; structural rewrite or alternate HTTP/retry logic beyond the
+  four authorized safety deltas fails QA.
 - Failures remain fail-open at the facade and update health/dropped counts.
 - Legacy health reports queue depth/capacity, worker/exporter state, last
   terminal failure, and per-signal overflow/drop counts equivalently to SDK.
@@ -210,6 +243,12 @@ the subsequent success/recovery transition.
   worker panic/exit resolves every sync/async waiter within the deadline.
 - Retry fixtures freeze classification, bounded `Retry-After`, jitter/backoff,
   overall deadline, and prompt shutdown cancellation.
+- Retry bound fixtures cover delta-seconds and HTTP-date, negative, malformed,
+  past, and huge `Retry-After` values; zero/overflow/cross-field validation;
+  distinct production instance seeds; and deterministic injected seeds.
+- Shutdown-during-backoff and shutdown-during-request fixtures assert one
+  `ShutdownCancelledRetry` drop, degraded terminal health, first-caller
+  `ShutdownFailure`, prompt backoff wake, and the documented worst-case bound.
 - A response-loss fixture proves at-least-once duplicate delivery, separate
   attempt accounting, one terminal drop after exhaustion, and zero drops after
   a retried-then-successful batch.

@@ -62,9 +62,11 @@ wire/protocol differences are allowed, signal meaning loss is not.
    destinations in `legacy-otlp-provenance.json`, including
    `docs/observability/otlp/` and `scripts/ci/`; validate the import manifest
    and every final destination hash.
-5. Verify and, where implementation differs, amend the already-established
-   OTLP-001–022 requirements; do not describe OTLP-021 as future work. Update
-   accepted ADR-018, architecture, migration guide, API approvals,
+5. After D.7b records technical-lead acceptance of ADR-018, verify OTLP-021 as
+   an active requirement alongside OTLP-001–020/022. As a closure gate, remove
+   the requirements text saying "until that acceptance" and fail docs
+   consistency if ADR-018 remains proposed or OTLP-021 remains conditional.
+   Update architecture, migration guide, API approvals,
    dependency/license inventory, release notes, and operational docs for both
    backends and the no-enabled-noop rule. The requirements and migration guide
    must state the D.7b 2.0 lifecycle decision, barrier ordering, runtime-lifetime
@@ -77,7 +79,10 @@ wire/protocol differences are allowed, signal meaning loss is not.
   decoded collector output is semantically equivalent for every required field.
 - Every lifecycle/failure negative case asserts equivalent queue
   depth/capacity, worker/exporter state, last terminal failure, and per-signal
-  overflow/drop fields for both backends, with no credential leakage.
+  overflow/drop fields for both backends, with no credential leakage. A
+  transient retry increments only `retry_attempt_failures`; a terminal failure
+  populates `last_terminal_failure`; the next successful batch while `Open`
+  clears it and records recovery; closing/shutdown retains it.
 - Awaited SDK shutdown surfaces the actual final-export failure on both
   current-thread and multi-thread runtimes; after successful await the host can
   tear its runtime down immediately without losing an admitted export.
@@ -95,6 +100,8 @@ wire/protocol differences are allowed, signal meaning loss is not.
   legacy repository names from shipped docs/scripts.
 - Requirements, architecture, API, migration, release, and operational docs
   agree; no enabled configuration is documented or implemented as no-op.
+- ADR-018 is accepted and OTLP-021 is active: neither document retains
+  proposed/"until that acceptance" wording at sprint closure.
 
 ## Required validation
 

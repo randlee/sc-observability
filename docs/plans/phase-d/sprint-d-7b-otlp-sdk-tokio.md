@@ -90,6 +90,14 @@ headers/auth, CA/TLS, timeout and retry map to the selected builder;
 selection; `insecure_skip_verify` is either implemented by the backend with an
 explicit security warning or rejected at construction—never ignored.
 
+Lifecycle bounds are explicit `OtelConfig` fields shared by both backends:
+`lifecycle_flush_timeout_ms` and `lifecycle_shutdown_timeout_ms`, each defaulting
+to `30_000`. Both must be nonzero; the shutdown value must also be at least the
+transport `timeout_ms`. Deadlines use a monotonic clock, begin when the public
+lifecycle call is admitted, and are testable through an injected clock. Zero,
+overflowing duration conversion, or a shutdown bound below the per-request
+timeout fails construction with a stable configuration error.
+
 ## 2.0 lifecycle decision
 
 Synchronous `emit_*` remains admission-only for the SDK backend. Construction
@@ -139,7 +147,8 @@ the shared completion while it is in flight; later calls after terminal
 completion are idempotent and return `Ok(())`, preserving the existing
 first-caller failure rule.
 
-Every async flush/shutdown accepts or derives a finite validated deadline.
+Every async flush/shutdown derives its finite deadline from those validated
+fields; there is no unbounded or caller-implicit default.
 Timeout resolves all waiters with `LifecycleTimeout`, leaves a truthful
 degraded terminal state, and never reports success while work is pending.
 Synchronous SDK lifecycle always returns `AsyncLifecycleRequired`, including
@@ -184,8 +193,11 @@ into an unreviewable single change.
 4. Preserve fail-open health/dropped behavior for immediate admission,
    terminal export, runtime cancellation, and lifecycle failures. Invalid or
    unsupported combinations fail construction with stable typed errors.
-   Health exposes bounded queue depth/capacity, worker/provider state, last
-   terminal failure and per-signal overflow counts without credentials.
+   Health exposes bounded queue depth/capacity, worker/provider state,
+   `last_terminal_failure`, per-signal overflow counts, and transient-attempt
+   counts without credentials. Transient attempts never overwrite the terminal
+   field; the next successful export while `Open` clears it and records
+   recovery, while `Closing`/`Shutdown` retains it. D.7c uses the same model.
 5. Add an in-repository Tokio-hosted public consumer and loopback collector
    fixture covering all signals, redaction, bounded channel pressure, timeout,
    late failure, flush barriers, concurrent admission, shutdown, cancellation,
@@ -217,6 +229,8 @@ into an unreviewable single change.
   deadlines, worker/provider death, construction outside Tokio, all valid and
   invalid backend/protocol/config combinations, queue-depth health, and
   `debug_local_export`/`insecure_skip_verify` dispositions are asserted.
+- Boundary fixtures cover zero/overflowing lifecycle values, shutdown shorter
+  than transport timeout, exact 30-second defaults, and monotonic expiry.
 
 ## Required validation
 

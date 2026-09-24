@@ -3,7 +3,7 @@
   "source_repository": "https://github.com/randlee/agent-team-mail",
   "source_commit": "7b39f4e7f72b6845edec4eab4cd671611661445f",
   "destination_hash_policy": {
-    "planned": "destination_sha256 must be null; implementation must replace it with the final file hash before sprint closure",
+    "planned": "destination_sha256 must be null; implementation must replace it with the final file hash before sprint closure, including every destination_children entry",
     "transplanted-or-translated": "destination_sha256 is required and must equal the final destination bytes",
     "reference-and-disposition-only": "destination_sha256 remains null; validate that the disposition document cites source commit, blob, sha256, and disposition",
     "dependency-reference-only": "destination_sha256 remains null; validate the dependency/version/features disposition rather than byte equality"
@@ -16,10 +16,10 @@
       "destination": "crates/sc-observability-otlp/src/legacy_http_json/mod.rs",
       "destination_scope": "parent module for the split transplant",
       "destination_children": [
-        "crates/sc-observability-otlp/src/legacy_http_json/worker.rs",
-        "crates/sc-observability-otlp/src/legacy_http_json/request.rs",
-        "crates/sc-observability-otlp/src/legacy_http_json/retry.rs",
-        "crates/sc-observability-otlp/src/legacy_http_json/payload.rs"
+        {"destination":"crates/sc-observability-otlp/src/legacy_http_json/worker.rs","destination_status":"planned","destination_sha256":null},
+        {"destination":"crates/sc-observability-otlp/src/legacy_http_json/request.rs","destination_status":"planned","destination_sha256":null},
+        {"destination":"crates/sc-observability-otlp/src/legacy_http_json/retry.rs","destination_status":"planned","destination_sha256":null},
+        {"destination":"crates/sc-observability-otlp/src/legacy_http_json/payload.rs","destination_status":"planned","destination_sha256":null}
       ],
       "destination_status": "planned",
       "destination_sha256": null,
