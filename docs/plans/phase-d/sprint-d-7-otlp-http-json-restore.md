@@ -11,11 +11,11 @@ release_train: '2.0'
 ## Goal and dependency
 
 Restore a regressed real collector pipeline in `sc-observability-otlp` through
-**both** implementation paths. The primary present consumer is `atm-core`,
-which already has a Tokio runtime, so the official SDK path is required—not
-deferred by the current crate's synchronous facade. The retained synchronous
-HTTP/JSON path is also required for direct compatibility with the real
-pre-split exporter and for environments that do not host Tokio.
+**both** implementation paths. The official SDK path is required for
+Tokio-hosted consumers; the synchronous HTTP/JSON path is required for
+compatibility with the real pre-split exporter and for environments that do not
+host Tokio. `atm-core` is a downstream consumer: no `atm-core` code, fixture,
+worktree, or PR is owned by this sprint.
 
 The pre-split `agent-team-mail` source was a 920-line `reqwest::blocking`
 HTTP/JSON exporter that posted to `/v1/logs`, `/v1/traces`, and `/v1/metrics`,
@@ -33,15 +33,14 @@ data schema.
 
 ### A. Official OpenTelemetry SDK path — required primary path
 
-Adopt `opentelemetry-otlp`, `opentelemetry`, and `opentelemetry_sdk` for the
-Tokio-hosted integration used by `atm-core`.
+Adopt `opentelemetry-otlp`, `opentelemetry`, and `opentelemetry_sdk` for
+Tokio-hosted consumers.
 
 - The SDK supplies native models for `SpanKind`, trace sampling, links, and
   proper histogram points instead of recreating all OTLP semantics by hand.
-- Its default gRPC transport through `tonic` requires Tokio, which `atm-core`
-  already provides. The larger footprint—protobuf generation, tonic and
-  Tokio—and reconciliation with SDK provider/batch-processor lifecycle remain
-  real implementation work.
+- Its default gRPC transport through `tonic` requires Tokio. The larger
+  footprint—protobuf generation, tonic and Tokio—and reconciliation with SDK
+  provider/batch-processor lifecycle remain real implementation work.
 - The existing synchronous `Telemetry::emit_log`/`emit_span`/`emit_metric`,
   buffering, health and flush/shutdown API must remain the public façade. D.7
   specifies an explicit adapter/ownership model rather than leaking SDK
@@ -81,7 +80,7 @@ Port the legacy `reqwest::blocking` exporter into the current neutral model.
    providers/exporters, use the host's Tokio runtime without creating an
    uncontrolled second runtime, and define flush/shutdown ownership so SDK
    processor flush occurs exactly once. Support the SDK-selected OTLP protocol
-   and collector endpoint with an end-to-end `atm-core` Tokio fixture.
+   and collector endpoint with an in-repository Tokio-hosted consumer fixture.
 4. **Synchronous HTTP/JSON implementation.** Port the legacy behavior using
    `reqwest::blocking`, adapted to current `TelemetryConfig.service_name`,
    resources and neutral signals. Normalize endpoint suffixes exactly once;
@@ -100,12 +99,13 @@ Port the legacy `reqwest::blocking` exporter into the current neutral model.
    counts, fail-open flush, and idempotent shutdown. SDK async work must not
    block a Tokio worker; synchronous work must remain outside async executor
    critical paths or use a documented bridge that preserves caller semantics.
-7. **Consumer evidence and observability docs.** Add an `atm-core` integration
-   fixture exercising the SDK path from its existing Tokio runtime. Restore
-   Grafana dashboard/LogQL recipes only after translating them to current
-   neutral resource/attribute schema; never revive ATM-only labels as a
-   compatibility fiction. Include runnable local collector smoke commands and
-   redacted receipts for both paths.
+7. **Consumer-neutral evidence and observability docs.** Add an in-repository
+   Tokio-hosted consumer fixture exercising the SDK path. Restore Grafana
+   dashboard/LogQL recipes only after translating them to current neutral
+   resource/attribute schema; never revive ATM-only labels as a compatibility
+   fiction. Include runnable local collector smoke commands and redacted
+   receipts for both paths. A downstream `atm-core` integration is optional
+   post-merge consumer evidence, never a deliverable or gate owned here.
 8. **Contracts and migration.** Update OTLP-001–022, architecture, public API
    inventory, 2.0 release notes, migration guide, and dependency/license
    inventory. Document both modes, their intended runtime environments,
@@ -116,7 +116,7 @@ Port the legacy `reqwest::blocking` exporter into the current neutral model.
 
 - The public `Telemetry` facade sends logs, traces and metrics to real
   loopback collectors through **both** SDK/Tokio and synchronous HTTP/JSON
-  modes. The SDK proof runs through `atm-core`'s Tokio-hosted integration.
+  modes. The SDK proof uses an in-repository Tokio-hosted consumer fixture.
 - A shared corpus yields equivalent resource/signal semantics in both modes:
   trace kind/sampled flags/parent/links/events/status and histogram bounds,
   bucket counts, count and sum are all present and correct.
@@ -135,8 +135,8 @@ Port the legacy `reqwest::blocking` exporter into the current neutral model.
 - `cargo test -p sc-observability-types -p sc-observability-otlp --locked`
   with source-model negative cases, dual-mode loopback collectors, retry/CA/
   auth-redaction and lifecycle cases.
-- Tokio-hosted `atm-core` SDK integration fixture; synchronous external
-  consumer fixture with no Tokio runtime; shared cross-path conformance corpus.
+- Tokio-hosted in-repository SDK fixture; synchronous external-consumer-style
+  fixture with no Tokio runtime; shared cross-path conformance corpus.
 - `cargo test --workspace --locked`, clippy with warnings denied, rustdoc,
   public-API/semver validation against the declared 1.x baseline, dependency/
   license inventory validation, and docs consistency.

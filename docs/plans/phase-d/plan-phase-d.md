@@ -72,8 +72,8 @@ consumer fixtures.
 - D.7 must repair OTLP data-model prerequisites before emitting to a collector:
   `SpanKind`, trace sampled flag and links, plus a histogram representation
   with bucket boundaries/counts/sum/count. It scopes both the official SDK
-  integration (the primary path for Tokio-hosted `atm-core`) and the restored
-  synchronous legacy HTTP/JSON path. The old single-`f64` histogram placeholder
+  integration (for Tokio-hosted consumers) and the restored synchronous legacy
+  HTTP/JSON path. The old single-`f64` histogram placeholder
   is not spec-correct and cannot be exported as one.
 
 ## Planning deliverables
