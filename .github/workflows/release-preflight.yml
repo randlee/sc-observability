@@ -47,6 +47,15 @@ jobs:
             exit 1
           fi
 
+      - id: immutable_releases
+        name: Verify immutable release prerequisite (read-only)
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: python3 .github/scripts/release_immutability.py --tag "$RELEASE_VERSION"
+
       - id: secret_plan
         name: Read non-disclosing credential plan from release manifest
         continue-on-error: true
@@ -416,6 +425,7 @@ jobs:
         continue-on-error: true
         shell: bash
         env:
+          IMMUTABLE_RELEASES: ${{ steps.immutable_releases.outcome }}
           OWNERSHIP: ${{ steps.ownership.outcome }}
           RELEASE_METADATA: ${{ steps.meta.outcome }}
           RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
@@ -437,6 +447,7 @@ jobs:
           jq -e 'type == "object"' <<<"${credential_liveness_channels_json}" >/dev/null \
             || { echo 'CREDENTIAL_LIVENESS_CHANNELS must be a JSON object.' >&2; exit 1; }
           outcomes="$(jq -nc \
+            --arg immutable_releases "${IMMUTABLE_RELEASES}" \
             --arg ownership "${OWNERSHIP}" \
             --arg release_metadata "${RELEASE_METADATA}" \
             --arg repository_secrets "${REPOSITORY_SECRETS}" \
@@ -446,7 +457,7 @@ jobs:
             --argjson credential_liveness_channels "${credential_liveness_channels_json}" \
             --arg registry_state "${REGISTRY_STATE}" \
             --arg github_release_permissions "${GITHUB_RELEASE_PERMISSIONS}" \
-            '{ownership: $ownership, release_metadata: $release_metadata, repository_secrets: $repository_secrets, repository_secret_channels: $repository_secret_channels, environment_secrets: $environment_secrets, credential_liveness: $credential_liveness, credential_liveness_channels: $credential_liveness_channels, registry_state: $registry_state, github_release_permissions: $github_release_permissions}')"
+            '{immutable_releases: $immutable_releases, ownership: $ownership, release_metadata: $release_metadata, repository_secrets: $repository_secrets, repository_secret_channels: $repository_secret_channels, environment_secrets: $environment_secrets, credential_liveness: $credential_liveness, credential_liveness_channels: $credential_liveness_channels, registry_state: $registry_state, github_release_permissions: $github_release_permissions}')"
           results="$(python3 .github/scripts/release_artifacts.py channel-preflight-results \
             --manifest "${RELEASE_ARTIFACT_MANIFEST}" \
             --outcomes "${outcomes}" \
@@ -462,6 +473,7 @@ jobs:
         if: ${{ always() }}
         shell: bash
         env:
+          IMMUTABLE_RELEASES: ${{ steps.immutable_releases.outcome }}
           OWNERSHIP: ${{ steps.ownership.outcome }}
           SECRET_PLAN: ${{ steps.secret_plan.outcome }}
           BUILD_PLAN: ${{ steps.build_plan.outcome }}
@@ -497,6 +509,7 @@ jobs:
               *) failed+=("${name}") ;;
             esac
           }
+          record immutable-releases "${IMMUTABLE_RELEASES}"
           record ownership "${OWNERSHIP}"
           record secret-plan "${SECRET_PLAN}"
           record build-plan "${BUILD_PLAN}"

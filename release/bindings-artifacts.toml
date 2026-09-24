@@ -105,7 +105,7 @@ registry_secret_configured = true
 [[packages]]
 artifact = "sc-observability-typescript-client"
 kind = "npm"
-package = "@sc-observability/client"
+package = "@synaptic-canvas/sc-observability"
 manifest_path = "bindings/typescript/package.json"
 publish_order = 6
 depends_on = []

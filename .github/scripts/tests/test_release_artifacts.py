@@ -458,7 +458,9 @@ def run_release_gate_readiness(
         "release_manifest.py",
         "release_registry.py",
         "release_credentials.py",
+        "release_immutability.py",
         "npm_release.py",
+        "worker_result.py",
         "release_python.py",
         "release_gate.sh",
     ):
@@ -690,6 +692,7 @@ def run_release_preflight_channel_results_shell(
     environment = {
         **os.environ,
         "OWNERSHIP": "success",
+        "IMMUTABLE_RELEASES": "success",
         "RELEASE_METADATA": "success",
         "RELEASE_TAG": "v1.5.0",
         "REPOSITORY_SECRETS": "success",
@@ -1047,7 +1050,9 @@ def test_no_single_repo_concerns_leak_into_kit_workflows_actions_or_scripts() ->
         "release_manifest.py",
         "release_registry.py",
         "release_credentials.py",
+        "release_immutability.py",
         "npm_release.py",
+        "worker_result.py",
         "release_python.py",
         "release_gate.sh",
     )
@@ -1707,6 +1712,7 @@ def test_channel_preflight_results_execute_contract_outcome_mapping() -> None:
     passing_outcomes = json.dumps(
         {
             "ownership": "success",
+            "immutable_releases": "success",
             "release_metadata": "success",
             "repository_secrets": "success",
             "repository_secret_channels": {
@@ -1758,6 +1764,7 @@ def test_channel_preflight_results_execute_contract_outcome_mapping() -> None:
     failed_outcomes = json.dumps(
         {
             "ownership": "success",
+            "immutable_releases": "success",
             "release_metadata": "success",
             "repository_secrets": "failure",
             "repository_secret_channels": {
@@ -1804,6 +1811,7 @@ def test_channel_preflight_results_execute_contract_outcome_mapping() -> None:
         json.dumps(
             {
                 "ownership": "success",
+            "immutable_releases": "success",
                 "release_metadata": "success",
                 "repository_secrets": "success",
                 "environment_secrets": "success",
@@ -1851,6 +1859,7 @@ def test_channel_preflight_results_execute_contract_outcome_mapping() -> None:
     invalid_tag_outcomes = json.dumps(
         {
             "ownership": "success",
+            "immutable_releases": "success",
             "release_metadata": "failure",
             "repository_secrets": "success",
             "repository_secret_channels": {
@@ -1946,6 +1955,7 @@ def test_background_workers_consume_and_gate_their_own_preflight_contracts() -> 
 
     passed_outcomes = {
         "ownership": "success",
+            "immutable_releases": "success",
         "release_metadata": "success",
         "repository_secrets": "success",
         "repository_secret_channels": {

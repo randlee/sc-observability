@@ -86,12 +86,14 @@ def main() -> int:
         initial = baseline is None
         if initial and not registry_absent(crate):
             raise ValueError(f'{crate}: initial-release declaration conflicts with registry; set published baseline')
-        if args.mode == 'diff' or initial:
+        proc_macro_semver = args.mode == 'semver' and settings['kind'] == 'proc-macro' and not initial
+        if args.mode == 'diff' or initial or proc_macro_semver:
             command = ['cargo', 'public-api', '--manifest-path', package['manifest_path'], '-sss']
             if not initial:
                 command.extend(['diff', baseline])
         else:
-            command = ['cargo', 'semver-checks', '--manifest-path', package['manifest_path'], '--baseline-version', baseline, '--release-type', 'minor', '--default-features']
+            same_minor = baseline.split('.')[:2] == package['version'].split('.')[:2]
+            command = ['cargo', 'semver-checks', '--manifest-path', package['manifest_path'], '--baseline-version', baseline, '--release-type', 'patch' if same_minor else 'minor', '--default-features']
         result = run(command)
         output = result.stdout + result.stderr
         log_name = f'{crate}-{args.mode}.log'
@@ -99,6 +101,16 @@ def main() -> int:
         status = 'passed'
         if result.returncode != 0:
             status, failure = 'tool-error', True
+        elif proc_macro_semver:
+            # cargo-semver-checks rejects proc-macro targets. Require an unchanged
+            # published export surface instead; never silently skip this crate.
+            sections = ('Removed items from the public API', 'Changed items in the public API', 'Added items to the public API')
+            if not all(section in result.stdout for section in sections):
+                status, failure = 'tool-error', True
+            elif any(line.startswith(('+', '-')) for line in result.stdout.splitlines()):
+                status, failure = 'proc-macro-api-changed', True
+            else:
+                status = 'published-proc-macro-api-unchanged'
         elif initial:
             if not result.stdout.strip():
                 status, failure = 'tool-error', True

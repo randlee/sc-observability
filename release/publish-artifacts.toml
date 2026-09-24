@@ -122,7 +122,7 @@ production_repository = "pypi"
 
 
 [[npm_packages]]
-name = "@sc-observability/client"
+name = "@synaptic-canvas/sc-observability"
 source = "bindings/typescript"
 [channels.npm]
 workflow = "npm-publish.yml"

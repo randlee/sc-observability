@@ -41,14 +41,14 @@
       {"id": "windows-x86_64", "os": "windows-2022", "target": "x86_64-pc-windows-msvc", "platform": "win_amd64"}
     ]}
   ],
-  "npm_packages": [{"name": "@sc-observability/client", "source": "bindings/typescript"}],
+  "npm_packages": [{"name": "@synaptic-canvas/sc-observability", "source": "bindings/typescript"}],
   "channels": {
     "pypi": {"workflow": "pypi-publish.yml", "dispatch_inputs": {}, "credential_rehearsal_inputs": {}, "test_repository": "testpypi", "production_repository": "pypi"},
     "npm": {"workflow": "npm-publish.yml", "dispatch_inputs": {}}
   },
   "review_notes": {
-    "npm": "Adopted from reviewed sc-publish revision cb29cb49; publication remains separately authorized and credential-gated.",
+    "npm": "Adopted from reviewed sc-publish revision 22137c2da13bf4638b4267b69c6c2f021617da73; publication remains separately authorized and credential-gated.",
     "publication": "No publication, tag, or release dispatch is authorized by C.1.",
-    "schema": "This contract follows the reviewed sc-publish npm-channel contract at cb29cb49; publication remains separately authorized."
+    "schema": "This contract follows the reviewed sc-publish npm-channel contract at 22137c2da13bf4638b4267b69c6c2f021617da73; publication remains separately authorized."
   }
 }

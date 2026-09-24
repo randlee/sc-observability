@@ -32,7 +32,7 @@ def main() -> int:
     actual = {(wheel["os"], wheel["target"], wheel["platform"]) for wheel in wheels}
     if actual != EXPECTED_WHEELS:
         raise SystemExit(f"five-wheel matrix mismatch: {sorted(actual)}")
-    if contract["npm_packages"] != [{"name": "@sc-observability/client", "source": "bindings/typescript"}]:
+    if contract["npm_packages"] != [{"name": "@synaptic-canvas/sc-observability", "source": "bindings/typescript"}]:
         raise SystemExit("npm package inventory mismatch")
     if contract["release_binaries"] != []:
         raise SystemExit("release_binaries must remain empty: no standalone binary is shipped")

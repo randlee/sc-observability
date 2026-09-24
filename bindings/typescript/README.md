@@ -1,4 +1,4 @@
-# `@sc-observability/client`
+# `@synaptic-canvas/sc-observability`
 
 This package is a generated-schema TypeScript client for the Tauri host
 adapter. Install the packed tarball in a clean consumer, pass Tauri's `invoke`

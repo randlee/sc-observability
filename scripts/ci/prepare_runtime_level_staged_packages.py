@@ -51,6 +51,10 @@ def checked_run(command: list[str], cwd: Path) -> str:
 def normalized_manifest(path: Path, version: str) -> bytes:
     """Resolve workspace inheritance and remove local paths for a standalone crate."""
     rendered = path.read_text()
+    if re.search(r"(?m)^authors\.workspace = true$", rendered):
+        workspace = tomllib.loads((path.parents[2] / "Cargo.toml").read_text())
+        authors = json.dumps(workspace["workspace"]["package"]["authors"])
+        rendered = re.sub(r"(?m)^authors\.workspace = true$", lambda _: f"authors = {authors}", rendered)
     rendered = re.sub(r"(?m)^version\.workspace = true$", f'version = "{version}"', rendered)
     for field, value in WORKSPACE_VALUES.items():
         rendered = re.sub(rf"(?m)^{re.escape(field)}\.workspace = true$", f"{field} = {value}", rendered)
