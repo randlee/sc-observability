@@ -34,8 +34,8 @@ deliverables, acceptance criteria, validation, and explicit non-closure.
 | D.3 | API design and error migration |
 | D.4 | ADR-017, requirements, API design, error migration, release notes |
 | D.7a | requirements, architecture, API design, generated model inventories |
-| D.7b | ADR-018; OTLP-020/lifecycle requirements; API design/rustdoc for async lifecycle and the D.7b-L transport contract; migration guide |
-| D.7c | source provenance manifest, architecture dependency boundary |
+| D.7b | ADR-018; OTLP-020/lifecycle requirements; API design/rustdoc for async lifecycle and the D.7b-L transport contract; migration guide; architecture shared-lifecycle/SDK/config/error sections |
+| D.7c | source provenance manifest; architecture legacy transport/dependency boundary sections |
 | D.7d | OTLP operational docs under `docs/observability/otlp/` |
 | D.5 | Python distribution docs and platform policy |
 | D.6 | Python distribution docs and metadata receipt contract |

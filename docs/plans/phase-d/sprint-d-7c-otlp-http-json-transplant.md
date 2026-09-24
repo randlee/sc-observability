@@ -141,10 +141,11 @@ there is no second lifecycle state machine. Signal admission uses `try_send`:
 full/closed fails open, records exactly one per-signal drop and health change,
 and never waits. Barriers have a reserved control path so saturated data cannot
 starve them; async waiters use a Tokio `oneshot` completed by the plain worker,
-never a blocking receive on an executor. Initialization failure, panic,
-unexpected exit, or sender closure stores the corresponding D.7b-L
-worker-termination outcome, resolves every pending barrier, accounts abandoned
-admissions once, and never hangs.
+never a blocking receive on an executor. Worker/client initialization failure
+returns D.7b-L's transport-construction failure before the handle is published.
+After successful initialization, panic, unexpected exit, or sender closure
+stores its worker-termination outcome, resolves every pending barrier, accounts
+abandoned admissions once, and never hangs.
 
 Legacy uses the authoritative D.7b-L health/accounting contract without adding
 fields or transitions. The legacy worker consumes D.7b-L's shared fixtures
@@ -257,8 +258,8 @@ D.7c owns no error variant, stable code, mapping, or error documentation.
 - Retry fixtures freeze classification, bounded `Retry-After`, jitter/backoff,
   overall deadline, and prompt shutdown cancellation.
 - Retry bound fixtures cover delta-seconds and HTTP-date, negative, malformed,
-  past, and huge `Retry-After` values; zero/overflow/cross-field validation;
-  distinct production instance seeds; deterministic injected seeds; and
+  past, and huge `Retry-After` values; distinct production instance seeds;
+  deterministic injected seeds; and
   positive jitter at the sequence deadline proving the D.7b-L fallback clamp
   and no zero-budget attempt. The shared cap-ordering fixture remains owned by
   D.7b-L and is consumed unchanged.

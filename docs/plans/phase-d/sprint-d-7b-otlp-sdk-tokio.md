@@ -122,18 +122,32 @@ therefore deterministic and reviewable.
 All raw serialized millisecond/percent fields are converted exactly once:
 
 ```rust
-pub(crate) enum ValueOrigin { Default, Explicit }
-
-pub(crate) struct ResolvedField<T> {
-    field: &'static str,
-    value: T,
-    origin: ValueOrigin,
+pub enum OtlpConfigField {
+    Timeout,
+    LifecycleFlushTimeout,
+    LifecycleShutdownTimeout,
+    MaxRetries,
+    InitialBackoff,
+    MaxBackoff,
+    RetrySequenceTimeout,
+    RetryAfterCap,
+    RetryJitterPercent,
 }
+
+pub enum ValueOrigin { Default, Explicit }
+
+pub struct ResolvedField<T> {
+    pub field: OtlpConfigField,
+    pub value: T,
+    pub origin: ValueOrigin,
+}
+
+pub enum OtlpConfigTarget { Disabled, Backend(ExporterBackend) }
 
 pub(crate) struct PositiveDuration(Duration);
 
 impl PositiveDuration {
-    fn try_from_millis(field: &'static str, value: u64)
+    fn try_from_millis(field: OtlpConfigField, value: u64)
         -> Result<Self, ConfigFailure>;
 }
 
@@ -179,10 +193,16 @@ retry state unrepresentable for SDK. Validation, using checked arithmetic, is:
 
 - every millisecond duration is positive and convertible to `Duration`;
 - `lifecycle_shutdown_timeout_ms >= timeout_ms`;
+- `lifecycle_flush_timeout_ms >= timeout_ms`;
 - for legacy, `max_backoff_ms >= initial_backoff_ms`;
 - for legacy, `retry_sequence_timeout_ms >= timeout_ms`;
 - for legacy, `0 < retry_after_cap_ms <= retry_sequence_timeout_ms`;
 - for legacy, `retry_jitter_percent <= 100`.
+
+Checks execute in exactly this listed order and return the first failure; they
+are not aggregated. Within the first bullet, fields are checked in the wire
+table's top-to-bottom order. This makes every multi-violation diagnostic
+deterministic.
 
 Both factories receive only `ValidatedTransportBounds` and cannot inspect or
 reparse raw fields. Deadlines use a monotonic injectable clock and start when
@@ -194,29 +214,35 @@ values; run checked conversion, ordering, and applicability validation; build
 Thus a malformed legacy config fails deterministically before D.7b's reserved
 `UnsupportedBackend`. Disabled transport still validates explicitly supplied
 shared fields, rejects every explicit legacy-only retry field with
-`ConfigFieldNotApplicable`, yields `BackendTransportBounds::Disabled`, and
-never constructs a network provider/worker.
+`ConfigFieldNotApplicable { target: OtlpConfigTarget::Disabled, .. }`, yields
+`BackendTransportBounds::Disabled`, and never constructs a network
+provider/worker. SDK inapplicability instead records
+`OtlpConfigTarget::Backend(ExporterBackend::OpenTelemetrySdk)`.
 
 Configuration variants carry reviewable payloads:
 
 ```rust
-ZeroDuration { field: &'static str, origin: ValueOrigin }
-DurationOverflow { field: &'static str, raw: u64, origin: ValueOrigin }
+ZeroDuration { field: OtlpConfigField, origin: ValueOrigin }
+DurationOverflow { field: OtlpConfigField, raw: u64, origin: ValueOrigin }
 InvalidBoundOrdering {
     lower: ResolvedField<u64>,
     upper: ResolvedField<u64>,
 }
-InvalidJitterPercent { field: &'static str, raw: u8, origin: ValueOrigin }
-ConfigFieldNotApplicable { field: &'static str, backend: ExporterBackend }
+InvalidJitterPercent { field: OtlpConfigField, raw: u8, origin: ValueOrigin }
+ConfigFieldNotApplicable { field: OtlpConfigField, target: OtlpConfigTarget }
+InsecureTransportRejected { backend: ExporterBackend }
+TransportConstructionFailed { backend: ExporterBackend, source: Diagnostic }
 ```
 
 ### D.7b-L stable failure inventory
 
 This is the complete Phase D OTLP stable-error inventory. D.7b-L exclusively
 owns these variants, codes, owning types, mappings, and documentation; later
-sprints consume this table without adding or restating rows. Every operational
-variant is owned by `ExportFailure`. Construction may preserve one as the
-source of `ConfigFailure::Transport`, and emit/lifecycle façades convert it to
+sprints consume this table without adding or restating rows. Configuration
+rows are construction-only `ConfigFailure` variants. Every runtime/lifecycle
+variant except `Shutdown` is owned by `ExportFailure`; `Shutdown` is owned by
+`TelemetryError`. Construction may preserve a runtime failure as the source of
+`ConfigFailure::Transport`, and emit/lifecycle façades convert it to
 `TelemetryError`, `FlushFailure`, or `ShutdownFailure` without changing its
 stable code or typed source. In particular, `QueueFull` is created as an
 `ExportFailure`; emit converts it through `From<ExportFailure> for
@@ -229,7 +255,9 @@ corresponding typed lifecycle failure.
 | `DurationOverflow` | `OTLP_CONFIG_DURATION_OVERFLOW` | `ConfigFailure` | milliseconds cannot convert safely | reduce the field | field/value only | after config correction |
 | `InvalidBoundOrdering` | `OTLP_CONFIG_BOUND_ORDER` | `ConfigFailure` | resolved ordering rule fails | correct the named explicit/defaulted fields | field/value/origin only | after config correction |
 | `InvalidJitterPercent` | `OTLP_CONFIG_JITTER_PERCENT` | `ConfigFailure` | jitter exceeds 100 | use `0..=100` | field/value only | after config correction |
-| `ConfigFieldNotApplicable` | `OTLP_CONFIG_FIELD_NOT_APPLICABLE` | `ConfigFailure` | legacy-only field supplied for SDK | omit it or select legacy | field/backend only | after config correction |
+| `ConfigFieldNotApplicable` | `OTLP_CONFIG_FIELD_NOT_APPLICABLE` | `ConfigFailure` | field is inapplicable to disabled transport or the selected backend | omit it, enable transport, or select its applicable backend | field/closed target only | after config correction |
+| `InsecureTransportRejected` | `OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED` | `ConfigFailure` | selected backend does not implement the requested insecure verification override | disable the override or choose an explicitly supporting backend | backend only | after config correction |
+| `TransportConstructionFailed` | `OTLP_TRANSPORT_CONSTRUCTION_FAILED` | `ConfigFailure` | CA/auth/client/provider/legacy-worker initialization failed | correct the bounded typed source and reconstruct | bounded typed source; never path contents, credentials, header values, or response bodies | after config/environment correction |
 | `UnsupportedBackend` | `OTLP_UNSUPPORTED_BACKEND` | `ConfigFailure` | feature/backend unavailable | enable/select a supported backend | enum values only | after build/config correction |
 | `UnsupportedProtocol` | `OTLP_UNSUPPORTED_PROTOCOL` | `ConfigFailure` | protocol invalid for backend | select a matrix-supported protocol | enum values only | after config correction |
 | `TokioRuntimeRequired` | `OTLP_TOKIO_RUNTIME_REQUIRED` | `ConfigFailure` | SDK construction lacks an entered Tokio runtime | construct inside the host runtime | no dynamic data | after entering a runtime |
@@ -337,8 +365,10 @@ into an unreviewable single change.
    events, status, or histogram content.
    D.7b-L owns `PositiveDuration`, `LifecycleBounds`, `RetryPolicy`,
    `BoundedPercent`, `BackendTransportBounds`, `ValidatedTransportBounds`,
-   `ValueOrigin`, `ResolvedField`, the sole backend-aware validation
-   constructor, and the complete stable-error inventory above.
+   `OtlpConfigField`, `OtlpConfigTarget`, `ValueOrigin`, `ResolvedField`, the
+   sole backend-aware validation constructor, and the complete stable-error
+   inventory above. The four public payload types and public `ConfigFailure`
+   shapes are included in API approval and the 2.0 semver manifest.
 3. Implement the exact ordering/state/cancellation contract above without
    `block_on`, a hidden runtime, a process-global provider, mutex-held network
    waits, or executor-worker blocking.
@@ -365,14 +395,19 @@ into an unreviewable single change.
 
 - Resolve every field through the one constructor and assert its value and
   `ValueOrigin`; cover each field absent and explicitly supplied.
-- Freeze partial overrides: an explicit legacy `timeout_ms = 40_000` conflicts
-  with the defaulted `retry_sequence_timeout_ms = 30_000`, and an explicit
-  `lifecycle_shutdown_timeout_ms = 2_000` conflicts with the defaulted
-  `timeout_ms = 3_000`; both diagnostics name values and origins. Exercise each
+- Freeze partial overrides and first-error order: SDK `timeout_ms = 40_000`
+  first returns `InvalidBoundOrdering` for the defaulted shutdown bound; legacy
+  `timeout_ms = 40_000` with explicit flush/shutdown bounds of `50_000` reaches
+  the defaulted sequence-bound failure. Separate explicit flush and shutdown
+  values of `2_000` each fail against the defaulted request timeout. Every
+  diagnostic names the public field, values, and origins. Exercise each
   legacy-only field alone through the same constructor.
 - Prove malformed values and ordering fail before unsupported backend/protocol
   checks, while disabled transport validates explicit shared values, rejects
   explicit legacy-only fields, and never constructs network state.
+  Pin disabled transport with `backend = LegacyHttpJson` and explicit
+  `max_retries`; it returns `ConfigFieldNotApplicable` with target `Disabled`,
+  not the otherwise-applicable backend target.
 - Freeze independent legacy delay caps: fallback delay is
   `min(jittered_exponential, max_backoff, remaining_sequence_budget)`, whereas
   a valid server delay is `min(retry_after, retry_after_cap,
@@ -397,12 +432,17 @@ into an unreviewable single change.
   records as dropped, and never reports successful completion.
 - Two telemetry instances remain isolated; enabled SDK config cannot resolve
   to no-op; disabled config makes no request; credentials never enter errors.
+- Construction fixtures cover unsupported insecure verification, unreadable CA,
+  invalid auth-header construction, SDK/provider builder failure, and legacy
+  worker/client initialization; each yields the exact D.7b-L construction-only
+  variant with a redacted typed source.
 - Capacity-one/full/closed queue tests account each record exactly once; finite
   deadlines, worker/provider death, construction outside Tokio, all valid and
   invalid backend/protocol/config combinations, queue-depth health, and
   `debug_local_export`/`insecure_skip_verify` dispositions are asserted.
-- Boundary fixtures cover zero/overflowing lifecycle values, shutdown shorter
-  than transport timeout, exact 30-second defaults, and monotonic expiry.
+- Boundary fixtures cover zero/overflowing lifecycle values, flush and shutdown
+  shorter than transport timeout, exact 30-second defaults, deterministic
+  first-error ordering, and monotonic expiry.
 
 ## Required validation
 
