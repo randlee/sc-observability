@@ -52,8 +52,9 @@ Perform a source-preserving transplant of the legacy `reqwest::blocking`
 exporter into the current neutral model. This is a copy-and-adapt delivery,
 not a rewrite: retain the established endpoint normalization, request assembly,
 HTTP client construction, auth/CA handling, retry/backoff algorithm, and its
-collector tests unless a current public type/config incompatibility requires a
-small adapter at the boundary.
+collector tests. Copy and run the legacy tests as the regression baseline;
+only a current public type/config incompatibility may require a small fixture
+adapter at the boundary, and every such change needs a recorded disposition.
 
 - It is a proven route to `/v1/logs`, `/v1/traces`, and `/v1/metrics`, keeps a
   synchronous `reqwest` footprint, and fits directly below today's facade.
@@ -64,7 +65,8 @@ small adapter at the boundary.
 - It must not become a weaker, untested fallback; the same public signal and
   failure contracts apply to both paths.
 - The implementation record must identify the exact legacy source revision,
-  source paths, copied tests, and every changed/deleted line category. A new
+  source paths, copied tests and their execution results, and every
+  changed/deleted line category. A new
   transport architecture, alternate HTTP client, or rewritten retry/payload
   algorithm is out of scope for this companion path.
 
@@ -97,7 +99,9 @@ small adapter at the boundary.
    TLS flag, timeout, and bounded exponential retry/backoff behavior; record a
    source-to-destination disposition for every necessary adaptation. Do not
    log secrets or hold the telemetry runtime lock during blocking network/retry
-   work.
+   work. Copy the legacy `/v1/logs`, `/v1/traces`, `/v1/metrics`, auth, and CA
+   collector fixtures into this crate and execute them, adapting only their
+   inputs/expected current-neutral payload fields.
 5. **Cross-path conformance suite.** Run both modes against hermetic loopback
    collectors. Validate request method/path/content type/authorization,
    resource/scope metadata, log severity/body/attributes, trace parent/status/
@@ -134,8 +138,9 @@ small adapter at the boundary.
 - Neither mode creates a silent no-op for enabled telemetry; unsupported
   protocol/mode combinations fail at construction with a stable typed error.
 - The synchronous implementation has a committed source-to-destination matrix
-  and retains every relevant legacy collector fixture; any behavior not copied
-  has an explicit current-API incompatibility disposition. It is not a rewrite.
+  and executes every relevant copied legacy collector fixture; any behavior or
+  assertion not copied has an explicit current-API incompatibility disposition.
+  It is not a rewrite.
 - SDK batching/provider shutdown and synchronous retry/flush each occur once
   under the facade's documented ownership rules; neither blocks or deadlocks
   the host runtime, and failure health/dropped accounting is consistent.
