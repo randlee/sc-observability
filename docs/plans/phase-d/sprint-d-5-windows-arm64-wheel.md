@@ -1,8 +1,12 @@
 ---
 id: D.5
-status: proposed
+status: complete
 branch: feature/phase-d-5-windows-arm64-wheel
 base: develop
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-5-windows-arm64-wheel
+depends_on: [D.7d]
+relation: must_follow
+owned_docs: [docs/python-distribution.md, release/python-platform-policy.json]
 ---
 
 # D.5 — Windows ARM64 Python wheel support
@@ -18,7 +22,10 @@ ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
 
 ## Deliverables
 
-1. Add a `windows-arm64` policy row with a GitHub-hosted ARM64 Windows runner,
+1. Preflight GitHub-hosted Windows ARM64 and native CPython ARM64 availability
+   for every supported 3.10–3.14 interpreter. If any cell is unavailable, D.5
+   remains open; x64 emulation or a cross-build is not native evidence. Then
+   add a `windows-arm64` policy row with an ARM64 Windows runner,
    `machine: ARM64`, `wheel_platform: win_arm64`, and explicit target-triple
    handling. Update every policy cardinality/assertion and artifact inventory
    from five/25 to six/30 cells without weakening duplicate/missing checks.
@@ -26,7 +33,10 @@ ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
    immutable sdist/source commit and installed on native Windows ARM64 for all
    currently supported Python interpreters. Preserve Windows supervision and
    bounded async proof behavior.
-3. Extend distribution validators to require a `cp310-abi3-win_arm64` wheel,
+3. Extend `_python_distribution.py::verify_native_architecture` with the PE
+   ARM64 machine value `0xAA64` for `win_arm64`, and add positive/negative PE
+   fixtures. Extend all policy JSON, platform maps, cardinality assertions,
+   and distribution validators to require a `cp310-abi3-win_arm64` wheel,
    correct architecture/linkage metadata, one wheel per platform, the same
    production feature set, and one same-source sdist across all six platforms.
 4. Add documentation and release inventory entries describing the six-platform
@@ -43,6 +53,8 @@ ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
   companion checks as the other Windows wheel where applicable.
 - Aggregate validation rejects a missing, duplicate, wrong-tag, wrong-target,
   or cross-built-but-not-native-executed ARM64 evidence record.
+- `_python_distribution.py::verify_native_architecture` accepts an authentic
+  PE `0xAA64` binary and rejects x86/x64/malformed payloads labeled ARM64.
 
 ## Required validation
 

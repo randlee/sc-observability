@@ -1,8 +1,12 @@
 ---
 id: D.7c
-status: proposed
+status: complete
 branch: feature/phase-d-7c-otlp-http-json-transplant
 base: develop
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7c-otlp-http-json-transplant
+depends_on: [D.7b]
+relation: must_follow
+owned_docs: [docs/requirements.md, docs/architecture.md, docs/plans/phase-d/legacy-otlp-provenance.json]
 release_train: '2.0'
 recommended_agent: rust-developer
 recommended_model: deep-reasoning
@@ -51,11 +55,14 @@ Authoritative source evidence is commit
 `7b39f4e7f72b6845edec4eab4cd671611661445f`, path
 `crates/sc-observability-otlp/src/lib.rs`, from the read-only legacy repository.
 The transient scratchpad path is not part of the implementation contract.
+The complete immutable source/blob/destination and documentation disposition
+is [`legacy-otlp-provenance.json`](legacy-otlp-provenance.json); that manifest,
+not a local clone path, is the transplant authority.
 
 ## Retained implementation contract
 
 ```rust
-pub struct OtlpHttpExporter {
+pub(crate) struct OtlpHttpExporter {
     commands: SyncSender<LegacyCommand>,
     completion: Arc<LegacyCompletionState>,
 }
@@ -97,6 +104,23 @@ ordered barrier's real terminal result on plain callers; async lifecycle awaits
 the same result. Backend choice remains construction/injection; no legacy
 branch is added to `Telemetry::emit_*`, flush, or shutdown.
 
+Legacy commands use the D.7b-L lifecycle core and one bounded `sync_channel`;
+there is no second lifecycle state machine. Signal admission uses `try_send`:
+full/closed fails open, records exactly one per-signal drop and health change,
+and never waits. Barriers have a reserved control path so saturated data cannot
+starve them; async waiters use a Tokio `oneshot` completed by the plain worker,
+never a blocking receive on an executor. Initialization failure, panic,
+unexpected exit, or sender closure stores one terminal `WorkerTerminated`
+result, resolves every pending barrier, accounts abandoned admissions once,
+and never hangs.
+
+Each request/retry sequence has a finite overall deadline. Shutdown enters
+`Closing`, cancels retry backoff, and drains only work before its barrier.
+Connection errors, 408, 429, and 5xx are retryable; other 4xx are terminal.
+Honor bounded `Retry-After`, otherwise use capped exponential backoff with
+deterministic testable jitter. No request, backoff, barrier, join, or client
+drop is unbounded.
+
 ## Deliverables
 
 1. Copy the exporter implementation and its `/v1/logs`, `/v1/traces`,
@@ -106,6 +130,9 @@ branch is added to `Telemetry::emit_*`, flush, or shutdown.
    incompatibility rationale. The worker is an ownership/context adapter around
    copied transport code; no HTTP/client configuration/retry redesign is
    permitted.
+   Extend `scripts/ci/validate_log_import.py` to validate the Phase D manifest,
+   Git blob ids and destination hashes, and reject scratch/`/tmp` paths, ATM
+   imports/labels, or the stale repository name in imported outputs.
 3. Adapt inputs to current `TelemetryConfig`, D.7a signal types, diagnostic
    errors, D.7b backend selector, and common crate-private exporter traits while
    preserving the original HTTP/JSON behavior and current
@@ -114,10 +141,17 @@ branch is added to `Telemetry::emit_*`, flush, or shutdown.
    exact construction/use/drop contract above. The worker alone constructs,
    calls, and drops reqwest outside telemetry locks. Context preflight occurs
    before mutation; credentials remain redacted.
+   Reuse D.7b-L's state/deadline/accounting core and implement the reserved
+   control path, retry cancellation, worker-panic propagation, and oneshot
+   async barrier described above.
 5. Add public external-consumer-style construction/flush/shutdown proof with
    no caller-owned Tokio runtime and no official OTel SDK/tonic dependencies.
 6. Retain exact reqwest features/version and commit `cargo tree` evidence for
    the legacy-only feature graph, including its acknowledged transitive Tokio.
+7. Split transplanted source into bounded `worker`, `request`, `retry`, and
+   `payload` modules plus tests; enforce the repository line-count check.
+   Update both dependency-boundary scripts and architecture §6 with the exact
+   legacy allowlist and automated graph assertions.
 
 ## Acceptance criteria
 
@@ -139,6 +173,10 @@ branch is added to `Telemetry::emit_*`, flush, or shutdown.
 - Any behavior/assertion not copied is identified by a concrete API
   incompatibility; structural rewrite or alternate HTTP/retry logic fails QA.
 - Failures remain fail-open at the facade and update health/dropped counts.
+- Capacity-one saturation cannot block or starve flush/shutdown; injected
+  worker panic/exit resolves every sync/async waiter within the deadline.
+- Retry fixtures freeze classification, bounded `Retry-After`, jitter/backoff,
+  overall deadline, and prompt shutdown cancellation.
 
 ## Required validation
 
@@ -151,6 +189,8 @@ branch is added to `Telemetry::emit_*`, flush, or shutdown.
 - `cargo tree -p sc-observability-otlp -e features` under the legacy-only
   feature, with assertions that the acknowledged reqwest-internal Tokio is
   present while official OTel SDK and tonic crates are absent.
+- Import-provenance validation and automated no-exporter/legacy-only/combined
+  dependency graph gates; module line-count validation.
 
 ## Non-closure
 

@@ -1,8 +1,9 @@
 ---
 phase: D
-status: draft
+status: complete
 branch: plan/phase-d
 base: develop
+worktree: /Users/randlee/github/sc-observability-worktrees/plan/phase-d
 ---
 
 # Phase D — Host logging ergonomics, configuration, and distribution completion
@@ -24,10 +25,32 @@ deliverables, acceptance criteria, validation, and explicit non-closure.
 | D.5 | [Windows ARM64 Python wheel qualification](sprint-d-5-windows-arm64-wheel.md) | New platform gap |
 | D.6 | [Open-ended Python ABI/metadata CI guard](sprint-d-6-python-open-ended-guard.md) | New regression guard |
 
+### Documentation ownership
+
+| Sprint | Authoritative owned documentation |
+| --- | --- |
+| D.2 | requirements, API design, startup settings example |
+| D.1 | requirements, API design, error migration |
+| D.3 | API design and error migration |
+| D.4 | ADR-017, requirements, API design, error migration, release notes |
+| D.7a | requirements, architecture, API design, generated model inventories |
+| D.7b | ADR-018, OTLP lifecycle requirements, migration guide |
+| D.7c | source provenance manifest, architecture dependency boundary |
+| D.7d | OTLP operational docs under `docs/observability/otlp/` |
+| D.5 | Python distribution docs and platform policy |
+| D.6 | Python distribution docs and metadata receipt contract |
+
 ## Sprint order
 
 All implementation branches target `develop`; this plan does not authorize a
 release, tag, registry publication, or a change to the supported Python floor.
+
+The single execution order is **D.2 → D.1 → D.3 → D.4 → D.7a → D.7b →
+D.7c → D.7d → D.5 → D.6**. Each sprint merges its predecessor before work
+and before every correction round. None is `parallel_safe`: the apparently
+separable pairs share either the public logger/configuration contract, the
+2.0 API baseline, OTLP lifecycle/configuration code, or the immutable Python
+distribution evidence set.
 
 | Relation | Rationale |
 | --- | --- |
@@ -55,6 +78,14 @@ consumer fixtures.
 - D.4 is a breaking **2.0** sprint. It requires a versioning decision,
   migration guide, public-API approval, semver fixture updates, and consumer
   migration evidence; it may not masquerade as a 1.x additive release.
+- Before D.4 code changes, the technical lead must accept new ADR-017,
+  "Phase D 2.0 error surface", which explicitly supersedes ADR-012 only for
+  the enumerated 2.0 breaks. Before D.7b code changes, the lead must accept
+  ADR-018, "Dual OTLP backends and shared lifecycle". Proposed text, silence,
+  or an issue label is not approval; the accepted ADR commit is a gate.
+- D.1–D.3 are additive 1.x work. Their public-API/semver checks compare the
+  candidate to the published `1.4.1` baseline and target the next compatible
+  1.x development line. D.4 creates the 2.0 baseline; D.7a–D.7d consume it.
 - Existing Python distribution compatibility remains open-ended: CPython
   stable ABI `abi3-py310`, `requires-python = ">=3.10"`, no upper bound, and
   all supported current interpreters. D.6 protects this; it does not add an
@@ -87,3 +118,28 @@ consumer fixtures.
 This index and the ten sprint docs, plus requirements/ADR/migration and CI
 updates explicitly owned by those docs. Each sprint requires direct QA against
 its authoritative acceptance list and retains exact command/evidence output.
+
+## Shared implementation gates
+
+- Extend `scripts/ci/validate_public_api_semver.py` with an explicit major
+  release mode. Every removed/changed symbol must be enumerated in reviewed
+  `release/public-api-major-breaks.toml`, linked to accepted ADR-017, and
+  compared with the frozen 1.4.1 baseline. Unlisted breaks still fail. Only
+  after that comparison passes may the reviewed 2.0 baseline be generated;
+  this is a controlled rebaseline, not a waiver.
+- D.7b/D.7c update `scripts/ci/validate_repo_boundaries.sh`,
+  `scripts/ci/validate_dependency_bans.sh`, and architecture §6 with exact,
+  feature-gated OTLP dependency allowlists. Automated SDK-only, legacy-only,
+  combined, and no-exporter graphs replace manual `cargo tree` inspection.
+- D.1 and D.7a–D.7c add every new failure to the central error inventory with
+  stable code, cause, remediation, redaction, and retryability. Required codes
+  include policy rejection, detach timeout, invalid histogram, unsupported
+  backend/protocol, async lifecycle required, runtime terminated, blocking
+  backend in async context, queue full, lifecycle timeout, and worker
+  terminated.
+- Source restoration uses
+  [`legacy-otlp-provenance.json`](legacy-otlp-provenance.json). The Phase B
+  `validate_log_import.py` mechanism is extended to verify the source commit,
+  Git blob ids, destination hashes/dispositions, and to reject scratch paths,
+  `/tmp` literals, ATM imports, ATM-only labels, and stale repository names in
+  imported production/docs output.

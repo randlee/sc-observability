@@ -1,8 +1,12 @@
 ---
 id: D.7b
-status: proposed
+status: complete
 branch: feature/phase-d-7b-otlp-sdk-tokio
 base: develop
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7b-otlp-sdk-tokio
+depends_on: [D.7a]
+relation: must_follow
+owned_docs: [docs/requirements.md, docs/architecture.md, docs/migrate-error-api.md]
 release_train: '2.0'
 recommended_agent: rust-developer
 recommended_model: deep-reasoning
@@ -70,13 +74,33 @@ never branched on by emit, flush, or shutdown. Selecting `LegacyHttpJson`
 before D.7c returns a stable typed unsupported-backend error. An enabled
 configuration never silently installs a no-op exporter.
 
+The factory validates this closed matrix before allocating providers/workers:
+
+| Backend | Valid protocol | Required feature/runtime | Invalid result |
+| --- | --- | --- | --- |
+| disabled (transport disabled) | none | none | the sole no-network disabled implementation |
+| `OpenTelemetrySdk` | SDK-supported gRPC or HTTP/protobuf | `otlp-sdk`; entered caller Tokio runtime | stable unsupported-protocol/runtime error |
+| `LegacyHttpJson` | `HttpJson` only | `legacy-http-json`; plain-thread construction | reserved typed error until D.7c |
+
+Delete public/production `Noop*Exporter` fallbacks; disabled construction is an
+explicit private disabled set and an enabled selection can never reach it.
+Every existing `OtelConfig` field receives one disposition: endpoint,
+headers/auth, CA/TLS, timeout and retry map to the selected builder;
+`debug_local_export` is a separate diagnostic mirror outside exporter
+selection; `insecure_skip_verify` is either implemented by the backend with an
+explicit security warning or rejected at construction—never ignored.
+
 ## 2.0 lifecycle decision
 
-Synchronous `emit_*` remains admission-only for the SDK backend. One bounded
-SDK dispatcher is spawned on the caller's current Tokio runtime and holds the
-SDK providers/processors. Trait calls clone owned batches and synchronously
-enqueue ordered commands; they never call `block_on`, create another runtime,
-or wait for network I/O.
+Synchronous `emit_*` remains admission-only for the SDK backend. Construction
+requires an entered Tokio handle and fails before mutation outside a runtime.
+One bounded SDK dispatcher is spawned on that runtime and holds the SDK
+providers/processors. Use the SDK batch processor (not a second simple/blocking
+processor). Trait calls clone owned batches and use nonblocking bounded
+admission; they never call `block_on`, create another runtime, wait for queue
+capacity, or perform network I/O. Capacity is a validated configuration value;
+full/closed queues fail open, increment existing per-signal dropped counters,
+set degraded/unavailable health, and return stable `QueueFull`/worker failures.
 
 The canonical 2.0 completion surface is:
 
@@ -96,6 +120,13 @@ stable typed `AsyncLifecycleRequired` failure before any mutation; callers then
 use the async method. This avoids returning success before a future collector
 failure is known and avoids blocking a Tokio worker.
 
+Every public lifecycle entry point is dispositioned together: untyped
+`flush()`/`shutdown()` delegate once to the typed synchronous methods;
+`flush_typed()`/`shutdown_typed()` perform backend-neutral preflight; and
+`flush_async_typed()`/`shutdown_async_typed()` use the same shared barriers.
+No entry point branches on `ExporterBackend`, bypasses ordering, or starts a
+second completion path.
+
 The dispatcher linearizes every export and lifecycle command under one short
 admission lock with a monotonic sequence. A flush barrier completes only after
 all commands sequenced before it have terminal outcomes. Concurrent emission
@@ -108,6 +139,15 @@ the shared completion while it is in flight; later calls after terminal
 completion are idempotent and return `Ok(())`, preserving the existing
 first-caller failure rule.
 
+Every async flush/shutdown accepts or derives a finite validated deadline.
+Timeout resolves all waiters with `LifecycleTimeout`, leaves a truthful
+degraded terminal state, and never reports success while work is pending.
+Synchronous SDK lifecycle always returns `AsyncLifecycleRequired`, including
+from a plain thread; it never uses `spawn_blocking` or blocks a current-thread
+runtime. Typestate was considered and rejected because existing `Telemetry`
+must support runtime-selected backends; the explicit shared state machine plus
+typed preflight is the reviewable 2.0 contract.
+
 Dropping an awaiter does not cancel the queued lifecycle command. The host must
 keep its Tokio runtime alive until `shutdown_async_typed().await` completes;
 after completion it may tear the runtime down immediately. If the host runtime
@@ -116,13 +156,26 @@ terminates first, dispatcher/task drop guards resolve waiters with a typed
 dropped/degraded. The plan records this decision in the architecture/ADR and
 amends OTLP-021 and the 1.x-to-2.0 migration guide accordingly.
 
+## Mandatory two-stage implementation
+
+D.7b is one sprint but must be reviewed as two sequential implementation PRs.
+**D.7b-L** first lands the backend-neutral lifecycle core, state machine,
+barriers, deadlines, health/accounting, error inventory, matrix validation,
+and traits with fake exporters only. **D.7b-S** must follow it and adds the
+official SDK adapter and Tokio fixture. D.7c consumes D.7b-L; it must not build
+a second dispatcher or lifecycle state machine. Neither sub-PR may be folded
+into an unreviewable single change.
+
 ## Deliverables
 
 1. Pin reviewed compatible versions/features of `opentelemetry`,
    `opentelemetry_sdk`, and `opentelemetry-otlp`; record dependency, license,
    Rust-version, feature, and protocol impact.
-2. Implement the backend factory, common `ExporterSet`, official SDK signal
-   adapters, shared dispatcher, and completion outcome sink. Convert D.7a
+   Update `validate_repo_boundaries.sh`, `validate_dependency_bans.sh`, and
+   architecture §6; automated no-exporter/SDK-only graph fixtures enforce the
+   exact allowlist.
+2. Implement D.7b-L's one shared lifecycle core and factory, then D.7b-S's
+   common `ExporterSet`, official SDK signal adapters and outcome sink. Convert D.7a
    neutral signals without losing resource/scope metadata, kind, flags, links,
    events, status, or histogram content.
 3. Implement the exact ordering/state/cancellation contract above without
@@ -131,12 +184,16 @@ amends OTLP-021 and the 1.x-to-2.0 migration guide accordingly.
 4. Preserve fail-open health/dropped behavior for immediate admission,
    terminal export, runtime cancellation, and lifecycle failures. Invalid or
    unsupported combinations fail construction with stable typed errors.
+   Health exposes bounded queue depth/capacity, worker/provider state, last
+   terminal failure and per-signal overflow counts without credentials.
 5. Add an in-repository Tokio-hosted public consumer and loopback collector
    fixture covering all signals, redaction, bounded channel pressure, timeout,
    late failure, flush barriers, concurrent admission, shutdown, cancellation,
    and immediate post-completion host teardown.
+   Its fixture crate is `publish = false` and excluded from publish rosters.
 6. Record the lifecycle ADR, OTLP-021 revision, API approval, and migration from
    synchronous 1.x lifecycle to the backend-neutral async 2.0 completion API.
+   The technical lead must accept ADR-018 before D.7b-L production code.
 
 ## Acceptance criteria
 
@@ -156,6 +213,10 @@ amends OTLP-021 and the 1.x-to-2.0 migration guide accordingly.
   records as dropped, and never reports successful completion.
 - Two telemetry instances remain isolated; enabled SDK config cannot resolve
   to no-op; disabled config makes no request; credentials never enter errors.
+- Capacity-one/full/closed queue tests account each record exactly once; finite
+  deadlines, worker/provider death, construction outside Tokio, all valid and
+  invalid backend/protocol/config combinations, queue-depth health, and
+  `debug_local_export`/`insecure_skip_verify` dispositions are asserted.
 
 ## Required validation
 
@@ -164,6 +225,8 @@ amends OTLP-021 and the 1.x-to-2.0 migration guide accordingly.
 - `cargo test -p sc-observability-otlp --features otlp-sdk --locked`.
 - Workspace tests/clippy/rustdoc, dependency/license, public API/semver,
   requirements/ADR, and migration-doc consistency gates.
+- Automated feature graph gates for no-exporter and SDK-only builds, including
+  the updated repository-boundary/dependency-ban allowlists.
 
 ## Non-closure
 

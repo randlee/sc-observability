@@ -1,8 +1,12 @@
 ---
 id: D.6
-status: proposed
+status: complete
 branch: feature/phase-d-6-python-open-ended-guard
 base: develop
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-6-python-open-ended-guard
+depends_on: [D.5]
+relation: must_follow
+owned_docs: [docs/python-distribution.md, release/python-platform-policy.json]
 ---
 
 # D.6 — Open-ended Python distribution regression guard
@@ -15,15 +19,18 @@ and `requires-python = ">=3.10"` with no upper bound.
 
 ## Deliverables
 
-1. Add a hermetic CI validator that parses—not greps—the Python
-`pyproject.toml`, `Cargo.toml`, and built wheel metadata/tags. It asserts
-`requires-python` has lower bound 3.10 and no upper/exclusion cap, PyO3 and
-maturin features select `abi3-py310`, and wheel tags are stable-ABI
-`cp310-abi3` for every policy platform.
-2. Run the validator in the normal Python source/distribution workflow before
+1. Extend the existing `_python_distribution.py` source inspection and
+   `inspect_wheel` result with `expected_requires_python`. Parse—not grep—the
+   Python `pyproject.toml`, `Cargo.toml`, and built wheel `METADATA`; assert
+   `requires-python` has lower bound 3.10 and no upper/exclusion cap. Retain
+   the existing PyO3/maturin and `cp310-abi3` tag validators; do not create a
+   second wheel-tag validator.
+2. Run the extension in `.github/workflows/b4a-python-distributions.yml`, in the
+   existing aggregate distribution-validation job before
    publishing eligibility, and add unit fixtures that fail for `>=3.10,<3.13`,
    non-abi3/cp311 ABI tags, missing abi3 feature, and a wrong platform tag.
-3. Emit a concise contract receipt identifying parsed metadata, source SHA,
+3. Add only the missing source/artifact metadata comparison and emit a concise
+   contract receipt identifying parsed metadata, source SHA,
    policy platform list, and validator version; retain it with the existing
    production distribution evidence.
 4. Document the invariant and explicit change-control rule: raising the floor

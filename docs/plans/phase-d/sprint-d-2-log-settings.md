@@ -1,8 +1,12 @@
 ---
 id: D.2
-status: proposed
+status: complete
 branch: feature/phase-d-2-log-settings
 base: develop
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-2-log-settings
+depends_on: []
+relation: root
+owned_docs: [docs/requirements.md, docs/api-design.md]
 ---
 
 # D.2 — Shared startup `LogSettings` (#96)
@@ -11,7 +15,8 @@ base: develop
 
 Create the single serde-stable, binding-friendly configuration value in
 `sc-observability` that applications resolve before constructing a `Logger`.
-It has no internal sprint dependency and must merge before D.1.
+It has no internal sprint dependency and must merge before D.1. This is
+additive 1.x work checked against the published 1.4.1 API/semver baseline.
 
 ## Public contract
 
@@ -19,32 +24,11 @@ It has no internal sprint dependency and must merge before D.1.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct LogSettings {
-    #[serde(
-        default,
-        serialize_with = "settings_level_wire::serialize_option",
-        deserialize_with = "settings_level_wire::deserialize_option"
-    )]
-    pub level: Option<LevelFilter>,
+    pub level: Option<LevelFilterDto>,
     pub log_root: Option<PathBuf>,
     pub enable_file_sink: Option<bool>,
     pub enable_console_sink: Option<bool>,
-    pub retained_log_policy: Option<RetainedLogPolicyOverrides>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
-pub struct RetainedLogPolicyOverrides {
-    pub rotation_max_bytes: Option<u64>,
-    pub rotation_max_files: Option<u64>,
-    pub retention_max_age_days: Option<u32>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LogEnvPrefix(String);
-
-impl LogEnvPrefix {
-    pub fn shared() -> Self; // exactly "SC_"
-    pub fn application(value: &str) -> Result<Self, LogSettingsError>;
+    pub retained_log_policy: Option<RetainedLogPolicy>,
 }
 
 pub struct ResolvedLogSettings {
@@ -58,7 +42,7 @@ pub struct ResolvedLogSettings {
 }
 
 impl LogSettings {
-    pub fn from_env(prefix: LogEnvPrefix) -> Result<Self, LogSettingsError>;
+    pub fn from_env(prefix: EnvPrefix) -> Result<Self, LogSettingsError>;
     pub fn resolve(
         file: Option<Self>,
         shared_env: Self,
@@ -72,20 +56,21 @@ impl ResolvedLogSettings {
 }
 ```
 
-`settings_level_wire` is a crate-private, field-local adapter. Its serializer
-maps `LevelFilter::{Off,Error,Warn,Info,Debug,Trace}` to lowercase strings. Its
-deserializer accepts those six tokens case-insensitively (and accepts `null`
-for `Option`) before converting to the existing `LevelFilter`. Environment
-parsing calls the same settings-only token parser. The adapter is attached only
-to `LogSettings.level`: the existing `Serialize`/`Deserialize` implementation
-for `LevelFilter` remains unchanged and continues to emit/accept its published
-native variant names such as `"Info"`.
+The contract reuses existing owners: `LevelFilterDto` supplies the published
+level wire conversion, `EnvPrefix` supplies its existing validation and
+normalization rules, and `RetainedLogPolicy` supplies strong policy values and
+millisecond duration semantics. D.2 must not add `settings_level_wire`,
+`LogEnvPrefix`, or an overrides type. `RetainedLogPolicy` gains `serde(default)`
+only if needed to support a partial nested object, preserving its field names,
+strong validation, and canonical units.
 
-`LogEnvPrefix::shared()` is exactly `SC_`. An application prefix must match
-`[A-Z][A-Z0-9_]*_`; `LogEnvPrefix::application("BTIT_")`, for example, maps
-the same suffixes to `BTIT_LOG_*`. Resolution is field-wise
-`defaults < JSON < SC_ environment < application environment`. If no
-application prefix is requested, the last layer is absent.
+The shared namespace is `EnvPrefix::new("SC")`; an application such as BTIT
+uses `EnvPrefix::new("BTIT")` and maps to `BTIT_LOG_*`. Prefixes follow the
+existing `EnvPrefix` contract (no caller-supplied trailing underscore).
+Resolution is normally `defaults < JSON < SC_ environment < application
+environment`. To preserve LOG-009, an explicitly non-empty JSON `logRoot`
+wins over `SC_LOG_ROOT`; the environment root is consulted only when JSON root
+is absent/empty, then the application root wins if configured.
 
 ## Authoritative field inventory
 
@@ -98,13 +83,19 @@ Defaults are the values passed to or produced by `LoggerConfig::default_for`.
 | `log_root` | `logRoot` | `SC_LOG_ROOT` | non-empty OS path | `default_root` argument | present empty value is invalid |
 | `enable_file_sink` | `enableFileSink` | `SC_LOG_FILE` | JSON boolean / env `true` or `false` | `true` | no numeric/truthy aliases |
 | `enable_console_sink` | `enableConsoleSink` | `SC_LOG_CONSOLE` | JSON boolean / env `true` or `false` | `false` | no numeric/truthy aliases |
-| `retained_log_policy.rotation_max_bytes` | `retainedLogPolicy.rotationMaxBytes` | `SC_LOG_ROTATION_MAX_BYTES` | bytes, base-10 unsigned integer | `67_108_864` | `1..=u64::MAX` |
-| `retained_log_policy.rotation_max_files` | `retainedLogPolicy.rotationMaxFiles` | `SC_LOG_ROTATION_MAX_FILES` | file count, base-10 unsigned integer | `10` | must fit target `usize`; zero means retain no rotated files |
-| `retained_log_policy.retention_max_age_days` | `retainedLogPolicy.retentionMaxAgeDays` | `SC_LOG_RETENTION_MAX_AGE_DAYS` | calendar days, base-10 unsigned integer | `7` | `1..=u32::MAX` and duration conversion must not overflow |
+| `retained_log_policy.rotation_max_bytes` | `retainedLogPolicy.rotation_max_bytes` | `SC_LOG_ROTATION_MAX_BYTES` | canonical `ByteCount` serde / bytes | canonical policy default | existing strong-type validation |
+| `retained_log_policy.rotation_max_files` | `retainedLogPolicy.rotation_max_files` | `SC_LOG_ROTATION_MAX_FILES` | canonical `FileCount` serde | canonical policy default | existing strong-type validation |
+| `retained_log_policy.retention_max_age` | `retainedLogPolicy.retention_max_age` | `SC_LOG_RETENTION_MAX_AGE_MS` | canonical `RetentionMaxAge` serde / milliseconds | canonical policy default | existing strong-type validation |
+| `retained_log_policy.maintenance_cadence` | `retainedLogPolicy.maintenance_cadence` | `SC_LOG_MAINTENANCE_CADENCE_MS` | canonical `MaintenanceCadence` serde / milliseconds | canonical policy default | existing strong-type validation |
+| `retained_log_policy.writer_shutdown_timeout` | `retainedLogPolicy.writer_shutdown_timeout` | `SC_LOG_WRITER_SHUTDOWN_TIMEOUT_MS` | canonical `WriterShutdownTimeout` serde / milliseconds | canonical policy default | existing strong-type validation |
+| `retained_log_policy.maintenance_max_work_per_pass` | `retainedLogPolicy.maintenance_max_work_per_pass` | `SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS` | optional count | canonical policy default | existing policy validation |
 
 The application-prefix form replaces only the leading `SC_` in this table.
-`maintenance_cadence`, `writer_shutdown_timeout`, queue capacity, redaction,
-process identity, and maintenance work limit retain current
+If the application prefix normalizes to `SC`, construction fails with
+`PrefixCollision`. A selected namespace containing a non-UTF-8 key/value,
+duplicate case-folded key, or unknown `${prefix}_LOG_*` key fails with a stable
+typed code; unrelated namespaces and non-UTF-8 values are ignored.
+Queue capacity, redaction, and process identity retain current
 `LoggerConfig::default_for` values and are not D.2 configuration fields.
 
 JSON absent and JSON `null` both mean “no override” for each optional field.
@@ -116,11 +107,12 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
 
 ## Deliverables
 
-1. Add the public source and resolved types, prefix type, typed errors, stable
-   codes, rustdoc, field-local level adapter, serde behavior, and signatures
-   above. Do not change shared `LevelFilter` serde.
+1. Add the public source/resolved types, typed errors, stable codes, rustdoc,
+   serde behavior, and signatures above by reusing `EnvPrefix`,
+   `LevelFilterDto`, and `RetainedLogPolicy`; add no parallel owners.
 2. Implement deterministic environment parsing for the complete inventory and
-   field-wise resolution in the documented four-layer order. Parsing uses a
+   field-wise resolution in the documented order including the LOG-009 root
+   exception. Parsing uses a
    captured environment snapshot so one resolution cannot mix process states.
 3. Convert the resolved value to `LoggerConfig` and its strong policy types,
    preserving all non-inventory defaults and introducing no post-construction
@@ -139,10 +131,11 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
 - Every invalid boundary, present-empty environment value, unknown JSON key,
   and unknown selected-prefix environment key returns its documented typed
   failure and code.
-- Serde uses exactly the camelCase keys and typed level values in the table;
-  settings round-trip fixtures freeze lowercase output and case-insensitive
-  input. The pre-existing native `LevelFilter` fixture still round-trips
-  `"Info"` unchanged outside `LogSettings`.
+- Collision, trailing-underscore misuse, case collision, selected-namespace
+  non-UTF-8, and LOG-009 root-precedence fixtures freeze prefix behavior.
+- Serde uses exactly the camelCase keys and delegates level tokens to the
+  existing `LevelFilterDto` conversion/fixtures; no second case policy is
+  introduced. Native `LevelFilter` behavior remains unchanged.
 - Configuration is fully resolved before logger construction; no setter,
   watcher, or late reload is introduced.
 
@@ -150,9 +143,9 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
 
 - Table-driven unit tests generated from the authoritative inventory for JSON,
   environment, precedence, defaults, validation, and conversion parity.
-- A paired serde regression proves `LogSettings { level: Info }` emits
-  `{"level":"info"}` while standalone `LevelFilter::Info` still emits
-  `"Info"` and consumes the existing published fixture.
+- Paired regressions prove `LogSettings` delegates to the existing
+  `LevelFilterDto` wire and `RetainedLogPolicy` validation rather than defining
+  second codecs or units.
 - Public consumer compile fixture plus `cargo test --workspace --locked`.
 - Docs consistency, rustdoc, public API, and semver gates used by the repository
   at execution time.

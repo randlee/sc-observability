@@ -1,8 +1,12 @@
 ---
 id: D.7d
-status: proposed
+status: complete
 branch: feature/phase-d-7d-otlp-conformance
 base: develop
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7d-otlp-conformance
+depends_on: [D.7c]
+relation: must_follow
+owned_docs: [docs/requirements.md, docs/architecture.md, docs/observability/otlp]
 release_train: '2.0'
 recommended_agent: rust-developer
 recommended_model: deep-reasoning
@@ -54,8 +58,13 @@ wire/protocol differences are allowed, signal meaning loss is not.
 4. Restore Grafana dashboard and LogQL/trace/metric recipes from legacy phases
    AV–AY only after translating them to current neutral resource/attribute
    schema. Record a disposition for each retained or omitted recipe; no stale
-   ATM-only label is presented as a generic contract.
-5. Finalize OTLP-001–022, architecture, migration guide, API approvals,
+   ATM-only label is presented as a generic contract. Use the exact blobs and
+   destinations in `legacy-otlp-provenance.json`, including
+   `docs/observability/otlp/` and `scripts/ci/`; validate the import manifest
+   and every final destination hash.
+5. Verify and, where implementation differs, amend the already-established
+   OTLP-001–022 requirements; do not describe OTLP-021 as future work. Update
+   accepted ADR-018, architecture, migration guide, API approvals,
    dependency/license inventory, release notes, and operational docs for both
    backends and the no-enabled-noop rule. The requirements and migration guide
    must state the D.7b 2.0 lifecycle decision, barrier ordering, runtime-lifetime
@@ -80,6 +89,9 @@ wire/protocol differences are allowed, signal meaning loss is not.
   internal transitive Tokio graph.
 - Restored dashboards/queries work against the current collector fixture and
   have a complete legacy-to-current disposition inventory.
+- Import provenance validates source commit/blob ids, destination hashes, and
+  rejects ATM-only imports/labels, scratch paths, `/tmp` literals, and stale
+  legacy repository names from shipped docs/scripts.
 - Requirements, architecture, API, migration, release, and operational docs
   agree; no enabled configuration is documented or implemented as no-op.
 
@@ -92,6 +104,10 @@ wire/protocol differences are allowed, signal meaning loss is not.
   public API/semver, docs consistency, dependency/license, and CI workflow
   validation.
 - Local collector smoke commands for both backends at one exact source SHA.
+- A backend × protocol × runtime × feature conformance matrix covering every
+  valid and rejected combination, `debug_local_export`,
+  `insecure_skip_verify`, disabled transport, queue pressure, deadline, and
+  worker/provider failure.
 
 ## Non-closure
 

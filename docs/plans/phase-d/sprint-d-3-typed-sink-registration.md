@@ -1,8 +1,12 @@
 ---
 id: D.3
-status: proposed
+status: complete
 branch: feature/phase-d-3-typed-sink-registration
 base: develop
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-3-typed-sink-registration
+depends_on: [D.1]
+relation: must_follow
+owned_docs: [docs/api-design.md, docs/migrate-error-api.md]
 ---
 
 # D.3 — Typed sink registration ergonomics (#203)
@@ -11,6 +15,8 @@ base: develop
 
 After D.1, remove the 1.x consumer need to use deprecated `LogSinkError` or
 manually call `typed::legacy_sink()` when registering a `TypedLogSink`.
+This additive surface is checked against published 1.4.1. It is a deliberate
+one-release bridge: D.4 removes the duplicate typed/legacy split in 2.0.
 
 ## Deliverables
 
@@ -42,4 +48,6 @@ manually call `typed::legacy_sink()` when registering a `TypedLogSink`.
 ## Non-closure
 
 The retained `LogSink`/`LogSinkError` ABI is not removed here; D.4 owns the
-2.0 removal and migration.
+2.0 removal and migration. D.4's inventory must disposition
+`SinkRegistration::typed`, `register_typed_sink`, `TypedLogSink`, and
+`legacy_sink` together so only one canonical sink path remains.

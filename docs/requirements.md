@@ -364,6 +364,16 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
     false success, and accounts admitted-but-incomplete records as dropped
   - incomplete spans are dropped only at shutdown/final flush
 - OTLP-022 `sc-observability-otlp` shall own crate-local sealed signal-emitter traits for direct telemetry injection where needed.
+- OTLP-023 Restored legacy exporter code, tests, dashboards, and operational
+  recipes shall be traceable to an immutable source commit and Git blob in an
+  in-repository provenance manifest. Import validation shall verify destination
+  dispositions/hashes and reject scratch paths, ATM dependencies/labels, and
+  stale source-repository names from shipped output.
+- OTLP-024 The supported Grafana/LogQL operational recipes shall be translated
+  to the current neutral resource/attribute schema, tested against the same
+  hermetic collector corpus as both exporters, and stored under
+  `docs/observability/otlp/`; legacy phase documents are evidence, not a public
+  labeling contract.
 
 ## 6.1 ATM Out-Of-The-Box Baseline
 
