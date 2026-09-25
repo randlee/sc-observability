@@ -8,7 +8,7 @@ depends_on: []
 relation: root
 assignee: lobs
 model_class: luna
-owned_docs: [docs/architecture.md, docs/requirements.md, docs/api-design.md, docs/migrate-error-api.md]
+owned_docs: [docs/architecture.md, docs/requirements.md, docs/api-design.md]
 ---
 
 # D.4 — 2.0 discriminated error enum migration (#92)
@@ -53,9 +53,8 @@ silence, or issue label is not approval.
    error boundaries with a documented mapping.
 7. Update every version-bearing target: workspace/package `Cargo.toml` and
    `Cargo.lock`, `crates/sc-observability-py/{Cargo.toml,pyproject.toml}`,
-   JavaScript package metadata, `release/{publish-artifacts.toml,
-   bindings-artifacts.toml,python-platform-policy.json}`, hard-coded wheel
-   names/fixtures, changelog, and release documentation. A repository scan
+   JavaScript package metadata, release manifests, changelog, and release
+   documentation. A repository scan
    must disposition every remaining `1.4.1` literal.
 8. Add the controlled major-release mechanism to
    `validate_public_api_semver.py`: compare against frozen 1.4.1, require every

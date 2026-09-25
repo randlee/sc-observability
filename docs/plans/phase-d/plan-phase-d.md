@@ -8,53 +8,54 @@ worktree: /Users/randlee/github/sc-observability-worktrees/plan/phase-d
 
 # Phase D — logging, OTLP, and Python distribution
 
-This is a planned implementation; every sprint below is `planned` until
-implemented.
-Implementation uses independent `gh stack` stacks rooted on `develop`. A stack
-merges bottom-to-top with `gh stack merge --yes`; after the stack heads land,
-`integrate/phase-d` rebases remaining heads on `develop` and runs final
-workspace/release checks. A release-train label is not a code dependency.
+All sprints are planned. The plan has four independent work streams, with only
+real code-consumption edges. Each branch starts from `develop`; a
+`must_follow` child merge-forwards its parent’s development branch before a
+work or fix round. Final release integration happens in
+`/Users/randlee/github/sc-observability-worktrees/integrate/phase-d` on
+`integrate/phase-d` after the listed parent PRs merge.
 
 ## Sprint table
 
-| Sprint | Deliverable | Stack | Agent:model | Depends on / concrete reason |
+| Sprint | Deliverable | Agent:model | Relation and concrete reason |
 | --- | --- | --- | --- | --- |
-| D.1 | [Startup `LogSettings`](sprint-d-1-log-settings.md) | logging | cobs:terra | — |
-| D.2 | [Host logger bridge](sprint-d-2-host-logger-bridge.md) | logging | cobs:terra | D.1: bridge consumes resolved `LogSettings` |
-| D.3 | [Typed sink registration](sprint-d-3-typed-sink-registration.md) | logging | cobs:terra | D.2: uses the finalized logger integration boundary |
-| D.4 | [2.0 error enums](sprint-d-4-error-enums-2-0.md) | errors | lobs:luna | — |
-| D.5 | [OTLP signal model](sprint-d-5-otlp-signal-model.md) | otlp | aobs:astra | —; rebase only if D.4 changes a consumed error type |
-| D.6 | [SDK/Tokio exporter](sprint-d-6-otlp-sdk-tokio.md) | otlp | aobs:astra | D.5: consumes neutral signals |
-| D.7 | [Legacy HTTP/JSON transplant](sprint-d-7-otlp-http-json-transplant.md) | otlp | aobs:astra | D.6: consumes shared exporter/lifecycle/config code |
-| D.8 | [Dual-path conformance](sprint-d-8-otlp-conformance.md) | otlp | aobs:astra | D.7: requires both production paths |
-| D.9 | [Windows ARM64 wheel](sprint-d-9-windows-arm64-wheel.md) | python | cobs:terra | — |
-| D.10 | [Python ABI/metadata guard](sprint-d-10-python-open-ended-guard.md) | python | cobs:terra | D.9: validates the final wheel matrix |
+| D.1 | [Startup `LogSettings`](sprint-d-1-log-settings.md) | cobs:terra | Parallel-safe with D.2/D.3; no bridge or sink API consumes it. |
+| D.2 | [Host logger bridge](sprint-d-2-host-logger-bridge.md) | cobs:terra | Parallel-safe with D.1/D.3; it owns only the `log` facade bridge. |
+| D.3 | [1.x typed-sink bridge](sprint-d-3-typed-sink-registration.md) | cobs:terra | Parallel-safe with D.1/D.2; a temporary 1.x-only compatibility release. |
+| D.4 | [2.0 error migration and release baseline](sprint-d-4-error-enums-2-0.md) | lobs:luna | Root; sole owner of the 2.0 version bump, API-break approval, and canonical error enums. |
+| D.5 | [OTLP signal model](sprint-d-5-otlp-signal-model.md) | aobs:astra | Must follow D.4: the model’s breaking API uses D.4’s 2.0 approval/baseline. |
+| D.6 | [OTLP lifecycle core](sprint-d-6-otlp-lifecycle-core.md) | aobs:astra | Must follow D.4 and D.5: uses canonical errors and neutral signals. |
+| D.7 | [Official SDK/Tokio adapter](sprint-d-7-otlp-sdk-tokio.md) | aobs:astra | Must follow D.6: injects the SDK through the shared lifecycle core. |
+| D.8 | [Legacy HTTP/JSON transplant](sprint-d-8-otlp-http-json-transplant.md) | aobs:astra | Must follow D.6: adapts copied transport code to the shared core. |
+| D.9 | [Dual-path conformance](sprint-d-9-otlp-conformance.md) | aobs:astra | Must follow D.7 and D.8: requires both operational backends. |
+| D.10 | [Windows ARM64 wheel](sprint-d-10-windows-arm64-wheel.md) | cobs:terra | Root; owns the independent six-platform Python matrix. |
+| D.11 | [Open-ended Python guard](sprint-d-11-python-open-ended-guard.md) | cobs:terra | Must follow D.10: checks the final matrix and metadata. |
 
-## Parallel stacks and worktrees
+## Branches, worktrees, and merge order
 
-| Stack | Branch order / merge order | Worktrees | Base and integration |
-| --- | --- | --- | --- |
-| logging | `feature/phase-d-1-log-settings` → `feature/phase-d-2-host-logger-bridge` → `feature/phase-d-3-typed-sink-registration` | `/Users/randlee/github/sc-observability-worktrees/feature/phase-d-{1-log-settings,2-host-logger-bridge,3-typed-sink-registration}` | `develop`; merge bottom-to-top |
-| errors | `feature/phase-d-4-error-enums-2-0` | `/Users/randlee/github/sc-observability-worktrees/feature/phase-d-4-error-enums-2-0` | `develop`; runs beside logging and OTLP |
-| otlp | `feature/phase-d-5-otlp-signal-model` → `feature/phase-d-6-otlp-sdk-tokio` → `feature/phase-d-7-otlp-http-json-transplant` → `feature/phase-d-8-otlp-conformance` | `/Users/randlee/github/sc-observability-worktrees/feature/phase-d-{5-otlp-signal-model,6-otlp-sdk-tokio,7-otlp-http-json-transplant,8-otlp-conformance}` | `develop`; D.5 rebases only for a consumed D.4 type |
-| python | `feature/phase-d-9-windows-arm64-wheel` → `feature/phase-d-10-python-open-ended-guard` | `/Users/randlee/github/sc-observability-worktrees/feature/phase-d-{9-windows-arm64-wheel,10-python-open-ended-guard}` | `develop`; starts when cobs finishes logging and overlaps OTLP |
+| Stream | Branches / merge order | Worktrees |
+| --- | --- | --- |
+| logging | `feature/phase-d-{1-log-settings,2-host-logger-bridge,3-typed-sink-registration}` are parallel-safe; cobs works them serially | matching `/Users/randlee/github/sc-observability-worktrees/feature/phase-d-*` paths |
+| errors | `feature/phase-d-4-error-enums-2-0` | matching feature worktree |
+| OTLP | `feature/phase-d-4-error-enums-2-0` → `feature/phase-d-5-otlp-signal-model` → `feature/phase-d-6-otlp-lifecycle-core` → two children, `feature/phase-d-7-otlp-sdk-tokio` and `feature/phase-d-8-otlp-http-json-transplant` → `feature/phase-d-9-otlp-conformance` | matching feature worktrees; D.7 and D.8 are parallel-safe after D.6 |
+| Python | `feature/phase-d-10-windows-arm64-wheel` → `feature/phase-d-11-python-open-ended-guard` | matching feature worktrees; cobs begins after logging |
 
-Start logging, errors, and OTLP together on cobs, lobs, and aobs. The final
-integration worktree is `/Users/randlee/github/sc-observability-worktrees/integrate/phase-d`
-on `integrate/phase-d`, based on current `develop`.
+## Scope and retained gates
 
-## Scope and real gates
-
-- D.4 keeps the published-1.4.1 literal scan and reviewed major API comparison;
-  the compiler covers ordinary call-site migration, so no per-`ErrorCode` ledger.
+- D.4 alone owns the 2.0 version bump, `release/public-api-major-breaks.toml`,
+  the reviewed API comparison, and the literal `1.4.1` scan. It does not own
+  Python platform policy.
+- D.3 is a 1.x bridge shipped before the 2.0 train. D.4 may remove it only in
+  that later major release; no D.3 API is added to the 2.0 baseline.
 - D.5 changes the metric type directly; compiler errors identify old
   `MetricRecord.value` uses, so no inventory ledger.
-- D.7 pins source commit/blob/SHA, destination, and disposition. A minimal
-  validator compares each transplant destination to its pinned source blob and
-  permits only D.7's named source-to-destination deltas.
-- D.8 runs ordinary dual-path tests and CI; it retains neither receipt archives
-  nor a permanent documentation-restatement CI gate.
-- D.10 relies on CI pass/fail and adds no archival artifact.
+- D.8 retains `legacy-otlp-provenance.json` to prove that the working legacy
+  implementation and tests are copied, not rewritten. Its validator compares
+  each copied file to the pinned source blob and accepts only named adaptation
+  deltas. Translation/reference rows require only their disposition.
+- D.9 runs ordinary dual-path tests. It adds no receipt archive or permanent
+  documentation-restatement CI gate.
+- D.11 relies on CI pass/fail and adds no archival artifact.
 
 No `atm-core` implementation, Python OTEL binding, registry publication, or
 new transport is included.

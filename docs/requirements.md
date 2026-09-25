@@ -341,7 +341,7 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
   - `initial_backoff_ms = 250`
   - `max_backoff_ms = 5000`
   - logs, traces, and metrics disabled unless explicitly configured
-  This list is the frozen 1.x baseline only. D.6-L exclusively owns the Phase
+  This list is the frozen 1.x baseline only. D.6 exclusively owns the Phase
   D 2.0 candidate config/default/validation contract and its documentation;
   upon ADR-018 acceptance, D.6 updates this requirement rather than allowing
   any later sprint to redefine that contract.

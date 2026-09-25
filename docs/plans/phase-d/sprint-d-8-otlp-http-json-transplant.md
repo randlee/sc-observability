@@ -1,9 +1,9 @@
 ---
-id: D.7
+id: D.8
 status: planned
-branch: feature/phase-d-7-otlp-http-json-transplant
+branch: feature/phase-d-8-otlp-http-json-transplant
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7-otlp-http-json-transplant
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-8-otlp-http-json-transplant
 depends_on: [D.6]
 relation: must_follow
 assignee: aobs
@@ -12,13 +12,13 @@ owned_docs: [docs/architecture.md, docs/plans/phase-d/legacy-otlp-provenance.jso
 release_train: '2.0'
 ---
 
-# D.7 — Legacy HTTP/JSON source transplant
+# D.8 — Legacy HTTP/JSON source transplant
 
 ## Goal and dependency
 
 Make `ExporterBackend::LegacyHttpJson` operational by transplanting—not
 rewriting—the tested synchronous exporter and its tests from
-`agent-team-mail`. D.7 `must_follow`s D.6 because both touch the same config,
+`agent-team-mail`. D.8 `must_follow`s D.6 because both touch the same config,
 crate dependencies, facade, and exporter ownership boundary.
 
 `sc-observability-py` is the concrete in-repository motivating consumer: a
@@ -44,10 +44,10 @@ and exits. No caller directly creates or drops a reqwest blocking client.
 
 Construction synchronously waits for worker/client initialization and is
 supported only from a plain thread. If a Tokio runtime is entered, construction
-returns the D.6-L transport-construction failure whose redacted diagnostic
+returns the D.6 transport-construction failure whose redacted diagnostic
 source is its blocking-backend-in-async-context outcome, before spawning the
 worker or calling reqwest. Synchronous flush/shutdown instead return that
-D.6-L runtime outcome directly after preflighting the calling context and
+D.6 runtime outcome directly after preflighting the calling context and
 before removing buffered records or sending commands. The nonblocking
 signal-admission methods and async lifecycle may be used from either context
 because all blocking transport work stays on the owned worker. Tokio-first
@@ -93,7 +93,7 @@ are authorized deltas—not claims about the legacy implementation:
 | Legacy behavior | Authorized transplant delta | Required matrix disposition |
 | --- | --- | --- |
 | retry every non-success status | retry connection errors, 408, 429, and 5xx; terminate other 4xx | `changed: retry classification` |
-| capped exponential delay only | honor bounded `Retry-After`; otherwise add per-instance-seeded bounded jitter (deterministic under an injected test seed), consuming D.6-L's independently capped server/fallback paths | `changed: server pacing/jitter and independent caps` |
+| capped exponential delay only | honor bounded `Retry-After`; otherwise add per-instance-seeded bounded jitter (deterministic under an injected test seed), consuming D.6's independently capped server/fallback paths | `changed: server pacing/jitter and independent caps` |
 | `thread::sleep` cannot be interrupted | use worker-owned cancelable wait woken by shutdown | `changed: shutdown cancellation` |
 | per-request timeout but no overall bound | add finite sequence deadline covering attempts and waits | `changed: retry deadline` |
 
@@ -103,10 +103,10 @@ algorithm. It explicitly carves out only the four safety deltas above. The
 source-to-destination matrix must name each delta and preserve copied tests
 alongside new delta-specific fixtures.
 
-D.7 consumes the validated legacy payload defined by D.6-L. D.6-L is
+D.8 consumes the validated legacy payload defined by D.6. D.6 is
 authoritative for every raw field, default, applicability rule, checked type,
 ordering rule, config error, origin metadata, and shared validation fixture;
-D.7 does not redefine them.
+D.8 does not redefine them.
 
 Delta-seconds and HTTP-date `Retry-After` values are parsed at most up to 128
 header bytes; raw values are never retained. Invalid values produce only the
@@ -138,40 +138,43 @@ ordered barrier's real terminal result on plain callers; async lifecycle awaits
 the same result. Backend choice remains construction/injection; no legacy
 branch is added to `Telemetry::emit_*`, flush, or shutdown.
 
-Legacy commands use the D.6-L lifecycle core and one bounded `sync_channel`;
+Legacy commands use the D.6 lifecycle core. A bounded data `sync_channel` and
+a separate capacity-one control `sync_channel` feed the same worker; it drains
+control with `try_recv` before waiting briefly for data. Thus flush/shutdown
+barriers cannot be starved by saturated admission.
 there is no second lifecycle state machine. Signal admission uses `try_send`:
 full/closed fails open, records exactly one per-signal drop and health change,
 and never waits. Barriers have a reserved control path so saturated data cannot
 starve them; async waiters use a Tokio `oneshot` completed by the plain worker,
 never a blocking receive on an executor. Worker/client initialization failure
-returns D.6-L's transport-construction failure before the handle is published.
+returns D.6's transport-construction failure before the handle is published.
 After successful initialization, panic, unexpected exit, or sender closure
 stores its worker-termination outcome, resolves every pending barrier, accounts
 abandoned admissions once, and never hangs.
 
-Legacy uses the authoritative D.6-L health/accounting contract without adding
-fields or transitions. The legacy worker consumes D.6-L's shared fixtures
+Legacy uses the authoritative D.6 health/accounting contract without adding
+fields or transitions. The legacy worker consumes D.6's shared fixtures
 unchanged, including redaction coverage.
 
 Each request/retry sequence has a finite overall deadline. Shutdown enters
 `Closing`, cancels retry backoff, and drains only work before its barrier.
 Connection errors, 408, 429, and 5xx are retryable; other 4xx are terminal.
 For every retry, choose exactly one delay path and apply either the validated
-D.6-L fallback cap or its independent server-delay cap, then the remaining
-sequence budget. D.7 consumes the cap semantics and ordering frozen by the
-D.6-L matrix/fixtures without redefining them. If no positive budget remains,
-return the D.6-L retry-deadline outcome without sleeping or issuing a
+D.6 fallback cap or its independent server-delay cap, then the remaining
+sequence budget. D.8 consumes the cap semantics and ordering frozen by the
+D.6 matrix/fixtures without redefining them. If no positive budget remains,
+return the D.6 retry-deadline outcome without sleeping or issuing a
 zero-budget attempt. No request, backoff, barrier, join, or client drop is
 unbounded.
 
-Shutdown cancellation of a pre-barrier retry sequence returns the D.6-L
+Shutdown cancellation of a pre-barrier retry sequence returns the D.6
 shutdown-cancelled-retry outcome: account that admitted batch as dropped
-exactly once, apply D.6-L terminal-health accounting, and return the failure from the
+exactly once, apply D.6 terminal-health accounting, and return the failure from the
 first/in-flight shutdown completion. Cancelable backoff wakes immediately. A
 currently blocking reqwest call cannot be interrupted, but its remaining wait
-is bounded by the D.6-L request and sequence budgets; public shutdown is
-bounded by the D.6-L lifecycle budget or returns its lifecycle-timeout
-outcome. All timing bounds arrive already validated; D.7 performs no second
+is bounded by the D.6 request and sequence budgets; public shutdown is
+bounded by the D.6 lifecycle budget or returns its lifecycle-timeout
+outcome. All timing bounds arrive already validated; D.8 performs no second
 validation.
 
 Delivery is **at least once across retries**: a collector may accept an
@@ -180,14 +183,14 @@ observed twice. The exporter supplies no idempotency key and does not promise
 deduplication. Attempts are recorded separately, while an admitted batch is
 counted as dropped exactly once only if the sequence exhausts/terminates; a
 successful retry is not a drop. Transient, terminal, and recovery accounting
-follow the D.6-L health contract without additional D.7 fields or
+follow the D.6 health contract without additional D.8 fields or
 transitions.
 
 ## Failure contract
 
-D.7 uses the complete D.6-L stable-failure table. Runtime paths return its
+D.8 uses the complete D.6 stable-failure table. Runtime paths return its
 named outcomes through the owning types and façade mappings defined there;
-D.7 owns no error variant, stable code, mapping, or error documentation.
+D.8 owns no error variant, stable code, mapping, or error documentation.
 
 ## Deliverables
 
@@ -210,21 +213,14 @@ D.7 owns no error variant, stable code, mapping, or error documentation.
    exact construction/use/drop contract above. The worker alone constructs,
    calls, and drops reqwest outside telemetry locks. Context preflight occurs
    before mutation; credentials remain redacted.
-   Reuse D.6-L's state/deadline/accounting core and implement the reserved
+   Reuse D.6's state/deadline/accounting core and implement the reserved
    control path, retry cancellation, worker-panic propagation, and oneshot
    async barrier described above.
 5. Add public external-consumer-style construction/flush/shutdown proof with
    no caller-owned Tokio runtime and no official OTel SDK/tonic dependencies.
-6. Retain exact reqwest features/version and commit `cargo tree` evidence for
-   the legacy-only feature graph, including its acknowledged transitive Tokio.
-7. Split transplanted source into bounded `worker`, `request`, `retry`, and
-   `payload` modules plus tests; enforce the repository line-count check.
-   Update both dependency-boundary scripts and architecture §6 with the exact
-   legacy allowlist and automated graph assertions.
-8. Verify that D.6-L-owned requirements, API design, rustdoc, and migration
-   guide cover the implemented legacy behavior and report any correction to
-   D.6-L. D.7 owns only legacy runtime/provenance and architecture-boundary
-   documentation; it does not edit or restate config/error contracts.
+6. Record the exact reqwest features/version and legacy-only dependency
+   boundary in architecture §6. D.8 owns legacy runtime/provenance and
+   architecture-boundary documentation; it does not redefine D.6 contracts.
 
 ## Acceptance criteria
 
@@ -237,7 +233,7 @@ D.7 owns no error variant, stable code, mapping, or error documentation.
 - Plain-thread construction plus sync flush/shutdown return real results.
   Construction and synchronous lifecycle from current-thread/multi-thread
   Tokio reject before worker creation, buffer drain, or command admission.
-  The construction fixture asserts the D.6-L wrapped construction form and
+  The construction fixture asserts the D.6 wrapped construction form and
   redacted blocking-context diagnostic source; lifecycle fixtures assert its
   direct runtime-failure form.
 - Async lifecycle from Tokio remains responsive while the plain worker performs
@@ -250,7 +246,7 @@ D.7 owns no error variant, stable code, mapping, or error documentation.
   incompatibility; structural rewrite or alternate HTTP/retry logic beyond the
   four authorized safety deltas fails QA.
 - Failures remain fail-open at the facade and update health/dropped counts.
-- Legacy health satisfies the complete D.6-L health/accounting contract
+- Legacy health satisfies the complete D.6 health/accounting contract
   equivalently to SDK, without adding or restating fields.
 - Capacity-one saturation cannot block or starve flush/shutdown; injected
   worker panic/exit resolves every sync/async waiter within the deadline.
@@ -259,16 +255,16 @@ D.7 owns no error variant, stable code, mapping, or error documentation.
 - Retry bound fixtures cover delta-seconds and HTTP-date, negative, malformed,
   past, and huge `Retry-After` values; distinct production instance seeds;
   deterministic injected seeds; and
-  positive jitter at the sequence deadline proving the D.6-L fallback clamp
+  positive jitter at the sequence deadline proving the D.6 fallback clamp
   and no zero-budget attempt. The shared cap-ordering fixture remains owned by
-  D.6-L and is consumed unchanged.
-- Shutdown-during-backoff asserts the D.6-L cancellation outcome, its exact
+  D.6 and is consumed unchanged.
+- Shutdown-during-backoff asserts the D.6 cancellation outcome, its exact
   accounting/facade mapping, and prompt wake.
 - Shutdown-during-request has three fixtures: a successful in-flight response
   completes with no drop; an ordinary terminal response fails/drops once with
-  its D.6-L terminal outcome; a retryable response becomes the D.6-L
+  its D.6 terminal outcome; a retryable response becomes the D.6
   cancellation outcome and drops once. Every case is accounted exactly once
-  and finishes within the D.6-L lifecycle contract.
+  and finishes within the D.6 lifecycle contract.
 - A response-loss fixture proves at-least-once duplicate delivery, separate
   attempt accounting, one terminal drop after exhaustion, and zero drops after
   a retried-then-successful batch.

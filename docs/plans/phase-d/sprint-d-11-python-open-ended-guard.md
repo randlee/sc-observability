@@ -1,21 +1,21 @@
 ---
-id: D.10
+id: D.11
 status: planned
-branch: feature/phase-d-10-python-open-ended-guard
+branch: feature/phase-d-11-python-open-ended-guard
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-10-python-open-ended-guard
-depends_on: [D.9]
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-11-python-open-ended-guard
+depends_on: [D.10]
 relation: must_follow
 assignee: cobs
 model_class: terra
-owned_docs: [docs/python-distribution.md, release/python-platform-policy.json]
+owned_docs: [docs/project-plan.md, release/python-platform-policy.json]
 ---
 
-# D.10 — Open-ended Python distribution regression guard
+# D.11 — Open-ended Python distribution regression guard
 
 ## Goal and dependency
 
-After D.9, make CI fail if the Python distribution stops being open-ended.
+After D.10, make CI fail if the Python distribution stops being open-ended.
 The required contract is PyO3 `abi3-py310`, built wheels tagged `cp310-abi3`,
 and `requires-python = ">=3.10"` with no upper bound.
 
@@ -44,7 +44,7 @@ and `requires-python = ">=3.10"` with no upper bound.
   and fails deterministically for every negative fixture.
 - A wheel must satisfy both source configuration and produced metadata/tag
   checks; changing only one cannot pass.
-- The six D.9 platforms have no Python-version upper bound hidden in PEP 440
+- The six D.10 platforms have no Python-version upper bound hidden in PEP 440
   specifier parsing.
 
 ## Required validation

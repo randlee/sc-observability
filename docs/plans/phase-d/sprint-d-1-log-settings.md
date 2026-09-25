@@ -5,7 +5,7 @@ branch: feature/phase-d-1-log-settings
 base: develop
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-1-log-settings
 depends_on: []
-relation: root
+relation: parallel_safe
 assignee: cobs
 model_class: terra
 owned_docs: [docs/requirements.md, docs/api-design.md]
@@ -17,8 +17,8 @@ owned_docs: [docs/requirements.md, docs/api-design.md]
 
 Create the single serde-stable, binding-friendly configuration value in
 `sc-observability` that applications resolve before constructing a `Logger`.
-It has no internal sprint dependency and must merge before D.2. This is
-additive 1.x work checked against the published 1.4.1 API/semver baseline.
+It is parallel-safe with D.2 and D.3 because neither consumes this type. This
+is additive 1.x work checked against the published 1.4.1 API/semver baseline.
 
 ## Public contract
 
@@ -26,7 +26,7 @@ additive 1.x work checked against the published 1.4.1 API/semver baseline.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct LogSettings {
-    pub level: Option<LevelFilterDto>,
+    pub level: Option<LevelFilter>,
     pub log_root: Option<PathBuf>,
     pub enable_file_sink: Option<bool>,
     pub enable_console_sink: Option<bool>,
@@ -38,19 +38,19 @@ pub struct ResolvedLogSettings {
     pub log_root: PathBuf,
     pub enable_file_sink: bool,
     pub enable_console_sink: bool,
-    pub rotation_max_bytes: ByteCount,
-    pub rotation_max_files: FileCount,
-    pub retention_max_age: RetentionMaxAge,
+    pub retained_log_policy: RetainedLogPolicy,
 }
 
 impl LogSettings {
     pub fn from_env(prefix: EnvPrefix) -> Result<Self, LogSettingsError>;
-    pub fn resolve(
-        file: Option<Self>,
-        shared_env: Self,
-        application_env: Option<Self>,
-        default_root: PathBuf,
-    ) -> Result<ResolvedLogSettings, LogSettingsError>;
+    pub fn resolve(inputs: LogSettingsInputs) -> Result<ResolvedLogSettings, LogSettingsError>;
+}
+
+pub struct LogSettingsInputs {
+    pub file: Option<LogSettings>,
+    pub shared_env: LogSettings,
+    pub application_env: Option<LogSettings>,
+    pub default_root: PathBuf,
 }
 
 impl ResolvedLogSettings {
@@ -58,8 +58,8 @@ impl ResolvedLogSettings {
 }
 ```
 
-The contract reuses existing owners: `LevelFilterDto` supplies the published
-level wire conversion, `EnvPrefix` supplies its existing validation and
+The contract reuses existing owners: `LevelFilter` is the legal type owned by
+`sc-observability-types`; `EnvPrefix` supplies its existing validation and
 normalization rules, and `RetainedLogPolicy` supplies strong policy values and
 millisecond duration semantics. D.1 must not add `settings_level_wire`,
 `LogEnvPrefix`, or an overrides type. `RetainedLogPolicy` gains `serde(default)`
@@ -111,7 +111,7 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
 
 1. Add the public source/resolved types, typed errors, stable codes, rustdoc,
    serde behavior, and signatures above by reusing `EnvPrefix`,
-   `LevelFilterDto`, and `RetainedLogPolicy`; add no parallel owners.
+   `LevelFilter`, and `RetainedLogPolicy`; add no parallel owners.
 2. Implement deterministic environment parsing for the complete inventory and
    field-wise resolution in the documented order including the LOG-009 root
    exception. Parsing uses a
@@ -136,8 +136,8 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
 - Collision, trailing-underscore misuse, case collision, selected-namespace
   non-UTF-8, and LOG-009 root-precedence fixtures freeze prefix behavior.
 - Serde uses exactly the camelCase keys and delegates level tokens to the
-  existing `LevelFilterDto` conversion/fixtures; no second case policy is
-  introduced. Native `LevelFilter` behavior remains unchanged.
+  existing `LevelFilter` conversion/fixtures; level spelling is defined by
+  that single owner.
 - Configuration is fully resolved before logger construction; no setter,
   watcher, or late reload is introduced.
 
@@ -146,7 +146,7 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
 - Table-driven unit tests generated from the authoritative inventory for JSON,
   environment, precedence, defaults, validation, and conversion parity.
 - Paired regressions prove `LogSettings` delegates to the existing
-  `LevelFilterDto` wire and `RetainedLogPolicy` validation rather than defining
+  `LevelFilter` wire and `RetainedLogPolicy` validation rather than defining
   second codecs or units.
 - Public consumer compile fixture plus `cargo test --workspace --locked`.
 - Docs consistency, rustdoc, public API, and semver gates used by the repository

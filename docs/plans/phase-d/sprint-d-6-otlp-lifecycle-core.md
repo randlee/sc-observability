@@ -1,40 +1,39 @@
 ---
 id: D.6
 status: planned
-branch: feature/phase-d-6-otlp-sdk-tokio
+branch: feature/phase-d-6-otlp-lifecycle-core
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-6-otlp-sdk-tokio
-depends_on: [D.5]
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-6-otlp-lifecycle-core
+depends_on: [D.4, D.5]
 relation: must_follow
 assignee: aobs
 model_class: astra
-owned_docs: [docs/requirements.md, docs/architecture.md, docs/api-design.md, docs/migrate-error-api.md]
+owned_docs: [docs/requirements.md, docs/architecture.md, docs/api-design.md]
 release_train: '2.0'
 ---
 
-# D.6 — Official SDK/Tokio exporter
+# D.6 — OTLP lifecycle core
 
 ## Goal and dependency
 
-Add the production official-SDK exporter for Tokio-hosted Rust consumers while
-preserving synchronous emit admission and giving asynchronous transport
-lifecycle an honest awaitable completion surface. D.6 `must_follow`s D.5.
-This repository owns a neutral Tokio fixture; no `atm-core` code or PR is part
-of the sprint.
+Define the backend-neutral lifecycle core used by both exporters, preserving
+synchronous emit admission and giving asynchronous transport lifecycle an
+honest awaitable completion surface. D.6 `must_follow`s D.4 and D.5. No
+`atm-core` code or PR is part of the sprint.
 
 ## Backend and trait contract
 
 ```rust
 pub enum ExporterBackend {
     OpenTelemetrySdk,
-    LegacyHttpJson, // reserved; D.7 makes this backend operational
+    LegacyHttpJson, // reserved; D.8 makes this backend operational
 }
 
 pub struct OtelConfig {
     pub backend: ExporterBackend,
     pub protocol: OtlpProtocol,
     // endpoint/auth/TLS and timeout fields remain explicit;
-    // legacy-only retry fields are optional (authoritative D.6-L table below)
+    // legacy-only retry fields are optional (authoritative D.6 table below)
 }
 
 type LifecycleFuture = Pin<
@@ -72,7 +71,7 @@ pub(crate) struct ExporterSet {
 Both backends construct the same `ExporterSet`; `Telemetry` stores only these
 trait objects. `ExporterBackend` is consumed by construction/injection and is
 never branched on by emit, flush, or shutdown. Selecting `LegacyHttpJson`
-before D.7 returns a stable typed unsupported-backend error. An enabled
+before D.8 returns a stable typed unsupported-backend error. An enabled
 configuration never silently installs a no-op exporter.
 
 The factory validates this closed matrix before allocating providers/workers:
@@ -81,7 +80,7 @@ The factory validates this closed matrix before allocating providers/workers:
 | --- | --- | --- | --- |
 | disabled (transport disabled) | none | none | the sole no-network disabled implementation |
 | `OpenTelemetrySdk` | SDK-supported gRPC or HTTP/protobuf | `otlp-sdk`; entered caller Tokio runtime | stable unsupported-protocol/runtime error |
-| `LegacyHttpJson` | `HttpJson` only | `legacy-http-json`; plain-thread construction | reserved typed error until D.7 |
+| `LegacyHttpJson` | `HttpJson` only | `legacy-http-json`; plain-thread construction | reserved typed error until D.8 |
 
 Delete public/production `Noop*Exporter` fallbacks; disabled construction is an
 explicit private disabled set and an enabled selection can never reach it.
@@ -91,9 +90,9 @@ headers/auth, CA/TLS and `timeout_ms` map to the SDK/legacy builders;
 selection; `insecure_skip_verify` is either implemented by the backend with an
 explicit security warning or rejected at construction—never ignored.
 
-### D.6-L-owned validated transport contract
+### D.6-owned validated transport contract
 
-D.6-L is the sole owner of every transport-bound field, default, validation,
+D.6 is the sole owner of every transport-bound field, default, validation,
 and configuration error. The flat 2.0 wire surface is:
 
 | Field | Applicability | Default when absent |
@@ -101,12 +100,30 @@ and configuration error. The flat 2.0 wire surface is:
 | `timeout_ms` | both backends; maps to request/export timeout | `3_000` |
 | `lifecycle_flush_timeout_ms` | both backends | `30_000` |
 | `lifecycle_shutdown_timeout_ms` | both backends | `30_000` |
+| `queue_capacity` | both backends; bounded admission queue | `1_024` |
 | `max_retries` | legacy only, optional on wire | `3` |
 | `initial_backoff_ms` | legacy only, optional on wire | `250` |
 | `max_backoff_ms` | legacy only, optional on wire | `5_000` |
 | `retry_sequence_timeout_ms` | legacy only, optional on wire | `30_000` |
 | `retry_after_cap_ms` | legacy only, optional on wire | `5_000` |
 | `retry_jitter_percent` | legacy only, optional on wire | `20` |
+
+`queue_capacity` is validated as `1..=65_536`; records are split before
+admission at `512` records or `1 MiB`. A 413 is terminal for that split batch,
+which is counted once as failed/dropped rather than retried as a larger batch.
+`shutdown_async_typed` has one drain budget: it starts at shutdown entry and
+covers cancellation, the in-flight request, barrier, and worker join. On
+expiry it returns `LifecycleTimeout` with remaining admitted work accounted.
+
+```rust
+pub struct TelemetryHealth {
+    pub queue_depth: usize,
+    pub queue_capacity: usize,
+    pub worker_state: WorkerState,
+    pub last_terminal_failure: Option<Diagnostic>,
+    pub last_success: Option<Timestamp>,
+}
+```
 
 For `OpenTelemetrySdk`, the three shared timeout fields map to SDK lifecycle /
 export construction. Any explicit legacy-only field—including the pre-existing
@@ -126,6 +143,7 @@ pub enum OtlpConfigField {
     Timeout,
     LifecycleFlushTimeout,
     LifecycleShutdownTimeout,
+    QueueCapacity,
     MaxRetries,
     InitialBackoff,
     MaxBackoff,
@@ -238,9 +256,9 @@ InsecureTransportRejected { backend: ExporterBackend }
 TransportConstructionFailed { backend: ExporterBackend, source: Diagnostic }
 ```
 
-### D.6-L stable failure inventory
+### D.6 stable failure inventory
 
-This is the complete Phase D OTLP stable-error inventory. D.6-L exclusively
+This is the complete Phase D OTLP stable-error inventory. D.6 exclusively
 owns these variants, codes, owning types, mappings, and documentation; later
 sprints consume this table without adding or restating rows. Configuration
 rows are construction-only `ConfigFailure` variants. Every runtime/lifecycle
@@ -356,17 +374,13 @@ dispatcher or lifecycle state machine.
 
 ## Deliverables
 
-1. Pin reviewed compatible versions/features of `opentelemetry`,
-   `opentelemetry_sdk`, and `opentelemetry-otlp`; record dependency, license,
-   Rust-version, feature, and protocol impact.
-   Update `validate_repo_boundaries.sh`, `validate_dependency_bans.sh`, and
-   architecture §6; automated no-exporter/SDK-only graph fixtures enforce the
-   exact allowlist.
-2. Implement D.6-L's one shared lifecycle core and factory, then D.6-S's
-   common `ExporterSet`, official SDK signal adapters and outcome sink. Convert D.5
-   neutral signals without losing resource/scope metadata, kind, flags, links,
-   events, status, or histogram content.
-   D.6-L owns `PositiveDuration`, `LifecycleBounds`, `RetryPolicy`,
+1. Implement D.6's shared lifecycle core, factory, `ExporterSet`, bounds,
+   health/accounting, and fake exporter fixture. D.7 and D.8 inject their
+   transport adapters through this interface.
+2. Convert D.5 neutral signals at the core boundary without losing
+   resource/scope metadata, kind, flags, links, events, status, or histogram
+   content.
+   D.6 owns `PositiveDuration`, `LifecycleBounds`, `RetryPolicy`,
    `BoundedPercent`, `BackendTransportBounds`, `ValidatedTransportBounds`,
    `OtlpConfigField`, `OtlpConfigTarget`, `ValueOrigin`, `ResolvedField`, the
    sole backend-aware validation constructor, and the complete stable-error
@@ -382,19 +396,18 @@ dispatcher or lifecycle state machine.
    `last_terminal_failure`, per-signal overflow counts, and
    `retry_attempt_failures` without credentials. Transient attempts never overwrite the terminal
    field; the next successful export while `Open` clears it and records
-   recovery, while `Closing`/`Shutdown` retains it. D.7 uses the same model.
-5. Add an in-repository Tokio-hosted public consumer and loopback collector
-   fixture covering all signals, redaction, bounded channel pressure, timeout,
-   late failure, flush barriers, concurrent admission, shutdown, cancellation,
-   and immediate post-completion host teardown.
-   Its fixture crate is `publish = false` and excluded from publish rosters.
+   recovery, while `Closing`/`Shutdown` retains it. D.7 and D.8 use the same
+   model.
+5. Add lifecycle fixtures with fake exporters for bounded channel pressure,
+   timeout, late failure, flush barriers, concurrent admission, shutdown, and
+   cancellation. D.7 owns the Tokio-hosted consumer and collector fixture.
 6. Record the lifecycle ADR, OTLP-020/021 revisions, API approval, rustdoc, and
    migration from synchronous 1.x lifecycle to the backend-neutral async 2.0
-   completion API. D.6-L owns those config/error/lifecycle documents and their
+   completion API. D.6 owns those config/error/lifecycle documents and their
    shared validation fixtures; D.7 may only verify them by reference.
-   The technical lead must accept ADR-018 before D.6-L production code.
+   The technical lead must accept ADR-018 before D.6 production code.
 
-## D.6-L validation fixtures
+## D.6 validation fixtures
 
 - Resolve every field through the one constructor and assert its value and
   `ValueOrigin`; cover each field absent and explicitly supplied.
@@ -442,7 +455,7 @@ dispatcher or lifecycle state machine.
   to no-op; disabled config makes no request; credentials never enter errors.
 - Construction fixtures cover unsupported insecure verification, unreadable CA,
   invalid auth-header construction, SDK/provider builder failure, and legacy
-  worker/client initialization; each yields the exact D.6-L construction-only
+  worker/client initialization; each yields the exact D.6 construction-only
   variant with a redacted typed source.
 - Capacity-one/full/closed queue tests account each record exactly once; finite
   deadlines, worker/provider death, construction outside Tokio, all valid and
@@ -464,5 +477,5 @@ dispatcher or lifecycle state machine.
 
 ## Non-closure
 
-`LegacyHttpJson` is not operational until D.7. No downstream `atm-core` work,
+`LegacyHttpJson` is not operational until D.8. No downstream `atm-core` work,
 Python binding, dashboard restoration, or publication.
