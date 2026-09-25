@@ -19,7 +19,7 @@
   "design": "## Public Contract\n`pub enum Signal { .. }`",
   "acceptance_criteria": "## Acceptance Criteria\n- [ ] signal types round-trip\n\n## Validation\n- `cargo test -p sc-observability-otlp`",
   "blocked_by": [
-    "obs-d-4-qc"
+    "obs-d-4-sanity"
   ],
   "model_class": "astra",
   "requirements": [

@@ -12,7 +12,8 @@
 #      and every ADR id is in docs/architecture.md (or docs/*/architecture.md);
 #      an id missing from a doc the sprint owns is a warning (resources/planning.md
 #      "New Ids": plan review checks the deliverable that adds it);
-#   4. every assignee is an ATM member of this team;
+#   4. every assignee is an ATM member of this team, and every sanity check
+#      bead is assigned to the dev-sanity role's member (scripts/resolve-role);
 #   5. the integration branch exists on origin (warning only).
 # Exit 0 = valid, 5 = problems listed, 2 = could not run.
 set -uo pipefail
@@ -57,10 +58,10 @@ plan="$scratch/plan.jsonl"
 if [ -n "$file" ]; then
   cp "$file" "$plan"
 else
-  # the root, its dev beads, and their quick-checks (not the quick-checks of finding fixes)
+  # the root, its dev beads, and their sanity checks (not the sanity checks of finding fixes)
   ids=$( { echo "$root"; bd list --parent "$root" --all -n 0 --json 2>/dev/null \
     | jq -r '[.[] | select((.labels // []) | index("stage:dev"))] as $d | ($d | map(.id)) as $dids
-      | ($d[].id), (.[] | select(((.labels // []) | index("stage:quick-check")) and ((.metadata.dev_bead // "") as $x | $dids | index($x))) | .id)'; } )
+      | ($d[].id), (.[] | select(((.labels // []) | index("stage:dev-sanity")) and ((.metadata.dev_bead // "") as $x | $dids | index($x))) | .id)'; } )
   # bd show lists dependencies as {id, dependency_type}; check-plan.jq reads the import shape.
   # shellcheck disable=SC2086
   bd show $ids --json 2>/dev/null | jq -c '.[] | . as $b
@@ -81,7 +82,7 @@ while IFS= read -r dep; do
   labels=$(bd show "$dep" --json 2>/dev/null | jq -r '.[0].labels // [] | join(" ")') \
     || { problems+=("blocker $dep is neither in the plan nor in beads"); continue; }
   case "$dep" in
-    *-qc) want=stage:quick-check ;;
+    *-sanity) want=stage:dev-sanity ;;
     *-plan-qa*) want=stage:plan-review ;;
     *) want="" ;;
   esac
@@ -118,6 +119,13 @@ fi
 while IFS=$'\t' read -r id who; do
   echo "$members" | grep -qx -- "$who" || problems+=("$id: assignee $who is not an ATM member of this team")
 done < <(jq -r 'select(.issue_type != "epic" and .issue_type != "feature") | [.id, (.assignee // "")] | @tsv' "$plan")
+if ! sanity=$("$here/resolve-role" dev-sanity); then
+  echo "validate-plan: the dev-sanity role is not mapped (.claude/agents/registry.yaml roles:)" >&2
+  exit 2
+fi
+while IFS=$'\t' read -r id who; do
+  [ "$who" = "$sanity" ] || problems+=("$id: sanity check assignee $who is not the dev-sanity member $sanity")
+done < <(jq -r 'select((.labels // []) | index("stage:dev-sanity")) | [.id, (.assignee // "")] | @tsv' "$plan")
 
 # 5. integration branch
 trunk=$(jq -r 'select(.issue_type == "epic" or .issue_type == "feature") | .metadata.integration_branch // empty' "$plan" | head -1)

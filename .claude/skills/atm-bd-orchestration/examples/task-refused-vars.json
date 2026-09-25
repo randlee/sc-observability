@@ -1,8 +1,8 @@
 {
   "generated_at": "2026-09-25T07:50:00Z",
-  "task_id": "obs-d-4-qc",
+  "task_id": "obs-d-4-sanity",
   "sprint": "d-4",
-  "stage": "quick-check",
+  "stage": "dev-sanity",
   "bead_state": "open",
   "reason_md": "The commit `4f1c2a9` is not on origin; `git fetch origin` does not find it.",
   "branch": "sprint/d-4-otlp-sync-exporter",

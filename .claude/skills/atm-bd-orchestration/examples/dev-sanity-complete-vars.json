@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-09-25T07:40:00Z",
-  "task_id": "obs-d-4-qc",
+  "task_id": "obs-d-4-sanity",
   "checked_bead": "obs-d-4",
   "sprint": "d-4",
   "branch": "sprint/d-4-otlp-sync-exporter",

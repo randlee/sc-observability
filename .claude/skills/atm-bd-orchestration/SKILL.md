@@ -1,6 +1,6 @@
 ---
 name: atm-bd-orchestration
-version: 0.2.0
+version: 0.3.0
 description: Bead-driven phase orchestration for the lead. Use when running a phase whose plan is in beads, dispatching from `bd ready` with ATM tasks, and landing it as one gh stack.
 requires:
   cli:
@@ -31,7 +31,7 @@ The flow and the dependency edges are in
 the lead's loop and the full set of assignment, close and bead templates.
 
 Never block on bureaucracy. Dev waits only on its prerequisites'
-quick-checks; QA, triage and fixes run beside it. 100% of findings are
+sanity checks; QA, triage and fixes run beside it. 100% of findings are
 closed, each with a close reason.
 
 ## Step 1 — Verify CLI Installation
@@ -68,8 +68,15 @@ files those from a phase-end review.
 | --- | --- | --- |
 | lead | the appointed lead | this skill |
 | dev | frontier / high-value devs; fast agents for important and minor findings | the assignment templates |
-| quick-check | a dedicated agent, never a dev or fix agent | [`roles/quick-check.md`](roles/quick-check.md) |
+| dev-sanity | the member the repository maps to the role, never a dev or fix agent | [`roles/dev-sanity.md`](roles/dev-sanity.md) |
 | quality-mgr | the long-running QA agent | [`roles/quality-mgr.md`](roles/quality-mgr.md) |
+
+This skill names roles, not members or agents. A repository maps a role to
+its team-unique member in `roles:` of `.claude/agents/registry.yaml`, and
+that member's `[startup.<member>]` prompt in `.atm.toml` names the directive
+it runs. Resolve the member with
+`.claude/skills/atm-beads/scripts/resolve-role <role>`; it exits 2 when the
+role is not mapped.
 
 A long-running agent takes its role at session start, or whenever it is
 switched to this workflow:
@@ -96,9 +103,9 @@ any agent can follow. What this skill changes:
   pushed top (it is live and has no children, so this is the one allowed
   rebase) and pushes. Layers therefore stack in completion order. When two
   layers finish on the same top, the lead rebases the second onto the first
-  before linking it (Loop, quick-check PASS).
+  before linking it (Loop, sanity check PASS).
 - The lead opens the PR (base = the top it was rebased onto) and links it
-  when its **quick-check passes**, not at the first push. A quick-check
+  when its **sanity check passes**, not at the first push. A sanity check
   failure reopens a branch nothing is stacked on yet, so the dev-fix can
   commit and rebase it again.
 - Once linked, a layer is frozen. A later finding on it is fixed on a new
@@ -119,9 +126,9 @@ No dev bead is dispatched until the plan passes review.
    existence check and the ATM member check. Exit 0 or stop.
 2. Create the plan-review bead right after the import (the import
    procedures do this as their next step), so that it blocks every root sprint (every dev
-   bead with no quick-check blocker). For sprints imported into a running
+   bead with no sanity check blocker). For sprints imported into a running
    phase, use `<root>-plan-qa-<n>` (the next free number) and block only the
-   new dev beads, including any that already have quick-check blockers:
+   new dev beads, including any that already have sanity check blockers:
 
    ```bash
    bd create --id <root>-plan-qa --type task --parent <root> \
@@ -153,14 +160,14 @@ bd ready -l phase-<x> -n 0 --json
 ```
 
 `bd ready` lists every bead whose blockers are closed, highest priority
-first: dev beads whose prerequisites' quick-checks passed, quick-checks
+first: dev beads whose prerequisites' sanity checks passed, sanity checks
 whose dev bead closed, QA beads and open findings. For each ready bead:
 
 | Ready bead | Template | To |
 | --- | --- | --- |
 | plan review (`stage:plan-review`) | [`plan-review-template.xml.j2`](templates/plan-review-template.xml.j2) | quality-mgr |
 | dev (`stage:dev`) | [`dev-template.xml.j2`](templates/dev-template.xml.j2) | its assignee |
-| quick-check (`stage:quick-check`) | [`quick-check-template.xml.j2`](templates/quick-check-template.xml.j2) | the quick-check agent |
+| sanity check (`stage:dev-sanity`) | [`dev-sanity-template.xml.j2`](templates/dev-sanity-template.xml.j2) | `resolve-role dev-sanity` |
 | QA (`stage:qa`) | [`qa-template.xml.j2`](templates/qa-template.xml.j2) | quality-mgr |
 | finding (`stage:finding`) | [`fix-assignment.xml.j2`](templates/fix-assignment.xml.j2) | the member the lead picks |
 | review (`stage:review`) | [`review-template.xml.j2`](templates/review-template.xml.j2) | the phase-end reviewer |
@@ -171,14 +178,14 @@ Then, on each task close:
 | --- | --- |
 | plan-review PASS | nothing when the bead closed: the root sprints are now ready. With minor findings the bead is assigned to you still open: fix each listed bead with `bd update`, then `bd close <root>-plan-qa --reason "minor fixes applied"` |
 | plan-review FAIL | have the author fix the listed beads, run `validate-plan` again, then dispatch the next round |
-| dev-complete | nothing: the quick-check is now ready |
-| quick-check PASS | check that the layer's `rebased_onto` (from its dev-complete or fix-complete) is still the pushed top. If another layer was linked since, rebase the branch onto the new top yourself: it is not linked and has no children. Run the test command and push with `--force-with-lease`. On a conflict, `bd reopen` the bead and send a dev-fix naming the new top. Then link the layer, then create the QA bead from [`qa-bead.json.j2`](templates/qa-bead.json.j2) (`validates` the dev or finding bead). For a finding, the QA dispatch sets `checked_bead` = the finding (it carries its own requirements and ADRs), `sprint_bead` = its `metadata.sprint_bead`, `carry_forward` = the finding id, and `round` = the `metadata.round` of the QA bead it was `discovered-from`, + 1, or 1 when it came from the phase-end review |
-| quick-check FAIL | `bd reopen <checked bead> --reason "<summary>"`, then [`dev-fix.xml.j2`](templates/dev-fix.xml.j2) with the findings. This applies to a finding bead too: its task id is the finding, and it closes with `dev-complete.md.j2` |
+| dev-complete | nothing: the sanity check is now ready |
+| sanity check PASS | check that the layer's `rebased_onto` (from its dev-complete or fix-complete) is still the pushed top. If another layer was linked since, rebase the branch onto the new top yourself: it is not linked and has no children. Run the test command and push with `--force-with-lease`. On a conflict, `bd reopen` the bead and send a dev-fix naming the new top. Then link the layer, then create the QA bead from [`qa-bead.json.j2`](templates/qa-bead.json.j2) (`validates` the dev or finding bead). For a finding, the QA dispatch sets `checked_bead` = the finding (it carries its own requirements and ADRs), `sprint_bead` = its `metadata.sprint_bead`, `carry_forward` = the finding id, and `round` = the `metadata.round` of the QA bead it was `discovered-from`, + 1, or 1 when it came from the phase-end review |
+| sanity check FAIL | `bd reopen <checked bead> --reason "<summary>"`, then [`dev-fix.xml.j2`](templates/dev-fix.xml.j2) with the findings. This applies to a finding bead too: its task id is the finding, and it closes with `dev-complete.md.j2` |
 | qa-complete | nothing to wire: quality-mgr filed and wired the finding beads; they are in the next `bd ready` |
-| fix-complete (`fixed`) | create the fix's quick-check bead (`atm-beads` [`quick-check-bead.json.j2`](../atm-beads/templates/quick-check-bead.json.j2), `dev_bead` = the finding) |
+| fix-complete (`fixed`) | create the fix's sanity check bead (`atm-beads` [`dev-sanity-bead.json.j2`](../atm-beads/templates/dev-sanity-bead.json.j2), `dev_bead` = the finding) |
 | review-complete | file each finding with `finding-bead.json.j2` (`qa_bead` = the review bead) |
 | task-refused | read the reason and the bead state (`open`, or `blocked-failed` for a dev bead that declared failure). Reassign it, split it, or close the bead yourself with `bd close <bead> --force --reason "<why>"`. A `blocked` bead is never in `bd ready`: run `bd update <bead> --status open --assignee <new agent>` before you re-dispatch it |
-| fix-complete (`not_reproducible`) | nothing: no commit, no quick-check; the finding is closed |
+| fix-complete (`not_reproducible`) | nothing: no commit, no sanity check; the finding is closed |
 | not-ready report | the task is still open and queued. Fix the cause it names (usually a blocker still open) and tell the assignee to run the ready check again. If the work is no longer wanted, close the task `cancelled` with `task-refused.md.j2` (`bead_state` open) |
 
 Re-run `bd ready` after every close. Never cache the ready list. The open
@@ -262,7 +269,8 @@ atm task assign <agent> --task-id <bead> \
   origin/<top>`. That is `top` in the vars, and `integrate/phase-<x>` while
   the stack is empty.
 - Set the bead's assignee to the recipient first:
-  `bd update <bead> --assignee <agent>`. A claim fails when the bead is
+  `bd update <bead> --assignee <agent>`. For a role, the recipient is
+  `resolve-role <role>` (a sanity check bead is already assigned to it). A claim fails when the bead is
   assigned to anyone else.
 - Build vars from the template's `required_variables`, with `task_id` = the
   bead id; the bead supplies most of the rest
@@ -284,9 +292,9 @@ The assignee pairs every ATM step with its bead step:
   first. A bead that is not ready is neither claimed nor started: the
   assignee finds the root cause (`bd blocked --json`, then `bd show` on each
   blocker) and reports it to the lead.
-- A failed quick-check or plan review leaves its bead open, because closing
+- A failed sanity check or plan review leaves its bead open, because closing
   it would release the beads it blocks (see
-  [`roles/quick-check.md`](roles/quick-check.md) and "Plan Gate").
+  [`roles/dev-sanity.md`](roles/dev-sanity.md) and "Plan Gate").
 - Every task closes with a template. A push or progress report closes
   nothing.
 
@@ -298,7 +306,7 @@ templates. Each is a requirement for the planned combined `atm bd claim` /
 
 | Gap | Interim rule | `atm bd` requirement |
 | --- | --- | --- |
-| one active task per agent | quick-check and quality-mgr claim every bead and close tasks they could not start | several active tasks for a coordinator role |
+| one active task per agent | dev-sanity and quality-mgr claim every bead and close tasks they could not start | several active tasks for a coordinator role |
 | `BEADS_ACTOR` empty falls back to git `user.name` | `--actor "$ATM_IDENTITY"` on every `bd` write | the actor is always `ATM_IDENTITY` |
 | claim fails when the bead is assigned to someone else | lead sets the assignee before `atm task assign`; returned beads clear it | claim reassigns the bead to the task's assignee |
 | only the original assigner can re-dispatch a closed task id | the lead that dispatched a bead re-dispatches it; after a lead handover, the outgoing lead re-dispatches the beads it had already dispatched | the current lead may take over closed tasks |
@@ -315,10 +323,10 @@ written to beads with the `atm-beads` templates.
 | `plan-review-template.xml.j2` | assignment | lead → quality-mgr, the plan-review bead |
 | `plan-review-complete.md.j2` | close | quality-mgr, PASS or FAIL |
 | `dev-template.xml.j2` | assignment | lead → dev, a planned dev bead |
-| `dev-fix.xml.j2` | assignment | lead → dev, a dev bead reopened by a failed quick-check |
+| `dev-fix.xml.j2` | assignment | lead → dev, a dev bead reopened by a failed sanity check |
 | `dev-complete.md.j2` | close | dev, for `dev-template` and `dev-fix` |
-| `quick-check-template.xml.j2` | assignment | lead → quick-check agent |
-| `quick-check-complete.md.j2` | close | quick-check agent, PASS or FAIL |
+| `dev-sanity-template.xml.j2` | assignment | lead → dev-sanity member |
+| `dev-sanity-complete.md.j2` | close | dev-sanity member, PASS or FAIL |
 | `qa-template.xml.j2` | assignment | lead → quality-mgr |
 | `qa-complete.md.j2` | close | quality-mgr, and its PR comment |
 | `fix-assignment.xml.j2` | assignment | lead → dev, one finding bead |
@@ -327,7 +335,7 @@ written to beads with the `atm-beads` templates.
 | `review-complete.md.j2` | close | phase-end reviewer |
 | `task-refused.md.j2` | close | anyone who cannot do the whole assignment |
 | `req-qa`, `arch-qa`, `ruthless-boundary-qa`, `flaky-test-qa`, `schema-reviewer` `-assignment.json.j2` | fenced JSON | quality-mgr → its background reviewers |
-| `qa-bead.json.j2` | bead | lead, after a green quick-check |
+| `qa-bead.json.j2` | bead | lead, after a green sanity check |
 | `finding-bead.json.j2` | bead | quality-mgr (QA) and lead (review), one per finding |
 
 Bead templates render with `sc-compose render --file <t> --var-file <v>

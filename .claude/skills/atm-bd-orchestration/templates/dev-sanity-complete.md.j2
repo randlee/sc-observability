@@ -1,7 +1,7 @@
 ---
-name: quick-check-complete
+name: dev-sanity-complete
 version: 1.0.0
-description: Quick-check report; the body of `atm task close <task-id> completed`. PASS closes the quick-check bead; FAIL leaves it open and the lead reopens the checked bead with these findings.
+description: Sanity check report; the body of `atm task close <task-id> completed`. PASS closes the sanity check bead; FAIL leaves it open and the lead reopens the checked bead with these findings.
 format: markdown
 required_variables:
   - generated_at
@@ -19,20 +19,20 @@ optional_variables:
 defaults:
   notes_md: ""
 metadata:
-  type: quick-check-complete
+  type: dev-sanity-complete
   tags:
-    - stage:quick-check
+    - stage:dev-sanity
     - orchestration:beads
   workflow:
     scope:
       kind: sprint
       variable: sprint
-    state: quick-check-complete
-    stage: quick-check
+    state: dev-sanity-complete
+    stage: dev-sanity
     transition: complete
 ---
 {% if verdict not in ["PASS", "FAIL"] %}{{ verdict | verdict_must_be_PASS_or_FAIL }}ERROR: verdict must be PASS or FAIL, got {{ verdict }}
-{% endif %}# Quick-Check {{ verdict }}
+{% endif %}# Dev Sanity Check {{ verdict }}
 
 Generated: {{ generated_at }}
 Bead: {{ task_id }} (sprint {{ sprint }})

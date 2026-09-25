@@ -2,7 +2,7 @@
 
 The plan is written to beads, not to markdown files. The phase is a root
 bead (an epic, or a feature under the Development epic). Every sprint is two
-beads under it: a dev bead, and the quick-check bead that follows it. The
+beads under it: a dev bead, and the sanity check bead that follows it. The
 dependency edges are the order. There is no phase plan or sprint doc to keep
 in sync: `bd show <bead>` is the plan.
 
@@ -23,7 +23,7 @@ rather than reaching an agent:
 | --- | --- | --- |
 | phase root | [`plan-root.json.j2`](../templates/plan-root.json.j2) | `<prefix>-phase-<x>` |
 | sprint dev bead | [`sprint-bead.json.j2`](../templates/sprint-bead.json.j2) | `<prefix>-<x>-<n>` |
-| sprint quick-check | [`quick-check-bead.json.j2`](../templates/quick-check-bead.json.j2) | `<dev id>-qc` |
+| sprint sanity check | [`dev-sanity-bead.json.j2`](../templates/dev-sanity-bead.json.j2) | `<dev id>-sanity` |
 
 1. Run `bd doctor --json`. Any check with `"status": "error"` stops the
    plan; report it to lead.
@@ -78,7 +78,7 @@ Keep `<scratch>` outside the repository.
 | `acceptance_criteria` | acceptance criteria and the validation commands |
 | `assignee` | the ATM identity that owns it (`aobs`); must be in `atm members` |
 | `parent` | the phase root |
-| `blocked_by` | the **quick-check** bead of each prerequisite sprint (`obs-d-4-qc`), never its dev bead |
+| `blocked_by` | the **sanity check** bead of each prerequisite sprint (`obs-d-4-sanity`), never its dev bead |
 
 Its labels (`phase-<x>`, `stage:dev`, `stack:<stack>`, `train:<t>` when
 set) and metadata come from these required vars:
@@ -126,12 +126,12 @@ Branch and id naming follows the repository's "Plan Naming" in
 `.claude/project/quality-policy.md` and the shared rules in the guidelines'
 "Naming" section; the doc file names there do not apply.
 
-## Quick-Check Bead
+## Dev Sanity Check Bead
 
 One per sprint: `dev_bead` = the sprint's dev bead, `assignee` = the
-dedicated quick-check agent. It is blocked by its dev bead, and later sprints
+member of the `dev-sanity` role (`scripts/resolve-role dev-sanity`). It is blocked by its dev bead, and later sprints
 wait on it rather than on the dev bead, so a sprint's dependents start only
-after its work passes the quick-check. See [`quick-check.md`](quick-check.md).
+after its work passes the sanity check. See [`dev-sanity.md`](dev-sanity.md).
 
 ## Stack
 
@@ -158,10 +158,11 @@ exits 0. It fails when:
 - a bead lacks a required field, label or metadata key;
 - `requirements` or `adrs` is empty, mixes `NONE` with ids, holds a
   malformed id, or names an id that its governing document does not have;
-- a dev bead does not have exactly one quick-check bead, or is blocked by a
-  bead other than a quick-check (or the plan-review bead);
+- a dev bead does not have exactly one sanity check bead, or is blocked by a
+  bead other than a sanity check (or the plan-review bead);
 - a `root` sprint has prerequisites, or a `must_follow` sprint has none;
 - two beads claim the same `stack` and `layer`, or a layer's `pr_target` is
   not the branch of the layer below;
 - a bead's parent is not the phase root, or its phase does not match;
-- an assignee is not an ATM member of the team.
+- an assignee is not an ATM member of the team, or a sanity check bead's
+  assignee is not the `dev-sanity` role's member.

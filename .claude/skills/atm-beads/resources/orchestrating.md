@@ -4,7 +4,7 @@ For the lead: check the plan in beads, keep the dependency graph current, and
 dispatch from `bd ready`. The plan itself (epic and sprint beads) is written
 as in [`planning.md`](planning.md).
 
-Never block on bureaucracy. Dev waits only on its prerequisites' quick-checks; QA, triage and
+Never block on bureaucracy. Dev waits only on its prerequisites' sanity checks; QA, triage and
 fixes run beside it. 100% of findings are closed before the phase closes, and
 one or two fast agents keep up with the important and minor ones.
 
@@ -16,20 +16,20 @@ one or two fast agents keep up with the important and minor ones.
    (`atm-bd-orchestration` "Plan Gate").
 2. `bd ready -l phase-<x> -n 0` lists exactly the dev beads with no prerequisites.
 3. `bd ready --explain` shows every other dev bead blocked by the
-   quick-check beads of its prerequisites.
+   sanity check beads of its prerequisites.
 4. The dispatched agent reads its assignment from the bead: `bd show <bead>`
    gives the description, design, acceptance criteria and metadata (branch,
    `pr_target`, worktree).
 
 ## Dependencies
 
-Plan time creates the dev and quick-check beads. At runtime lead creates the QA
+Plan time creates the dev and sanity check beads. At runtime lead creates the QA
 beads and quality-mgr creates the finding beads.
 
 | Edge | Type | Meaning |
 | --- | --- | --- |
-| dev → quick-check | `blocks` | quick-check runs on the closed dev bead |
-| quick-check → dependent dev | `blocks` | a dev bead waits on the quick-check of each required prerequisite |
+| dev → sanity check | `blocks` | sanity check runs on the closed dev bead |
+| sanity check → dependent dev | `blocks` | a dev bead waits on the sanity check of each required prerequisite |
 | `parallel_safe` | none | no edge |
 | QA → dev | `validates` | records the layer the QA reviewed; blocks nothing |
 | finding → QA | `discovered-from` | records the QA that found it; blocks nothing |
@@ -39,35 +39,35 @@ beads and quality-mgr creates the finding beads.
 The phase feature is the parent of every bead, not a blocker. It cannot close
 while any child, including a finding, is open.
 
-## Quick-Check
+## Dev Sanity Check
 
-Every dev bead is followed by a quick-check bead, which is blocked by the dev
+Every dev bead is followed by a sanity check bead, which is blocked by the dev
 bead and blocks every dev bead that requires it. Its assignment is
-[`quick-check.md`](quick-check.md).
+[`dev-sanity.md`](dev-sanity.md).
 
 1. The dev agent completes its dev task and closes it; lead receives the
    dev-task completion.
-2. Lead assigns the quick-check.
-3. If quick-check fails, lead reopens the dev bead and gives the dev agent a
+2. Lead assigns the sanity check.
+3. If sanity check fails, lead reopens the dev bead and gives the dev agent a
    dev-fix assignment with the bead id and the findings (this may change once
    the quality-mgr process is worked out):
 
    ```bash
-   bd reopen <dev-bead-id> --reason "<what quick-check found>"
+   bd reopen <dev-bead-id> --reason "<what sanity check found>"
    ```
 
 4. Steps 1 to 3 repeat until the task is done.
 
 The dev agent may instead declare failure, with the reason the work cannot be
 completed. It sets the bead `blocked` with a `failed:` note and does not close
-it: a closed dev bead would release its quick-check.
+it: a closed dev bead would release its sanity check.
 
 ## QA And Findings
 
 Nothing waits on QA. A dev bead is released by its prerequisites'
-quick-checks alone, so dev keeps moving while a layer is reviewed.
+sanity checks alone, so dev keeps moving while a layer is reviewed.
 
-1. Quick-check N is green: lead creates the QA bead (parent the phase
+1. Sanity check N is green: lead creates the QA bead (parent the phase
    feature, `validates` dev N, metadata `sprint`, `layer` and the pinned head
    SHA) and assigns it to quality-mgr.
 2. quality-mgr runs its review agents as background agents, as it does today,
@@ -91,7 +91,7 @@ quick-checks alone, so dev keeps moving while a layer is reviewed.
 6. Each fix lands on the stack the finding was found on, one fix per layer.
    Fix layers can land between dev layers of the same stack.
 7. A fix is assigned to a dev like a dev task: the finding bead is the task,
-   followed by a quick-check bead and then QA, as for a dev bead. Each QA
+   followed by a sanity check bead and then QA, as for a dev bead. Each QA
    round after the first reviews one small fix layer, so it is quick.
 
 Priority is the queue order. `bd ready` sorts by it, so a blocking finding is
@@ -155,10 +155,10 @@ refusal) is defined once, in the `atm-bd-orchestration` skill ("Dispatch").
 
 ## Dispatch Loop
 
-1. `bd ready -l phase-<x> -n 0` lists the dev, quick-check, QA and finding beads
+1. `bd ready -l phase-<x> -n 0` lists the dev, sanity check, QA and finding beads
    whose blockers are closed, highest priority first.
 2. Assign each ready bead to its assignee with the matching assignment
    template, using the bead id as `task_id`.
-3. When a task closes, its bead closes with it, except after a failed quick-check or plan review, which leaves the bead open. Run `bd sync`, then `bd ready` again. After a
-   green quick-check or a triaged QA, create and wire the QA or finding beads
+3. When a task closes, its bead closes with it, except after a failed sanity check or plan review, which leaves the bead open. Run `bd sync`, then `bd ready` again. After a
+   green sanity check or a triaged QA, create and wire the QA or finding beads
    first, then run `bd ready`.

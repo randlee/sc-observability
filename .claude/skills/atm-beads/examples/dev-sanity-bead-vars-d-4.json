@@ -1,9 +1,9 @@
 {
-  "id": "obs-d-4-qc",
+  "id": "obs-d-4-sanity",
   "parent": "obs-phase-d",
   "dev_bead": "obs-d-4",
   "phase": "d",
   "sprint": "d-4",
   "stack": "phase-d",
-  "assignee": "quick-check"
+  "assignee": "obs-sanity"
 }

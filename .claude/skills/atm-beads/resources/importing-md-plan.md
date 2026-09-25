@@ -31,7 +31,7 @@ goes back to the plan's author to supply, with the exact list of gaps.
 2. **Read** the phase plan (whole-phase import) and each sprint doc to import.
    Build one vars file per bead from the mapping below:
    - a whole-phase import produces the root (`plan-root.json.j2`), plus
-     `sprint-bead.json.j2` and `quick-check-bead.json.j2` for each sprint;
+     `sprint-bead.json.j2` and `dev-sanity-bead.json.j2` for each sprint;
    - a one-plan import produces only the sprint's two beads.
 3. **Check** the vars against every row in Checks except the id-exists row
    (step 6), and collect all the gaps before reporting any of them. If any blocking row fails, stop and send the
@@ -92,7 +92,7 @@ goes back to the plan's author to supply, with the exact list of gaps.
     - `bd ready -l phase-<x> -n 0` lists the plan-review bead and no dev bead
       from this import;
     - `bd ready --explain` shows every other dev bead blocked by the
-      plan-review bead or by the quick-check beads of its prerequisites.
+      plan-review bead or by the sanity check beads of its prerequisites.
 11. **Sync**: run `bd sync` so the Dolt remote has the plan (see
     `atm-bd-orchestration` "Sync").
 
@@ -123,12 +123,12 @@ Keep `<scratch>` outside the repository.
 | Bead var | Markdown source |
 | --- | --- |
 | `sprint` | frontmatter `id`, lower-cased with `.` → `-` (`D.4` → `d-4`) |
-| `id` | `<prefix>-<sprint>` (`obs-d-4`); its quick-check is `<id>-qc` |
+| `id` | `<prefix>-<sprint>` (`obs-d-4`); its sanity check is `<id>-sanity` |
 | `parent` | the phase root's id |
 | `title` | H1 without the `<id> — ` prefix |
 | `assignee`, `model_class` | frontmatter `assignee`, `model_class` (or the sprint table's `agent:model`) |
 | `relation` | frontmatter `relation` (`root`, `must_follow`, `parallel_safe`) |
-| `blocked_by` | for each `must_follow` parent in `depends_on`: that parent's quick-check bead (`obs-d-5-qc`), never the parent's dev bead |
+| `blocked_by` | for each `must_follow` parent in `depends_on`: that parent's sanity check bead (`obs-d-5-sanity`), never the parent's dev bead |
 | `closure_type`, `target_boundary` | frontmatter or the "Closure" section |
 | `owned_paths` | the "Owned Paths" section, else "Exact Targets", plus `owned_docs` (see Checks) |
 | `description` | Goal, Deliverables, Required Work, and Non-closure, in that order, as markdown |
@@ -142,7 +142,7 @@ Keep `<scratch>` outside the repository.
 | `worktree` | `<repo>-worktrees/<branch>` |
 | `stack` | `phase-<x>`: the phase is one append-only stack |
 | `layer`, `pr_target` | planned order: layer 1 targets `integrate/phase-<x>`, and layer n targets the branch of layer n−1. Number the layers in the sprint table's order among sprints of the same dependency depth, and by sprint number within a row. These are the plan's intent: layers really stack in completion order, and lead records the actual values at link time |
-| quick-check bead | `id` = `<sprint id>-qc`, `dev_bead` = the sprint id, `assignee` = the dedicated quick-check agent from `atm members` (ask lead when there is none) |
+| sanity check bead | `id` = `<sprint id>-sanity`, `dev_bead` = the sprint id, `assignee` = `scripts/resolve-role dev-sanity` (ask lead when the role is not mapped or the member is not in `atm members`) |
 
 Section headings vary between plans. Map a section by what it holds, not by
 its exact title: "Goal and dependency" is the Goal plus the dependency

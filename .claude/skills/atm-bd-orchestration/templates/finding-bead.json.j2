@@ -41,7 +41,7 @@ defaults:
   "status": "open",
   "priority": {{ {"blocking": 1, "important": 3, "minor": 4}[severity] }},
   "assignee": {{ assignee | tojson }},
-  "description": {{ (description ~ "\n\nEvidence:\n" ~ evidence ~ "\n\nFixed on a new layer at the top of stack " ~ stack ~ ". QA verifies the fix after its quick-check; the quick-check judges only the acceptance criteria below.") | tojson }},
+  "description": {{ (description ~ "\n\nEvidence:\n" ~ evidence ~ "\n\nFixed on a new layer at the top of stack " ~ stack ~ ". QA verifies the fix after its sanity check; the sanity check judges only the acceptance criteria below.") | tojson }},
   "design": {{ remedy | tojson }},
   "acceptance_criteria": {{ "- [ ] the remedy (design) is applied at every occurrence in scope\n- [ ] a test or check that reproduces the defect passes at the fix head\n- [ ] the repository's validation passes" | tojson }},
   "labels": {{ ["phase-" ~ phase, "stage:finding", "stack:" ~ stack, "severity:" ~ severity] | tojson }},

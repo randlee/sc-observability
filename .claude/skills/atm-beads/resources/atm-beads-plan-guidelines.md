@@ -32,13 +32,13 @@ risk deferred to one late checkpoint. Both extremes are findings. See
 
 - The phase is one bead, normally of type `feature`, with every sprint bead
   of the phase under it as a `parent-child` child.
-- Each sprint is two beads: a dev bead and a quick-check bead. The dev
+- Each sprint is two beads: a dev bead and a sanity check bead. The dev
   bead's description, design, acceptance criteria and metadata carry what
   the sprint doc carried.
-- The quick-check bead is blocked by its dev bead and blocks every dev bead
+- The sanity check bead is blocked by its dev bead and blocks every dev bead
   that requires that sprint. What it verifies is defined in
-  [`quick-check.md`](quick-check.md).
-- A dev bead is blocked by the quick-check bead of each required
+  [`dev-sanity.md`](dev-sanity.md).
+- A dev bead is blocked by the sanity check bead of each required
   prerequisite (`must_follow`). `parallel_safe` sprints have no dependency
   between them.
 - A track is a `gh stack` on the phase integration branch. The stack is

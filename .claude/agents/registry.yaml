@@ -53,6 +53,21 @@ agents:
   rust-service-hardening-agent:
     version: 0.12.1
     path: .claude/agents/rust-service-hardening-agent.md
+  dev-sanity-llm:
+    version: 0.1.0
+    path: .claude/agents/dev-sanity-llm.md
+  sc-sanity-llm:
+    version: 0.1.0
+    path: .claude/agents/sc-sanity-llm.md
+  sc-sanity-jev:
+    version: 0.0.1
+    path: .claude/agents/sc-sanity-jev.md
+
+# Role -> ATM member. Skills name the role; the member's startup prompt in
+# .atm.toml names the directive it runs. Member names are team-unique
+# because Herdr agent names are global on the host.
+roles:
+  dev-sanity: obs-sanity
 
 skills:
   codex-orchestration:
