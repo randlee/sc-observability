@@ -63,6 +63,10 @@ Every assignment is closed, and every close uses its complete template.
 | `plan-hardening/03-consistency-hardening.xml.j2` | `plan-hardening/plan-consistency-hardening-complete.md.j2` |
 | `plan-hardening/plan-critical-review.xml.j2` | `plan-hardening/plan-critical-review-complete.md.j2` |
 
+Every assignment pairs `atm task start` with `atm task close --template`; that
+pair is the task's span. When the task id is also a bead, `bd update <id>
+--claim` runs with the start and `bd close <id>` with the close.
+
 Paths are under `.claude/skills/`. `refused` and `cancelled` closes carry
 a reason instead of a report.
 
