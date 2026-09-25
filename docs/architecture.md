@@ -1118,6 +1118,40 @@ ADR navigation index (status is recorded in each decision below):
   for Phase C.
 - **Contracts**: PHC-001–006; [Phase C](plans/phase-c/plan-phase-c.md).
 
+### ADR-017: Phase D 2.0 Error Surface
+
+- **Status**: Proposed; technical-lead acceptance is a hard D.4 precondition.
+- **Context**: ADR-012 protected additive 1.x compatibility, while Phase D
+  explicitly targets a major release that can replace opaque wrappers and the
+  temporary parallel typed surface.
+- **Proposed decision**: For 2.0 only, replace the nine inventoried wrappers
+  with same-name non-exhaustive discriminated enums, remove duplicate typed /
+  legacy adapters, and use an enumerated major-break manifest compared to the
+  frozen 1.4.1 API. This supersedes ADR-012 only for those reviewed breaks;
+  its historical 1.x decision remains intact.
+- **Acceptance gate**: An accepted ADR commit and technical-lead ruling must
+  precede production changes. The semver validator fails every unlisted break
+  before a reviewed 2.0 baseline is generated.
+- **Contracts**: Phase D D.4; `release/public-api-major-breaks.toml`.
+
+### ADR-018: Dual OTLP Backends And Shared Lifecycle
+
+- **Status**: Proposed; technical-lead acceptance is a hard D.6 precondition.
+- **Context**: Tokio-hosted consumers need the official SDK while synchronous
+  and Python-hosted consumers need the previously tested blocking HTTP/JSON
+  path without owning a Tokio runtime.
+- **Proposed decision**: Use one backend-neutral lifecycle state machine,
+  ordered barriers, deadlines, health/accounting, and crate-private exporter
+  traits. The official SDK adapter requires a caller Tokio runtime; the legacy
+  adapter owns a bounded plain-thread worker and uses the same lifecycle core.
+  Backend/protocol combinations are validated at construction. Enabled
+  transports never fall back to no-op. Imported code/docs are governed by the
+  immutable Phase D provenance manifest and OTLP-023/024.
+- **Acceptance gate**: The technical lead accepts the backend/protocol/runtime
+  matrix, async 2.0 lifecycle, queue/deadline behavior, and source provenance
+  before D.6-L lands production code.
+- **Contracts**: OTLP-001–024; Phase D D.5–D.8.
+
 ## 8. API-Design Consistency
 
 `api-design.md` matches the corrected layering:

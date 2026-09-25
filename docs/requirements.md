@@ -341,12 +341,45 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
   - `initial_backoff_ms = 250`
   - `max_backoff_ms = 5000`
   - logs, traces, and metrics disabled unless explicitly configured
-- OTLP-021 `Telemetry` lifecycle behavior shall be explicit:
-  - emit methods after `shutdown()` return `TelemetryError::Shutdown`
-  - `flush()` attempts to export ready batches and drops incomplete spans only at shutdown/final flush
-  - the first `shutdown()` surfaces any final flush failure as `ShutdownError`
-  - repeated `shutdown()` calls are idempotent and return `Ok(())`
+  This list is the frozen 1.x baseline only. D.6-L exclusively owns the Phase
+  D 2.0 candidate config/default/validation contract and its documentation;
+  upon ADR-018 acceptance, D.6 updates this requirement rather than allowing
+  any later sprint to redefine that contract.
+- OTLP-021 Upon technical-lead acceptance of ADR-018, `Telemetry` lifecycle
+  behavior shall be explicit as follows; until that acceptance these bullets
+  are the gated Phase D candidate contract rather than an active requirement:
+  - synchronous emit admission remains available for both backends; emit methods
+    after async shutdown begins return `TelemetryError::Shutdown`
+  - `flush_async_typed().await` completes only after every export admitted
+    before its ordered barrier has a terminal outcome
+  - `shutdown_async_typed().await` closes admission, drains every prior
+    admission, performs provider/exporter shutdown exactly once, and surfaces
+    any final export failure as `ShutdownFailure`
+  - concurrent or repeated async shutdown callers share one completion; calls
+    made after terminal completion are idempotent and return `Ok(())`, so only
+    the first/in-flight caller set observes a terminal failure
+  - the synchronous legacy backend retains final-result
+    `flush_typed()`/`shutdown_typed()` compatibility on plain threads; it
+    returns `BlockingBackendInAsyncContext` before buffer/state mutation when
+    called from an entered Tokio runtime
+  - the SDK backend returns a typed `AsyncLifecycleRequired` from synchronous
+    lifecycle before buffer/state mutation because it cannot block a Tokio
+    worker for async completion
+  - callers of the SDK backend keep the host runtime alive through awaited
+    shutdown; premature runtime termination yields `RuntimeTerminated`, never
+    false success, and accounts admitted-but-incomplete records as dropped
+  - incomplete spans are dropped only at shutdown/final flush
 - OTLP-022 `sc-observability-otlp` shall own crate-local sealed signal-emitter traits for direct telemetry injection where needed.
+- OTLP-023 Restored legacy exporter code, tests, dashboards, and operational
+  recipes shall be traceable to an immutable source commit and Git blob in an
+  in-repository provenance manifest. Import validation shall verify destination
+  dispositions/hashes and reject scratch paths, ATM dependencies/labels, and
+  stale source-repository names from shipped output.
+- OTLP-024 The supported Grafana/LogQL operational recipes shall be translated
+  to the current neutral resource/attribute schema, tested against the same
+  hermetic collector corpus as both exporters, and stored under
+  `docs/observability/otlp/`; legacy phase documents are evidence, not a public
+  labeling contract.
 
 ## 6.1 ATM Out-Of-The-Box Baseline
 
