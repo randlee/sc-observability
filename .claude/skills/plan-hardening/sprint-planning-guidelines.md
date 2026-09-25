@@ -74,6 +74,25 @@ PR merges first. `parallel_safe` requires
 non-intersecting modules/crates, public contracts, artifacts, and ownership.
 Prefer parallel-safe splits where credible. Plan-scope-reviewer verifies this.
 
+A `must_follow` edge needs concrete coupling: the same files/crates/public
+types, or the child consumes the parent's code. Shared release/version
+baseline alone is not coupling; handle it with a final integration step.
+Parallel tracks run as separate gh-stack stacks with named branches,
+worktrees, and assigned agents.
+
+## Process Artifacts
+
+A plan may require a process artifact (manifest, inventory, ledger, receipt,
+matrix, docs-consistency check, new CI gate) only if the sprint doc names:
+its consumer, the capability it gates, the observed defect it prevents (not
+speculative), and when it is retired. Otherwise leave it out. Prefer what
+already enforces the property: the compiler, existing tests, existing CI,
+git history. A plan-writing rule (e.g. single ownership of a contract) stays
+a plan rule; it does not become a product CI gate.
+
+Frontmatter `status` describes the sprint, not the plan: an unimplemented
+sprint is `planned`, never `complete`.
+
 ## QA Consumption
 
 Sprint docs must be short and structured enough that:
@@ -99,6 +118,12 @@ Structural findings:
 
 Structural findings always remain in the main `findings` array and must be
 rated `Blocking` or `Important` when they affect implementability or closure.
+
+A "missing gate" finding is structural only when a deliverable's behavior
+would otherwise go unverified. A finding whose only remedy is a new process
+artifact must pass the Process Artifacts rule above; otherwise it is debt
+notes, not a finding. Over-specification (unjustified artifacts, restated
+contracts, redundant inventories) is itself a valid finding.
 
 Wording findings:
 - prose ambiguity that does not change scope or closure meaning

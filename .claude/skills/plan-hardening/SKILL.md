@@ -34,7 +34,14 @@ Use this only for phase-plan hardening before implementation starts or resumes.
 Sprint plan approved by:
 - `plan-scope-reviewer`
 - `critical-plan-reviewer`
-- `quality-mgr`
+- `quality-mgr` (plan QA-1 includes `ceremony-qa`)
+
+Hardening improves the plan's deliverables; it does not grow process.
+Findings whose only remedy is a new manifest, inventory, receipt, or CI gate
+must pass the "Process Artifacts" rule in `sprint-planning-guidelines.md`.
+Before routing step 2 or step 4 findings to the developer, `team-lead` runs
+`ceremony-finding-screen` over them and drops any it rules `rejected:
+ceremony`, recording the reason in the round table Note.
 
 ## Required Reference
 
@@ -66,11 +73,12 @@ Use the example in:
 
 ## Reviewer Cycle Caps
 
-- `plan-scope-reviewer` and `critical-plan-reviewer` both default to a
-  3-cycle cap
+- `plan-scope-reviewer`, `critical-plan-reviewer`, and step-6 plan QA
+  (`quality-mgr`) all default to a 3-cycle cap
 - these caps must be carried in JSON:
   - `plan_scope_review_cycle_limit`
   - `critical_review_cycle_limit`
+  - `plan_qa_cycle_limit`
 - reviewer launch payloads must also include:
   - `review_cycle_limit`
   - `review_cycle_index`
