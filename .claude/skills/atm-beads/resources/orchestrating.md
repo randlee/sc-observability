@@ -67,8 +67,10 @@ quick-checks alone, so dev keeps moving while a layer is reviewed.
 1. Quick-check N is green: lead creates the QA bead (parent the phase
    feature, `validates` dev N, metadata `sprint`, `layer` and the pinned head
    SHA) and assigns it to quality-mgr.
-2. quality-mgr runs its reviewer subagents as today, triages the results and
-   screens them with its `ceremony-finding-screen` subagent.
+2. quality-mgr runs its review agents as background agents, as it does today,
+   triages their results, and screens them with the `ceremony-finding-screen`
+   procedure (`.claude/agents/ceremony-finding-screen.md`), also run as a
+   background agent.
 3. quality-mgr files one finding bead per finding, screened or not: parent
    the phase feature, `discovered-from` the QA bead, `caused-by` dev N,
    metadata `severity`, `stack` and `found_on_layer`. The screen verdict
@@ -103,14 +105,44 @@ Lead picks the team member for each finding. The assignee column is the usual
 case, not a rule: an important but difficult finding may go to a frontier dev,
 and a blocking doc fix may go to a fast agent.
 
+## Passing A Bead To A Background Agent
+
+This works the same for Claude and Codex agents. A background agent (a
+subagent or child agent, whichever the harness provides) is never assumed to
+run `bd`. The agent that starts it fetches the bead and pipes the content into
+the background agent's prompt file:
+
+```bash
+{ printf '%s\n\n' "<instruction>"
+  printf 'The bead:\n\n```json\n'
+  bd show <bead> --json | jq '.[0] | {id, title, description, design, acceptance_criteria, metadata}'
+  printf '```\n'
+} > <scratch>/<bead>-prompt.md
+```
+
+1. `bd show --json` returns a one-element array; `.[0]` is the bead.
+2. Start one background agent per bead with the contents of
+   `<scratch>/<bead>-prompt.md` as its prompt. Start them together when
+   there are several, up to the harness's concurrency limit; the rest start
+   as slots free up.
+3. The background agent reads the bead from the fenced JSON block, does the
+   work against the worktree named in the instruction, and returns its result
+   as text. It does not write to beads or ATM.
+4. The agent that started it applies the result: closes or reopens beads,
+   files findings, closes its own ATM task.
+
+Keep `<scratch>` outside the repository and never commit the prompt files.
+
 ## Stacking
 
 Dev and fix work runs in parallel and is stacked when it completes: the dev
 completes the work, rebases it onto the current top of its stack, and the
 stack writer (lead) links it. Layers therefore stack in the order they
 complete, and lead records each bead's actual `layer` and `pr_target` when it
-is linked; the plan-time values are the plan's intent. The mechanics are
-`/sc-gh-stack`: its `workflow.md`, `recipe-cut-layer.md` and `recipe-link.md`.
+is linked; the plan-time values are the plan's intent. The mechanics are the
+`sc-gh-stack` skill (`/sc-gh-stack` in Claude): its `workflow.md`,
+`recipe-cut-layer.md` and `recipe-link.md` are plain markdown any agent can
+follow.
 
 ## Lifecycle
 
