@@ -47,5 +47,5 @@ release/evidence/
 examples/tauri-logging/src-tauri/gen/
 examples/tauri-logging/src-tauri/permissions/
 
-# sc-compose render logs (runtime output, never committed)
-**/.sc-compose/logs/
+# sc-compose runtime state and render logs (never committed)
+**/.sc-compose/
