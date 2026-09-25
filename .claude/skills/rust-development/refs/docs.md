@@ -1,6 +1,6 @@
 # Documentation Reference Notes
 
-These notes provide the anchors referenced by `rust-development/guidelines.txt`.
+These notes provide the anchors referenced by `../guidelines.txt`.
 
 ## Documentation Has Canonical Sections (M-CANONICAL-DOCS) { #M-CANONICAL-DOCS }
 
