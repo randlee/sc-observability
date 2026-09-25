@@ -108,11 +108,13 @@ Before starting a sprint:
    - `rust-best-practices-agent`
    - `rust-service-hardening-agent`
    - `flaky-test-qa` when test instability risk is present
-7. QA-2 and later (fix-verification) rounds on the same sprint branch omit
+7. QA-2 and later (fix-verification) rounds on the same sprint branch run
    `ruthless-boundary-qa`, `rust-best-practices-agent`, and
-   `rust-service-hardening-agent` unconditionally — they reliably surface
-   findings on any diff regardless of size, which turns a small fix-round
-   into unbounded review churn. QA-2+ rounds launch `req-qa` + `arch-qa`
+   `rust-service-hardening-agent` only to confirm fixes to their own QA-1
+   findings (verification-locked to those ids; a reviewer with no QA-1
+   findings is not re-run) — as open reviews they reliably surface findings
+   on any diff regardless of size, which turns a small fix-round into
+   unbounded review churn. QA-2+ rounds also launch `req-qa` + `arch-qa`
    (scoped to the dispatched finding ids) plus `rust-qa-agent` (its
    objective execution-fact gates — fmt, clippy, tests, lint, RULE-003,
    pytests — are not a subjective findings pass and stay in every round).
@@ -125,14 +127,16 @@ Before starting a sprint:
    deferral. QA-1 findings route back to the developer via
    `fix-assignment.xml.j2` before QA-2, following the standard
    triage-and-fix path. `ruthless-boundary-qa`, `rust-best-practices-agent`,
-   and `rust-service-hardening-agent` remain part of docs-only plan review
-   and phase-ending review regardless of sprint round.
+   and `rust-service-hardening-agent` run open reviews on plan QA-1 and
+   phase-ending review.
 8. If QA passes and CI is green, merge may proceed.
 9. After every QA round that reports any finding, at any severity, the lead
    runs `/triaging-findings` (where the repository carries that skill) the
    same way: every finding is recorded, correlated
    across worktrees, and promoted to the current top layer of the stack. No
-   finding is skipped, deferred, or left without a fix dispatch.
+   finding is skipped, deferred, or left without a fix dispatch, except a
+   finding the lead upholds as `rejected: ceremony` under quality-mgr's
+   Ceremony Disputes rule.
 10. After triage completes, the lead routes concrete fixes back to
    the developer using `fix-assignment.xml.j2`. Fix assignments must also include
    `sprint_doc`, and the sprint document remains authoritative if the task
@@ -157,7 +161,9 @@ of §0.
 1. the lead completes `/plan-hardening` steps 1 through 5.
 2. the lead assigns plan QA to `quality-mgr` using `qa-template.xml.j2`
    with `review_mode: plan`.
-3. The QA assignment must include the phase-plan document as `sprint_doc`, and
+3. Every QA assignment, plan or sprint, requires an open PR; quality-mgr
+   posts its report to that PR after every round. The QA assignment must
+   include the phase-plan document as `sprint_doc`, and
    that plan document is the authoritative scope source for plan QA.
 4. `quality-mgr` treats `review_mode: plan` as docs-only review and launches:
    - `req-qa`
@@ -165,9 +171,15 @@ of §0.
    - `ruthless-boundary-qa`
    - `rust-best-practices-agent`
    - `rust-service-hardening-agent`
+   - `ceremony-qa`
+   on plan QA-1. Later rounds, the minor-findings rule, and the
+   `ceremony-finding-screen` step follow `quality-mgr.md` "Default Reviewer
+   Set" and "Ceremony Disputes".
 5. If plan QA passes, the hardened plan is ready for implementation dispatch.
 6. If plan QA fails, the lead uses the normal codex-orchestration
    triage-and-fix loop to route concrete fixes back to the developer.
+7. Plan QA is capped at 3 rounds (`plan_qa_cycle_limit`); see
+   `/plan-hardening` Reviewer Cycle Caps.
 
 ## QA Coverage Rule
 

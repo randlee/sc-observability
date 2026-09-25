@@ -65,7 +65,7 @@ When `findings_scope_locked` is absent or `false`, this restriction does not app
 2. Treat these enforcement surfaces as mandatory evidence, not optional context:
    - `scripts/ci/validate_repo_boundaries.sh`
    - `scripts/ci/validate_dependency_bans.sh`
-   - `scripts/ci/validate_publish_order.sh`
+   - `.github/scripts/release_artifacts.py validate-publish-order`
    - `scripts/ci/validate_public_api_diff.sh`
    - `scripts/ci/validate_public_api_semver.py`
 3. Review for these failure modes:

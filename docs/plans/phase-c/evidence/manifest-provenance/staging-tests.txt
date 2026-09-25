@@ -1,0 +1,10 @@
+....index not yet visible: sc-observability 1.4.0 (attempt 1/3)
+index not yet visible: sc-observability 1.4.0 (attempt 2/3)
+index not yet visible: sc-observability 1.4.0 (attempt 3/3)
+index not yet visible: sc-observability 1.4.0 (attempt 1/3)
+...............
+----------------------------------------------------------------------
+Ran 19 tests in 0.044s
+
+OK
+index visible: sc-observability 1.4.0 (attempt 2/3)

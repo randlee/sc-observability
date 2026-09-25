@@ -222,11 +222,17 @@ python3 -m venv "$PY_VENV"
 TESTS_COPY="$TMP_ROOT/py-tests"
 cp -R bindings/python/sc-observability-py/tests "$TESTS_COPY"
 rm -rf "$TESTS_COPY/typing"  # mypy strict-typing gate is B.4's own scope (validate_python_bindings.sh), not this validator's
+# The production wheel deliberately omits the private native test hooks used by
+# test_runtime_faults.py.  Keep that suite out of the public consumer proof;
+# validate_python_distribution.py runs it separately against the instrumented
+# companion wheel and proves the companion never enters publication inventory.
+rm -f "$TESTS_COPY/test_runtime_faults.py"
 SC_OBSERVABILITY_RUNTIME_TEST=1 PYTHONWARNINGS=error "$PY_VENV/bin/python" -I -m pytest "$TESTS_COPY" -ra
 echo "PASS: sc-observability wheel installs into a fresh isolated venv and its test subset passes against the installed package"
+echo "PRIVATE_FAULT_SUITE: delegated to the separately-built instrumented companion wheel; production wheel remains hook-free"
 
 echo
-echo "-- TypeScript: @sc-observability/client (forward-looking structural proof only) --"
+echo "-- TypeScript: @synaptic-canvas/sc-observability (forward-looking structural proof only) --"
 # npm pack proves the packaged tarball's file set installs and runs, without
 # claiming publish-readiness while the owner publication gate is pending.
 TS_DIR="bindings/typescript"
@@ -242,7 +248,7 @@ TS_CONSUMER_DIR="$TMP_ROOT/ts-consumer"
 mkdir -p "$TS_CONSUMER_DIR"
 ( cd "$TS_CONSUMER_DIR" && npm init --yes --silent >/dev/null && npm install --silent --ignore-scripts --no-save "$TS_TARBALL" >/dev/null )
 ( cd "$TS_CONSUMER_DIR" && node -e '
-const { createClient, encodeEvent } = require("@sc-observability/client");
+const { createClient, encodeEvent } = require("@synaptic-canvas/sc-observability");
 const event = encodeEvent({ level: "info", target: "package-consumer", action: "smoke", fields: { count: 3n } });
 if (event.kind !== "ok" || event.value.fields.count.value !== "3") throw new Error("packaged tarball event encoding failed");
 const operations = [];
@@ -258,7 +264,7 @@ created.value.tryLog(event.value).then((result) => {
   console.log("TS_PACKAGED_TARBALL_CONSUMER_PASSED");
 }).catch((error) => { console.error(error); process.exit(1); });
 ' )
-echo "STRUCTURAL PROOF ONLY (pending): @sc-observability/client packs into a real npm tarball and installs/smoke-checks in isolation; sc-publish credential provisioning and owner publication approval remain deferred, so this is NOT npm-publish-readiness"
+echo "STRUCTURAL PROOF ONLY (pending): @synaptic-canvas/sc-observability packs into a real npm tarball and installs/smoke-checks in isolation; sc-publish credential provisioning and owner publication approval remain deferred, so this is NOT npm-publish-readiness"
 
 echo
 echo "== 4/4: summary =="
@@ -270,7 +276,7 @@ echo "  - the packaged sc-observability-dto/binding-runtime/py tarballs (not the
 echo "    source tree) compile as an external Rust consumer"
 echo "  - the built sc-observability wheel installs into a fresh isolated venv and its"
 echo "    test subset passes against the installed package"
-echo "  - the @sc-observability/client npm tarball installs and smoke-checks in isolation"
+echo "  - the @synaptic-canvas/sc-observability npm tarball installs and smoke-checks in isolation"
 echo "    (owner publication gate pending; NOT publish-ready)"
 echo "  - sc-observability-tauri: qualification recorded PASS; independent phase-end QA/API approval remains pending"
 echo

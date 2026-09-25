@@ -15,6 +15,10 @@ Historical recovery and pre-publish planning documents remain valuable
 reference material, but they are no longer the controlling phase for current
 work.
 
+## npm publishing follow-up
+
+Active: [npm scope and shared publishing adoption](plans/npm-publish-adoption/sprint.md). Lead: aobs; developer: cobs. Correct the active package identity and adopt reviewed shared publishing updates on a branch from develop, without another publication.
+
 ## Near-Term Work
 
 1. Keep repo workflow and review discipline aligned with ATM.
@@ -419,6 +423,11 @@ registry-publication tail.
 
 ## Phase C — Shared publishing migration
 
+Status: in progress (owner-authorized execution). Lead: `aobs`. Integration:
+`integrate/phase-c`; C.1: `fix/phase-c-1-shared-pipeline-migration`; C.2:
+`fix/phase-c-2-release-surface-preflight` (depends on C.1). Publication remains
+separately authorized; upstream prerequisites still gate installation.
+
 The proposed next lettered phase is tracked in
 [`plans/phase-c/plan-phase-c.md`](./plans/phase-c/plan-phase-c.md). It replaces
 this repo's bespoke publishing implementation with the shared `../sc-publish`
@@ -427,11 +436,18 @@ Python wheels/sdist, the npm client, and applicable native/Tauri artifacts)
 through that shared pipeline. It is planning-and-preflight scope only: it does
 not authorize publication, tag creation, or BTIT repository integration tests,
 and its planning branch does not execute until Phase B merges into `develop`.
-The shared package's missing npm channel and stale pinned action versions are
-treated as named upstream prerequisites for `../sc-publish` to satisfy at a
-reviewed pin before the affected sprint completes — not a repository-local
-publisher fork and not an accepted regression tracked only by a follow-up
-ticket. See `docs/requirements.md` §11 and
+C.2 implementation and nonpublishing qualification are complete, with lead
+completeness PASS recorded on 2026-09-19 in
+[`final-c2-audit.md`](plans/phase-c/evidence/final-c2-audit.md).
+Current Python qualification passed all 33 jobs; native qualification, package
+completeness, required environment scopes, and actual release preflight passed.
+The final documentation correction awaits independent QA registry closure.
+The shared installer and immutable sc-lint source pins are adopted; npm scope
+is configured. The owner separately authorized only the annotated candidate tag
+recorded in the audit. Phase C integration/ordered merges and publication remain
+separate from completed sprint implementation; nothing here authorizes release
+publication or BTIT post-publication integration tests. See
+`docs/requirements.md` §11 and
 [ADR-016](architecture.md#adr-016-shared-publishing-pipeline-adoption).
 
 ## Rule
@@ -552,3 +568,5 @@ that integrate against the shipped public API.
      CLI surface precisely enough for implementation and review
    - `qm-comp` cross-document consistency review passes; all three docs are
      confirmed mutually consistent before merge
+
+Follow-up: [complete immutable installer adoption](plans/npm-publish-adoption/followup.md), lead aobs, developer cobs; child of PR199.

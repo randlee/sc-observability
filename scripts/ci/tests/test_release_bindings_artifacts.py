@@ -49,7 +49,7 @@ name = "sc-observability"
 version = "9.9.9"
 """
 
-PACKAGE_JSON = json.dumps({"name": "@sc-observability/client", "version": "9.9.9"})
+PACKAGE_JSON = json.dumps({"name": "@synaptic-canvas/sc-observability", "version": "9.9.9"})
 
 
 class FixtureRepo:
@@ -126,7 +126,7 @@ status = "ready"
 [[packages]]
 artifact = "sc-observability-typescript-client"
 kind = "npm"
-package = "@sc-observability/client"
+package = "@synaptic-canvas/sc-observability"
 manifest_path = "pkg/package.json"
 publish_order = 5
 depends_on = []

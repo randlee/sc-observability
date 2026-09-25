@@ -79,10 +79,9 @@ say so in the status message to the lead.
 field.** If the assignment has no `PR number` (e.g. the field is empty,
 absent, or `n/a` and no PR actually exists yet for the branch), do not start
 the review. Reply to the lead rejecting the assignment and stating that a
-PR number is required before QA can begin, then stop. Only exception: an
-assignment explicitly marked `review_mode: plan` (docs-only plan review),
-which reviews a plan document, not a PR — a plan-mode assignment does not
-require a PR number.
+PR number is required before QA can begin, then stop. This applies to
+`review_mode: plan` too: the plan branch must have an open PR, because the
+plan-QA report is posted to it.
 
 Treat `review_mode: plan` as docs-only plan review.
 
@@ -132,8 +131,7 @@ TODO-specific rule:
    - `req-qa` from `.claude/skills/codex-orchestration/req-qa-assignment.json.j2`
    - `arch-qa` from `.claude/skills/codex-orchestration/arch-qa-assignment.json.j2`
    - `ruthless-boundary-qa` from `.claude/skills/codex-orchestration/ruthless-boundary-qa-assignment.json.j2`
-     on every sprint QA round for the near term, plus docs-only plan review
-     and phase-ending review
+     per the Boundary-review deployment rule below
    - `flaky-test-qa` from `.claude/skills/codex-orchestration/flaky-test-qa-assignment.json.j2` only when tests changed or instability is suspected
    - Rust reviewer assignments from `.claude/assets/sc-rust/quality-mgr/templates/` exactly as directed by `.claude/assets/sc-rust/quality-mgr/quality-mgr.rust.md`
    - when rechecking prior findings, pass `triage_records`, `round_limit`,
@@ -151,6 +149,10 @@ TODO-specific rule:
    - skipped
    Before citing any reviewer-supplied `file:line`, re-resolve it in the
    current branch/worktree. Missing or stale evidence is a finding.
+   Then, every round with findings (sprint or plan QA), run
+   `ceremony-finding-screen` over all of them and list its `ceremony` and
+   `concern_valid_remedy_ceremony` verdicts in the report as proposed
+   `rejected: ceremony` rulings for the lead (see Ceremony Disputes).
 9. Check PR CI state when a PR number is present:
    - prefer `atm gh monitor status`
    - prefer `atm gh monitor pr <PR> --start-timeout 120`
@@ -193,9 +195,11 @@ For QA-2 and later (fix-verification) rechecks of implementation work:
 - always run `arch-qa`
 - always run `rust-qa-agent` (objective execution-fact gates: fmt, clippy,
   tests, lint, RULE-003, pytests — not a subjective findings pass)
-- do not run `ruthless-boundary-qa`
-- do not run `rust-best-practices-agent`
-- do not run `rust-service-hardening-agent`
+- re-dispatch only those of `ruthless-boundary-qa`,
+  `rust-best-practices-agent`, `rust-service-hardening-agent` (and, for plan
+  QA, `ceremony-qa`) that raised QA-1 findings, verification-locked
+  (`carry_forward_findings` = their own QA-1 ids) so they confirm those
+  fixes and report nothing new; skip any of them that raised none
 - run `flaky-test-qa` when tests changed, CI shows intermittent behavior, or
   `rust-qa-agent` surfaces unstable execution symptoms
 - verdict = each dispatched finding's fixed/regressed/open status plus
@@ -205,14 +209,16 @@ For QA-2 and later (fix-verification) rechecks of implementation work:
 
 Boundary-review deployment rule:
 - `ruthless-boundary-qa`, `rust-best-practices-agent`, and
-  `rust-service-hardening-agent` are QA-1 only — unconditionally omit all
-  three from QA-2 and later fix-verification rounds on the same sprint
-  branch, with no lead-narrowing carve-out needed
+  `rust-service-hardening-agent` (plus `ceremony-qa` in plan QA) run an open
+  review on the first round only — sprint QA-1, plan QA-1, and phase-ending
+  review
+- on QA-2 and later, sprint or plan, they run only to confirm fixes to their
+  own QA-1 findings, verification-locked to those ids; a reviewer with no
+  QA-1 findings is not re-run
 - their job is to find a finding and their acceptance criteria is
   subjective, so they reliably surface something on any diff regardless of
-  size; running them on a fix round guarantees a new round instead of
+  size; an open review on a fix round guarantees a new round instead of
   verifying the fix
-- keep all three on docs-only plan review and phase-ending review
 
 For phase-ending QA:
 - always run `req-qa`
@@ -230,11 +236,29 @@ For phase-ending QA:
   step 7 by verifying the delegated command output and its source revision
 
 For docs-only plan review (`review_mode: plan`):
-- run `req-qa`
-- run `arch-qa`
-- run `ruthless-boundary-qa`
-- always run `rust-best-practices-agent`
-- always run `rust-service-hardening-agent`
+- plan QA-1 runs `req-qa`, `arch-qa`, `ruthless-boundary-qa`,
+  `rust-best-practices-agent`, `rust-service-hardening-agent`, and
+  `ceremony-qa`
+- plan QA-2 and later are fix-verification rounds: run `req-qa` and
+  `arch-qa` scoped to the dispatched findings, and re-dispatch only those of `ruthless-boundary-qa`,
+  `rust-best-practices-agent`, `rust-service-hardening-agent` (and, for plan
+  QA, `ceremony-qa`) that raised QA-1 findings, verification-locked
+  (`carry_forward_findings` = their own QA-1 ids) so they confirm those
+  fixes and report nothing new.
+  Verdict = each dispatched finding's fixed/regressed/open status, nothing
+  else. New observations go in debt notes and do not fail the round, except
+  a regression introduced by the fix itself
+- plan QA is capped at 3 rounds (`plan_qa_cycle_limit`, default 3). If round
+  3 still fails, report `cap-exhausted / not converged` with the open
+  findings to the lead; do not open round 4
+- minor findings must still be fixed, but when a round leaves only minor
+  findings open, report `PASS — minor fixes required, no re-QA` listing
+  them. The lead routes them to the developer and confirms each fix against
+  the listed ids before merge; no further QA round is opened
+- apply `.claude/skills/plan-hardening/sprint-planning-guidelines.md`
+  "Process Artifacts": reviewers must not raise a finding whose only remedy is
+  a new manifest/inventory/receipt/CI gate unless it passes that rule, and may
+  raise unjustified process artifacts as findings
 - do not run `rust-qa-agent` for docs-only review
 
 Reviewer ownership note:
@@ -246,7 +270,26 @@ Reviewer ownership note:
   concrete repository evidence
 - a branch is not merge-ready if deliverable completion is below `100%`
 
+## Ceremony Disputes
+
+The developer or lead may dispute any finding (from any reviewer, sprint or
+plan QA) whose remedy is a new process artifact — manifest, inventory,
+ledger, receipt, matrix, report, docs-consistency check, or CI gate — as
+ceremony, and `ceremony-finding-screen` proposes such disputes each round.
+The dispute names which of the four required elements is missing
+(consumer, capability gated, observed defect, retirement condition) per
+`.claude/skills/plan-hardening/sprint-planning-guidelines.md` "Process
+Artifacts". The lead rules; an upheld dispute records the finding as
+`rejected: ceremony` with that reason. Record it in the next PR report, and
+exclude it from the verdict and from later rounds. If a reviewer re-raises
+it, or you disagree with the ruling, escalate to the user; never open a
+new round over it.
+
 ## Output Format
+
+Post the rendered findings or quality report to the PR after every QA
+round — FAIL, IN-FLIGHT, and PASS alike — before closing the task. A round
+with no PR comment is not complete.
 
 All ATM messages must follow the required sequence:
 1. task start

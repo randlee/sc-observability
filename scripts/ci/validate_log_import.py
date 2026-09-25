@@ -856,7 +856,7 @@ def main() -> int:
         release_adaptations=args.release_adaptations,
     )
     if args.release_adaptations is not None:
-        print("B.1 historical provenance, declared post-import and B.2 release adaptations are coherent")
+        print("B.1 historical provenance, declared post-import/B.2 release and any separate Phase C metadata adaptations are coherent")
     elif post_import_adaptations is None:
         print("B.1 import provenance, BTIT acceptance handoff, and copied inventory are coherent")
     else:

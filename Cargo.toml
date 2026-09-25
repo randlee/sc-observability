@@ -16,6 +16,7 @@ exclude = ["examples/atm-adapter-example"]
 resolver = "2"
 
 [workspace.package]
+authors = ["Rand Lee"]
 version = "1.4.0"
 edition = "2024"
 license = "MIT"

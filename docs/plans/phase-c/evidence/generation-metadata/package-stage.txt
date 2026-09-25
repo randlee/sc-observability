@@ -1,0 +1,2 @@
+B.2 LICENSE/publish proof and any separately recorded Phase C metadata verified; historical provenance unchanged
+staged and verified all six packages at 7f25a4889eb74800899f5ded162b932d82f45837: /private/tmp/phase-c-generation-six-package-stage

@@ -1,0 +1,15 @@
+{
+  "source_revision": "ba2d9bf622c1604e3f017c728040906b90e71bce",
+  "repository": "randlee/sc-lint",
+  "version": "0.6.0",
+  "wheel_sha256": "58ab09f79330f6b6caad6d72ae3e5fae8b352a907bc19cd0773fc8c4db38f3ab",
+  "wheel": "/home/runner/work/_temp/sc-lint-source-2fqlsp83/wheels/sc_lint-0.6.0-cp39-abi3-manylinux_2_39_x86_64.whl",
+  "binaries": {
+    "sc-lint-runtime": "bf1608a4854c40ff032212fe0e35aa90cafd7840305e17ad846d00124a470e0d",
+    "sc-lint-boundary": "5a23fbede206fc0fe2a8bb9ffc105c58ca03136e7ec938dfbf85a8c4fa039bb2",
+    "sc-lint": "bbdabc2501855034e5a1cc922125b97f041156785b7ca3e37944525517d28aef",
+    "sc-lint-portability": "ecf4935d681e71d65e10623953bd60e77b1ecabd345bdfd43c4d7216b0c8f7d6"
+  },
+  "binary_directory": "/home/runner/work/_temp/sc-lint-source-2fqlsp83/bin",
+  "python": "/home/runner/work/sc-observability/sc-observability/.sc-lint/venv/bin/python3"
+}

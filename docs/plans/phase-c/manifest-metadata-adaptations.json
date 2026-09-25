@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "kind": "phase_c_workspace_metadata",
+  "historical_provenance": "docs/plans/phase-b/import-provenance.json",
+  "release_adaptations": "docs/plans/phase-b/release-adaptations-b-2.json",
+  "before_commit": "280f39555c18ed41723c179242fdaa6f6e15d23d",
+  "after_commit": "aec16d67ccf6fd9c85f3de75ceeb825da6ddbdf1",
+  "reason": "Inherit package authors/homepage/repository and the existing versioned bridge dependency; preserve Phase B import and release snapshots. No runtime adaptation or publication approval.",
+  "manifests": {
+    "Cargo.toml": {
+      "before_blob": "c9ff2ad4760019c93c819a19fb4571c8185d736f",
+      "after_blob": "52dfdb809ca189dbe678c541ab2804e8bd09ead8"
+    },
+    "bindings/python/sc-observability-py/Cargo.toml": {
+      "before_blob": "8c06d8523bb990dc5da243800aa18d124a93e6dd",
+      "after_blob": "c890ab8cf8ca2d8fbd8eaff0e8e180f23c683a8d"
+    },
+    "crates/sc-observability-binding-runtime/Cargo.toml": {
+      "before_blob": "0d92b13fa0f540e667ae15fa6147713329f9b16b",
+      "after_blob": "ea71b68b4d27153e3ce0b09ba16585a84cf2ee68"
+    },
+    "crates/sc-observability-dto/Cargo.toml": {
+      "before_blob": "e6b70bd6e8103e8df23ec8020df33f34211515fc",
+      "after_blob": "24c25d7bfa4c2f5a859a7df8d033150d4bb2a6d4"
+    },
+    "crates/sc-observability-log-consumer-check/Cargo.toml": {
+      "before_blob": "e2d3ca52ff37a9a8c8e091bef1b813bcde082836",
+      "after_blob": "29269d372d9f6c41b9042fb5b6d003b682e86b9e"
+    },
+    "crates/sc-observability-log-macros/Cargo.toml": {
+      "before_blob": "38ccc81fdc54c0ed68e375606ab75ddb36cfa5a2",
+      "after_blob": "4a0d47522f1094004209f9956d1a0b350356fecc"
+    },
+    "crates/sc-observability-log/Cargo.toml": {
+      "before_blob": "b83cdb8585569662f9c20fe53379eb075f06f6f3",
+      "after_blob": "7ed126e178dc4521175b97435f17d0b1a6e4d18c"
+    },
+    "crates/sc-observability-otlp/Cargo.toml": {
+      "before_blob": "9e45405bc878d02ac8217134828b7fbd1858ceed",
+      "after_blob": "809d26c91350fda56e7bd579f0bd296c3c1112ab"
+    },
+    "crates/sc-observability-types/Cargo.toml": {
+      "before_blob": "dd95bf6148a78a405bdf50c4535042490d03f685",
+      "after_blob": "0bda06013436020e04995a37b91b0b8ae4afa2b2"
+    },
+    "crates/sc-observability/Cargo.toml": {
+      "before_blob": "5fb22a14b91ba5e32e91730908d5529975c75d48",
+      "after_blob": "54aab6f2708c8ac8edd55e5dcab43c1ea9000590"
+    },
+    "crates/sc-observe/Cargo.toml": {
+      "before_blob": "50708688f89bc64da4b74d6e2367d399d6d4f2d4",
+      "after_blob": "6f2f88985d50a79e0dd18447e6ce8a4bba987389"
+    },
+    "examples/rust-python-logging/Cargo.toml": {
+      "before_blob": "ff94865c44ac568886bebedbf04cadc78b797b16",
+      "after_blob": "40b33d00e47180c7a416d233eadcd0d0327b5437"
+    }
+  }
+}

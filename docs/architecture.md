@@ -1062,7 +1062,7 @@ ADR navigation index (status is recorded in each decision below):
 - **Status**: Proposed for Phase C review.
 - **Context**: This repository's release implementation
   (`.github/workflows/release.yml`/`release-preflight.yml`, the `publisher`
-  agent, `scripts/release_gate.sh`/`scripts/release_artifacts.py`, and
+  agent, `.github/scripts/release_gate.sh`/`.github/scripts/release_artifacts.py`, and
   `release/publish-artifacts.toml`) is repository-specific and predates
   Phase B's expanded release surface (npm client, Python wheels/sdist,
   native/Tauri artifacts). `../sc-publish` is a separately-owned shared

@@ -1,0 +1,47 @@
+{
+  "run_id": 35458975629,
+  "source_commit": "09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+  "source_evidence_child": "d14943a2101a17042c33ab88fa33726cc5241643",
+  "conclusion": "success",
+  "jobs_passed": 33,
+  "wheel_jobs_passed": 5,
+  "installed_suite_jobs_passed": 25,
+  "inventory_sha256": "97716f4363997422f9bd0a69feb8e5031be89cb7407f8b64d7b73e92cc2d2c70",
+  "inventory_hash_origin": "Computed from downloaded production-artifacts.json bytes; aggregate log records output calculation but does not print its value.",
+  "artifact_id": 10589791842,
+  "github_artifact_zip_sha256": "f427e94bbe97db0ca1dea8a6b5db69e8119f1ea2ddc23541103b2884d463d25f",
+  "artifacts_verified": [
+    {
+      "path": "dist/sc_observability-1.4.0.tar.gz",
+      "sha256": "341f1a12050753f7afafe71494c6828fc34913daf9b26d0386a4e3067641dade"
+    },
+    {
+      "path": "dist/sc_observability-1.4.0-cp310-abi3-macosx_11_0_arm64.whl",
+      "sha256": "26a02c387034ee31b587b9f4843bbbe450b2170260e8a29134926534fb0449e7"
+    },
+    {
+      "path": "dist/sc_observability-1.4.0-cp310-abi3-manylinux_2_28_x86_64.whl",
+      "sha256": "483a04f3bfa1faf805ee9d0d0eac93455f1845a706ecf76cc333774cb2eecc68"
+    },
+    {
+      "path": "dist/sc_observability-1.4.0-cp310-abi3-macosx_10_13_x86_64.whl",
+      "sha256": "7c677a8b409dccc04dda8e0ee6a841177e35474165c56edfc7ca376d1ba25d13"
+    },
+    {
+      "path": "dist/sc_observability-1.4.0-cp310-abi3-manylinux_2_28_aarch64.whl",
+      "sha256": "6da9dc19905043fceca9a3f53d30472bbce6826d22e88703d2bde78057dd7f9e"
+    },
+    {
+      "path": "dist/sc_observability-1.4.0-cp310-abi3-win_amd64.whl",
+      "sha256": "ecae05f94dfa4e8c80cfd5a2fdabd67d1055cbcaa1a8a2c5a011adcc833206e4"
+    }
+  ],
+  "download_command": "gh run download 35458975629 --repo randlee/sc-observability --name b4a-production-inventory --dir /tmp/phase-c-python-final-inventory",
+  "qualified_non_docs_changed_paths": [],
+  "publication": "No publication; production candidate artifacts retained.",
+  "local_aggregate_replay": {
+    "command": "python3 scripts/ci/validate_python_distribution.py aggregate --policy release/python-platform-policy.json --sdist /tmp/phase-c-python-final-inventory/dist/sc_observability-1.4.0.tar.gz --evidence /tmp/phase-c-python-final-results --source-commit 09e0ce3bc03bed4ffc78e5467f6c6ec6093b6eb8",
+    "result": "B4A_QUALIFIED: five ABI wheels, 25 installed full-suite cells, offline sdist and embedding",
+    "scope": "Revalidates downloaded build/cell JSON, raw JUnit, archive hashes and production/companion separation; does not rerun platform execution."
+  }
+}

@@ -1,0 +1,104 @@
+
+added 1 package, and audited 2 packages in 174ms
+
+found 0 vulnerabilities
+
+> @sc-observability/client@1.4.0 build
+> tsc --project tsconfig.json
+
+[
+  {
+    "id": "@sc-observability/client@1.4.0",
+    "name": "@sc-observability/client",
+    "version": "1.4.0",
+    "size": 58823,
+    "unpackedSize": 587491,
+    "shasum": "54b84fd78daaebaae58c85731814747cbfd0e303",
+    "integrity": "sha512-R5R2tPMeoTU6uiTD9vEbNmbPWVx4wOxbSTcT1tSe8HCMxFqtQIyqHv/3kJcupCxS0Ax1drHoprg5uTq6A40sNA==",
+    "filename": "sc-observability-client-1.4.0.tgz",
+    "files": [
+      {
+        "path": "README.md",
+        "size": 1395,
+        "mode": 420
+      },
+      {
+        "path": "dist/client.d.ts",
+        "size": 1114,
+        "mode": 420
+      },
+      {
+        "path": "dist/client.js",
+        "size": 16967,
+        "mode": 420
+      },
+      {
+        "path": "dist/encoding.d.ts",
+        "size": 657,
+        "mode": 420
+      },
+      {
+        "path": "dist/encoding.js",
+        "size": 7776,
+        "mode": 420
+      },
+      {
+        "path": "dist/generated/index.d.ts",
+        "size": 278691,
+        "mode": 420
+      },
+      {
+        "path": "dist/generated/index.js",
+        "size": 120933,
+        "mode": 420
+      },
+      {
+        "path": "dist/index.d.ts",
+        "size": 201,
+        "mode": 420
+      },
+      {
+        "path": "dist/index.js",
+        "size": 2023,
+        "mode": 420
+      },
+      {
+        "path": "dist/result.d.ts",
+        "size": 781,
+        "mode": 420
+      },
+      {
+        "path": "dist/result.js",
+        "size": 2614,
+        "mode": 420
+      },
+      {
+        "path": "dist/test.d.ts",
+        "size": 11,
+        "mode": 420
+      },
+      {
+        "path": "dist/test.js",
+        "size": 14086,
+        "mode": 420
+      },
+      {
+        "path": "package.json",
+        "size": 627,
+        "mode": 420
+      },
+      {
+        "path": "src/generated/index.ts",
+        "size": 139592,
+        "mode": 420
+      },
+      {
+        "path": "src/generated/package.json",
+        "size": 23,
+        "mode": 420
+      }
+    ],
+    "entryCount": 16,
+    "bundled": []
+  }
+]

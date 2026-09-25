@@ -140,7 +140,7 @@ or local consumer result can satisfy them.
 bash scripts/ci/validate_typescript_bindings.sh
 bash scripts/ci/validate_python_bindings.sh
 bash scripts/ci/validate_binding_registry_consumers.sh
-bash scripts/ci/validate_publish_order.sh
+python3 .github/scripts/release_artifacts.py validate-publish-order --manifest release/publish-artifacts.toml --workspace-toml Cargo.toml
 python3 scripts/ci/validate_version_literals.py
 bash scripts/ci/validate_public_api_docs.sh
 bash scripts/ci/validate_docs_consistency.sh

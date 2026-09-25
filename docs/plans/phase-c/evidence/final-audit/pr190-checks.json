@@ -1,0 +1,142 @@
+[
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459204/job/105847773879",
+    "name": "all-platforms",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423488723/job/105845660851",
+    "name": "test (macos-latest)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423488723/job/105845660835",
+    "name": "test (windows-latest)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423488723/job/105845660911",
+    "name": "test (ubuntu-latest)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459204/job/105845506918",
+    "name": "real-ipc-artifacts (macos-latest)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459204/job/105845507039",
+    "name": "real-ipc-artifacts (ubuntu-latest)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459204/job/105845506899",
+    "name": "real-ipc-artifacts (windows-2022)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423488723/job/105845444104",
+    "name": "manifest-validation (ubuntu)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423488723/job/105845444109",
+    "name": "public-api-governance (ubuntu)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459097/job/105845428886",
+    "name": "complete-gate",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459123/job/105845422700",
+    "name": "aggregate-platform-evidence",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423488723/job/105845376243",
+    "name": "version-literals (ubuntu)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423488723/job/105845376164",
+    "name": "docs-consistency (ubuntu)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423488723/job/105845376254",
+    "name": "log-bridge-import-integrity (ubuntu)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423488723/job/105845376169",
+    "name": "dependency-bans (ubuntu)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423488723/job/105845327112",
+    "name": "clippy",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459123/job/105845294643",
+    "name": "staged-consumer (macos-latest, macos)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459123/job/105845294664",
+    "name": "staged-consumer (ubuntu-latest, ubuntu)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459123/job/105845294644",
+    "name": "staged-consumer (windows-latest, windows)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423488723/job/105845288193",
+    "name": "Format check",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459097/job/105845209111",
+    "name": "native-contract (macos-latest)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459097/job/105845208949",
+    "name": "packaged-consumer",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459084/job/105845208927",
+    "name": "binding-schema",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459123/job/105845209006",
+    "name": "package-stage",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459097/job/105845209059",
+    "name": "native-contract (windows-latest)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459204/job/105845209289",
+    "name": "schema-and-contract",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459049/job/105845208744",
+    "name": "Python source runtime (ubuntu)",
+    "state": "SUCCESS"
+  },
+  {
+    "link": "https://github.com/randlee/sc-observability/actions/runs/35423459097/job/105845209094",
+    "name": "native-contract (ubuntu-latest)",
+    "state": "SUCCESS"
+  }
+]

@@ -1,0 +1,25 @@
+C.1 installed-suite evidence
+============================
+
+Final consumer qualification commit: pending this evidence commit
+Corrected upstream publish-kit pin: 006092a305bb03bd483d79dd6b5d51bda1e545e4
+Python environment: /private/tmp/scpub-venv.Jz9AMi/bin/python
+Dependencies: pytest 8.3.5, PyYAML 6.0.3, sc-compose 1.5.0
+
+Command:
+
+    /private/tmp/scpub-venv.Jz9AMi/bin/python -m pytest -q .github/scripts/tests
+
+Result:
+
+    157 passed, 11 skipped, 0 failed
+
+Previous failures (fixed by the corrected upstream pin):
+
+1. ``test_node24_runtime_floors`` previously raised ``KeyError: configure-pages``;
+   the corrected upstream test scopes action-floor checks to shared-managed assets.
+2. ``test_python_package_metadata_uses_local_readme_for_sdist`` previously opened
+   a nonexistent root path; the corrected upstream test uses declared nested paths.
+
+The immutable installer repeat check independently reports ``Publish-kit assets
+are in sync.``; no publication, tag, or release dispatch was performed.

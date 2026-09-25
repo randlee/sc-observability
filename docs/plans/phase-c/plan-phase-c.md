@@ -1,13 +1,17 @@
 ---
 phase: C
-status: draft
-branch: plan/phase-c-sc-publish
-worktree: /Users/randlee/github/sc-observability-worktrees/plan/phase-c-sc-publish
+status: in_progress
+branch: integrate/phase-c
+worktree: /Users/randlee/github/sc-observability-worktrees/integrate/phase-c
 ---
 # Phase C — Shared publishing migration
 
 Owner scope: two sprints, executed only after Phase B merges into develop.
-This branch is planning only; do not install or execute publication while planning.
+Execution authorized by the owner after Phase B and the Phase C plan merged into
+`develop` at `28e4ee6`. Lead: `aobs`. Publication remains unauthorized.
+C.1 completed inventory, installation, and compatibility qualification against
+the immutable shared-package revision recorded in its pin file. Publication
+remains separately unauthorized.
 
 Sprints:
 
@@ -45,14 +49,16 @@ Pin and document the reviewed shared-pipeline revision and its supported channel
 Any unsupported Phase B channel needs an explicit resolution and acceptance test;
 never silently omit it or claim unsupported functionality exists.
 
-Confirmed shared-package facts as of the pinned revision
-`3a57926b3e939835644aad944a614cbb48e4d5fc` (see sprint C.1 for the full
-inventory and resolution):
+Historical shared-package facts from the superseded revision
+`3a57926b3e939835644aad944a614cbb48e4d5fc` are retained below for audit. The
+current upstream candidate under review is PR95 (`a99c9a7`); its caller-owned
+JSON adds npm and structured wheel entries, but it is not yet a reviewed pin.
+See sprint C.1 for the full inventory and resolution:
 
-- `install.py`'s `CHANNEL_NAMES` is exactly `github_release`, `crates_io`,
-  `pypi`, `homebrew`, `scoop`, `winget` — no npm channel exists. Adopting an
-  npm publish path is therefore a **named upstream prerequisite** for C.1
-  (see sprint C.1 deliverable 3), not a repository-local publisher.
+- The superseded installer's `CHANNEL_NAMES` lacked npm. PR95 adds npm as an
+  opt-in post-release channel; adopting it remains a **named upstream
+  prerequisite** until that revision is reviewed and pinned, not a
+  repository-local publisher.
 - The PyPI channel's `environment_secrets` require `PYPI_API_TOKEN` in a
   `pypi` GitHub Environment and `TEST_PYPI_API_TOKEN` in a `testpypi`
   Environment via `maturin upload`; it does not assume trusted (OIDC)
@@ -87,9 +93,10 @@ BTIT tests and actual publishing are not authorized by this planning request.
   does not substitute a local fork or workaround for that capability, and
   does not accept a permanent gap with only a follow-up ticket in its place.
   If the upstream work cannot land before Phase C needs to execute, the
-  sprint stops and escalates to the owner for an explicit decision (delay
-  execution, or accept a documented, owner-signed-off temporary gap) rather
-  than treating a local substitute as equivalent adoption.
+  sprint stops on the technical compatibility gate and reports the gap rather
+  than treating a local substitute as equivalent adoption. Phase C execution
+  is authorized; the lead selects the reviewed/validated upstream pin once
+  the compatibility evidence is complete.
 - Go and future sc-runtime publishing surfaces remain deferred per Phase B.
 
 Planning deliverables: complete plan and two sprint docs, requirements and
