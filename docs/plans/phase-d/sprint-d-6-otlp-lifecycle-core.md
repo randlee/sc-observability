@@ -1,15 +1,20 @@
 ---
 id: D.6
 status: planned
-branch: feature/phase-d-6-otlp-lifecycle-core
+branch: sprint/d-6-otlp-lifecycle-core
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-6-otlp-lifecycle-core
-depends_on: [D.4, D.5]
+worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-6-otlp-lifecycle-core
+depends_on: ["D.4", "D.5"]
 relation: must_follow
 assignee: aobs
 model_class: astra
-owned_docs: [docs/requirements.md, docs/architecture.md, docs/api-design.md]
-release_train: '2.0'
+owned_docs: ["docs/requirements.md", "docs/architecture.md", "docs/api-design.md"]
+release_train: "2.0"
+requirements: ["OTLP-009", "OTLP-011", "OTLP-012", "OTLP-013", "OTLP-018", "OTLP-019", "OTLP-020", "OTLP-021"]
+adrs: ["ADR-004", "ADR-005", "ADR-018"]
+closure_type: boundary
+target_boundary: "backend-neutral OTLP lifecycle"
+owned_paths: ["crates/sc-observability-otlp/**", "crates/sc-observability-types/**", "Cargo.toml", "Cargo.lock", "release/public-api-policy.json", "docs/migration.md", "scripts/ci/validate_dependency_bans.sh", "scripts/ci/validate_repo_boundaries.sh", "docs/api-approvals/d-6-*.json", "docs/requirements.md", "docs/architecture.md", "docs/api-design.md"]
 ---
 
 # D.6 — OTLP lifecycle core
@@ -514,6 +519,25 @@ dispatcher or lifecycle state machine.
   requirements/ADR, and migration-doc consistency gates.
 - Automated feature graph gates for no-exporter and SDK-only builds, including
   the updated repository-boundary/dependency-ban allowlists.
+
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability-otlp/**`
+- `crates/sc-observability-types/**`
+- `Cargo.toml`
+- `Cargo.lock`
+- `release/public-api-policy.json`
+- `docs/migration.md`
+- `scripts/ci/validate_dependency_bans.sh`
+- `scripts/ci/validate_repo_boundaries.sh`
+- `docs/api-approvals/d-6-*.json`
+- `docs/requirements.md`
+- `docs/architecture.md`
+- `docs/api-design.md`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
 
 ## Non-closure
 

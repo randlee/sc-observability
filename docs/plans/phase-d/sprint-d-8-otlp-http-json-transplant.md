@@ -1,15 +1,20 @@
 ---
 id: D.8
 status: planned
-branch: feature/phase-d-8-otlp-http-json-transplant
+branch: sprint/d-8-otlp-http-json-transplant
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-8-otlp-http-json-transplant
-depends_on: [D.6]
+worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-8-otlp-http-json-transplant
+depends_on: ["D.6", "D.7"]
 relation: must_follow
 assignee: aobs
 model_class: astra
-owned_docs: [docs/architecture.md, docs/plans/phase-d/legacy-otlp-provenance.json]
-release_train: '2.0'
+owned_docs: ["docs/architecture.md", "docs/plans/phase-d/legacy-otlp-provenance.json"]
+release_train: "2.0"
+requirements: ["OTLP-011", "OTLP-012", "OTLP-013", "OTLP-020", "OTLP-021", "OTLP-023"]
+adrs: ["ADR-004", "ADR-018"]
+closure_type: boundary
+target_boundary: "legacy HTTP/JSON exporter adapter"
+owned_paths: ["crates/sc-observability-otlp/**", "Cargo.toml", "Cargo.lock", "examples/otlp-legacy/**", "scripts/ci/validate_log_import.py", "scripts/ci/tests/test_validate_log_import.py", "scripts/ci/validate_dependency_bans.sh", "scripts/ci/validate_repo_boundaries.sh", "docs/architecture.md", "docs/plans/phase-d/legacy-otlp-provenance.json"]
 ---
 
 # D.8 — Legacy HTTP/JSON source transplant
@@ -287,6 +292,25 @@ D.8 owns no error variant, stable code, mapping, or error documentation.
   tests/clippy/rustdoc; and review of the source-transplant matrix.
 - Import-provenance validation and automated no-exporter/legacy-only/combined
   dependency graph gates; module line-count validation.
+
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability-otlp/**`
+- `Cargo.toml`
+- `Cargo.lock`
+- `examples/otlp-legacy/**`
+- `scripts/ci/validate_log_import.py`
+- `scripts/ci/tests/test_validate_log_import.py`
+- `scripts/ci/validate_dependency_bans.sh`
+- `scripts/ci/validate_repo_boundaries.sh`
+- `docs/architecture.md`
+- `docs/plans/phase-d/legacy-otlp-provenance.json`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+Must also follow D.7 because both edit the OTLP crate manifest/factory, Cargo.lock, dependency allowlists, and docs/architecture.md. The two backend scopes stay distinct.
 
 ## Non-closure
 

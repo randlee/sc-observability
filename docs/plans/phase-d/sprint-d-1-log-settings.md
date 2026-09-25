@@ -1,15 +1,19 @@
 ---
 id: D.1
 status: planned
-branch: feature/phase-d-1-log-settings
+branch: sprint/d-1-log-settings
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-1-log-settings
+worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-1-log-settings
 depends_on: []
 relation: parallel_safe
 assignee: cobs
 model_class: terra
-requirements: [LOG-009, LOG-040, LOG-042]
-owned_docs: [docs/requirements.md, docs/api-design.md]
+requirements: ["LOG-009", "LOG-040", "LOG-042", "LOG-002", "TYP-026"]
+owned_docs: ["docs/logging/d-1-log-settings.md"]
+adrs: ["ADR-003", "ADR-010"]
+closure_type: boundary
+target_boundary: "startup logging settings resolution"
+owned_paths: ["crates/sc-observability/src/lib.rs", "crates/sc-observability/src/settings.rs", "crates/sc-observability/tests/log_settings.rs", "examples/log-settings/**", "docs/api-approvals/d-1-*.json", "docs/logging/d-1-log-settings.md"]
 ---
 
 # D.1 — Shared startup `LogSettings` (#96)
@@ -161,6 +165,21 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
 - Public consumer compile fixture plus `cargo test --workspace --locked`.
 - Docs consistency, rustdoc, public API, and semver gates used by the repository
   at execution time.
+
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability/src/lib.rs`
+- `crates/sc-observability/src/settings.rs`
+- `crates/sc-observability/tests/log_settings.rs`
+- `examples/log-settings/**`
+- `docs/api-approvals/d-1-*.json`
+- `docs/logging/d-1-log-settings.md`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+Parallel-safe with the other additive logging sprints: this sprint owns its separate additive document and scoped API approval. D.4 owns linking these documents from the shared API design. No shared normative document or release baseline is edited here.
 
 ## Non-closure
 

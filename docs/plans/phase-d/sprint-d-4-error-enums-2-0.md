@@ -1,21 +1,27 @@
 ---
 id: D.4
 status: planned
-branch: feature/phase-d-4-error-enums-2-0
+branch: sprint/d-4-error-enums-2-0
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-4-error-enums-2-0
-depends_on: []
-relation: root
+worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-4-error-enums-2-0
+depends_on: ["D.1", "D.2", "D.3"]
+relation: must_follow
 assignee: lobs
 model_class: luna
-owned_docs: [docs/architecture.md, docs/requirements.md, docs/api-design.md]
+owned_docs: ["docs/architecture.md", "docs/requirements.md", "docs/api-design.md"]
+requirements: ["TYP-003", "TYP-004", "TYP-006", "TYP-030", "PHB-003", "PHB-004", "PHB-005", "PHB-006"]
+adrs: ["ADR-011", "ADR-012", "ADR-017"]
+closure_type: integration
+target_boundary: "canonical 2.0 error surface and consumer migration"
+release_train: "2.0"
+owned_paths: ["Cargo.toml", "Cargo.lock", "crates/**", "bindings/**", "examples/**", "release/public-api-major-breaks.toml", "release/public-api-policy.json", "release/release-inventory.json", "release/bindings-artifacts.toml", "release/publish-artifacts.toml", "release/bp2-publish-artifacts.toml", "release/RELEASE-NOTES-*.md", "CHANGELOG.md", "docs/migration-guide.md", "docs/migration.md", "docs/publishing.md", "docs/public-api-checklist.md", "scripts/ci/validate_public_api_semver.py", "scripts/ci/validate_public_api.py", "scripts/ci/validate_version_literals.py", "scripts/ci/validate_error_migration.py", "scripts/ci/fixtures/**", "scripts/ci/validate_python_distribution.py", ".github/workflows/**", "docs/api-approvals/**", "docs/architecture.md", "docs/requirements.md", "docs/api-design.md"]
 ---
 
 # D.4 — 2.0 discriminated error enum migration (#92)
 
 ## Goal and dependency
 
-Independently plan and execute the explicitly breaking 2.0 migration from nine opaque
+Plan and execute the explicitly breaking 2.0 migration from nine opaque
 wrappers (the eight `error_wrapper!` types plus hand-written `IdentityError`)
 to same-name discriminated enums. Before public code changes, the technical
 lead must accept ADR-017, which precisely supersedes ADR-012 for this listed
@@ -77,6 +83,43 @@ silence, or issue label is not approval.
 - Focused type/error-code matrix tests and cross-crate consumer fixtures.
 - `cargo test --workspace --locked`, `cargo clippy --workspace --all-targets -- -D warnings`, rustdoc, and the explicit major-release API comparison against published 1.4.1 followed by reviewed 2.0 rebaseline.
 - Documentation consistency and release-manifest validation.
+
+## Owned Paths and Exact Targets
+
+- `Cargo.toml`
+- `Cargo.lock`
+- `crates/**`
+- `bindings/**`
+- `examples/**`
+- `release/public-api-major-breaks.toml`
+- `release/public-api-policy.json`
+- `release/release-inventory.json`
+- `release/bindings-artifacts.toml`
+- `release/publish-artifacts.toml`
+- `release/bp2-publish-artifacts.toml`
+- `release/RELEASE-NOTES-*.md`
+- `CHANGELOG.md`
+- `docs/migration-guide.md`
+- `docs/migration.md`
+- `docs/publishing.md`
+- `docs/public-api-checklist.md`
+- `scripts/ci/validate_public_api_semver.py`
+- `scripts/ci/validate_public_api.py`
+- `scripts/ci/validate_version_literals.py`
+- `scripts/ci/validate_error_migration.py`
+- `scripts/ci/fixtures/**`
+- `scripts/ci/validate_python_distribution.py`
+- `.github/workflows/**`
+- `docs/api-approvals/**`
+- `docs/architecture.md`
+- `docs/requirements.md`
+- `docs/api-design.md`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+Must follow D.1, D.2, and D.3 because migration edits core src/lib.rs, types src/errors.rs and the log bridge files they own. These are code conflicts, not documentation-only edges. Link their separate additive documents from docs/api-design.md while retaining D.4 sole ownership of the 2.0 baseline.
 
 ## Non-closure
 

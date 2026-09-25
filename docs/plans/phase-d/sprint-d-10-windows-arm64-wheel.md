@@ -1,22 +1,26 @@
 ---
 id: D.10
 status: planned
-branch: feature/phase-d-10-windows-arm64-wheel
+branch: sprint/d-10-windows-arm64-wheel
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-10-windows-arm64-wheel
-depends_on: []
-relation: root
+worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-10-windows-arm64-wheel
+depends_on: ["D.4"]
+relation: must_follow
 assignee: cobs
 model_class: terra
-requirements: [PHB-013]
-owned_docs: [docs/project-plan.md, release/python-platform-policy.json]
+requirements: ["PHB-013"]
+owned_docs: ["docs/project-plan.md", "release/python-platform-policy.json"]
+adrs: ["ADR-015"]
+closure_type: integration
+target_boundary: "native Windows ARM64 Python distribution"
+owned_paths: [".github/workflows/b4a-python-distributions.yml", "scripts/ci/_python_distribution.py", "scripts/ci/prepare_python_distributions.py", "scripts/ci/validate_python_distribution.py", "scripts/ci/tests/test_python_distribution.py", "release/release-inventory.json", "docs/project-plan.md", "release/python-platform-policy.json"]
 ---
 
 # D.10 — Windows ARM64 Python wheel support
 
 ## Goal and dependency
 
-D.10 is independent of the logging and OTLP stacks. Extend the qualified Python
+D.10 follows D.4 for release-inventory ownership and remains independent of D.5–D.9. Extend the qualified Python
 distribution platform matrix from five to six wheels by adding native Windows
 ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
 `win_arm64`.
@@ -63,6 +67,38 @@ ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
 - Reusable B.4a workflow dispatched at an exact SHA and aggregate validation
   of the six wheels/30 cells.
 - Existing workspace/Python packaging gates remain green.
+
+Concrete validation commands (dispatch at the reviewed implementation SHA):
+
+```bash
+python3 -m unittest discover -s scripts/ci/tests -p test_python_distribution.py
+bash scripts/ci/validate_docs_consistency.sh
+gh workflow run b4a-python-distributions.yml --ref "$(git rev-parse HEAD)" -f source_commit="$(git rev-parse HEAD)"
+```
+
+A dispatch receipt is not a pass: the immutable-source workflow and aggregate
+job must finish successfully with the matrix required above.
+
+## Owned Paths and Exact Targets
+
+- `.github/workflows/b4a-python-distributions.yml`
+- `scripts/ci/_python_distribution.py`
+- `scripts/ci/prepare_python_distributions.py`
+- `scripts/ci/validate_python_distribution.py`
+- `scripts/ci/tests/test_python_distribution.py`
+- `release/release-inventory.json`
+- `docs/project-plan.md`
+- `release/python-platform-policy.json`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+Must follow D.4 because both update release/release-inventory.json and the version-bearing distribution baseline. It remains independent of D.5–D.9; Python policy remains D.10-owned.
+
+`_python_distribution.py` owns the source/wheel inspection and architecture
+checks; reuse its existing result and the existing B.4a aggregate job.
+The Python Cargo/pyproject metadata is inspected, not changed by this sprint.
 
 ## Non-closure
 

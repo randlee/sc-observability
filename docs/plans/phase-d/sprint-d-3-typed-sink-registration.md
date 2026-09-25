@@ -1,15 +1,19 @@
 ---
 id: D.3
 status: planned
-branch: feature/phase-d-3-typed-sink-registration
+branch: sprint/d-3-typed-sink-registration
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-3-typed-sink-registration
+worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-3-typed-sink-registration
 depends_on: []
 relation: parallel_safe
 assignee: cobs
 model_class: terra
-requirements: [LOG-004, LOG-015]
-owned_docs: [docs/api-design.md]
+requirements: ["LOG-004", "LOG-015", "PHB-003", "PHB-004"]
+owned_docs: ["docs/logging/d-3-typed-sink-registration.md"]
+adrs: ["ADR-012"]
+closure_type: integration
+target_boundary: "typed sink registration compatibility"
+owned_paths: ["crates/sc-observability/src/builder.rs", "crates/sc-observability/src/typed.rs", "crates/sc-observability-types/src/errors.rs", "crates/sc-observability/tests/typed_registration.rs", "docs/api-approvals/d-3-*.json", "docs/logging/d-3-typed-sink-registration.md"]
 ---
 
 # D.3 — Typed sink registration ergonomics (#203)
@@ -28,8 +32,8 @@ one-release bridge. D.4 may remove this bridge only in its later 2.0 release.
 2. Add `LoggerBuilder::register_typed_sink(...)` mirroring the retained
    registration flow, including chaining/error behavior and sink health/flush
    behavior.
-3. Update `LogSinkError` deprecation/rustdoc and the existing API/migration
-   sections in `docs/api-design.md` to
+3. Update `LogSinkError` deprecation/rustdoc and the additive API/migration
+   sections in `docs/logging/d-3-typed-sink-registration.md` to
    name `TypedLogSink`, `SinkRegistration::typed`, and builder registration.
 4. Add public-only consumer fixtures implementing `TypedLogSink` without
    `#[allow(deprecated)]`, proving write, explicit flush, health, registration,
@@ -48,6 +52,25 @@ one-release bridge. D.4 may remove this bridge only in its later 2.0 release.
 - Focused core and external consumer tests, with warnings denied for the new
   typed consumer fixture.
 - `cargo test --workspace --locked` and public API/semver validation.
+
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability/src/builder.rs`
+- `crates/sc-observability/src/typed.rs`
+- `crates/sc-observability-types/src/errors.rs`
+- `crates/sc-observability/tests/typed_registration.rs`
+- `docs/api-approvals/d-3-*.json`
+- `docs/logging/d-3-typed-sink-registration.md`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+Parallel-safe with the other additive logging sprints: this sprint owns its separate additive document and scoped API approval. D.4 owns linking these documents from the shared API design. No shared normative document or release baseline is edited here.
+
+Implement both inherent registration entry points in core `builder.rs` and
+reuse `typed.rs`; update the existing error deprecation at its types owner.
+The same-crate inherent impl for `SinkRegistration` avoids editing D.1-owned `lib.rs`.
 
 ## Non-closure
 

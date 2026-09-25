@@ -1,15 +1,20 @@
 ---
 id: D.7
 status: planned
-branch: feature/phase-d-7-otlp-sdk-tokio
+branch: sprint/d-7-otlp-sdk-tokio
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7-otlp-sdk-tokio
-depends_on: [D.6]
+worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-7-otlp-sdk-tokio
+depends_on: ["D.6"]
 relation: must_follow
 assignee: aobs
 model_class: astra
-owned_docs: [docs/architecture.md, docs/api-design.md]
-release_train: '2.0'
+owned_docs: ["docs/architecture.md", "docs/api-design.md"]
+release_train: "2.0"
+requirements: ["OTLP-001", "OTLP-008", "OTLP-009", "OTLP-010", "OTLP-011", "OTLP-012", "OTLP-021"]
+adrs: ["ADR-004", "ADR-018"]
+closure_type: boundary
+target_boundary: "official SDK exporter adapter"
+owned_paths: ["crates/sc-observability-otlp/**", "Cargo.toml", "Cargo.lock", "examples/otlp-sdk/**", "scripts/ci/validate_dependency_bans.sh", "scripts/ci/validate_repo_boundaries.sh", "docs/architecture.md", "docs/api-design.md"]
 ---
 
 # D.7 — Official SDK/Tokio adapter
@@ -49,6 +54,21 @@ consumer fixture, not lifecycle state, error definitions, or a downstream
 - Focused SDK adapter/collector tests and the Tokio consumer fixture.
 - `cargo test --workspace --locked`, clippy with warnings denied, rustdoc, and
   the existing dependency-boundary checks.
+
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability-otlp/**`
+- `Cargo.toml`
+- `Cargo.lock`
+- `examples/otlp-sdk/**`
+- `scripts/ci/validate_dependency_bans.sh`
+- `scripts/ci/validate_repo_boundaries.sh`
+- `docs/architecture.md`
+- `docs/api-design.md`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
 
 ## Non-closure
 
