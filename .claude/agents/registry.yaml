@@ -44,6 +44,9 @@ agents:
   critical-plan-reviewer:
     version: 0.1.0
     path: .claude/agents/critical-plan-reviewer.md
+  ceremony-qa:
+    version: 0.1.0
+    path: .claude/agents/ceremony-qa.md
 
 skills:
   rust-development:

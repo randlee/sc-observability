@@ -25,7 +25,7 @@ Expected `/tmp/plan-hardening-qa-vars.json` shape:
   "sprint_doc": "docs/plans/phase-X/plan-phase-X.md",
   "review_mode": "plan",
   "description": "Focused plan QA for phase-X after consistency hardening",
-  "pr_number": "",
+  "pr_number": "205",
   "branch": "feature/branch-name",
   "worktree_path": "/absolute/path/to/worktree",
   "commits": "HEAD",
@@ -58,6 +58,9 @@ atm send quality-mgr --file /tmp/step-6-message.xml --team <team> --task-id <tas
 
 Always use `--file` for this handoff. Do not use `--stdin`: its known input
 handling bug is tracked separately.
+
+Open the plan PR before sending; plan QA requires it. Include
+`plan_qa_cycle_limit` (default 3) in the assignment.
 
 **3. Handoff**
 
