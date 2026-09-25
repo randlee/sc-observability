@@ -31,8 +31,10 @@ this discriminated shape and information content:
 #[non_exhaustive]
 pub enum SpanKind { Internal, Server, Client, Producer, Consumer }
 
+#[non_exhaustive]
 pub struct TraceFlags(u8); // exposes sampled() and preserves known W3C bits
 
+#[non_exhaustive]
 pub struct SpanLink {
     pub trace_id: TraceId,
     pub span_id: SpanId,
@@ -82,6 +84,9 @@ single `f64` combination. Exact serde names and constructors are frozen in the
 `HistogramPoint` deserializes through a validated `TryFrom` representation so
 serde cannot construct an invalid value. A link contains its own ids/flags and
 never embeds `TraceContext`, eliminating two sources of truth.
+`MetricValue`, `TraceFlags`, and `SpanLink` are `#[non_exhaustive]` public
+types; consumers must use their constructors/accessors or wildcard matching
+rather than depend on exhaustive future shape.
 
 ## Deliverables
 

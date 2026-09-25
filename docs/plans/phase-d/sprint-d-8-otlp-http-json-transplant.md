@@ -120,7 +120,7 @@ the seed is neither public configuration nor serialized evidence.
 Pin the transplanted client to the legacy tested selection
 `reqwest = "=0.12.28"` with `default-features = false` and features
 `["blocking", "json", "rustls-tls"]`, subject only to a separately reviewed
-security update. Add a minimal optional direct Tokio `rt` feature solely for
+security update. Add a minimal optional direct Tokio `sync` feature solely for
 construction/synchronous-lifecycle context preflight; it does not create or
 own a runtime. The feature/dependency evidence must explicitly show
 reqwest's transitive Tokio/hyper/rustls graph and the absence of
