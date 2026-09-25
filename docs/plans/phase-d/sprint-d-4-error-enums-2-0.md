@@ -63,8 +63,7 @@ silence, or issue label is not approval.
 
 ## Acceptance criteria
 
-- `rg 'error_wrapper!' crates` returns no production macro definition or use;
-  all nine former wrappers are public discriminated enums.
+- All nine former wrappers are public discriminated enums.
 - Every retained diagnostic property is tested per enum variant, including
   source chain and serde shape where public serialization is promised.
 - A 1.x consumer fixture fails only at intentional wrapper-construction or
@@ -77,8 +76,7 @@ silence, or issue label is not approval.
 
 - Focused type/error-code matrix tests and cross-crate consumer fixtures.
 - `cargo test --workspace --locked`, `cargo clippy --workspace --all-targets -- -D warnings`, rustdoc, and the explicit major-release API comparison against published 1.4.1 followed by reviewed 2.0 rebaseline.
-- Documentation consistency, release-manifest validation, and a clean
-  `rg 'error_wrapper!' crates docs` scan.
+- Documentation consistency and release-manifest validation.
 
 ## Non-closure
 

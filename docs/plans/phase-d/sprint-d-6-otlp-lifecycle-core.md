@@ -24,40 +24,49 @@ honest awaitable completion surface. D.6 `must_follow`s D.4 and D.5. No
 ## Backend and trait contract
 
 ```rust
+#[non_exhaustive]
 pub enum ExporterBackend {
     OpenTelemetrySdk,
     LegacyHttpJson, // reserved; D.8 makes this backend operational
 }
 
+#[non_exhaustive]
 pub struct OtelConfig {
     pub backend: ExporterBackend,
     pub protocol: OtlpProtocol,
     // endpoint/auth/TLS and timeout fields remain explicit;
-    // legacy-only retry fields are optional (authoritative D.6 table below)
+    pub legacy_retry: Option<LegacyRetryPolicy>,
+}
+
+#[non_exhaustive]
+pub struct LegacyRetryPolicy { /* legacy-only retry wire fields below */ }
+
+impl OtelConfig {
+    pub fn new(backend: ExporterBackend, protocol: OtlpProtocol) -> Self;
 }
 
 type LifecycleFuture = Pin<
-    Box<dyn Future<Output = Result<(), ExportFailure>> + Send + 'static>
+    Box<dyn Future<Output = Result<(), ExportError>> + Send + 'static>
 >;
 
 pub(crate) trait ExporterLifecycle: Send + Sync {
-    fn blocking_preflight(&self) -> Result<(), ExportFailure>;
+    fn blocking_preflight(&self) -> Result<(), ExportError>;
     fn flush_async(&self) -> LifecycleFuture;
     fn shutdown_async(&self) -> LifecycleFuture;
-    fn flush_blocking(&self) -> Result<(), ExportFailure>;
-    fn shutdown_blocking(&self) -> Result<(), ExportFailure>;
+    fn flush_blocking(&self) -> Result<(), ExportError>;
+    fn shutdown_blocking(&self) -> Result<(), ExportError>;
 }
 
 pub(crate) trait LogExporter: Send + Sync {
-    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportFailure>;
+    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError>;
 }
 
 pub(crate) trait TraceExporter: Send + Sync {
-    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportFailure>;
+    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError>;
 }
 
 pub(crate) trait MetricExporter: Send + Sync {
-    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportFailure>;
+    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError>;
 }
 
 pub(crate) struct ExporterSet {
@@ -89,6 +98,11 @@ headers/auth, CA/TLS and `timeout_ms` map to the SDK/legacy builders;
 `debug_local_export` is a separate diagnostic mirror outside exporter
 selection; `insecure_skip_verify` is either implemented by the backend with an
 explicit security warning or rejected at construction—never ignored.
+`timeout_ms` covers the entire legacy HTTP request, including connect, TLS,
+request write, response headers, and response read. Endpoint and header/auth
+values are validated before provider/worker construction; malformed endpoints,
+invalid header syntax, and forbidden credential placement return named
+construction failures without retaining secret values.
 
 ### D.6-owned validated transport contract
 
@@ -101,12 +115,12 @@ and configuration error. The flat 2.0 wire surface is:
 | `lifecycle_flush_timeout_ms` | both backends | `30_000` |
 | `lifecycle_shutdown_timeout_ms` | both backends | `30_000` |
 | `queue_capacity` | both backends; bounded admission queue | `1_024` |
-| `max_retries` | legacy only, optional on wire | `3` |
-| `initial_backoff_ms` | legacy only, optional on wire | `250` |
-| `max_backoff_ms` | legacy only, optional on wire | `5_000` |
-| `retry_sequence_timeout_ms` | legacy only, optional on wire | `30_000` |
-| `retry_after_cap_ms` | legacy only, optional on wire | `5_000` |
-| `retry_jitter_percent` | legacy only, optional on wire | `20` |
+| `legacy_retry.max_retries` | legacy only, optional on wire | `3` |
+| `legacy_retry.initial_backoff_ms` | legacy only, optional on wire | `250` |
+| `legacy_retry.max_backoff_ms` | legacy only, optional on wire | `5_000` |
+| `legacy_retry.retry_sequence_timeout_ms` | legacy only, optional on wire | `30_000` |
+| `legacy_retry.retry_after_cap_ms` | legacy only, optional on wire | `5_000` |
+| `legacy_retry.retry_jitter_percent` | legacy only, optional on wire | `20` |
 
 `queue_capacity` is validated as `1..=65_536`; records are split before
 admission at `512` records or `1 MiB`. A 413 is terminal for that split batch,
@@ -212,6 +226,7 @@ retry state unrepresentable for SDK. Validation, using checked arithmetic, is:
 - every millisecond duration is positive and convertible to `Duration`;
 - `lifecycle_shutdown_timeout_ms >= timeout_ms`;
 - `lifecycle_flush_timeout_ms >= timeout_ms`;
+- `queue_capacity` is in `1..=65_536`, otherwise `InvalidQueueCapacity`;
 - for legacy, `max_backoff_ms >= initial_backoff_ms`;
 - for legacy, `retry_sequence_timeout_ms >= timeout_ms`;
 - for legacy, `0 < retry_after_cap_ms <= retry_sequence_timeout_ms`;
@@ -258,19 +273,21 @@ TransportConstructionFailed { backend: ExporterBackend, source: Diagnostic }
 
 ### D.6 stable failure inventory
 
-This is the complete Phase D OTLP stable-error inventory. D.6 exclusively
-owns these variants, codes, owning types, mappings, and documentation; later
-sprints consume this table without adding or restating rows. Configuration
+This is D.6's complete transport/lifecycle/configuration stable-error
+inventory. D.6 exclusively owns these variants, codes, owning types, mappings,
+and documentation; D.5 separately owns its `MetricModelError` rows, and later
+sprints consume both tables without adding or restating rows. Configuration
 rows are construction-only `ConfigFailure` variants. Every runtime/lifecycle
-variant except `Shutdown` is owned by `ExportFailure`; `Shutdown` is owned by
-`TelemetryError`. Construction never uses an additional wrapper variant: it
+variant except `Shutdown` is owned by D.4's canonical `ExportError`; `Shutdown`
+is owned by `TelemetryError`. Construction never uses an additional wrapper variant: it
 returns the named `ConfigFailure` rows below. A legacy async-context failure
 during construction is the redacted `Diagnostic` source of
 `TransportConstructionFailed`; the same condition during synchronous lifecycle
 is `BlockingBackendInAsyncContext` directly. Emit/lifecycle façades convert
-runtime failures to `TelemetryError`, `FlushFailure`, or `ShutdownFailure`
-without changing their stable code or typed source. In particular, `QueueFull` is created as an
-`ExportFailure`; emit converts it through `From<ExportFailure> for
+runtime failures to `TelemetryError`, D.4's canonical `FlushError`, or D.4's
+canonical `ShutdownError` without changing their stable code or typed source.
+In particular, `QueueFull` is created as an
+`ExportError`; emit converts it through `From<ExportError> for
 TelemetryError`, while lifecycle converts the same source through the
 corresponding typed lifecycle failure.
 
@@ -280,23 +297,24 @@ corresponding typed lifecycle failure.
 | `DurationOverflow` | `OTLP_CONFIG_DURATION_OVERFLOW` | `ConfigFailure` | milliseconds cannot convert safely | reduce the field | field/value only | after config correction |
 | `InvalidBoundOrdering` | `OTLP_CONFIG_BOUND_ORDER` | `ConfigFailure` | resolved ordering rule fails | correct the named explicit/defaulted fields | field/value/origin only | after config correction |
 | `InvalidJitterPercent` | `OTLP_CONFIG_JITTER_PERCENT` | `ConfigFailure` | jitter exceeds 100 | use `0..=100` | field/value only | after config correction |
+| `InvalidQueueCapacity` | `OTLP_CONFIG_QUEUE_CAPACITY` | `ConfigFailure` | queue capacity is outside `1..=65_536` | choose a bounded capacity | field/value only | after config correction |
 | `ConfigFieldNotApplicable` | `OTLP_CONFIG_FIELD_NOT_APPLICABLE` | `ConfigFailure` | field is inapplicable to disabled transport or the selected backend | omit it, enable transport, or select its applicable backend | field/closed target only | after config correction |
 | `InsecureTransportRejected` | `OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED` | `ConfigFailure` | selected backend does not implement the requested insecure verification override | disable the override or choose an explicitly supporting backend | backend only | after config correction |
 | `TransportConstructionFailed` | `OTLP_TRANSPORT_CONSTRUCTION_FAILED` | `ConfigFailure` | CA/auth/client/provider/legacy-worker initialization failed | correct the bounded typed source and reconstruct | bounded typed source; never path contents, credentials, header values, or response bodies | after config/environment correction |
 | `UnsupportedBackend` | `OTLP_UNSUPPORTED_BACKEND` | `ConfigFailure` | feature/backend unavailable | enable/select a supported backend | enum values only | after build/config correction |
 | `UnsupportedProtocol` | `OTLP_UNSUPPORTED_PROTOCOL` | `ConfigFailure` | protocol invalid for backend | select a matrix-supported protocol | enum values only | after config correction |
 | `TokioRuntimeRequired` | `OTLP_TOKIO_RUNTIME_REQUIRED` | `ConfigFailure` | SDK construction lacks an entered Tokio runtime | construct inside the host runtime | no dynamic data | after entering a runtime |
-| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | `ExportFailure` | legacy synchronous lifecycle entered Tokio; construction preserves this condition as the redacted source of `TransportConstructionFailed` | use a plain thread or async lifecycle | no dynamic data | in a supported context |
-| `AsyncLifecycleRequired` | `OTLP_ASYNC_LIFECYCLE_REQUIRED` | `ExportFailure` | SDK synchronous completion requested | await the typed async operation | no dynamic data | through async lifecycle |
-| `RuntimeTerminated` | `OTLP_RUNTIME_TERMINATED` | `ExportFailure` | host runtime ended before completion | keep the runtime alive through awaited shutdown | bounded state/counts | with a live replacement runtime/instance |
-| `LifecycleTimeout` | `OTLP_LIFECYCLE_TIMEOUT` | `ExportFailure` | monotonic lifecycle deadline elapsed | inspect terminal health and transport/provider | duration/state only | operation-specific |
-| `QueueFull` | `OTLP_QUEUE_FULL` | `ExportFailure` | bounded admission queue saturated | preserve fail-open behavior and inspect health | capacity/depth only | yes, later admission |
-| `WorkerTerminated` | `OTLP_WORKER_TERMINATED` | `ExportFailure` | SDK dispatcher or legacy worker terminated unexpectedly | correct the terminal cause and construct a new instance | bounded typed source; no credentials | only with a new instance |
-| `ShutdownCancelledRetry` | `OTLP_SHUTDOWN_CANCELLED_RETRY` | `ExportFailure` | shutdown cancelled a retryable pre-barrier legacy sequence | inspect terminal health; resend only if duplicates are acceptable | attempt/count only | caller decision; duplicates possible |
-| `RetryDeadlineExhausted` | `OTLP_RETRY_DEADLINE_EXHAUSTED` | `ExportFailure` | no legacy sequence budget remains | increase the validated sequence bound or restore collector health | budget/attempt only | new operation after recovery |
-| `NonRetryableHttpStatus` | `OTLP_HTTP_STATUS_TERMINAL` | `ExportFailure` | collector returned a non-retryable HTTP status | correct request/auth/config before retrying | status/category only; no body/headers | after cause correction |
-| `RetryAttemptsExhausted` | `OTLP_RETRY_ATTEMPTS_EXHAUSTED` | `ExportFailure` | legacy maximum attempts ended before success | restore collector health or adjust the validated policy | attempt/count only | new operation after recovery |
-| `TerminalExportFailure` | `OTLP_EXPORT_TERMINAL` | `ExportFailure` | SDK or legacy provider returned a terminal export failure | inspect the preserved source and collector state | bounded typed source; no credentials | source-dependent |
+| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | `ExportError` | legacy synchronous lifecycle entered Tokio; construction preserves this condition as the redacted source of `TransportConstructionFailed` | use a plain thread or async lifecycle | no dynamic data | in a supported context |
+| `AsyncLifecycleRequired` | `OTLP_ASYNC_LIFECYCLE_REQUIRED` | `ExportError` | SDK synchronous completion requested | await the typed async operation | no dynamic data | through async lifecycle |
+| `RuntimeTerminated` | `OTLP_RUNTIME_TERMINATED` | `ExportError` | host runtime ended before completion | keep the runtime alive through awaited shutdown | bounded state/counts | with a live replacement runtime/instance |
+| `LifecycleTimeout` | `OTLP_LIFECYCLE_TIMEOUT` | `ExportError` | monotonic lifecycle deadline elapsed | inspect terminal health and transport/provider | duration/state only | operation-specific |
+| `QueueFull` | `OTLP_QUEUE_FULL` | `ExportError` | bounded admission queue saturated | preserve fail-open behavior and inspect health | capacity/depth only | yes, later admission |
+| `WorkerTerminated` | `OTLP_WORKER_TERMINATED` | `ExportError` | SDK dispatcher or legacy worker terminated unexpectedly | correct the terminal cause and construct a new instance | bounded typed source; no credentials | only with a new instance |
+| `ShutdownCancelledRetry` | `OTLP_SHUTDOWN_CANCELLED_RETRY` | `ExportError` | shutdown cancelled a retryable pre-barrier legacy sequence | inspect terminal health; resend only if duplicates are acceptable | attempt/count only | caller decision; duplicates possible |
+| `RetryDeadlineExhausted` | `OTLP_RETRY_DEADLINE_EXHAUSTED` | `ExportError` | no legacy sequence budget remains | increase the validated sequence bound or restore collector health | budget/attempt only | new operation after recovery |
+| `NonRetryableHttpStatus` | `OTLP_HTTP_STATUS_TERMINAL` | `ExportError` | collector returned a non-retryable HTTP status | correct request/auth/config before retrying | status/category only; no body/headers | after cause correction |
+| `RetryAttemptsExhausted` | `OTLP_RETRY_ATTEMPTS_EXHAUSTED` | `ExportError` | legacy maximum attempts ended before success | restore collector health or adjust the validated policy | attempt/count only | new operation after recovery |
+| `TerminalExportFailure` | `OTLP_EXPORT_TERMINAL` | `ExportError` | SDK or legacy provider returned a terminal export failure | inspect the preserved source and collector state | bounded typed source; no credentials | source-dependent |
 | `Shutdown` | `OTLP_TELEMETRY_SHUTDOWN` | `TelemetryError` | emit was attempted after shutdown began | construct a new telemetry instance | no dynamic data | only on a new instance |
 
 ## 2.0 lifecycle decision
@@ -315,8 +333,8 @@ The canonical 2.0 completion surface is:
 
 ```rust
 impl Telemetry {
-    pub async fn flush_async_typed(&self) -> Result<(), FlushFailure>;
-    pub async fn shutdown_async_typed(&self) -> Result<(), ShutdownFailure>;
+    pub async fn flush_async_typed(&self) -> Result<(), FlushError>;
+    pub async fn shutdown_async_typed(&self) -> Result<(), ShutdownError>;
 }
 ```
 
@@ -447,10 +465,13 @@ dispatcher or lifecycle state machine.
   provider shutdown occurs exactly once for concurrent/repeated callers.
 - Current-thread and multi-thread Tokio tests complete without deadlock,
   `block_on`, worker blocking, a second runtime, or global-provider leakage.
-- An awaited final-export failure is surfaced as `ShutdownFailure`, and the
+- An awaited final-export failure is surfaced as `ShutdownError`, and the
   host can immediately tear down its runtime after the await without loss.
 - Premature runtime teardown produces `RuntimeTerminated`, accounts pending
   records as dropped, and never reports successful completion.
+- Flush and shutdown drop every incomplete started span, increment the dropped
+  export accounting once per span, and never pass an incomplete span to either
+  backend (OTLP-009).
 - Two telemetry instances remain isolated; enabled SDK config cannot resolve
   to no-op; disabled config makes no request; credentials never enter errors.
 - Construction fixtures cover unsupported insecure verification, unreadable CA,

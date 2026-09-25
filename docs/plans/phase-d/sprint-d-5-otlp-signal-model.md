@@ -8,7 +8,8 @@ depends_on: [D.4]
 relation: must_follow
 assignee: aobs
 model_class: astra
-owned_docs: [docs/requirements.md, docs/architecture.md, docs/api-design.md]
+requirements: [OTLP-008, OTLP-009, OTLP-010]
+owned_docs: [docs/requirements.md, docs/architecture.md, docs/api-design.md, docs/migration.md]
 release_train: '2.0'
 ---
 
@@ -42,6 +43,7 @@ pub struct SpanLink {
 #[non_exhaustive]
 pub enum AggregationTemporality { Delta, Cumulative }
 
+#[non_exhaustive]
 pub enum MetricValue {
     Gauge(FiniteF64),
     Sum {
@@ -96,14 +98,17 @@ never embeds `TraceContext`, eliminating two sources of truth.
    histograms; `Delta` requires an explicit start time no later than the point
    timestamp, while `Cumulative` permits `Timestamp::UNIX_EPOCH` or an earlier
    explicit start. Reject inconsistent intervals.
-4. Record the breaking 1.x-to-2.0 source/serde migration, public API approval,
-   and requirements changes.
+4. Record the breaking 1.x-to-2.0 source/serde migration in
+   `docs/migration.md`, the public API approval, and the OTLP-020/OTLP-021
+   requirements changes.
 5. Migrate consumers in `sc-observability-types`,
    `sc-observability-dto` (`TraceContextDto` included), `sc-observe`,
    `sc-observability`, `sc-observability-otlp`, binding runtime, generated
    Python/TypeScript models, examples, and public fixtures.
 6. Add `InvalidHistogram`, invalid temporality, and invalid interval failures
-   to the central error inventory with stable codes and remediation.
+   to the D.5-owned `MetricModelError` rows of the central error inventory
+   with stable codes and remediation. D.6 owns only transport, lifecycle, and
+   configuration rows.
 
 ## Acceptance criteria
 
