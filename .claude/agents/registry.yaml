@@ -59,8 +59,11 @@ agents:
   sc-sanity-llm:
     version: 0.1.0
     path: .claude/agents/sc-sanity-llm.md
+  dev-sanity-jev:
+    version: 0.1.0
+    path: .claude/agents/dev-sanity-jev.md
   sc-sanity-jev:
-    version: 0.0.1
+    version: 0.1.0
     path: .claude/agents/sc-sanity-jev.md
 
 # Role -> ATM member. Skills name the role; the member's startup prompt in
