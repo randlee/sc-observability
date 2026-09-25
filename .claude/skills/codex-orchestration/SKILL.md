@@ -1,7 +1,7 @@
 ---
 name: codex-orchestration
-version: 0.1.0
-description: Orchestrate sprint work where an appointed lead coordinates, the assigned developer (`assignee`) is the sole developer, and quality-mgr enforces the QA gate.
+version: 0.2.0
+description: Orchestrate sprint work where an appointed lead coordinates, the developer the lead assigns each sprint to is its sole developer, and quality-mgr enforces the QA gate.
 depends_on:
   quality-management-gh: 1.x
   quality-mgr: 0.x
@@ -22,12 +22,21 @@ This skill defines the repo-local orchestration workflow for this repository.
 
 - The **lead** coordinates sprint sequencing, worktree assignments, PR flow,
   and every dispatch and report in this skill. `team-lead` is the default
-  lead; `fenix` or any other identity may hold the role.
-- the developer named by the `assignee` variable is the sole developer for
-  Codex-driven implementation work. Every dev-facing template declares
-  `assignee` as an optional variable with a repo default in its frontmatter;
-  the lead overrides it with `--var assignee=<identity>` or an `assignee` key
-  in the vars file. Body text never names a developer.
+  lead; any roster identity may hold the role.
+- the developer is the agent the lead assigns the task to:
+  `atm task assign <agent> --template <template> --vars <json>`. That
+  positional agent is the only place a developer is named. No template takes
+  an assignee variable and no message body names its recipient; the agent
+  that receives a task is its assignee, and the task ledger records it.
+- a developer is the sole developer for **one sprint**. Sprints that are
+  `parallel_safe` run at the same time under different developers: the lead
+  dispatches each sprint to the agent its sprint doc names in
+  `recommended_agent` (chosen at plan time from the repository's developer
+  roster by model tier), substituting only an idle agent of the same or a
+  higher tier. Sending every sprint to one agent makes
+  a parallel plan serial again. Agent count is the lead's concern, not the
+  plan's: when ready sprints outnumber idle developers of the needed tier,
+  start another agent of that tier instead of queueing the sprint.
 - `quality-mgr` runs the QA gate after each delivery
 
 ## Lead Role
@@ -69,11 +78,12 @@ Before starting a sprint:
    - `quality-management-gh/`
 6. `quality-mgr` must read:
    - `.claude/assets/sc-rust/quality-mgr/quality-mgr.rust.md`
+   - `.claude/project/quality-policy.md`
 7. `quality-mgr` must also read:
    - `.claude/skills/quality-management-gh/SKILL.md`
 8. Every ATM assignment is sent with
-   `atm send <agent> --task-id "$TASK_ID" --template <template> --vars <json>`;
-   the same `TASK_ID` is supplied as the template's `task_id` variable. Never
+   `atm task assign <agent> --task-id "$TASK_ID" --template <template> --vars <json>`;
+   the same `TASK_ID` is the `task_id` key in the vars file. Never
    render a template yourself and send the output as message text or via `--stdin`.
    To view or validate the exact body before sending, use
    `atm compose --template <template> --vars <json>` (same renderer, same
@@ -82,23 +92,55 @@ Before starting a sprint:
 9. `.claude/agents/ruthless-boundary-qa.md` and
    `.claude/skills/codex-orchestration/ruthless-boundary-qa-assignment.json.j2`
    exist for first-pass boundary optimization review.
+10. Every agent pane exports `BEADS_ACTOR` equal to its `ATM_IDENTITY` (the
+    pane name, not an alias), and bead assignee values use those same names.
+
+## Beads
+
+This is the lifecycle contract for development, fix, and QA work.
+
+1. **Identity and dispatch.** Before dispatch, the lead creates one bead for
+   each task, assigns it to the recipient's ATM identity, and uses that bead id
+   as the ATM `task_id`. Phase or release work is grouped under its epic.
+2. **Assignee-owned tandem lifecycle.** The assignee verifies
+   `BEADS_ACTOR=$ATM_IDENTITY`, starts the ATM task, and claims the bead. After
+   successful validation it closes the ATM task and bead. Refusal closes the
+   ATM task as refused, leaves the bead open, and records the reason as a bead
+   note. A push or progress report closes neither system.
+3. **Dependency-driven flow.** Before dispatch, the lead represents execution
+   order with bead dependencies. QA depends on development; merge or release
+   depends on the latest QA. After FAIL, fix child beads block a follow-up QA
+   bead, and that QA bead blocks merge. Run `bd ready` only after the graph
+   reflects the latest verdict.
+4. **QA findings and rejected work.** `quality-mgr` reports stable finding ids
+   but does not create finding or fix beads. The lead creates and wires those
+   after triage. Rejected completed work is reopened or represented by a child
+   bead; the lead does not close an assignee's bead merely by accepting work.
 
 ## Sprint Flow
 
-1. the lead assigns development to the developer (`assignee`) using `dev-template.xml.j2`.
+1. the lead creates and wires the development bead, then assigns development
+   to its assignee using `dev-template.xml.j2` with the bead id as `task_id`.
    Every dev assignment must include the sprint-plan document path as
    `sprint_doc`, and that sprint document is the authoritative source for the
    task. Assignment prose may summarize, but it must not replace or weaken the
-   sprint doc.
-2. the developer starts, implements, commits, pushes, and reports branch plus SHA.
+   sprint doc. If the task touches Rust, the developer first reads
+   `.claude/skills/rust-development/guidelines.txt` and
+   `.claude/skills/rust-best-practices/patterns/practice-inventory.md`; the
+   reviewers score against them.
+2. the developer claims the bead with task start, implements, commits, pushes,
+   reports branch plus SHA, and closes both task and bead after validation.
 3. Before QA-1, the developer performs a self-directed Rust best-practices sweep on
    the integration branch using the same `review_targets` planned for QA-1 and
    fixes all RBP findings found there. This is a developer cleanup step, not a
    QA surprise.
 4. the lead opens or updates the PR.
-5. the lead assigns QA to `quality-mgr` using `qa-template.xml.j2`.
+5. after the development bead closes, the lead runs `bd ready`, then assigns
+   the newly ready QA bead to `quality-mgr` using `qa-template.xml.j2`.
    Every QA assignment must include `sprint_doc`, and `quality-mgr` must treat
    that sprint document as the authoritative QA scope source.
+   The QA assignment also carries one exact `branch` and `commit`; every
+   reviewer assignment must repeat those values unchanged.
 6. `quality-mgr` launches the full reviewer set on QA-1 (the sprint's first
    QA pass):
    - `req-qa`
@@ -108,53 +150,58 @@ Before starting a sprint:
    - `rust-best-practices-agent`
    - `rust-service-hardening-agent`
    - `flaky-test-qa` when test instability risk is present
-7. QA-2 and later (fix-verification) rounds on the same sprint branch run
-   `ruthless-boundary-qa`, `rust-best-practices-agent`, and
-   `rust-service-hardening-agent` only to confirm fixes to their own QA-1
-   findings (verification-locked to those ids; a reviewer with no QA-1
-   findings is not re-run) — as open reviews they reliably surface findings
-   on any diff regardless of size, which turns a small fix-round into
-   unbounded review churn. QA-2+ rounds also launch `req-qa` + `arch-qa`
-   (scoped to the dispatched finding ids) plus `rust-qa-agent` (its
-   objective execution-fact gates — fmt, clippy, tests, lint, RULE-003,
-   pytests — are not a subjective findings pass and stay in every round).
+7. QA-2 and later (fix-verification) rounds on the same sprint branch never
+   rerun `ruthless-boundary-qa`, `rust-best-practices-agent`, or
+   `rust-service-hardening-agent` open-ended. Dispatch one only when the round
+   carries an assigned finding that reviewer owns (`RBQA-*`, `RBP-*`, or
+   `RSH-*`), and scope-lock its output to those ids; a reviewer that raised
+   no QA-1 findings is not re-run. As open reviews they reliably surface
+   findings on any diff regardless of size, which turns a small fix-round
+   into unbounded review churn. QA-2+ rounds always launch
+   `req-qa` + `arch-qa` (scoped to the dispatched finding ids) plus
+   `rust-qa-agent` (its objective execution-fact gates — fmt, clippy, tests,
+   lint, RULE-003, pytests — are not a subjective findings pass and stay in
+   every round).
    The verdict is each dispatched finding's fixed/regressed/open status
    plus `rust-qa-agent`'s gate results, nothing else. Anything req-qa or
    arch-qa notices outside the dispatched findings goes in a debt-notes
-   section of the report and does not affect the verdict. All QA-1
-   first-pass findings from every reviewer must still be fixed before
+   section of the report and does not affect the verdict. Every QA-1
+   first-pass finding from every reviewer must be fixed and verified before
    merge — merge gate is 0B+0I+0m with no exceptions and no backlog
    deferral. QA-1 findings route back to the developer via
    `fix-assignment.xml.j2` before QA-2, following the standard
    triage-and-fix path. `ruthless-boundary-qa`, `rust-best-practices-agent`,
    and `rust-service-hardening-agent` run open reviews on plan QA-1 and
    phase-ending review.
-8. If QA passes and CI is green, merge may proceed.
-9. After every QA round that reports any finding, at any severity, the lead
+8. After QA closes, the lead reads the verdict before `bd ready`. PASS and
+   green CI permit merge work to become ready; FAIL must not expose merge.
+9. On FAIL, the lead triages the findings, creates fix child beads and a
+   follow-up QA bead that depends on every fix, and makes merge depend on that
+   QA bead.
+10. After every QA round that reports any finding, at any severity, the lead
    runs `/triaging-findings` (where the repository carries that skill) the
    same way: every finding is recorded, correlated
    across worktrees, and promoted to the current top layer of the stack. No
    finding is skipped, deferred, or left without a fix dispatch, except a
    finding the lead upholds as `rejected: ceremony` under quality-mgr's
    Ceremony Disputes rule.
-10. After triage completes, the lead routes concrete fixes back to
-   the developer using `fix-assignment.xml.j2`. Fix assignments must also include
+11. After triage completes, the lead routes concrete fixes to a developer of
+   the tier the fix needs, using `fix-assignment.xml.j2`: easy fixes go to the
+   fast tier for speed, not back to the sprint's developer by default. Fix assignments must also include
    `sprint_doc`, and the sprint document remains authoritative if the task
    summary omits or compresses details.
-11. Fix handoffs require a worktree-local checklist and two complete passes:
-    implement every fix, then verify each against its files and test/check evidence.
-    The lead checks completeness before QA and returns incomplete work.
 
 ## Stacked Phases
 
 Every phase runs as one append-only `gh stack` of sprint and fix layers
-above `integrate/phase-N`. The rule is defined once, in
-[`docs/development/gh-stack-guidelines.md`](../../../docs/development/gh-stack-guidelines.md)
-§0, and is not restated here. What it means for this skill: the lead owns
+above `integrate/phase-N`. Repository branch policy is defined in
+[`CLAUDE.md` and `AGENTS.md`](../../../CLAUDE.md). The lead owns
 the stack and each dev owns exactly one layer; every dispatch below — dev,
 fix, cleanup — is a new worktree cut from the current top, and the
 `<stack-discipline>` element every template carries is the dev-facing copy
-of §0.
+of §0. Never interrupt a task in progress for fix work, and never put fix
+work on the sprint branch under review: each fix goes on a new branch on top
+of the stack.
 
 ## Plan Review Flow
 
@@ -172,9 +219,9 @@ of §0.
    - `rust-best-practices-agent`
    - `rust-service-hardening-agent`
    - `ceremony-qa`
-   on plan QA-1. Later rounds, the minor-findings rule, and the
-   `ceremony-finding-screen` step follow `quality-mgr.md` "Default Reviewer
-   Set" and "Ceremony Disputes".
+   on plan QA-1 (the set in `.claude/project/quality-policy.md` governs).
+   Later rounds, the minor-findings rule, and the `ceremony-finding-screen`
+   step follow `quality-mgr.md` "Reviewer Selection" and "Ceremony Disputes".
 5. If plan QA passes, the hardened plan is ready for implementation dispatch.
 6. If plan QA fails, the lead uses the normal codex-orchestration
    triage-and-fix loop to route concrete fixes back to the developer.
@@ -192,11 +239,18 @@ of §0.
   deliverable points to a boundary, packaging, release-tracking, readiness, or
   validation gate
 - QA cannot PASS unless deliverable completion is 100%
+- QA scope follows the sprint doc's `closure_type`
+  (`.claude/skills/plan-hardening/sprint-planning-guidelines.md`): a
+  `contract` or `boundary` sprint is judged against its one
+  `target_boundary`, its boundary-rooted criteria and its per-crate
+  validation; behaviour listed under "This Sprint Does Not Close" is not a
+  finding against it. End-to-end, CLI, live-daemon and smoke proof is judged
+  in `integration` sprints and the phase-ending review
 
 ## Phase-End Review
 
 For extraction-readiness or phase-close reviews, use `review-template.xml.j2`
-to assign a read-only review to the developer (`assignee`).
+to assign a read-only review to a developer.
 After the phase lands, where the repository carries `triaging-findings`, run
 its post-mortem
 (`.claude/skills/triaging-findings/references/post-mortem.md`); the write-up
@@ -212,14 +266,12 @@ mandatory:
 - `rust-service-hardening-agent`
 - `flaky-test-qa`
 
-Before phase-ending QA can report PASS, `quality-mgr` must require a successful
-`just validate` result from the assigned execution reviewer (normally
-`rust-qa-agent`). To preserve `quality-mgr`'s no-foreground-QA rule, it verifies
-the delegated `executed_checks.artifacts` output and source revision instead of
-executing that broad command itself. The phase-end rust-qa assignment supplies
-`just validate` through its artifact-command channel. `just validate` includes
-the committed CLI-surface contract check, so released CLI changes cannot bypass
-its baseline gate.
+Before phase-ending QA can report PASS, `quality-mgr` must require the
+repository-wide artifact command configured in
+`.claude/project/quality-policy.md`. It supplies that command through
+`rust-qa-agent`'s artifact-command channel and verifies the delegated
+`executed_checks.artifacts` output and source revision instead of executing the
+broad command itself. If no command is configured, phase-ending QA cannot PASS.
 
 ## CI
 
@@ -234,13 +286,33 @@ Do not assume ATM-specific PR monitoring commands exist.
 Dispatch form (mandatory for every assignment below):
 
 ```bash
-TASK_ID="<task-id>"
-atm send <agent> \
+VARS=<vars.json>                       # carries task_id
+TASK_ID="$(jq -r .task_id "$VARS")"
+atm task assign <agent> \
   --task-id "$TASK_ID" \
   --template <path/to/template.j2> \
-  --vars <vars.json> \
-  --var task_id="$TASK_ID"
+  --vars "$VARS"
 ```
+
+This form is mandatory for every orchestration assignment, to developers and
+to `quality-mgr` alike (`atm task assign quality-mgr ... --template
+qa-template.xml.j2`), for two reasons:
+
+- **the template** is what makes state tracked: its frontmatter declares the
+  message type, tags and workflow state/stage/scope, so the dispatch is
+  queryable with `atm search` and the reports can count it. Rendered text
+  sent with `--stdin`, `--file` or inline carries none of that.
+- **the task assignment** is what queues the work on the agent and nudges it
+  at the right time, and what `atm task start` / `atm task close` act on. A
+  plain `atm send` opens no task.
+
+`<agent>` is the only routing input. `atm send <agent> --task-id ... --template
+... --vars ...` is the same operation under its alias and is acceptable;
+nothing else is. A re-dispatch to an idle or silent agent re-issues the same
+`atm task assign` with the same `--task-id`, template and vars; a nudge
+alone is `atm send <agent> "check atm for <TASK-ID>"`. Status
+questions, notices and replies that assign no work stay plain `atm send` or
+`atm queue`.
 
 Install the repository templates on the daemon host after this change merges:
 
@@ -269,6 +341,6 @@ Use the Rust assignment templates from:
 ## Required Message Sequence
 
 The sequence for every ATM task assignment — start, work, task close; the
-receiver never acks a close — is defined once in
+receiver never acks a close — is defined in
 [`docs/team-protocol.md`](../../../docs/team-protocol.md) (Required Flow).
-This skill adds nothing to it and restates none of it.
+This skill's Beads section defines the paired durable-task lifecycle.
