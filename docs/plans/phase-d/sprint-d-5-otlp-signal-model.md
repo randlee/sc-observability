@@ -4,8 +4,8 @@ status: planned
 branch: feature/phase-d-5-otlp-signal-model
 base: develop
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-5-otlp-signal-model
-depends_on: []
-relation: root
+depends_on: [D.4]
+relation: must_follow
 assignee: aobs
 model_class: astra
 owned_docs: [docs/requirements.md, docs/architecture.md, docs/api-design.md]
@@ -17,8 +17,8 @@ release_train: '2.0'
 ## Goal and dependency
 
 Define the spec-correct neutral signal model that both real exporters consume.
-It starts independently; if D.4 changes a consumed error type, D.5 rebases on
-that change before integration. D.6 and D.7 may not invent transport-local
+It must follow D.4: D.4 owns the 2.0 version bump, break approval, and
+canonical errors used here. D.6 and D.8 may not invent transport-local
 substitutes.
 
 ## Public contract
@@ -27,6 +27,7 @@ The implementation may refine names during API review, but it must preserve
 this discriminated shape and information content:
 
 ```rust
+#[non_exhaustive]
 pub enum SpanKind { Internal, Server, Client, Producer, Consumer }
 
 pub struct TraceFlags(u8); // exposes sampled() and preserves known W3C bits
@@ -35,23 +36,24 @@ pub struct SpanLink {
     pub trace_id: TraceId,
     pub span_id: SpanId,
     pub flags: TraceFlags,
-    pub attributes: serde_json::Map<String, serde_json::Value>,
+    pub attributes: Attributes,
 }
 
+#[non_exhaustive]
 pub enum AggregationTemporality { Delta, Cumulative }
 
 pub enum MetricValue {
-    Gauge(f64),
+    Gauge(FiniteF64),
     Sum {
-        value: f64,
+        value: FiniteF64,
         monotonic: bool,
         temporality: AggregationTemporality,
-        start_time: SystemTime,
+        start_time: Timestamp,
     },
     Histogram {
         point: HistogramPoint,
         temporality: AggregationTemporality,
-        start_time: SystemTime,
+        start_time: Timestamp,
     },
 }
 
@@ -59,7 +61,7 @@ pub struct HistogramPoint {
     explicit_bounds: Vec<f64>,
     bucket_counts: Vec<u64>,
     count: u64,
-    sum: f64,
+    sum: FiniteF64,
 }
 
 impl HistogramPoint {
@@ -68,7 +70,10 @@ impl HistogramPoint {
 }
 ```
 
-`SpanRecord` carries `SpanKind` and links; `TraceContext` carries trace flags.
+`Attributes` and `FiniteF64` are neutral validated types owned by
+`sc-observability-types`; this model does not introduce a `serde_json` runtime
+dependency in lower crates. `SpanRecord` carries `SpanKind` and links;
+`TraceContext` carries trace flags.
 `MetricRecord` carries `MetricValue` rather than the current `MetricKind` plus
 single `f64` combination. Exact serde names and constructors are frozen in the
 2.0 API approval before implementation completion.
@@ -88,7 +93,9 @@ never embeds `TraceContext`, eliminating two sources of truth.
    ordered bounds, `sum(bucket_counts) == count`, finite sum, and no invalid
    negative count representation.
    Preserve aggregation temporality and data-point start time for sums and
-   histograms; reject inconsistent interval/time combinations.
+   histograms; `Delta` requires an explicit start time no later than the point
+   timestamp, while `Cumulative` permits `Timestamp::UNIX_EPOCH` or an earlier
+   explicit start. Reject inconsistent intervals.
 4. Record the breaking 1.x-to-2.0 source/serde migration, public API approval,
    and requirements changes.
 5. Migrate consumers in `sc-observability-types`,

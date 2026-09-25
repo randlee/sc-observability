@@ -1149,7 +1149,7 @@ ADR navigation index (status is recorded in each decision below):
   immutable Phase D provenance manifest and OTLP-023/024.
 - **Acceptance gate**: The technical lead accepts the backend/protocol/runtime
   matrix, async 2.0 lifecycle, queue/deadline behavior, and source provenance
-  before D.6-L lands production code.
+  before D.6 lands production code.
 - **Contracts**: OTLP-001–024; Phase D D.5–D.8.
 
 ## 8. API-Design Consistency

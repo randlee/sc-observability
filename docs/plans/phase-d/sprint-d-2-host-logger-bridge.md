@@ -4,11 +4,11 @@ status: planned
 branch: feature/phase-d-2-host-logger-bridge
 base: develop
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-2-host-logger-bridge
-depends_on: [D.1]
-relation: must_follow
+depends_on: []
+relation: parallel_safe
 assignee: cobs
 model_class: terra
-owned_docs: [docs/requirements.md, docs/api-design.md, docs/migrate-error-api.md]
+owned_docs: [docs/requirements.md, docs/api-design.md]
 ---
 
 # D.2 — Host-owned logger bridge and event policy (#204)
@@ -98,18 +98,19 @@ one `close_and_drain` primitive; detach never shuts down the host logger.
    bridge calls so successful explicit detach releases every attachment-owned
    `Arc<Logger>` reference.
 3. Apply policy on the reused `CoreLoggerBackend`/`bridge_backend` path before
-   every `try_log`. Rejection records `DropCause::PolicyRejected` in existing
-   `DroppedEvents` accounting and never calls the sink. Do not add a second
-   counter or redaction system. Policy panics are contained at the boundary.
+   every `try_log`. Rejection records the existing `DropCause::InvalidEvent`
+   accounting bucket and never calls the sink; this preserves the exhaustive
+   1.x `DropCause` ABI. Do not add a second counter or redaction system.
+   Policy panics are contained at the boundary.
 4. Preserve current owned-init and `ForeignLoggerInstalled` behavior. Document
    facade ownership with a tracing bridge and distinguish the owned `LogGuard`
    lifecycle from the non-owning attachment lifecycle.
 5. Add public integration fixtures for direct plus macro logging through one
    recording sink; allowlist/redaction, bounded-payload, rejection, panic,
    foreign-facade, concurrent detach, and ownership recovery cases.
-6. Inventory `DetachError` and policy failures with stable codes, cause,
-   remediation, redaction, and timeout semantics. Test every slot transition,
-   reattachment, stale control, foreign ownership, and the one shared drain.
+6. Define `DetachError::{Timeout, NotInstalled, ForeignLoggerInstalled}` with
+   stable diagnostics; test every slot transition, reattachment, stale control,
+   foreign ownership, and the one shared drain.
 
 ## Acceptance criteria
 

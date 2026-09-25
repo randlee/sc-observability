@@ -4,21 +4,21 @@ status: planned
 branch: feature/phase-d-3-typed-sink-registration
 base: develop
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-3-typed-sink-registration
-depends_on: [D.2]
-relation: must_follow
+depends_on: []
+relation: parallel_safe
 assignee: cobs
 model_class: terra
-owned_docs: [docs/api-design.md, docs/migrate-error-api.md]
+owned_docs: [docs/api-design.md]
 ---
 
 # D.3 — Typed sink registration ergonomics (#203)
 
 ## Goal and dependency
 
-After D.2, remove the 1.x consumer need to use deprecated `LogSinkError` or
+In a compatible 1.x release, remove the consumer need to use deprecated `LogSinkError` or
 manually call `typed::legacy_sink()` when registering a `TypedLogSink`.
 This additive surface is checked against published 1.4.1. It is a deliberate
-one-release bridge: D.4 removes the duplicate typed/legacy split in 2.0.
+one-release bridge. D.4 may remove this bridge only in its later 2.0 release.
 
 ## Deliverables
 
@@ -27,7 +27,8 @@ one-release bridge: D.4 removes the duplicate typed/legacy split in 2.0.
 2. Add `LoggerBuilder::register_typed_sink(...)` mirroring the retained
    registration flow, including chaining/error behavior and sink health/flush
    behavior.
-3. Update `LogSinkError` deprecation/rustdoc and `migrate-error-api.md` to
+3. Update `LogSinkError` deprecation/rustdoc and the existing API/migration
+   sections in `docs/api-design.md` to
    name `TypedLogSink`, `SinkRegistration::typed`, and builder registration.
 4. Add public-only consumer fixtures implementing `TypedLogSink` without
    `#[allow(deprecated)]`, proving write, explicit flush, health, registration,

@@ -2,9 +2,9 @@
   "schema_version": 3,
   "source_repository": "https://github.com/randlee/agent-team-mail",
   "source_commit": "7b39f4e7f72b6845edec4eab4cd671611661445f",
-  "validation": "For transplant-and-adapt entries, compare the destination with this pinned source blob and permit only the D.7 source-to-destination matrix's named deltas. Translation and reference entries require only their stated disposition.",
+  "validation": "For transplant-and-adapt entries, compare the destination file with this pinned source blob and permit only the D.8 source-to-destination matrix's named deltas. Translation and reference entries require only their stated disposition.",
   "entries": [
-    {"source":"crates/sc-observability-otlp/src/lib.rs","git_blob":"447b93b138cb18dabe53a432262349dc8035754b","sha256":"f1292b48d2f8d2d8c9a7b77edebbbd03c9aae28e490ed35eb6a88f772d81a6ad","destination":"crates/sc-observability-otlp/src/legacy_http_json/","disposition":"transplant-and-adapt"},
+    {"source":"crates/sc-observability-otlp/src/lib.rs","git_blob":"447b93b138cb18dabe53a432262349dc8035754b","sha256":"f1292b48d2f8d2d8c9a7b77edebbbd03c9aae28e490ed35eb6a88f772d81a6ad","destination":"crates/sc-observability-otlp/src/legacy_http_json/lib.rs","disposition":"transplant-and-adapt"},
     {"source":"crates/sc-observability-otlp/Cargo.toml","git_blob":"0383c6d2c4648813b3944fcf46e222be712ee18b","sha256":"e775439f49696d26b03576c851105b3ec8a976b394d61c477dd59e08745ee6fe","destination":"crates/sc-observability-otlp/Cargo.toml","disposition":"dependency-reference-only"},
     {"source":"crates/sc-observability-otlp/tests/timestamp_export_integration.rs","git_blob":"331accac42e9c9bd536e2df78502d44e141aa435","sha256":"959edf7c0ff72a18d5702edb3a105df6936aab52af25d2fe065f478544125221","destination":"crates/sc-observability-otlp/tests/legacy_http_json.rs","disposition":"transplant-and-adapt"},
     {"source":"docs/observability/grafana-dashboards.md","git_blob":"a9dc4a2eafe42d5d944471ffb5eaf00930cd3eb1","sha256":"5af138a71c6584dc401474498b8c549ebbce07dcbb22de9708504b99eec4541b","destination":"docs/observability/otlp/grafana-dashboards.md","disposition":"translate-current-schema"},

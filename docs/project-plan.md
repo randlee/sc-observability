@@ -487,17 +487,16 @@ The detailed sprint-by-sprint execution record remains in
 ## Phase D — Host logging, OTLP restoration, and distribution completion
 
 The finalized Phase D plan is
-[`docs/plans/phase-d/plan-phase-d.md`](plans/phase-d/plan-phase-d.md). It is a
-four parallel stacks:
+[`docs/plans/phase-d/plan-phase-d.md`](plans/phase-d/plan-phase-d.md). Its
+streams are:
 
-1. [D.1 startup settings](plans/phase-d/sprint-d-1-log-settings.md) → [D.2 host logger bridge](plans/phase-d/sprint-d-2-host-logger-bridge.md) → [D.3 typed sink registration](plans/phase-d/sprint-d-3-typed-sink-registration.md)
-2. [D.4 2.0 error enums](plans/phase-d/sprint-d-4-error-enums-2-0.md)
-3. [D.5 OTLP signal model](plans/phase-d/sprint-d-5-otlp-signal-model.md) → [D.6 official SDK/Tokio exporter](plans/phase-d/sprint-d-6-otlp-sdk-tokio.md) → [D.7 legacy HTTP/JSON transplant](plans/phase-d/sprint-d-7-otlp-http-json-transplant.md) → [D.8 dual-path conformance](plans/phase-d/sprint-d-8-otlp-conformance.md)
-4. [D.9 Windows ARM64 wheel](plans/phase-d/sprint-d-9-windows-arm64-wheel.md) → [D.10 open-ended Python metadata guard](plans/phase-d/sprint-d-10-python-open-ended-guard.md)
+1. Parallel-safe [D.1 startup settings](plans/phase-d/sprint-d-1-log-settings.md), [D.2 host logger bridge](plans/phase-d/sprint-d-2-host-logger-bridge.md), and [D.3 1.x typed-sink bridge](plans/phase-d/sprint-d-3-typed-sink-registration.md)
+2. [D.4 2.0 error enums and release baseline](plans/phase-d/sprint-d-4-error-enums-2-0.md) → [D.5 OTLP signal model](plans/phase-d/sprint-d-5-otlp-signal-model.md) → [D.6 lifecycle core](plans/phase-d/sprint-d-6-otlp-lifecycle-core.md) → parallel [D.7 SDK adapter](plans/phase-d/sprint-d-7-otlp-sdk-tokio.md) and [D.8 legacy transplant](plans/phase-d/sprint-d-8-otlp-http-json-transplant.md) → [D.9 conformance](plans/phase-d/sprint-d-9-otlp-conformance.md)
+3. [D.10 Windows ARM64 wheel](plans/phase-d/sprint-d-10-windows-arm64-wheel.md) → [D.11 open-ended Python metadata guard](plans/phase-d/sprint-d-11-python-open-ended-guard.md)
 
-The detailed plan names stack branches, worktrees, agents, and the final
-integration step. The initial three stacks start together; Python starts when
-the logging agent is free.
+The detailed plan names branches, worktrees, agents, and the final integration
+step. The logging trio is serial only because cobs owns it; its artifacts are
+otherwise parallel-safe. D.4 precedes all 2.0 OTLP work.
 
 Only concrete code-consumption edges are `must_follow`; release baseline
 alignment occurs in final integration. D.1–D.3 remain additive against the 1.4.1

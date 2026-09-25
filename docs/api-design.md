@@ -1801,7 +1801,7 @@ This shape is the v1 transport contract. It preserves the proven transport
 knobs while neutralizing the old ATM-specific surface.
 
 This section and its unconditional retry defaults are the frozen 1.x baseline,
-not the Phase D 2.0 candidate contract. D.6-L exclusively owns the 2.0
+not the Phase D 2.0 candidate contract. D.6 exclusively owns the 2.0
 backend-aware optional fields, defaults, validation, public payload types, and
 stable errors; D.6 must revise this section as part of ADR-018/API approval.
 Later sprints reference that revision rather than redefining it.
@@ -1933,7 +1933,7 @@ Rules:
 
 `sc-observability-otlp` should ship:
 
-The retry constants below describe the frozen 1.x baseline. D.6-L owns their
+The retry constants below describe the frozen 1.x baseline. D.6 owns their
 2.0 disposition and any replacement constants through its reviewed API/semver
 update; D.7 and D.8 do not independently redefine them.
 

@@ -1,21 +1,21 @@
 ---
-id: D.9
+id: D.10
 status: planned
-branch: feature/phase-d-9-windows-arm64-wheel
+branch: feature/phase-d-10-windows-arm64-wheel
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-9-windows-arm64-wheel
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-10-windows-arm64-wheel
 depends_on: []
 relation: root
 assignee: cobs
 model_class: terra
-owned_docs: [docs/python-distribution.md, release/python-platform-policy.json]
+owned_docs: [docs/project-plan.md, release/python-platform-policy.json]
 ---
 
-# D.9 — Windows ARM64 Python wheel support
+# D.10 — Windows ARM64 Python wheel support
 
 ## Goal and dependency
 
-D.9 is independent of the logging and OTLP stacks. Extend the qualified Python
+D.10 is independent of the logging and OTLP stacks. Extend the qualified Python
 distribution platform matrix from five to six wheels by adding native Windows
 ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
 `win_arm64`.
@@ -23,7 +23,7 @@ ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
 ## Deliverables
 
 1. Preflight GitHub-hosted Windows ARM64 and native CPython ARM64 availability
-   for every supported 3.10–3.14 interpreter. If any cell is unavailable, D.9
+   for every supported 3.10–3.14 interpreter. If any cell is unavailable, D.10
    remains open; x64 emulation or a cross-build is not native evidence. Then
    add a `windows-arm64` policy row with an ARM64 Windows runner,
    `machine: ARM64`, `wheel_platform: win_arm64`, and explicit target-triple
