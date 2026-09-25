@@ -17,10 +17,20 @@ required_variables:
   - round_index
   - replay_nonce
 optional_variables:
+  - previous_reviewed_commit
+  - questions_or_concerns
+  - reviewer_findings_json
+  - supersedes_task_id
+  - reviewed_commit
   - assignee
   - lead
   - cc
 defaults:
+  previous_reviewed_commit: ""
+  questions_or_concerns: ""
+  reviewer_findings_json: ""
+  supersedes_task_id: ""
+  reviewed_commit: ""
   assignee: "cobs"
   lead: team-lead
   cc: team-lead
@@ -62,9 +72,7 @@ metadata:
 
 {% if reviewer_findings_json is defined and reviewer_findings_json | trim %}
   <reviewer-findings-json>
-<![CDATA[
 {{ reviewer_findings_json }}
-]]>
   </reviewer-findings-json>
 {% endif %}
 
@@ -103,14 +111,12 @@ metadata:
       "errors": []
     }
     ```
-<![CDATA[
 {{ previous_step_json }}
-]]>
   </required-input>
 
   <plan-hardening>
-    Read the current plan docs from disk first, using `<source-of-truth>` and
-    `<references>`, before doing anything else.
+    Read the current plan docs from disk first, using `source-of-truth` element and
+    `references` element, before doing anything else.
 
     This is the first required hardening pass. Your job is to attack the plan
     from the sprint-shape and deliverable side before any broader consistency
@@ -296,7 +302,7 @@ metadata:
         "mode": "plan-hardening-sprint-scope",
         "round_id": "{{ round_id }}",
         "round_index": {{ round_index }},
-        "reviewed_commit": "<commit-sha>",
+        "reviewed_commit": "COMMIT_SHA",
         "previous_reviewed_commit": "{{ previous_reviewed_commit | default('') }}",
         "iterations": 0,
         "findings_resolved": 0,
