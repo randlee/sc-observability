@@ -1,0 +1,8 @@
+{
+  "task_id": "obs-phase-d-plan-qa",
+  "root": "obs-phase-d",
+  "phase": "d",
+  "round": 1,
+  "lead": "team-lead",
+  "cc": "team-lead"
+}

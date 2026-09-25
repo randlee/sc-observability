@@ -1,0 +1,12 @@
+{
+  "generated_at": "2026-09-25T07:40:00Z",
+  "task_id": "obs-d-4-sanity",
+  "checked_bead": "obs-d-4",
+  "sprint": "d-4",
+  "branch": "sprint/d-4-otlp-sync-exporter",
+  "commit": "4f1c2a9e7b3d5f60812a4c9e0b7d3f5a1c2e4b6d",
+  "verdict": "FAIL",
+  "findings_count": 1,
+  "findings_md": "- crates/sc-observability-otlp/src/sync.rs:88 D.4-2 retry policy is `todo!()`",
+  "lint_md": "- `just lint`: ok"
+}
