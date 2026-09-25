@@ -46,3 +46,6 @@ release/evidence/
 # its build script runs.
 examples/tauri-logging/src-tauri/gen/
 examples/tauri-logging/src-tauri/permissions/
+
+# sc-compose render logs (runtime output, never committed)
+**/.sc-compose/logs/
