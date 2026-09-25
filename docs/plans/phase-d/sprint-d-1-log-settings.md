@@ -1,21 +1,23 @@
 ---
-id: D.2
-status: complete
-branch: feature/phase-d-2-log-settings
+id: D.1
+status: planned
+branch: feature/phase-d-1-log-settings
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-2-log-settings
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-1-log-settings
 depends_on: []
 relation: root
+assignee: cobs
+model_class: terra
 owned_docs: [docs/requirements.md, docs/api-design.md]
 ---
 
-# D.2 — Shared startup `LogSettings` (#96)
+# D.1 — Shared startup `LogSettings` (#96)
 
 ## Goal and dependency
 
 Create the single serde-stable, binding-friendly configuration value in
 `sc-observability` that applications resolve before constructing a `Logger`.
-It has no internal sprint dependency and must merge before D.1. This is
+It has no internal sprint dependency and must merge before D.2. This is
 additive 1.x work checked against the published 1.4.1 API/semver baseline.
 
 ## Public contract
@@ -59,7 +61,7 @@ impl ResolvedLogSettings {
 The contract reuses existing owners: `LevelFilterDto` supplies the published
 level wire conversion, `EnvPrefix` supplies its existing validation and
 normalization rules, and `RetainedLogPolicy` supplies strong policy values and
-millisecond duration semantics. D.2 must not add `settings_level_wire`,
+millisecond duration semantics. D.1 must not add `settings_level_wire`,
 `LogEnvPrefix`, or an overrides type. `RetainedLogPolicy` gains `serde(default)`
 only if needed to support a partial nested object, preserving its field names,
 strong validation, and canonical units.
@@ -74,7 +76,7 @@ is absent/empty, then the application root wins if configured.
 
 ## Authoritative field inventory
 
-The following is the complete D.2 schema. No other `SC_LOG_*` key is accepted.
+The following is the complete D.1 schema. No other `SC_LOG_*` key is accepted.
 Defaults are the values passed to or produced by `LoggerConfig::default_for`.
 
 | Rust field | JSON key | `SC_` environment key | Unit / representation | Default | Validation |
@@ -96,7 +98,7 @@ If the application prefix normalizes to `SC`, construction fails with
 duplicate case-folded key, or unknown `${prefix}_LOG_*` key fails with a stable
 typed code; unrelated namespaces and non-UTF-8 values are ignored.
 Queue capacity, redaction, and process identity retain current
-`LoggerConfig::default_for` values and are not D.2 configuration fields.
+`LoggerConfig::default_for` values and are not D.1 configuration fields.
 
 JSON absent and JSON `null` both mean “no override” for each optional field.
 An absent environment variable also means no override; a present empty value

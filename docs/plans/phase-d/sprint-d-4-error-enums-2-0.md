@@ -1,11 +1,13 @@
 ---
 id: D.4
-status: complete
+status: planned
 branch: feature/phase-d-4-error-enums-2-0
 base: develop
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-4-error-enums-2-0
-depends_on: [D.3]
-relation: must_follow
+depends_on: []
+relation: root
+assignee: lobs
+model_class: luna
 owned_docs: [docs/architecture.md, docs/requirements.md, docs/api-design.md, docs/migrate-error-api.md]
 ---
 
@@ -13,7 +15,7 @@ owned_docs: [docs/architecture.md, docs/requirements.md, docs/api-design.md, doc
 
 ## Goal and dependency
 
-Following D.3, execute the explicitly breaking 2.0 migration from nine opaque
+Independently plan and execute the explicitly breaking 2.0 migration from nine opaque
 wrappers (the eight `error_wrapper!` types plus hand-written `IdentityError`)
 to same-name discriminated enums. Before public code changes, the technical
 lead must accept ADR-017, which precisely supersedes ADR-012 for this listed
@@ -22,11 +24,10 @@ silence, or issue label is not approval.
 
 ## Deliverables
 
-1. Inventory every emitted `ErrorCode` and constructor/call site for
-   `InitError`, `EventError`, `FlushError`, `ShutdownError`, `ProjectionError`,
-   `SubscriberError`, `LogSinkError`, `ExportError`, and `IdentityError`; map each to a named
-   enum variant carrying `Box<ErrorContext>`. Record every disposition—no
-   generic catch-all that hides a known current code.
+1. Implement named variants carrying `Box<ErrorContext>` for `InitError`,
+   `EventError`, `FlushError`, `ShutdownError`, `ProjectionError`,
+   `SubscriberError`, `LogSinkError`, `ExportError`, and `IdentityError`.
+   Do not retain a generic catch-all that hides a known current code.
 2. Replace all nine wrappers with `#[non_exhaustive]` same-name public enums;
    make all existing public error enums non-exhaustive where the 2.0 contract
    requires future-safe matching. Preserve `DiagnosticInfo`, stable diagnostic
@@ -44,13 +45,12 @@ silence, or issue label is not approval.
 5. Record accepted ADR-017, mark the conflicting portion of ADR-012 superseded
    (without rewriting its historical decision), and update requirements,
    architecture, API design, migration docs, and public inventories to agree.
-6. Record an explicit disposition for every parallel surface. Remove
+6. Remove
    `typed::*Failure` duplicates and `impl_legacy_classification!`; migrate typed
    methods to the canonical same-name enums. Make canonical `LogSink` return
    the discriminated `LogSinkError`, remove `TypedLogSink`, `legacy_sink`, and
-   D.3's `SinkRegistration::typed`/`register_typed_sink` bridge. Inventory the
-   log crate's own error enums and either migrate a distinct boundary with a
-   documented mapping or retain it with proof it is not a duplicate.
+   any then-current typed sink boundary. Migrate or retain distinct log-crate
+   error boundaries with a documented mapping.
 7. Update every version-bearing target: workspace/package `Cargo.toml` and
    `Cargo.lock`, `crates/sc-observability-py/{Cargo.toml,pyproject.toml}`,
    JavaScript package metadata, `release/{publish-artifacts.toml,
@@ -65,8 +65,7 @@ silence, or issue label is not approval.
 ## Acceptance criteria
 
 - `rg 'error_wrapper!' crates` returns no production macro definition or use;
-  all nine former wrappers are public discriminated enums and each known
-  emitted code has an explicit variant disposition.
+  all nine former wrappers are public discriminated enums.
 - Every retained diagnostic property is tested per enum variant, including
   source chain and serde shape where public serialization is promised.
 - A 1.x consumer fixture fails only at intentional wrapper-construction or
@@ -80,7 +79,7 @@ silence, or issue label is not approval.
 - Focused type/error-code matrix tests and cross-crate consumer fixtures.
 - `cargo test --workspace --locked`, `cargo clippy --workspace --all-targets -- -D warnings`, rustdoc, and the explicit major-release API comparison against published 1.4.1 followed by reviewed 2.0 rebaseline.
 - Documentation consistency, release-manifest validation, and a clean
-  `rg 'error_wrapper!' crates docs` disposition scan.
+  `rg 'error_wrapper!' crates docs` scan.
 
 ## Non-closure
 

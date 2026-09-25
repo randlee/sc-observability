@@ -1,19 +1,21 @@
 ---
-id: D.6
-status: complete
-branch: feature/phase-d-6-python-open-ended-guard
+id: D.10
+status: planned
+branch: feature/phase-d-10-python-open-ended-guard
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-6-python-open-ended-guard
-depends_on: [D.5]
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-10-python-open-ended-guard
+depends_on: [D.9]
 relation: must_follow
+assignee: cobs
+model_class: terra
 owned_docs: [docs/python-distribution.md, release/python-platform-policy.json]
 ---
 
-# D.6 — Open-ended Python distribution regression guard
+# D.10 — Open-ended Python distribution regression guard
 
 ## Goal and dependency
 
-After D.5, make CI fail if the Python distribution stops being open-ended.
+After D.9, make CI fail if the Python distribution stops being open-ended.
 The required contract is PyO3 `abi3-py310`, built wheels tagged `cp310-abi3`,
 and `requires-python = ">=3.10"` with no upper bound.
 
@@ -29,10 +31,8 @@ and `requires-python = ">=3.10"` with no upper bound.
    existing aggregate distribution-validation job before
    publishing eligibility, and add unit fixtures that fail for `>=3.10,<3.13`,
    non-abi3/cp311 ABI tags, missing abi3 feature, and a wrong platform tag.
-3. Add only the missing source/artifact metadata comparison and emit a concise
-   contract receipt identifying parsed metadata, source SHA,
-   policy platform list, and validator version; retain it with the existing
-   production distribution evidence.
+3. Add only the missing source/artifact metadata comparison; CI pass/fail is
+   the consumer-facing result.
 4. Document the invariant and explicit change-control rule: raising the floor
    or adding an upper bound requires a separately approved compatibility
    decision, updated supported-interpreter matrix, and this guard's expected
@@ -44,14 +44,14 @@ and `requires-python = ">=3.10"` with no upper bound.
   and fails deterministically for every negative fixture.
 - A wheel must satisfy both source configuration and produced metadata/tag
   checks; changing only one cannot pass.
-- The final receipt lists all six D.5 platforms and has no Python-version
-  upper bound hidden in PEP 440 specifier parsing.
+- The six D.9 platforms have no Python-version upper bound hidden in PEP 440
+  specifier parsing.
 
 ## Required validation
 
 - Validator unit/negative tests, source-build validation, and a full B.4a
   reusable workflow run at an immutable SHA.
-- Docs consistency plus source/artifact receipt verification.
+- Docs consistency plus source/artifact metadata verification.
 
 ## Non-closure
 

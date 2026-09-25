@@ -1,24 +1,24 @@
 ---
-id: D.7b
-status: complete
-branch: feature/phase-d-7b-otlp-sdk-tokio
+id: D.6
+status: planned
+branch: feature/phase-d-6-otlp-sdk-tokio
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7b-otlp-sdk-tokio
-depends_on: [D.7a]
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-6-otlp-sdk-tokio
+depends_on: [D.5]
 relation: must_follow
+assignee: aobs
+model_class: astra
 owned_docs: [docs/requirements.md, docs/architecture.md, docs/api-design.md, docs/migrate-error-api.md]
 release_train: '2.0'
-recommended_agent: rust-developer
-recommended_model: deep-reasoning
 ---
 
-# D.7b — Official SDK/Tokio exporter
+# D.6 — Official SDK/Tokio exporter
 
 ## Goal and dependency
 
 Add the production official-SDK exporter for Tokio-hosted Rust consumers while
 preserving synchronous emit admission and giving asynchronous transport
-lifecycle an honest awaitable completion surface. D.7b `must_follow`s D.7a.
+lifecycle an honest awaitable completion surface. D.6 `must_follow`s D.5.
 This repository owns a neutral Tokio fixture; no `atm-core` code or PR is part
 of the sprint.
 
@@ -27,14 +27,14 @@ of the sprint.
 ```rust
 pub enum ExporterBackend {
     OpenTelemetrySdk,
-    LegacyHttpJson, // reserved; D.7c makes this backend operational
+    LegacyHttpJson, // reserved; D.7 makes this backend operational
 }
 
 pub struct OtelConfig {
     pub backend: ExporterBackend,
     pub protocol: OtlpProtocol,
     // endpoint/auth/TLS and timeout fields remain explicit;
-    // legacy-only retry fields are optional (authoritative D.7b-L table below)
+    // legacy-only retry fields are optional (authoritative D.6-L table below)
 }
 
 type LifecycleFuture = Pin<
@@ -72,7 +72,7 @@ pub(crate) struct ExporterSet {
 Both backends construct the same `ExporterSet`; `Telemetry` stores only these
 trait objects. `ExporterBackend` is consumed by construction/injection and is
 never branched on by emit, flush, or shutdown. Selecting `LegacyHttpJson`
-before D.7c returns a stable typed unsupported-backend error. An enabled
+before D.7 returns a stable typed unsupported-backend error. An enabled
 configuration never silently installs a no-op exporter.
 
 The factory validates this closed matrix before allocating providers/workers:
@@ -81,7 +81,7 @@ The factory validates this closed matrix before allocating providers/workers:
 | --- | --- | --- | --- |
 | disabled (transport disabled) | none | none | the sole no-network disabled implementation |
 | `OpenTelemetrySdk` | SDK-supported gRPC or HTTP/protobuf | `otlp-sdk`; entered caller Tokio runtime | stable unsupported-protocol/runtime error |
-| `LegacyHttpJson` | `HttpJson` only | `legacy-http-json`; plain-thread construction | reserved typed error until D.7c |
+| `LegacyHttpJson` | `HttpJson` only | `legacy-http-json`; plain-thread construction | reserved typed error until D.7 |
 
 Delete public/production `Noop*Exporter` fallbacks; disabled construction is an
 explicit private disabled set and an enabled selection can never reach it.
@@ -91,9 +91,9 @@ headers/auth, CA/TLS and `timeout_ms` map to the SDK/legacy builders;
 selection; `insecure_skip_verify` is either implemented by the backend with an
 explicit security warning or rejected at construction—never ignored.
 
-### D.7b-L-owned validated transport contract
+### D.6-L-owned validated transport contract
 
-D.7b-L is the sole owner of every transport-bound field, default, validation,
+D.6-L is the sole owner of every transport-bound field, default, validation,
 and configuration error. The flat 2.0 wire surface is:
 
 | Field | Applicability | Default when absent |
@@ -215,7 +215,7 @@ the public operation is admitted.
 Construction order is fixed: resolve defaults and create `ResolvedField`
 values; run the ordered validation list above; build
 `ValidatedTransportBounds`; then check feature/backend/protocol availability.
-Thus a malformed legacy config fails deterministically before D.7b's reserved
+Thus a malformed legacy config fails deterministically before D.6's reserved
 `UnsupportedBackend`. Disabled transport still validates explicitly supplied
 shared fields, rejects every explicit legacy-only retry field with
 `ConfigFieldNotApplicable { target: OtlpConfigTarget::Disabled, .. }`, yields
@@ -238,9 +238,9 @@ InsecureTransportRejected { backend: ExporterBackend }
 TransportConstructionFailed { backend: ExporterBackend, source: Diagnostic }
 ```
 
-### D.7b-L stable failure inventory
+### D.6-L stable failure inventory
 
-This is the complete Phase D OTLP stable-error inventory. D.7b-L exclusively
+This is the complete Phase D OTLP stable-error inventory. D.6-L exclusively
 owns these variants, codes, owning types, mappings, and documentation; later
 sprints consume this table without adding or restating rows. Configuration
 rows are construction-only `ConfigFailure` variants. Every runtime/lifecycle
@@ -348,15 +348,11 @@ terminates first, dispatcher/task drop guards resolve waiters with a typed
 dropped/degraded. Accepted ADR-018 activates and verifies the conditional
 OTLP-021 contract; the sprint also updates the 1.x-to-2.0 migration guide.
 
-## Mandatory two-stage implementation
+## Implementation order
 
-D.7b is one sprint but must be reviewed as two sequential implementation PRs.
-**D.7b-L** first lands the backend-neutral lifecycle core, state machine,
-barriers, deadlines, health/accounting, error inventory, matrix validation,
-and traits with fake exporters only. **D.7b-S** must follow it and adds the
-official SDK adapter and Tokio fixture. D.7c consumes D.7b-L; it must not build
-a second dispatcher or lifecycle state machine. Neither sub-PR may be folded
-into an unreviewable single change.
+Land the backend-neutral lifecycle core before wiring the official SDK adapter
+and Tokio fixture. D.7 consumes that shared core and must not build a second
+dispatcher or lifecycle state machine.
 
 ## Deliverables
 
@@ -366,11 +362,11 @@ into an unreviewable single change.
    Update `validate_repo_boundaries.sh`, `validate_dependency_bans.sh`, and
    architecture §6; automated no-exporter/SDK-only graph fixtures enforce the
    exact allowlist.
-2. Implement D.7b-L's one shared lifecycle core and factory, then D.7b-S's
-   common `ExporterSet`, official SDK signal adapters and outcome sink. Convert D.7a
+2. Implement D.6-L's one shared lifecycle core and factory, then D.6-S's
+   common `ExporterSet`, official SDK signal adapters and outcome sink. Convert D.5
    neutral signals without losing resource/scope metadata, kind, flags, links,
    events, status, or histogram content.
-   D.7b-L owns `PositiveDuration`, `LifecycleBounds`, `RetryPolicy`,
+   D.6-L owns `PositiveDuration`, `LifecycleBounds`, `RetryPolicy`,
    `BoundedPercent`, `BackendTransportBounds`, `ValidatedTransportBounds`,
    `OtlpConfigField`, `OtlpConfigTarget`, `ValueOrigin`, `ResolvedField`, the
    sole backend-aware validation constructor, and the complete stable-error
@@ -386,7 +382,7 @@ into an unreviewable single change.
    `last_terminal_failure`, per-signal overflow counts, and
    `retry_attempt_failures` without credentials. Transient attempts never overwrite the terminal
    field; the next successful export while `Open` clears it and records
-   recovery, while `Closing`/`Shutdown` retains it. D.7c uses the same model.
+   recovery, while `Closing`/`Shutdown` retains it. D.7 uses the same model.
 5. Add an in-repository Tokio-hosted public consumer and loopback collector
    fixture covering all signals, redaction, bounded channel pressure, timeout,
    late failure, flush barriers, concurrent admission, shutdown, cancellation,
@@ -394,11 +390,11 @@ into an unreviewable single change.
    Its fixture crate is `publish = false` and excluded from publish rosters.
 6. Record the lifecycle ADR, OTLP-020/021 revisions, API approval, rustdoc, and
    migration from synchronous 1.x lifecycle to the backend-neutral async 2.0
-   completion API. D.7b-L owns those config/error/lifecycle documents and their
-   shared validation fixtures; D.7c may only verify them by reference.
-   The technical lead must accept ADR-018 before D.7b-L production code.
+   completion API. D.6-L owns those config/error/lifecycle documents and their
+   shared validation fixtures; D.7 may only verify them by reference.
+   The technical lead must accept ADR-018 before D.6-L production code.
 
-## D.7b-L validation fixtures
+## D.6-L validation fixtures
 
 - Resolve every field through the one constructor and assert its value and
   `ValueOrigin`; cover each field absent and explicitly supplied.
@@ -446,7 +442,7 @@ into an unreviewable single change.
   to no-op; disabled config makes no request; credentials never enter errors.
 - Construction fixtures cover unsupported insecure verification, unreadable CA,
   invalid auth-header construction, SDK/provider builder failure, and legacy
-  worker/client initialization; each yields the exact D.7b-L construction-only
+  worker/client initialization; each yields the exact D.6-L construction-only
   variant with a redacted typed source.
 - Capacity-one/full/closed queue tests account each record exactly once; finite
   deadlines, worker/provider death, construction outside Tokio, all valid and
@@ -468,5 +464,5 @@ into an unreviewable single change.
 
 ## Non-closure
 
-`LegacyHttpJson` is not operational until D.7c. No downstream `atm-core` work,
+`LegacyHttpJson` is not operational until D.7. No downstream `atm-core` work,
 Python binding, dashboard restoration, or publication.

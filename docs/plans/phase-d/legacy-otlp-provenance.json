@@ -1,45 +1,20 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "source_repository": "https://github.com/randlee/agent-team-mail",
   "source_commit": "7b39f4e7f72b6845edec4eab4cd671611661445f",
-  "destination_hash_policy": {
-    "planned": "destination_sha256 must be null; implementation must replace it with the final file hash before sprint closure, including every destination_children entry",
-    "transplanted": "closed state for transplant-and-adapt: destination_sha256 is required and must equal the final destination bytes",
-    "translated": "closed state for translate-current-schema: destination_sha256 is required and must equal the final destination bytes",
-    "reference-and-disposition-only": "destination_sha256 remains null; validate that the disposition document cites source commit, blob, sha256, and disposition",
-    "dependency-reference-only": "destination_sha256 remains null; validate the dependency/version/features disposition rather than byte equality"
-  },
-  "planned_status_transitions": {
-    "transplant-and-adapt": "transplanted",
-    "translate-current-schema": "translated"
-  },
+  "validation": "For transplant-and-adapt entries, compare the destination with this pinned source blob and permit only the D.7 source-to-destination matrix's named deltas. Translation and reference entries require only their stated disposition.",
   "entries": [
-    {
-      "source": "crates/sc-observability-otlp/src/lib.rs",
-      "git_blob": "447b93b138cb18dabe53a432262349dc8035754b",
-      "sha256": "f1292b48d2f8d2d8c9a7b77edebbbd03c9aae28e490ed35eb6a88f772d81a6ad",
-      "destination": "crates/sc-observability-otlp/src/legacy_http_json/mod.rs",
-      "destination_scope": "parent module for the split transplant",
-      "destination_children": [
-        {"destination":"crates/sc-observability-otlp/src/legacy_http_json/worker.rs","destination_status":"planned","destination_sha256":null},
-        {"destination":"crates/sc-observability-otlp/src/legacy_http_json/request.rs","destination_status":"planned","destination_sha256":null},
-        {"destination":"crates/sc-observability-otlp/src/legacy_http_json/retry.rs","destination_status":"planned","destination_sha256":null},
-        {"destination":"crates/sc-observability-otlp/src/legacy_http_json/payload.rs","destination_status":"planned","destination_sha256":null}
-      ],
-      "destination_status": "planned",
-      "destination_sha256": null,
-      "disposition": "transplant-and-adapt"
-    },
-    {"source":"crates/sc-observability-otlp/Cargo.toml","git_blob":"0383c6d2c4648813b3944fcf46e222be712ee18b","sha256":"e775439f49696d26b03576c851105b3ec8a976b394d61c477dd59e08745ee6fe","destination":"crates/sc-observability-otlp/Cargo.toml","destination_status":"dependency-reference-only","destination_sha256":null,"disposition":"dependency-reference-only"},
-    {"source":"crates/sc-observability-otlp/tests/timestamp_export_integration.rs","git_blob":"331accac42e9c9bd536e2df78502d44e141aa435","sha256":"959edf7c0ff72a18d5702edb3a105df6936aab52af25d2fe065f478544125221","destination":"crates/sc-observability-otlp/tests/legacy_http_json.rs","destination_status":"planned","destination_sha256":null,"disposition":"transplant-and-adapt"},
-    {"source":"docs/observability/grafana-dashboards.md","git_blob":"a9dc4a2eafe42d5d944471ffb5eaf00930cd3eb1","sha256":"5af138a71c6584dc401474498b8c549ebbce07dcbb22de9708504b99eec4541b","destination":"docs/observability/otlp/grafana-dashboards.md","destination_status":"planned","destination_sha256":null,"disposition":"translate-current-schema"},
-    {"source":"docs/observability/grafana-rollout-smoke.md","git_blob":"89d9bd819a374549801dde8b1f6859e5b1babc69","sha256":"9b1f6d42f426d1a9162104960c29c6da471994e97b948b26fb693d8c224bd586","destination":"docs/observability/otlp/grafana-rollout-smoke.md","destination_status":"planned","destination_sha256":null,"disposition":"translate-current-schema"},
-    {"source":"docs/observability/smoke-test-plan-phase-aw.md","git_blob":"9b284670444143b3b57ecac5fd526ce4c9f5e426","sha256":"16c12b0a375cb78fc1db9c69dcb8ab2407c8e8e5af09436f9bf2921d98f35b3c","destination":"docs/observability/otlp/smoke-test.md","destination_status":"planned","destination_sha256":null,"disposition":"translate-current-schema"},
-    {"source":"docs/phase-av-otel-planning.md","git_blob":"d7539261117f4d7ff4b757b1fa75186471bc19da","sha256":"cbc3a0558d3a23026a560dc2e7ff0419bbf2139476df412fa0f8cc82fd7d2b68","destination":"docs/observability/otlp/legacy-dispositions.md","destination_status":"reference-and-disposition-only","destination_sha256":null,"disposition":"reference-and-disposition-only"},
-    {"source":"docs/phase-aw-traces-metrics-planning.md","git_blob":"fbb495ef8615953a37f3d11a4611539452904621","sha256":"05cca7bb18ddb926d3d2f1f9a8a701f23d43218e0bf09c3c870c32c9fc48d3a4","destination":"docs/observability/otlp/legacy-dispositions.md","destination_status":"reference-and-disposition-only","destination_sha256":null,"disposition":"reference-and-disposition-only"},
-    {"source":"docs/phase-ax-planning.md","git_blob":"e6739c3231b0d2914878b133236a79a6cc01ffc9","sha256":"7aa0a7007f4cc95cc6b3b3beaf07c47fb9ad83b37323b09aa39cf800614e2eed","destination":"docs/observability/otlp/legacy-dispositions.md","destination_status":"reference-and-disposition-only","destination_sha256":null,"disposition":"reference-and-disposition-only"},
-    {"source":"docs/phase-ay-grafana-dogfood-readiness.md","git_blob":"5be117c599d02868aaa0786d93861e608e4974eb","sha256":"2f3fb9fc674bf7727aab8c0d7c5a3ef123eb1606a20127d1ecfffc89dc3fcae8","destination":"docs/observability/otlp/legacy-dispositions.md","destination_status":"reference-and-disposition-only","destination_sha256":null,"disposition":"reference-and-disposition-only"},
-    {"source":"scripts/grafana-verify-smoke.py","git_blob":"497bb87b5bc481e4c7316ce22a203d8741b00b62","sha256":"68aa9e0a61b316219d64cefcab58c13364b5b0be9dfd642251d9d07be8046f6c","destination":"scripts/ci/verify_otlp_grafana_smoke.py","destination_status":"planned","destination_sha256":null,"disposition":"transplant-and-adapt"},
-    {"source":"scripts/otel-dev-install-smoke.py","git_blob":"6524662aa9d37f21451759accef52c2cfea51c78","sha256":"f38a13677e11a5eaafef711e16d28e125810094a8b813f2af3c29954a883f58d","destination":"scripts/ci/otlp_dev_install_smoke.py","destination_status":"planned","destination_sha256":null,"disposition":"transplant-and-adapt"}
+    {"source":"crates/sc-observability-otlp/src/lib.rs","git_blob":"447b93b138cb18dabe53a432262349dc8035754b","sha256":"f1292b48d2f8d2d8c9a7b77edebbbd03c9aae28e490ed35eb6a88f772d81a6ad","destination":"crates/sc-observability-otlp/src/legacy_http_json/","disposition":"transplant-and-adapt"},
+    {"source":"crates/sc-observability-otlp/Cargo.toml","git_blob":"0383c6d2c4648813b3944fcf46e222be712ee18b","sha256":"e775439f49696d26b03576c851105b3ec8a976b394d61c477dd59e08745ee6fe","destination":"crates/sc-observability-otlp/Cargo.toml","disposition":"dependency-reference-only"},
+    {"source":"crates/sc-observability-otlp/tests/timestamp_export_integration.rs","git_blob":"331accac42e9c9bd536e2df78502d44e141aa435","sha256":"959edf7c0ff72a18d5702edb3a105df6936aab52af25d2fe065f478544125221","destination":"crates/sc-observability-otlp/tests/legacy_http_json.rs","disposition":"transplant-and-adapt"},
+    {"source":"docs/observability/grafana-dashboards.md","git_blob":"a9dc4a2eafe42d5d944471ffb5eaf00930cd3eb1","sha256":"5af138a71c6584dc401474498b8c549ebbce07dcbb22de9708504b99eec4541b","destination":"docs/observability/otlp/grafana-dashboards.md","disposition":"translate-current-schema"},
+    {"source":"docs/observability/grafana-rollout-smoke.md","git_blob":"89d9bd819a374549801dde8b1f6859e5b1babc69","sha256":"9b1f6d42f426d1a9162104960c29c6da471994e97b948b26fb693d8c224bd586","destination":"docs/observability/otlp/grafana-rollout-smoke.md","disposition":"translate-current-schema"},
+    {"source":"docs/observability/smoke-test-plan-phase-aw.md","git_blob":"9b284670444143b3b57ecac5fd526ce4c9f5e426","sha256":"16c12b0a375cb78fc1db9c69dcb8ab2407c8e8e5af09436f9bf2921d98f35b3c","destination":"docs/observability/otlp/smoke-test.md","disposition":"translate-current-schema"},
+    {"source":"docs/phase-av-otel-planning.md","git_blob":"d7539261117f4d7ff4b757b1fa75186471bc19da","sha256":"cbc3a0558d3a23026a560dc2e7ff0419bbf2139476df412fa0f8cc82fd7d2b68","destination":"docs/observability/otlp/legacy-dispositions.md","disposition":"reference-and-disposition-only"},
+    {"source":"docs/phase-aw-traces-metrics-planning.md","git_blob":"fbb495ef8615953a37f3d11a4611539452904621","sha256":"05cca7bb18ddb926d3d2f1f9a8a701f23d43218e0bf09c3c870c32c9fc48d3a4","destination":"docs/observability/otlp/legacy-dispositions.md","disposition":"reference-and-disposition-only"},
+    {"source":"docs/phase-ax-planning.md","git_blob":"e6739c3231b0d2914878b133236a79a6cc01ffc9","sha256":"7aa0a7007f4cc95cc6b3b3beaf07c47fb9ad83b37323b09aa39cf800614e2eed","destination":"docs/observability/otlp/legacy-dispositions.md","disposition":"reference-and-disposition-only"},
+    {"source":"docs/phase-ay-grafana-dogfood-readiness.md","git_blob":"5be117c599d02868aaa0786d93861e608e4974eb","sha256":"2f3fb9fc674bf7727aab8c0d7c5a3ef123eb1606a20127d1ecfffc89dc3fcae8","destination":"docs/observability/otlp/legacy-dispositions.md","disposition":"reference-and-disposition-only"},
+    {"source":"scripts/grafana-verify-smoke.py","git_blob":"497bb87b5bc481e4c7316ce22a203d8741b00b62","sha256":"68aa9e0a61b316219d64cefcab58c13364b5b0be9dfd642251d9d07be8046f6c","destination":"scripts/ci/verify_otlp_grafana_smoke.py","disposition":"transplant-and-adapt"},
+    {"source":"scripts/otel-dev-install-smoke.py","git_blob":"6524662aa9d37f21451759accef52c2cfea51c78","sha256":"f38a13677e11a5eaafef711e16d28e125810094a8b813f2af3c29954a883f58d","destination":"scripts/ci/otlp_dev_install_smoke.py","disposition":"transplant-and-adapt"}
   ]
 }

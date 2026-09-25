@@ -1,21 +1,21 @@
 ---
-id: D.5
-status: complete
-branch: feature/phase-d-5-windows-arm64-wheel
+id: D.9
+status: planned
+branch: feature/phase-d-9-windows-arm64-wheel
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-5-windows-arm64-wheel
-depends_on: [D.7d]
-relation: must_follow
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-9-windows-arm64-wheel
+depends_on: []
+relation: root
+assignee: cobs
+model_class: terra
 owned_docs: [docs/python-distribution.md, release/python-platform-policy.json]
 ---
 
-# D.5 — Windows ARM64 Python wheel support
+# D.9 — Windows ARM64 Python wheel support
 
 ## Goal and dependency
 
-D.5 `must_follow`s D.7d (and therefore transitively follows the D.4 2.0
-version baseline). Merge-forward the final pushed D.7d source/version baseline
-before implementation and every fix round. Extend that qualified Python
+D.9 is independent of the logging and OTLP stacks. Extend the qualified Python
 distribution platform matrix from five to six wheels by adding native Windows
 ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
 `win_arm64`.
@@ -23,7 +23,7 @@ ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
 ## Deliverables
 
 1. Preflight GitHub-hosted Windows ARM64 and native CPython ARM64 availability
-   for every supported 3.10–3.14 interpreter. If any cell is unavailable, D.5
+   for every supported 3.10–3.14 interpreter. If any cell is unavailable, D.9
    remains open; x64 emulation or a cross-build is not native evidence. Then
    add a `windows-arm64` policy row with an ARM64 Windows runner,
    `machine: ARM64`, `wheel_platform: win_arm64`, and explicit target-triple
@@ -46,7 +46,7 @@ ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
 
 - An immutable-source CI run has one successful native wheel build and five
   successful installed-suite cells for `windows-arm64`; all six wheel builds
-  and 30 cells pass aggregate validation from the final D.7d source/version
+  and 30 cells pass aggregate validation from one immutable source/version
   baseline.
 - The ARM64 wheel installs in an isolated ARM64 Windows environment and passes
   the same public suite, typing, embedding, negative/offline, and private

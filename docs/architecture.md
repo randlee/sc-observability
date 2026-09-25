@@ -1136,7 +1136,7 @@ ADR navigation index (status is recorded in each decision below):
 
 ### ADR-018: Dual OTLP Backends And Shared Lifecycle
 
-- **Status**: Proposed; technical-lead acceptance is a hard D.7b precondition.
+- **Status**: Proposed; technical-lead acceptance is a hard D.6 precondition.
 - **Context**: Tokio-hosted consumers need the official SDK while synchronous
   and Python-hosted consumers need the previously tested blocking HTTP/JSON
   path without owning a Tokio runtime.
@@ -1149,8 +1149,8 @@ ADR navigation index (status is recorded in each decision below):
   immutable Phase D provenance manifest and OTLP-023/024.
 - **Acceptance gate**: The technical lead accepts the backend/protocol/runtime
   matrix, async 2.0 lifecycle, queue/deadline behavior, and source provenance
-  before D.7b-L lands production code.
-- **Contracts**: OTLP-001–024; Phase D D.7a–D.7d.
+  before D.6-L lands production code.
+- **Contracts**: OTLP-001–024; Phase D D.5–D.8.
 
 ## 8. API-Design Consistency
 

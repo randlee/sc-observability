@@ -1,24 +1,25 @@
 ---
-id: D.7a
-status: complete
-branch: feature/phase-d-7a-otlp-signal-model
+id: D.5
+status: planned
+branch: feature/phase-d-5-otlp-signal-model
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7a-otlp-signal-model
-depends_on: [D.4]
-relation: must_follow
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-5-otlp-signal-model
+depends_on: []
+relation: root
+assignee: aobs
+model_class: astra
 owned_docs: [docs/requirements.md, docs/architecture.md, docs/api-design.md]
 release_train: '2.0'
-recommended_agent: rust-developer
-recommended_model: deep-reasoning
 ---
 
-# D.7a — OTLP 2.0 signal model
+# D.5 — OTLP 2.0 signal model
 
 ## Goal and dependency
 
 Define the spec-correct neutral signal model that both real exporters consume.
-D.7a `must_follow`s D.4 because these public model changes ship only in the
-accepted 2.0 train. D.7b and D.7c may not invent transport-local substitutes.
+It starts independently; if D.4 changes a consumed error type, D.5 rebases on
+that change before integration. D.6 and D.7 may not invent transport-local
+substitutes.
 
 ## Public contract
 
@@ -89,8 +90,8 @@ never embeds `TraceContext`, eliminating two sources of truth.
    Preserve aggregation temporality and data-point start time for sums and
    histograms; reject inconsistent interval/time combinations.
 4. Record the breaking 1.x-to-2.0 source/serde migration, public API approval,
-   requirements changes, and exhaustive inventory of construction/match sites.
-5. Inventory and migrate every consumer in `sc-observability-types`,
+   and requirements changes.
+5. Migrate consumers in `sc-observability-types`,
    `sc-observability-dto` (`TraceContextDto` included), `sc-observe`,
    `sc-observability`, `sc-observability-otlp`, binding runtime, generated
    Python/TypeScript models, examples, and public fixtures.
@@ -112,10 +113,8 @@ never embeds `TraceContext`, eliminating two sources of truth.
 
 - Focused type serde/negative tests and span-assembly/projector tests.
 - `cargo test -p sc-observability-types -p sc-observability-dto -p sc-observe -p sc-observability-binding-runtime -p sc-observability-otlp --locked`.
-- Workspace clippy/rustdoc and the D.4 controlled 1.4.1-to-2.0 public API
+- Workspace clippy/rustdoc and the reviewed 1.4.1-to-2.0 public API
   comparison/rebaseline mechanism.
-- An inventory gate proves every old `MetricRecord.value` construction and
-  match has a recorded migration disposition.
 
 ## Non-closure
 

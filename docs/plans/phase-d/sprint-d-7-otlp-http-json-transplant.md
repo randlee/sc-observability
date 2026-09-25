@@ -1,24 +1,24 @@
 ---
-id: D.7c
-status: complete
-branch: feature/phase-d-7c-otlp-http-json-transplant
+id: D.7
+status: planned
+branch: feature/phase-d-7-otlp-http-json-transplant
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7c-otlp-http-json-transplant
-depends_on: [D.7b]
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-7-otlp-http-json-transplant
+depends_on: [D.6]
 relation: must_follow
+assignee: aobs
+model_class: astra
 owned_docs: [docs/architecture.md, docs/plans/phase-d/legacy-otlp-provenance.json]
 release_train: '2.0'
-recommended_agent: rust-developer
-recommended_model: deep-reasoning
 ---
 
-# D.7c — Legacy HTTP/JSON source transplant
+# D.7 — Legacy HTTP/JSON source transplant
 
 ## Goal and dependency
 
 Make `ExporterBackend::LegacyHttpJson` operational by transplanting—not
 rewriting—the tested synchronous exporter and its tests from
-`agent-team-mail`. D.7c `must_follow`s D.7b because both touch the same config,
+`agent-team-mail`. D.7 `must_follow`s D.6 because both touch the same config,
 crate dependencies, facade, and exporter ownership boundary.
 
 `sc-observability-py` is the concrete in-repository motivating consumer: a
@@ -44,14 +44,14 @@ and exits. No caller directly creates or drops a reqwest blocking client.
 
 Construction synchronously waits for worker/client initialization and is
 supported only from a plain thread. If a Tokio runtime is entered, construction
-returns the D.7b-L transport-construction failure whose redacted diagnostic
+returns the D.6-L transport-construction failure whose redacted diagnostic
 source is its blocking-backend-in-async-context outcome, before spawning the
 worker or calling reqwest. Synchronous flush/shutdown instead return that
-D.7b-L runtime outcome directly after preflighting the calling context and
+D.6-L runtime outcome directly after preflighting the calling context and
 before removing buffered records or sending commands. The nonblocking
 signal-admission methods and async lifecycle may be used from either context
 because all blocking transport work stays on the owned worker. Tokio-first
-hosts should normally select D.7b.
+hosts should normally select D.6.
 
 Authoritative source evidence is commit
 `7b39f4e7f72b6845edec4eab4cd671611661445f`, path
@@ -93,7 +93,7 @@ are authorized deltas—not claims about the legacy implementation:
 | Legacy behavior | Authorized transplant delta | Required matrix disposition |
 | --- | --- | --- |
 | retry every non-success status | retry connection errors, 408, 429, and 5xx; terminate other 4xx | `changed: retry classification` |
-| capped exponential delay only | honor bounded `Retry-After`; otherwise add per-instance-seeded bounded jitter (deterministic under an injected test seed), consuming D.7b-L's independently capped server/fallback paths | `changed: server pacing/jitter and independent caps` |
+| capped exponential delay only | honor bounded `Retry-After`; otherwise add per-instance-seeded bounded jitter (deterministic under an injected test seed), consuming D.6-L's independently capped server/fallback paths | `changed: server pacing/jitter and independent caps` |
 | `thread::sleep` cannot be interrupted | use worker-owned cancelable wait woken by shutdown | `changed: shutdown cancellation` |
 | per-request timeout but no overall bound | add finite sequence deadline covering attempts and waits | `changed: retry deadline` |
 
@@ -103,10 +103,10 @@ algorithm. It explicitly carves out only the four safety deltas above. The
 source-to-destination matrix must name each delta and preserve copied tests
 alongside new delta-specific fixtures.
 
-D.7c consumes the validated legacy payload defined by D.7b-L. D.7b-L is
+D.7 consumes the validated legacy payload defined by D.6-L. D.6-L is
 authoritative for every raw field, default, applicability rule, checked type,
 ordering rule, config error, origin metadata, and shared validation fixture;
-D.7c does not redefine them.
+D.7 does not redefine them.
 
 Delta-seconds and HTTP-date `Retry-After` values are parsed at most up to 128
 header bytes; raw values are never retained. Invalid values produce only the
@@ -130,7 +130,7 @@ Pin `httpdate = "=1.0.3"` for RFC 7231 HTTP-date `Retry-After` parsing, record
 its license/dependency disposition, and keep it inside the legacy-only feature.
 
 Each transplanted exporter implements the same crate-private `LogExporter`,
-`TraceExporter`, or `MetricExporter` trait used by D.7b, and its backend state
+`TraceExporter`, or `MetricExporter` trait used by D.6, and its backend state
 implements the separate common `ExporterLifecycle`. Signal methods clone and
 enqueue owned batches; the worker executes the copied blocking request/retry
 code outside telemetry locks. `flush_blocking`/`shutdown_blocking` wait for the
@@ -138,40 +138,40 @@ ordered barrier's real terminal result on plain callers; async lifecycle awaits
 the same result. Backend choice remains construction/injection; no legacy
 branch is added to `Telemetry::emit_*`, flush, or shutdown.
 
-Legacy commands use the D.7b-L lifecycle core and one bounded `sync_channel`;
+Legacy commands use the D.6-L lifecycle core and one bounded `sync_channel`;
 there is no second lifecycle state machine. Signal admission uses `try_send`:
 full/closed fails open, records exactly one per-signal drop and health change,
 and never waits. Barriers have a reserved control path so saturated data cannot
 starve them; async waiters use a Tokio `oneshot` completed by the plain worker,
 never a blocking receive on an executor. Worker/client initialization failure
-returns D.7b-L's transport-construction failure before the handle is published.
+returns D.6-L's transport-construction failure before the handle is published.
 After successful initialization, panic, unexpected exit, or sender closure
 stores its worker-termination outcome, resolves every pending barrier, accounts
 abandoned admissions once, and never hangs.
 
-Legacy uses the authoritative D.7b-L health/accounting contract without adding
-fields or transitions. The legacy worker consumes D.7b-L's shared fixtures
+Legacy uses the authoritative D.6-L health/accounting contract without adding
+fields or transitions. The legacy worker consumes D.6-L's shared fixtures
 unchanged, including redaction coverage.
 
 Each request/retry sequence has a finite overall deadline. Shutdown enters
 `Closing`, cancels retry backoff, and drains only work before its barrier.
 Connection errors, 408, 429, and 5xx are retryable; other 4xx are terminal.
 For every retry, choose exactly one delay path and apply either the validated
-D.7b-L fallback cap or its independent server-delay cap, then the remaining
-sequence budget. D.7c consumes the cap semantics and ordering frozen by the
-D.7b-L matrix/fixtures without redefining them. If no positive budget remains,
-return the D.7b-L retry-deadline outcome without sleeping or issuing a
+D.6-L fallback cap or its independent server-delay cap, then the remaining
+sequence budget. D.7 consumes the cap semantics and ordering frozen by the
+D.6-L matrix/fixtures without redefining them. If no positive budget remains,
+return the D.6-L retry-deadline outcome without sleeping or issuing a
 zero-budget attempt. No request, backoff, barrier, join, or client drop is
 unbounded.
 
-Shutdown cancellation of a pre-barrier retry sequence returns the D.7b-L
+Shutdown cancellation of a pre-barrier retry sequence returns the D.6-L
 shutdown-cancelled-retry outcome: account that admitted batch as dropped
-exactly once, apply D.7b-L terminal-health accounting, and return the failure from the
+exactly once, apply D.6-L terminal-health accounting, and return the failure from the
 first/in-flight shutdown completion. Cancelable backoff wakes immediately. A
 currently blocking reqwest call cannot be interrupted, but its remaining wait
-is bounded by the D.7b-L request and sequence budgets; public shutdown is
-bounded by the D.7b-L lifecycle budget or returns its lifecycle-timeout
-outcome. All timing bounds arrive already validated; D.7c performs no second
+is bounded by the D.6-L request and sequence budgets; public shutdown is
+bounded by the D.6-L lifecycle budget or returns its lifecycle-timeout
+outcome. All timing bounds arrive already validated; D.7 performs no second
 validation.
 
 Delivery is **at least once across retries**: a collector may accept an
@@ -180,14 +180,14 @@ observed twice. The exporter supplies no idempotency key and does not promise
 deduplication. Attempts are recorded separately, while an admitted batch is
 counted as dropped exactly once only if the sequence exhausts/terminates; a
 successful retry is not a drop. Transient, terminal, and recovery accounting
-follow the D.7b-L health contract without additional D.7c fields or
+follow the D.6-L health contract without additional D.7 fields or
 transitions.
 
 ## Failure contract
 
-D.7c uses the complete D.7b-L stable-failure table. Runtime paths return its
+D.7 uses the complete D.6-L stable-failure table. Runtime paths return its
 named outcomes through the owning types and façade mappings defined there;
-D.7c owns no error variant, stable code, mapping, or error documentation.
+D.7 owns no error variant, stable code, mapping, or error documentation.
 
 ## Deliverables
 
@@ -198,25 +198,19 @@ D.7c owns no error variant, stable code, mapping, or error documentation.
    incompatibility rationale. The worker is an ownership/context adapter around
    copied transport code; no HTTP/client configuration/retry redesign beyond
    the four enumerated safety deltas is permitted.
-   Extend `scripts/ci/validate_log_import.py` to validate the Phase D manifest,
-   Git blob ids and disposition-aware destination evidence. Planned import
-   hashes are null until files land and become mandatory before closure;
-   the parent module and each split child file have independent hashes;
-   reference/dependency-only rows keep null hashes and validate their cited
-   disposition rather than byte identity. Enforce
-   `planned_status_transitions`; closure fails if any transplant/translation
-   parent or child remains `planned`, lacks its closed literal status, or has a
-   null/mismatched hash. Reject scratch/`/tmp` paths, ATM
-   imports/labels, or the stale repository name in imported outputs.
-3. Adapt inputs to current `TelemetryConfig`, D.7a signal types, diagnostic
-   errors, D.7b backend selector, and common crate-private exporter traits while
+   Extend `scripts/ci/validate_log_import.py` to verify the manifest's pinned
+   commit/blob/SHA and compare each transplant destination with its source blob.
+   Permit only the named matrix deltas; this prevents a rewrite being presented
+   as a transplant. Translation/reference rows validate only their disposition.
+3. Adapt inputs to current `TelemetryConfig`, D.5 signal types, diagnostic
+   errors, D.6 backend selector, and common crate-private exporter traits while
    preserving the original HTTP/JSON behavior and current
    health/dropped-count facade contract.
 4. Implement bounded command admission, ordered barrier completion, and the
    exact construction/use/drop contract above. The worker alone constructs,
    calls, and drops reqwest outside telemetry locks. Context preflight occurs
    before mutation; credentials remain redacted.
-   Reuse D.7b-L's state/deadline/accounting core and implement the reserved
+   Reuse D.6-L's state/deadline/accounting core and implement the reserved
    control path, retry cancellation, worker-panic propagation, and oneshot
    async barrier described above.
 5. Add public external-consumer-style construction/flush/shutdown proof with
@@ -227,9 +221,9 @@ D.7c owns no error variant, stable code, mapping, or error documentation.
    `payload` modules plus tests; enforce the repository line-count check.
    Update both dependency-boundary scripts and architecture §6 with the exact
    legacy allowlist and automated graph assertions.
-8. Verify that D.7b-L-owned requirements, API design, rustdoc, and migration
+8. Verify that D.6-L-owned requirements, API design, rustdoc, and migration
    guide cover the implemented legacy behavior and report any correction to
-   D.7b-L. D.7c owns only legacy runtime/provenance and architecture-boundary
+   D.6-L. D.7 owns only legacy runtime/provenance and architecture-boundary
    documentation; it does not edit or restate config/error contracts.
 
 ## Acceptance criteria
@@ -237,13 +231,13 @@ D.7c owns no error variant, stable code, mapping, or error documentation.
 - Every relevant legacy implementation symbol and test has a disposition; all
   copied tests execute in this repository against the transplanted code.
 - Captured requests preserve exact signal endpoints, content type, auth, CA,
-  timeout, and retry behavior while carrying D.7a's current neutral fields.
+  timeout, and retry behavior while carrying D.5's current neutral fields.
 - The synchronous backend works from a plain thread without a caller-owned
   Tokio runtime and never silently falls back to no-op when enabled.
 - Plain-thread construction plus sync flush/shutdown return real results.
   Construction and synchronous lifecycle from current-thread/multi-thread
   Tokio reject before worker creation, buffer drain, or command admission.
-  The construction fixture asserts the D.7b-L wrapped construction form and
+  The construction fixture asserts the D.6-L wrapped construction form and
   redacted blocking-context diagnostic source; lifecycle fixtures assert its
   direct runtime-failure form.
 - Async lifecycle from Tokio remains responsive while the plain worker performs
@@ -256,7 +250,7 @@ D.7c owns no error variant, stable code, mapping, or error documentation.
   incompatibility; structural rewrite or alternate HTTP/retry logic beyond the
   four authorized safety deltas fails QA.
 - Failures remain fail-open at the facade and update health/dropped counts.
-- Legacy health satisfies the complete D.7b-L health/accounting contract
+- Legacy health satisfies the complete D.6-L health/accounting contract
   equivalently to SDK, without adding or restating fields.
 - Capacity-one saturation cannot block or starve flush/shutdown; injected
   worker panic/exit resolves every sync/async waiter within the deadline.
@@ -265,16 +259,16 @@ D.7c owns no error variant, stable code, mapping, or error documentation.
 - Retry bound fixtures cover delta-seconds and HTTP-date, negative, malformed,
   past, and huge `Retry-After` values; distinct production instance seeds;
   deterministic injected seeds; and
-  positive jitter at the sequence deadline proving the D.7b-L fallback clamp
+  positive jitter at the sequence deadline proving the D.6-L fallback clamp
   and no zero-budget attempt. The shared cap-ordering fixture remains owned by
-  D.7b-L and is consumed unchanged.
-- Shutdown-during-backoff asserts the D.7b-L cancellation outcome, its exact
+  D.6-L and is consumed unchanged.
+- Shutdown-during-backoff asserts the D.6-L cancellation outcome, its exact
   accounting/facade mapping, and prompt wake.
 - Shutdown-during-request has three fixtures: a successful in-flight response
   completes with no drop; an ordinary terminal response fails/drops once with
-  its D.7b-L terminal outcome; a retryable response becomes the D.7b-L
+  its D.6-L terminal outcome; a retryable response becomes the D.6-L
   cancellation outcome and drops once. Every case is accounted exactly once
-  and finishes within the D.7b-L lifecycle contract.
+  and finishes within the D.6-L lifecycle contract.
 - A response-loss fixture proves at-least-once duplicate delivery, separate
   attempt accounting, one terminal drop after exhaustion, and zero drops after
   a retried-then-successful batch.
@@ -295,6 +289,6 @@ D.7c owns no error variant, stable code, mapping, or error documentation.
 
 ## Non-closure
 
-No SDK changes beyond consuming D.7b's selector, no rewrite, no dashboards,
+No SDK changes beyond consuming D.6's selector, no rewrite, no dashboards,
 no Python binding change (the binding is a motivating consumer only), and no
 publication.

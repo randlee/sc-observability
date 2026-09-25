@@ -1,11 +1,13 @@
 ---
 id: D.3
-status: complete
+status: planned
 branch: feature/phase-d-3-typed-sink-registration
 base: develop
 worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-3-typed-sink-registration
-depends_on: [D.1]
+depends_on: [D.2]
 relation: must_follow
+assignee: cobs
+model_class: terra
 owned_docs: [docs/api-design.md, docs/migrate-error-api.md]
 ---
 
@@ -13,7 +15,7 @@ owned_docs: [docs/api-design.md, docs/migrate-error-api.md]
 
 ## Goal and dependency
 
-After D.1, remove the 1.x consumer need to use deprecated `LogSinkError` or
+After D.2, remove the 1.x consumer need to use deprecated `LogSinkError` or
 manually call `typed::legacy_sink()` when registering a `TypedLogSink`.
 This additive surface is checked against published 1.4.1. It is a deliberate
 one-release bridge: D.4 removes the duplicate typed/legacy split in 2.0.
@@ -47,7 +49,5 @@ one-release bridge: D.4 removes the duplicate typed/legacy split in 2.0.
 
 ## Non-closure
 
-The retained `LogSink`/`LogSinkError` ABI is not removed here; D.4 owns the
-2.0 removal and migration. D.4's inventory must disposition
-`SinkRegistration::typed`, `register_typed_sink`, `TypedLogSink`, and
-`legacy_sink` together so only one canonical sink path remains.
+The retained `LogSink`/`LogSinkError` ABI is not removed here; the separate
+D.4 major-version migration owns any later removal.

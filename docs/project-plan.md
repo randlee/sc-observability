@@ -472,22 +472,20 @@ The detailed sprint-by-sprint execution record remains in
 
 The finalized Phase D plan is
 [`docs/plans/phase-d/plan-phase-d.md`](plans/phase-d/plan-phase-d.md). It is a
-single linear train:
+four parallel stacks:
 
-1. [D.2 startup settings](plans/phase-d/sprint-d-2-log-settings.md)
-2. [D.1 host logger bridge](plans/phase-d/sprint-d-1-host-logger-bridge.md)
-3. [D.3 typed sink registration](plans/phase-d/sprint-d-3-typed-sink-registration.md)
-4. [D.4 2.0 error enums](plans/phase-d/sprint-d-4-error-enums-2-0.md)
-5. [D.7a OTLP signal model](plans/phase-d/sprint-d-7a-otlp-signal-model.md)
-6. [D.7b official SDK/Tokio exporter](plans/phase-d/sprint-d-7b-otlp-sdk-tokio.md)
-7. [D.7c legacy HTTP/JSON transplant](plans/phase-d/sprint-d-7c-otlp-http-json-transplant.md)
-8. [D.7d dual-path conformance](plans/phase-d/sprint-d-7d-otlp-conformance.md)
-9. [D.5 Windows ARM64 wheel](plans/phase-d/sprint-d-5-windows-arm64-wheel.md)
-10. [D.6 open-ended Python metadata guard](plans/phase-d/sprint-d-6-python-open-ended-guard.md)
+1. [D.1 startup settings](plans/phase-d/sprint-d-1-log-settings.md) → [D.2 host logger bridge](plans/phase-d/sprint-d-2-host-logger-bridge.md) → [D.3 typed sink registration](plans/phase-d/sprint-d-3-typed-sink-registration.md)
+2. [D.4 2.0 error enums](plans/phase-d/sprint-d-4-error-enums-2-0.md)
+3. [D.5 OTLP signal model](plans/phase-d/sprint-d-5-otlp-signal-model.md) → [D.6 official SDK/Tokio exporter](plans/phase-d/sprint-d-6-otlp-sdk-tokio.md) → [D.7 legacy HTTP/JSON transplant](plans/phase-d/sprint-d-7-otlp-http-json-transplant.md) → [D.8 dual-path conformance](plans/phase-d/sprint-d-8-otlp-conformance.md)
+4. [D.9 Windows ARM64 wheel](plans/phase-d/sprint-d-9-windows-arm64-wheel.md) → [D.10 open-ended Python metadata guard](plans/phase-d/sprint-d-10-python-open-ended-guard.md)
 
-Every edge is `must_follow`; the predecessor is merge-forwarded before work
-and before each correction round. D.1–D.3 remain additive against the 1.4.1
-baseline. D.4 starts the accepted 2.0 train and D.7a–D.7d consume it. Planning
+The detailed plan names stack branches, worktrees, agents, and the final
+integration step. The initial three stacks start together; Python starts when
+the logging agent is free.
+
+Only concrete code-consumption edges are `must_follow`; release baseline
+alignment occurs in final integration. D.1–D.3 remain additive against the 1.4.1
+baseline. Planning
 or implementation does not authorize a release, tag, registry publication,
 or downstream `atm-core` change. Issue #88 (Python OTEL/structured logging)
 is expressly excluded.

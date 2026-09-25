@@ -1,19 +1,21 @@
 ---
-id: D.1
-status: complete
-branch: feature/phase-d-1-host-logger-bridge
+id: D.2
+status: planned
+branch: feature/phase-d-2-host-logger-bridge
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-1-host-logger-bridge
-depends_on: [D.2]
+worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-2-host-logger-bridge
+depends_on: [D.1]
 relation: must_follow
+assignee: cobs
+model_class: terra
 owned_docs: [docs/requirements.md, docs/api-design.md, docs/migrate-error-api.md]
 ---
 
-# D.1 — Host-owned logger bridge and event policy (#204)
+# D.2 — Host-owned logger bridge and event policy (#204)
 
 ## Goal and dependency
 
-After D.2 has merged, let `sc-observability-log` route `log` macros and
+After D.1 has merged, let `sc-observability-log` route `log` macros and
 `#[instrument]` records to an existing `Arc<sc_observability::Logger>` without
 creating another writer, file sink, shutdown owner, or level owner. This is
 additive 1.x API work; it does not change direct logger admission semantics or
