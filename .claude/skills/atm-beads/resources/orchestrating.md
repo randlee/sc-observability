@@ -14,7 +14,7 @@ one or two fast agents keep up with the important and minor ones.
    (it runs `bd doctor` and every check in [`planning.md`](planning.md)
    "Checks"), and the plan has passed plan review
    (`atm-bd-orchestration` "Plan Gate").
-2. `bd ready -l phase-<x>` lists exactly the dev beads with no prerequisites.
+2. `bd ready -l phase-<x> -n 0` lists exactly the dev beads with no prerequisites.
 3. `bd ready --explain` shows every other dev bead blocked by the
    quick-check beads of its prerequisites.
 4. The dispatched agent reads its assignment from the bead: `bd show <bead>`
@@ -150,25 +150,12 @@ follow.
 ## Lifecycle
 
 Each assignment is one ATM task and one bead, opened and closed together; the
-task id is the bead id. The templates and the full pairing are in the
-`atm-bd-orchestration` skill.
-
-| Step | Bead | ATM |
-| --- | --- | --- |
-| dispatch (lead) | assignee already set | `atm task assign <agent> --task-id <bead> --template <assignment> --vars <file>` |
-| ready check (assignee) | `bd ready -n 0 --json` lists the bead | |
-| start (assignee) | `bd update <bead> --claim` | then `atm task start <bead> "<one line>"` |
-| done (assignee) | `bd close <bead> --reason "<why>"` | with `atm task close <bead> completed --template <complete> --vars <file>` |
-| refused (assignee) | returned open with no assignee (`bd update <bead> --status open --assignee "" --append-notes`), or `blocked` with a `failed:` note for a dev bead | with `atm task close <bead> refused --template task-refused.md.j2 --vars <file>` |
-
-`bd update --claim` succeeds on a blocked bead, so the ready check comes first.
-A bead that is not ready is neither claimed nor started; the assignee reports
-the root cause (its open blockers) to lead. A push or progress report closes
-neither the task nor the bead.
+task id is the bead id. The pairing (ready check, claim, start, close,
+refusal) is defined once, in the `atm-bd-orchestration` skill ("Dispatch").
 
 ## Dispatch Loop
 
-1. `bd ready -l phase-<x>` lists the dev, quick-check, QA and finding beads
+1. `bd ready -l phase-<x> -n 0` lists the dev, quick-check, QA and finding beads
    whose blockers are closed, highest priority first.
 2. Assign each ready bead to its assignee with the matching assignment
    template, using the bead id as `task_id`.

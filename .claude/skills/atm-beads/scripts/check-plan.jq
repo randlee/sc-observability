@@ -7,6 +7,8 @@ def need($c; $msg): if $c then empty else $msg end;
 def blank: . == null or . == "" or . == [];
 def has_label($l): (.labels // []) | index($l) != null;
 def deps($t): [(.dependencies // [])[] | select(.type == $t) | .depends_on_id];
+# transitive closure of a set of ids over a {id: [prerequisite ids]} graph
+def closure($g): until((. as $s | [$s[] | ($g[.] // [])[]] + $s | unique) == .; . as $s | [$s[] | ($g[.] // [])[]] + $s | unique);
 
 . as $all
 | [ $all[] | select(.issue_type == "epic" or .issue_type == "feature") ] as $roots
@@ -16,6 +18,8 @@ def deps($t): [(.dependencies // [])[] | select(.type == $t) | .depends_on_id];
 | ($root.id // $ARGS.named.root // "") as $rid
 | ($root.metadata.phase // $ARGS.named.phase // "") as $p
 | ($root.metadata.integration_branch // "integrate/phase-\($p)") as $trunk
+| ([$qcs[] | {key: .id, value: (.metadata.dev_bead // "")}] | from_entries) as $qcdev
+| ([$devs[] | {key: .id, value: [deps("blocks")[] | select(endswith("-qc")) | ($qcdev[.] // rtrimstr("-qc"))]}] | from_entries) as $g
 | [
     need($roots | length <= 1; "plan has \($roots | length) roots; at most one"),
     need($devs | length > 0; "plan has no stage:dev beads"),
@@ -45,6 +49,9 @@ def deps($t): [(.dependencies // [])[] | select(.type == $t) | .depends_on_id];
         need([$qcs[] | select(deps("blocks") | index($s.id))] | length == 1; "\($id): needs exactly one quick-check bead blocked by it"),
         ( ($s | deps("blocks"))[] as $b
           | need(($b | endswith("-qc")) or ($b | startswith("\($rid)-plan-qa")); "\($id): blocked by \($b), which is not a quick-check bead (a dev bead waits on its prerequisites' quick-checks)") ),
+        ( ($s | deps("blocks"))[] | select(endswith("-qc")) as $b | select([$all[] | select(.id == $b)] | length == 1)
+          | need($qcdev[$b] != null; "\($id): blocked by \($b), which is in the plan but is not a quick-check bead") ),
+        need(($g[$s.id] | closure($g) | index($s.id)) == null; "\($id): dependency cycle (it waits, through quick-checks, on its own work)"),
         [ ($s | deps("blocks"))[] | select(endswith("-qc")) ] as $pre
         | ( if $m.relation == "must_follow" then need($pre | length > 0; "\($id): must_follow but blocked by no quick-check")
           elif $m.relation == "root" then need($pre | length == 0; "\($id): root but blocked by \($pre | join(", "))")
@@ -56,7 +63,9 @@ def deps($t): [(.dependencies // [])[] | select(.type == $t) | .depends_on_id];
               else empty end
           end ) ),
     ( $qcs[] as $q | "\($q.id)" as $id
-      | need(($q | deps("blocks")) | length == 1; "\($id): must be blocked by exactly one dev bead"),
+      | need($q.assignee | blank | not; "\($id): no assignee (the quick-check agent)"),
+        need(($q.metadata.dev_bead // "") == (($q | deps("blocks"))[0] // "-"); "\($id): metadata.dev_bead is not the dev bead that blocks it"),
+        need(($q | deps("blocks")) | length == 1; "\($id): must be blocked by exactly one dev bead"),
         need(($q | deps("blocks"))[0] as $d | [$devs[] | select(.id == $d)] | length == 1; "\($id): its dev bead is not in this plan") ),
     ( $devs | group_by([.metadata.stack, .metadata.layer])[] | select(length > 1)
       | "stack \(.[0].metadata.stack) layer \(.[0].metadata.layer) claimed by \(map(.id) | join(", "))" )

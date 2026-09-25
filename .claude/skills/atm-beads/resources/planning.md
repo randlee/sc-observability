@@ -48,8 +48,9 @@ rather than reaching an agent:
    Add `--root <id> --phase <x>` when the root already exists. Exit 5 lists
    every problem. Fix them all and render again.
 4. `bd import --dry-run -i <scratch>/plan.jsonl`, then `bd import -i
-   <scratch>/plan.jsonl`. Then run `validate-plan --root <root>` on the
-   imported beads and `bd sync`.
+   <scratch>/plan.jsonl`. Right away, create the plan-review bead
+   (`atm-bd-orchestration` "Plan Gate", step 2). Then run
+   `validate-plan --root <root>` on the imported beads, and `bd sync`.
 
 The plan then goes to plan review (`atm-bd-orchestration` "Plan Gate").
 Nothing is dispatched until it passes.
@@ -104,9 +105,22 @@ Optional: `model_class` (`astra`, `terra`, `luna`), `release_train`,
 before coding, QA checks the change against each one, and plan review
 rejects a list that is missing, names an id that does not exist or does not
 govern the work, or leaves out one the work touches. `NONE` is a claim the
-author makes, and plan review checks it like any other. An id the sprint
-itself adds is allowed only when the sprint owns that document
-(`owned_paths`).
+author makes, and plan review checks it like any other.
+
+### New Ids
+
+This is the one exception to "the id must exist", and every other file
+links here. A sprint may list a requirement or ADR id that its governing
+document does not have yet only when both of these hold:
+
+1. the document is in the sprint's `owned_paths`;
+2. a deliverable in the bead's description names the id and says the sprint
+   adds it.
+
+`validate-plan` checks the first and reports the id as a warning. Plan
+review checks the second; if it fails, the id is unknown and blocking. QA
+checks that the definition landed in the document at the reviewed commit;
+if it did not, that is a blocking finding.
 
 Branch and id naming follows the repository's "Plan Naming" in
 `.claude/project/quality-policy.md` and the shared rules in the guidelines'
@@ -132,7 +146,7 @@ after its work passes the quick-check. See [`quick-check.md`](quick-check.md).
 The stack table is a query, not a document:
 
 ```bash
-bd list -l phase-d,stage:dev --json | jq -r '.[] | [.metadata.stack, .metadata.layer, .metadata.sprint, .metadata.branch, .metadata.pr_target, .assignee] | @tsv' | sort
+bd list -l phase-d,stage:dev -n 0 --json | jq -r '.[] | [.metadata.stack, .metadata.layer, .metadata.sprint, .metadata.branch, .metadata.pr_target, .assignee] | @tsv' | sort
 ```
 
 ## Checks

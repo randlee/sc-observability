@@ -1,7 +1,14 @@
 ---
 name: atm-beads
-version: 0.1.0
-description: Write the phase plan as beads (one root, a dev bead and a quick-check bead per sprint), validate it, import a markdown plan, and run each ATM task and its bead as one lifecycle.
+version: 0.2.0
+description: Plans written as beads. Use when writing, validating or importing a phase plan into beads, or when pairing an ATM task with its bead (claim, start, close).
+requires:
+  cli:
+    - name: bd
+      minimum_version: 1.3.0
+    - name: atm
+    - name: sc-compose
+    - name: jq
 depends_on:
   atm-bd-orchestration: 0.x
 ---
@@ -12,6 +19,19 @@ Beads are the plan and the work graph; ATM tasks are the dispatch and the
 span. There are no plan markdown files: the phase is an epic and each sprint
 is a dev bead followed by a quick-check bead. A bead id is the ATM
 `task_id`, and the two open and close together.
+
+## Step 1 — Verify CLI Installation
+
+Run this before anything else in the skill:
+
+```bash
+for c in bd atm sc-compose jq; do command -v "$c" >/dev/null && echo "ok $c" || echo "MISSING $c"; done
+bd version    # 1.3.0 or newer
+```
+
+If anything is missing or too old, **read
+[`references/installation-and-troubleshooting.md`](references/installation-and-troubleshooting.md)
+before proceeding.**
 
 ## Identity
 

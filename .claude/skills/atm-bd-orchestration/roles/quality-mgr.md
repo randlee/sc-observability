@@ -36,7 +36,9 @@ why they are strict:
 
 - `validate-plan` runs first. `bd doctor` is part of it. Every problem it
   prints is a blocking finding.
-- A missing, empty or unknown requirement or ADR id is always blocking. So
+- A missing, empty or unknown requirement or ADR id is always blocking. An
+  id the sprint adds itself is unknown unless it meets
+  [New Ids](../../atm-beads/resources/planning.md#new-ids). So
   is one that does not govern the work, and so is a requirement or ADR the
   work touches that the bead does not list, `NONE` included. A dev who
   starts from a bead with the wrong governing ids builds against the wrong

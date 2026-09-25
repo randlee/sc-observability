@@ -21,8 +21,8 @@ goes back to the plan's author to supply, with the exact list of gaps.
 0. **Check the database.** Run `bd doctor --json`. Any check with
    `"status": "error"` stops the import: report it to lead. Do not import
    into a database that doctor rejects. `validate-plan` runs doctor again at
-   step 5 and step 9.
-1. **Find the root.** `bd list -l phase-<x> --type feature` (or `epic`). If
+   step 5 and step 10.
+1. **Find the root.** `bd list -l phase-<x> --type feature -n 0` (or `epic`). If
    the phase root already exists, do not render a new one. Import the
    sprints under it, and gate them with
    `--root <id> --phase <x>` (step 5). Check that its description,
@@ -80,24 +80,25 @@ goes back to the plan's author to supply, with the exact list of gaps.
 
 8. **Record the source** on each imported sprint bead:
    `bd update <bead> --append-notes "imported from <doc path>@<git short sha>"`.
-9. **Verify** the imported beads with
-   `.claude/skills/atm-beads/scripts/validate-plan --root <root>`, then check
-   the graph:
-   - whole phase: `bd ready -l phase-<x>` lists no dev bead until the plan
-     review passes, and afterwards exactly the root sprints (`relation:
-     root`, or `parallel_safe` with no prerequisites);
-   - one plan: the new dev bead is not ready until its own plan review
-     passes (below);
-   - `bd ready --explain` shows every other dev bead blocked by the
-     quick-check beads of its prerequisites.
-10. **Sync**: run `bd sync` so the Dolt remote has the plan (see
+9. **Wire the plan gate** right away, before any readiness check. Nothing
+   is dispatched until this is done. Create the plan-review bead as in
+   `atm-bd-orchestration` "Plan Gate", step 2:
+   - whole phase: `<root>-plan-qa`, blocking every root sprint;
+   - one plan into a running phase: `<root>-plan-qa` is already closed, so
+     create `<root>-plan-qa-<n>` (the next free number), blocking every new
+     dev bead.
+10. **Verify** with `.claude/skills/atm-beads/scripts/validate-plan --root
+    <root>`, then check the graph:
+    - `bd ready -l phase-<x> -n 0` lists the plan-review bead and no dev bead
+      from this import;
+    - `bd ready --explain` shows every other dev bead blocked by the
+      plan-review bead or by the quick-check beads of its prerequisites.
+11. **Sync**: run `bd sync` so the Dolt remote has the plan (see
     `atm-bd-orchestration` "Sync").
 
-The plan then goes to plan review (`atm-bd-orchestration` "Plan Gate")
-before any sprint is dispatched. For a one-plan import into a running phase,
-the phase's `<root>-plan-qa` bead is already closed. Create
-`<root>-plan-qa-<n>` (the next free number) blocking the new dev bead, and
-review it the same way.
+The plan then goes to plan review (`atm-bd-orchestration` "Plan Gate",
+step 3). Once it passes, `bd ready` lists exactly the root sprints
+(`relation: root`, or `parallel_safe` with no prerequisites).
 
 Keep `<scratch>` outside the repository.
 
@@ -173,7 +174,7 @@ does not stop it.
 | Owned paths taken only from the Deliverables list (no "Owned Paths" or "Exact Targets" section) | warn | import them and list them for the author to confirm |
 | Two sprints that can run at once (`parallel_safe`, or neither depends on the other) with overlapping owned paths or `owned_docs` | blocking | the author makes one `must_follow` or splits the sprint |
 | No requirement ids and no explicit "no requirements" statement, or the same for ADRs | blocking | ask the author for the ids, or for an explicit `NONE` |
-| A REQ or ADR id is not in `docs/requirements.md` / `docs/architecture.md` (or the crate's copy), and the sprint does not own that doc | blocking | ask the author |
+| A REQ or ADR id is not in `docs/requirements.md` / `docs/architecture.md` (or the crate's copy), and does not meet [New Ids](planning.md#new-ids) | blocking | ask the author |
 | An id with the REQ shape (`LOG-001`) used for something else, such as an error code | warn | list it; do not put it in `requirements` |
 | The integration branch `integrate/phase-<x>` does not exist on origin | warn | lead creates it before the first dispatch |
 | Acceptance criteria or validation commands missing | blocking | ask the author |

@@ -1,12 +1,13 @@
 ---
 name: atm-bd-orchestration
-version: 0.1.0
-description: Bead-driven phase orchestration. The plan and the work graph are beads; `bd ready` is the cursor. Every sprint is a dev bead followed by a quick-check bead, QA and findings run beside dev and never hold it back, and the phase lands as one append-only gh stack. Derived from graph-orchestration and codex-orchestration; beads replace the TTL event log and the sprint docs.
+version: 0.2.0
+description: Bead-driven phase orchestration for the lead. Use when running a phase whose plan is in beads, dispatching from `bd ready` with ATM tasks, and landing it as one gh stack.
 requires:
   cli:
     - name: bd
       minimum_version: 1.3.0
     - name: atm
+    - name: sc-compose
     - name: jq
     - name: gh
 depends_on:
@@ -32,6 +33,20 @@ the lead's loop and the full set of assignment, close and bead templates.
 Never block on bureaucracy. Dev waits only on its prerequisites'
 quick-checks; QA, triage and fixes run beside it. 100% of findings are
 closed, each with a close reason.
+
+## Step 1 — Verify CLI Installation
+
+Run this before anything else in the skill:
+
+```bash
+for c in bd atm sc-compose jq gh; do command -v "$c" >/dev/null && echo "ok $c" || echo "MISSING $c"; done
+bd version    # 1.3.0 or newer
+gh stack --version   # the gh-stack extension
+```
+
+If anything is missing or too old, **read
+[`../atm-beads/references/installation-and-troubleshooting.md`](../atm-beads/references/installation-and-troubleshooting.md)
+before proceeding.**
 
 ## Lead Role
 
@@ -102,7 +117,8 @@ No dev bead is dispatched until the plan passes review.
    `.claude/skills/atm-beads/scripts/validate-plan --root <root>`, run from
    the repository root. It runs `bd doctor`, `check-plan.jq`, the REQ/ADR
    existence check and the ATM member check. Exit 0 or stop.
-2. Create the plan-review bead so that it blocks every root sprint (every dev
+2. Create the plan-review bead right after the import (the import
+   procedures do this as their next step), so that it blocks every root sprint (every dev
    bead with no quick-check blocker). For sprints imported into a running
    phase, use `<root>-plan-qa-<n>` (the next free number) and block only the
    new dev beads, including any that already have quick-check blockers:
@@ -125,14 +141,15 @@ No dev bead is dispatched until the plan passes review.
 Requirements and ADRs are the tight part of the gate. Every dev bead lists
 its governing ids in `metadata.requirements` and `metadata.adrs`, or exactly
 `["NONE"]`. quality-mgr rejects the plan as blocking when a list is missing,
-names an id that does not exist, names an id that does not govern the work,
+names an id that does not exist (except as
+[New Ids](../atm-beads/resources/planning.md#new-ids) allows), names an id that does not govern the work,
 or omits one the work touches. The dev reads them before coding, and QA
 checks the change against them.
 
 ## Loop
 
 ```bash
-bd ready -l phase-<x> --json
+bd ready -l phase-<x> -n 0 --json
 ```
 
 `bd ready` lists every bead whose blockers are closed, highest priority
@@ -155,7 +172,7 @@ Then, on each task close:
 | plan-review PASS | nothing when the bead closed: the root sprints are now ready. With minor findings the bead is assigned to you still open: fix each listed bead with `bd update`, then `bd close <root>-plan-qa --reason "minor fixes applied"` |
 | plan-review FAIL | have the author fix the listed beads, run `validate-plan` again, then dispatch the next round |
 | dev-complete | nothing: the quick-check is now ready |
-| quick-check PASS | check that the layer's `rebased_onto` (from its dev-complete or fix-complete) is still the pushed top. If another layer was linked since, rebase the branch onto the new top yourself: it is not linked and has no children. Run the test command and push with `--force-with-lease`. On a conflict, `bd reopen` the bead and send a dev-fix naming the new top. Then link the layer, then create the QA bead from [`qa-bead.json.j2`](templates/qa-bead.json.j2) (`validates` the dev or finding bead). For a finding, the QA dispatch sets `sprint_bead` = the finding's `caused-by` bead (it carries the requirements and ADRs), `carry_forward` = the finding id, `round` = the `metadata.round` of the QA bead the finding was `discovered-from`, + 1, and `checked_bead` = the finding |
+| quick-check PASS | check that the layer's `rebased_onto` (from its dev-complete or fix-complete) is still the pushed top. If another layer was linked since, rebase the branch onto the new top yourself: it is not linked and has no children. Run the test command and push with `--force-with-lease`. On a conflict, `bd reopen` the bead and send a dev-fix naming the new top. Then link the layer, then create the QA bead from [`qa-bead.json.j2`](templates/qa-bead.json.j2) (`validates` the dev or finding bead). For a finding, the QA dispatch sets `checked_bead` = the finding (it carries its own requirements and ADRs), `sprint_bead` = its `metadata.sprint_bead`, `carry_forward` = the finding id, and `round` = the `metadata.round` of the QA bead it was `discovered-from`, + 1, or 1 when it came from the phase-end review |
 | quick-check FAIL | `bd reopen <checked bead> --reason "<summary>"`, then [`dev-fix.xml.j2`](templates/dev-fix.xml.j2) with the findings. This applies to a finding bead too: its task id is the finding, and it closes with `dev-complete.md.j2` |
 | qa-complete | nothing to wire: quality-mgr filed and wired the finding beads; they are in the next `bd ready` |
 | fix-complete (`fixed`) | create the fix's quick-check bead (`atm-beads` [`quick-check-bead.json.j2`](../atm-beads/templates/quick-check-bead.json.j2), `dev_bead` = the finding) |
@@ -168,7 +185,7 @@ Re-run `bd ready` after every close. Never cache the ready list. The open
 phase root also appears in it; it is never dispatched.
 
 When every sprint and finding bead is closed
-(`bd list -l phase-<x> --status open,in_progress,blocked --json` lists only
+(`bd list -l phase-<x> --status open,in_progress,blocked -n 0 --json` lists only
 the phase root), run the phase-end review (below). When its findings are
 closed too, land the stack (`recipe-land.md`), close the phase root, and run
 `bd sync`.
@@ -192,7 +209,11 @@ On review-complete, file each finding with `finding-bead.json.j2`, using:
   the top layer when it is the root);
 - `found_at_commit` = the reviewed commit;
 - `screen` = `keep`, unless you ran `ceremony-finding-screen` over them;
-- `finding_ref` = the reviewer's numbering (`R-1`, `R-2`, …).
+- `finding_ref` = the reviewer's numbering (`R-1`, `R-2`, …);
+- `sprint_bead`, `requirements` and `adrs` = the cited dev bead's id and
+  lists. For a finding that spans sprints, use the root as `sprint_bead` and
+  the union of the lists of the sprints it touches. If no requirement or ADR
+  governs the finding, use exactly `["NONE"]`.
 
 Fix them as for any finding.
 
