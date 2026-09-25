@@ -14,6 +14,9 @@ agents:
   ruthless-boundary-qa:
     version: 0.2.0
     path: .claude/agents/ruthless-boundary-qa.md
+  scrum-master:
+    version: 0.1.0
+    path: .claude/agents/scrum-master.md
   schema-reviewer:
     version: 1.0.0
     path: .claude/agents/schema-reviewer.md
@@ -66,6 +69,13 @@ skills:
       rust-service-hardening-agent: 0.x
   quality-management-gh:
     version: 1.1.0
+  phase-orchestration:
+    version: 0.2.0
+    depends_on:
+      scrum-master: 0.x
+      rust-developer: 0.x
+      rust-qa-agent: 0.x
+      req-qa: 0.x
   rust-development:
     version: 0.12.0
     depends_on:
