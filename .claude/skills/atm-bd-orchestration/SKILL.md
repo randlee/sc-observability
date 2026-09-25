@@ -211,9 +211,10 @@ On review-complete, file each finding with `finding-bead.json.j2`, using:
 - `screen` = `keep`, unless you ran `ceremony-finding-screen` over them;
 - `finding_ref` = the reviewer's numbering (`R-1`, `R-2`, …);
 - `sprint_bead`, `requirements` and `adrs` = the cited dev bead's id and
-  lists. For a finding that spans sprints, use the root as `sprint_bead` and
-  the union of the lists of the sprints it touches. If no requirement or ADR
-  governs the finding, use exactly `["NONE"]`.
+  lists. For a finding that spans sprints, use the root as `sprint_bead`. For
+  `requirements` and for `adrs` separately, take the union of the real ids
+  of the sprints it touches, dropping every `NONE` and duplicate. Use
+  exactly `["NONE"]` only when that union is empty.
 
 Fix them as for any finding.
 
