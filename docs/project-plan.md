@@ -19,6 +19,12 @@ work.
 
 Active: [npm scope and shared publishing adoption](plans/npm-publish-adoption/sprint.md). Lead: aobs; developer: cobs. Correct the active package identity and adopt reviewed shared publishing updates on a branch from develop, without another publication.
 
+## Dev sanity Jev investigation
+
+Completed investigation and draft adapter: [sanity-jev](investigations/sanity-jev.md)
+(`obs-sanity-jev-1`, branch `feature/sanity-jev`, stacked on PR #216).
+Live Jev evaluation and switching the obs-sanity directive remain user decisions.
+
 ## Near-Term Work
 
 1. Keep repo workflow and review discipline aligned with ATM.
