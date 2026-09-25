@@ -1,11 +1,11 @@
 ---
 name: atm-doctor
-description: Run ATM health diagnostics, present severity-sorted findings, and delegate deep remediation analysis to the atm-doctor agent when critical findings exist.
+description: Run ATM health diagnostics, present severity-sorted findings, and delegate deep remediation analysis to a background general-purpose agent when critical findings exist.
 ---
 
 # ATM Doctor
 
-This skill runs `atm doctor --json`, formats results for operators, and conditionally delegates to the `atm-doctor` background agent for remediation analysis.
+This skill runs `atm doctor --json`, formats results for operators, and conditionally delegates remediation analysis to a background `general-purpose` agent.
 
 ## Execution
 
@@ -29,7 +29,7 @@ rm -f "$tmp_json"
 
 3. Behavior by exit code:
 - `0`: show clean status summary; do not spawn agent.
-- `2`: spawn `atm-doctor` background agent and pass:
+- `2`: spawn a background `general-purpose` agent and pass:
   - team
   - exit_code
   - full doctor JSON
@@ -42,8 +42,8 @@ When exit code is `2`, invoke:
 ```json
 {
   "description": "Analyze atm doctor findings and propose remediation runbook",
-  "prompt": "Analyze the provided atm doctor JSON and provide actionable remediation guidance.",
-  "subagent_type": "atm-doctor",
+  "prompt": "You are an ATM health remediation analyst. Analyze the provided atm doctor JSON (fenced below) and return: a remediation runbook ordered by severity, with the exact atm/shell commands for each critical finding, plus any findings that require user escalation and why. Do not run commands that change state.",
+  "subagent_type": "general-purpose",
   "run_in_background": true
 }
 ```
