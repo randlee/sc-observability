@@ -107,7 +107,8 @@ construction failures without retaining secret values.
 ### D.6-owned validated transport contract
 
 D.6 is the sole owner of every transport-bound field, default, validation,
-and configuration error. The flat 2.0 wire surface is:
+and configuration error. The 2.0 wire surface uses direct shared transport
+fields plus a grouped `legacy_retry` object:
 
 | Field | Applicability | Default when absent |
 | --- | --- | --- |
@@ -130,6 +131,7 @@ covers cancellation, the in-flight request, barrier, and worker join. On
 expiry it returns `LifecycleTimeout` with remaining admitted work accounted.
 
 ```rust
+#[non_exhaustive]
 pub struct TelemetryHealth {
     pub queue_depth: usize,
     pub queue_capacity: usize,
@@ -153,7 +155,10 @@ therefore deterministic and reviewable.
 All raw serialized millisecond/percent fields are converted exactly once:
 
 ```rust
+#[non_exhaustive]
 pub enum OtlpConfigField {
+    Endpoint,
+    Header,
     Timeout,
     LifecycleFlushTimeout,
     LifecycleShutdownTimeout,
@@ -166,14 +171,17 @@ pub enum OtlpConfigField {
     RetryJitterPercent,
 }
 
+#[non_exhaustive]
 pub enum ValueOrigin { Default, Explicit }
 
+#[non_exhaustive]
 pub struct ResolvedField<T> {
     pub field: OtlpConfigField,
     pub value: T,
     pub origin: ValueOrigin,
 }
 
+#[non_exhaustive]
 pub enum OtlpConfigTarget { Disabled, Backend(ExporterBackend) }
 
 pub(crate) struct PositiveDuration(Duration);
@@ -216,6 +224,10 @@ impl ValidatedTransportBounds {
 }
 ```
 
+`TelemetryHealth`, `OtlpConfigField`, `ValueOrigin`, `ResolvedField`, and
+`OtlpConfigTarget` are `#[non_exhaustive]` public types so their 2.0 contracts
+can add fields or variants without a further breaking release.
+
 The constructor derives `Disabled` from `config.enabled == false`; otherwise
 it derives the backend only from `config.backend`.
 `LifecycleBounds` holds checked positive flush/shutdown durations;
@@ -235,6 +247,9 @@ retry state unrepresentable for SDK. Validation, using checked arithmetic, is:
   selected backend with `ConfigFieldNotApplicable`;
 - reject a requested insecure verification override when the selected backend
   does not explicitly support it with `InsecureTransportRejected`.
+- validate endpoint URL syntax, header/auth syntax, and credential placement;
+  otherwise return `InvalidEndpoint` or `InvalidHeader` with a redacted,
+  field-only payload.
 
 Checks execute in exactly this listed order and return the first failure; they
 are not aggregated. Within the first bullet, fields are checked in the wire
@@ -268,6 +283,8 @@ InvalidBoundOrdering {
 InvalidJitterPercent { field: OtlpConfigField, raw: u8, origin: ValueOrigin }
 ConfigFieldNotApplicable { field: OtlpConfigField, target: OtlpConfigTarget }
 InsecureTransportRejected { backend: ExporterBackend }
+InvalidEndpoint { field: OtlpConfigField }
+InvalidHeader { field: OtlpConfigField }
 TransportConstructionFailed { backend: ExporterBackend, source: Diagnostic }
 ```
 
@@ -300,6 +317,8 @@ corresponding typed lifecycle failure.
 | `InvalidQueueCapacity` | `OTLP_CONFIG_QUEUE_CAPACITY` | `ConfigFailure` | queue capacity is outside `1..=65_536` | choose a bounded capacity | field/value only | after config correction |
 | `ConfigFieldNotApplicable` | `OTLP_CONFIG_FIELD_NOT_APPLICABLE` | `ConfigFailure` | field is inapplicable to disabled transport or the selected backend | omit it, enable transport, or select its applicable backend | field/closed target only | after config correction |
 | `InsecureTransportRejected` | `OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED` | `ConfigFailure` | selected backend does not implement the requested insecure verification override | disable the override or choose an explicitly supporting backend | backend only | after config correction |
+| `InvalidEndpoint` | `OTLP_CONFIG_INVALID_ENDPOINT` | `ConfigFailure` | endpoint URL syntax is invalid | provide a valid endpoint URL | field only | after config correction |
+| `InvalidHeader` | `OTLP_CONFIG_INVALID_HEADER` | `ConfigFailure` | header/auth syntax or credential placement is invalid | correct the header/auth configuration | field only | after config correction |
 | `TransportConstructionFailed` | `OTLP_TRANSPORT_CONSTRUCTION_FAILED` | `ConfigFailure` | CA/auth/client/provider/legacy-worker initialization failed | correct the bounded typed source and reconstruct | bounded typed source; never path contents, credentials, header values, or response bodies | after config/environment correction |
 | `UnsupportedBackend` | `OTLP_UNSUPPORTED_BACKEND` | `ConfigFailure` | feature/backend unavailable | enable/select a supported backend | enum values only | after build/config correction |
 | `UnsupportedProtocol` | `OTLP_UNSUPPORTED_PROTOCOL` | `ConfigFailure` | protocol invalid for backend | select a matrix-supported protocol | enum values only | after config correction |
@@ -469,9 +488,9 @@ dispatcher or lifecycle state machine.
   host can immediately tear down its runtime after the await without loss.
 - Premature runtime teardown produces `RuntimeTerminated`, accounts pending
   records as dropped, and never reports successful completion.
-- Flush and shutdown drop every incomplete started span, increment the dropped
-  export accounting once per span, and never pass an incomplete span to either
-  backend (OTLP-009).
+- Shutdown, including its final flush, drops every incomplete started span,
+  increments the dropped export accounting once per span, and never passes an
+  incomplete span to either backend (OTLP-009).
 - Two telemetry instances remain isolated; enabled SDK config cannot resolve
   to no-op; disabled config makes no request; credentials never enter errors.
 - Construction fixtures cover unsupported insecure verification, unreadable CA,

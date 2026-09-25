@@ -96,6 +96,12 @@ Defaults are the values passed to or produced by `LoggerConfig::default_for`.
 | `retained_log_policy.writer_shutdown_timeout` | `retainedLogPolicy.writer_shutdown_timeout` | `SC_LOG_WRITER_SHUTDOWN_TIMEOUT_MS` | canonical `WriterShutdownTimeout` serde / milliseconds | canonical policy default | existing strong-type validation |
 | `retained_log_policy.maintenance_max_work_per_pass` | `retainedLogPolicy.maintenance_max_work_per_pass` | `SC_LOG_MAINTENANCE_MAX_WORK_PER_PASS` | optional count | canonical policy default | existing policy validation |
 
+When one or more retention-policy environment keys are set, D.1 constructs one
+whole `RetainedLogPolicy`: each supplied key overrides its canonical default
+and every omitted retention field uses that canonical default. The resulting
+policy is then the atomic environment override; it is never field-wise merged
+with a supplied JSON policy.
+
 The application-prefix form replaces only the leading `SC_` in this table.
 If the application prefix normalizes to `SC`, construction fails with
 `PrefixCollision`. A selected namespace containing a non-UTF-8 key/value,
@@ -152,9 +158,6 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
 
 - Table-driven unit tests generated from the authoritative inventory for JSON,
   environment, precedence, defaults, validation, and conversion parity.
-- Paired regressions prove `LogSettings` delegates to the existing
-  `LevelFilter` wire and `RetainedLogPolicy` validation rather than defining
-  second codecs or units.
 - Public consumer compile fixture plus `cargo test --workspace --locked`.
 - Docs consistency, rustdoc, public API, and semver gates used by the repository
   at execution time.
