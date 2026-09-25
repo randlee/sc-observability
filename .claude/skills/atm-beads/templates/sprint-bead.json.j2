@@ -23,12 +23,14 @@ required_variables:
   - design
   - acceptance_criteria
 optional_variables:
+  - priority
   - blocked_by
   - model_class
   - requirements
   - adrs
   - release_train
 defaults:
+  priority: 2
   blocked_by: []
   model_class: ""
   requirements: []
@@ -40,6 +42,7 @@ defaults:
   "title": {{ (sprint ~ ": " ~ title) | tojson }},
   "issue_type": "task",
   "status": "open",
+  "priority": {{ priority }},
   "assignee": {{ assignee | tojson }},
   "description": {{ description | tojson }},
   "design": {{ design | tojson }},
