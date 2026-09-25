@@ -13,7 +13,7 @@ their own prompts.
 - Project plan: `docs/project-plan.md`
 - Team protocol: `docs/team-protocol.md`
 - Crate docs: `crates/<crate>/docs/` when present
-- Rust TODO finder (todo-triage): `python3 scripts/find_todos.py`
+- Rust TODO finder (todo-triage): `python3 .claude/skills/todo-triage/scripts/find_todos.py`
 - Developer roster: no roster file. Developers are `cobs` (terra), `lobs`
   (luna), `aobs` (astra); `.atm.toml` and the ATM roster are authoritative
   for live identities.

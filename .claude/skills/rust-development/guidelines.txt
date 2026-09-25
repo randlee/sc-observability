@@ -188,7 +188,7 @@ fn copy(src: File, dst: File) {}
 When publicly re-exporting crate items via `pub use foo::Foo` or `pub use foo::*`, they show up in an opaque re-export block. In most cases, this is not
 helpful to the reader:
 
-![TEXT](M-DOC-INLINE_BAD.png)
+_(Upstream screenshot omitted: rustdoc shows the re-export as an opaque `pub use` block.)_
 
 Instead, you should annotate them with `#[doc(inline)]` at the `use` site, for them to be inlined organically:
 
@@ -203,7 +203,7 @@ pub use foo::*;
 pub use foo::Foo;
 ```
 
-![TEXT](M-DOC-INLINE_GOOD.png)
+_(Upstream screenshot omitted: with `#[doc(inline)]` the item is documented in place.)_
 
 This does not apply to `std` or 3rd party types; these should always be re-exported without inlining to make it clear they are external.
 
@@ -235,11 +235,11 @@ exceed to keep things tidy on most screens.
 
 If you keep things in a line, your docs will become easily skimmable. Compare, for example, the standard library:
 
-![TEXT](M-FIRST-DOC-SENTENCE_GOOD.png)
+_(Upstream screenshot omitted: std module summaries, each first sentence on one line.)_
 
 Otherwise, you might end up with _widows_ and a generally unpleasant reading flow:
 
-![TEXT](M-FIRST-DOC-SENTENCE_BAD.png)
+_(Upstream screenshot omitted: wrapped first sentences leave single-word widows in the summary.)_
 
 As a rule of thumb, the first sentence should not exceed **15 words**.
 
@@ -278,7 +278,7 @@ The rest of the module documentation should be comprehensive, i.e., cover the mo
 This does not mean every module should contain all of these items. But if there is something to say about the interaction of the contained types,
 their module documentation is the right place.
 
-[M-DOC-FIRST-SENTENCE]: ./#M-DOC-FIRST-SENTENCE
+[M-DOC-FIRST-SENTENCE]: #M-FIRST-DOC-SENTENCE
 
 
 ---
@@ -427,7 +427,7 @@ You should not:
 
 Shared state should only be used if the cost of sharing is less than the cost of re-computation.
 
-[M-YIELD-POINTS]: ./#M-YIELD-POINTS
+[M-YIELD-POINTS]: #M-YIELD-POINTS
 
 
 
@@ -963,7 +963,7 @@ If your type is expected to be read by upstream consumers, be it developers or e
 Implementations of `Display` should follow Rust customs; this includes rendering newlines and escape sequences.
 The handling of sensitive data outlined in [M-PUBLIC-DEBUG] applies analogously.
 
-[M-PUBLIC-DEBUG]: ./#M-PUBLIC-DEBUG
+[M-PUBLIC-DEBUG]: #M-PUBLIC-DEBUG
 
 
 
@@ -1283,7 +1283,7 @@ comparable to crates.io should be used. In addition, the specific hashes of acce
 
 Downloading sources can fail on hermetic build environments, therefore alternative source roots should also be specifiable (e.g., via environment variables).
 
-[M-OOBE]: ./#M-OOBE
+[M-OOBE]: #M-OOBE
 
 
 ---
@@ -1444,12 +1444,6 @@ async fn foo() {
 > "reinvent the world" to get anything done in a thread-per-core universe.
 >
 > The good news is, in most cases atomics and uncontended locks only have a measurable impact if accessed more frequently than every 64 words or so.
->
-> <div style="background-color:white;">
->
-> ![TEXT](M-TYPES-SEND.png)
->
-> </div>
 >
 > Working with a large `Vec<AtomicUsize>` in a hot loop is a bad idea, but doing the occasional uncontended atomic operation from otherwise thread-per-core
 > async code has no performance impact, but gives you widespread ecosystem compatibility.
@@ -1731,7 +1725,6 @@ impl HttpClient {
 }
 ```
 
-[M-MOCKABLE-SYSCALLS]: ./#M-MOCKABLE-SYSCALLS
 
 
 ---
@@ -1770,7 +1763,7 @@ Smart pointers in APIs are acceptable when:
 
 - The smart pointer, based on benchmarks, significantly improves performance and the complexity is justified.
 
-[M-ABSTRACTIONS-DONT-NEST]: ./#M-ABSTRACTIONS-DONT-NEST
+[M-ABSTRACTIONS-DONT-NEST]: refs/libs-ux.md#M-ABSTRACTIONS-DONT-NEST
 
 
 
@@ -1857,9 +1850,8 @@ enum DataAccess {
 async fn read_database(x: &DataAccess) { ... }
 ```
 
-[M-AVOID-WRAPPERS]: ./#M-AVOID-WRAPPERS
+[M-AVOID-WRAPPERS]: #M-AVOID-WRAPPERS
 [M-MOCKABLE-SYSCALLS]: refs/resilience.md#M-MOCKABLE-SYSCALLS
-[M-ABSTRACTIONS-DONT-NEST]: ./#M-ABSTRACTIONS-DONT-NEST
 
 
 
@@ -2111,7 +2103,6 @@ Synchronous functions should use [`std::io::Read`](https://doc.rust-lang.org/std
 [`futures::io::AsyncRead`](https://docs.rs/futures/latest/futures/io/trait.AsyncRead.html) and similar.
 _Types_ that need to perform runtime-specific, continuous I/O should follow [M-RUNTIME-ABSTRACTED] instead.
 
-[M-RUNTIME-ABSTRACTED]: ./#M-RUNTIME-ABSTRACTED
 
 
 
