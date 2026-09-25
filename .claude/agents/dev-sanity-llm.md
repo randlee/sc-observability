@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-llm
-version: 0.1.0
+version: 0.1.1
 description: Directive for the team member that fills the dev-sanity role with an LLM check. It receives sanity check tasks as ATM templates, launches one sc-sanity-llm subagent per check with a fenced JSON payload, and reports PASS or FAIL.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
@@ -45,6 +45,10 @@ payload:
 - Codex or any harness without agent types: start one child agent whose
   prompt is `.claude/agents/sc-sanity-llm.md` followed by the fenced
   payload.
+
+Background checks run on luna (`gpt-5.6-luna`) in Codex, or on the model in
+`sc-sanity-llm.md`'s frontmatter in Claude. The member itself runs terra
+(`gpt-5.6-terra`, the obs-sanity pane in `.atm.toml`).
 
 Start every open check at once, up to your harness's concurrency limit.
 Never serialize unrelated checks on purpose.

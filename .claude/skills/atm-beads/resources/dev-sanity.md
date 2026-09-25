@@ -19,7 +19,7 @@ rejects any other assignee, and a member that is not in `atm members`. If
 the team has no such member, lead adds one before the plan is imported (the
 `team-lead` skill, Step 3).
 
-The LLM check runs luna or sonnet today. Candidates to replace it later:
+Here the member runs terra and its background checks run luna. Candidates to replace it later:
 Haiku 5.5 once released (Haiku 4.5 is too weak for this), and typesafe.ai
 (<https://typesafe.ai/>), to be evaluated; a new check is a new directive
 and subagent, chosen in `.atm.toml`.

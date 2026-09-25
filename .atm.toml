@@ -46,7 +46,7 @@ env = { ATM_IDENTITY = "aobs", ATM_TEAM = "sc-obs" }
 
 [[rmux.windows.panes]]
 name = "obs-sanity"
-command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-luna"
+command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-terra"
 env = { ATM_IDENTITY = "obs-sanity", ATM_TEAM = "sc-obs" }
 
 [startup.team-lead]
