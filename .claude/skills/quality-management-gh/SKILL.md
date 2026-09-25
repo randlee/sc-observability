@@ -1,6 +1,6 @@
 ---
 name: quality-management-gh
-version: 1.0.0
+version: 1.1.0
 description: Reusable QA orchestration skill for GitHub PRs. Use for multi-pass QA, CI monitoring, and template-driven findings and final quality reports.
 ---
 
@@ -31,8 +31,8 @@ mkdir -p ~/.atm/templates/quality-management-gh && cp .claude/skills/quality-man
 
 Build the `--vars` JSON for this run from the selected template's frontmatter
 `required_variables`; both templates list them. Every value comes from the
-run: `task_id` from the QA assignment, `commit` from `git rev-parse`, and
-counts from the reviewer outputs. Keep numeric fields as JSON numbers and
+run: `task_id` and `commit` unchanged from the QA assignment, and counts from
+the reviewer outputs. Keep numeric fields as JSON numbers and
 `blocking_ids_json` as a JSON string because the templates embed it as JSON.
 Write the vars file outside the repository working tree (in the session
 scratchpad or a temp directory); never commit or stage it, and delete it or
@@ -74,23 +74,53 @@ Use fenced JSON for machine-readable status payloads:
     "minor": 0
   },
   "blocking_ids": ["QA-001"],
-  "next_action": "Fix lock acquisition rollback semantics",
-  "owner": "<assignee>",
   "merge_readiness": "not ready",
-  "merge_reason": "Blocking findings remain"
+  "merge_reason": "Blocking findings remain",
+  "next_action": "Fix lock acquisition rollback semantics",
+  "owner": "team-lead"
+}
+```
+
+A `PASS` report (`quality-report.md.j2`) emits this shape:
+
+```json
+{
+  "sprint": "M.1",
+  "task": "mailbox-locking",
+  "branch": "feature/pM-s1-mailbox-locking",
+  "commit": "abc1234",
+  "pr": 123,
+  "verdict": "PASS",
+  "findings": {
+    "blocking": 0,
+    "important": 0,
+    "minor": 0
+  },
+  "blocking_ids": [],
+  "merge_readiness": "ready",
+  "merge_reason": "All reviewers PASS",
+  "next_action": "none",
+  "owner": "none",
+  "recommendation": "Merge"
 }
 ```
 
 ## QA Lifecycle (Multi-Pass)
 
 1. Initial pass: usually `FAIL` with findings.
-   - If Rust best-practices review is in scope, run it in QA-1 only.
+   - If Rust best-practices review is in scope, run its open-ended pass in QA-1.
 2. Fix passes: `IN-FLIGHT` or `FAIL` while fixes are in progress.
-   - QA-2 and later rounds must not re-run Rust best-practices review on the
-     same sprint branch.
-   - Unresolved QA-1 RBP findings that are not fixed in the first fix round
-     carry to the next phase backlog instead of being re-raised in later rounds.
+   - QA-2 and later rounds must not re-run subjective reviewers open-ended on
+     the same sprint branch.
+   - Dispatch a subjective reviewer only to verify explicitly assigned
+     carry-forward findings it owns, with its output scope-locked to those ids.
+   - Every prior finding remains in the merge gate until its owning reviewer
+     verifies it as fixed; do not defer unresolved findings to a later phase.
+     The only exclusion is a finding the lead upholds as `rejected: ceremony`
+     under `quality-mgr.md` "Ceremony Disputes"; record it in the next report.
 3. Final pass: `PASS` with final quality report and merge recommendation.
+   A plan-review round that leaves only minor findings reports
+   `PASS — minor fixes required, no re-QA`, listing them.
 
 Do not treat QA as single-shot.
 

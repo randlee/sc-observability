@@ -44,7 +44,7 @@ Run this:
 From repo root:
 
 ```bash
-python3 scripts/find_todos.py
+python3 .claude/skills/todo-triage/scripts/find_todos.py
 ```
 
 The script scans repo Rust source files only.

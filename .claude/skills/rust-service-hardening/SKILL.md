@@ -1,6 +1,6 @@
 ---
 name: rust-service-hardening
-version: 0.11.0
+version: 0.12.2
 description: Harden Rust backend services for production readiness. Use when working on Tokio, Axum, Hyper, Tonic, or Reqwest-based services and you need guidance or review for config validation, structured tracing, request IDs, timeouts, retries, graceful shutdown, backpressure, body limits, health checks, metrics, and dependency hygiene. Not for non-service Rust crates, embedded Rust, pure sync CLI tools, or low-level libraries without runtime, network, or server concerns.
 depends_on:
   rust-service-hardening-agent: 0.x
@@ -84,12 +84,18 @@ Use these existing `sc-rust` agents for service-hardening workflows:
 
 Invoke these agents via Agent Runner using `.claude/agents/registry.yaml`, and keep the prompt focused on service-hardening concerns rather than general Rust style issues.
 
+Every `rust-code-reviewer` delegation must use that agent's fenced-JSON input
+contract and pass the exact `worktree_path`, `branch`, `commit`, and
+`review_targets`; never dispatch it against implicit unstaged changes.
+
 Dedicated `rust-service-hardening-agent` assignment template:
 
 ```json
 {
   "review_mode": "doc_review | sprint_review | phase_end",
   "worktree_path": "/absolute/path/to/worktree",
+  "branch": "feature/branch-name",
+  "commit": "abc1234",
   "review_targets": [
     "src/",
     "Cargo.toml"
@@ -108,6 +114,12 @@ Dedicated `rust-service-hardening-agent` assignment template:
     "actix-web",
     "reqwest"
   ],
+  "service_indicators_extra": [],
+  "round_limit": false,
+  "changed_files": ["optional changed-file hint for limited recheck rounds"],
+  "triage_records": ["optional prior finding records to recheck"],
+  "carry_forward_findings": [],
+  "findings_scope_locked": false,
   "notes": "optional context"
 }
 ```
@@ -151,6 +163,8 @@ Suggested `rust-qa-agent` assignment:
 ```json
 {
   "worktree_path": "/absolute/path/to/worktree",
+  "branch": "feature/branch-name",
+  "commit": "abc1234",
   "review_mode": "sprint_review | phase_end",
   "review_targets": [
     "src/",
@@ -165,6 +179,10 @@ Suggested `rust-qa-agent` assignment:
   "baseline_ref": "optional git ref",
   "artifact_regeneration_required": false,
   "artifact_commands": "",
+  "round_limit": false,
+  "changed_files": ["optional changed-file hint for limited recheck rounds"],
+  "triage_records": ["optional prior finding records to recheck"],
+  "carry_forward_findings": [],
   "notes": "optional context"
 }
 ```

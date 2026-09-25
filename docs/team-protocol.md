@@ -5,12 +5,14 @@ This protocol is mandatory for all ATM team communications.
 ## Required Flow
 
 1. Read every ATM message that requires action (see Message Classes), then
-   start the assigned task when its `task_ready` line arrives.
+   start the assigned task when its `task_ready` line arrives and claim its
+   matching bead with `bd update <task-id> --claim`.
 2. Execute the requested task.
 3. Send a completion message with a concise summary of what was done. When
    closing a tracked task, use `atm task close <task-id> completed --stdin`
    or its alias, `atm send <assigner> --task-id <task-id> --task-complete
-   --stdin`, to deliver the completion report and close the task atomically.
+   --stdin`, to deliver the completion report and close the task atomically;
+   then close the matching bead with `bd close <task-id>`.
 - Example: `task complete: <summary>`
 4. A task close is terminal. The assigner does not acknowledge it; the
    daemon's close receipt is the record, and the assigner closes the mirror
@@ -22,6 +24,12 @@ If work cannot be completed, close it with the typed outcome `refused` or
 `cancelled` and supply the reason as the optional third positional argument
 (or provide a report source such as `--stdin`). Never close a task as
 `reassigned`; reassign it in place with `atm task assign` and its existing id.
+
+For development, fix, and QA work, the bead id is also the ATM task id. The
+lead creates and dependency-wires the bead before dispatch, assigns it to the
+recipient's ATM identity, and runs `bd ready` after paired task/bead closes to
+dispatch newly unblocked work. A refused ATM task leaves its bead open with a
+note. Rejected completed work is reopened or represented by a child bead.
 
 ## Task Commands
 

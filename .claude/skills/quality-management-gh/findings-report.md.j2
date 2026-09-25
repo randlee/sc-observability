@@ -1,6 +1,6 @@
 ---
 name: findings-report
-version: 1.0.0
+version: 1.0.2
 description: Multi-pass QA findings report template for FAIL and IN-FLIGHT updates.
 format: markdown
 required_variables:
@@ -55,12 +55,12 @@ Verdict: **{{ verdict }}**
 ## Machine Status (JSON)
 ```json
 {
-  "sprint": "{{ sprint_id }}",
-  "task": "{{ task_id }}",
-  "branch": "{{ branch }}",
-  "commit": "{{ commit }}",
+  "sprint": {{ sprint_id | tojson }},
+  "task": {{ task_id | tojson }},
+  "branch": {{ branch | tojson }},
+  "commit": {{ commit | tojson }},
   "pr": {{ pr_number }},
-  "verdict": "{{ verdict }}",
+  "verdict": {{ verdict | tojson }},
   "deliverables": {
     "complete": {{ deliverables_complete }},
     "total": {{ deliverables_total }},
@@ -71,11 +71,11 @@ Verdict: **{{ verdict }}**
     "important": {{ findings_important }},
     "minor": {{ findings_minor }}
   },
-  "blocking_ids": {{ blocking_ids_json }},
-  "merge_readiness": "{{ merge_readiness }}",
-  "merge_reason": "{{ merge_reason }}",
-  "next_action": "{{ next_action }}",
-  "owner": "{{ action_owner }}"
+  "blocking_ids": {{ blocking_ids_json | safe }},
+  "merge_readiness": {{ merge_readiness | tojson }},
+  "merge_reason": {{ merge_reason | tojson }},
+  "next_action": {{ next_action | tojson }},
+  "owner": {{ action_owner | tojson }}
 }
 ```
 

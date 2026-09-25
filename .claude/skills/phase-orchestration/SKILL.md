@@ -1,11 +1,17 @@
 ---
 name: phase-orchestration
-description: Orchestrate multi-sprint phase execution as team-lead (ARCH-ATM). Manages sprint waves, scrum-master lifecycle, PR merges, cobs reviews, and integration branch strategy. This skill is for the TEAM-LEAD only, not for scrum-masters.
+version: 0.2.0
+description: Orchestrate multi-sprint phase execution as team-lead. Manages sprint waves, scrum-master lifecycle, PR merges, Codex design reviews, and integration branch strategy. This skill is for the TEAM-LEAD only, not for scrum-masters.
+depends_on:
+  scrum-master: 0.x
+  rust-developer: 0.x
+  rust-qa-agent: 0.x
+  req-qa: 0.x
 ---
 
 # Phase Orchestration
 
-This skill defines how the team-lead (ARCH-ATM) orchestrates a development phase consisting of multiple sprints with dependency-aware parallelism.
+This skill defines how the team-lead orchestrates a development phase consisting of multiple sprints with dependency-aware parallelism.
 
 **Audience**: Team-lead only. Scrum-masters have their own process defined in `.claude/agents/scrum-master.md`.
 
@@ -14,8 +20,8 @@ This skill defines how the team-lead (ARCH-ATM) orchestrates a development phase
 Before starting a phase:
 1. Phase plan document exists (e.g., `docs/phase-{N}-*.md`) with sprint specs
 2. Integration branch `integrate/phase-{N}` exists and is up to date with `develop`
-3. Claude Code team exists (e.g., `sc-obs`) — do NOT recreate between phases
-4. cobs (Codex) is running and reachable via ATM CLI
+3. The team named by `$ATM_TEAM` exists — do NOT recreate between phases
+4. The persistent Codex reviewer is running and reachable via ATM CLI. Below it is called `<codex-reviewer>`; the repo's `docs/team-protocol.md` and developer roster name it.
 
 ## Phase Execution Loop
 
@@ -63,7 +69,7 @@ REQUIREMENTS: Read docs/{requirements-file} for FRs and acceptance criteria.
 
 WORKTREE:
 - Create worktree via sc-git-worktree skill from integrate/phase-{P}
-- Work in: ../agent-team-mail-worktrees/feature/{P}-{S}-{slug}
+- Work in: ../<repo>-worktrees/feature/{P}-{S}-{slug}
 - Branch: git checkout -b feature/{P}-{S}-{slug}
 
 PR targets: integrate/phase-{P}
@@ -90,38 +96,38 @@ After each scrum-master reports completion:
 4. **Update integration branch** — pull latest into worktree
 5. **Mark task completed** — TaskUpdate status to completed
 
-### 4. Post-Sprint: Arch-CTM Critical Design Review
+### 4. Post-Sprint: Codex Critical Design Review
 
-**After EVERY sprint PR is merged to `integrate/phase-{N}`**, request cobs review:
+**After EVERY sprint PR is merged to `integrate/phase-{N}`**, request `<codex-reviewer>` review:
 
-1. Send cobs the diff via ATM CLI:
+1. Send `<codex-reviewer>` the diff via ATM CLI:
    ```
-   atm send cobs "Sprint {P}.{S} merged (PR #{N}). Critical design review requested. Review: gh pr diff {N} --repo randlee/agent-team-mail. Focus: correctness bugs, architectural violations, missing edge cases."
+   atm send <codex-reviewer> "Sprint {P}.{S} merged (PR #{N}). Critical design review requested. Review: gh pr diff {N} --repo <owner>/<repo>. Focus: correctness bugs, architectural violations, missing edge cases."
    ```
-2. Start the next eligible sprint immediately (dependency permitting) — do NOT wait for cobs review before continuing development
-3. Run cobs review in parallel (use delay agent, nudge via tmux if no reply in 2 min)
-4. Track cobs findings:
+2. Start the next eligible sprint immediately (dependency permitting) — do NOT wait for `<codex-reviewer>` review before continuing development
+3. Run `<codex-reviewer>` review in parallel (use delay agent, nudge via tmux if no reply in 2 min)
+4. Track `<codex-reviewer>` findings:
    - **No issues**: Continue to next sprint
-   - **Issues found**: Create/update a **parallel cobs fix track** in a separate worktree (`feature/{P}-fixes-arch-review`) to address findings while later sprint waves continue
-5. cobs is authorized to implement fixes directly in the fix worktree for review findings
-6. Every cobs fix PR MUST be validated by QA agents (`rust-qa-agent` and `atm-qa-agent`) before merge
-7. Do NOT block ongoing sprint execution unless cobs marks findings as critical/blocking
+   - **Issues found**: Create/update a **parallel `<codex-reviewer>` fix track** in a separate worktree (`feature/{P}-fixes-arch-review`) to address findings while later sprint waves continue
+5. `<codex-reviewer>` is authorized to implement fixes directly in the fix worktree for review findings
+6. Every `<codex-reviewer>` fix PR MUST be validated by QA agents (`rust-qa-agent` and `req-qa`) before merge
+7. Do NOT block ongoing sprint execution unless `<codex-reviewer>` marks findings as critical/blocking
 
-### 5. Arch-CTM Fix Sprint (if needed)
+### 5. Codex Review Fix Sprint (if needed)
 
-If cobs found issues across sprints:
+If `<codex-reviewer>` found issues across sprints:
 1. Create a new worktree branched from `integrate/phase-{N}` (after all sprint PRs merged)
-2. cobs may execute fixes directly OR team-lead may delegate to a fresh scrum-master
-3. Regardless of who implements fixes, run QA validation (`rust-qa-agent` + `atm-qa-agent`) before merge
+2. `<codex-reviewer>` may execute fixes directly OR team-lead may delegate to a fresh scrum-master
+3. Regardless of who implements fixes, run QA validation (`rust-qa-agent` + `req-qa`) before merge
 4. Follow normal CI loop and merge fix PR to integration branch
-5. Request cobs re-review of fixes if delegated implementation was used
+5. Request `<codex-reviewer>` re-review of fixes if delegated implementation was used
 
 ### 6. Wave Transitions (for parallel sprints)
 
 Before starting the next wave:
 1. All prerequisite sprints from previous wave must be merged
 2. Integration branch must be updated (`git pull` in worktree)
-3. Any cobs critical/blocking findings must be addressed first
+3. Any `<codex-reviewer>` critical/blocking findings must be addressed first
 4. New scrum-masters get fresh worktrees branched from updated `integrate/phase-{N}`
 
 ### 7. Phase Completion
@@ -146,15 +152,15 @@ After all sprints (including fix sprint if needed) merge to `integrate/phase-{N}
 
 - **Team persists across phases** — NEVER use TeamDelete on persistent teams
 - **Scrum-masters are ephemeral** — shutdown after their sprint completes
-- **cobs is persistent** — communicates exclusively via ATM CLI (not Claude Code SendMessage)
+- **`<codex-reviewer>` is persistent** — communicates exclusively via ATM CLI (not Claude Code SendMessage)
 - Between sprints: team stays alive, only scrum-master panes come and go
 
-## ATM CLI Communication (cobs)
+## ATM CLI Communication (Codex reviewer)
 
-cobs is a Codex agent that does NOT receive Claude Code team messages. Use ATM CLI only:
+`<codex-reviewer>` is a Codex agent that does NOT receive Claude Code team messages. Use ATM CLI only:
 
 ```bash
-atm send cobs "message"     # Send
+atm send <codex-reviewer> "message"     # Send
 atm read                         # Check replies
 atm inbox                        # Summary
 ```
@@ -176,8 +182,8 @@ Create one task per sprint at phase start:
 - Do NOT use `rust-developer` as scrum-master subagent_type — use `scrum-master`
 - Do NOT tell scrum-masters to "do the work yourself" — they are coordinators
 - Do NOT do dev or QA work as team-lead — delegate to scrum-masters
-- Do NOT skip post-merge cobs sprint review — every merged sprint requires it
-- Do NOT merge cobs fix PRs without QA validation from both QA agents
+- Do NOT skip post-merge `<codex-reviewer>` sprint review — every merged sprint requires it
+- Do NOT merge `<codex-reviewer>` fix PRs without QA validation from both QA agents
 - Do NOT merge without QA pass + CI green
 - Do NOT delete the team between sprints or phases
 - Do NOT clean up worktrees without user approval

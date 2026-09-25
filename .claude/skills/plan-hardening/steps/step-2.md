@@ -23,12 +23,12 @@ Expected reviewer launch input shape:
 
 ```json
 {
-  "source_of_truth": "docs/plans/phase-X/plan-phase-X.md",
+  "source_of_truth": "docs/plans/phase-bc/phase-bc-plan.md",
   "references": [
     "docs/project-plan.md"
   ],
   "worktree_path": "/absolute/path/to/worktree",
-  "branch": "feature/branch-name",
+  "branch": "plan/phase-bc",
   "review_cycle_limit": 3,
   "review_cycle_index": 1,
   "reviewed_commit": "abc1234",
@@ -68,6 +68,9 @@ Save the extracted fenced JSON to `/tmp/step-2.json`.
   `reviewer_findings_json` contains the Step 2 fenced JSON, then re-run Step 1
 - every Step 2 `FAIL` must be routed to Step 1; there is no accept-and-proceed
   path
+- before routing, run `ceremony-finding-screen` over the Step 2 findings and
+  remove any finding upheld as `rejected: ceremony` from
+  `reviewer_findings_json`, recording the reason in the round table Note
 - after Step 1 returns updated fenced JSON, update:
   - `previous_reviewed_commit`
   - `reviewed_commit`
@@ -106,13 +109,20 @@ A background reviewer generates no ATM traffic, so the round is invisible to
 `plan-review-notice` (template
 `.claude/skills/plan-hardening/plan-review-notice.xml.j2`, installed under
 `~/.atm/templates/plan-hardening/`) with `reviewer: plan-scope-reviewer`,
-`round_index`, `verdict`, and a one-paragraph `summary`. Send it to
+`round_index`, `verdict`, and a one-paragraph `summary`. The template
+requires all of `phase`, `reviewer`, `round_index`, `pr_number`, `branch`,
+`commit`, `verdict` and `summary`; start from
+`.claude/skills/plan-hardening/examples/plan-review-notice-vars.example.json`. Send it to
 `team-lead`; when `team-lead` runs the round itself, send it to the plan
 author from Step 1 with `atm queue` so it never interrupts work in progress.
 The template declares `workflow.stage: plan`, which is what makes the round
 discoverable (`atm search --team <team> --workflow-stage plan`).
 
-Update the round table after every Step 2 response:
+Update the round table after every Step 2 response. In the Note column
+record the plan's `critical_path` and `width` for the round (from the
+`plan-scope-reviewer` `parallelism` block). A round that lengthens the
+critical path or narrows the width is a regression: name the finding that
+caused it, and prefer a boundary re-cut over accepting it.
 
 | Round | Step | Reviewer | reviewed_commit | status | blocking | important | minor | findings_hash | supersedes | Note |
 |-------|------|----------|-----------------|--------|----------|-----------|-------|---------------|------------|------|
