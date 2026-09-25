@@ -25,7 +25,7 @@ Expected `/tmp/plan-hardening-qa-vars.json` shape:
   "sprint_doc": "docs/plans/phase-X/plan-phase-X.md",
   "review_mode": "plan",
   "description": "Focused plan QA for phase-X after consistency hardening",
-  "pr_number": "205",
+  "pr_number": "<required: open PR number>",
   "branch": "feature/branch-name",
   "worktree_path": "/absolute/path/to/worktree",
   "commits": "HEAD",
