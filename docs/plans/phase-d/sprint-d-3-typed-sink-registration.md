@@ -8,6 +8,7 @@ depends_on: []
 relation: parallel_safe
 assignee: cobs
 model_class: terra
+requirements: [LOG-004, LOG-015]
 owned_docs: [docs/api-design.md]
 ---
 

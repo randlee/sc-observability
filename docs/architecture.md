@@ -1147,6 +1147,9 @@ ADR navigation index (status is recorded in each decision below):
   Backend/protocol combinations are validated at construction. Enabled
   transports never fall back to no-op. Imported code/docs are governed by the
   immutable Phase D provenance manifest and OTLP-023/024.
+  The dependency allowlist admits only the explicitly feature-gated
+  `opentelemetry*` SDK family and reviewed transport dependencies; no unrelated
+  dependency may be added under the OTLP feature.
 - **Acceptance gate**: The technical lead accepts the backend/protocol/runtime
   matrix, async 2.0 lifecycle, queue/deadline behavior, and source provenance
   before D.6 lands production code.

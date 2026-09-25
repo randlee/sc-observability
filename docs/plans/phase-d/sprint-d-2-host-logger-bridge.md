@@ -8,6 +8,7 @@ depends_on: []
 relation: parallel_safe
 assignee: cobs
 model_class: terra
+requirements: [LOG-001, LOG-010, LOG-015]
 owned_docs: [docs/requirements.md, docs/api-design.md]
 ---
 
@@ -15,7 +16,7 @@ owned_docs: [docs/requirements.md, docs/api-design.md]
 
 ## Goal and dependency
 
-After D.1 has merged, let `sc-observability-log` route `log` macros and
+Let `sc-observability-log` route `log` macros and
 `#[instrument]` records to an existing `Arc<sc_observability::Logger>` without
 creating another writer, file sink, shutdown owner, or level owner. This is
 additive 1.x API work; it does not change direct logger admission semantics or
@@ -45,6 +46,7 @@ pub enum PolicyRejection {
     Invalid,
 }
 
+#[non_exhaustive]
 pub struct AttachmentOptions {
     pub bridge: BridgeOptions,
     pub policy: Arc<dyn BridgeEventPolicy>,
@@ -61,6 +63,10 @@ impl LogAttachment {
     pub fn control(&self) -> LogControl;
     pub fn detach(self, timeout: Duration) -> Result<(), DetachError>;
 }
+
+impl AttachmentOptions {
+    pub fn new(bridge: BridgeOptions, policy: Arc<dyn BridgeEventPolicy>) -> Self;
+}
 ```
 
 The policy inspects but cannot mutate the assembled event and returns admission
@@ -70,6 +76,9 @@ every `Logger::try_log`, including `LogControl::try_log`; macro, tracing, and
 control entry points cannot bypass it. The trait is intentionally open for
 host implementations; its one method plus non-exhaustive decision/reason
 enums is the forward-compatibility decision.
+The policy applies only to facade/attachment admission; a host's direct
+`Logger::try_log` intentionally bypasses it. `BridgeEventPolicy` is owned by
+`sc-observability-log`, which owns that facade boundary.
 
 `LogAttachment` deliberately has no `elevate_level`, `reset_level`, or logger
 shutdown method. `detach` first closes/removes the bridge slot so no new calls
@@ -108,9 +117,11 @@ one `close_and_drain` primitive; detach never shuts down the host logger.
 5. Add public integration fixtures for direct plus macro logging through one
    recording sink; allowlist/redaction, bounded-payload, rejection, panic,
    foreign-facade, concurrent detach, and ownership recovery cases.
-6. Define `DetachError::{Timeout, NotInstalled, ForeignLoggerInstalled}` with
-   stable diagnostics; test every slot transition, reattachment, stale control,
-   foreign ownership, and the one shared drain.
+6. Define the `#[non_exhaustive]`
+   `DetachError::{Timeout, NotInstalled, ForeignLoggerInstalled}` with stable
+   diagnostics; test every slot transition, reattachment, stale control,
+   foreign ownership, and the one shared drain. This is the explicit TYP-030
+   forward-compatibility exception for this public error.
 
 ## Acceptance criteria
 

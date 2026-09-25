@@ -498,8 +498,9 @@ The detailed plan names branches, worktrees, agents, and the final integration
 step. The logging trio is serial only because cobs owns it; its artifacts are
 otherwise parallel-safe. D.4 precedes all 2.0 OTLP work.
 
-Only concrete code-consumption edges are `must_follow`; release baseline
-alignment occurs in final integration. D.1–D.3 remain additive against the 1.4.1
+Only concrete code-consumption edges are `must_follow`; D.4 alone owns release
+baseline alignment before its children begin, while final integration is
+merge-only. D.1–D.3 remain additive against the 1.4.1
 baseline. Planning
 or implementation does not authorize a release, tag, registry publication,
 or downstream `atm-core` change. Issue #88 (Python OTEL/structured logging)

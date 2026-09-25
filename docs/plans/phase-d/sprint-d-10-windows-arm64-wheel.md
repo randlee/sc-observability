@@ -8,6 +8,7 @@ depends_on: []
 relation: root
 assignee: cobs
 model_class: terra
+requirements: [PHB-013]
 owned_docs: [docs/project-plan.md, release/python-platform-policy.json]
 ---
 
@@ -59,8 +60,8 @@ ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
 ## Required validation
 
 - Focused policy/validator tests including negative ARM64 fixtures.
-- Reusable B.4a workflow dispatched at an exact SHA; retain wheel hashes,
-  evidence inventory, and CI URLs for six wheels/30 cells.
+- Reusable B.4a workflow dispatched at an exact SHA and aggregate validation
+  of the six wheels/30 cells.
 - Existing workspace/Python packaging gates remain green.
 
 ## Non-closure

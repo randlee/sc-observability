@@ -8,6 +8,7 @@ depends_on: []
 relation: parallel_safe
 assignee: cobs
 model_class: terra
+requirements: [LOG-009, LOG-040, LOG-042]
 owned_docs: [docs/requirements.md, docs/api-design.md]
 ---
 
@@ -41,15 +42,17 @@ pub struct ResolvedLogSettings {
     pub retained_log_policy: RetainedLogPolicy,
 }
 
+pub struct EnvSnapshot { /* selected environment captured once */ }
+
 impl LogSettings {
-    pub fn from_env(prefix: EnvPrefix) -> Result<Self, LogSettingsError>;
+    pub fn from_env(snapshot: &EnvSnapshot, prefix: EnvPrefix) -> Result<Self, LogSettingsError>;
     pub fn resolve(inputs: LogSettingsInputs) -> Result<ResolvedLogSettings, LogSettingsError>;
 }
 
 pub struct LogSettingsInputs {
     pub file: Option<LogSettings>,
-    pub shared_env: LogSettings,
-    pub application_env: Option<LogSettings>,
+    pub shared_env: LogSettings, // resolved from EnvSnapshot
+    pub application_env: Option<LogSettings>, // resolved from EnvSnapshot
     pub default_root: PathBuf,
 }
 
@@ -62,9 +65,10 @@ The contract reuses existing owners: `LevelFilter` is the legal type owned by
 `sc-observability-types`; `EnvPrefix` supplies its existing validation and
 normalization rules, and `RetainedLogPolicy` supplies strong policy values and
 millisecond duration semantics. D.1 must not add `settings_level_wire`,
-`LogEnvPrefix`, or an overrides type. `RetainedLogPolicy` gains `serde(default)`
-only if needed to support a partial nested object, preserving its field names,
-strong validation, and canonical units.
+`LogEnvPrefix`, or an overrides type. `retainedLogPolicy` is atomic: when
+supplied, it replaces the policy as one validated value; an absent or `null`
+value means no policy override. D.1 does not provide field-wise nested overlays
+or add a second policy codec.
 
 The shared namespace is `EnvPrefix::new("SC")`; an application such as BTIT
 uses `EnvPrefix::new("BTIT")` and maps to `BTIT_LOG_*`. Prefixes follow the
@@ -81,7 +85,7 @@ Defaults are the values passed to or produced by `LoggerConfig::default_for`.
 
 | Rust field | JSON key | `SC_` environment key | Unit / representation | Default | Validation |
 | --- | --- | --- | --- | --- | --- |
-| `level` | `level` | `SC_LOG_LEVEL` | enum: `off`, `error`, `warn`, `info`, `debug`, `trace` | `info` | exact case-insensitive enum token; no free string retained |
+| `level` | `level` | `SC_LOG_LEVEL` | existing `LevelFilter` serde token | `info` | delegates exact accepted spelling/case to `LevelFilter`; no free string retained |
 | `log_root` | `logRoot` | `SC_LOG_ROOT` | non-empty OS path | `default_root` argument | present empty value is invalid |
 | `enable_file_sink` | `enableFileSink` | `SC_LOG_FILE` | JSON boolean / env `true` or `false` | `true` | no numeric/truthy aliases |
 | `enable_console_sink` | `enableConsoleSink` | `SC_LOG_CONSOLE` | JSON boolean / env `true` or `false` | `false` | no numeric/truthy aliases |
@@ -114,22 +118,25 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
    `LevelFilter`, and `RetainedLogPolicy`; add no parallel owners.
 2. Implement deterministic environment parsing for the complete inventory and
    field-wise resolution in the documented order including the LOG-009 root
-   exception. Parsing uses a
-   captured environment snapshot so one resolution cannot mix process states.
+   exception. Parsing uses a named `EnvSnapshot` so one resolution cannot mix
+   process states.
 3. Convert the resolved value to `LoggerConfig` and its strong policy types,
    preserving all non-inventory defaults and introducing no post-construction
    mutation.
 4. Document the table, precedence, null/unset behavior, prefix rules, failure
    codes, and startup-only lifecycle. Add a public example embedding settings
-   under an application's `logging` JSON key.
+   under an application's `logging` JSON key. Document the compact stable-error
+   table: `PrefixCollision`/`LOG-001`, `InvalidEnvironment`/`LOG-002`,
+   `UnknownKey`/`LOG-003`, `InvalidValue`/`LOG-004`, and
+   `Resolution`/`LOG-005`.
 
 ## Acceptance criteria
 
 - Empty/`null` JSON resolves exactly like `LoggerConfig::default_for` for the
   supplied service and default root.
 - Every row has fixtures for default, JSON, shared environment, application
-  environment, and full precedence; nested retention fields merge per field
-  rather than replacing the whole object.
+  environment, and full precedence; a supplied `retainedLogPolicy` replaces
+  the complete validated policy rather than merging nested fields.
 - Every invalid boundary, present-empty environment value, unknown JSON key,
   and unknown selected-prefix environment key returns its documented typed
   failure and code.

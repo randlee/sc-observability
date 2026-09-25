@@ -70,9 +70,9 @@ pub(crate) struct OtlpHttpExporter {
 }
 
 impl OtlpHttpExporter {
-    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportFailure>;
-    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportFailure>;
-    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportFailure>;
+    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError>;
+    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError>;
+    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError>;
 }
 
 // Private worker-thread-owned value; never crosses to a caller thread.
@@ -128,6 +128,9 @@ reqwest's transitive Tokio/hyper/rustls graph and the absence of
 legacy-only build.
 Pin `httpdate = "=1.0.3"` for RFC 7231 HTTP-date `Retry-After` parsing, record
 its license/dependency disposition, and keep it inside the legacy-only feature.
+The direct Tokio preflight dependency enables only Tokio's `sync` feature; the
+per-exporter jitter seed uses OS-backed `getrandom` entropy, with the injected
+test source remaining crate-private.
 
 Each transplanted exporter implements the same crate-private `LogExporter`,
 `TraceExporter`, or `MetricExporter` trait used by D.6, and its backend state
@@ -141,8 +144,8 @@ branch is added to `Telemetry::emit_*`, flush, or shutdown.
 Legacy commands use the D.6 lifecycle core. A bounded data `sync_channel` and
 a separate capacity-one control `sync_channel` feed the same worker; it drains
 control with `try_recv` before waiting briefly for data. Thus flush/shutdown
-barriers cannot be starved by saturated admission.
-there is no second lifecycle state machine. Signal admission uses `try_send`:
+barriers cannot be starved by saturated admission. There is no second lifecycle
+state machine. Signal admission uses `try_send`:
 full/closed fails open, records exactly one per-signal drop and health change,
 and never waits. Barriers have a reserved control path so saturated data cannot
 starve them; async waiters use a Tokio `oneshot` completed by the plain worker,
@@ -180,7 +183,9 @@ validation.
 Delivery is **at least once across retries**: a collector may accept an
 attempt whose response is lost, after which the identical batch is retried and
 observed twice. The exporter supplies no idempotency key and does not promise
-deduplication. Attempts are recorded separately, while an admitted batch is
+deduplication; collectors must aggregate Delta metrics according to their
+temporality and must not infer exactly-once delivery. Attempts are recorded
+separately, while an admitted batch is
 counted as dropped exactly once only if the sequence exhausts/terminates; a
 successful retry is not a drop. Transient, terminal, and recovery accounting
 follow the D.6 health contract without additional D.8 fields or
@@ -221,6 +226,8 @@ D.8 owns no error variant, stable code, mapping, or error documentation.
 6. Record the exact reqwest features/version and legacy-only dependency
    boundary in architecture §6. D.8 owns legacy runtime/provenance and
    architecture-boundary documentation; it does not redefine D.6 contracts.
+   Run the repository's existing `just lint` boundary check after the
+   transplant; no separate identifier-scrub process is introduced.
 
 ## Acceptance criteria
 
@@ -277,9 +284,6 @@ D.8 owns no error variant, stable code, mapping, or error documentation.
   construction and sync-lifecycle rejection; async barrier responsiveness;
   cross-context final-handle drop/worker-exit tests; workspace
   tests/clippy/rustdoc; and review of the source-transplant matrix.
-- `cargo tree -p sc-observability-otlp -e features` under the legacy-only
-  feature, with assertions that the acknowledged reqwest-internal Tokio is
-  present while official OTel SDK and tonic crates are absent.
 - Import-provenance validation and automated no-exporter/legacy-only/combined
   dependency graph gates; module line-count validation.
 

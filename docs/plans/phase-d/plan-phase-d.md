@@ -15,10 +15,15 @@ work or fix round. Final release integration happens in
 `/Users/randlee/github/sc-observability-worktrees/integrate/phase-d` on
 `integrate/phase-d` after the listed parent PRs merge.
 
+D.4 is the sole owner of 2.0 requirements, API-design, and release-baseline
+edits. D.1–D.3 document only their additive 1.x surfaces and rebase when those
+local sections overlap D.4; final integration is merge-only and performs no
+baseline alignment.
+
 ## Sprint table
 
 | Sprint | Deliverable | Agent:model | Relation and concrete reason |
-| --- | --- | --- | --- | --- |
+| --- | --- | --- | --- |
 | D.1 | [Startup `LogSettings`](sprint-d-1-log-settings.md) | cobs:terra | Parallel-safe with D.2/D.3; no bridge or sink API consumes it. |
 | D.2 | [Host logger bridge](sprint-d-2-host-logger-bridge.md) | cobs:terra | Parallel-safe with D.1/D.3; it owns only the `log` facade bridge. |
 | D.3 | [1.x typed-sink bridge](sprint-d-3-typed-sink-registration.md) | cobs:terra | Parallel-safe with D.1/D.2; a temporary 1.x-only compatibility release. |

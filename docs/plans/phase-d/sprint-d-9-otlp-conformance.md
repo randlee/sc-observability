@@ -8,6 +8,7 @@ depends_on: [D.7, D.8]
 relation: must_follow
 assignee: aobs
 model_class: astra
+requirements: [OTLP-001, OTLP-023, OTLP-024]
 owned_docs: [docs/observability/otlp]
 release_train: '2.0'
 ---
@@ -80,14 +81,12 @@ wire/protocol differences are allowed, signal meaning loss is not.
 - Restored dashboards/queries work against the current collector fixture.
 - Import provenance validates pinned source commit/blob ids and the named
   allowed deltas for transplanted destinations.
-- ADR-018 is accepted and OTLP-021 is active: neither document retains
-  proposed/"until that acceptance" wording at sprint closure.
 
 ## Required validation
 
 - Shared dual-backend conformance suite and negative matrix.
 - Feature-isolated tests for `otlp-sdk` and `legacy-http-json`, plus combined
-  feature tests and `cargo tree -e features` assertions for both graphs.
+  feature tests for both graphs.
 - `cargo test --workspace --locked`, clippy with warnings denied, rustdoc,
   public API/semver, dependency/license, and CI workflow validation.
 - Local collector smoke commands for both backends.
