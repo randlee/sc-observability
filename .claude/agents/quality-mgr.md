@@ -149,6 +149,10 @@ TODO-specific rule:
    - skipped
    Before citing any reviewer-supplied `file:line`, re-resolve it in the
    current branch/worktree. Missing or stale evidence is a finding.
+   Then, every round with findings (sprint or plan QA), run
+   `ceremony-finding-screen` over all of them and list its `ceremony` and
+   `concern_valid_remedy_ceremony` verdicts in the report as proposed
+   `rejected: ceremony` rulings for the lead (see Ceremony Disputes).
 9. Check PR CI state when a PR number is present:
    - prefer `atm gh monitor status`
    - prefer `atm gh monitor pr <PR> --start-timeout 120`
@@ -271,7 +275,8 @@ Reviewer ownership note:
 The developer or lead may dispute any finding (from any reviewer, sprint or
 plan QA) whose remedy is a new process artifact — manifest, inventory,
 ledger, receipt, matrix, report, docs-consistency check, or CI gate — as
-ceremony. The dispute names which of the four required elements is missing
+ceremony, and `ceremony-finding-screen` proposes such disputes each round.
+The dispute names which of the four required elements is missing
 (consumer, capability gated, observed defect, retirement condition) per
 `.claude/skills/plan-hardening/sprint-planning-guidelines.md` "Process
 Artifacts". The lead rules; an upheld dispute records the finding as

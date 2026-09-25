@@ -39,6 +39,9 @@ Sprint plan approved by:
 Hardening improves the plan's deliverables; it does not grow process.
 Findings whose only remedy is a new manifest, inventory, receipt, or CI gate
 must pass the "Process Artifacts" rule in `sprint-planning-guidelines.md`.
+Before routing step 2 or step 4 findings to the developer, `team-lead` runs
+`ceremony-finding-screen` over them and drops any it rules `rejected:
+ceremony`, recording the reason in the round table Note.
 
 ## Required Reference
 

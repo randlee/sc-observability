@@ -172,17 +172,14 @@ of §0.
    - `rust-best-practices-agent`
    - `rust-service-hardening-agent`
    - `ceremony-qa`
-   as open reviews on plan QA-1 only. Plan QA-2+ are fix-verification
-   rounds: `req-qa` and `arch-qa` check the dispatched findings, and the
-   QA-1 reviewers above confirm only their own QA-1 findings; new
-   observations are debt notes. When only minor findings remain, they are
-   fixed and lead-confirmed with no further QA round.
+   on plan QA-1. Later rounds, the minor-findings rule, and the
+   `ceremony-finding-screen` step follow `quality-mgr.md` "Default Reviewer
+   Set" and "Ceremony Disputes".
 5. If plan QA passes, the hardened plan is ready for implementation dispatch.
 6. If plan QA fails, the lead uses the normal codex-orchestration
    triage-and-fix loop to route concrete fixes back to the developer.
-7. Plan QA is capped at 3 rounds (`plan_qa_cycle_limit`). A failing round 3
-   ends as `cap-exhausted / not converged`, reported to the user with the
-   open findings; the lead does not open round 4.
+7. Plan QA is capped at 3 rounds (`plan_qa_cycle_limit`); see
+   `/plan-hardening` Reviewer Cycle Caps.
 
 ## QA Coverage Rule
 
