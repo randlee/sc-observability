@@ -120,15 +120,16 @@ the seed is neither public configuration nor serialized evidence.
 Pin the transplanted client to the legacy tested selection
 `reqwest = "=0.12.28"` with `default-features = false` and features
 `["blocking", "json", "rustls-tls"]`, subject only to a separately reviewed
-security update. Add a minimal optional direct Tokio `sync` feature solely for
-construction/synchronous-lifecycle context preflight; it does not create or
-own a runtime. The feature/dependency evidence must explicitly show
+security update. Add a minimal optional direct Tokio dependency with only the
+`rt` feature (`Handle::try_current` construction/synchronous-lifecycle context
+preflight) and the `sync` feature (the async-waiter `oneshot`); it does not
+create or own a runtime. The feature/dependency evidence must explicitly show
 reqwest's transitive Tokio/hyper/rustls graph and the absence of
 `opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp`, and tonic in the
 legacy-only build.
 Pin `httpdate = "=1.0.3"` for RFC 7231 HTTP-date `Retry-After` parsing, record
 its license/dependency disposition, and keep it inside the legacy-only feature.
-The direct Tokio preflight dependency enables only Tokio's `sync` feature; the
+The direct Tokio dependency enables only Tokio's `rt` and `sync` features; the
 per-exporter jitter seed uses OS-backed `getrandom` entropy, with the injected
 test source remaining crate-private.
 

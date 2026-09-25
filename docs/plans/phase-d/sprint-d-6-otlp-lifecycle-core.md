@@ -488,9 +488,9 @@ dispatcher or lifecycle state machine.
   host can immediately tear down its runtime after the await without loss.
 - Premature runtime teardown produces `RuntimeTerminated`, accounts pending
   records as dropped, and never reports successful completion.
-- Shutdown, including its final flush, drops every incomplete started span, increments the dropped
-  export accounting once per span, and never pass an incomplete span to either
-  backend (OTLP-009).
+- Shutdown, including its final flush, drops every incomplete started span,
+  increments the dropped export accounting once per span, and never passes an
+  incomplete span to either backend (OTLP-009).
 - Two telemetry instances remain isolated; enabled SDK config cannot resolve
   to no-op; disabled config makes no request; credentials never enter errors.
 - Construction fixtures cover unsupported insecure verification, unreadable CA,
