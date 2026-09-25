@@ -1,0 +1,9 @@
+{
+  "id": "obs-d-4-qc",
+  "parent": "obs-phase-d",
+  "dev_bead": "obs-d-4",
+  "phase": "d",
+  "sprint": "d-4",
+  "stack": "otlp",
+  "assignee": "lobs"
+}
