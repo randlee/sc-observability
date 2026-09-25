@@ -4,7 +4,7 @@
   "sprint": "d-5",
   "title": "OTLP 2.0 signal model",
   "assignee": "aobs",
-  "stack": "otlp",
+  "stack": "phase-d",
   "layer": 2,
   "branch": "sprint/d-5-otlp-signal-model",
   "pr_target": "sprint/d-4-error-enums",
@@ -19,12 +19,17 @@
   "design": "## Public Contract\n`pub enum Signal { .. }`",
   "acceptance_criteria": "## Acceptance Criteria\n- [ ] signal types round-trip\n\n## Validation\n- `cargo test -p sc-observability-otlp`",
   "blocked_by": [
-    "obs-d-4"
+    "obs-d-4-qc"
   ],
   "model_class": "astra",
   "requirements": [
-    "OTLP-001"
+    "OTLP-008",
+    "OTLP-009",
+    "OTLP-010"
   ],
   "release_train": "2.0",
-  "parent": "obs-phase-d"
+  "parent": "obs-phase-d",
+  "adrs": [
+    "NONE"
+  ]
 }

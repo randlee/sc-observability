@@ -10,9 +10,11 @@ one or two fast agents keep up with the important and minor ones.
 
 ## Before Dispatch
 
-1. Every sprint bead passes the checks in [`planning.md`](planning.md)
-   ("Checks").
-2. `bd ready -l phase:<x>` lists exactly the dev beads with no prerequisites.
+1. `.claude/skills/atm-beads/scripts/validate-plan --root <root>` exits 0
+   (it runs `bd doctor` and every check in [`planning.md`](planning.md)
+   "Checks"), and the plan has passed plan review
+   (`atm-bd-orchestration` "Plan Gate").
+2. `bd ready -l phase-<x>` lists exactly the dev beads with no prerequisites.
 3. `bd ready --explain` shows every other dev bead blocked by the
    quick-check beads of its prerequisites.
 4. The dispatched agent reads its assignment from the bead: `bd show <bead>`
@@ -56,8 +58,9 @@ bead and blocks every dev bead that requires it. Its assignment is
 
 4. Steps 1 to 3 repeat until the task is done.
 
-The dev agent may instead close the bead and declare failure, with the reason
-the work cannot be completed.
+The dev agent may instead declare failure, with the reason the work cannot be
+completed. It sets the bead `blocked` with a `failed:` note and does not close
+it: a closed dev bead would release its quick-check.
 
 ## QA And Findings
 
@@ -146,24 +149,29 @@ follow.
 
 ## Lifecycle
 
-Each assignment is one ATM task and one bead, opened and closed together.
+Each assignment is one ATM task and one bead, opened and closed together; the
+task id is the bead id. The templates and the full pairing are in the
+`atm-bd-orchestration` skill.
 
-| Step | ATM | Bead |
+| Step | Bead | ATM |
 | --- | --- | --- |
-| dispatch (lead) | `atm task assign <agent> --task-id <bead> --template <assignment> --vars <file>` | assignee already set |
-| start (assignee) | `atm task start <bead> "<one line>"` | `bd update <bead> --claim` |
-| done (assignee) | `atm task close <bead> completed --template <complete> --vars <file>` | `bd close <bead>` |
-| refused (assignee) | `atm task close <bead> refused "<reason>"` | stays open; `bd update <bead> --notes "<reason>"` |
+| dispatch (lead) | assignee already set | `atm task assign <agent> --task-id <bead> --template <assignment> --vars <file>` |
+| ready check (assignee) | `bd ready -n 0 --json` lists the bead | |
+| start (assignee) | `bd update <bead> --claim` | then `atm task start <bead> "<one line>"` |
+| done (assignee) | `bd close <bead> --reason "<why>"` | with `atm task close <bead> completed --template <complete> --vars <file>` |
+| refused (assignee) | returned open with no assignee (`bd update <bead> --status open --assignee "" --append-notes`), or `blocked` with a `failed:` note for a dev bead | with `atm task close <bead> refused --template task-refused.md.j2 --vars <file>` |
 
-The complete templates are listed in `docs/team-protocol.md` (Close
-Templates). A push or progress report closes neither the task nor the bead.
+`bd update --claim` succeeds on a blocked bead, so the ready check comes first.
+A bead that is not ready is neither claimed nor started; the assignee reports
+the root cause (its open blockers) to lead. A push or progress report closes
+neither the task nor the bead.
 
 ## Dispatch Loop
 
-1. `bd ready -l phase:<x>` lists the dev, quick-check, QA and finding beads
+1. `bd ready -l phase-<x>` lists the dev, quick-check, QA and finding beads
    whose blockers are closed, highest priority first.
 2. Assign each ready bead to its assignee with the matching assignment
    template, using the bead id as `task_id`.
-3. When a task closes, its bead closes with it; run `bd ready` again. After a
+3. When a task closes, its bead closes with it, except after a failed quick-check or plan review, which leaves the bead open. Run `bd sync`, then `bd ready` again. After a
    green quick-check or a triaged QA, create and wire the QA or finding beads
    first, then run `bd ready`.

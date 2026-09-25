@@ -1,17 +1,17 @@
 ---
 name: atm-beads
 version: 0.1.0
-description: Write the phase plan as beads (one epic, one bead per sprint, stack-ordered dependencies) and run each ATM task and its bead as one lifecycle.
+description: Write the phase plan as beads (one root, a dev bead and a quick-check bead per sprint), validate it, import a markdown plan, and run each ATM task and its bead as one lifecycle.
 depends_on:
-  codex-orchestration: 0.x
+  atm-bd-orchestration: 0.x
 ---
 
 # ATM Beads
 
 Beads are the plan and the work graph; ATM tasks are the dispatch and the
 span. There are no plan markdown files: the phase is an epic and each sprint
-is a bead. A bead id is the ATM `task_id`, and the two open and close
-together.
+is a dev bead followed by a quick-check bead. A bead id is the ATM
+`task_id`, and the two open and close together.
 
 ## Identity
 
@@ -22,10 +22,12 @@ together.
 
 ## Lifecycle
 
-Every assignment is one ATM task and one bead, opened and closed together:
-`atm task start` with `bd update <bead> --claim`, and
-`atm task close <bead> completed --template <complete> --vars <file>` with
-`bd close <bead>`. A push or progress report closes neither.
+Every assignment is one ATM task and one bead, opened and closed together,
+and the task id is the bead id: `bd update <bead> --claim` then
+`atm task start`, and `bd close <bead>` with
+`atm task close <bead> completed --template <complete> --vars <file>`. The
+templates and the not-ready rule are in the `atm-bd-orchestration` skill. A
+push or progress report closes neither.
 
 ## Resources
 
@@ -33,8 +35,24 @@ Read only the one the current job needs.
 
 | Resource | Read when |
 | --- | --- |
-| [`resources/planning.md`](resources/planning.md) | writing or reviewing the plan: the phase epic, sprint beads, their fields, metadata and stack order |
+| [`resources/planning.md`](resources/planning.md) | writing or reviewing the plan: the phase root, dev and quick-check beads, their fields, metadata and stack order |
 | [`resources/atm-beads-plan-guidelines.md`](resources/atm-beads-plan-guidelines.md) | shaping the sprints themselves: boundaries, closure, tracks, waves, naming (read "sprint doc" as "sprint bead") |
-| [`resources/orchestrating.md`](resources/orchestrating.md) | lead work: checking the plan beads, wiring QA and fix dependencies, dispatching from `bd ready` |
+| [`resources/orchestrating.md`](resources/orchestrating.md) | lead work: checking the plan beads, wiring QA and fix dependencies, dispatching from `bd ready` (templates: the `atm-bd-orchestration` skill) |
+| [`resources/importing-md-plan.md`](resources/importing-md-plan.md) | importing an existing markdown plan into beads: one sprint doc, or a whole phase; includes the missing-info checks |
 | [`resources/quick-check.md`](resources/quick-check.md) | writing or sending the quick-check assignment (recipient and message) |
 | [`resources/troubleshooting.md`](resources/troubleshooting.md) | a claim, close or assignee looks wrong, or `bd ready` misses assigned work |
+
+## Validation
+
+Validation is mandatory before a plan is imported, before plan review and
+before the first dispatch. Run it from the repository root:
+
+```bash
+.claude/skills/atm-beads/scripts/validate-plan --file <plan.jsonl>   # rendered, before import
+.claude/skills/atm-beads/scripts/validate-plan --root <root id>      # live beads
+```
+
+It runs `bd doctor` first. It fails on any doctor error, a missing field,
+a broken graph, a missing, empty or unknown REQ/ADR id (`["NONE"]` is the
+only way to say there is none), or an assignee who is not an ATM member.
+Exit 0 means valid, 5 lists the problems, and 2 means it could not run.

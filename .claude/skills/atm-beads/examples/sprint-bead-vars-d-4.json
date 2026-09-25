@@ -4,7 +4,7 @@
   "sprint": "d-4",
   "title": "Error enums",
   "assignee": "cobs",
-  "stack": "otlp",
+  "stack": "phase-d",
   "layer": 1,
   "branch": "sprint/d-4-error-enums",
   "pr_target": "integrate/phase-d",
@@ -20,7 +20,14 @@
   "acceptance_criteria": "## Acceptance Criteria\n- [ ] every error variant has a code\n\n## Validation\n- `cargo test -p sc-observability-types`",
   "blocked_by": [],
   "model_class": "terra",
-  "requirements": [],
+  "requirements": [
+    "NONE"
+  ],
   "release_train": "2.0",
-  "parent": "obs-phase-d"
+  "parent": "obs-phase-d",
+  "adrs": [
+    "ADR-011",
+    "ADR-012",
+    "ADR-017"
+  ]
 }

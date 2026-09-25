@@ -1,7 +1,7 @@
 ---
 name: sprint-bead
-version: 0.1.0
-description: One sprint bead of a plan written to beads. Every mandatory plan field is a required variable, so a strict render fails when one is missing. Render strictly, then `jq -c .` into the import JSONL.
+version: 0.2.0
+description: One sprint bead of a plan written to beads. Every mandatory plan field is a required variable, so a strict render fails when one is missing. `requirements` and `adrs` are lists of governing ids, or exactly ["NONE"] when the sprint has none. Render strictly, then `jq -c .` into the import JSONL.
 format: json
 required_variables:
   - id
@@ -22,19 +22,17 @@ required_variables:
   - description
   - design
   - acceptance_criteria
+  - requirements
+  - adrs
 optional_variables:
   - priority
   - blocked_by
   - model_class
-  - requirements
-  - adrs
   - release_train
 defaults:
   priority: 2
   blocked_by: []
   model_class: ""
-  requirements: []
-  adrs: []
   release_train: ""
 ---
 {

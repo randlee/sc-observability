@@ -1,0 +1,11 @@
+{
+  "task_id": "obs-d-4-qc",
+  "checked_bead": "obs-d-4",
+  "sprint": "d-4",
+  "worktree_path": "/Users/randlee/github/sc-observability-worktrees/sprint/d-4-otlp-sync-exporter",
+  "branch": "sprint/d-4-otlp-sync-exporter",
+  "commit": "4f1c2a9e7b3d5f60812a4c9e0b7d3f5a1c2e4b6d",
+  "base": "sprint/d-3-otlp-config",
+  "lead": "obs-lead",
+  "cc": ""
+}

@@ -1,0 +1,68 @@
+---
+name: quick-check-task
+version: 1.0.0
+description: lead quick-check assignment for the dedicated quick-check agent. task_id is the quick-check bead. The agent pipes the checked dev or finding bead into one background agent and reports PASS or FAIL. Not QA.
+format: xml
+required_variables:
+  - task_id
+  - checked_bead
+  - sprint
+  - worktree_path
+  - branch
+  - commit
+  - base
+optional_variables:
+  - lead
+  - cc
+  - lint_command
+defaults:
+  lead: team-lead
+  cc: team-lead
+  lint_command: "just lint"
+metadata:
+  type: quick-check-task
+  tags:
+    - stage:quick-check
+    - orchestration:beads
+  workflow:
+    scope:
+      kind: sprint
+      variable: sprint
+    state: quick-check-start
+    stage: quick-check
+    transition: start
+---
+<atm-task id="{{ task_id }}" sprint="{{ sprint }}" mode="quick-check">
+  <description><![CDATA[Quick-check `{{ checked_bead | string | cdata_escape }}` at `{{ commit | string | cdata_escape }}`: nothing skipped, no obvious errors, lint passes. This is not QA.]]></description>
+
+  <checked-bead><![CDATA[{{ checked_bead | string | cdata_escape }}]]></checked-bead>
+  <worktree><![CDATA[{{ worktree_path | string | cdata_escape }}]]></worktree>
+  <branch><![CDATA[{{ branch | string | cdata_escape }}]]></branch>
+  <commit><![CDATA[{{ commit | string | cdata_escape }}]]></commit>
+  <base><![CDATA[{{ base | string | cdata_escape }}]]></base>
+  <lint-command><![CDATA[{{ lint_command | string | cdata_escape }}]]></lint-command>
+
+  <workflow>
+    <step id="a"><![CDATA[Claim the bead, then start the task. `BEADS_ACTOR` must equal your `ATM_IDENTITY` (claims and closes are recorded as that actor); if it is empty, pass `--actor "$ATM_IDENTITY"` to every `bd` write. Check that the bead is ready: `bd ready -n 0 --json | jq -e --arg b {{ task_id | string | cdata_escape }} 'any(.[]; .id == $b)'`. When it prints `true`, run `bd update {{ task_id | string | cdata_escape }} --claim`, then `atm task start {{ task_id | string | cdata_escape }} "quick-check {{ checked_bead | string | cdata_escape }}"`. Quick-checks never wait for each other: run this one concurrently with every other open quick-check task in your queue. ATM allows one active task per agent today: when another of your tasks is already active, `atm task start` fails; claim the bead anyway, do the work, and close the task without starting it (ATM accepts closing a queued task). The close still pairs with the bead close.]]></step>
+    <step id="a1"><![CDATA[When it prints `false` the bead is not ready: do not claim it and do not start the task. Find the root cause: `bd show {{ task_id | string | cdata_escape }}` (status, assignee), `bd blocked --json | jq --arg b {{ task_id | string | cdata_escape }} '.[] | select(.id == $b)'` (normally `{{ checked_bead | string | cdata_escape }}` still open), and `bd show <blocker>` for each. Report it with `atm send {{ lead | string | cdata_escape }} --stdin`: the bead, why it is not ready, and which bead or agent has to move. Then wait.]]></step>
+    <step id="b"><![CDATA[Write the background agent's prompt, piping the checked bead in:
+```bash
+{ bd show {{ task_id | string | cdata_escape }} --json | jq -r '.[0].description'
+  printf '\nWorktree: {{ worktree_path | string | cdata_escape }}\nBranch: {{ branch | string | cdata_escape }}\nCommit: {{ commit | string | cdata_escape }}\n'
+  printf 'Read code at the commit only (git show {{ commit | string | cdata_escape }}:<path>); the change is git diff origin/{{ base | string | cdata_escape }}...{{ commit | string | cdata_escape }}.\n'
+  printf 'Run {{ lint_command | string | cdata_escape }} in the worktree.\n'
+  printf 'Reply with PASS or FAIL on the first line, then one line per finding: <file>:<line> <what is missing or wrong>. Do not edit files.\n\n'
+  printf 'The bead:\n\n```json\n'
+  bd show {{ checked_bead | string | cdata_escape }} --json | jq '.[0] | {id, title, description, design, acceptance_criteria, metadata}'
+  printf '```\n'
+} > <scratch>/{{ task_id | string | cdata_escape }}-prompt.md
+```
+Keep `<scratch>` outside the repository.]]></step>
+    <step id="c"><![CDATA[Start one background agent (a subagent or child agent, whichever your harness provides) with the contents of `<scratch>/{{ task_id | string | cdata_escape }}-prompt.md` as its prompt. It returns text; it never runs `bd` or `atm`.]]></step>
+    <step id="d"><![CDATA[Check the result before you report it: the worktree is at `{{ commit | string | cdata_escape }}` (`git -C {{ worktree_path | string | cdata_escape }} rev-parse HEAD`) and each finding names a real file and line. Drop findings that are QA opinions (style, design preference) rather than skipped work, obvious errors or lint failures.]]></step>
+    <step id="e"><![CDATA[PASS: close the bead and the task together: `bd close {{ task_id | string | cdata_escape }} --reason "PASS at {{ commit | string | cdata_escape }}"` and `atm task close {{ task_id | string | cdata_escape }} completed --template .claude/skills/atm-bd-orchestration/templates/quick-check-complete.md.j2 --vars <scratch>/qc-{{ task_id | string | cdata_escape }}-vars.json` with `verdict` PASS. Closing the bead releases every dev bead that required `{{ checked_bead | string | cdata_escape }}`.]]></step>
+    <step id="e1"><![CDATA[FAIL: the bead must stay **open**, because closing it would release the dependent dev beads. Return it to the queue with `bd update {{ task_id | string | cdata_escape }} --status open --assignee "" --append-notes "FAIL at {{ commit | string | cdata_escape }}: <n> findings"` and close the task with the same `atm task close … completed` command, `verdict` FAIL and the findings. {{ lead | string | cdata_escape }} reopens `{{ checked_bead | string | cdata_escape }}` and assigns the dev-fix; when it closes again this bead is ready for the next round.{% if cc and cc != lead %} Copy the verdict line to `{{ cc | string | cdata_escape }}` with a plain `atm send {{ cc | string | cdata_escape }} --stdin`.{% endif %}]]></step>
+    <step id="e2"><![CDATA[If the check cannot run (worktree missing, commit not pushed), return the bead with `bd update {{ task_id | string | cdata_escape }} --status open --assignee "" --append-notes "<reason>"` and close the task with `atm task close {{ task_id | string | cdata_escape }} refused --template .claude/skills/atm-bd-orchestration/templates/task-refused.md.j2 --vars <scratch>/refused-{{ task_id | string | cdata_escape }}-vars.json`.]]></step>
+    <step id="f"><![CDATA[After the close, read ATM again.]]></step>
+  </workflow>
+</atm-task>

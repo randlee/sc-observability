@@ -11,6 +11,11 @@ independent background agent, concurrently up to its harness's limit, and
 never serializes unrelated checks on purpose. The background agents run luna
 today.
 
+The quick-check bead's `assignee` is that agent's `ATM_IDENTITY` (the
+examples call it `quick-check`). It must be an ATM member of the team:
+`validate-plan` rejects any other name. If the team has no such member,
+lead adds one before the plan is imported (the `team-lead` skill, Step 3).
+
 Candidates to replace luna later: Haiku 5.5 once released (Haiku 4.5 is too
 weak for this), and typesafe.ai (<https://typesafe.ai/>), to be evaluated.
 
