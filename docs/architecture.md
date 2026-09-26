@@ -1221,8 +1221,9 @@ ADR navigation index (status is recorded in each decision below):
 
 #### ADR-019 amendment: staged neutral signal contracts
 
-- **Status**: Proposed 2026-09-26 for technical-lead acceptance before merge
-  of obs-d-12-qa-f2; the original ADR-019 acceptance above is unchanged.
+- **Status**: Accepted 2026-09-26 by the lead (ruling
+  `01M3F5BQFV804H5G4W6HFNZ03V`); the original ADR-019 acceptance above
+  is unchanged.
 - **Context**: ADR-017's error-wrapper replacement does not itself specify
   the neutral signal model or its temporary public module. D.12 needs to
   release these contracts while existing 1.x consumers continue to compile.
