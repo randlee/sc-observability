@@ -14,12 +14,25 @@ use sc_observability_types::typed::InitFailure;
     deprecated,
     reason = "the builder retains InitError in its published compatibility signature"
 )]
-use sc_observability_types::{InitError, Remediation};
+use sc_observability_types::{ErrorContext, InitError, Remediation};
+use thiserror::Error;
 
+use crate::typed::{TypedLogSink, legacy_sink};
 use crate::{
     ConsoleSink, JsonlFileSink, LevelControl, LevelOwner, Logger, LoggerConfig, LoggerRuntime,
-    Running, SinkRegistration, default_log_path,
+    Running, SinkHealthState, SinkRegistration, default_log_path, error_codes,
 };
+
+impl SinkRegistration {
+    /// Registers a typed sink through the retained open [`crate::LogSink`] boundary.
+    ///
+    /// The D13 adapter keeps the typed sink's structured diagnostic and source
+    /// intact while this registration retains any sink-local filter metadata.
+    #[must_use]
+    pub fn typed(sink: Arc<dyn TypedLogSink>) -> Self {
+        Self::new(legacy_sink(sink))
+    }
+}
 
 /// Construction-time logger builder that owns sink registration.
 #[expect(
@@ -30,6 +43,31 @@ pub struct LoggerBuilder {
     config: LoggerConfig,
     file_sink: Option<Arc<JsonlFileSink>>,
     sinks: Vec<SinkRegistration>,
+    typed_sinks: Vec<Arc<dyn TypedLogSink>>,
+}
+
+/// A typed sink could not be added to a logger builder.
+#[derive(Debug, Error)]
+pub enum SinkRegistrationError {
+    /// The same typed sink instance was already registered.
+    #[error("{0}")]
+    Duplicate(#[source] Box<ErrorContext>),
+    /// The sink is degraded and cannot be registered.
+    #[error("{0}")]
+    Invalid(#[source] Box<ErrorContext>),
+    /// The sink is unavailable and therefore closed to registration.
+    #[error("{0}")]
+    Closed(#[source] Box<ErrorContext>),
+}
+
+impl SinkRegistrationError {
+    /// Returns the stable diagnostic context for this registration failure.
+    #[must_use]
+    pub fn context(&self) -> &ErrorContext {
+        match self {
+            Self::Duplicate(context) | Self::Invalid(context) | Self::Closed(context) => context,
+        }
+    }
 }
 
 impl LoggerBuilder {
@@ -91,6 +129,7 @@ impl LoggerBuilder {
             config,
             file_sink,
             sinks,
+            typed_sinks: Vec::new(),
         })
     }
 
@@ -98,6 +137,65 @@ impl LoggerBuilder {
     pub fn register_sink(&mut self, registration: SinkRegistration) -> &mut Self {
         self.sinks.push(registration);
         self
+    }
+
+    /// Registers a typed sink before the logger runtime is built.
+    ///
+    /// This is equivalent to registering [`SinkRegistration::typed`] and
+    /// returns the builder so callers can continue fluent configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SinkRegistrationError::Duplicate`] for the same typed sink
+    /// instance, [`SinkRegistrationError::Invalid`] for a degraded sink, and
+    /// [`SinkRegistrationError::Closed`] for an unavailable sink.
+    pub fn register_typed_sink(
+        &mut self,
+        sink: Arc<dyn TypedLogSink>,
+    ) -> Result<&mut Self, SinkRegistrationError> {
+        if self
+            .typed_sinks
+            .iter()
+            .any(|registered| Arc::ptr_eq(registered, &sink))
+        {
+            return Err(SinkRegistrationError::Duplicate(Box::new(
+                ErrorContext::new(
+                    error_codes::SC_LOG_SINK_REGISTRATION_DUPLICATE,
+                    "typed sink is already registered",
+                    Remediation::recoverable(
+                        "register each typed sink instance only once",
+                        ["remove the duplicate registration"],
+                    ),
+                ),
+            )));
+        }
+
+        match sink.health().state {
+            SinkHealthState::Healthy => {}
+            SinkHealthState::DegradedDropping => {
+                return Err(SinkRegistrationError::Invalid(Box::new(ErrorContext::new(
+                    error_codes::SC_LOG_SINK_REGISTRATION_INVALID,
+                    "typed sink is degraded and cannot be registered",
+                    Remediation::recoverable(
+                        "restore the sink to a healthy state before registration",
+                        ["repair the sink", "register a healthy sink"],
+                    ),
+                ))));
+            }
+            SinkHealthState::Unavailable => {
+                return Err(SinkRegistrationError::Closed(Box::new(ErrorContext::new(
+                    error_codes::SC_LOG_SINK_REGISTRATION_CLOSED,
+                    "typed sink is unavailable and closed to registration",
+                    Remediation::recoverable(
+                        "create a healthy replacement sink before registration",
+                        ["create a replacement sink"],
+                    ),
+                ))));
+            }
+        }
+
+        self.typed_sinks.push(sink.clone());
+        Ok(self.register_sink(SinkRegistration::typed(sink)))
     }
 
     /// Finalizes construction and returns the logger runtime.
@@ -141,6 +239,7 @@ impl LoggerBuilder {
             config,
             file_sink,
             sinks,
+            typed_sinks: _,
         } = self;
         let config = Arc::new(config);
         let active_log_path = default_log_path(&config.log_root, &config.service_name);

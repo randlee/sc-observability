@@ -38,7 +38,7 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 #[doc(inline)]
-pub use builder::LoggerBuilder;
+pub use builder::{LoggerBuilder, SinkRegistrationError};
 #[doc(inline)]
 pub use follow::LogFollowSession;
 #[doc(inline)]
