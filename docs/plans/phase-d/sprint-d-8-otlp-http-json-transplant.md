@@ -1,13 +1,24 @@
 # d-8: Legacy HTTP/JSON source transplant
 
+Generated projection of `obs-d-8`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 11
+- Wave: 2
+- Layer: 11
+- Assignee / model: lobs / luna
+- Relation: `must_follow`
+- Closure: `boundary`
+- Target boundary: OTLP HTTP JSON module
 - Branch: `sprint/d-8-otlp-http-json-transplant`
-- PR target: `sprint/d-7-otlp-sdk-tokio`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-8-otlp-http-json-transplant`
+- PR target (merge order only): `sprint/d-7-otlp-sdk-tokio`
 - Blocked by: `obs-d-12-sanity`
-- Owned paths:
+- Requirements: LAY-001, LAY-004, LAY-005, LAY-006, NFR-001, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, OTLP-001, OTLP-002, OTLP-003, OTLP-004, OTLP-005, OTLP-006, OTLP-007, OTLP-008, OTLP-009, OTLP-010, OTLP-011, OTLP-012, OTLP-013, OTLP-014, OTLP-015, OTLP-016, OTLP-017, OTLP-018, OTLP-019, OTLP-020, OTLP-021, OTLP-022, OTLP-023, PHB-003, PHB-004, PHB-005, PHB-006, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-021, TYP-023, TYP-024, TYP-030, TYP-031
+- ADRs: ADR-002, ADR-004, ADR-005, ADR-006, ADR-008, ADR-009, ADR-017, ADR-018
+- Owned paths (metadata projection):
   - `crates/sc-observability-otlp/src/legacy_http_json/implementation.rs`
+  - `crates/sc-observability-otlp/src/legacy_http_json/mod.rs`
   - `crates/sc-observability-otlp/src/legacy_http_json/tests.rs`
   - `docs/plans/phase-d/sprint-d-8-otlp-http-json-transplant.md`
   - `examples/otlp-legacy/src/**`
@@ -34,14 +45,7 @@ Transplant the immutable 7b39f4e7f72b6845edec4eab4cd671611661445f HTTP/JSON expo
 
 No SDK implementation, normative/manifest/registry edit, additional validator framework, Python binding implementation or publication. D.18 composes real backends; D.9 owns collector/dashboard qualification.
 
-
 ## Design
-
-## Ownership split
-
-D.8 owns only legacy HTTP/JSON backend behavior in `legacy_http_json/implementation.rs` and `legacy_http_json/tests.rs`; it calls D.6’s shared lifecycle core and owns no lifecycle barrier, shutdown ordering, admission policy, public facade, config/default, registry, manifest, feature allowlist, or module declaration. D.12 owns and stubs `legacy_http_json/mod.rs` and the `legacy-http-json` feature/dependency allowlist. `ExporterSet` is crate-private and owned by D.12.
-
-D.8 preserves typed terminal results at its supported external consumer boundary; expected failures remain result values rather than panics or false success (ADR-014). ADR-005 requires the named OTLP retry-limit constants module supplied by D.12; D.8 consumes those constants without defining inline policy values. ADR-019 records the Phase-D pins/allowlist and structural ownership decisions that constrain this backend.
 
 ## Retained implementation contract
 
@@ -186,14 +190,71 @@ The only file fence is metadata.owned_paths; paths mentioned as dependencies are
 Created by obs-d-12, owned here from wave 2. Consume its completed sanity-gated artifact; preserve the contract while implementing or retiring staged compatibility. This serial handoff is why relation is must_follow; no same-wave sibling shares these paths.
 
 - `crates/sc-observability-otlp/src/legacy_http_json/implementation.rs`
+- `crates/sc-observability-otlp/src/legacy_http_json/mod.rs`
 - `crates/sc-observability-otlp/src/legacy_http_json/tests.rs`
 
 ## Acceptance criteria
 
-- [ ] Deliverable 1: source-pin/disposition tests externally prove every relevant legacy implementation symbol and copied transport/endpoint/auth/CA/payload test is retained from the immutable provenance source.
-- [ ] Deliverable 2: loopback tests externally verify the retained request behavior and exactly the four authorized deltas: retry classification, bounded Retry-After/jitter, shutdown cancellation, and sequence deadline.
-- [ ] Deliverable 3: `cargo test -p sc-observability-otlp --features legacy-http-json --locked` proves D.12 neutral payload/config/typed-result consumption without new error mappings or inline retry constants.
-- [ ] Deliverable 4: external saturation tests prove nonblocking record/byte admission, capacity-one control progress, ordered barrier completion, bounded construction, and exact-once worker exit/drop accounting through D.6’s lifecycle core.
-- [ ] Deliverable 5: external fixtures prove plain-thread operation, entered-Tokio rejection, async responsiveness, cancellation, bounded Retry-After parsing, and response-loss accounting.
-- [ ] Deliverable 6: existing dependency/boundary validation proves the legacy-only build excludes the official SDK/tonic and consumes the D.12 allowlist unchanged.
-- [ ] This sprint does not close production composition or collector equivalence; D.18 and D.9 own those outcomes.
+## Acceptance criteria
+
+- Every relevant legacy implementation symbol and test has a disposition; all
+  copied tests execute in this repository against the transplanted code.
+- Captured requests preserve exact signal endpoints, content type, auth, CA,
+  timeout, and retry behavior while carrying D.5's current neutral fields.
+- The synchronous backend works from a plain thread without a caller-owned
+  Tokio runtime and never silently falls back to no-op when enabled.
+- Plain-thread construction plus sync flush/shutdown return real results.
+  Construction and synchronous lifecycle from current-thread/multi-thread
+  Tokio reject before worker creation, buffer drain, or command admission.
+  The construction fixture asserts the D.12 wrapped construction form and
+  redacted blocking-context diagnostic source; lifecycle fixtures assert its
+  direct runtime-failure form.
+- Async lifecycle from Tokio remains responsive while the plain worker performs
+  transport; dropping the final exporter handle on Tokio merely closes the
+  sender, and instrumentation proves the reqwest client is ultimately dropped
+  and the worker exits on its plain thread. No nested-runtime panic escapes.
+- `Telemetry` uses the same trait-object call sites for both backends; only
+  construction/injection selects the synchronous implementations.
+- Any behavior/assertion not copied is identified by a concrete API
+  incompatibility; structural rewrite or alternate HTTP/retry logic beyond the
+  four authorized safety deltas fails QA.
+- Failures remain fail-open at the facade and update health/dropped counts.
+- Legacy health satisfies the complete D.12 health/accounting contract
+  equivalently to SDK, without adding or restating fields.
+- Capacity-one saturation cannot block or starve flush/shutdown; injected
+  worker panic/exit resolves every sync/async waiter within the deadline.
+- Retry fixtures freeze classification, bounded `Retry-After`, jitter/backoff,
+  overall deadline, and prompt shutdown cancellation.
+- Retry bound fixtures cover delta-seconds and HTTP-date, negative, malformed,
+  past, and huge `Retry-After` values; distinct production instance seeds;
+  deterministic injected seeds; and
+  positive jitter at the sequence deadline proving the D.12 fallback clamp
+  and no zero-budget attempt. The shared cap-ordering fixture remains owned by
+  D.12 and is consumed unchanged.
+- Shutdown-during-backoff asserts the D.12 cancellation outcome, its exact
+  accounting/facade mapping, and prompt wake.
+- Shutdown-during-request has three fixtures: a successful in-flight response
+  completes with no drop; an ordinary terminal response fails/drops once with
+  its D.12 terminal outcome; a retryable response becomes the D.12
+  cancellation outcome and drops once. Every case is accounted exactly once
+  and finishes within the D.12 lifecycle contract.
+- A response-loss fixture proves at-least-once duplicate delivery, separate
+  attempt accounting, one terminal drop after exhaustion, and zero drops after
+  a retried-then-successful batch.
+
+
+## Required validation
+
+- Copied legacy unit/loopback tests plus current public facade fixtures.
+- `cargo test -p sc-observability-otlp --features legacy-http-json --locked`.
+- A plain synchronous external-consumer fixture; current-thread/multi-thread
+  construction and sync-lifecycle rejection; async barrier responsiveness;
+  cross-context final-handle drop/worker-exit tests; workspace
+  tests/clippy/rustdoc; and review against the existing immutable source manifest.
+- Existing boundary/dependency checks and the owned adapter source-pin/disposition tests pass; no line-count or parallel provenance gate.
+
+
+- `cargo test -p sc-observability-otlp --lib legacy_http_json::tests --features legacy-http-json --locked` executes all adapter cases above.
+- This sprint does not close production composition or collector equivalence; D.18/D.9 do.
+
+- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.

@@ -1,12 +1,22 @@
 # d-18: Integration and public API
 
+Generated projection of `obs-d-18`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 16
+- Wave: 3
+- Layer: 16
+- Assignee / model: cobs / terra
+- Relation: `must_follow`
+- Closure: `integration`
+- Target boundary: phase integration
 - Branch: `sprint/d-18-integration-and-public-api`
-- PR target: `sprint/d-17-log-consumer-error-migration`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-18-integration-and-public-api`
+- PR target (merge order only): `sprint/d-17-log-consumer-error-migration`
 - Blocked by: `obs-d-2-sanity`, `obs-d-3-sanity`, `obs-d-16-sanity`, `obs-d-1-sanity`, `obs-d-10-sanity`, `obs-d-17-sanity`, `obs-d-14-sanity`, `obs-d-6-sanity`, `obs-d-4-sanity`, `obs-d-5-sanity`, `obs-d-15-sanity`, `obs-d-8-sanity`, `obs-d-7-sanity`
-- Owned paths:
+- Requirements: DOC-001, DOC-002, DOC-003, DOC-004, DOC-005, DOC-006, DOC-007, DOC-008, LAY-001, LAY-002, LAY-004, LAY-005, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-007, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-047, LOG-048, NFR-001, NFR-002, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, NFR-010, NFR-011, NFR-012, OTLP-001, OTLP-002, OTLP-003, OTLP-004, OTLP-005, OTLP-006, OTLP-007, OTLP-008, OTLP-009, OTLP-010, OTLP-011, OTLP-012, OTLP-013, OTLP-014, OTLP-015, OTLP-016, OTLP-017, OTLP-018, OTLP-019, OTLP-020, OTLP-021, OTLP-022, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, PHB-012, PHB-013, PHB-014, PHC-001, PHC-003, PHC-004, PHC-006, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-021, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
+- ADRs: ADR-001, ADR-002, ADR-003, ADR-004, ADR-005, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018
+- Owned paths (metadata projection):
   - `CHANGELOG.md`
   - `RELEASE-NOTES*.md`
   - `bindings/API-COVERAGE.md`
@@ -153,7 +163,6 @@ Activate the composed 2.0 library surface after the implementation sanity gates;
 
 D.9 owns hermetic dual-collector equivalence and operational recipes; D.11 owns final six-wheel/30-cell artifact metadata qualification. No publication/tagging is authorized.
 
-
 ## Design
 
 ## Composition and retirement
@@ -281,7 +290,6 @@ Created by obs-d-14, owned here from wave 3. Consume its completed sanity-gated 
 - `crates/sc-observe/tests/routing_integration.rs`
 - `crates/sc-observe/tests/typed_observation.rs`
 
-
 ## Acceptance criteria
 
 - [ ] `cargo check --workspace --locked`, `cargo check --workspace --all-features --locked`, `cargo test --workspace --locked` and `cargo test --workspace --all-features --locked` pass after canonical activation/removal; workspace clippy/rustdoc and existing boundary gates pass (D1/D5).
@@ -292,4 +300,3 @@ Created by obs-d-14, owned here from wave 3. Consume its completed sanity-gated 
 - [ ] Canonical DTO/schema/binding fixtures preserve code/remediation/source projection, lossless histograms and typed operational outcomes. Combined logging integration proves precedence, one host writer, policy/redaction, typed sink failure and detach ownership. No final semver/API approval is claimed by boundary sprints (D5).
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
-

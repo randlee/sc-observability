@@ -1,20 +1,27 @@
 # d-10: Windows ARM64 Python wheel support
 
+Generated projection of `obs-d-10`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 3
+- Wave: 1
+- Layer: 3
+- Assignee / model: lobs / luna
+- Relation: `root`
+- Closure: `boundary`
+- Target boundary: Windows ARM64 Python distribution
 - Branch: `sprint/d-10-windows-arm64-wheel`
-- PR target: `sprint/d-13-logging-contract`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-10-windows-arm64-wheel`
+- PR target (merge order only): `sprint/d-13-logging-contract`
 - Blocked by: `obs-phase-d-plan-qa`
-- Owned paths:
+- Requirements: NFR-011, PHB-013, PHB-014, PHC-001, PHC-003, PHC-004, PHC-006
+- ADRs: ADR-014, ADR-015, ADR-016
+- Owned paths (metadata projection):
   - `.github/workflows/b4a-python-distributions.yml`
   - `docs/plans/phase-d/sprint-d-10-windows-arm64-wheel.md`
-  - `scripts/ci/_python_distribution.py`
   - `scripts/ci/prepare_python_distributions.py`
   - `scripts/ci/python_arm64.py`
   - `scripts/ci/tests/test_python_arm64.py`
-  - `scripts/ci/tests/test_python_distribution.py`
-  - `scripts/ci/validate_python_distribution.py`
 
 ## Goal
 
@@ -34,7 +41,6 @@ Close the independent native Windows ARM64 build adapter boundary. D.18 owns rel
 
 Release policy/inventory activation is D.18; source/wheel metadata guard and final six-build/30-cell evidence are D.11. No publication or new ABI baseline.
 
-
 ## Design
 
 ## Python build boundary
@@ -42,7 +48,6 @@ Release policy/inventory activation is D.18; source/wheel metadata guard and fin
 D.10 owns native ARM64 build/prepare behavior and a focused PE helper, avoiding edits to D.11's shared _python_distribution.py/validator/test files. The helper takes wheel bytes/tag and returns the existing typed validation shape; D.11 wires it into verify_native_architecture once. D.18 owns all release/** policy activation. Workflow jobs execute against one immutable sdist/source commit, never cross-built evidence disguised as native execution. Existing aggregate invocation remains the integration hook, requiring no D.11 workflow edit. This independent root sprint can preflight/build/test its adapter before release inventory activation; it cannot claim the final 30-cell aggregate.
 
 The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
-
 
 ## Acceptance criteria
 
@@ -52,4 +57,3 @@ The only file fence is metadata.owned_paths; paths mentioned as dependencies are
 - [ ] This sprint does not close final six-platform/30-cell aggregate qualification; D.11 does after D.18 activates policy.
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
-
