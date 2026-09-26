@@ -6,7 +6,12 @@ import argparse
 import json
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "atm-beads" / "scripts"))
+from plan_contract import FINDING_LABEL, FIX_LABEL, SANITY_LABEL
 
 
 def deps(bead: dict[str, Any]) -> set[str]:
@@ -29,7 +34,7 @@ def targets(finding: dict[str, Any], all_beads: list[dict[str, Any]]) -> tuple[s
     source = meta.get("sprint_bead")
     by_id = {str(bead.get("id")): bead for bead in all_beads}
     source_gate = next((str(bead.get("id")) for bead in all_beads
-                        if "stage:dev-sanity" in (bead.get("labels") or [])
+                        if SANITY_LABEL in (bead.get("labels") or [])
                         and str((bead.get("metadata") or {}).get("dev_bead")) == source), None)
     if not source_gate: raise RuntimeError("source sprint has no sanity bead")
     downstream = {str(bead.get("id")) for bead in all_beads if "stage:dev" in (bead.get("labels") or [])
@@ -37,7 +42,9 @@ def targets(finding: dict[str, Any], all_beads: list[dict[str, Any]]) -> tuple[s
     result = set(downstream)
     for bead in all_beads:
         meta = bead.get("metadata") or {}
-        if bead.get("status") == "open" and not bead.get("assignee") and meta.get("sprint_bead") in downstream:
+        if (bead.get("status") == "open" and not bead.get("assignee")
+                and ({FINDING_LABEL, FIX_LABEL} & set(bead.get("labels") or []))
+                and meta.get("sprint_bead") in downstream):
             result.add(str(bead.get("id")))
     return source_gate, sorted(result)
 
@@ -53,16 +60,19 @@ def main() -> int:
     try:
         finding = json.loads(cmd("bd", "show", args.finding, "--json", capture=True))[0]
         all_beads = json.loads(cmd("bd", "list", "--all", "-n", "0", "--json", capture=True))
-        _, selected = targets(finding, all_beads)
-        if not selected: print(json.dumps({"finding": args.finding, "edges": []})); return 0
+        source_gate, selected = targets(finding, all_beads)
+        if source_gate is None:
+            print(json.dumps({"finding": args.finding, "edges": []})); return 0
         gate = f"{args.finding}-sanity"
         existing = {str(bead.get("id")) for bead in all_beads}
         if gate not in existing:
             cmd("bd", "create", "--id", gate, "--type", "task", "--status", "open", "--parent", args.finding,
-                "--title", f"sanity gate for {args.finding}", "--labels", "stage:dev-sanity",
+                "--title", f"sanity gate for {args.finding}", "--labels", SANITY_LABEL,
                 "--metadata", json.dumps({"dev_bead": args.finding}), "--silent")
+        by_id = {str(bead.get("id")): bead for bead in all_beads}
         for target in selected:
-            cmd("bd", "dep", "add", target, gate, "--type", "blocks")
+            if gate not in deps(by_id[target]):
+                cmd("bd", "dep", "add", target, gate, "--type", "blocks")
         print(json.dumps({"finding": args.finding, "gate": gate, "edges": selected}))
         return 0
     except (RuntimeError, ValueError, IndexError) as exc:
