@@ -80,7 +80,8 @@ between `base_sha` and `commit`.
     "commit_checked": "<full 40-char sha>",
     "findings": [
       {"kind": "skipped | error", "file": "crates/x/src/lib.rs", "line": 42,
-       "issue": "One sentence: what is missing or wrong."}
+       "issue": "One sentence: what is missing or wrong.",
+       "depends_on": [{"deliverable": 1, "file": "crates/x/src/config.rs", "line": 19}]}
     ]
   },
   "error": null
@@ -91,6 +92,11 @@ between `base_sha` and `commit`.
 error. Every finding names a real file (relative to the worktree) and a real
 line at `commit_checked`. There is no verdict field: `sanity-merge` decides
 PASS or FAIL over all deliverables and lint.
+
+`depends_on` is optional and normally empty. Include it only when this
+finding cannot be fixed until another reported finding is fixed; every entry
+must name that prerequisite by its `deliverable`, `file`, and `line`. Do not
+invent ordering: absent evidence means no dependency edge.
 
 ## Error Handling
 

@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-jev
-version: 0.4.0
+version: 0.4.3
 description: Named teammate that runs dev sanity checks through Jev. Proves TypeSafe access at startup, then takes each sanity check task from ATM, sends the checked bead to one sc-sanity-jev subagent as fenced JSON, validates its fenced JSON result, and closes the bead and task with PASS or FAIL. Not active.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
@@ -140,7 +140,10 @@ Close with
 `atm task close <task> completed --template .claude/skills/atm-bd-orchestration/templates/dev-sanity-complete.md.j2 --vars <scratch>/sanity-<task>-vars.json`.
 Fill the vars from the accepted result: `commit` = `$sha`, `verdict`,
 `findings_count`, `findings_md` (one `<file>:<line> <kind>: <issue>` line
-each), `lint_md`, and the task fields. The report carries this fenced
+each), `lint_md`, and the task fields. On FAIL, also write `findings` as the
+structured records consumed by `sanity-create-findings`: `finding_ref`,
+`deliverable`, `kind`, `file`, `line`, `issue`, and optional `depends_on`
+selectors (`deliverable`, `file`, `line`). The report carries this fenced
 status:
 
 ```json
@@ -151,9 +154,47 @@ status:
   "branch": "sprint/d-4-slug",
   "commit": "<full 40-char sha>",
   "verdict": "FAIL",
-  "findings": 1
+  "findings": 1,
+  "finding_bead_ids": ["obs-d-4.1"]
 }
 ```
+
+## FAIL Finding Handoff
+
+On FAIL, preserve every finding as an individual, unchanged report item. Do
+not consolidate, dismiss, or turn the findings into a parent-bead fix task.
+After merge and before the FAIL task close, you own this handoff:
+
+The completed vars file is the source report data. Run this exact command; it
+creates one open `bug` child per finding under the checked bead, copies the
+report fields unchanged to child metadata and description, copies the checked
+bead's phase/sprint/stack/layer provenance, uses exactly the
+`phase-<phase>`, `stage:finding`, and `stack:<stack>` labels, gives it priority
+`min(parent + 1, P4)`, and adds any required sibling dependency edges:
+
+```bash
+.claude/skills/atm-bd-orchestration/scripts/sanity-create-findings \
+  --task "$task" --bead "$checked_bead" \
+  --vars "$scratch/sanity-$task-vars.json" --reviewer sc-sanity-jev \
+  --actor "$ATM_IDENTITY" \
+  > "$scratch/sanity-$task-finding-children.json"
+```
+
+The parent/child hierarchy is the parent closure gate; `bd` rejects a
+parent-to-child `blocks` edge because that would deadlock the child. For a
+reported `depends_on` selector, the script creates
+`<dependent-finding-child> --blocks--> <prerequisite-finding-child>`, so the
+dependent fix cannot close first. The script's JSON output maps every stable
+finding reference to its child id and adds the ordered `finding_bead_ids` array
+to the report vars used by `atm task close`. Do not duplicate those ids in
+parent notes: the parent/child relation and `blocks` edges are authoritative.
+
+Once reopened, the parent dev bead cannot close until every finding child is
+closed. The lead retains the existing process: review the created children,
+then reopen the parent and assign the dev fix. The lead may overrule, amend,
+split, or reassign children, but never recreates the report data. A failure to
+create or wire any child is `cannot run`; never report FAIL as complete without
+the full child set.
 
 ## Error Handling
 
