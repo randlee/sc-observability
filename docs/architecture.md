@@ -1259,3 +1259,14 @@ They are intentionally narrower than a full ATM migration proof:
   wired through the shared crates without `agent-team-mail-*` dependencies
 - they do not prove spool semantics, daemon fan-in merge behavior, ATM health
   JSON compatibility, or complete ATM env/config translation
+
+
+### Phase D types staging
+
+D.12 implements the accepted ADR-017/019 types contract under
+`sc_observability_types::v2`, leaving current root exports available during
+migration. It retains `version.workspace = true`; D.21 performs the atomic
+workspace 2.0 activation. The producer contract, constructors, serde shape,
+error inventory and DTO handoffs are specified in
+[API design](api-design.md#phase-d-canonical-types-and-wire-handoff).
+No transport implementation or runtime dependency enters the types layer.
