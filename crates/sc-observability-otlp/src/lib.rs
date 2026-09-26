@@ -191,13 +191,6 @@ fn exporter_factory(
             Arc::new(DisabledTraceExporter),
             Arc::new(DisabledMetricExporter),
         )),
-        #[cfg(any(test, debug_assertions))]
-        BackendTransportBounds::Sdk | BackendTransportBounds::Legacy(_) => Ok((
-            Arc::new(DisabledLogExporter),
-            Arc::new(DisabledTraceExporter),
-            Arc::new(DisabledMetricExporter),
-        )),
-        #[cfg(not(any(test, debug_assertions)))]
         BackendTransportBounds::Sdk | BackendTransportBounds::Legacy(_) => {
             Err(InitFailure::from_context(Box::new(ErrorContext::new(
                 error_codes::TELEMETRY_INVALID_CONFIG,
@@ -837,6 +830,29 @@ mod tests {
             .expect("valid telemetry config")
     }
 
+    /// Test-only construction seam: enabled production configurations must
+    /// receive concrete exporters rather than the factory inventing a
+    /// successful fallback exporter.
+    fn test_telemetry(config: TelemetryConfig) -> Telemetry {
+        Telemetry::new_with_exporters(
+            config,
+            Arc::new(RecordingLogExporter::default()),
+            Arc::new(RecordingTraceExporter::default()),
+            Arc::new(RecordingMetricExporter::default()),
+        )
+        .expect("test telemetry")
+    }
+
+    fn test_telemetry_typed(config: TelemetryConfig) -> Telemetry {
+        Telemetry::new_with_exporters_typed(
+            config,
+            Arc::new(RecordingLogExporter::default()),
+            Arc::new(RecordingTraceExporter::default()),
+            Arc::new(RecordingMetricExporter::default()),
+        )
+        .expect("typed test telemetry")
+    }
+
     fn trace_context() -> TraceContext {
         TraceContext {
             trace_id: TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
@@ -1166,8 +1182,8 @@ mod tests {
             trace,
             Map::new(),
         );
-        let legacy = Telemetry::new(telemetry_config()).expect("legacy telemetry");
-        let typed = Telemetry::new_typed(telemetry_config()).expect("typed telemetry");
+        let legacy = test_telemetry(telemetry_config());
+        let typed = test_telemetry_typed(telemetry_config());
 
         legacy
             .emit_span(&SpanSignal::Started(started.clone()))
@@ -1192,7 +1208,7 @@ mod tests {
     #[test]
     fn orphaned_ended_span_returns_export_failure_and_is_counted() {
         let trace = trace_context();
-        let telemetry = Telemetry::new(telemetry_config()).expect("telemetry");
+        let telemetry = test_telemetry(telemetry_config());
         let ended = SpanRecord::<SpanStarted>::new(
             Timestamp::UNIX_EPOCH,
             service_name(),
@@ -1217,7 +1233,7 @@ mod tests {
     #[test]
     fn orphaned_span_event_returns_export_failure_from_span_assembler() {
         let trace = trace_context();
-        let telemetry = Telemetry::new(telemetry_config()).expect("telemetry");
+        let telemetry = test_telemetry(telemetry_config());
         let event = SpanEvent {
             timestamp: Timestamp::UNIX_EPOCH,
             trace,
@@ -1498,8 +1514,8 @@ mod tests {
         // Emitters intentionally remain the B.1 legacy public surface. This
         // pairs their unchanged calls after each lifecycle entry point rather
         // than adding parallel typed emitter methods to this preparation layer.
-        let legacy = Telemetry::new(telemetry_config()).expect("legacy telemetry");
-        let typed = Telemetry::new_typed(telemetry_config()).expect("typed telemetry");
+        let legacy = test_telemetry(telemetry_config());
+        let typed = test_telemetry_typed(telemetry_config());
         let trace = trace_context();
         let started = SpanRecord::<SpanStarted>::new(
             Timestamp::UNIX_EPOCH,
@@ -1602,7 +1618,7 @@ mod tests {
 
     #[test]
     fn repeated_shutdown_is_idempotent() {
-        let telemetry = Telemetry::new(telemetry_config()).expect("telemetry");
+        let telemetry = test_telemetry(telemetry_config());
 
         telemetry.shutdown().expect("first shutdown");
         telemetry.shutdown().expect("second shutdown");
@@ -1610,7 +1626,7 @@ mod tests {
 
     #[test]
     fn typed_telemetry_lifecycle_preserves_fail_open_and_repeat_shutdown() {
-        let telemetry = Telemetry::new_typed(telemetry_config()).expect("typed telemetry");
+        let telemetry = test_telemetry_typed(telemetry_config());
 
         telemetry
             .flush_typed()
