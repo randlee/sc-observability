@@ -20,7 +20,7 @@ use sc_observability_binding_runtime::{TestWriterGate, create_test_blocking_core
 use sc_observability_dto::{
     CompletionDto, Failure, LevelChangeDto, LogEventDto, LogHealthDto, LogQueryDto, ResultDto,
 };
-use sc_observability_types::{LevelChangeSource, LevelFilter, ServiceName};
+use sc_observability_types::{self as native, LevelChangeSource, LevelFilter, ServiceName, v2};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
@@ -75,6 +75,132 @@ fn closed_failure(message: impl Into<String>) -> Failure {
 fn unavailable_failure(code: &str, message: impl Into<String>) -> Failure {
     Failure::Unavailable {
         diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(code, message)),
+    }
+}
+
+/// Names and projects the staged D.12 errors without inspecting display text.
+///
+/// The binding-runtime remains the owner of core conversion. This narrow
+/// projection is the language-boundary handoff used when a canonical v2 error
+/// is already available, and deliberately retains only the neutral diagnostic.
+pub trait CanonicalProjection {
+    /// Returns the canonical enum and variant name.
+    fn canonical_name(&self) -> &'static str;
+    /// Returns the original native diagnostic without parsing display text.
+    fn canonical_diagnostic(&self) -> &native::Diagnostic;
+}
+
+macro_rules! canonical_projection {
+    ($type:ty, { $( $variant:ident => $name:literal ),+ $(,)? }) => {
+        impl CanonicalProjection for $type {
+            fn canonical_name(&self) -> &'static str {
+                match self {
+                    $(Self::$variant { .. } => $name,)+
+                    _ => "canonical::unknown",
+                }
+            }
+
+            fn canonical_diagnostic(&self) -> &native::Diagnostic {
+                <$type>::diagnostic(self)
+            }
+        }
+    };
+}
+
+canonical_projection!(v2::IdentityError, { Process => "IdentityError::Process" });
+canonical_projection!(v2::InitError, {
+    Configuration => "InitError::Configuration",
+    Runtime => "InitError::Runtime",
+});
+canonical_projection!(v2::EventError, {
+    Validation => "EventError::Validation",
+    Routing => "EventError::Routing",
+});
+canonical_projection!(v2::FlushError, { Drain => "FlushError::Drain" });
+canonical_projection!(v2::ShutdownError, {
+    Timeout => "ShutdownError::Timeout",
+    Drain => "ShutdownError::Drain",
+});
+canonical_projection!(v2::ProjectionError, { Projection => "ProjectionError::Projection" });
+canonical_projection!(v2::SubscriberError, { Subscriber => "SubscriberError::Subscriber" });
+canonical_projection!(v2::LogSinkError, {
+    Write => "LogSinkError::Write",
+    Flush => "LogSinkError::Flush",
+});
+canonical_projection!(v2::ConfigFailure, {
+    ZeroDuration => "ConfigFailure::ZeroDuration",
+    DurationOverflow => "ConfigFailure::DurationOverflow",
+    InvalidBoundOrdering => "ConfigFailure::InvalidBoundOrdering",
+    InvalidJitterPercent => "ConfigFailure::InvalidJitterPercent",
+    InvalidQueueCapacity => "ConfigFailure::InvalidQueueCapacity",
+    InvalidQueueByteCapacity => "ConfigFailure::InvalidQueueByteCapacity",
+    ConfigFieldNotApplicable => "ConfigFailure::ConfigFieldNotApplicable",
+    InsecureTransportRejected => "ConfigFailure::InsecureTransportRejected",
+    InvalidEndpoint => "ConfigFailure::InvalidEndpoint",
+    InvalidHeader => "ConfigFailure::InvalidHeader",
+    TransportConstructionFailed => "ConfigFailure::TransportConstructionFailed",
+    UnsupportedBackend => "ConfigFailure::UnsupportedBackend",
+    UnsupportedProtocol => "ConfigFailure::UnsupportedProtocol",
+    TokioRuntimeRequired => "ConfigFailure::TokioRuntimeRequired",
+});
+canonical_projection!(v2::MetricModelError, {
+    InvalidHistogram => "MetricModelError::InvalidHistogram",
+    InvalidTemporality => "MetricModelError::InvalidTemporality",
+    InvalidInterval => "MetricModelError::InvalidInterval",
+});
+canonical_projection!(v2::ExportError, {
+    Transport => "ExportError::Transport",
+    BlockingBackendInAsyncContext => "ExportError::BlockingBackendInAsyncContext",
+    AsyncLifecycleRequired => "ExportError::AsyncLifecycleRequired",
+    RuntimeTerminated => "ExportError::RuntimeTerminated",
+    LifecycleTimeout => "ExportError::LifecycleTimeout",
+    QueueFull => "ExportError::QueueFull",
+    WorkerTerminated => "ExportError::WorkerTerminated",
+    ShutdownCancelledRetry => "ExportError::ShutdownCancelledRetry",
+    RetryDeadlineExhausted => "ExportError::RetryDeadlineExhausted",
+    NonRetryableHttpStatus => "ExportError::NonRetryableHttpStatus",
+    RetryAttemptsExhausted => "ExportError::RetryAttemptsExhausted",
+    TerminalExportFailure => "ExportError::TerminalExportFailure",
+});
+
+#[derive(Clone, Copy, Debug)]
+pub enum CanonicalWireKind {
+    /// A checked input or event failure.
+    Validation,
+    /// A persistence or transport failure.
+    Io,
+    /// A worker or runtime availability failure.
+    Unavailable,
+    /// A bounded operation deadline failure.
+    Timeout,
+    /// A closed lifecycle failure.
+    Closed,
+}
+
+/// Projects a canonical D.12 error into the neutral tagged wire failure.
+pub fn project_canonical_failure<T: CanonicalProjection>(
+    error: &T,
+    kind: CanonicalWireKind,
+) -> Failure {
+    let diagnostic = error.canonical_diagnostic();
+    let diagnostic = Box::new(sc_observability_dto::Diagnostic {
+        at: diagnostic.timestamp.to_string(),
+        code: diagnostic.code.as_str().to_owned(),
+        message: diagnostic.message.clone(),
+        remediation: diagnostic.remediation.clone().into(),
+    });
+    match kind {
+        CanonicalWireKind::Validation => Failure::Validation {
+            diagnostic,
+            field: error.canonical_name().to_owned(),
+        },
+        CanonicalWireKind::Io => Failure::Io { diagnostic },
+        CanonicalWireKind::Unavailable => Failure::Unavailable { diagnostic },
+        CanonicalWireKind::Timeout => Failure::Timeout {
+            diagnostic,
+            operation: error.canonical_name().to_owned(),
+        },
+        CanonicalWireKind::Closed => Failure::Closed { diagnostic },
     }
 }
 
@@ -955,6 +1081,30 @@ mod tests {
     };
     use std::thread;
     use std::time::Instant;
+
+    #[test]
+    fn canonical_v2_projection_preserves_variant_name_and_code() {
+        let error = v2::EventError::Validation {
+            context: Box::new(native::ErrorContext::new(
+                native::error_codes::VALUE_VALIDATION_FAILED,
+                "invalid event",
+                native::Remediation::recoverable("correct the event", [] as [&str; 0]),
+            )),
+        };
+        let projected = project_canonical_failure(&error, CanonicalWireKind::Validation);
+        assert_eq!(error.canonical_name(), "EventError::Validation");
+        assert_eq!(
+            error.canonical_diagnostic().code,
+            native::error_codes::VALUE_VALIDATION_FAILED
+        );
+        assert!(matches!(
+            projected,
+            Failure::Validation { diagnostic, field }
+                if field == "EventError::Validation"
+                    && diagnostic.code == native::error_codes::VALUE_VALIDATION_FAILED.as_str()
+        ));
+        assert_ne!(error.canonical_name(), "ValidationError");
+    }
 
     #[test]
     fn host_installation_is_immutable_per_module() {
