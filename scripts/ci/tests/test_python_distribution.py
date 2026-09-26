@@ -10,7 +10,8 @@ from argparse import Namespace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _python_distribution import DistributionError, extract_sdist, inspect_wheel, digest, verify_source
+from _python_distribution import (DistributionError, extract_sdist, inspect_wheel, digest,
+                                  source_python_contract, validate_requires_python, verify_source)
 
 
 class DistributionTests(unittest.TestCase):
@@ -89,6 +90,10 @@ class DistributionTests(unittest.TestCase):
                 inspect_wheel(wheel, {'wheel_platform': 'win_amd64'}, '1.4.0')
             with self.assertRaisesRegex(DistributionError, 'wrong wheel ABI/platform'):
                 inspect_wheel(wheel, {'wheel_platform': 'manylinux_2_28_x86_64'}, '1.4.0')
+            cp311 = Path(temporary) / 'sc_observability-1.4.0-cp311-abi3-win_amd64.whl'
+            cp311.write_bytes(wheel.read_bytes())
+            with self.assertRaisesRegex(DistributionError, 'wrong wheel ABI/platform'):
+                inspect_wheel(cp311, {'wheel_platform': 'win_amd64'}, '1.4.0')
 
     def test_debug_contract_reaches_isolated_python_and_rejects_invalid_values(self):
         import subprocess
@@ -107,12 +112,65 @@ class DistributionTests(unittest.TestCase):
 
     def test_binary_architecture_cannot_be_overridden_by_filename(self):
         from _python_distribution import verify_native_architecture
+        from test_python_arm64 import pe
         arm = b'\xcf\xfa\xed\xfe' + (0x100000c).to_bytes(4, 'little')
         verify_native_architecture(arm, 'macosx_11_0_arm64')
+        verify_native_architecture(pe(0xAA64), 'win_arm64')
         with self.assertRaisesRegex(DistributionError, 'architecture'):
             verify_native_architecture(arm, 'macosx_10_13_x86_64')
         with self.assertRaisesRegex(DistributionError, 'architecture'):
             verify_native_architecture(b'MZ', 'win_amd64')
+
+    def test_verify_native_architecture_uses_arm64_helper_once(self):
+        from unittest.mock import patch
+        from _python_distribution import verify_native_architecture
+        with patch('python_arm64.is_pe_arm64', return_value=True) as helper:
+            verify_native_architecture(b'fixture', 'win_arm64')
+        helper.assert_called_once_with(b'fixture')
+
+    def test_requires_python_is_open_ended_and_has_the_abi3_floor(self):
+        self.assertEqual(validate_requires_python('>=3.10'), '>=3.10')
+        for value in ('>=3.10,<3.13', '>=3.10,!=3.12', '>=3.11', '==3.10'):
+            with self.subTest(value=value), self.assertRaises(DistributionError):
+                validate_requires_python(value)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'pyproject.toml').write_text(
+                '[project]\nrequires-python = ">=3.10"\n'
+                '[tool.maturin]\nfeatures = ["pyo3/abi3-py310"]\n')
+            (root / 'Cargo.toml').write_text(
+                '[dependencies]\npyo3 = { version = "0.29.2", features = [] }\n')
+            with self.assertRaisesRegex(DistributionError, 'abi3-py310'):
+                source_python_contract(root)
+
+    def test_wheel_metadata_is_parsed_and_compared_to_source(self):
+        from test_python_arm64 import pe
+        with tempfile.TemporaryDirectory() as temporary:
+            wheel = Path(temporary) / 'sc_observability-1.4.0-cp310-abi3-win_arm64.whl'
+            members = {
+                'sc_observability/__init__.py': '',
+                'sc_observability/py.typed': '',
+                'sc_observability/generated/__init__.py': '',
+                'sc_observability/generated/__init__.pyi': '',
+                'sc_observability/_native.pyd': pe(0xAA64),
+                'sc_observability-1.4.0.dist-info/WHEEL':
+                    'Wheel-Version: 1.0\nTag: cp310-abi3-win_arm64\n',
+                'sc_observability-1.4.0.dist-info/METADATA':
+                    'Metadata-Version: 2.1\nName: sc-observability\nVersion: 1.4.0\nRequires-Python: >=3.10\n',
+            }
+            with zipfile.ZipFile(wheel, 'w') as archive:
+                for name, content in members.items():
+                    archive.writestr(name, content)
+            policy = {'wheel_platform': 'win_arm64', 'expected_requires_python': '>=3.10'}
+            self.assertEqual(inspect_wheel(wheel, policy, '1.4.0')['expected_requires_python'], '>=3.10')
+            with zipfile.ZipFile(wheel, 'w') as archive:
+                for name, content in members.items():
+                    if isinstance(content, str):
+                        content = content.replace('Requires-Python: >=3.10',
+                                                  'Requires-Python: >=3.10,<3.13')
+                    archive.writestr(name, content)
+            with self.assertRaisesRegex(DistributionError, 'Requires-Python'):
+                inspect_wheel(wheel, policy, '1.4.0')
 
     def test_instrumented_wheel_cannot_enter_publication_inventory(self):
         from _python_distribution import release_wheel, fault_paths
@@ -124,13 +182,17 @@ class DistributionTests(unittest.TestCase):
         with self.assertRaises(DistributionError):
             fault_paths({'fault_pytest_paths': ['tests/']})
 
-    def test_policy_preserves_all_twenty_five_cells(self):
+    def test_policy_preserves_base_and_d18_arm64_matrix_sizes(self):
         path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
         policy = json.loads(path.read_text())
         self.assertEqual(policy['interpreters'], ['3.10', '3.11', '3.12', '3.13', '3.14'])
         self.assertEqual({p['id'] for p in policy['platforms']},
                          {'macos-arm64', 'macos-x86_64', 'linux-x86_64', 'linux-aarch64', 'windows-x86_64'})
         self.assertEqual(len(policy['interpreters']) * len(policy['platforms']), 25)
+        policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
+                                    'wheel_platform': 'win_arm64',
+                                    'rust_target': 'aarch64-pc-windows-msvc'})
+        self.assertEqual(len(policy['interpreters']) * len(policy['platforms']), 30)
 
     def test_frozen_inventory_rejects_tampering_missing_lock_and_extra_files(self):
         required = ('Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'pyproject.toml',
@@ -142,7 +204,10 @@ class DistributionTests(unittest.TestCase):
                 for relative in required:
                     path = root / relative
                     path.parent.mkdir(parents=True, exist_ok=True)
-                    path.write_text('fixture')
+                    path.write_text({
+                        'Cargo.toml': '[dependencies]\npyo3 = { version = "0.29.2", features = ["abi3-py310"] }\n',
+                        'pyproject.toml': '[project]\nrequires-python = ">=3.10"\n[tool.maturin]\nfeatures = ["pyo3/abi3-py310"]\n',
+                    }.get(relative, 'fixture'))
                 record = {'schema_version': 1, 'publication': 'pending_B.7', 'source_commit': 'a' * 40,
                           'files': {path: digest(root / path) for path in required}}
                 (root / 'distribution-manifest.json').write_text(json.dumps(record))
@@ -169,9 +234,11 @@ class DistributionTests(unittest.TestCase):
                 source = root / 'source'; source.mkdir()
                 for relative in required:
                     path = source / relative; path.parent.mkdir(parents=True, exist_ok=True)
-                    path.write_text('fixture')
+                    path.write_text({
+                        'Cargo.toml': '[dependencies]\npyo3 = { version = "0.29.2", features = ["abi3-py310"] }\n',
+                        'pyproject.toml': '[project]\nrequires-python = ">=3.10"\n[tool.maturin]\nfeatures = ["pyo3/abi3-py310"]\n',
+                    }.get(relative, 'fixture'))
                 contract = {'schema_version': 1, 'runtime_complete': True, 'embedding_in_each_cell': True}
-                (source / 'pyproject.toml').write_text('[tool.maturin]\nfeatures = ["pyo3/abi3-py310"]\n')
                 manifest = {'schema_version': 1, 'publication': 'pending_B.7', 'source_commit': 'a' * 40,
                             'runtime_suite': contract, 'files': {path: digest(source / path) for path in required}}
                 (source / 'distribution-manifest.json').write_text(json.dumps(manifest))
@@ -179,6 +246,7 @@ class DistributionTests(unittest.TestCase):
                 with tarfile.open(sdist, 'w:gz') as archive:
                     archive.add(source, arcname='source')
                 common = {'status': 'passed', 'source_commit': 'a' * 40, 'sdist_sha256': digest(sdist),
+                          'expected_requires_python': '>=3.10',
                           'isolation': {'checkout': True, 'cargo_cache': True, 'network': True},
                           'wheel': {'sha256': 'fixture'}}
                 for index, platform in enumerate(policy['platforms']):
@@ -192,26 +260,34 @@ class DistributionTests(unittest.TestCase):
                             record['embedding'] = {'status': 'passed', 'python': version,
                                 'python_full': 'wrong' if mutation == 'wrong-interpreter' else version}
                         (directory / 'cell-result.json').write_text(json.dumps(record))
-                with self.assertRaisesRegex(DistributionError, 'interpreter-matched embedded-host'):
+                with self.assertRaisesRegex(DistributionError, 'six builds|interpreter-matched embedded-host'):
                     aggregate(Namespace(policy=policy_path, evidence=root, sdist=sdist, source_commit='a' * 40))
 
     def test_aggregate_rejects_missing_duplicate_and_mixed_source_cells(self):
         from validate_python_distribution import aggregate
         policy_path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
         policy = json.loads(policy_path.read_text())
-        for mutation in ('missing', 'duplicate', 'mixed-source'):
+        policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
+                                    'wheel_platform': 'win_arm64',
+                                    'rust_target': 'aarch64-pc-windows-msvc'})
+        for mutation in ('missing', 'duplicate', 'wrong-target', 'mixed-source'):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
+                policy_fixture = root / 'policy.json'
+                policy_fixture.write_text(json.dumps(policy))
                 sdist = root / 'fixture.tar.gz'
                 sdist.write_bytes(b'fixture')
                 common = {'status': 'passed', 'source_commit': 'a' * 40,
                           'sdist_sha256': digest(sdist),
+                          'expected_requires_python': '>=3.10',
                           'isolation': {'checkout': True, 'cargo_cache': True, 'network': True}}
                 for index, platform in enumerate(policy['platforms']):
                     directory = root / f'build-{index}'; directory.mkdir()
                     record = {**common, 'platform': platform['id'], 'wheel': {'sha256': 'fixture'}}
                     if mutation == 'mixed-source' and index == 0:
                         record['source_commit'] = 'b' * 40
+                    if mutation == 'wrong-target' and index == 0:
+                        record['platform'] = 'unsupported-platform'
                     (directory / 'build-result.json').write_text(json.dumps(record))
                     for count, version in enumerate(policy['interpreters']):
                         if mutation == 'missing' and index == 0 and count == 0:
@@ -222,4 +298,4 @@ class DistributionTests(unittest.TestCase):
                             record['python'] = '3.11'
                         (directory / 'cell-result.json').write_text(json.dumps(record))
                 with self.assertRaises(DistributionError):
-                    aggregate(Namespace(policy=policy_path, evidence=root, sdist=sdist, source_commit='a' * 40))
+                    aggregate(Namespace(policy=policy_fixture, evidence=root, sdist=sdist, source_commit='a' * 40))

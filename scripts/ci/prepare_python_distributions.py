@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PROJECT = Path('bindings/python/sc-observability-py')
 QUALIFICATION_HELPERS = (
     '_python_distribution.py', '_python_sandbox.py', '_windows_identity.py',
+    'python_arm64.py',
     'supervise_windows_proof.py', 'validate_python_distribution.py',
     'build_binding_source_bundle.py', '_hashing.py', '_log_staging.py',
     'python-packaging-requirements.txt',
@@ -168,7 +169,17 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     qualification.mkdir(exist_ok=True)
     for filename in QUALIFICATION_HELPERS:
         shutil.copyfile(source / 'scripts/ci' / filename, qualification / filename)
-    shutil.copyfile(source / 'release/python-platform-policy.json', qualification / 'platform-policy.json')
+    policy = json.loads((source / 'release/python-platform-policy.json').read_text())
+    arm64 = next((item for item in policy['platforms'] if item['id'] == 'windows-arm64'), None)
+    required_arm64 = {'id': 'windows-arm64', 'machine': 'ARM64',
+                      'wheel_platform': 'win_arm64', 'rust_target': 'aarch64-pc-windows-msvc'}
+    if arm64 is None:
+        arm64 = {**required_arm64, 'runner': 'windows-11-arm'}
+        policy['platforms'].append(arm64)
+    elif any(arm64.get(key) != value for key, value in required_arm64.items()):
+        raise DistributionError('Windows ARM64 policy row differs from the D.10 handoff')
+    arm64.setdefault('runner', 'windows-11-arm')
+    (qualification / 'platform-policy.json').write_text(json.dumps(policy, indent=2) + '\n')
     shutil.copyfile(bundle / 'Cargo.lock', staging / 'Cargo.lock')
     run(['cargo', 'metadata', '--offline', '--format-version', '1'], staging, log)
     shutil.copyfile(bundle / 'Cargo.lock', staging / 'embedding/Cargo.lock')
