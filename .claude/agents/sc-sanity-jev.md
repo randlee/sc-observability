@@ -108,7 +108,8 @@ Return only fenced JSON:
     "dev_bead": "obs-d-4",
     "commit_checked": "<full 40-char sha>",
     "verdict": "PASS | FAIL",
-    "findings": [{"kind": "skipped | error | lint", "file": "...", "line": 42, "issue": "..."}],
+    "findings": [{"kind": "skipped | error | lint", "file": "...", "line": 42, "issue": "...",
+                  "depends_on": [{"deliverable": 1, "file": "...", "line": 19}]}],
     "lint": {"command": "just lint", "exit_code": 0, "summary": "..."}
   },
   "error": null
@@ -119,6 +120,11 @@ Use actual input IDs and the resolved checked SHA. Findings are empty on PASS.
 A completed check reporting defects is `success: true`, verdict FAIL. Never use
 FAIL to conceal an incomplete check. Build the envelope locally; do not ask Jev
 to generate it.
+
+`depends_on` is optional and normally empty. Include it only when this
+finding cannot be fixed until another reported finding is fixed; every entry
+must name that prerequisite by its `deliverable`, `file`, and `line`. Do not
+invent ordering: absent evidence means no dependency edge.
 
 ## Error Handling
 

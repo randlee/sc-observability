@@ -1,6 +1,6 @@
 ---
 name: atm-bd-orchestration
-version: 0.3.5
+version: 0.3.6
 description: Bead-driven phase orchestration for the lead. Use when running a phase whose plan is in beads, dispatching from `bd ready` with ATM tasks, and landing it as one gh stack.
 requires:
   cli:
@@ -115,6 +115,46 @@ any agent can follow. What this skill changes:
   `bd update <bead> --set-metadata layer=<n> --set-metadata pr_target=<branch>`.
 - Landing is one `gh stack merge <stack#> --yes --merge` after the last
   finding closes (`recipe-land.md`).
+- A shared type or a critical bug that several live branches need goes on
+  its own `fix/<thing>` branch off the base and merges first (Parallel Quick
+  Fix, below); it never rides inside one sprint's layer.
+
+### Parallel Quick Fix
+
+A running sprint sometimes finds a change that other live branches need at
+the same time: a shared type or trait signature that parallel sprints all
+implement or consume, or a critical bug in code every branch carries. That
+change does not go into the finder's layer. Landed there, every other branch
+fails until that layer merges, and the cross-fence edits it forces conflict
+on every restack and show up as out-of-scope work in that sprint's PR.
+
+1. The finder stops the edit in the sprint worktree and tells the lead the
+   exact change and the branches it breaks.
+2. The lead picks the base: the lowest branch that already holds what the
+   change needs. That is `integrate/phase-<x>` for a bug in merged code, or
+   the stack layer whose types the change uses.
+3. The finder cuts `fix/<thing>` from `origin/<base>` in its own worktree,
+   with only the change, the implementors and call sites the compiler
+   forces, and one test when it is a bug. The test command passes; push; PR
+   into `<base>`.
+   When every roster agent is mid-task, the lead runs a background
+   `rust-developer` subagent for this step instead of waiting; the branch,
+   scope and test rule are the same.
+4. The lead dispatches one QA round on the fix PR (`qa-template.xml.j2`,
+   `checked_bead` = the finder's bead, `layer` = the base) and merges when
+   it passes; no PR into the integration branch or a stack layer merges
+   without QA. The lead then rebases the stack layers above the base and pushes each
+   with `--force-with-lease`. A live sprint branch rebases onto its new top
+   at its next push; the lead sends its owner the new top.
+5. The lead records the fix branch and PR in the finder's bead notes and in
+   the notes of every bead whose fence it touched. The finder's sprint task
+   stays open and continues on the rebased layer.
+
+Once the fix is in the base, it leaves every rebased branch's PR diff, so CI
+and QA on those PRs never see it, and no sprint carries another sprint's
+edits. It also means one copy of the missing code: without it each blocked
+sprint writes its own version of the change; the copies conflict at restack and
+the designs drift apart.
 
 ## Plan Gate
 
@@ -180,7 +220,7 @@ Then, on each task close:
 | plan-review FAIL | have the author fix the listed beads, run `validate-plan` again, then dispatch the next round |
 | dev-complete | nothing: the sanity check is now ready |
 | sanity check PASS | check that the layer's `rebased_onto` (from its dev-complete or fix-complete) is still the pushed top. If another layer was linked since, rebase the branch onto the new top yourself: it is not linked and has no children. Run the test command and push with `--force-with-lease`. On a conflict, `bd reopen` the bead and send a dev-fix naming the new top. Then link the layer, then create the QA bead from [`qa-bead.json.j2`](templates/qa-bead.json.j2) (`validates` the dev or finding bead). For a finding, the QA dispatch sets `checked_bead` = the finding (it carries its own requirements and ADRs), `sprint_bead` = its `metadata.sprint_bead`, `carry_forward` = the finding id, and `round` = the `metadata.round` of the QA bead it was `discovered-from`, + 1, or 1 when it came from the phase-end review |
-| sanity check FAIL | `bd reopen <checked bead> --reason "<summary>"`, then [`dev-fix.xml.j2`](templates/dev-fix.xml.j2) with the findings. This applies to a finding bead too: its task id is the finding, and it closes with `dev-complete.md.j2` |
+| sanity check FAIL | the sanity member creates one child finding bead for every reported finding under `<checked bead>` at `min(parent priority + 1, P4)`; it does not edit the parent. It copies phase/sprint/stack/layer provenance and uses only `phase-<phase>`, `stage:finding`, and `stack:<stack>` labels. The hierarchy is the parent closure gate (`bd` rejects parent-to-child `blocks` edges); only reported prerequisite relationships become sibling `blocks` edges. Each child stores the exact structured report data. The lead reviews them and retains the existing process: reopen the dev bead, then assign it with [`dev-fix.xml.j2`](templates/dev-fix.xml.j2). The lead may overrule, amend, split, or reassign children, but does not recreate them. The parent cannot close until every child closes. This applies to a finding bead too: its task id is the finding, and it closes with `dev-complete.md.j2` |
 | qa-complete | nothing to wire: quality-mgr filed and wired the finding beads; they are in the next `bd ready` |
 | fix-complete (`fixed`) | create the fix's sanity check bead (`atm-beads` [`dev-sanity-bead.json.j2`](../atm-beads/templates/dev-sanity-bead.json.j2), `dev_bead` = the finding) |
 | review-complete | file each finding with `finding-bead.json.j2` (`qa_bead` = the review bead) |
