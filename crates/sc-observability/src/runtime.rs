@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -10,7 +11,7 @@ use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure};
     reason = "the logger runtime retains named legacy error types in compatibility signatures"
 )]
 use sc_observability_types::{
-    AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext,
+    AdmissionOutcome, ChangeDiagnostic, DiagnosticInfo, DiagnosticSummary, EnvPrefix, ErrorContext,
     EventError, FlushError, LevelChange, LevelChangeError, LevelChangeSource, LevelFilter,
     LevelState, LogQuery, LogSnapshot, LoggingHealthReport, LoggingHealthState,
     MaintenanceHealthReport, MaintenanceWorkerState, OperationDiagnostic, QueryError,
@@ -28,10 +29,228 @@ use crate::maintenance::{
 use crate::redact::{redact_bearer_token_text, redact_string_value};
 use crate::sinks::JsonlFileSink;
 use crate::{
-    LevelOwner, LogError, LogEvent, LogFailure, Logger, LoggerConfig, RedactionPolicy,
-    RetainedLogPolicy, Running, ServiceName, Stopped, TryLogError, TryLogFailure, default_log_path,
-    error_codes, shutdown_timed_out_error_context, writer_degraded_error_context,
+    EnvSnapshot, LevelOwner, LogError, LogEvent, LogFailure, LogRoot, LogSettings,
+    LogSettingsError, LogSettingsInputs, Logger, LoggerConfig, RedactionPolicy,
+    ResolvedLogSettings, RetainedLogPolicy, Running, ServiceName, Stopped, TryLogError,
+    TryLogFailure, default_log_path, error_codes, shutdown_timed_out_error_context,
+    writer_degraded_error_context,
 };
+
+impl LogSettings {
+    /// Parses one selected environment namespace from an immutable snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LogSettingsError`] when a selected key is invalid, duplicated,
+    /// unsupported, or contains an invalid value. Unrelated namespaces are ignored.
+    pub fn from_env(snapshot: &EnvSnapshot, prefix: EnvPrefix) -> Result<Self, LogSettingsError> {
+        let prefix_name = prefix.as_str().to_owned();
+        drop(prefix);
+        let namespace = format!("{prefix_name}_LOG_");
+        let folded_namespace = namespace.to_ascii_uppercase();
+        let mut seen = BTreeSet::new();
+        let mut settings = Self::default();
+        let mut policy = RetainedLogPolicy::default();
+        let mut has_policy_override = false;
+
+        for (raw_key, raw_value) in &snapshot.0 {
+            let Some(key) = raw_key.to_str() else {
+                continue;
+            };
+            let folded_key = key.to_ascii_uppercase();
+            if !folded_key.starts_with(&folded_namespace) {
+                continue;
+            }
+            if !seen.insert(folded_key) {
+                return Err(LogSettingsError::environment(format!(
+                    "duplicate case-folded logging environment key {key}"
+                )));
+            }
+            if !key.starts_with(&namespace) {
+                return Err(LogSettingsError::environment(format!(
+                    "logging environment key {key} must use the exact {namespace} prefix"
+                )));
+            }
+            let value = raw_value.to_str().ok_or_else(|| {
+                LogSettingsError::environment(format!(
+                    "logging environment value for {key} is not valid UTF-8"
+                ))
+            })?;
+            if value.is_empty() {
+                return Err(LogSettingsError::invalid_value(format!(
+                    "logging environment value for {key} must not be empty"
+                )));
+            }
+
+            let suffix = key.strip_prefix(&namespace).ok_or_else(|| {
+                LogSettingsError::environment(format!(
+                    "logging environment key {key} did not retain its selected namespace"
+                ))
+            })?;
+            match suffix {
+                "LEVEL" => settings.level = Some(parse_json_string(value, key)?),
+                "ROOT" => settings.log_root = Some(PathBuf::from(value)),
+                "FILE" => settings.enable_file_sink = Some(parse_env_bool(value, key)?),
+                "CONSOLE" => settings.enable_console_sink = Some(parse_env_bool(value, key)?),
+                "ROTATION_MAX_BYTES" => {
+                    policy.rotation_max_bytes = parse_env_json(value, key)?;
+                    has_policy_override = true;
+                }
+                "ROTATION_MAX_FILES" => {
+                    policy.rotation_max_files = parse_env_json(value, key)?;
+                    has_policy_override = true;
+                }
+                "RETENTION_MAX_AGE_MS" => {
+                    policy.retention_max_age = parse_env_json(value, key)?;
+                    has_policy_override = true;
+                }
+                "MAINTENANCE_CADENCE_MS" => {
+                    policy.maintenance_cadence = parse_env_json(value, key)?;
+                    has_policy_override = true;
+                }
+                "WRITER_SHUTDOWN_TIMEOUT_MS" => {
+                    policy.writer_shutdown_timeout = parse_env_json(value, key)?;
+                    has_policy_override = true;
+                }
+                "MAINTENANCE_MAX_WORK_PER_PASS" => {
+                    policy.maintenance_max_work_per_pass = Some(parse_env_json(value, key)?);
+                    has_policy_override = true;
+                }
+                _ => {
+                    return Err(LogSettingsError::unknown_key(format!(
+                        "unsupported logging environment key {key}"
+                    )));
+                }
+            }
+        }
+
+        if has_policy_override {
+            settings.retained_log_policy = Some(policy);
+        }
+        Ok(settings)
+    }
+
+    /// Parses an application namespace and rejects the reserved shared prefix.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LogSettingsError::PrefixCollision`] when `prefix` is `SC`, or
+    /// forwards the selected-namespace parsing errors from [`Self::from_env`].
+    pub fn from_application_env(
+        snapshot: &EnvSnapshot,
+        prefix: EnvPrefix,
+    ) -> Result<Self, LogSettingsError> {
+        if prefix.as_str() == "SC" {
+            return Err(LogSettingsError::prefix_collision(&prefix));
+        }
+        Self::from_env(snapshot, prefix)
+    }
+
+    /// Resolves JSON, shared, and application settings into one startup value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LogSettingsError`] when any supplied root is empty or the
+    /// resulting root cannot be validated.
+    pub fn resolve(inputs: LogSettingsInputs) -> Result<ResolvedLogSettings, LogSettingsError> {
+        let LogSettingsInputs {
+            file,
+            shared_env,
+            application_env,
+            default_root,
+        } = inputs;
+        let file = file.unwrap_or_default();
+        let application_env = application_env.unwrap_or_default();
+        for root in [
+            file.log_root.as_ref(),
+            shared_env.log_root.as_ref(),
+            application_env.log_root.as_ref(),
+        ] {
+            if root.is_some_and(|root| root.as_os_str().is_empty()) {
+                return Err(LogSettingsError::invalid_value("logRoot must not be empty"));
+            }
+        }
+
+        // JSON has the explicit LOG-009 exception for the log root. Every
+        // other field follows defaults < JSON < shared env < application env.
+        let log_root = file
+            .log_root
+            .or(application_env.log_root)
+            .or(shared_env.log_root)
+            .unwrap_or(default_root);
+        Ok(ResolvedLogSettings {
+            level: application_env
+                .level
+                .or(shared_env.level)
+                .or(file.level)
+                .unwrap_or(LevelFilter::Info),
+            log_root: LogRoot::new(log_root)?,
+            enable_file_sink: application_env
+                .enable_file_sink
+                .or(shared_env.enable_file_sink)
+                .or(file.enable_file_sink)
+                .unwrap_or(true),
+            enable_console_sink: application_env
+                .enable_console_sink
+                .or(shared_env.enable_console_sink)
+                .or(file.enable_console_sink)
+                .unwrap_or(false),
+            retained_log_policy: application_env
+                .retained_log_policy
+                .or(shared_env.retained_log_policy)
+                .or(file.retained_log_policy)
+                .unwrap_or_default(),
+        })
+    }
+}
+
+impl ResolvedLogSettings {
+    /// Converts startup settings into one immutable logger configuration.
+    #[must_use]
+    pub fn into_logger_config(self, service_name: ServiceName) -> LoggerConfig {
+        let defaults = LoggerConfig::default_for(service_name, self.log_root.into_path());
+        LoggerConfig {
+            level: self.level,
+            retained_log_policy: self.retained_log_policy,
+            enable_file_sink: self.enable_file_sink,
+            enable_console_sink: self.enable_console_sink,
+            ..defaults
+        }
+    }
+}
+
+fn parse_env_bool(value: &str, key: &str) -> Result<bool, LogSettingsError> {
+    match value {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err(LogSettingsError::invalid_value(format!(
+            "logging environment value for {key} must be true or false"
+        ))),
+    }
+}
+
+fn parse_json_string<T>(value: &str, key: &str) -> Result<T, LogSettingsError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let encoded = serde_json::to_string(value).expect("str serializes");
+    serde_json::from_str(&encoded).map_err(|error| {
+        LogSettingsError::invalid_value(format!(
+            "invalid logging environment value for {key}: {error}"
+        ))
+    })
+}
+
+fn parse_env_json<T>(value: &str, key: &str) -> Result<T, LogSettingsError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    serde_json::from_str(value).map_err(|error| {
+        LogSettingsError::invalid_value(format!(
+            "invalid logging environment value for {key}: {error}"
+        ))
+    })
+}
 
 pub(crate) struct LoggerRuntime {
     pub(crate) dropped_events_total: Arc<AtomicU64>,
