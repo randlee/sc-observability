@@ -24,7 +24,7 @@ use sc_observability_types::typed::{
     ProjectionFailure, TypedLogProjector, TypedMetricProjector, TypedSpanProjector,
     typed_log_projector, typed_metric_projector, typed_span_projector,
 };
-use sc_observability_types::v2::MetricRecord as V2MetricRecord;
+use sc_observability_types::v2::{MetricRecord as V2MetricRecord, SpanSignal as V2SpanSignal};
 use sc_observability_types::{
     ErrorContext, LogEvent, LogProjector, MetricProjector, MetricRecord, Observable, Observation,
     ObservationFilter, ProjectionError, ProjectionRegistration, Remediation, SpanProjector,
@@ -43,6 +43,20 @@ use sc_observability_types::{
 )]
 pub(crate) fn project_v2_metric(metric: V2MetricRecord) -> V2MetricRecord {
     metric
+}
+
+/// Carries one validated 2.0 span signal into the OTLP implementation layer.
+///
+/// Span lifecycle values are already typestate-validated by the neutral model.
+/// Projection therefore preserves their trace flags, kind, links, status,
+/// timing, attributes, and events until [`crate::assembly::V2SpanAssembler`]
+/// establishes the completed-span invariant.
+#[allow(
+    dead_code,
+    reason = "D.18 activates this staged 2.0 projector after the canonical re-export switch"
+)]
+pub(crate) fn project_v2_span(signal: V2SpanSignal) -> V2SpanSignal {
+    signal
 }
 
 /// Public helper for attaching telemetry export to ordinary observation projection registration.
@@ -266,11 +280,15 @@ fn telemetry_to_projection_failure(
 
 #[cfg(test)]
 mod tests {
-    use super::project_v2_metric;
+    use super::{project_v2_metric, project_v2_span};
     use sc_observability_types::v2::{
-        AggregationTemporality, FiniteF64, HistogramPoint, MetricRecord, MetricValue,
+        AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint,
+        MetricRecord, MetricValue, SpanEvent, SpanKind, SpanLink, SpanRecord, SpanSignal,
+        SpanStarted, SpanStatus, TraceContext, TraceFlags,
     };
-    use sc_observability_types::{MetricName, ServiceName, Timestamp};
+    use sc_observability_types::{
+        ActionName, DurationMs, MetricName, ServiceName, SpanId, Timestamp, TraceId,
+    };
 
     fn metric(value: MetricValue) -> MetricRecord {
         MetricRecord::try_new(
@@ -284,6 +302,64 @@ mod tests {
 
     fn one_second_after_epoch() -> Timestamp {
         serde_json::from_str("\"1970-01-01T00:00:01Z\"").expect("valid timestamp")
+    }
+
+    fn trace_context() -> TraceContext {
+        TraceContext::new(
+            TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
+            SpanId::new("0123456789abcdef").expect("valid span id"),
+            TraceFlags::new(0xa5),
+        )
+    }
+
+    #[test]
+    fn v2_span_projection_preserves_lifecycle_fields_without_legacy_conversion() {
+        let trace = trace_context();
+        let link = SpanLink::new(
+            TraceId::new("fedcba9876543210fedcba9876543210").expect("valid linked trace"),
+            SpanId::new("fedcba9876543210").expect("valid linked span"),
+            TraceFlags::new(0x01),
+            Attributes::from([(
+                "link.kind".to_owned(),
+                AttributeValue::String("parent".to_owned()),
+            )]),
+        );
+        let started = SpanRecord::<SpanStarted>::new(
+            Timestamp::UNIX_EPOCH,
+            ServiceName::new("test-service").expect("valid service"),
+            ActionName::new("test.operation").expect("valid action"),
+            trace.clone(),
+            Attributes::from([(
+                "scope.name".to_owned(),
+                AttributeValue::String("test".to_owned()),
+            )]),
+        )
+        .with_kind(SpanKind::Server)
+        .with_links(vec![link]);
+        let ended = started.clone().end(SpanStatus::Ok, DurationMs::from(9));
+        let event = SpanEvent {
+            timestamp: Timestamp::UNIX_EPOCH,
+            trace,
+            name: ActionName::new("test.event").expect("valid event"),
+            attributes: Attributes::from([("event.count".to_owned(), AttributeValue::UInt(1))]),
+            diagnostic: None,
+        };
+
+        let projected_started = project_v2_span(SpanSignal::Started(started.clone()));
+        let projected_event = project_v2_span(SpanSignal::Event(event.clone()));
+        let projected_ended = project_v2_span(SpanSignal::Ended(ended.clone()));
+
+        assert_eq!(projected_started, SpanSignal::Started(started));
+        assert_eq!(projected_event, SpanSignal::Event(event));
+        assert_eq!(projected_ended, SpanSignal::Ended(ended.clone()));
+        let SpanSignal::Ended(projected) = projected_ended else {
+            panic!("ended span must remain ended through projection");
+        };
+        assert_eq!(projected.kind(), SpanKind::Server);
+        assert_eq!(projected.trace().flags.bits(), 0xa5);
+        assert_eq!(projected.links().len(), 1);
+        assert_eq!(projected.status(), SpanStatus::Ok);
+        assert_eq!(projected.duration_ms(), Some(DurationMs::from(9)));
     }
 
     #[test]
