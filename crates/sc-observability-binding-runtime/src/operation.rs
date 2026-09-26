@@ -41,6 +41,7 @@ struct Inner<T> {
     next: AtomicU64,
     dispatcher: Weak<Dispatcher>,
     timer: Arc<TimerService>,
+    kind: error::OperationKind,
 }
 /// Caller-owned saved result; completed values do not own backend helpers.
 pub struct Operation<T> {
@@ -79,7 +80,11 @@ impl Drop for CompletionSubscription {
 }
 
 impl<T: Clone + Send + Sync + 'static> Operation<T> {
-    pub(crate) fn new(dispatcher: &Arc<Dispatcher>, timer: &Arc<TimerService>) -> Self {
+    pub(crate) fn new(
+        dispatcher: &Arc<Dispatcher>,
+        timer: &Arc<TimerService>,
+        kind: error::OperationKind,
+    ) -> Self {
         Self {
             inner: Arc::new(Inner {
                 published: Arc::new(OnceLock::new()),
@@ -88,6 +93,7 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
                 next: AtomicU64::new(1),
                 dispatcher: Arc::downgrade(dispatcher),
                 timer: timer.clone(),
+                kind,
             }),
         }
     }
@@ -110,10 +116,10 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
             return Some(if value.at <= deadline {
                 value.result.clone()
             } else {
-                Err(error::timeout())
+                Err(error::observer_timeout(self.inner.kind))
             });
         }
-        (Instant::now() >= deadline).then(|| Err(error::timeout()))
+        (Instant::now() >= deadline).then(|| Err(error::observer_timeout(self.inner.kind)))
     }
     fn permit(&self) -> Result<ObserverPermit, Failure> {
         self.inner
@@ -198,14 +204,25 @@ impl<T: Clone + Send + Sync + 'static> Operation<T> {
         let permit = self.permit()?;
         let dispatcher = self.inner.dispatcher.upgrade().ok_or_else(error::closed)?;
         let published = self.inner.published.clone();
-        let job = dispatcher.reserve(
-            permit,
-            Box::new(move || {
-                if let Some(value) = published.get() {
-                    callback(value.result.clone());
-                }
-            }),
-        )?;
+        let job = dispatcher
+            .reserve(
+                permit,
+                Box::new(move || {
+                    if let Some(value) = published.get() {
+                        callback(value.result.clone());
+                    }
+                }),
+            )
+            .map_err(|error| {
+                let kind = if error.diagnostic().code.as_str()
+                    == sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED
+                {
+                    crate::conversion::Kind::Closed
+                } else {
+                    crate::conversion::Kind::QueueFull
+                };
+                crate::conversion::canonical(&error, kind)
+            })?;
         let id = self.inner.next.fetch_add(1, Ordering::SeqCst);
         {
             let mut observers = lock(&self.inner.observers);
