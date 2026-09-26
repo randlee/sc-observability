@@ -572,7 +572,7 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
     validated_transport_bounds(&config.transport).map_err(config_failure_to_init_failure)?;
     if config.transport.enabled && config.transport.endpoint.is_none() {
         return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
             "enabled telemetry requires an endpoint",
             Remediation::recoverable(
                 "set OtelConfig.endpoint before constructing Telemetry",
@@ -586,7 +586,7 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
         && config.metrics.is_none()
     {
         return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
             "at least one telemetry signal must be enabled",
             Remediation::recoverable(
                 "enable logs, traces, or metrics before constructing Telemetry",
@@ -601,7 +601,7 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
             .is_some_and(|cfg| cfg.batch_size == 0 || u64::from(cfg.export_interval_ms) == 0)
     {
         return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
             "telemetry batch sizing and export intervals must be positive",
             Remediation::recoverable(
                 "set batch sizes and export intervals above zero",
@@ -670,7 +670,12 @@ pub(crate) fn validated_transport_bounds(
     let legacy_retry_field = first_legacy_retry_field(config);
     let timeout = resolve_duration(
         OtlpConfigField::Timeout,
-        Some(config.timeout_ms),
+        // `timeout_ms` predates the optional transport fields, so its default
+        // is materialized in `OtelConfig::default()`. Preserve the contract
+        // origin rather than treating that materialized default as caller
+        // input.
+        (u64::from(config.timeout_ms) != constants::DEFAULT_OTLP_TIMEOUT_MS)
+            .then_some(config.timeout_ms),
         constants::DEFAULT_OTLP_TIMEOUT_MS,
     );
     let flush = resolve_duration(

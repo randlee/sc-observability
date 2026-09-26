@@ -56,6 +56,38 @@ fn contract_tests_resolved_defaults() {
 }
 
 #[test]
+fn contract_tests_timeout_origin_tracks_default_and_explicit_values() {
+    let default_timeout = validated_transport_bounds(&OtelConfig {
+        lifecycle_shutdown_timeout_ms: Some(2_999_u64.into()),
+        ..legacy_config()
+    })
+    .expect_err("a shutdown bound below the default timeout is invalid");
+    assert!(matches!(
+        default_timeout,
+        ConfigFailure::InvalidBoundOrdering { .. }
+    ));
+    assert_eq!(
+        default_timeout.diagnostic().details.get("origin"),
+        Some(&serde_json::Value::String("Default".to_owned()))
+    );
+
+    let explicit_timeout = validated_transport_bounds(&OtelConfig {
+        timeout_ms: 3_001_u64.into(),
+        lifecycle_shutdown_timeout_ms: Some(3_000_u64.into()),
+        ..legacy_config()
+    })
+    .expect_err("a shutdown bound below an explicit timeout is invalid");
+    assert!(matches!(
+        explicit_timeout,
+        ConfigFailure::InvalidBoundOrdering { .. }
+    ));
+    assert_eq!(
+        explicit_timeout.diagnostic().details.get("origin"),
+        Some(&serde_json::Value::String("Explicit".to_owned()))
+    );
+}
+
+#[test]
 fn contract_tests_stable_failure_codes() {
     let zero = validated_transport_bounds(&OtelConfig {
         timeout_ms: 0_u64.into(),
