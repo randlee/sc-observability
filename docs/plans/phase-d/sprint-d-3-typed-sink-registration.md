@@ -19,15 +19,15 @@ Implement canonical 2.0 typed sink registration using obs-d-13 contracts.
 
 ## Deliverables
 
-1. [REQ: LOG-013] Implement `SinkRegistration::typed` in `builder.rs` against
+1. [REQ: LOG-004, LOG-013, LOG-037] Implement `SinkRegistration::typed` in `builder.rs` against
    the canonical open-sink contract, preserving registration metadata and using
    the D.13 signature.
 
-2. [REQ: LOG-013, NFR-012] Implement `LoggerBuilder::register_typed_sink` with
+2. [REQ: LOG-004, LOG-013, LOG-037, NFR-012] Implement `LoggerBuilder::register_typed_sink` with
    chaining, typed registration errors, one write/flush per operation, and
    preserved sink health/source diagnostics.
 
-3. [REQ: LOG-013, NFR-012] Migrate existing `LogSink` implementors in
+3. [REQ: LOG-004, LOG-013, LOG-037, NFR-012] Migrate existing `LogSink` implementors in
    `sinks.rs` to the canonical 2.0 error signature; update the typed
    registration consumer fixtures and documentation. `examples/custom-sink-example`
    remains D.17's owned example.
