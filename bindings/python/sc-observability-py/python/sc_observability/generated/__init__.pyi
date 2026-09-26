@@ -26,6 +26,180 @@ class InputBridgeHealth:
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
+class InputCanonicalDiagnostic:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    message: str
+    remediation: InputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailureValidation:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    field: str
+    kind: Literal['validation'] = dataclass_field(default='validation', init=False)
+    message: str
+    remediation: InputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailureQueueFull:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['queue_full'] = dataclass_field(default='queue_full', init=False)
+    message: str
+    remediation: InputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailureBelowBaseline:
+    at: str
+    cause: str | None = None
+    code: str
+    configured: InputLevelFilter
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['below_baseline'] = dataclass_field(default='below_baseline', init=False)
+    message: str
+    remediation: InputRemediation
+    requested: InputLevelFilter
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailureUnsupportedLevel:
+    at: str
+    available: InputLevelFilter
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['unsupported_level'] = dataclass_field(default='unsupported_level', init=False)
+    message: str
+    remediation: InputRemediation
+    requested: InputLevelFilter
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailurePermissionDenied:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['permission_denied'] = dataclass_field(default='permission_denied', init=False)
+    message: str
+    remediation: InputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailureClosed:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['closed'] = dataclass_field(default='closed', init=False)
+    message: str
+    remediation: InputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailureUnavailable:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['unavailable'] = dataclass_field(default='unavailable', init=False)
+    message: str
+    remediation: InputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailureIo:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['io'] = dataclass_field(default='io', init=False)
+    message: str
+    remediation: InputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailureTimeout:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['timeout'] = dataclass_field(default='timeout', init=False)
+    message: str
+    operation: str
+    remediation: InputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailureCancelled:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['cancelled'] = dataclass_field(default='cancelled', init=False)
+    message: str
+    operation: str
+    remediation: InputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailureUnsupportedVersion:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['unsupported_version'] = dataclass_field(default='unsupported_version', init=False)
+    message: str
+    received: int
+    remediation: InputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailureInternal:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['internal'] = dataclass_field(default='internal', init=False)
+    message: str
+    remediation: InputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalFailureUnknownRemote:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, InputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['unknown_remote'] = dataclass_field(default='unknown_remote', init=False)
+    message: str
+    remediation: InputRemediation
+    remote_kind: str
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalWireEnvelopeOk:
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
+    schema_version: Literal[1]
+    value: InputAdmission
+
+@dataclass(frozen=True, kw_only=True)
+class InputCanonicalWireEnvelopeError:
+    error: InputCanonicalFailure
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
+    schema_version: Literal[1]
+
+@dataclass(frozen=True, kw_only=True)
 class InputChangeDiagnosticAccepted:
     kind: Literal['accepted'] = dataclass_field(default='accepted', init=False)
 
@@ -240,6 +414,13 @@ class InputHealthRequest:
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
+class InputHistogramPoint:
+    bucket_counts: tuple[InputDecimal, ...]
+    count: InputDecimal
+    explicit_bounds: tuple[float, ...]
+    sum: float
+
+@dataclass(frozen=True, kw_only=True)
 class InputLevelChangeChanged:
     current: InputLevelState
     diagnostic: InputChangeDiagnostic
@@ -337,6 +518,30 @@ class InputMaintenanceHealth:
     pruned_files_total: InputDecimal
     rotated_files_total: InputDecimal
     state: InputWorkerState
+
+@dataclass(frozen=True, kw_only=True)
+class InputMetricRecord:
+    attributes: Mapping[str, InputValue]
+    name: str
+    service: str
+    timestamp: str
+    unit: str | None = None
+    value: InputMetricValue
+
+@dataclass(frozen=True, kw_only=True)
+class InputMetricValueGauge:
+    data: float
+    kind: Literal['gauge'] = dataclass_field(default='gauge', init=False)
+
+@dataclass(frozen=True, kw_only=True)
+class InputMetricValueSum:
+    data: Mapping[str, NoReturn]
+    kind: Literal['sum'] = dataclass_field(default='sum', init=False)
+
+@dataclass(frozen=True, kw_only=True)
+class InputMetricValueHistogram:
+    data: Mapping[str, NoReturn]
+    kind: Literal['histogram'] = dataclass_field(default='histogram', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class InputPathUtf8:
@@ -463,6 +668,46 @@ class InputSinkHealth:
     state: InputAvailability
 
 @dataclass(frozen=True, kw_only=True)
+class InputSpanEvent:
+    attributes: Mapping[str, InputValue]
+    diagnostic: InputStoredDiagnostic | None = None
+    name: str
+    timestamp: str
+    trace: InputTraceContextV2
+
+@dataclass(frozen=True, kw_only=True)
+class InputSpanLink:
+    attributes: Mapping[str, InputValue]
+    flags: int
+    span_id: str
+    trace_id: str
+
+@dataclass(frozen=True, kw_only=True)
+class InputSpanRecord:
+    attributes: Mapping[str, InputValue]
+    diagnostic: InputStoredDiagnostic | None = None
+    duration_ms: InputDecimal | None = None
+    kind: InputSpanKind
+    links: tuple[InputSpanLink, ...]
+    name: str
+    service: str
+    status: InputSpanStatus
+    timestamp: str
+    trace: InputTraceContextV2
+
+@dataclass(frozen=True, kw_only=True)
+class InputSpanSignal0:
+    Started: InputSpanRecord
+
+@dataclass(frozen=True, kw_only=True)
+class InputSpanSignal1:
+    Event: InputSpanEvent
+
+@dataclass(frozen=True, kw_only=True)
+class InputSpanSignal2:
+    Ended: InputSpanRecord
+
+@dataclass(frozen=True, kw_only=True)
 class InputStateTransition:
     entity_id: str | None = None
     entity_kind: str
@@ -501,6 +746,13 @@ class InputStoredEvent:
 
 @dataclass(frozen=True, kw_only=True)
 class InputTraceContext:
+    parent_span_id: str | None = None
+    span_id: str
+    trace_id: str
+
+@dataclass(frozen=True, kw_only=True)
+class InputTraceContextV2:
+    flags: int
     parent_span_id: str | None = None
     span_id: str
     trace_id: str
@@ -657,6 +909,180 @@ class OutputBridgeHealth:
     level_revision: OutputDecimal
     lifecycle: OutputLifecycle
     logging: OutputLoggingHealth
+    schema_version: Literal[1]
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalDiagnostic:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    message: str
+    remediation: OutputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailureValidation:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    field: str
+    kind: Literal['validation'] = dataclass_field(default='validation', init=False)
+    message: str
+    remediation: OutputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailureQueueFull:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['queue_full'] = dataclass_field(default='queue_full', init=False)
+    message: str
+    remediation: OutputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailureBelowBaseline:
+    at: str
+    cause: str | None = None
+    code: str
+    configured: OutputLevelFilter
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['below_baseline'] = dataclass_field(default='below_baseline', init=False)
+    message: str
+    remediation: OutputRemediation
+    requested: OutputLevelFilter
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailureUnsupportedLevel:
+    at: str
+    available: OutputLevelFilter
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['unsupported_level'] = dataclass_field(default='unsupported_level', init=False)
+    message: str
+    remediation: OutputRemediation
+    requested: OutputLevelFilter
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailurePermissionDenied:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['permission_denied'] = dataclass_field(default='permission_denied', init=False)
+    message: str
+    remediation: OutputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailureClosed:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['closed'] = dataclass_field(default='closed', init=False)
+    message: str
+    remediation: OutputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailureUnavailable:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['unavailable'] = dataclass_field(default='unavailable', init=False)
+    message: str
+    remediation: OutputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailureIo:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['io'] = dataclass_field(default='io', init=False)
+    message: str
+    remediation: OutputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailureTimeout:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['timeout'] = dataclass_field(default='timeout', init=False)
+    message: str
+    operation: str
+    remediation: OutputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailureCancelled:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['cancelled'] = dataclass_field(default='cancelled', init=False)
+    message: str
+    operation: str
+    remediation: OutputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailureUnsupportedVersion:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['unsupported_version'] = dataclass_field(default='unsupported_version', init=False)
+    message: str
+    received: int
+    remediation: OutputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailureInternal:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['internal'] = dataclass_field(default='internal', init=False)
+    message: str
+    remediation: OutputRemediation
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalFailureUnknownRemote:
+    at: str
+    cause: str | None = None
+    code: str
+    details: Mapping[str, OutputValue] = dataclass_field(default_factory=lambda: MappingProxyType({}))
+    docs: str | None = None
+    kind: Literal['unknown_remote'] = dataclass_field(default='unknown_remote', init=False)
+    message: str
+    remediation: OutputRemediation
+    remote_kind: str
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalWireEnvelopeOk:
+    kind: Literal['ok'] = dataclass_field(default='ok', init=False)
+    schema_version: Literal[1]
+    value: OutputAdmission
+
+@dataclass(frozen=True, kw_only=True)
+class OutputCanonicalWireEnvelopeError:
+    error: OutputCanonicalFailure
+    kind: Literal['error'] = dataclass_field(default='error', init=False)
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
@@ -874,6 +1300,13 @@ class OutputHealthRequest:
     schema_version: Literal[1]
 
 @dataclass(frozen=True, kw_only=True)
+class OutputHistogramPoint:
+    bucket_counts: tuple[OutputDecimal, ...]
+    count: OutputDecimal
+    explicit_bounds: tuple[float, ...]
+    sum: float
+
+@dataclass(frozen=True, kw_only=True)
 class OutputLevelChangeChanged:
     current: OutputLevelState
     diagnostic: OutputChangeDiagnostic
@@ -971,6 +1404,30 @@ class OutputMaintenanceHealth:
     pruned_files_total: OutputDecimal
     rotated_files_total: OutputDecimal
     state: OutputWorkerState
+
+@dataclass(frozen=True, kw_only=True)
+class OutputMetricRecord:
+    attributes: Mapping[str, OutputValue]
+    name: str
+    service: str
+    timestamp: str
+    unit: str | None
+    value: OutputMetricValue
+
+@dataclass(frozen=True, kw_only=True)
+class OutputMetricValueGauge:
+    data: float
+    kind: Literal['gauge'] = dataclass_field(default='gauge', init=False)
+
+@dataclass(frozen=True, kw_only=True)
+class OutputMetricValueSum:
+    data: Mapping[str, NoReturn]
+    kind: Literal['sum'] = dataclass_field(default='sum', init=False)
+
+@dataclass(frozen=True, kw_only=True)
+class OutputMetricValueHistogram:
+    data: Mapping[str, NoReturn]
+    kind: Literal['histogram'] = dataclass_field(default='histogram', init=False)
 
 @dataclass(frozen=True, kw_only=True)
 class OutputPathUtf8:
@@ -1097,6 +1554,46 @@ class OutputSinkHealth:
     state: OutputAvailability
 
 @dataclass(frozen=True, kw_only=True)
+class OutputSpanEvent:
+    attributes: Mapping[str, OutputValue]
+    diagnostic: OutputStoredDiagnostic | None
+    name: str
+    timestamp: str
+    trace: OutputTraceContextV2
+
+@dataclass(frozen=True, kw_only=True)
+class OutputSpanLink:
+    attributes: Mapping[str, OutputValue]
+    flags: int
+    span_id: str
+    trace_id: str
+
+@dataclass(frozen=True, kw_only=True)
+class OutputSpanRecord:
+    attributes: Mapping[str, OutputValue]
+    diagnostic: OutputStoredDiagnostic | None
+    duration_ms: OutputDecimal | None
+    kind: OutputSpanKind
+    links: tuple[OutputSpanLink, ...]
+    name: str
+    service: str
+    status: OutputSpanStatus
+    timestamp: str
+    trace: OutputTraceContextV2
+
+@dataclass(frozen=True, kw_only=True)
+class OutputSpanSignal0:
+    Started: OutputSpanRecord
+
+@dataclass(frozen=True, kw_only=True)
+class OutputSpanSignal1:
+    Event: OutputSpanEvent
+
+@dataclass(frozen=True, kw_only=True)
+class OutputSpanSignal2:
+    Ended: OutputSpanRecord
+
+@dataclass(frozen=True, kw_only=True)
 class OutputStateTransition:
     entity_id: str | None
     entity_kind: str
@@ -1135,6 +1632,13 @@ class OutputStoredEvent:
 
 @dataclass(frozen=True, kw_only=True)
 class OutputTraceContext:
+    parent_span_id: str | None
+    span_id: str
+    trace_id: str
+
+@dataclass(frozen=True, kw_only=True)
+class OutputTraceContextV2:
+    flags: int
     parent_span_id: str | None
     span_id: str
     trace_id: str
@@ -1276,7 +1780,10 @@ class OutputWireEnvelope8Error:
 
 InputAdmission: TypeAlias = InputAdmissionAccepted | InputAdmissionFiltered
 InputAdmissionOperation: TypeAlias = Literal['log'] | Literal['try_log']
+InputAggregationTemporality: TypeAlias = Literal['delta'] | Literal['cumulative']
 InputAvailability: TypeAlias = Literal['healthy'] | Literal['degraded_dropping'] | Literal['unavailable']
+InputCanonicalFailure: TypeAlias = InputCanonicalFailureValidation | InputCanonicalFailureQueueFull | InputCanonicalFailureBelowBaseline | InputCanonicalFailureUnsupportedLevel | InputCanonicalFailurePermissionDenied | InputCanonicalFailureClosed | InputCanonicalFailureUnavailable | InputCanonicalFailureIo | InputCanonicalFailureTimeout | InputCanonicalFailureCancelled | InputCanonicalFailureUnsupportedVersion | InputCanonicalFailureInternal | InputCanonicalFailureUnknownRemote
+InputCanonicalWireEnvelope: TypeAlias = InputCanonicalWireEnvelopeOk | InputCanonicalWireEnvelopeError
 InputChangeDiagnostic: TypeAlias = InputChangeDiagnosticAccepted | InputChangeDiagnosticNotAccepted
 InputClientOutcome: TypeAlias = InputClientOutcomeIdle | InputClientOutcomeScheduled | InputClientOutcomeAccepted | InputClientOutcomeFiltered | InputClientOutcomeCompleted
 InputCompletion: TypeAlias = InputCompletionCompleted
@@ -1292,6 +1799,7 @@ InputLevelRequest: TypeAlias = InputLevelRequestElevate | InputLevelRequestReset
 InputLifecycle: TypeAlias = Literal['running'] | Literal['stopping'] | Literal['stopped'] | Literal['failed']
 InputLogOperation: TypeAlias = Literal['log']
 InputLogOrder: TypeAlias = Literal['oldest_first'] | Literal['newest_first']
+InputMetricValue: TypeAlias = InputMetricValueGauge | InputMetricValueSum | InputMetricValueHistogram
 InputPath: TypeAlias = InputPathUtf8 | InputPathUnrepresentable | InputPathAbsent
 InputQueryState: TypeAlias = Literal['healthy'] | Literal['degraded'] | Literal['unavailable']
 InputRemediation: TypeAlias = InputRemediationRecoverable | InputRemediationNotRecoverable
@@ -1303,6 +1811,9 @@ InputResult5: TypeAlias = InputResult5Ok | InputResult5Error
 InputResult6: TypeAlias = InputResult6Ok | InputResult6Error
 InputResult7: TypeAlias = InputResult7Ok | InputResult7Error
 InputResult8: TypeAlias = InputResult8Ok | InputResult8Error
+InputSpanKind: TypeAlias = Literal['internal'] | Literal['server'] | Literal['client'] | Literal['producer'] | Literal['consumer']
+InputSpanSignal: TypeAlias = InputSpanSignal0 | InputSpanSignal1 | InputSpanSignal2
+InputSpanStatus: TypeAlias = Literal['Ok'] | Literal['Error'] | Literal['Unset']
 InputValue: TypeAlias = InputValueNull | InputValueBoolean | InputValueString | InputValueInteger | InputValueFloat | InputValueArray | InputValueObject
 InputWireEnvelope: TypeAlias = InputWireEnvelopeOk | InputWireEnvelopeError
 InputWireEnvelope2: TypeAlias = InputWireEnvelope2Ok | InputWireEnvelope2Error
@@ -1315,7 +1826,10 @@ InputWireEnvelope8: TypeAlias = InputWireEnvelope8Ok | InputWireEnvelope8Error
 InputWorkerState: TypeAlias = Literal['running'] | Literal['degraded'] | Literal['stopped']
 OutputAdmission: TypeAlias = OutputAdmissionAccepted | OutputAdmissionFiltered
 OutputAdmissionOperation: TypeAlias = Literal['log'] | Literal['try_log']
+OutputAggregationTemporality: TypeAlias = Literal['delta'] | Literal['cumulative']
 OutputAvailability: TypeAlias = Literal['healthy'] | Literal['degraded_dropping'] | Literal['unavailable']
+OutputCanonicalFailure: TypeAlias = OutputCanonicalFailureValidation | OutputCanonicalFailureQueueFull | OutputCanonicalFailureBelowBaseline | OutputCanonicalFailureUnsupportedLevel | OutputCanonicalFailurePermissionDenied | OutputCanonicalFailureClosed | OutputCanonicalFailureUnavailable | OutputCanonicalFailureIo | OutputCanonicalFailureTimeout | OutputCanonicalFailureCancelled | OutputCanonicalFailureUnsupportedVersion | OutputCanonicalFailureInternal | OutputCanonicalFailureUnknownRemote
+OutputCanonicalWireEnvelope: TypeAlias = OutputCanonicalWireEnvelopeOk | OutputCanonicalWireEnvelopeError
 OutputChangeDiagnostic: TypeAlias = OutputChangeDiagnosticAccepted | OutputChangeDiagnosticNotAccepted
 OutputClientOutcome: TypeAlias = OutputClientOutcomeIdle | OutputClientOutcomeScheduled | OutputClientOutcomeAccepted | OutputClientOutcomeFiltered | OutputClientOutcomeCompleted
 OutputCompletion: TypeAlias = OutputCompletionCompleted
@@ -1331,6 +1845,7 @@ OutputLevelRequest: TypeAlias = OutputLevelRequestElevate | OutputLevelRequestRe
 OutputLifecycle: TypeAlias = Literal['running'] | Literal['stopping'] | Literal['stopped'] | Literal['failed']
 OutputLogOperation: TypeAlias = Literal['log']
 OutputLogOrder: TypeAlias = Literal['oldest_first'] | Literal['newest_first']
+OutputMetricValue: TypeAlias = OutputMetricValueGauge | OutputMetricValueSum | OutputMetricValueHistogram
 OutputPath: TypeAlias = OutputPathUtf8 | OutputPathUnrepresentable | OutputPathAbsent
 OutputQueryState: TypeAlias = Literal['healthy'] | Literal['degraded'] | Literal['unavailable']
 OutputRemediation: TypeAlias = OutputRemediationRecoverable | OutputRemediationNotRecoverable
@@ -1342,6 +1857,9 @@ OutputResult5: TypeAlias = OutputResult5Ok | OutputResult5Error
 OutputResult6: TypeAlias = OutputResult6Ok | OutputResult6Error
 OutputResult7: TypeAlias = OutputResult7Ok | OutputResult7Error
 OutputResult8: TypeAlias = OutputResult8Ok | OutputResult8Error
+OutputSpanKind: TypeAlias = Literal['internal'] | Literal['server'] | Literal['client'] | Literal['producer'] | Literal['consumer']
+OutputSpanSignal: TypeAlias = OutputSpanSignal0 | OutputSpanSignal1 | OutputSpanSignal2
+OutputSpanStatus: TypeAlias = Literal['Ok'] | Literal['Error'] | Literal['Unset']
 OutputValue: TypeAlias = OutputValueNull | OutputValueBoolean | OutputValueString | OutputValueInteger | OutputValueFloat | OutputValueArray | OutputValueObject
 OutputWireEnvelope: TypeAlias = OutputWireEnvelopeOk | OutputWireEnvelopeError
 OutputWireEnvelope2: TypeAlias = OutputWireEnvelope2Ok | OutputWireEnvelope2Error
@@ -1352,6 +1870,7 @@ OutputWireEnvelope6: TypeAlias = OutputWireEnvelope6Ok | OutputWireEnvelope6Erro
 OutputWireEnvelope7: TypeAlias = OutputWireEnvelope7Ok | OutputWireEnvelope7Error
 OutputWireEnvelope8: TypeAlias = OutputWireEnvelope8Ok | OutputWireEnvelope8Error
 OutputWorkerState: TypeAlias = Literal['running'] | Literal['degraded'] | Literal['stopped']
+InputCanonicalWireEnvelopeAdmission: TypeAlias = InputCanonicalWireEnvelope
 InputOperationDiagnostic: TypeAlias = InputDiagnostic
 InputResultAdmission: TypeAlias = InputResult
 InputResultClientOutcome: TypeAlias = InputResult7
@@ -1371,8 +1890,13 @@ InputWireEnvelopeLogHealth: TypeAlias = InputWireEnvelope5
 InputWireEnvelopeLogSnapshot: TypeAlias = InputWireEnvelope4
 Admission: TypeAlias = OutputAdmission
 AdmissionOperation: TypeAlias = OutputAdmissionOperation
+AggregationTemporality: TypeAlias = OutputAggregationTemporality
 Availability: TypeAlias = OutputAvailability
 BridgeHealth: TypeAlias = OutputBridgeHealth
+CanonicalDiagnostic: TypeAlias = OutputCanonicalDiagnostic
+CanonicalFailure: TypeAlias = OutputCanonicalFailure
+OutputCanonicalWireEnvelopeAdmission: TypeAlias = OutputCanonicalWireEnvelope
+CanonicalWireEnvelopeAdmission: TypeAlias = OutputCanonicalWireEnvelopeAdmission
 ChangeDiagnostic: TypeAlias = OutputChangeDiagnostic
 ClientOutcome: TypeAlias = OutputClientOutcome
 ClientStatus: TypeAlias = OutputClientStatus
@@ -1388,6 +1912,7 @@ FailureCounts: TypeAlias = OutputFailureCounts
 FieldMatch: TypeAlias = OutputFieldMatch
 FlushRequest: TypeAlias = OutputFlushRequest
 HealthRequest: TypeAlias = OutputHealthRequest
+HistogramPoint: TypeAlias = OutputHistogramPoint
 LevelChange: TypeAlias = OutputLevelChange
 LevelChangeRequest: TypeAlias = OutputLevelChangeRequest
 LevelChangeSource: TypeAlias = OutputLevelChangeSource
@@ -1404,6 +1929,8 @@ LogQuery: TypeAlias = OutputLogQuery
 LogSnapshot: TypeAlias = OutputLogSnapshot
 LoggingHealth: TypeAlias = OutputLoggingHealth
 MaintenanceHealth: TypeAlias = OutputMaintenanceHealth
+MetricRecord: TypeAlias = OutputMetricRecord
+MetricValue: TypeAlias = OutputMetricValue
 OutputOperationDiagnostic: TypeAlias = OutputDiagnostic
 OperationDiagnostic: TypeAlias = OutputOperationDiagnostic
 Path: TypeAlias = OutputPath
@@ -1429,10 +1956,17 @@ ResultLogHealth: TypeAlias = OutputResultLogHealth
 OutputResultLogSnapshot: TypeAlias = OutputResult4
 ResultLogSnapshot: TypeAlias = OutputResultLogSnapshot
 SinkHealth: TypeAlias = OutputSinkHealth
+SpanEvent: TypeAlias = OutputSpanEvent
+SpanKind: TypeAlias = OutputSpanKind
+SpanLink: TypeAlias = OutputSpanLink
+SpanRecord: TypeAlias = OutputSpanRecord
+SpanSignal: TypeAlias = OutputSpanSignal
+SpanStatus: TypeAlias = OutputSpanStatus
 StateTransition: TypeAlias = OutputStateTransition
 StoredDiagnostic: TypeAlias = OutputStoredDiagnostic
 StoredEvent: TypeAlias = OutputStoredEvent
 TraceContext: TypeAlias = OutputTraceContext
+TraceContextV2: TypeAlias = OutputTraceContextV2
 TryLogRequest: TypeAlias = OutputTryLogRequest
 Value: TypeAlias = OutputValue
 OutputWireEnvelopeAdmission: TypeAlias = OutputWireEnvelope
