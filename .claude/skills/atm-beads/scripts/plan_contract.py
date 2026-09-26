@@ -40,7 +40,10 @@ WARNING_PREFIX: str = "warning: "
 
 # Optional top-level keys of docs/plans/phase-<p>/sprints.json beyond the membership rows (user ruling 2026-09-26).
 INDEX_OPTIONAL_KEYS: tuple[str, ...] = ("integration_branch", "review_artifacts", "policy")
-POLICY_KEYS: tuple[str, ...] = ("human_gates",)
+POLICY_KEYS: tuple[str, ...] = ("human_gates", "waivers")
+# policy.waivers[{bead, check, reason}]: a past state violation the user accepted in the plan PR; the validator
+# prints it as a warning instead of a problem. `check` names the state invariant.
+WAIVABLE_CHECKS: tuple[str, ...] = ("reopened_after_pass", "started_before_blocker", "pass_without_qa")
 
 
 def model_matches(model: str | None, difficulty: str) -> bool:
