@@ -27,8 +27,16 @@ Dual-path hermetic conformance and OTLP documentation are closed by D.9; the Pyt
 
 ## Design
 
-One-boundary integration sprint.
+## Implementation targets
+
+- `Cargo.lock`: lock the completed workspace dependency graph (deliverable 1).
+- `release/release-inventory.json` and `release/public-api-major-breaks.toml`: record the 2.0 release/API evidence (deliverable 3).
+- `docs/api-approvals/**`: add the reviewed public API JSON (deliverable 3).
+- `bindings/**`: re-export and translate the canonical error surface (deliverable 4).
+- Composition modules: construct `ExporterSet`, re-export it, and gate builders by features (deliverables 1–2).
 
 ## Acceptance criteria
 
-boundary:phase integration: implementation is production ready; run target tests, workspace build, and boundary validation.
+- `cargo test --workspace` passes with the canonical enums and exporter composition.
+- `rg "error_wrapper!|legacy wrapper" crates bindings` returns zero obsolete wrapper constructions.
+- `release/public-api-major-breaks.toml`, API approvals, and release inventory exist and are updated.
