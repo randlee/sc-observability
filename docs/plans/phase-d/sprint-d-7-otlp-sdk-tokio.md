@@ -42,12 +42,28 @@ surface, or `atm-core` code.
 
 ## Design
 
+
+
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability-otlp/**`
+- `Cargo.toml`
+- `Cargo.lock`
+- `examples/otlp-sdk/**`
+- `scripts/ci/validate_dependency_bans.sh`
+- `scripts/ci/validate_repo_boundaries.sh`
+- `docs/architecture.md`
+- `docs/api-design.md`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
 ## Implementation targets
 
-- `crates/sc-observability-otlp/src/assembly.rs`: implement the SDK/Tokio adapter constructor that satisfies the D.12 exporter trait (deliverable 1).
-- `examples/otlp-sdk/**`: add an SDK adapter configuration and lifecycle example (deliverable 2).
-- Adapter tests: exercise export, cancellation, retry, and shutdown through the D.6 lifecycle core (deliverables 3–4).
 
+- `crates/sc-observability-otlp/src/assembly.rs`: construct the SDK/Tokio exporter adapter from D12 `ExporterSet` (deliverable 1).
+- `examples/otlp-sdk/**`: exercise async lifecycle and typed failures (deliverable 2).
 
 ## Acceptance criteria
 

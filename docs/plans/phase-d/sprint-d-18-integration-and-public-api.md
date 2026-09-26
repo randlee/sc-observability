@@ -27,16 +27,25 @@ Dual-path hermetic conformance and OTLP documentation are closed by D.9; the Pyt
 
 ## Design
 
-## Implementation targets
+## Integration targets
 
-- `Cargo.lock`: lock the completed workspace dependency graph (deliverable 1).
-- `release/release-inventory.json` and `release/public-api-major-breaks.toml`: record the 2.0 release/API evidence (deliverable 3).
-- `docs/api-approvals/**`: add the reviewed public API JSON (deliverable 3).
-- `bindings/**`: re-export and translate the canonical error surface (deliverable 4).
-- Composition modules: construct `ExporterSet`, re-export it, and gate builders by features (deliverables 1–2).
+- `Cargo.lock`: resolve the completed workspace graph for deliverable 1.
+- `release/release-inventory.json` and `release/public-api-major-breaks.toml`: record the 2.0 API/release inventory for deliverable 3.
+- `docs/api-approvals/**`: approve every public D12/D13/D18 surface for deliverable 3.
+- `bindings/**`: retype binding error surfaces and public exports for deliverable 4.
+- Workspace re-exports: export `ExporterSet`, typed error enums, `LogSettings`, `AttachmentOptions`, and `TypedLogSink`; gate SDK and legacy builders with `otlp-sdk` and `legacy-http-json` features for deliverable 2.
+
+## Composition procedure
+
+1. Delete compatibility wrappers and `error_wrapper!` only after every consumer compiles against D12.
+2. Construct `ExporterSet` from the feature-selected builder and expose it through the public facade.
+3. Update API approvals, release inventory, and binding fixtures in the same public-surface review.
+
 
 ## Acceptance criteria
 
-- `cargo test --workspace` passes with the canonical enums and exporter composition.
-- `rg "error_wrapper!|legacy wrapper" crates bindings` returns zero obsolete wrapper constructions.
-- `release/public-api-major-breaks.toml`, API approvals, and release inventory exist and are updated.
+- `cargo test --workspace` passes with canonical enums and exporter composition (deliverable 1).
+- `rg "error_wrapper!|legacy wrapper" crates bindings` returns zero remaining obsolete composition constructions (deliverable 1).
+- `cargo check -p sc-observability-otlp --features otlp-sdk,legacy-http-json` passes the feature-gated builder/re-export surface (deliverable 2).
+- `test -f release/public-api-major-breaks.toml && test -f release/release-inventory.json && find docs/api-approvals -name "*.json" -print -quit | grep -q .` finds the release and approval evidence (deliverable 3).
+- `rg "ErrorContext|ExportError|InitError" bindings` reports the binding migration evidence (deliverable 4).

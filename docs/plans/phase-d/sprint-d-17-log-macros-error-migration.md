@@ -8,7 +8,6 @@
 - Blocked by: `obs-d-12-sanity`
 - Owned paths:
   - `crates/sc-observability-log-macros/**`
-  - ``
 
 ## Deliverables
 
@@ -23,30 +22,28 @@ Workspace-wide wrapper removal, public re-exports, and release/API approval are 
 
 ## Design
 
-## Migration recipe\n\n| Current wrapper or error | D.12 target | ErrorContext fields |\n| --- | --- | --- |\n| crate-local diagnostic wrapper | canonical non-exhaustive error enum | operation, source, diagnostic code |\n\n## Implementation targets\n\n- Each owned source module: replace local wrapper construction with the D.12 enum variant (deliverable 1).\n- Each owned test module: assert the typed variant and source context (deliverable 3).\n\n
+## Migration recipe
+
+| Current wrapper/error | D12 enum variant | ErrorContext fields | Call-site count on develop | Tests to retype |
+| --- | --- | --- | --- | --- |
+| macro parse diagnostics | `EventError::Context` | `code, source, macro_site` | `rg -n 'macro' crates` recorded before edit | `crates/sc-observability-log-macros/src/fields.rs` |
+
+```rust
+// before
+return Err(LegacyError::from(context));
+// after
+return Err(EventError::Context(Box::new(context)));
+```
+
+## Implementation targets
+
+- `crates/sc-observability-log-macros/src/fields.rs`: replace the listed construction sites and preserve `ErrorContext` source identity (deliverable 1).
+- `crates/sc-observability-log-macros/src/fields.rs`: delete local wrappers only after each call site is typed (deliverable 2).
+- `crates/sc-observability-log-macros/src/fields.rs`: add variant, stable diagnostic, and source-context assertions (deliverable 3).
+- Sprint documentation: record the migrated surface (deliverable 4).
 
 ## Acceptance criteria
 
-- 
-running 5 tests
-test fields::tests::parses_event_level ... ok
-test fields::tests::parses_brace_field_set ... ok
-test fields::tests::rejects_unsupported_forms ... ok
-test fields::tests::parses_prefixes_fields_and_message ... ok
-test fields::tests::instrument_context_rejects_value_less_fields ... ok
-
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
-
-running 7 tests
-test crates/sc-observability-log-macros/src/lib.rs - debug (line 48) ... ignored
-test crates/sc-observability-log-macros/src/lib.rs - error (line 81) ... ignored
-test crates/sc-observability-log-macros/src/lib.rs - event (line 92) ... ignored
-test crates/sc-observability-log-macros/src/lib.rs - info (line 59) ... ignored
-test crates/sc-observability-log-macros/src/lib.rs - instrument (line 119) ... ignored
-test crates/sc-observability-log-macros/src/lib.rs - trace (line 37) ... ignored
-test crates/sc-observability-log-macros/src/lib.rs - warn (line 70) ... ignored
-
-test result: ok. 0 passed; 0 failed; 7 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
-all doctests ran in 0.29s; merged doctests compilation took 0.09s passes with migrated typed-error assertions.\n-  returns zero remaining legacy constructions.\n- The crate's sprint doc and typed-error tests exist and name the D.12 enum.
+- `cargo test -p sc-observability-log-macros` passes typed-error assertions (deliverables 1 and 3).
+- `rg "error_wrapper!|LegacyError" crates/sc-observability-log-macros` returns zero local legacy constructions (deliverable 2).
+- The generated sprint doc names the D12 enum mapping and retargeted tests (deliverable 4).

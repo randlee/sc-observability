@@ -36,6 +36,8 @@ redesign. #88 remains excluded.
 
 ## Design
 
+Contract: obs-d-12 design, section "D.4 canonical error-enum inventory".
+
 ## Owned Paths and Exact Targets
 
 - `Cargo.toml`
@@ -73,7 +75,12 @@ New modules stay inside the listed crate fences. No unrelated changes are author
 
 Must follow D.1, D.2, and D.3 because migration edits core src/lib.rs, types src/errors.rs and the log bridge files they own. These are code conflicts, not documentation-only edges. Link their separate additive documents from docs/api-design.md while retaining D.4 sole ownership of the 2.0 baseline.
 
+## Implementation targets
 
+
+- `crates/sc-observability/src/error_codes.rs`: map core error codes to D12 enum variants (deliverable 1).
+- `crates/sc-observability/src/health.rs`: report typed error diagnostics without wrappers (deliverable 2).
+- `crates/sc-observability/tests/logging_only.rs`: assert enum variants and `ErrorContext` source identity (deliverable 3).
 
 ## Acceptance criteria
 

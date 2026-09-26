@@ -8,7 +8,6 @@
 - Blocked by: `obs-d-12-sanity`
 - Owned paths:
   - `crates/sc-observability-dto/**`
-  - ``
 
 ## Deliverables
 
@@ -23,39 +22,28 @@ Workspace-wide wrapper removal, public re-exports, and release/API approval are 
 
 ## Design
 
-## Migration recipe\n\n| Current wrapper or error | D.12 target | ErrorContext fields |\n| --- | --- | --- |\n| crate-local diagnostic wrapper | canonical non-exhaustive error enum | operation, source, diagnostic code |\n\n## Implementation targets\n\n- Each owned source module: replace local wrapper construction with the D.12 enum variant (deliverable 1).\n- Each owned test module: assert the typed variant and source context (deliverable 3).\n\n
+## Migration recipe
+
+| Current wrapper/error | D12 enum variant | ErrorContext fields | Call-site count on develop | Tests to retype |
+| --- | --- | --- | --- | --- |
+| DTO conversion and wire errors | `EventError::Context` | `code, source, wire_field` | `rg -n 'DTO' crates` recorded before edit | `crates/sc-observability-dto/src/wire/primitives.rs` |
+
+```rust
+// before
+return Err(LegacyError::from(context));
+// after
+return Err(EventError::Context(Box::new(context)));
+```
+
+## Implementation targets
+
+- `crates/sc-observability-dto/src/wire/primitives.rs`: replace the listed construction sites and preserve `ErrorContext` source identity (deliverable 1).
+- `crates/sc-observability-dto/src/wire/primitives.rs`: delete local wrappers only after each call site is typed (deliverable 2).
+- `crates/sc-observability-dto/src/wire/primitives.rs`: add variant, stable diagnostic, and source-context assertions (deliverable 3).
+- Sprint documentation: record the migrated surface (deliverable 4).
 
 ## Acceptance criteria
 
-- 
-running 0 tests
-
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
-
-running 18 tests
-test diagnostics_preserve_unknown_codes_order_and_original_time ... ok
-test checked_event_preserves_integer_and_host_stamp ... ok
-test decimal_domains_are_canonical ... ok
-test registry_has_unique_literals_and_exact_remediation ... ok
-test protected_key_policy_is_shared_and_exact ... ok
-test paths_keep_absence_and_non_unicode ... ok
-test timeouts_are_bounded_integers ... ok
-test level_change_errors_and_unsuccessful_diagnostics_preserve_payloads ... ok
-test malformed_unknown_and_oversized_remote_errors_differ ... ok
-test diagnostic_string_and_step_bounds_are_exact_and_never_truncate ... ok
-test inputs_reject_missing_unknown_and_invalid_versions ... ok
-test query_defaults_and_inclusive_bounds ... ok
-test all_stored_event_fields_and_trusted_output_survive ... ok
-test nested_output_additions_do_not_weaken_strict_inputs ... ok
-test nonfinite_typed_values_cannot_bypass_input_checks ... ok
-test complete_health_projection_and_unsigned_wire_counters ... ok
-test spoofed_provenance_is_rejected_at_all_depths ... ok
-test exact_request_size_and_depth_boundaries ... ok
-
-test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
-
-
-running 0 tests
-
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s passes with migrated typed-error assertions.\n-  returns zero remaining legacy constructions.\n- The crate's sprint doc and typed-error tests exist and name the D.12 enum.
+- `cargo test -p sc-observability-dto` passes typed-error assertions (deliverables 1 and 3).
+- `rg "error_wrapper!|LegacyError" crates/sc-observability-dto` returns zero local legacy constructions (deliverable 2).
+- The generated sprint doc names the D12 enum mapping and retargeted tests (deliverable 4).

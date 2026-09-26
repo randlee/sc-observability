@@ -47,6 +47,8 @@ implement #88/OTEL functionality.
 
 ## Design
 
+
+
 ## Owned Paths and Exact Targets
 
 - `.github/workflows/b4a-python-distributions.yml`
@@ -64,7 +66,13 @@ New modules stay inside the listed crate fences. No unrelated changes are author
 checks; reuse its existing result and the existing B.4a aggregate job.
 The Python Cargo/pyproject metadata is inspected, not changed by this sprint.
 
+## Implementation targets
 
+
+- `scripts/ci/_python_distribution.py`: implement open-ended platform inventory assertions (deliverable 1).
+- `scripts/ci/validate_python_distribution.py`: expose the regression guard command (deliverable 2).
+- `scripts/ci/tests/test_python_distribution.py`: cover discovered platform matrix changes (deliverable 3).
+- `docs/project-plan.md`: document guard ownership (deliverable 4).
 
 ## Acceptance criteria
 

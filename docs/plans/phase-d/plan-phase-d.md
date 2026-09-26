@@ -16,12 +16,12 @@ fences follow those boundaries and never use `crates/**`.
 
 ## Wave table
 
-| Wave | Track | Sprints | Target boundary | Owned paths |
-| --- | --- | --- | --- | --- |
-| 1 | contracts | D.12 `c-types`, D.13 `c-log` | types/OTLP and logging contracts | contract modules, OTLP declarations/features |
-| 2 | bounded implementations | D.1–D.8, D.10, D.14–D.17 | one crate or module per sprint | disjoint crate/module fences |
-| 3 | library/API | D.18, D.11 | composition, release/public API and Python guard | shared release/API files |
-| 4 | qualification | D.9 | dual exporter conformance | collectors, conformance tests and docs |
+| Wave | Track | Sprints | Target boundary | Owned paths | Assignee / model |
+| --- | --- | --- | --- | --- | --- |
+| 1 | contracts | D.10 `windows-arm64-wheel`, D.12 `c-types`, D.13 `c-log` | wheel policy; types/OTLP and logging contracts | wheel files; contract modules; OTLP declarations/features | D.10 luna/luna; D.12 terra/terra; D.13 terra/terra |
+| 2 | bounded implementations | D.1–D.8, D.14–D.17 | one crate or module per sprint | disjoint crate/module fences | D.1–D.8 terra/terra; D.14–D.17 terra/terra |
+| 3 | library/API | D.18 `integration-and-public-api` | composition and release/public API | shared release/API files | D.18 terra/terra |
+| 4 | qualification | D.9 `otlp-conformance`, D.11 `python-open-ended-guard` | dual exporter conformance and Python distribution guard | collectors, conformance tests, docs, and guard scripts | D.9 terra/terra; D.11 luna/luna |
 
 **Critical path:** 4 sprints. **Width:** 13 implementation sprints.
 **Sprint count:** 18. Every `must_follow` edge consumes a named contract;

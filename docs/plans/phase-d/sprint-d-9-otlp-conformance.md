@@ -49,6 +49,8 @@ or new transport beyond the two qualified paths.
 
 ## Design
 
+
+
 ## Shared conformance contract
 
 ```rust
@@ -83,7 +85,12 @@ These are edit fences for the deliverables above, including their tests and
 public API approval where listed; reading dependencies does not claim ownership.
 New modules stay inside the listed crate fences. No unrelated changes are authorized.
 
+## Implementation targets
 
+
+- `crates/sc-observability-otlp/tests/full_stack_integration.rs`: run both exporter paths against hermetic collectors (deliverable 1).
+- `docs/observability/otlp/**`: document configuration, diagnostics, and migration (deliverable 2).
+- `scripts/ci/fixtures/otlp/**`: provide deterministic collector fixtures (deliverable 1).
 
 ## Acceptance criteria
 

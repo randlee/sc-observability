@@ -55,72 +55,7 @@ No network exporter, SDK dependency, collector smoke test, or dashboard work.
 
 ## Design
 
-## Public contract
-
-The implementation may refine names during API review, but it must preserve
-this discriminated shape and information content:
-
-```rust
-#[non_exhaustive]
-pub enum SpanKind { Internal, Server, Client, Producer, Consumer }
-
-#[non_exhaustive]
-pub struct TraceFlags(u8); // exposes sampled() and preserves known W3C bits
-
-#[non_exhaustive]
-pub struct SpanLink {
-    pub trace_id: TraceId,
-    pub span_id: SpanId,
-    pub flags: TraceFlags,
-    pub attributes: Attributes,
-}
-
-#[non_exhaustive]
-pub enum AggregationTemporality { Delta, Cumulative }
-
-#[non_exhaustive]
-pub enum MetricValue {
-    Gauge(FiniteF64),
-    Sum {
-        value: FiniteF64,
-        monotonic: bool,
-        temporality: AggregationTemporality,
-        start_time: Timestamp,
-    },
-    Histogram {
-        point: HistogramPoint,
-        temporality: AggregationTemporality,
-        start_time: Timestamp,
-    },
-}
-
-pub struct HistogramPoint {
-    explicit_bounds: Vec<f64>,
-    bucket_counts: Vec<u64>,
-    count: u64,
-    sum: FiniteF64,
-}
-
-impl HistogramPoint {
-    pub fn try_new(/* fields above */) -> Result<Self, MetricModelError>;
-    // read-only accessors
-}
-```
-
-`Attributes` and `FiniteF64` are neutral validated types owned by
-`sc-observability-types`; this model does not introduce a `serde_json` runtime
-dependency in lower crates. `SpanRecord` carries `SpanKind` and links;
-`TraceContext` carries trace flags.
-`MetricRecord` carries `MetricValue` rather than the current `MetricKind` plus
-single `f64` combination. Exact serde names and constructors are frozen in the
-2.0 API approval before implementation completion.
-`HistogramPoint` deserializes through a validated `TryFrom` representation so
-serde cannot construct an invalid value. A link contains its own ids/flags and
-never embeds `TraceContext`, eliminating two sources of truth.
-`MetricValue`, `TraceFlags`, and `SpanLink` are `#[non_exhaustive]` public
-types; consumers must use their constructors/accessors or wildcard matching
-rather than depend on exhaustive future shape.
-
+Contract: obs-d-12 design, section "Public contract".
 
 ## Owned Paths and Exact Targets
 
@@ -139,7 +74,11 @@ These are edit fences for the deliverables above, including their tests and
 public API approval where listed; reading dependencies does not claim ownership.
 New modules stay inside the listed crate fences. No unrelated changes are authorized.
 
+## Implementation targets
 
+
+- `crates/sc-observability-otlp/src/projectors.rs`: project spans and metrics with D12 neutral types (deliverable 2).
+- `crates/sc-observability-otlp/tests/error_registry_parity.rs`: assert model validation and error-code parity (deliverable 3).
 
 ## Acceptance criteria
 

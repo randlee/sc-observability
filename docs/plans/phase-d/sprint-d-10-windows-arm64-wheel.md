@@ -50,6 +50,8 @@ another Python ABI baseline.
 
 ## Design
 
+
+
 ## Owned Paths and Exact Targets
 
 - `.github/workflows/b4a-python-distributions.yml`
@@ -71,7 +73,12 @@ Must follow D.4 because both update release/release-inventory.json and the versi
 checks; reuse its existing result and the existing B.4a aggregate job.
 The Python Cargo/pyproject metadata is inspected, not changed by this sprint.
 
+## Implementation targets
 
+
+- `.github/workflows/b4a-python-distributions.yml`: add Windows ARM64 wheel job and artifact assertions (deliverable 1).
+- `scripts/ci/prepare_python_distributions.py`: select the ARM64 target deterministically (deliverable 2).
+- `release/python-platform-policy.json`: record supported wheel policy (deliverable 3).
 
 ## Acceptance criteria
 

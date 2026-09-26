@@ -100,6 +100,8 @@ publication.
 
 ## Design
 
+
+
 ## Retained implementation contract
 
 ```rust
@@ -258,7 +260,11 @@ New modules stay inside the listed crate fences. No unrelated changes are author
 
 Must also follow D.7 because both edit the OTLP crate manifest/factory, Cargo.lock, dependency allowlists, and docs/architecture.md. The two backend scopes stay distinct.
 
+## Implementation targets
 
+
+- `crates/sc-observability-otlp/src/error_codes.rs`: map legacy HTTP/JSON failures to D12 variants (deliverable 1).
+- `examples/otlp-legacy/**`: demonstrate the transplanted backend and retry behavior (deliverable 2).
 
 ## Acceptance criteria
 
