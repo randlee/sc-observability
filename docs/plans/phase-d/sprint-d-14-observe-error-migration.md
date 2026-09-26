@@ -1,22 +1,12 @@
 # d-14: Observe error migration
 
-Generated projection of `obs-d-14`; the bead is authoritative.
-
 ## Plan metadata
 
-- Wave: 2
-- Layer: 12
-- Assignee / model: cobs / terra
-- Relation: `parallel_safe`
-- Closure: `boundary`
-- Target boundary: sc-observe
+- Wave: 12
 - Branch: `sprint/d-14-observe-error-migration`
-- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-14-observe-error-migration`
-- PR target (merge order only): `sprint/d-8-otlp-http-json-transplant`
+- PR target: `sprint/d-8-otlp-http-json-transplant`
 - Blocked by: `obs-d-12-sanity`
-- Requirements: LAY-001, LAY-002, LAY-003, LAY-004, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-007, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-047, LOG-048, NFR-001, NFR-002, NFR-003, NFR-005, NFR-006, NFR-007, NFR-009, OBS-001, OBS-002, OBS-003, OBS-004, OBS-005, OBS-006, OBS-007, OBS-008, OBS-009, OBS-010, OBS-011, OBS-012, OBS-013, OBS-014, OBS-015, OBS-016, OBS-017, OBS-018, OBS-019, OBS-020, OBS-021, OBS-022, OBS-023, OBS-024, OBS-025, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
-- ADRs: ADR-001, ADR-002, ADR-003, ADR-005, ADR-007, ADR-009, ADR-010, ADR-012, ADR-017
-- Owned paths (metadata projection):
+- Owned paths:
   - `crates/sc-observe/src/lib.rs`
   - `crates/sc-observe/tests/**`
   - `docs/plans/phase-d/sprint-d-14-observe-error-migration.md`
@@ -32,6 +22,7 @@ Generated projection of `obs-d-14`; the bead is authoritative.
 
 Workspace-wide wrapper removal, public re-exports, and release/API approval are closed by D.18.
 Update the sprint doc as explanatory evidence alongside code; documentation is not a separate closure gate.
+
 
 ## Design
 
@@ -53,6 +44,7 @@ Created/staged by obs-d-14, owned by obs-d-18 from wave 3; after this bead close
 - `crates/sc-observe/tests/routing_integration.rs`
 - `crates/sc-observe/tests/typed_observation.rs`
 
+
 ## Acceptance criteria
 
 - [ ] `cargo test -p sc-observe --locked` passes canonical and neutral-model cases, including routing guards and per-cause variants/source identity (D1/D3).
@@ -60,3 +52,4 @@ Created/staged by obs-d-14, owned by obs-d-18 from wave 3; after this bead close
 - [ ] This sprint does not close workspace bindings, collector behavior or release approvals; D.18/D.9 do.
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
+
