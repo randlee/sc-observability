@@ -3656,7 +3656,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-logging-example"
-version = "1.4.0"
+version = "2.0.0"
 dependencies = [
  "sc-observability",
  "sc-observability-binding-runtime",

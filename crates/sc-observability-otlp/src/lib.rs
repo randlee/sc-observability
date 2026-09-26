@@ -220,6 +220,34 @@ impl ExporterLifecycle for TestLifecycle {
 /// exporters while their concrete implementations are still staged elsewhere.
 fn exporter_factory(config: &TelemetryConfig) -> Result<ExporterSet, ConfigFailure> {
     let bounds = validated_transport_bounds(&config.transport)?;
+    if config.transport.enabled
+        && matches!(config.transport.backend, ExporterBackend::LegacyHttpJson)
+        && config.transport.protocol != OtlpProtocol::HttpJson
+    {
+        return Err(ConfigFailure::UnsupportedProtocol {
+            context: Box::new(
+                ErrorContext::new(
+                    sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_PROTOCOL,
+                    "the legacy HTTP/JSON exporter requires the HTTP/JSON protocol",
+                    Remediation::recoverable(
+                        "select HttpJson when using the legacy HTTP/JSON exporter",
+                        [
+                            "select HttpJson",
+                            "or select a backend that supports the configured protocol",
+                        ],
+                    ),
+                )
+                .detail("backend", Value::String("LegacyHttpJson".to_owned()))
+                .detail(
+                    "protocol",
+                    Value::String(format!(
+                        "{protocol:?}",
+                        protocol = config.transport.protocol
+                    )),
+                ),
+            ),
+        });
+    }
     match bounds.backend {
         BackendTransportBounds::Disabled => Ok(ExporterSet {
             logs: Arc::new(DisabledLogExporter),
@@ -352,7 +380,7 @@ impl Telemetry {
         {
             self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
             let context = ErrorContext::new(
-                error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
+                error_codes::OTLP_EXPORT_TERMINAL,
                 "received ended span without a matching started span",
                 Remediation::not_recoverable(
                     "emit the started span before the matching ended span",
@@ -525,7 +553,7 @@ impl Telemetry {
             self.dropped_exports_total
                 .fetch_add(dropped, Ordering::SeqCst);
             let context = ErrorContext::new(
-                error_codes::TELEMETRY_INCOMPLETE_SPAN_DROPPED,
+                error_codes::OTLP_EXPORT_TERMINAL,
                 "dropped incomplete spans during shutdown",
                 Remediation::recoverable(
                     "ensure all started spans receive matching ended signals before shutdown",
@@ -680,7 +708,7 @@ impl MetricEmitter for Telemetry {
 )]
 pub(crate) fn export_failure(message: impl Into<String>) -> TelemetryError {
     TelemetryError::ExportFailure(Box::new(ErrorContext::new(
-        error_codes::TELEMETRY_EXPORT_FAILED,
+        error_codes::OTLP_EXPORT_TERMINAL,
         message,
         Remediation::not_recoverable("retry/export policy is owned by telemetry runtime"),
     )))
@@ -709,7 +737,7 @@ fn export_failure_from_event(err: EventFailure) -> TelemetryError {
 fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
     ShutdownFailure::from_context(Box::new(
         ErrorContext::new(
-            error_codes::TELEMETRY_FLUSH_FAILED,
+            error_codes::OTLP_EXPORT_TERMINAL,
             "failed to flush telemetry during shutdown",
             Remediation::recoverable(
                 "inspect telemetry health and retry shutdown after the exporter recovers",
@@ -729,7 +757,7 @@ fn shutdown_export_failure_typed(
     // typed source chain keeps the actual exporter failure available to callers.
     let summary = diagnostic_summary.unwrap_or_else(|| DiagnosticSummary::from(error.diagnostic()));
     let mut context = ErrorContext::new(
-        error_codes::TELEMETRY_FLUSH_FAILED,
+        error_codes::OTLP_EXPORT_TERMINAL,
         "failed to flush telemetry during shutdown",
         Remediation::recoverable(
             "inspect telemetry health and retry shutdown after the exporter recovers",
@@ -775,7 +803,7 @@ mod tests {
             if self.fail.load(Ordering::SeqCst) {
                 Err(ExportError::Transport {
                     context: Box::new(ErrorContext::new(
-                        error_codes::TELEMETRY_EXPORT_FAILED,
+                        error_codes::OTLP_EXPORT_TERMINAL,
                         "log export failed",
                         Remediation::not_recoverable("test exporter failure"),
                     )),
@@ -798,7 +826,7 @@ mod tests {
             if self.fail.load(Ordering::SeqCst) {
                 Err(ExportError::Transport {
                     context: Box::new(ErrorContext::new(
-                        error_codes::TELEMETRY_EXPORT_FAILED,
+                        error_codes::OTLP_EXPORT_TERMINAL,
                         "trace export failed",
                         Remediation::not_recoverable("test exporter failure"),
                     )),
@@ -821,7 +849,7 @@ mod tests {
             if self.fail.load(Ordering::SeqCst) {
                 Err(ExportError::Transport {
                     context: Box::new(ErrorContext::new(
-                        error_codes::TELEMETRY_EXPORT_FAILED,
+                        error_codes::OTLP_EXPORT_TERMINAL,
                         "metric export failed",
                         Remediation::not_recoverable("test exporter failure"),
                     )),
@@ -881,6 +909,23 @@ mod tests {
             })
             .build()
             .expect("valid telemetry config")
+    }
+
+    fn legacy_telemetry_config(protocol: OtlpProtocol) -> TelemetryConfig {
+        TelemetryConfigBuilder::new(service_name())
+            .enable_logs(LogsConfig::default())
+            .with_transport(OtelConfig {
+                enabled: true,
+                backend: ExporterBackend::LegacyHttpJson,
+                protocol,
+                endpoint: Some(
+                    OtlpEndpoint::new("https://otel.example.internal")
+                        .expect("valid OTLP endpoint"),
+                ),
+                ..OtelConfig::default()
+            })
+            .build()
+            .expect("valid legacy telemetry config")
     }
 
     /// Test-only construction seam: enabled production configurations must
@@ -1042,6 +1087,36 @@ mod tests {
         };
         assert_eq!(
             constructor_error.diagnostic().code,
+            sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
+        );
+    }
+
+    #[test]
+    fn legacy_factory_rejects_non_json_protocol_before_backend_availability() {
+        let Err(protocol_error) =
+            exporter_factory(&legacy_telemetry_config(OtlpProtocol::HttpBinary))
+        else {
+            panic!("the legacy HTTP/JSON backend must reject a binary protocol");
+        };
+        assert!(matches!(
+            protocol_error,
+            ConfigFailure::UnsupportedProtocol { .. }
+        ));
+        assert_eq!(
+            protocol_error.diagnostic().code,
+            sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_PROTOCOL
+        );
+
+        let Err(backend_error) = exporter_factory(&legacy_telemetry_config(OtlpProtocol::HttpJson))
+        else {
+            panic!("the configured legacy backend remains unavailable");
+        };
+        assert!(matches!(
+            backend_error,
+            ConfigFailure::UnsupportedBackend { .. }
+        ));
+        assert_eq!(
+            backend_error.diagnostic().code,
             sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
         );
     }
@@ -1327,7 +1402,7 @@ mod tests {
         assert_eq!(health.malformed_spans_total, 1);
         assert_eq!(
             health.last_error.and_then(|summary| summary.code),
-            Some(error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED)
+            Some(error_codes::OTLP_EXPORT_TERMINAL)
         );
     }
 
@@ -1349,10 +1424,7 @@ mod tests {
         let TelemetryError::ExportFailure(context) = error else {
             panic!("expected an export failure");
         };
-        assert_eq!(
-            context.diagnostic().code,
-            error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED
-        );
+        assert_eq!(context.diagnostic().code, error_codes::OTLP_EXPORT_TERMINAL);
         assert_eq!(
             context.diagnostic().message,
             "received span event without a matching started span"
@@ -1363,7 +1435,7 @@ mod tests {
     fn export_failure_from_event_moves_original_context_without_reconstruction() {
         let context = Box::new(
             ErrorContext::new(
-                error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
+                error_codes::OTLP_EXPORT_TERMINAL,
                 "received span event without a matching started span",
                 Remediation::not_recoverable(
                     "emit started, event, and ended span signals in order",
@@ -1395,7 +1467,7 @@ mod tests {
     fn shutdown_flush_failure_preserves_flush_context_as_native_source() {
         let flush_failure = FlushFailure::from_context(Box::new(
             ErrorContext::new(
-                error_codes::TELEMETRY_EXPORT_FAILED,
+                error_codes::OTLP_EXPORT_TERMINAL,
                 "log export failed",
                 Remediation::not_recoverable("test flush failure"),
             )
@@ -1406,7 +1478,7 @@ mod tests {
 
         assert_eq!(
             shutdown_failure.diagnostic().code,
-            error_codes::TELEMETRY_FLUSH_FAILED
+            error_codes::OTLP_EXPORT_TERMINAL
         );
         assert_eq!(
             shutdown_failure.diagnostic().message,
@@ -1875,7 +1947,7 @@ mod tests {
         where
             E: DiagnosticInfo,
         {
-            assert_eq!(error.diagnostic().code, error_codes::TELEMETRY_FLUSH_FAILED);
+            assert_eq!(error.diagnostic().code, error_codes::OTLP_EXPORT_TERMINAL);
             assert_eq!(
                 error.diagnostic().cause.as_deref(),
                 Some("dropped incomplete spans during shutdown")
@@ -1883,9 +1955,7 @@ mod tests {
             assert_eq!(
                 error.diagnostic().details.get("exporter_error_code"),
                 Some(&Value::String(
-                    error_codes::TELEMETRY_INCOMPLETE_SPAN_DROPPED
-                        .as_str()
-                        .to_owned(),
+                    error_codes::OTLP_EXPORT_TERMINAL.as_str().to_owned(),
                 ))
             );
             let health = telemetry.health();
@@ -1893,7 +1963,7 @@ mod tests {
             assert_eq!(health.dropped_exports_total, 2);
             assert_eq!(
                 health.last_error.and_then(|summary| summary.code),
-                Some(error_codes::TELEMETRY_INCOMPLETE_SPAN_DROPPED)
+                Some(error_codes::OTLP_EXPORT_TERMINAL)
             );
             assert_eq!(
                 health.exporter_statuses[0].state,
