@@ -1,23 +1,14 @@
----
-id: D.7
-status: planned
-branch: sprint/d-7-otlp-sdk-tokio
-base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-7-otlp-sdk-tokio
-depends_on: ["D.6"]
-relation: must_follow
-assignee: aobs
-model_class: astra
-owned_docs: ["docs/architecture.md", "docs/api-design.md"]
-release_train: "2.0"
-requirements: ["OTLP-001", "OTLP-008", "OTLP-009", "OTLP-010", "OTLP-011", "OTLP-012", "OTLP-021"]
-adrs: ["ADR-004", "ADR-018"]
-closure_type: boundary
-target_boundary: "official SDK exporter adapter"
-owned_paths: ["crates/sc-observability-otlp/**", "Cargo.toml", "Cargo.lock", "examples/otlp-sdk/**", "scripts/ci/validate_dependency_bans.sh", "scripts/ci/validate_repo_boundaries.sh", "docs/architecture.md", "docs/api-design.md"]
----
+# d-7: Official SDK/Tokio adapter
 
-# D.7 — Official SDK/Tokio adapter
+## Plan metadata
+
+- Wave: 10
+- Branch: `sprint/d-7-otlp-sdk-tokio`
+- PR target: `sprint/d-6-otlp-lifecycle-core`
+- Blocked by: `obs-d-12-sanity`
+- Owned paths:
+  - `crates/sc-observability-otlp/src/assembly.rs`
+  - `examples/otlp-sdk/**`
 
 ## Goal and dependency
 
@@ -25,6 +16,7 @@ After D.6, wire the reviewed official OpenTelemetry SDK adapter into the shared
 lifecycle core. This sprint owns the Tokio-hosted adapter and its public
 consumer fixture, not lifecycle state, error definitions, or a downstream
 `atm-core` integration.
+
 
 ## Deliverables
 
@@ -41,19 +33,16 @@ consumer fixture, not lifecycle state, error definitions, or a downstream
    all signals, redaction, queue pressure, timeout, flush, shutdown,
    cancellation, and host teardown after awaited completion.
 
-## Acceptance criteria
 
-- The adapter adds no dispatcher, hidden runtime, process-global provider, or
-  second lifecycle/error contract.
-- Awaited shutdown reports terminal export failure and permits immediate host
-  runtime teardown after success.
-- SDK-only feature tests prove no legacy HTTP/JSON dependency is enabled.
+## Non-closure
 
-## Required validation
+No legacy HTTP/JSON implementation, operational dashboard work, Python OTEL
+surface, or `atm-core` code.
 
-- Focused SDK adapter/collector tests and the Tokio consumer fixture.
-- `cargo test --workspace --locked`, clippy with warnings denied, rustdoc, and
-  the existing dependency-boundary checks.
+
+## Design
+
+
 
 ## Owned Paths and Exact Targets
 
@@ -70,7 +59,27 @@ These are edit fences for the deliverables above, including their tests and
 public API approval where listed; reading dependencies does not claim ownership.
 New modules stay inside the listed crate fences. No unrelated changes are authorized.
 
-## Non-closure
+## Implementation targets
 
-No legacy HTTP/JSON implementation, operational dashboard work, Python OTEL
-surface, or `atm-core` code.
+
+- `crates/sc-observability-otlp/src/assembly.rs`: construct the SDK/Tokio exporter adapter from D12 `ExporterSet` (deliverable 1).
+- `examples/otlp-sdk/**`: exercise async lifecycle and typed failures (deliverable 2).
+
+## Acceptance criteria
+
+## Acceptance criteria
+
+- The adapter adds no dispatcher, hidden runtime, process-global provider, or
+  second lifecycle/error contract.
+- Awaited shutdown reports terminal export failure and permits immediate host
+  runtime teardown after success.
+- SDK-only feature tests prove no legacy HTTP/JSON dependency is enabled.
+
+
+## Required validation
+
+- Focused SDK adapter/collector tests and the Tokio consumer fixture.
+- `cargo test --workspace --locked`, clippy with warnings denied, rustdoc, and
+  the existing dependency-boundary checks.
+
+

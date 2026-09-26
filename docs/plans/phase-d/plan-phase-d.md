@@ -1,77 +1,112 @@
 ---
 phase: D
 status: planned
-branch: plan/phase-d
+branch: plan/phase-d-layer-recut
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/plan/phase-d
+worktree: /Users/randlee/github/sc-observability-worktrees/plan/phase-d-layer-recut
 ---
 
 # Phase D — logging, OTLP, and Python distribution
 
-All eleven sprints remain planned. The four work streams retain their reviewed
-scope. Beads are the execution plan after import; these markdown files become
-historical source. The phase uses one append-only stack on `integrate/phase-d`.
-Sprint branches are `sprint/d-<n>-<slug>` in matching worktrees beneath
-`/Users/randlee/github/sc-observability-worktrees/sprint/`. Planned stack layers
-are ordered by dependency depth, then sprint number; the lead records actual
-completion order when linking. Final integration remains merge-only.
+This four-wave library plan is derived from the architecture boundaries:
+`sc-observability-types`, `sc-observability-log`, `sc-observability-otlp`,
+`sc-observe`, `sc-observability-binding-runtime`, `sc-observability-dto`, and
+`sc-observability-log-macros`. Shared contracts have one owner; implementation
+fences follow those boundaries and never use `crates/**`.
 
-D.1–D.3 remain parallel and document their additive 1.x surfaces in separate
-`docs/logging/d-<n>-<slug>.md` files with separate API approvals. D.4 links those
-documents from the shared API design and remains the sole owner of 2.0
-requirements, API-design, and release-baseline edits. D.4 follows D.1–D.3 because
-its canonical error migration edits their core, types, and bridge source files.
+## Wave table
 
-## Sprint table
+| Wave | Track | Sprints | Target boundary | Owned paths | Assignee / model |
+| --- | --- | --- | --- | --- | --- |
+| 1 | contracts | D.10, D.12, D.13 | wheel policy; types/OTLP and logging contracts | wheel files; contract modules; OTLP declarations/features | D.10 lobs/luna; D.12 lobs/luna; D.13 cobs/terra |
+| 2 | bounded implementations | D.1–D.8, D.14–D.17 | one crate or module per sprint | disjoint crate/module fences | D.1 cobs/terra; D.2 lobs/luna; D.3 cobs/terra; D.4 lobs/luna; D.5 cobs/terra; D.6 lobs/luna; D.7 cobs/terra; D.8 lobs/luna; D.14 cobs/terra; D.15 lobs/luna; D.16 cobs/terra; D.17 lobs/luna |
+| 3 | library/API | D.18 | composition and release/public API | shared release/API files | D.18 cobs/terra |
+| 4 | qualification | D.9, D.11 | dual exporter conformance and Python distribution guard | collectors, conformance tests, docs, and guard scripts | D.9 cobs/terra; D.11 lobs/luna |
 
-| Sprint | Deliverable | Agent:model | Relation and concrete reason |
-| --- | --- | --- | --- |
-| D.1 | [Startup `LogSettings`](sprint-d-1-log-settings.md) | cobs:terra | Parallel-safe with D.2/D.3; no bridge or sink API consumes it. |
-| D.2 | [Host logger bridge](sprint-d-2-host-logger-bridge.md) | cobs:terra | Parallel-safe with D.1/D.3; it owns only the `log` facade bridge. |
-| D.3 | [1.x typed-sink bridge](sprint-d-3-typed-sink-registration.md) | cobs:terra | Parallel-safe with D.1/D.2; a temporary 1.x-only compatibility release. |
-| D.4 | [2.0 error migration and release baseline](sprint-d-4-error-enums-2-0.md) | lobs:luna | Must follow D.1/D.2/D.3: shares their core/types/bridge code; sole 2.0 baseline owner. |
-| D.5 | [OTLP signal model](sprint-d-5-otlp-signal-model.md) | aobs:astra | Must follow D.4: the model’s breaking API uses D.4’s 2.0 approval/baseline. |
-| D.6 | [OTLP lifecycle core](sprint-d-6-otlp-lifecycle-core.md) | aobs:astra | Must follow D.4 and D.5: uses canonical errors and neutral signals. |
-| D.7 | [Official SDK/Tokio adapter](sprint-d-7-otlp-sdk-tokio.md) | aobs:astra | Must follow D.6: injects the SDK through the shared lifecycle core. |
-| D.8 | [Legacy HTTP/JSON transplant](sprint-d-8-otlp-http-json-transplant.md) | aobs:astra | Must follow D.6 and D.7: shared OTLP manifest/factory and Cargo.lock; retains the transplant scope. |
-| D.9 | [Dual-path conformance](sprint-d-9-otlp-conformance.md) | aobs:astra | Must follow D.7 and D.8: requires both operational backends. |
-| D.10 | [Windows ARM64 wheel](sprint-d-10-windows-arm64-wheel.md) | cobs:terra | Must follow D.4: shared release/release-inventory.json; owns Python platform policy independently of OTLP. |
-| D.11 | [Open-ended Python guard](sprint-d-11-python-open-ended-guard.md) | cobs:terra | Must follow D.10: checks the final matrix and metadata. |
+**Critical path:** 4 sprints. **Width:** 13 implementation sprints.
+**Sprint count:** 18. Every `must_follow` edge consumes a named contract;
+D.18 consumes implementation gates, and D.9 consumes D.18's exporter-set
+composition. Shared-file overlap is never a dependency rationale.
 
-## Branches, worktrees, and merge order
+## Retained gates
 
-| Stream | Dependency order | Worktrees |
-| --- | --- | --- |
-| logging | D.1, D.2, D.3 parallel; cobs works them serially | matching `sprint/d-{1,2,3}-<slug>` paths |
-| errors | D.1 + D.2 + D.3 → D.4 | matching `sprint/d-4-error-enums-2-0` path |
-| OTLP | D.4 → D.5 → D.6 → D.7 → D.8 → D.9; retain explicit D.4→D.6, D.6→D.8 and D.7→D.9 edges | matching `sprint/d-{5,6,7,8,9}-<slug>` paths |
-| Python | D.4 → D.10 → D.11; independent of D.5–D.9 | matching `sprint/d-{10,11}-<slug>` paths |
+- Every dev bead has a sanity bead; dependents wait on sanity, not dev.
+- D.18 is the sole owner of shared version, release inventory, public API,
+  wrapper removal, and composition wiring.
+- D.9 owns hermetic dual-path conformance and OTLP docs. D.11 owns the Python
+  regression guard after integration.
+- No new transport, registry publication, Python OTEL binding, or `atm-core`
+  work is in scope.
 
-Only shared code/version-bearing files force the new edges: D.4 migrates
-`crates/sc-observability/src/lib.rs`, `crates/sc-observability-types/src/errors.rs`
-and the D.2 log bridge; D.7/D.8 share `Cargo.lock`,
-`crates/sc-observability-otlp/Cargo.toml`, factory wiring and dependency allowlists;
-D.4/D.10 share `release/release-inventory.json`. Documentation-only overlaps in
-D.1–D.3 are resolved by separate owned documents, not serialization.
-D.3 implements its same-crate inherent `SinkRegistration::typed` in `builder.rs`,
-so it does not edit D.1's `lib.rs` module/re-export surface.
+## Requirement mapping
 
-## Scope and retained gates
+Source: the 56 numbered deliverables of D.1 to D.11 as written in develop's `docs/plans/phase-d` sprint docs, mapped by content to the bead items that carry the work after the re-cut. Verified by the lead on 2026-09-26 against each bead's numbered deliverables. Retire this section when phase d closes.
 
-- D.4 alone owns the 2.0 version bump, `release/public-api-major-breaks.toml`,
-  the reviewed API comparison, and the literal `1.4.1` scan. It does not own
-  Python platform policy.
-- D.3 is a 1.x bridge shipped before the 2.0 train. D.4 may remove it only in
-  that later major release; no D.3 API is added to the 2.0 baseline.
-- D.5 changes the metric type directly; compiler errors identify old
-  `MetricRecord.value` uses, so no inventory ledger.
-- D.8 retains `legacy-otlp-provenance.json` to prove that the working legacy
-  implementation and tests are copied, not rewritten. Its validator compares
-  each copied file to the pinned source blob and accepts only named adaptation
-  deltas. Translation/reference rows require only their disposition.
-- D.9 runs ordinary dual-path tests. It adds no receipt archive or permanent
-  documentation-restatement CI gate.
-- D.11 relies on CI pass/fail and adds no archival artifact.
+| Original item | Bead#item(s) |
+| --- | --- |
+| D.1.1 | d-13#1 |
+| D.1.2 | d-1#1 |
+| D.1.3 | d-1#2 |
+| D.1.4 | d-1#3 |
+| D.2.1 | d-13#2 |
+| D.2.2 | d-2#1 |
+| D.2.3 | d-2#2 |
+| D.2.4 | d-2#3 |
+| D.2.5 | d-2#4 |
+| D.2.6 | d-2#5 |
+| D.3.1 | d-13#3, d-3#1 |
+| D.3.2 | d-13#3, d-3#2 |
+| D.3.3 | d-3#3 |
+| D.3.4 | d-3#3 |
+| D.4.1 | d-12#1 |
+| D.4.2 | d-12#1 |
+| D.4.3 | d-4#1, d-14#1, d-14#2, d-15#1, d-15#2, d-16#1, d-17#1, d-18#1, d-18#5 |
+| D.4.4 | d-18#3 |
+| D.4.5 | d-12#4, d-18#4 |
+| D.4.6 | d-13#4, d-4#1, d-4#2 |
+| D.4.7 | d-18#3 |
+| D.4.8 | d-18#4 |
+| D.5.1 | d-12#2 |
+| D.5.2 | d-5#1 |
+| D.5.3 | d-5#2 |
+| D.5.4 | d-5#3 |
+| D.5.5 | d-5#4 |
+| D.5.6 | d-5#5 |
+| D.6.1 | d-12#3, d-6#1 |
+| D.6.2 | d-6#2 |
+| D.6.3 | d-6#3 |
+| D.6.4 | d-6#3 |
+| D.6.5 | d-6#3 |
+| D.6.6 | d-6#4, d-18#3 |
+| D.7.1 | d-7#1 |
+| D.7.2 | d-7#2 |
+| D.7.3 | d-7#3, d-18#2 |
+| D.7.4 | d-7#4 |
+| D.8.1 | d-8#1 |
+| D.8.2 | d-8#2 |
+| D.8.3 | d-8#3 |
+| D.8.4 | d-8#4 |
+| D.8.5 | d-8#5 |
+| D.8.6 | d-8#6 |
+| D.9.1 | d-9#1 |
+| D.9.2 | d-9#2 |
+| D.9.3 | d-9#3 |
+| D.9.4 | d-9#4 |
+| D.10.1 | d-10#1 |
+| D.10.2 | d-10#2 |
+| D.10.3 | d-10#3 |
+| D.10.4 | d-10#4 |
+| D.11.1 | d-11#1 |
+| D.11.2 | d-11#2 |
+| D.11.3 | d-11#3 |
+| D.11.4 | d-11#4 |
 
-No `atm-core` implementation, Python OTEL binding, registry publication, or
-new transport is included.
+Current bead items no original item names; each exists because the re-cut split contracts, migrations and composition out of the original sprints:
+
+| Current bead item not referenced | Reason |
+| --- | --- |
+| d-12#5 | OTLP module and feature declarations hoisted into the contract layer so every implementation sprint compiles against one registration (from D.6/D.7 crate setup). |
+| d-14#3, d-14#4 | sc-observe migration tests and sprint documentation (evidence for D.4.3 in that crate). |
+| d-15#3, d-15#4 | binding-runtime migration tests and sprint documentation (evidence for D.4.3 in that crate). |
+| d-16#2, d-16#3 | sc-observability-log migration tests and sprint documentation (evidence for D.4.3 in that crate). |
+| d-17#2, d-17#3 | consumer-check and example migration tests and sprint documentation (evidence for D.4.3 in those targets). |
