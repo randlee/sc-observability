@@ -1357,10 +1357,9 @@ mod tests {
                     .expect("release lock")
                     .recv_timeout(Duration::from_secs(5));
             }
-            // An explicit flush acknowledges inside flush_batch, before the
-            // writer's following flush_sinks pass. Signal only after that pass
-            // has checked the gate, so it cannot consume a later shutdown arm.
-            if self.flush_calls.fetch_add(1, Ordering::SeqCst) == 1 {
+            // A Flush command makes one sink pass. Signal after that pass so
+            // the seed cannot consume the later shutdown arm.
+            if self.flush_calls.fetch_add(1, Ordering::SeqCst) == 0 {
                 let _ = self.seed_completed.send(());
             }
             Err(LogSinkError(Box::new(ErrorContext::new(
@@ -1410,7 +1409,7 @@ mod tests {
             .expect_err("seed logging failure counter");
         seed_rx
             .recv_timeout(Duration::from_secs(2))
-            .expect("both seed flush passes completed before shutdown is armed");
+            .expect("seed flush completed before shutdown is armed");
         let before = logger.health();
         assert_eq!(before.flush_errors_total, 1);
         assert!(before.last_error.is_some());
@@ -1651,7 +1650,7 @@ mod tests {
     fn flush_forwards_logger_flush_behavior_directly() {
         struct FlushFailSink {
             flush_calls: Arc<AtomicU64>,
-            second_flush_completed: std::sync::mpsc::Sender<()>,
+            flush_completed: std::sync::mpsc::Sender<()>,
         }
 
         impl LogSink for FlushFailSink {
@@ -1666,8 +1665,8 @@ mod tests {
                     "flush failed",
                     Remediation::not_recoverable("test sink intentionally fails flush"),
                 ))));
-                if call == 1 {
-                    let _ = self.second_flush_completed.send(());
+                if call == 0 {
+                    let _ = self.flush_completed.send(());
                 }
                 result
             }
@@ -1695,7 +1694,7 @@ mod tests {
 
         let build_failing_runtime = |name: &str| {
             let flush_calls = Arc::new(AtomicU64::new(0));
-            let (second_flush_completed, second_flush_rx) = std::sync::mpsc::channel();
+            let (flush_completed, flush_rx) = std::sync::mpsc::channel();
             let mut logger_config = LoggerConfig::default_for(
                 ServiceName::new("obs-app").expect("service"),
                 temp_path(name),
@@ -1706,7 +1705,7 @@ mod tests {
                 sc_observability::Logger::builder(logger_config).expect("logger builder");
             builder.register_sink(SinkRegistration::new(Arc::new(FlushFailSink {
                 flush_calls: flush_calls.clone(),
-                second_flush_completed,
+                flush_completed,
             })));
             let logger = builder.build();
 
@@ -1721,29 +1720,29 @@ mod tests {
                 observability_health_provider: None,
                 runtime: RuntimeState::default(),
             };
-            (runtime, flush_calls, second_flush_rx)
+            (runtime, flush_calls, flush_rx)
         };
 
-        let (legacy_runtime, legacy_flush_calls, legacy_second_flush_rx) =
+        let (legacy_runtime, legacy_flush_calls, legacy_flush_rx) =
             build_failing_runtime("flush-legacy");
-        let (typed_runtime, typed_flush_calls, typed_second_flush_rx) =
+        let (typed_runtime, typed_flush_calls, typed_flush_rx) =
             build_failing_runtime("flush-typed");
         let Err(legacy_error) = legacy_runtime.flush() else {
             panic!("legacy flush must report sink failure");
         };
-        legacy_second_flush_rx
+        legacy_flush_rx
             .recv_timeout(std::time::Duration::from_secs(1))
-            .expect("bounded legacy second flush completion");
+            .expect("bounded legacy flush completion");
         let Err(typed_error) = typed_runtime.flush_typed() else {
             panic!("typed flush must report sink failure");
         };
         assert_eq!(legacy_error.kind(), FlushFailureKind::LoggerFlush);
         assert_eq!(typed_error.kind(), FlushFailureKind::LoggerFlush);
-        typed_second_flush_rx
+        typed_flush_rx
             .recv_timeout(std::time::Duration::from_secs(1))
-            .expect("bounded typed second flush completion");
-        assert_eq!(legacy_flush_calls.load(Ordering::SeqCst), 2);
-        assert_eq!(typed_flush_calls.load(Ordering::SeqCst), 2);
+            .expect("bounded typed flush completion");
+        assert_eq!(legacy_flush_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(typed_flush_calls.load(Ordering::SeqCst), 1);
         for runtime in [&legacy_runtime, &typed_runtime] {
             let logging = runtime.health().logging.expect("logging health");
             assert_eq!(logging.flush_errors_total, 1);
