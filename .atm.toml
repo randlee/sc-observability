@@ -37,6 +37,21 @@ name = "aobs"
 command = "codex -c features.hooks=true --yolo --model gpt-6-astra"
 env = { ATM_IDENTITY = "aobs", ATM_TEAM = "sc-obs" }
 
+# Window 4: extra developers (terra + luna)
+[[rmux.windows]]
+name = "xtra"
+layout = "even-horizontal"
+
+[[rmux.windows.panes]]
+name = "cobs2"
+command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-terra"
+env = { ATM_IDENTITY = "cobs2", ATM_TEAM = "sc-obs" }
+
+[[rmux.windows.panes]]
+name = "lobs2"
+command = "codex -c features.hooks=true -c model_reasoning_effort=\"high\" --yolo --model gpt-5.6-luna"
+env = { ATM_IDENTITY = "lobs2", ATM_TEAM = "sc-obs" }
+
 # Window 3: QA (quality-mgr + dev-sanity)
 [[rmux.windows]]
 name = "qa"
@@ -72,6 +87,18 @@ all = [
   "Use native atm read to read messages from team-members",
 ]
 
+[startup.cobs2]
+all = [
+  "Use native atm send or atm ack for messages to team-lead or quality-mgr",
+  "Use native atm read to read messages from team-members",
+]
+
+[startup.lobs2]
+all = [
+  "Use native atm send or atm ack for messages to team-lead or quality-mgr",
+  "Use native atm read to read messages from team-members",
+]
+
 [startup.aobs]
 all = [
   "Use native atm send or atm ack for messages to team-lead or quality-mgr",
@@ -82,7 +109,7 @@ all = [
 all = [
   "read .claude/agents/quality-mgr.md for directive",
   "When the phase runs under atm-bd-orchestration, also read .claude/skills/atm-bd-orchestration/roles/quality-mgr.md; where the two differ, the role file wins",
-  "Use native atm send or atm ack for messages to team-lead, cobs, lobs, or aobs",
+  "Use native atm send or atm ack for messages to team-lead, cobs, lobs, aobs, cobs2, or lobs2",
   "Use native atm read to read messages from team-members",
 ]
 
