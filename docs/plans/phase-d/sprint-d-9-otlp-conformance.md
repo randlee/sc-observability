@@ -49,11 +49,41 @@ or new transport beyond the two qualified paths.
 
 ## Design
 
+## Shared conformance contract
+
+```rust
+struct OtlpConformanceCase {
+    logs: Vec<LogEvent>,
+    spans: Vec<CompleteSpan>,
+    metrics: Vec<MetricRecord>,
+}
+
+fn assert_collector_semantics(
+    backend: ExporterBackend,
+    case: &OtlpConformanceCase,
+    captured: &CollectorCapture,
+);
+```
+
+The same logical fixture corpus must run through both production backends;
+wire/protocol differences are allowed, signal meaning loss is not.
 
 
-## Implementation targets
+## Owned Paths and Exact Targets
 
- implement or update the named contract consumer and its focused test for the corresponding numbered deliverable.\n
+- `crates/sc-observability-otlp/tests/**`
+- `docs/observability/otlp/**`
+- `scripts/ci/verify_otlp_grafana_smoke.py`
+- `scripts/ci/otlp_dev_install_smoke.py`
+- `scripts/ci/fixtures/otlp/**`
+- `.github/workflows/ci.yml`
+- `.github/workflows/otlp-conformance.yml`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+
 
 ## Acceptance criteria
 

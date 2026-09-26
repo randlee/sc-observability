@@ -56,11 +56,96 @@ OTLP export, or #88 work.
 
 ## Design
 
+## Public contract
+
+The existing exhaustive two-field `BridgeOptions` and
+`init(LoggerConfig, BridgeOptions) -> Result<LogGuard, InitError>` signatures
+remain source-compatible and retain their current derives and owned lifecycle.
+
+```rust
+pub trait BridgeEventPolicy: Send + Sync {
+    fn decide(&self, event: &LogEvent) -> BridgeEventDecision;
+}
+
+#[non_exhaustive]
+pub enum BridgeEventDecision {
+    Admit,
+    Reject(PolicyRejection),
+}
+
+#[non_exhaustive]
+pub enum PolicyRejection {
+    Denied,
+    PayloadTooLarge,
+    Invalid,
+}
+
+#[non_exhaustive]
+pub struct AttachmentOptions {
+    pub bridge: BridgeOptions,
+    pub policy: Arc<dyn BridgeEventPolicy>,
+}
+
+pub fn attach_logger(
+    logger: Arc<Logger>,
+    options: AttachmentOptions,
+) -> Result<LogAttachment, InitError>;
+
+pub struct LogAttachment { /* no LevelOwner and no Logger shutdown authority */ }
+
+impl LogAttachment {
+    pub fn control(&self) -> LogControl;
+    pub fn detach(self, timeout: Duration) -> Result<(), DetachError>;
+}
+
+impl AttachmentOptions {
+    pub fn new(bridge: BridgeOptions, policy: Arc<dyn BridgeEventPolicy>) -> Self;
+}
+```
+
+The policy inspects but cannot mutate the assembled event and returns admission
+or a typed reasoned rejection. Existing `RedactionPolicy` remains the sole
+redaction owner. Policy runs on the shared backend path immediately before
+every `Logger::try_log`, including `LogControl::try_log`; macro, tracing, and
+control entry points cannot bypass it. The trait is intentionally open for
+host implementations; its one method plus non-exhaustive decision/reason
+enums is the forward-compatibility decision.
+The policy applies only to facade/attachment admission; a host's direct
+`Logger::try_log` intentionally bypasses it. `BridgeEventPolicy` is owned by
+`sc-observability-log`, which owns that facade boundary.
+
+`LogAttachment` deliberately has no `elevate_level`, `reset_level`, or logger
+shutdown method. `detach` first closes/removes the bridge slot so no new calls
+can clone the logger, then waits boundedly for already-entered bridge calls to
+release their references. `Drop` performs the same bounded detach but discards
+the result; callers that need proof use explicit `detach`. Detach never invokes
+`Logger::shutdown`. The host retains its original `Arc<Logger>` and can recover
+the owned `Logger` with `Arc::try_unwrap` after successful detach.
+
+The process-global slot has explicit `Empty`, `Owned`, `Attached`, and
+`Closing` states. Owned `init` and host attachment are mutually exclusive.
+The facade shim and `log::set_max_level(Trace)` are installed at most once;
+the shim owns the process-global maximum while the backend filter owns actual
+admission. A detached slot may be reattached through that shim, while a
+foreign logger is always rejected. A saved `LogControl` after detach returns
+the stable `NotInstalled` failure. Owned shutdown and attachment detach call
+one `close_and_drain` primitive; detach never shuts down the host logger.
 
 
-## Implementation targets
+## Owned Paths and Exact Targets
 
- implement or update the named contract consumer and its focused test for the corresponding numbered deliverable.\n
+- `crates/sc-observability-log/**`
+- `crates/sc-observability-log-consumer-check/**`
+- `docs/api-approvals/d-2-*.json`
+- `docs/logging/d-2-host-logger-bridge.md`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+Parallel-safe with the other additive logging sprints: this sprint owns its separate additive document and scoped API approval. D.4 owns linking these documents from the shared API design. No shared normative document or release baseline is edited here.
+
+
 
 ## Acceptance criteria
 
