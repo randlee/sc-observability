@@ -5,6 +5,10 @@ description: Generate a sprint status report for the current phase. Default is -
 
 # Sprint Report Skill
 
+## Usage
+
+`--table` is the default mode; use `--detailed` for one block per sprint.
+
 Run the repository-local report command from the main checkout:
 
 ```bash
@@ -17,15 +21,18 @@ Rows are never hand-typed.
 
 ## Data sources
 
-The index supplies sprint identity, layer, branch target, dependencies, planned
-assignee, sanity/QA bead IDs, deliverable count, owned paths, requirements and
-ADRs. For each row the command uses `bd show --json` for the dev, sanity and
-QA beads, counts open finding children of the selected QA bead, and uses
-`gh pr list --state all --json ...` to match the dev branch and `pr_target`.
-The integration row matches the phase integration branch into `develop`.
+The index supplies plan-only sprint identity, layer, branch target,
+dependencies, deliverable count, owned paths, requirements and ADRs. The
+command derives sanity and QA beads from live graph edges, uses `bd show
+--json` for each live bead, counts open `discovered-from` finding children,
+and uses `gh pr list --state all --json ...` to match each dev bead's head
+branch. The integration row matches the phase integration branch into
+`develop`.
 
 The QA cell is explicit per sprint: `R<round> <verdict> (<open> open)`; a
-sprint without a QA bead is `not dispatched`. This is the authoritative
+sprint without a QA bead is `not dispatched`; a folded sprint is shown as
+`folded → <sprint>` in DEV, QA and CI. The verdict comes from QA metadata or
+the `PASS:`/`FAIL:` close-reason prefix. This is the authoritative
 round/verdict/open-finding presentation for the table.
 
 ## Render command

@@ -10,10 +10,9 @@
       "layer": 1,
       "pr_target": "integrate/phase-d",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "aobs",
-      "sanity_bead": "obs-d-12-sanity",
-      "qa_bead": "obs-d-12-qa",
+      "depends_on": [
+        "obs-phase-d-plan-qa"
+      ],
       "deliverable_count": 3,
       "owned_paths": [
         "crates/sc-observability-dto/src/error_codes.rs",
@@ -131,10 +130,9 @@
       "layer": 2,
       "pr_target": "sprint/d-12-types-and-otlp-contract",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "cobs2",
-      "sanity_bead": "obs-d-21-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-12-sanity"
+      ],
       "deliverable_count": 3,
       "owned_paths": [
         "Cargo.lock",
@@ -255,10 +253,9 @@
       "layer": 3,
       "pr_target": "sprint/d-21-otlp-contract",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "cobs",
-      "sanity_bead": "obs-d-13-sanity",
-      "qa_bead": "obs-d-13-qa",
+      "depends_on": [
+        "obs-phase-d-plan-qa"
+      ],
       "deliverable_count": 4,
       "owned_paths": [
         "crates/sc-observability-log/src/bridge.rs",
@@ -334,10 +331,9 @@
       "layer": 4,
       "pr_target": "sprint/d-13-logging-contract",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "lobs",
-      "sanity_bead": "obs-d-10-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-phase-d-plan-qa"
+      ],
       "deliverable_count": 8,
       "owned_paths": [
         ".github/workflows/b4a-python-distributions.yml",
@@ -370,10 +366,9 @@
       "layer": 5,
       "pr_target": "sprint/d-10-windows-arm64-wheel",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "cobs",
-      "sanity_bead": "obs-d-1-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-13-sanity"
+      ],
       "deliverable_count": 3,
       "owned_paths": [
         "crates/sc-observability/src/runtime.rs",
@@ -424,10 +419,9 @@
       "layer": 6,
       "pr_target": "sprint/d-1-log-settings",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "lobs",
-      "sanity_bead": "obs-d-2-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-13-sanity"
+      ],
       "deliverable_count": 5,
       "owned_paths": [
         "crates/sc-observability-log/src/bridge.rs",
@@ -469,10 +463,9 @@
       "layer": 7,
       "pr_target": "sprint/d-2-host-logger-bridge",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "cobs",
-      "sanity_bead": "obs-d-3-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-13-sanity"
+      ],
       "deliverable_count": 3,
       "owned_paths": [
         "crates/sc-observability/src/builder.rs",
@@ -511,10 +504,11 @@
       "layer": 8,
       "pr_target": "sprint/d-3-typed-sink-registration",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "lobs",
-      "sanity_bead": "obs-d-4-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-1-sanity",
+        "obs-d-12-sanity",
+        "obs-d-3-sanity"
+      ],
       "deliverable_count": 2,
       "owned_paths": [
         "crates/sc-observability/src/health.rs",
@@ -550,10 +544,9 @@
       "layer": 9,
       "pr_target": "sprint/d-4-error-enums-2-0",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "cobs",
-      "sanity_bead": "obs-d-5-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-21-sanity"
+      ],
       "deliverable_count": 3,
       "owned_paths": [
         "crates/sc-observability-otlp/src/assembly.rs",
@@ -638,10 +631,9 @@
       "layer": 10,
       "pr_target": "sprint/d-5-otlp-signal-model",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "lobs",
-      "sanity_bead": "obs-d-6-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-21-sanity"
+      ],
       "deliverable_count": 4,
       "owned_paths": [
         "crates/sc-observability-otlp/src/lifecycle.rs",
@@ -672,10 +664,9 @@
       "layer": 11,
       "pr_target": "sprint/d-6-otlp-lifecycle-core",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "cobs",
-      "sanity_bead": "obs-d-7-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-21-sanity"
+      ],
       "deliverable_count": 4,
       "owned_paths": [
         "crates/sc-observability-otlp/src/sdk/implementation.rs",
@@ -710,10 +701,9 @@
       "layer": 12,
       "pr_target": "sprint/d-7-otlp-sdk-tokio",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "lobs",
-      "sanity_bead": "obs-d-8-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-21-sanity"
+      ],
       "deliverable_count": 6,
       "owned_paths": [
         "crates/sc-observability-otlp/src/legacy_http_json/implementation.rs",
@@ -748,10 +738,9 @@
       "layer": 13,
       "pr_target": "sprint/d-8-otlp-http-json-transplant",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "cobs2",
-      "sanity_bead": "obs-d-14-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-12-sanity"
+      ],
       "deliverable_count": 3,
       "owned_paths": [
         "crates/sc-observe/src/lib.rs",
@@ -851,10 +840,9 @@
       "layer": 14,
       "pr_target": "sprint/d-14-observe-error-migration",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "lobs2",
-      "sanity_bead": "obs-d-15-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-12-sanity"
+      ],
       "deliverable_count": 3,
       "owned_paths": [
         "crates/sc-observability-binding-runtime/src/**",
@@ -935,10 +923,10 @@
       "layer": 15,
       "pr_target": "sprint/d-15-binding-runtime-error-migration",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "cobs",
-      "sanity_bead": "obs-d-16-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-12-sanity",
+        "obs-d-2-sanity"
+      ],
       "deliverable_count": 2,
       "owned_paths": [
         "crates/sc-observability-log/src/control.rs",
@@ -1021,10 +1009,10 @@
       "layer": 16,
       "pr_target": "sprint/d-16-log-error-migration",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "lobs",
-      "sanity_bead": "obs-d-17-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-12-sanity",
+        "obs-d-13-sanity"
+      ],
       "deliverable_count": 2,
       "owned_paths": [
         "crates/sc-observability-log-consumer-check/src/lib.rs",
@@ -1119,10 +1107,10 @@
       "layer": 17,
       "pr_target": "sprint/d-17-log-consumer-error-migration",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "aobs",
-      "sanity_bead": "obs-d-19-sanity",
-      "qa_bead": "obs-d-19-qa",
+      "depends_on": [
+        "obs-d-12-sanity",
+        "obs-phase-d-plan-qa"
+      ],
       "deliverable_count": 3,
       "owned_paths": [
         "bindings/conformance/v1/conversion-cases.json",
@@ -1179,10 +1167,9 @@
       "layer": 18,
       "pr_target": "sprint/d-9-otlp-conformance",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "lobs",
-      "sanity_bead": "obs-d-11-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-18-sanity"
+      ],
       "deliverable_count": 4,
       "owned_paths": [
         "docs/plans/phase-d/sprint-d-11-python-open-ended-guard.md",
@@ -1201,7 +1188,8 @@
       ],
       "adrs": [
         "NONE"
-      ]
+      ],
+      "folded_into": "obs-d-10"
     },
     {
       "id": "obs-d-20",
@@ -1210,10 +1198,10 @@
       "layer": 18,
       "pr_target": "sprint/d-19-dto-and-schema-migration",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "lobs2",
-      "sanity_bead": "obs-d-20-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-12-sanity",
+        "obs-phase-d-plan-qa"
+      ],
       "deliverable_count": 3,
       "owned_paths": [
         "bindings/API-COVERAGE.md",
@@ -1290,10 +1278,24 @@
       "layer": 19,
       "pr_target": "sprint/d-20-language-binding-migration",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "cobs",
-      "sanity_bead": "obs-d-18-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-1-sanity",
+        "obs-d-10-sanity",
+        "obs-d-14-sanity",
+        "obs-d-15-sanity",
+        "obs-d-16-sanity",
+        "obs-d-17-sanity",
+        "obs-d-19-sanity",
+        "obs-d-2-sanity",
+        "obs-d-20-sanity",
+        "obs-d-21-sanity",
+        "obs-d-3-sanity",
+        "obs-d-4-sanity",
+        "obs-d-5-sanity",
+        "obs-d-6-sanity",
+        "obs-d-7-sanity",
+        "obs-d-8-sanity"
+      ],
       "deliverable_count": 5,
       "owned_paths": [
         "CHANGELOG.md",
@@ -1461,10 +1463,9 @@
       "layer": 20,
       "pr_target": "sprint/d-18-integration-and-public-api",
       "stack": "phase-d",
-      "depends_on": [],
-      "planned_assignee": "cobs",
-      "sanity_bead": "obs-d-9-sanity",
-      "qa_bead": null,
+      "depends_on": [
+        "obs-d-18-sanity"
+      ],
       "deliverable_count": 4,
       "owned_paths": [
         ".github/workflows/otlp-conformance.yml",
