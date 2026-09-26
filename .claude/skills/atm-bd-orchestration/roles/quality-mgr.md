@@ -108,6 +108,13 @@ screen said. What happens next depends on the verdict:
 - Render each finding to a file and gate it with `jq -e` before appending it
   to the import JSONL, so a finding the template rejects stops you instead of
   disappearing.
+- A round with only minor findings is PASS; its open finding beads remain
+  backlog. Any blocking or important finding is FAIL and receives exactly one
+  fix round. A second FAIL is `ROUND_CAP`: stop dispatch and record the root
+  cause rather than creating another fix round.
+- `difficulty` is required when rendering a finding. Copy it from the
+  checked sprint/finding; never select a default. The dispatch report prints
+  `UNCLASSIFIED` and no agent for a live bead missing it.
 - Findings are `parallel_safe` by default. Set `blocked_by` only when one fix
   needs another finding's fix first.
 - Ids are `<qa bead>-f<n>`, numbered in report order.
