@@ -1,4 +1,6 @@
 use std::ffi::OsString;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 
 use sc_observability::{
@@ -111,6 +113,18 @@ fn rejects_empty_unknown_case_and_prefix_collision() {
         collision,
         LogSettingsError::PrefixCollision { .. }
     ));
+}
+
+#[cfg(unix)]
+#[test]
+fn rejects_non_utf8_key_in_selected_namespace() {
+    let snapshot = EnvSnapshot::from_pairs([(
+        OsString::from_vec(b"SC_LOG_\xFF".to_vec()),
+        OsString::from("ignored"),
+    )]);
+
+    let error = LogSettings::from_env(&snapshot, EnvPrefix::new("SC").unwrap()).unwrap_err();
+    assert_eq!(error.code().as_str(), "SC_LOG_SETTINGS_INVALID_ENVIRONMENT");
 }
 
 #[test]

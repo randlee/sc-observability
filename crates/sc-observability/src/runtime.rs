@@ -54,13 +54,18 @@ impl LogSettings {
         let mut has_policy_override = false;
 
         for (raw_key, raw_value) in &snapshot.0 {
-            let Some(key) = raw_key.to_str() else {
-                continue;
-            };
-            let folded_key = key.to_ascii_uppercase();
+            // Match before requiring UTF-8 so `SC_LOG_<invalid bytes>` cannot
+            // evade selected-namespace validation by failing `OsStr::to_str`.
+            let key_for_match = raw_key.to_string_lossy();
+            let folded_key = key_for_match.to_ascii_uppercase();
             if !folded_key.starts_with(&folded_namespace) {
                 continue;
             }
+            let key = raw_key.to_str().ok_or_else(|| {
+                LogSettingsError::environment(format!(
+                    "logging environment key {key_for_match} is not valid UTF-8"
+                ))
+            })?;
             if !seen.insert(folded_key) {
                 return Err(LogSettingsError::environment(format!(
                     "duplicate case-folded logging environment key {key}"
