@@ -101,30 +101,35 @@ pub enum LogSettingsError {
     /// The application namespace collides with the shared `SC` namespace.
     #[error("{context}")]
     PrefixCollision {
+        /// Preserved collision diagnostic and recovery guidance.
         #[source]
         context: Box<ErrorContext>,
     },
     /// The selected environment contains invalid UTF-8, duplicates, or syntax.
     #[error("{context}")]
     InvalidEnvironment {
+        /// Preserved environment diagnostic and recovery guidance.
         #[source]
         context: Box<ErrorContext>,
     },
     /// The selected environment namespace contains an unsupported setting key.
     #[error("{context}")]
     UnknownKey {
+        /// Preserved unsupported-key diagnostic and recovery guidance.
         #[source]
         context: Box<ErrorContext>,
     },
     /// A supplied JSON or environment value is invalid.
     #[error("{context}")]
     InvalidValue {
+        /// Preserved invalid-value diagnostic and recovery guidance.
         #[source]
         context: Box<ErrorContext>,
     },
     /// Inputs cannot be combined into one resolved settings value.
     #[error("{context}")]
     Resolution {
+        /// Preserved resolution diagnostic and recovery guidance.
         #[source]
         context: Box<ErrorContext>,
     },
