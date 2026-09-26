@@ -242,7 +242,17 @@ impl SinkRegistration {
 impl LoggerBuilder {
     pub fn register_typed_sink(&mut self, sink: Arc<dyn TypedLogSink>) -> Result<&mut Self, SinkRegistrationError>;
 }
+
+pub fn legacy_sink(value: Arc<dyn TypedLogSink>) -> Arc<dyn LogSink>;
+pub fn typed_sink(value: Arc<dyn LogSink>) -> Arc<dyn TypedLogSink>;
 ```
+
+`legacy_sink` converts the typed sink result into the retained `LogSinkError`
+boundary, and `typed_sink` converts the retained result back to the typed
+failure boundary. Both move the original `ErrorContext` without rebuilding its
+diagnostic or source. These are the only D13-staged typed conversion
+signatures; D3 owns the registration implementations and D18 owns public
+activation and retirement.
 
 ## Ownership, errors and capability decisions
 
