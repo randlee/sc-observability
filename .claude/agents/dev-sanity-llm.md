@@ -145,7 +145,7 @@ same completion summary. Do not send a separate ATM message to the lead.
 iteration=$(atm task events "$task" --all --json \
   | jq '[.events[] | select(.event == "completed")] | length')
 .claude/skills/atm-bd-orchestration/scripts/sanity-run-history \
-  --vars "$scratch/sanity-$task-vars.json" --task "$task" \
+  --vars "$scratch/sanity-$task-vars.json" --task "$task" --bead "$checked_bead" \
   --pr-number "$pr_number" --iteration "$iteration" \
   --started-at "$run_started_at" --output "$scratch/sanity-$task-table-vars.json" --limit 6
 sc-compose render --strict \
@@ -155,13 +155,14 @@ sc-compose render --strict \
 ```
 
 `sanity-run-history` reads the completion vars directly, appends one record to
-`.sc/sanity-log/phase-<phase>.jsonl` in this repository, and returns exactly
-`{"runs": [ ... ]}`, already ordered newest first for the template. The PR is
-never shown as a vague state: a completed run has `#<number>`; a missing PR was
-already reported and refused. Calculate `iteration` only after `atm task close`
-has succeeded, so it includes the just-closed completion event. `--limit 6` is
-the normal view; use another positive limit on request, or `--limit 0` for the
-entire phase log.
+`.sc/sanity-log/phase-<phase>.jsonl` in the repository's primary checkout, and
+returns exactly `{"runs": [ ... ]}`, already ordered newest first for the
+template. It derives `phase` from the checked bead metadata, with a sprint-name
+fallback. The PR is never shown as a vague state: a completed run has
+`#<number>`; a missing PR was already reported and refused. Calculate
+`iteration` only after `atm task close` has succeeded, so it includes the
+just-closed completion event. `--limit 6` is the normal view; use another
+positive limit on request, or `--limit 0` for the entire phase log.
 
 ## FAIL Finding Handoff
 

@@ -15,6 +15,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -47,6 +48,11 @@ def parse_vars(path: Path) -> dict[str, object]:
     return record
 
 
+def normalize_phase(value: str) -> str | None:
+    match = re.fullmatch(r"(?:phase-)?([a-z][a-z0-9_-]*)", value.lower())
+    return match.group(1) if match else None
+
+
 def phase_from_sprint(sprint: str) -> str:
     match = re.fullmatch(r"(?:phase-)?([a-z]+)(?:[-_]?\d+)?", sprint.lower())
     if not match:
@@ -54,17 +60,36 @@ def phase_from_sprint(sprint: str) -> str:
     return match.group(1)
 
 
-def repository_root() -> Path:
+def phase_from_bead(bead: str, sprint: str) -> str:
     try:
         completed = subprocess.run(
-            ["git", "rev-parse", "--show-toplevel"],
+            ["bd", "show", bead, "--json"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        issues = json.loads(completed.stdout)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError):
+        issues = []
+    if isinstance(issues, list) and issues and isinstance(issues[0], dict):
+        metadata = issues[0].get("metadata")
+        phase = metadata.get("phase") if isinstance(metadata, dict) else None
+        if isinstance(phase, str) and (normalized := normalize_phase(phase)):
+            return normalized
+    return phase_from_sprint(sprint)
+
+
+def primary_repository_root() -> Path:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
             check=True,
             capture_output=True,
             text=True,
         )
     except (OSError, subprocess.CalledProcessError) as exc:
-        fail(f"cannot locate repository root: {exc}")
-    return Path(completed.stdout.strip())
+        fail(f"cannot locate repository common directory: {exc}")
+    return Path(completed.stdout.strip()).parent
 
 
 def load_log(path: Path) -> list[dict[str, object]]:
@@ -72,10 +97,17 @@ def load_log(path: Path) -> list[dict[str, object]]:
         return []
     runs = []
     try:
-        for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        lines = path.read_text().splitlines()
+        for line_number, line in enumerate(lines, start=1):
             if not line.strip():
                 continue
-            run = json.loads(line)
+            try:
+                run = json.loads(line)
+            except json.JSONDecodeError as exc:
+                if line_number == len(lines):
+                    print(f"sanity-run-history: skipping truncated final line in {path}: {exc}", file=sys.stderr)
+                    continue
+                raise
             if not isinstance(run, dict):
                 fail(f"log {path}:{line_number} is not a JSON object")
             runs.append(run)
@@ -89,6 +121,7 @@ def main() -> None:
     parser.add_argument("--vars", required=True, type=Path,
                         help="completed dev-sanity vars JSON")
     parser.add_argument("--task", required=True)
+    parser.add_argument("--bead", required=True, help="checked dev or finding bead")
     parser.add_argument("--pr-number", required=True, type=int)
     parser.add_argument("--iteration", required=True, type=int)
     parser.add_argument("--started-at", required=True, type=float)
@@ -103,7 +136,7 @@ def main() -> None:
     vars = parse_vars(args.vars)
     completed = datetime.now(timezone.utc)
     elapsed_seconds = max(0, round(completed.timestamp() - args.started_at))
-    phase = phase_from_sprint(vars["sprint"])
+    phase = phase_from_bead(args.bead, vars["sprint"])
     record = {
         "task": args.task,
         "sprint": vars["sprint"],
@@ -117,7 +150,7 @@ def main() -> None:
         "duration": f"{elapsed_seconds // 60}m{elapsed_seconds % 60:02d}s",
     }
 
-    log_path = repository_root() / ".sc" / "sanity-log" / f"phase-{phase}.jsonl"
+    log_path = primary_repository_root() / ".sc" / "sanity-log" / f"phase-{phase}.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = log_path.with_suffix(log_path.suffix + ".lock")
     with lock_path.open("a+") as lock:
