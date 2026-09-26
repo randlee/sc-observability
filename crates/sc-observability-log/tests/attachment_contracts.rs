@@ -66,7 +66,7 @@ impl LogAttachment {
 }
 
 impl LogControl {
-    fn submit(&self) -> Result<(), DetachError> {
+    fn submit(self) -> Result<(), DetachError> {
         self.attached.then_some(()).ok_or(DetachError::NotInstalled)
     }
 }
@@ -124,7 +124,7 @@ fn foreign_logger_rejected() {
 
 #[test]
 fn attachment_has_no_owner_authority() {
-    let _example = OwnerAuthorityCompileFail;
+    assert_eq!(std::mem::size_of::<OwnerAuthorityCompileFail>(), 0);
     let attachment = LogAttachment::attach(SlotState::Empty).expect("attach");
     let _control = attachment.control();
     // The compile-fail example above is intentionally the only attempted
