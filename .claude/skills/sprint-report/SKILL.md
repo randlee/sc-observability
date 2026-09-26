@@ -5,70 +5,67 @@ description: Generate a sprint status report for the current phase. Default is -
 
 # Sprint Report Skill
 
-Build fenced JSON and pipe to the Jinja2 template. `mode` controls table vs detailed.
-
-## Usage
-
-```
-/sprint-report [--table | --detailed]
-```
-
-Default: `--table`
-
----
-
-## Data Source
-
-**Always use `atm gh pr list` first** — single call, returns all open PRs with CI and merge state:
+Run the repository-local report command from the main checkout:
 
 ```bash
-atm gh pr list
+.claude/skills/sprint-report/scripts/sprint-report --table
 ```
 
-This is faster and sufficient for populating `sprint_rows` and `integration_row`. Only drill into individual `gh run view` calls if you need failure details for a specific job.
+Use `--detailed` for one block per sprint. The command reads the committed
+`docs/plans/phase-<p>/sprints.json`, then refreshes bead state and PR/CI state.
+Rows are never hand-typed.
 
-**Dogfooding rule**: If `atm gh pr list` output is missing information needed to fill the report (e.g., no per-job failure detail, no QA state, truncated CI summary), **file a GitHub issue** describing what field or format change would make it sufficient, then improve the command. Do not silently work around gaps with extra `gh` CLI calls — surface them as product issues.
+## Data sources
 
-## Render Command
+The index supplies sprint identity, layer, branch target, dependencies, planned
+assignee, sanity/QA bead IDs, deliverable count, owned paths, requirements and
+ADRs. For each row the command uses `bd show --json` for the dev, sanity and
+QA beads, counts open finding children of the selected QA bead, and uses
+`gh pr list --state all --json ...` to match the dev branch and `pr_target`.
+The integration row matches the phase integration branch into `develop`.
 
-The template path is relative — must run from the **main repo root** (not a worktree).
+The QA cell is explicit per sprint: `R<round> <verdict> (<open> open)`; a
+sprint without a QA bead is `not dispatched`. This is the authoritative
+round/verdict/open-finding presentation for the table.
+
+## Render command
+
+The template path is relative to the main repository root. The script invokes:
 
 ```bash
-cd "${CLAUDE_PROJECT_DIR:-$(git worktree list | head -1 | awk '{print $1}')}"
-echo '<json>' > /tmp/sprint-report.json
-sc-compose render .claude/skills/sprint-report/report.md.j2 --var-file /tmp/sprint-report.json
+sc-compose render --file .claude/skills/sprint-report/report.md.j2 --var-file <json>
 ```
 
-## --table (default)
+To render manually, write the variables JSON produced by the script to a
+temporary file and run the same command from the repository root.
+
+## Table variables
 
 ```json
 {
   "mode": "table",
-  "sprint_rows": "| AK.1 | ✅ | ✅ | 🏁 | #621 |\n| AK.2 | ✅ | ✅ | 🌀 | #622 |",
-  "integration_row": "| **integrate** | | — | 🌀 | — |"
+  "sprint_rows": "| d-12 | ✅ | R1 FAIL (16 open) | 🏁 | #233 |",
+  "integration_row": "| **integrate/phase-d** | | — | 🌀 | — |"
 }
 ```
 
-## --detailed
+## Detailed variables
 
 ```json
 {
   "mode": "detailed",
-  "sprint_rows": "Sprint: AK.1  Contract reconciliation\nPR: #621\nQA: PASS ✓ (iter 3)\nCI: Merged to integrate/phase-AK ✓\n────────────────────────────────────────\nSprint: AK.2  OTel core\nPR: #622\nQA: PASS ✓\nCI: Running (1 pending)",
-  "integration_row": "Integration: integrate/phase-AK → develop\nCI: Running — pending AK.4 + AK.5"
+  "sprint_rows": "Sprint: d-12  types 2.0 contract\nDEV: ✅\nQA: R1 FAIL (16 open)\nCI: 🏁\nPR: #233",
+  "integration_row": "Integration: integrate/phase-d → develop\nCI: 🌀\nPR: —"
 }
 ```
 
-## Icon Reference
+## Icon reference
 
 | State | DEV | QA | CI |
 |-------|-----|----|----|
-| Assigned | 📥 | 📥 | |
-| In progress | 🌀 | 🌀 | 🌀 |
-| Done/Pass | ✅ | ✅ | ✅ |
-| Findings | 🚩 | 🚩 | |
-| Fixing | 🔨 | | |
-| Blocked | | | 🚧 |
-| Fail | | | ❌ |
+| Assigned | 📥 | not dispatched | |
+| In progress | 🌀 | IN PROGRESS | 🌀 |
+| Done/pass | ✅ | PASS | ✅ |
+| Findings/fail | | FAIL | ❌ |
+| Blocked | 🚧 | | |
 | Merged | | | 🏁 |
-| Ready to merge | | | 🚀 |
