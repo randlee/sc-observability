@@ -1231,6 +1231,12 @@ No Git revision or historical blob pin is required for generated bindings.
 - **Contracts**: PHD-001–004, PHB-002/010/013, LOG-004/009/042/046,
   OTLP-011/021/023, SRC-001–004; obs-d-12/13/17/8.
 
+**Amendment (2026-09-26, CI retirement)**: The CI trim in
+[PR #239](https://github.com/randlee/sc-observability/pull/239) retired the
+historical import-provenance and generated-binding source-revision validators
+as recorded in [the CI policy](ci-policy.md). ADR-019’s Consequences sentence
+was reworded accordingly to describe the remaining validation.
+
 ## 8. API-Design Consistency
 
 `api-design.md` matches the corrected layering:
