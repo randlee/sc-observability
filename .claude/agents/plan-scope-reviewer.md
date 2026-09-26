@@ -182,12 +182,15 @@ For the current plan state, verify:
   `integrate/phase-<phase>`, `sprint/<phase>-<n>-<slug>`, same slug in doc and
   branch. For a plan in beads: id `<prefix>-<phase>-<n>`, title
   `<phase>-<n>: <title>`, `metadata.branch` = `sprint/<phase>-<n>-<slug>` with
-  the title's slug, `metadata.layer` = the wave number; the docs path rule
-  does not apply
-- `metadata.layer` and `metadata.pr_target` agree with the graph: a
-  wave-1 sprint targets `integrate/phase-<phase>`, a later sprint targets a
-  branch of the wave below it; metadata that describes a deeper stack than
-  the edges do is `SERIAL-RISK`
+  the title's slug; the docs path rule does not apply
+- `metadata.layer` and `metadata.pr_target` agree with the graph.
+  `layer` is the sprint's unique planned position in the phase's one
+  append-only stack (`planning.md`, "Stack"), not its wave; `pr_target` is
+  `integrate/phase-<phase>` for layer 1 and the branch of layer n-1
+  otherwise. Waves come from the `blocks` edges. A sprint whose layer is
+  lower than a sprint it must follow, or a `pr_target` that is not the
+  branch of the layer below, is `SERIAL-RISK`; so is a `must_follow` edge
+  the wave table does not explain
 - every sprint bead's `## Deliverables` is one numbered list whose items can
   be met inside its `owned_paths`; a fence narrowed without moving the work,
   a bead with no numbered deliverables, or a contract item planned in both a
