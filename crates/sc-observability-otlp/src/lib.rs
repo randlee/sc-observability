@@ -33,7 +33,7 @@ use std::sync::{Arc, LazyLock, Mutex};
 
 use config::{BackendTransportBounds, validate_config_typed, validated_transport_bounds};
 use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
-use sc_observability_types::v2::ExportError;
+use sc_observability_types::v2::{ConfigFailure, ExportError};
 #[allow(
     deprecated,
     reason = "telemetry retains legacy error names in its published compatibility signatures"
@@ -181,10 +181,9 @@ fn exporter_factory(
         Arc<dyn TraceExporter>,
         Arc<dyn MetricExporter>,
     ),
-    InitFailure,
+    ConfigFailure,
 > {
-    let bounds = validated_transport_bounds(&config.transport)
-        .map_err(|error| InitFailure::from_context(error.into_context()))?;
+    let bounds = validated_transport_bounds(&config.transport)?;
     match bounds.backend {
         BackendTransportBounds::Disabled => Ok((
             Arc::new(DisabledLogExporter),
@@ -192,14 +191,16 @@ fn exporter_factory(
             Arc::new(DisabledMetricExporter),
         )),
         BackendTransportBounds::Sdk | BackendTransportBounds::Legacy(_) => {
-            Err(InitFailure::from_context(Box::new(ErrorContext::new(
-                error_codes::TELEMETRY_INVALID_CONFIG,
-                "enabled exporter backend has no installed implementation",
-                Remediation::recoverable(
-                    "select disabled telemetry until the selected backend implementation is installed",
-                    ["disable telemetry"],
-                ),
-            ))))
+            Err(ConfigFailure::UnsupportedBackend {
+                context: Box::new(ErrorContext::new(
+                    sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND,
+                    "enabled exporter backend has no installed implementation",
+                    Remediation::recoverable(
+                        "select disabled telemetry until the selected backend implementation is installed",
+                        ["disable telemetry"],
+                    ),
+                )),
+            })
         }
     }
 }
@@ -220,7 +221,8 @@ impl Telemetry {
 
     /// Creates a telemetry runtime with neutral initialization failures.
     pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure> {
-        let (log_exporter, trace_exporter, metric_exporter) = exporter_factory(&config)?;
+        let (log_exporter, trace_exporter, metric_exporter) = exporter_factory(&config)
+            .map_err(|error| InitFailure::from_context(error.into_context()))?;
         Self::new_with_exporters_typed(config, log_exporter, trace_exporter, metric_exporter)
     }
 
@@ -968,6 +970,29 @@ mod tests {
         let typed_context = std::error::Error::source(&typed).expect("typed context");
         assert!(legacy_context.source().is_none());
         assert!(typed_context.source().is_none());
+    }
+
+    #[test]
+    fn enabled_backend_factory_returns_canonical_unsupported_backend() {
+        let Err(factory_error) = exporter_factory(&telemetry_config()) else {
+            panic!("an enabled backend needs an installed implementation");
+        };
+        assert!(matches!(
+            factory_error,
+            ConfigFailure::UnsupportedBackend { .. }
+        ));
+        assert_eq!(
+            factory_error.diagnostic().code,
+            sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
+        );
+
+        let Err(constructor_error) = Telemetry::new_typed(telemetry_config()) else {
+            panic!("the retained constructor preserves the factory diagnostic");
+        };
+        assert_eq!(
+            constructor_error.diagnostic().code,
+            sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
+        );
     }
 
     #[test]
