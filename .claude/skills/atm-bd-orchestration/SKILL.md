@@ -1,6 +1,6 @@
 ---
 name: atm-bd-orchestration
-version: 0.3.4
+version: 0.3.5
 description: Bead-driven phase orchestration for the lead. Use when running a phase whose plan is in beads, dispatching from `bd ready` with ATM tasks, and landing it as one gh stack.
 requires:
   cli:
@@ -334,7 +334,7 @@ written to beads with the `atm-beads` templates.
 | `review-template.xml.j2` | assignment | lead → phase-end reviewer |
 | `review-complete.md.j2` | close | phase-end reviewer |
 | `task-refused.md.j2` | close | anyone who cannot do the whole assignment |
-| `req-qa`, `arch-qa`, `ruthless-boundary-qa`, `flaky-test-qa`, `schema-reviewer` `-assignment.json.j2` | fenced JSON | quality-mgr → its background reviewers |
+| `req-qa`, `arch-qa`, `ruthless-boundary-qa`, `flaky-test-qa`, `schema-reviewer`, `plan-scope-reviewer` `-assignment.json.j2` | fenced JSON | quality-mgr → its background reviewers; `plan-scope-reviewer` every plan-review round |
 | `qa-bead.json.j2` | bead | lead, after a green sanity check |
 | `finding-bead.json.j2` | bead | quality-mgr (QA) and lead (review), one per finding |
 
