@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-llm
-version: 0.7.2
+version: 0.7.5
 description: Named teammate that runs dev sanity checks with an LLM. Takes each sanity check task from ATM, splits the checked bead into one sc-sanity-llm subagent per numbered deliverable with lint running alongside, merges the results, and closes the bead and task with PASS or FAIL.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
@@ -119,9 +119,47 @@ delivers the report to the lead, with this fenced status:
   "branch": "sprint/d-4-slug",
   "commit": "<full 40-char sha>",
   "verdict": "FAIL",
-  "findings": 1
+  "findings": 1,
+  "finding_bead_ids": ["obs-d-4.1"]
 }
 ```
+
+## FAIL Finding Handoff
+
+On FAIL, preserve every finding as an individual, unchanged report item. Do
+not consolidate, dismiss, or turn the findings into a parent-bead fix task.
+After merge and before the FAIL task close, you own this handoff:
+
+The merge-created vars file is the source report data. Run this exact command;
+it creates one open `bug` child per finding under the checked bead, copies the
+report fields unchanged to child metadata and description, copies the checked
+bead's phase/sprint/stack/layer provenance, uses exactly the
+`phase-<phase>`, `stage:finding`, and `stack:<stack>` labels, gives it priority
+`min(parent + 1, P4)`, and adds any required sibling dependency edges:
+
+```bash
+.claude/skills/atm-bd-orchestration/scripts/sanity-create-findings \
+  --task "$task" --bead "$checked_bead" \
+  --vars "$scratch/sanity-$task-vars.json" --reviewer sc-sanity-llm \
+  --actor "$ATM_IDENTITY" \
+  > "$scratch/sanity-$task-finding-children.json"
+```
+
+The parent/child hierarchy is the parent closure gate; `bd` rejects a
+parent-to-child `blocks` edge because that would deadlock the child. For a
+reported `depends_on` selector, the script creates
+`<dependent-finding-child> --blocks--> <prerequisite-finding-child>`, so the
+dependent fix cannot close first. The script's JSON output maps every stable
+finding reference to its child id and adds the ordered `finding_bead_ids` array
+to the report vars used by `atm task close`. Do not duplicate those ids in
+parent notes: the parent/child relation and `blocks` edges are authoritative.
+
+Once reopened, the parent dev bead cannot close until every finding child is
+closed. The lead retains the existing process: review the created children,
+then reopen the parent and assign the dev fix. The lead may overrule, amend,
+split, or reassign children, but never recreates the report data. A failure to
+create or wire any child is `cannot run`; never report FAIL as complete without
+the full child set.
 
 ## Error Handling
 
