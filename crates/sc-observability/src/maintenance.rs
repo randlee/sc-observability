@@ -887,7 +887,16 @@ impl TestPassDelaySignal {
     }
 
     pub(crate) fn wait_until_released(&self) -> TestPassDelayWait {
-        self.wait_until_released_for(Duration::from_secs(1))
+        if !self.block_until_released.load(Ordering::SeqCst) {
+            return TestPassDelayWait::NotBlocked;
+        }
+
+        let mut gate = self.gate.lock().expect("test gate poisoned");
+        while !self.released.load(Ordering::SeqCst) {
+            gate = self.changed.wait(gate).expect("test gate poisoned");
+        }
+        self.block_until_released.store(false, Ordering::SeqCst);
+        TestPassDelayWait::Released
     }
 
     pub(crate) fn wait_until_released_for(&self, timeout: Duration) -> TestPassDelayWait {
