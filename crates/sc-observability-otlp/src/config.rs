@@ -767,6 +767,32 @@ pub(crate) fn validated_transport_bounds(
         BackendTransportBounds::Disabled
     };
 
+    if config.enabled
+        && matches!(config.backend, ExporterBackend::LegacyHttpJson)
+        && config.protocol != OtlpProtocol::HttpJson
+    {
+        return Err(ConfigFailure::UnsupportedProtocol {
+            context: Box::new(
+                ErrorContext::new(
+                    otlp_error_codes::OTLP_UNSUPPORTED_PROTOCOL,
+                    "the legacy HTTP/JSON exporter requires the HTTP/JSON protocol",
+                    Remediation::recoverable(
+                        "select HttpJson when using the legacy HTTP/JSON exporter",
+                        [
+                            "select HttpJson",
+                            "or select a backend that supports the configured protocol",
+                        ],
+                    ),
+                )
+                .detail("backend", Value::String("LegacyHttpJson".to_owned()))
+                .detail(
+                    "protocol",
+                    Value::String(format!("{protocol:?}", protocol = config.protocol)),
+                ),
+            ),
+        });
+    }
+
     if config.insecure_skip_verify && config.enabled {
         return Err(config_failure(
             ConfigFailureKind::InsecureTransportRejected,
