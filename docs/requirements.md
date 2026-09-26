@@ -410,6 +410,8 @@ The shared workspace shall document the ATM-shaped out-of-the-box baseline in
 - NFR-012 Public API surface changes to `sc-observability` shall be
   accompanied by updates to the normative docs and shall pass the CI public-API
   governance checks introduced in sprint A.2 before merge.
+  This blocking merge gate applies to merges into `develop` or `main`; PRs into
+  `integrate/*` and stack layers run these checks in report mode.
 
 ## 8. Source Organization Requirements
 
