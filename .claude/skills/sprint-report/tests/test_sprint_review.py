@@ -1,6 +1,7 @@
 import importlib.machinery
 import importlib.util
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -49,6 +50,35 @@ class ViewTests(unittest.TestCase):
                         dag.generate(Path(directory), index, {}, 'd', open_view=view,
                                      publish_branch='integrate/phase-d')
             self.assertEqual(calls, ['publish', 'view'] if view else ['publish'])
+
+    def test_initial_window_uses_eighty_percent_of_logical_screen_bounds(self):
+        page = dag.html_view('<svg/>', 'd', 'root')
+        script = re.search(r'<script id="wyvern-initial-size">(.*?)</script>', page, re.S).group(1)
+        harness = r"""
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const code = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
+function run(bounds, screen, withIpc = true) {
+  const messages = [], listeners = {}, metas = {};
+  const window = { __wyvernViewportBounds: bounds, screen,
+    addEventListener: (event, callback) => listeners[event] = callback };
+  if (withIpc) window.ipc = { postMessage: value => messages.push(value) };
+  const document = { querySelector: name => metas[name] ||= {} };
+  vm.runInNewContext(code, {window, document});
+  return {messages, listeners, metas};
+}
+// Native bounds are logical pixels, independent of physical/Retina resolution.
+const native = run({available_width: 2560, available_height: 1440}, {availWidth: 5120, availHeight: 2880});
+assert.deepEqual(native.messages, ['resize:2048x1152']);
+native.listeners['wyvern:viewport-bounds']({detail: {available_width: 1920, available_height: 1080}});
+assert.equal(native.messages[1], 'resize:1536x864');
+assert.equal(native.metas['meta[name="wyvern:width"]'].content, '1536');
+assert.equal(native.metas['meta[name="wyvern:height"]'].content, '864');
+assert.deepEqual(run(null, {availWidth: 1440, availHeight: 900}).messages, ['resize:1152x720']);
+// The permanent artifact also works as ordinary HTML with no native bridge.
+assert.deepEqual(run(null, {}, false).messages, []);
+"""
+        subprocess.run(['node', '-e', harness], input=json.dumps(script), text=True, check=True)
 
     def test_html_embeds_svg_not_png_and_escapes_root(self):
         svg = '<svg xmlns="http://www.w3.org/2000/svg"><title>Evidence</title></svg>'

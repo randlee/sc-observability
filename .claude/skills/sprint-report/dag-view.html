@@ -4,7 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="phase-root-bead" content="$root_bead_id">
+  <meta name="wyvern:width" content="1536">
+  <meta name="wyvern:height" content="864">
   <title>$title</title>
+  <script id="wyvern-initial-size">
+    (() => {
+      function sizeWindow(event) {
+        const bounds = (event && event.detail) || window.__wyvernViewportBounds || {};
+        const screen = window.screen || {};
+        const width = Math.round(0.8 * (bounds.available_width || screen.availWidth || 1920));
+        const height = Math.round(0.8 * (bounds.available_height || screen.availHeight || 1080));
+        document.querySelector('meta[name="wyvern:width"]').content = String(width);
+        document.querySelector('meta[name="wyvern:height"]').content = String(height);
+        if (window.ipc && typeof window.ipc.postMessage === 'function') {
+          window.ipc.postMessage('resize:' + width + 'x' + height);
+        }
+      }
+      window.addEventListener('wyvern:viewport-bounds', sizeWindow);
+      sizeWindow();
+    })();
+  </script>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; color: #172b43; background: white; font: 14px system-ui, sans-serif; }

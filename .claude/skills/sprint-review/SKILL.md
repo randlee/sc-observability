@@ -31,7 +31,8 @@ A rejected push is reported as failure; never force-push to replace concurrent w
 
 Without `--view`, do not launch a viewer, render an inline image, or otherwise
 show the diagram. Report only the saved path and pushed commit. With `--view`,
-open the HTML in Wyvern if available. Missing or failing Wyvern must not prevent
+open the HTML in Wyvern if available, initially sized to 80% of the screen's
+logical width and height. Missing or failing Wyvern must not prevent
 artifact publication. Do not substitute Preview or a browser without a request.
 
 The page embeds SVG directly with zoom controls and state tooltips; it needs no
