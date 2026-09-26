@@ -15,7 +15,7 @@ Generated projection of `obs-d-6`; the bead is authoritative.
 - PR target (merge order only): `sprint/d-5-otlp-signal-model`
 - Blocked by: `obs-d-21-sanity`
 - Requirements: LAY-005, NFR-007, OTLP-012, OTLP-013, OTLP-021, PHD-003, PHD-004
-- ADRs: ADR-018
+- ADRs: ADR-004, ADR-005, ADR-017, ADR-018, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability-otlp/src/lifecycle.rs`
   - `crates/sc-observability-otlp/src/lifecycle_tests.rs`
@@ -51,6 +51,13 @@ Consume D.21’s sanity-gated contract artifact without changing its ownership.
 
 - `crates/sc-observability-otlp/src/lifecycle.rs`
 - `crates/sc-observability-otlp/src/lifecycle_tests.rs`
+
+## ADR applicability
+
+ADR-004 constrains this OTLP-only lifecycle module; ADR-005 constrains its
+registry-backed terminal results; ADR-017 constrains its 2.0 typed outcomes;
+and ADR-019 governs the shared lifecycle/registry ownership split. None grants
+D.6 configuration, constants, or facade ownership.
 ## Acceptance criteria
 
 - [ ] Deliverable 1: `cargo test -p sc-observability-otlp --lib lifecycle_tests --all-features --locked` externally exercises ordered barriers, repeated shutdown, cancelled waiters, deadlines, runtime termination, and exact-once drop accounting.

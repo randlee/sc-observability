@@ -1,7 +1,7 @@
 # SC-Observability Architecture
 
-**Status**: Approved baseline; ADR-011–ADR-015 proposed for Phase B review;
-ADR-016 proposed for Phase C review
+**Status**: Approved baseline; ADR-011–ADR-016 Accepted; ADR-017–ADR-019
+Accepted for Phase D
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Related documents**:
 - [`requirements.md`](./requirements.md)

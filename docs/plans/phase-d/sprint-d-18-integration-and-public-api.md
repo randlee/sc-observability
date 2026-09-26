@@ -14,8 +14,8 @@ Generated projection of `obs-d-18`; the bead is authoritative.
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-18-integration-and-public-api`
 - PR target (merge order only): `sprint/d-20-language-binding-migration`
 - Blocked by: `obs-d-2-sanity`, `obs-d-3-sanity`, `obs-d-21-sanity`, `obs-d-20-sanity`, `obs-d-16-sanity`, `obs-d-1-sanity`, `obs-d-10-sanity`, `obs-d-17-sanity`, `obs-d-14-sanity`, `obs-d-6-sanity`, `obs-d-4-sanity`, `obs-d-19-sanity`, `obs-d-5-sanity`, `obs-d-15-sanity`, `obs-d-8-sanity`, `obs-d-7-sanity`
-- Requirements: LAY-003, LAY-004, LAY-005, LOG-004, LOG-007, LOG-009, LOG-010, LOG-014, LOG-015, LOG-023, LOG-037, LOG-042, LOG-046, LOG-047, LOG-048, NFR-003, NFR-007, NFR-008, NFR-010, NFR-011, NFR-012, OBS-004, OBS-007, OBS-009, OBS-010, OBS-011, OBS-012, OBS-013, OBS-014, OBS-015, OBS-016, OBS-017, OBS-018, OBS-019, OBS-020, OBS-024, OTLP-001, OTLP-002, OTLP-005, OTLP-006, OTLP-007, OTLP-011, OTLP-012, OTLP-015, OTLP-017, OTLP-019, OTLP-021, OTLP-023, PHB-006, PHB-010, PHB-011, PHB-012, PHB-013, PHB-014, PHC-002, PHC-004, PHD-001, PHD-002, PHD-003, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-020, TYP-021, TYP-023, TYP-024, TYP-030
-- ADRs: ADR-001, ADR-002, ADR-003, ADR-004, ADR-006, ADR-010, ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018
+- Requirements: LAY-003, LAY-004, LAY-005, LOG-004, LOG-007, LOG-009, LOG-010, LOG-014, LOG-015, LOG-023, LOG-037, LOG-042, LOG-046, LOG-047, LOG-048, NFR-003, NFR-007, NFR-008, NFR-010, NFR-011, NFR-012, OBS-004, OBS-007, OBS-009, OBS-010, OBS-011, OBS-012, OBS-013, OBS-014, OBS-015, OBS-016, OBS-017, OBS-018, OBS-019, OBS-020, OBS-024, OTLP-001, OTLP-002, OTLP-005, OTLP-006, OTLP-007, OTLP-011, OTLP-012, OTLP-015, OTLP-017, OTLP-019, OTLP-021, OTLP-023, PHB-006, PHB-010, PHB-011, PHB-012, PHB-013, PHB-014, PHC-002, PHC-004, PHD-001, PHD-002, PHD-003, PHD-004, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-020, TYP-021, TYP-023, TYP-024, TYP-030
+- ADRs: ADR-001, ADR-002, ADR-003, ADR-004, ADR-006, ADR-010, ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018, ADR-019
 - Owned paths (metadata projection):
   - `CHANGELOG.md`
   - `RELEASE-NOTES*.md`
@@ -70,8 +70,10 @@ Generated projection of `obs-d-18`; the bead is authoritative.
   - `docs/migrate-error-api.md`
   - `docs/migration*.md`
   - `docs/plans/phase-d/sprint-d-18-integration-and-public-api.md`
+  - `docs/plans/phase-d/sprint-d-17-log-consumer-error-migration.md`
   - `docs/project-plan.md`
   - `examples/custom-sink-example/src/main.rs`
+  - `examples/atm-adapter-example/src/main.rs`
   - `examples/tauri-logging/src-tauri/src/main.rs`
   - `release/**`
   - `scripts/ci/fixtures/error-migration/*/src/**`
@@ -243,6 +245,10 @@ obs-d-6 produces lifecycle.rs barrier, shutdown ordering and admission control. 
 
 
 ## Integration scope
+
+Every 2.0 breaking change is authorized solely by ADR-017’s
+`release/public-api-major-breaks.toml` manifest. ADR-012 remains historical
+1.x guidance and is partly superseded only for those enumerated 2.0 breaks.
 
 Final wrapper/classifier/adapter deletion is owned here only, following PHD-002. Verify no routing implementation is moved out of sc-observe (LAY-003/NFR-003), no ATM adapter behavior enters shared crates (ADR-006), and layer docs remain self-contained (NFR-008). Validate the imported provenance set under OTLP-023 during composition; no new provenance ledger is created. Release inventory includes npm under the existing shared publishing channel (PHC-002), never a repository-local substitute.
 
