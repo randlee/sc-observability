@@ -24,15 +24,20 @@ worktree, and prints one JSON manifest to stdout:
 `--split-only` parses and renders only: no git pinning and no lint.
 
 The lint command runs under `lint-supervisor`, a detached process (its pid is
-`lint.pid`, equal to its process group) that redirects the command's stdout and
-stderr to the log itself, waits at most `timeout_seconds`, and always writes
-the exit file: the exit code, or `timeout` (the command's process group was
-killed), `cancelled` (the supervisor was terminated) or `error`.
-`kill -- -<pid>` stops the supervisor and the lint command together.
+`lint.pid`) that runs the command in a process group of its own, redirects the
+command's stdout and stderr to the log, waits at most `timeout_seconds`, and
+always writes the exit file: the exit code, or `timeout` (the command's group
+was killed), `cancelled` (the supervisor received SIGTERM or SIGINT: it sends
+SIGTERM to the command's group, waits up to 2 seconds, SIGKILLs the survivors
+and confirms the command is gone before writing) or `error`.
+`kill -- -<pid>` or `kill <pid>` stops the supervisor and the lint command.
 
 `## Deliverables` must be one top-level numbered list `1.` .. `X.`; wrapped
 lines, indented sub-bullets and blank lines belong to the item above them,
-fenced blocks are text, and anything else in the section is PLAN_INVALID.
+fenced blocks (CommonMark: closed only by a fence of the same character at
+least as long as the opener) are text even when they contain headings or
+numbered lines, and anything else in the section is PLAN_INVALID. The section
+ends at the first heading outside a fence.
 
 Exit codes (the code and message are printed on stderr):
   0  ok
@@ -91,25 +96,24 @@ def load_bead(args):
 
 ITEM = re.compile(r"^(\d+)\.\s+(\S.*)$")
 TOP_BULLET = re.compile(r"^[-*+]\s")
-FENCE = re.compile(r"^\s*(```|~~~)")
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
+HEADING = re.compile(r"^#{1,6} ")
 
 
 def parse_deliverables(description):
     match = re.search(r"^## Deliverables[ \t]*$", description or "", re.M)
     if not match:
         raise Fail(2, "bead has no `## Deliverables` section")
-    body = description[match.end():]
-    end = re.search(r"^#{1,2} ", body, re.M)
-    if end:
-        body = body[: end.start()]
     items, fence, prev_blank = [], None, True
-    for line in body.splitlines():
+    for line in description[match.end():].splitlines():
         stripped = line.strip()
         if fence:                                   # fenced text belongs to the current item
             items[-1][1] += " " + stripped
-            if stripped.startswith(fence):
+            if re.fullmatch(re.escape(fence) + r"[`~]*", stripped) and stripped[0] == fence[0]:
                 fence = None
             continue
+        if HEADING.match(line):
+            break                                   # the section ends at the next heading
         if not stripped:
             prev_blank = True
             continue
@@ -121,7 +125,7 @@ def parse_deliverables(description):
         elif TOP_BULLET.match(line):
             raise Fail(2, f"`## Deliverables` has an unnumbered top-level bullet: {stripped!r}")
         elif FENCE.match(line):
-            fence = FENCE.match(line).group(1)
+            fence = FENCE.match(line).group(1)       # closes on the same character, at least this long
             items[-1][1] += " " + stripped
         elif line[0] in " \t" or not prev_blank:    # indented sub-item, or wrapped item text
             items[-1][1] += " " + stripped
@@ -248,37 +252,63 @@ def start_lint(args):
             "pid": proc.pid, "timeout_seconds": args.lint_timeout_seconds}
 
 
+GRACE_SECONDS = 2
+
+
+class Cancelled(Exception):
+    pass
+
+
 def supervise(argv):
-    """Run the lint command in this process group; always write the exit file."""
+    """Run the lint command in its own process group; always write the exit file."""
     parser = argparse.ArgumentParser(prog="sanity-split lint-supervisor")
     for flag in ("--worktree", "--command", "--log", "--exit-file"):
         parser.add_argument(flag, required=True)
     parser.add_argument("--timeout-seconds", type=float, default=1800)
     args = parser.parse_args(argv)
     exit_file = Path(args.exit_file)
-    outcome = "error"
+    outcome, child = "error", None
 
-    def cancelled(signum, frame):
-        exit_file.write_text("cancelled\n")
-        os._exit(1)
+    def cancel(signum, frame):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        raise Cancelled()
 
-    signal.signal(signal.SIGTERM, cancelled)
-    signal.signal(signal.SIGINT, cancelled)
+    def stop(sig):
+        if child is not None and child.poll() is None:
+            try:
+                os.killpg(child.pid, sig)
+            except ProcessLookupError:
+                pass
+
+    signal.signal(signal.SIGTERM, cancel)
+    signal.signal(signal.SIGINT, cancel)
     try:
         with open(args.log, "w") as log:
             child = subprocess.Popen(["sh", "-c", args.command], cwd=args.worktree, stdin=subprocess.DEVNULL,
-                                     stdout=log, stderr=subprocess.STDOUT)
+                                     stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
             try:
                 outcome = str(child.wait(timeout=args.timeout_seconds))
             except subprocess.TimeoutExpired:
                 outcome = "timeout"
+                stop(signal.SIGKILL)
+                child.wait()
+    except Cancelled:
+        outcome = "cancelled"
+        if child is not None:
+            stop(signal.SIGTERM)
+            try:
+                child.wait(timeout=GRACE_SECONDS)
+            except subprocess.TimeoutExpired:
+                pass
+            stop(signal.SIGKILL)
+            child.wait()
     except Exception:
         outcome = "error"
+        stop(signal.SIGKILL)
     finally:
         exit_file.write_text(outcome + "\n")
-    if outcome == "timeout":
-        os.killpg(os.getpgid(0), signal.SIGKILL)   # the command and its children share this group
-    return 0
+    return 0 if outcome not in ("cancelled", "error") else 1
 
 
 def main():

@@ -14,6 +14,10 @@ TASK, DEV, SPRINT, BRANCH = "obs-d-4-sanity", "obs-d-4", "d-4", "sprint/d-4-x"
 FINDING = {"kind": "skipped", "file": "crates/x/src/lib.rs", "line": 3, "issue": "no 503 test"}
 
 
+def without(envelope, key):
+    return {k: v for k, v in envelope.items() if k != key}
+
+
 def git(cwd, *argv):
     return subprocess.run(["git", "-C", str(cwd), *argv], check=True, capture_output=True, text=True).stdout.strip()
 
@@ -124,6 +128,10 @@ class SanityMerge(unittest.TestCase):
             "failure with out-of-range deliverable": ([self.result(1), self.failure(deliverable=7)], "result 1: failure envelope must name"),
             "failure without message": ([self.result(1), self.failure(message=...)], "result 1: failure envelope must have code"),
             "failure with data": ([self.result(1), {**self.failure(), "data": {}}], "result 1: failure envelope must have data null"),
+            "success 0": ([self.result(1), {**self.result(2), "success": 0}], "result 1: not a success or failure envelope"),
+            "success 1": ([self.result(1), {**self.result(2), "success": 1}], "result 1: not a success or failure envelope"),
+            "success without error key": ([self.result(1), without(self.result(2), "error")], "result 1: not a success or failure envelope"),
+            "failure without data key": ([self.result(1), without(self.failure(), "data")], "result 1: not a success or failure envelope"),
             "not a result": (["not a result"], "result 0: not a success or failure envelope"),
             "not an array": ({"success": True}, "JSON array"),
             "not json": ("PASS", "not JSON"),

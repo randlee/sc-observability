@@ -181,8 +181,10 @@ def main(argv):
         results = read_results()
         by_number = {}
         for index, result in enumerate(results):
-            if not isinstance(result, dict) or result.get("success") not in (True, False):
-                raise Reject(f"result {index}: not a success or failure envelope")
+            if (not isinstance(result, dict) or not isinstance(result.get("success"), bool)
+                    or any(key not in result for key in ("success", "data", "error"))):
+                raise Reject(f"result {index}: not a success or failure envelope "
+                             "(success must be true or false; success, data and error must all be present)")
             if result["success"] is False:
                 envelope = failure_envelope(result, index, manifest["deliverables_total"])
                 print(f"{envelope['code']} {'recoverable' if envelope['recoverable'] else 'fatal'} {envelope['deliverable']}")

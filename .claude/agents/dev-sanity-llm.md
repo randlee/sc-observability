@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-llm
-version: 0.7.1
+version: 0.7.2
 description: Named teammate that runs dev sanity checks with an LLM. Takes each sanity check task from ATM, splits the checked bead into one sc-sanity-llm subagent per numbered deliverable with lint running alongside, merges the results, and closes the bead and task with PASS or FAIL.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
@@ -130,6 +130,7 @@ row that matches:
 
 | Result | Action |
 | --- | --- |
+| `sanity-split` exit 1 (usage, or the bead input unreadable or malformed) | fix your own invocation and rerun once; if it fails again, cannot run (`SANITY.RESULT_INVALID`) |
 | `sanity-split` exit 2 (`SANITY.PLAN_INVALID`) | cannot run, now; also `atm send <lead> --stdin`: the bead's `## Deliverables` is not a numbered list, so planning failed for it |
 | `sanity-split` exit 3, 4 or 5, or `SANITY.HARNESS_UNSUPPORTED` | cannot run, now, with that code |
 | `sanity-merge` exit 4 | lint still running: wait, then rerun the merge; lint stops itself at `lint.timeout_seconds` and the merge then exits 3 `SANITY.LINT_UNAVAILABLE fatal 0` |
@@ -141,8 +142,8 @@ row that matches:
 | second failure of any relaunch | cannot run, with the printed code (`SANITY.RESULT_INVALID` when there is none) |
 
 "Cannot run" is the Output Format row: the code goes in the bead note and
-the refusal. On every cannot run, stop the lint supervisor before closing:
-`kill -- -<lint.pid>` with the pid from the manifest.
+the refusal. On every cannot run, if a manifest with `lint.pid` exists, stop
+the lint supervisor before closing: `kill -- -<lint.pid>` with that pid.
 
 Never claim a bead that is not ready: find the root cause
 (`bd blocked --json`, `bd show <blocker>`) and send it to the lead.

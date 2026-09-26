@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -147,6 +148,10 @@ class SanitySplit(unittest.TestCase):
             "paragraph between items": "## Deliverables\n1. One.\n\nAlso do the auth check.\n\n2. Two.\n",
             "fenced example only": "## Deliverables\n```text\n1. This is an example, not a deliverable.\n```\n",
             "unclosed fence": "## Deliverables\n1. One.\n```\n2. Two.\n",
+            "numbered line inside a longer outer fence is not an item": (
+                "## Deliverables\n1. Document:\n````markdown\n```\n2. Example only.\n```\n````\n3. Tests.\n"),
+            "heading inside a fence does not end the section": (
+                "## Deliverables\n1. Document:\n```markdown\n## Example\n- stray bullet after the fence\n```\n- stray\n2. Tests.\n"),
         }
         for name, description in cases.items():
             with self.subTest(name):
@@ -154,6 +159,8 @@ class SanitySplit(unittest.TestCase):
                 self.assertEqual(out.returncode, 2, out.stderr)
                 self.assertIn("SANITY.PLAN_INVALID", out.stderr)
                 self.assertFalse(self.scratch.exists(), "lint must not start for an invalid plan")
+        out = self.run_split(bead(cases["numbered line inside a longer outer fence is not an item"]))
+        self.assertIn("numbering is not 1..2: [1, 3]", out.stderr)
 
     def test_plan_items_keep_wrapped_text_sub_bullets_and_fenced_examples(self):
         description = ("## Deliverables\n\n"
@@ -172,6 +179,25 @@ class SanitySplit(unittest.TestCase):
         self.assertEqual(texts[0], "Add the retry module with the predicate below. - covers 429 - covers 5xx")
         self.assertEqual(texts[1], "Document it: ```rust 1. not a deliverable ```")
         self.assertEqual(texts[2], "Tests.")
+
+    def test_fences_hide_headings_and_shorter_fences(self):
+        cases = {
+            "heading inside a fence": (
+                "## Deliverables\n1. Document:\n```markdown\n## Example\ncontent\n```\n2. Tests.\n\n## Non-closure\n\n3. not ours\n",
+                ["Document: ```markdown ## Example content ```", "Tests."]),
+            "three backticks inside four": (
+                "## Deliverables\n1. Document:\n````markdown\n```\n2. Example only.\n```\n````\n2. Tests.\n",
+                ["Document: ````markdown ``` 2. Example only. ``` ````", "Tests."]),
+            "tildes do not close backticks": (
+                "## Deliverables\n1. Document:\n```\n~~~\n2. Example only.\n```\n2. Tests.\n",
+                ["Document: ``` ~~~ 2. Example only. ```", "Tests."]),
+        }
+        for name, (description, expected) in cases.items():
+            with self.subTest(name):
+                out = self.run_split(bead(description), None, None, "sprint/x", "develop", "--split-only")
+                self.assertEqual(out.returncode, 0, out.stderr)
+                texts = [a["assignment"]["deliverable"]["text"] for a in json.loads(out.stdout)["assignments"]]
+                self.assertEqual(texts, expected)
 
     def test_commit_mismatch(self):
         with self.subTest("dirty tree"):
@@ -289,6 +315,33 @@ class SanitySplit(unittest.TestCase):
         time.sleep(0.2)
         leftover = subprocess.run(["pgrep", "-f", "sleep 3018"], capture_output=True, text=True)
         self.assertEqual(leftover.stdout.strip(), "", "the lint command survived the cancellation")
+
+    def test_lint_supervisor_cancellation_kills_a_term_resistant_command(self):
+        marker = self.root / "resistant.pid"
+        script = self.root / "resistant.py"
+        script.write_text("import os, pathlib, signal, time\n"
+                          "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+                          f"pathlib.Path({str(marker)!r}).write_text(str(os.getpid()))\n"
+                          "time.sleep(3019)\n")
+        out = self.run_split(lint=f"{sys.executable} {script}")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        manifest = json.loads(out.stdout)
+        for _ in range(200):
+            if marker.exists():
+                break
+            time.sleep(0.05)
+        child_pid = int(marker.read_text())
+        os.killpg(manifest["lint"]["pid"], signal.SIGTERM)
+        self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "cancelled")
+        for _ in range(100):   # the supervisor exits right after writing the exit file
+            if subprocess.run(["kill", "-0", str(manifest["lint"]["pid"])], capture_output=True).returncode != 0:
+                break
+            time.sleep(0.05)
+        self.assertNotEqual(subprocess.run(["kill", "-0", str(manifest["lint"]["pid"])], capture_output=True).returncode, 0)
+        self.assertNotEqual(subprocess.run(["kill", "-0", str(child_pid)], capture_output=True).returncode, 0,
+                            "the TERM-resistant lint command survived the cancellation")
+        leftover = subprocess.run(["pgrep", "-f", "resistant.py"], capture_output=True, text=True)
+        self.assertEqual(leftover.stdout.strip(), "")
 
     def test_split_only_skips_git_and_lint(self):
         (self.repo.wt / "dirty.txt").write_text("would fail pinning")
