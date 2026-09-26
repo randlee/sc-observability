@@ -54,6 +54,9 @@ impl LogControl {
     ///
     /// Returns [`FlushError`] when the lifecycle or bounded flush rejects the request.
     pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
+        if crate::bridge::is_attached() {
+            return crate::bridge::flush_current_attachment(timeout);
+        }
         handle::flush_installed(timeout)
     }
 
@@ -104,6 +107,9 @@ impl LogControl {
         reason = "the copied bridge retains its legacy logger admission boundary"
     )]
     pub fn try_log(&self, event: BridgeEvent) -> Result<EmitOutcome, EmitError> {
+        if crate::bridge::is_attached() {
+            return handle::submit_guarded(|| crate::bridge::submit_current_control(event));
+        }
         handle::submit_guarded(|| {
             if handle::lifecycle() != BridgeLifecycle::Running {
                 return Err(not_running());
@@ -225,7 +231,7 @@ fn diagnostic_from_context(
     }
 }
 
-fn core_emit_error(error: &sc_observability::TryLogError) -> EmitError {
+pub(crate) fn core_emit_error(error: &sc_observability::TryLogError) -> EmitError {
     match error {
         sc_observability::TryLogError::InvalidEvent(source) => EmitError::InvalidEvent {
             diagnostic: crate::error::diagnostic_from_info(source),
