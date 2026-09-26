@@ -14,8 +14,8 @@ Generated projection of `obs-d-13`; the bead is authoritative.
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-13-logging-contract`
 - PR target (merge order only): `sprint/d-12-types-and-otlp-contract`
 - Blocked by: `obs-phase-d-plan-qa`
-- Requirements: LAY-001, LAY-002, LAY-006, LAY-007, LOG-001, LOG-002, LOG-003, LOG-004, LOG-005, LOG-006, LOG-007, LOG-008, LOG-009, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-020, LOG-021, LOG-023, LOG-037, LOG-038, LOG-040, LOG-043, LOG-047, LOG-048, NFR-001, NFR-002, NFR-005, NFR-006, NFR-007, NFR-009, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-025, TYP-026, TYP-027, TYP-030, TYP-031, TYP-039
-- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-017
+- Requirements: LAY-002, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-008, LOG-009, LOG-010, LOG-015, LOG-018, LOG-019, LOG-020, LOG-023, LOG-037, LOG-038, LOG-040, LOG-042, LOG-043, LOG-046, NFR-005, NFR-006, NFR-012, PHB-002, PHB-007, PHB-010, PHB-011, PHB-013, PHD-001, TYP-023, TYP-024, TYP-026, TYP-030, TYP-039
+- ADRs: ADR-002, ADR-003, ADR-006, ADR-010, ADR-011, ADR-013, ADR-014, ADR-015, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability-log/src/bridge.rs`
   - `crates/sc-observability-log/src/lib.rs`
@@ -30,7 +30,7 @@ Generated projection of `obs-d-13`; the bead is authoritative.
 
 ## Goal
 
-Freeze the logging contracts against ADR-017 and PHB-002 without waiting for D.1/D.2/D.3 implementation tests.
+Freeze the logging contracts against ADR-017/019 and PHB-002 without waiting for D.1/D.2/D.3 implementation tests.
 
 ## Deliverables
 
@@ -38,9 +38,9 @@ Freeze the logging contracts against ADR-017 and PHB-002 without waiting for D.1
 
 2. Define AttachmentOptions, open BridgeEventPolicy, decisions and non-owning LogAttachment; define DetachError and contract fixtures for timeout, stale NotInstalled and foreign logger rejection.
 
-3. Freeze the canonical 2.0 sink signatures and SinkRegistrationError. TypedLogSink and LogSink stay intentionally open/object-safe; use canonical LogSinkError so no undefined LogSinkFailure appears in the new signature.
+3. Freeze the final canonical 2.0 sink signatures and SinkRegistrationError in the design. TypedLogSink and LogSink stay open/object-safe. Compiled wave-1 fixtures use a private error-parameterized harness and existing baseline types only; obs-d-1/2/3 bind obs-d-12 canonical errors/codes in wave 2.
 
-4. Stage canonical 2.0 typed.rs signatures/conversions and a precise retirement inventory for duplicate Failure classification and impl_legacy_classification!. Keep the functioning compatibility path through this wave; D.18 removes it at final canonical activation.
+4. Specify canonical 2.0 typed.rs signatures/conversions and exact retiring symbols in this design, with no standing inventory file. Add compile/grep checks proving the private contract harness introduces no duplicate Failure classification or impl_legacy_classification!; obs-d-18 performs actual public-export activation and removal.
 
 ## This Sprint Does Not Close
 
@@ -246,23 +246,15 @@ impl LoggerBuilder {
 
 ## Ownership, errors and capability decisions
 
-Settings and sink behavior contracts belong to sc-observability; shared neutral error context remains sc-observability-types; attachment/DetachError belongs to sc-observability-log under PHB-002/ADR-011. Dependencies point bridge -> core/types, never types -> bridge. DetachError::{Timeout, NotInstalled, ForeignLoggerInstalled} is non-exhaustive and carries boxed ErrorContext. Its stable codes are SC_LOG_DETACH_TIMEOUT, SC_LOG_DETACH_NOT_INSTALLED and SC_LOG_FOREIGN_LOGGER_INSTALLED; D.12 installs these registry constants, D.13 defines the companion enum. SinkRegistrationError::{Duplicate, Invalid, Closed} is defined in core typed.rs with boxed ErrorContext and corresponding SC_LOG_SINK_REGISTRATION_* codes in the D.12-owned registry. LogSettingsError::{PrefixCollision, InvalidEnvironment, UnknownKey, InvalidValue, Resolution} uses the already specified LOG-001..005 diagnostics; those are diagnostic codes, not requirement IDs.
+Settings and sink behavior contracts belong to sc-observability; shared neutral error context remains sc-observability-types; attachment/DetachError belongs to sc-observability-log under PHB-002/ADR-011. Dependencies point bridge -> core/types, never types -> bridge. DetachError::{Timeout, NotInstalled, ForeignLoggerInstalled} is non-exhaustive and carries boxed ErrorContext. Its stable codes are SC_LOG_DETACH_TIMEOUT, SC_LOG_DETACH_NOT_INSTALLED and SC_LOG_FOREIGN_LOGGER_INSTALLED; D.12 installs these registry constants, obs-d-13 specifies the companion enum and tests its shape in the private baseline-only harness; obs-d-2 binds the registry-backed production form in wave 2. SinkRegistrationError::{Duplicate, Invalid, Closed} is specified for the final core typed.rs contract with boxed ErrorContext and corresponding SC_LOG_SINK_REGISTRATION_* codes in the D.12-owned registry. LogSettingsError::{PrefixCollision, InvalidEnvironment, UnknownKey, InvalidValue, Resolution} uses the already specified LOG-001..005 diagnostics; those are diagnostic codes, not requirement IDs.
 
-TypedLogSink and LogSink remain open because downstream custom sinks are required; their write/flush errors are canonical LogSinkError. TypedLogSink is a documented alias/forwarding surface to the canonical open sink contract, not a new duplicate classifier. The old adapter remains only as transitional compatibility until D.18. Both registration entry points preserve sink metadata and are implemented in D.3 builder.rs. D.13 typed.rs supplies the contract/test double without changing D.3-owned builder.rs.
+TypedLogSink and LogSink remain open because downstream custom sinks are required; their final write/flush errors are canonical LogSinkError; the snippets specify the final bound contract, not wave-1 imports. TypedLogSink is a documented alias/forwarding surface to the canonical open sink contract, not a new duplicate classifier. The old adapter remains only as transitional compatibility until D.18. Both registration entry points preserve sink metadata and are implemented in D.3 builder.rs. obs-d-13 typed.rs supplies the error-parameterized private contract/test double without changing D.3-owned builder.rs.
 
 ResolvedLogSettings holds a validated LogRoot wrapper with private PathBuf and AsRef<Path>; source LogSettings retains optional PathBuf for serde compatibility and validates at resolution. LOG-009 is explicit-config precedence: a nonempty JSON logRoot outranks both environment namespaces; other fields use defaults < JSON < SC_ < application. Empty roots reject.
 
 Detach takes &mut self: Timeout retains the attachment for retry/inspection after admission closes. Successful detach transitions it to detached and releases its logger references. Drop remains a bounded best-effort operation; proof requires explicit successful detach. LogControl remains a read/admission capability with no level/shutdown methods. Its stale-slot NotInstalled runtime check is retained because cloned handles outlive detach; a lifetime phantom cannot encode process-global concurrent revocation. Compile-fail contract examples prove that attachment/control cannot invoke owner-only operations.
 
 The full schemas above are authoritative here; implementation beads reference them rather than restating signatures. Contract fixture tests in log_contracts.rs/attachment_contracts.rs exercise the contract state/test doubles, never an unfinished production bridge or settings resolver.
-
-## Green intermediate workspace and staged 2.0 contract
-
-Lead ruling 2026-09-26: contract closure cannot break implementation crates. D.12 introduces canonical errors in errors_v2.rs and neutral models in signals_v2.rs, exposed under an explicit v2 module path; existing 1.x wrappers and operational signatures remain functioning until D.18 activates canonical re-exports. D.13 stages its new sink/settings/attachment contract additively alongside the working old typed surface. Replacement/removal is the final ADR-017 state, while coexistence is temporary phase sequencing only. Do not delete live wrapper/typed compatibility used by another crate in this wave. D.18 retires it after every migration owner is green. Tests distinguish contract fixtures from production behavior; enabled production construction never silently chooses a stub/no-op.
-
-Module/interface stubs and test doubles are genuine contract artifacts allowed in this contract sprint. They live in the explicit cross-wave handoff files listed below, compile in the workspace with all features, and return typed not-yet-implemented/unsupported construction errors where necessary; they do not claim production transport completion. Implementation beads replace their handed-off stubs before boundary closure. Existing production 1.x paths remain operational so workspace tests stay green.
-
-The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
 ## Handoff to obs-d-2 (wave 2)
 
@@ -291,11 +283,43 @@ Created/staged by obs-d-13, owned by obs-d-1 from wave 2; after this bead closes
 
 - `crates/sc-observability/src/runtime.rs`
 
+
+## Independent wave-1 compilation (lead ruling PLAN-SCOPE-016)
+
+Every concrete code block above is the final contract specification. obs-d-13's compiled fixtures use a private error-parameterized harness and existing baseline types only; no new obs-d-12 canonical error name or registry row is imported or defined in this wave. This applies to settings/attachment/registration errors and their code assertions, not just LogSinkError. The harness accepts the error/code payload as data and tests structural shape, policy/ownership and resolution rules. It does not export a second canonical enum or duplicate registry constants. Production registry binding is checked by the wave-2 consumer. Final concrete signatures remain frozen; fixture type parameters do not become extra public generic parameters. obs-d-18 activates the typed.rs canonical public exports after both contract and implementation gates. The retirement targets are the obsolete *Failure classifier implementations and impl_legacy_classification! expansions, not the public enum specification or private independent harness.
+
+ADR-019 records atomic retained-policy resolution, explicit root precedence, open policy/sink traits, &mut detach retry, stale control runtime checks, and the independent compilation split. ADR-006 constrains the generic settings namespaces: no ATM-specific loader or adapter behavior is added. LOG-042/046 and PHB-013 constrain the host attachment contract: one host-owned writer/maintenance worker and definitive owner shutdown; attachment/control never gain that authority.
+
+
+## Handoff to obs-d-1
+
+obs-d-13 freezes concrete settings/attachment/TypedLogSink signatures and supplies baseline-only private fixtures. obs-d-1 consumes that specification plus obs-d-12 canonical errors/registry rows and binds them in its owned runtime.rs in wave 2. obs-d-3 consumes TypedLogSink and owns builder.rs implementation; it does not own typed.rs. typed.rs final exports activate in obs-d-18.
+
+
+## Handoff to obs-d-2
+
+obs-d-13 freezes concrete settings/attachment/TypedLogSink signatures and supplies baseline-only private fixtures. obs-d-2 consumes that specification plus obs-d-12 canonical errors/registry rows and binds them in its owned bridge.rs in wave 2. obs-d-3 consumes TypedLogSink and owns builder.rs implementation; it does not own typed.rs. typed.rs final exports activate in obs-d-18.
+
+
+## Handoff to obs-d-3
+
+obs-d-13 freezes concrete settings/attachment/TypedLogSink signatures and supplies baseline-only private fixtures. obs-d-3 consumes that specification plus obs-d-12 canonical errors/registry rows and binds them in its owned builder.rs in wave 2. obs-d-3 consumes TypedLogSink and owns builder.rs implementation; it does not own typed.rs. typed.rs final exports activate in obs-d-18.
+
+
+## Release gate and scope
+
+This boundary releases only its named artifact to obs-d-18 after its paired sanity check; final 2.0 semver/API approval, obsolete-wrapper removal and release inventory are obs-d-18 gates. The phase-root workspace invariant applies once to every sprint.
+
+
+## Handoff to obs-d-17
+
+Handoff to obs-d-17: the canonical sink contract is consumed by the log-consumer check and named examples; sink write/flush and shutdown outcomes remain typed and owner-scoped.
+
 ## Acceptance criteria
 
-- [ ] `cargo test -p sc-observability --test log_contracts --locked` runs nonzero settings_serde_defaults, log_root_validation, canonical_sink_object_safety and registration_error_codes contract cases (D1/D3).
-- [ ] `cargo test -p sc-observability-log --test attachment_contracts --locked` runs detach_retry_after_timeout, stale_control_not_installed and foreign_logger_rejected against the owned contract fixture; compile-fail examples deny owner authority (D2).
-- [ ] The canonical v2 typed path has no duplicate classification and preserves code/remediation/source; the explicitly inventoried old impl_legacy_classification!/Failure path remains functional until D.18 removes it (D4).
+- [ ] `cargo test -p sc-observability --test log_contracts --locked` runs nonzero settings_serde_defaults, log_root_validation, private_sink_contract_object_safety and registration_error_payloads contract cases (#1/#3).
+- [ ] `cargo test -p sc-observability-log --test attachment_contracts --locked` runs detach_retry_after_timeout, stale_control_not_installed and foreign_logger_rejected against the owned contract fixture; compile-fail examples deny owner authority (#2).
+- [ ] The private contract harness preserves supplied code/remediation/source without new classification. #4: cargo test -p sc-observability --test log_contracts --locked runs contract_harness_preserves_context; git diff of typed.rs plus rg -n "impl_legacy_classification!|impl .*Failure" over newly added harness blocks yields no new obsolete classifiers. Existing compatibility code is not a failure here; obs-d-18 checks actual deletion after activation. No standing inventory file is created.
 - [ ] Contract checks use only owned test targets, without wildcard cargo test names or D.1/D.2/D.3 implementation fixtures. PHB-003/005 historical 1.x rules are not asserted as the new 2.0 compatibility gate.
 
-- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
+- [ ] #1–4: cargo check --workspace --all-features --locked and the named fixture tests pass from the unchanged develop baseline plus obs-d-13 alone, with no obs-d-12 canonical-name or registry-row imports. Follow the root workspace invariant.
