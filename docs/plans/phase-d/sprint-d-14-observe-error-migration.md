@@ -25,23 +25,26 @@ Workspace-wide wrapper removal, public re-exports, and release/API approval are 
 
 ## Migration recipe
 
-| Current wrapper/error | D12 enum variant | ErrorContext fields | Call-site count on develop | Tests to retype |
-| --- | --- | --- | --- | --- |
-| sc-observe wrappers | `ObservationError::Context` | `code, source, route` | `rg -n 'sc-observe' crates` recorded before edit | `crates/sc-observe/src/lib.rs; crates/sc-observe/tests/typed_observation.rs` |
+| Current type | D12 target | ErrorContext fields | Count | Tests to retype |
+| --- | --- | --- | ---: | --- |
+| ObservationError | `EventError::Routing` | code, source, route | 19 | `tests/routing_integration.rs`, `tests/typed_observation.rs` |
+| InitError / InitFailure | `InitError::Configuration` | code, source, config_field | 22 | `tests/typed_observation.rs` |
+| FlushError | `FlushError::Drain` | code, source, queue_depth | 4 | `tests/routing_integration.rs` |
+| LogSinkError | `LogSinkError::Write` | code, source, sink | 7 | `tests/typed_observation.rs` |
+| ProjectionError | `ProjectionError::Projection` | code, source, projector | 11 | `tests/typed_observation.rs` |
+| ShutdownError | `ShutdownError::Drain` | code, source, deadline_ms | 4 | `tests/routing_integration.rs` |
+| SubscriberError | `SubscriberError::Subscriber` | code, source, subscriber | 8 | `tests/typed_observation.rs` |
 
 ```rust
-// before
-return Err(LegacyError::from(context));
-// after
-return Err(ObservationError::Context(Box::new(context)));
+// crates/sc-observe/src/lib.rs:383
+// before: return Err(ObservationError::RoutingFailure(Box::new(context)));
+// after:  return Err(EventError::Routing { context: Box::new(context) });
 ```
 
 ## Implementation targets
 
-- `crates/sc-observe/src/lib.rs; crates/sc-observe/tests/typed_observation.rs`: replace the listed construction sites and preserve `ErrorContext` source identity (deliverable 1).
-- `crates/sc-observe/src/lib.rs; crates/sc-observe/tests/typed_observation.rs`: delete local wrappers only after each call site is typed (deliverable 2).
-- `crates/sc-observe/src/lib.rs; crates/sc-observe/tests/typed_observation.rs`: add variant, stable diagnostic, and source-context assertions (deliverable 3).
-- Sprint documentation: record the migrated surface (deliverable 4).
+- `crates/sc-observe/src/lib.rs`: replace the tabled public and internal constructions (deliverables 1–2).
+- `crates/sc-observe/tests/routing_integration.rs` and `typed_observation.rs`: assert named variants, codes, and source identity (deliverable 3).
 
 ## Acceptance criteria
 

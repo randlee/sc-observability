@@ -18,10 +18,10 @@ fences follow those boundaries and never use `crates/**`.
 
 | Wave | Track | Sprints | Target boundary | Owned paths | Assignee / model |
 | --- | --- | --- | --- | --- | --- |
-| 1 | contracts | D.10 `windows-arm64-wheel`, D.12 `c-types`, D.13 `c-log` | wheel policy; types/OTLP and logging contracts | wheel files; contract modules; OTLP declarations/features | D.10 luna/luna; D.12 terra/terra; D.13 terra/terra |
-| 2 | bounded implementations | D.1–D.8, D.14–D.17 | one crate or module per sprint | disjoint crate/module fences | D.1–D.8 terra/terra; D.14–D.17 terra/terra |
-| 3 | library/API | D.18 `integration-and-public-api` | composition and release/public API | shared release/API files | D.18 terra/terra |
-| 4 | qualification | D.9 `otlp-conformance`, D.11 `python-open-ended-guard` | dual exporter conformance and Python distribution guard | collectors, conformance tests, docs, and guard scripts | D.9 terra/terra; D.11 luna/luna |
+| 1 | contracts | D.10, D.12, D.13 | wheel policy; types/OTLP and logging contracts | wheel files; contract modules; OTLP declarations/features | D.10 lobs/luna; D.12 lobs/luna; D.13 cobs/terra |
+| 2 | bounded implementations | D.1–D.8, D.14–D.17 | one crate or module per sprint | disjoint crate/module fences | D.1 cobs/terra; D.2 lobs/luna; D.3 cobs/terra; D.4 lobs/luna; D.5 cobs/terra; D.6 lobs/luna; D.7 cobs/terra; D.8 lobs/luna; D.14 cobs/terra; D.15 lobs/luna; D.16 cobs/terra; D.17 lobs/luna |
+| 3 | library/API | D.18 | composition and release/public API | shared release/API files | D.18 cobs/terra |
+| 4 | qualification | D.9, D.11 | dual exporter conformance and Python distribution guard | collectors, conformance tests, docs, and guard scripts | D.9 cobs/terra; D.11 lobs/luna |
 
 **Critical path:** 4 sprints. **Width:** 13 implementation sprints.
 **Sprint count:** 18. Every `must_follow` edge consumes a named contract;

@@ -24,23 +24,22 @@ Workspace-wide wrapper removal, public re-exports, and release/API approval are 
 
 ## Migration recipe
 
-| Current wrapper/error | D12 enum variant | ErrorContext fields | Call-site count on develop | Tests to retype |
-| --- | --- | --- | --- | --- |
-| binding runtime callback/coordinator errors | `InitError::Context` | `code, source, operation` | `rg -n 'binding' crates` recorded before edit | `crates/sc-observability-binding-runtime/src/lib.rs` |
+| Current type | D12 target | ErrorContext fields | Count | Tests to retype |
+| --- | --- | --- | ---: | --- |
+| FlushError | `FlushError::Drain` | code, source, queue_depth | 4 | `crates/sc-observability-binding-runtime/src/tests.rs` |
+| LogSinkError | `LogSinkError::Write` | code, source, sink | 3 | `crates/sc-observability-binding-runtime/src/tests.rs` |
+| TryLogFailure | `LogSinkError::Write` | code, source, sink | 2 | `crates/sc-observability-binding-runtime/src/conversion.rs` |
 
 ```rust
-// before
-return Err(LegacyError::from(context));
-// after
-return Err(InitError::Context(Box::new(context)));
+// crates/sc-observability-binding-runtime/src/tests.rs:675
+// before: crate::conversion::bridge_flush(FlushError::Logger { .. })
+// after:  crate::conversion::bridge_flush(FlushError::Drain { context })
 ```
 
 ## Implementation targets
 
-- `crates/sc-observability-binding-runtime/src/lib.rs`: replace the listed construction sites and preserve `ErrorContext` source identity (deliverable 1).
-- `crates/sc-observability-binding-runtime/src/lib.rs`: delete local wrappers only after each call site is typed (deliverable 2).
-- `crates/sc-observability-binding-runtime/src/lib.rs`: add variant, stable diagnostic, and source-context assertions (deliverable 3).
-- Sprint documentation: record the migrated surface (deliverable 4).
+- `src/conversion.rs`, `src/lib.rs`, and `src/tests.rs`: replace the tabled construction/conversion paths (deliverables 1–2).
+- `src/tests.rs`: assert variant, code, and source context (deliverable 3).
 
 ## Acceptance criteria
 

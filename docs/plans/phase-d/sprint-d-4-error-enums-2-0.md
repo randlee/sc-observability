@@ -10,77 +10,33 @@
   - `crates/sc-observability/src/error_codes.rs`
   - `crates/sc-observability/src/health.rs`
   - `crates/sc-observability/tests/logging_only.rs`
+  - `crates/sc-observability/src/lib.rs`
+  - `crates/sc-observability/src/sinks.rs`
 
 ## Goal and dependency
 
-Plan and execute the explicitly breaking 2.0 migration from nine opaque
-wrappers (the eight `error_wrapper!` types plus hand-written `IdentityError`)
-to same-name discriminated enums. Before public code changes, the technical
-lead must accept ADR-017, which precisely supersedes ADR-012 for this listed
-2.0 migration while retaining ADR-011's diagnostic boundary. A proposed ADR,
-silence, or issue label is not approval.
-
+Migrate only the sc-observability crate’s error surface to the D12 nine-enum contract.
 
 ## Deliverables
 
-1. Remove `error_wrapper!`, obsolete wrapper constructors, tuple-field
-   construction, and 1.x compatibility adapters that would retain the old
-   representation. Convert workspace, examples, bindings, and fixtures to
-   pattern matching/named constructors as appropriate.
+1. Replace obsolete wrapper construction and tuple-field access in `src/lib.rs`, `src/sinks.rs`, `src/error_codes.rs`, and `src/health.rs` with D12 named variants and boxed `ErrorContext`.
+2. Retype `tests/logging_only.rs` for named variants, stable codes, and source identity.
 
 ## Non-closure
 
-No 1.x compatibility promise, registry publication, or unrelated error-model
-redesign. #88 remains excluded.
-
+Examples, bindings, fixtures, workspace release/API evidence, and compatibility removal outside this crate are D18.
 
 ## Design
 
 Contract: obs-d-12 design, section "D.4 canonical error-enum inventory".
 
-## Owned Paths and Exact Targets
-
-- `Cargo.toml`
-- `Cargo.lock`
-- `crates/**`
-- `bindings/**`
-- `examples/**`
-- `release/public-api-major-breaks.toml`
-- `release/public-api-policy.json`
-- `release/release-inventory.json`
-- `release/bindings-artifacts.toml`
-- `release/publish-artifacts.toml`
-- `release/bp2-publish-artifacts.toml`
-- `release/RELEASE-NOTES-*.md`
-- `CHANGELOG.md`
-- `docs/migration-guide.md`
-- `docs/migration.md`
-- `docs/publishing.md`
-- `docs/public-api-checklist.md`
-- `scripts/ci/validate_public_api_semver.py`
-- `scripts/ci/validate_public_api.py`
-- `scripts/ci/validate_version_literals.py`
-- `scripts/ci/validate_error_migration.py`
-- `scripts/ci/fixtures/**`
-- `scripts/ci/validate_python_distribution.py`
-- `.github/workflows/**`
-- `docs/api-approvals/**`
-- `docs/architecture.md`
-- `docs/requirements.md`
-- `docs/api-design.md`
-
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
-
-Must follow D.1, D.2, and D.3 because migration edits core src/lib.rs, types src/errors.rs and the log bridge files they own. These are code conflicts, not documentation-only edges. Link their separate additive documents from docs/api-design.md while retaining D.4 sole ownership of the 2.0 baseline.
-
 ## Implementation targets
 
-
-- `crates/sc-observability/src/error_codes.rs`: map core error codes to D12 enum variants (deliverable 1).
-- `crates/sc-observability/src/health.rs`: report typed error diagnostics without wrappers (deliverable 2).
-- `crates/sc-observability/tests/logging_only.rs`: assert enum variants and `ErrorContext` source identity (deliverable 3).
+- `crates/sc-observability/src/lib.rs`: replace core `LogError`/`TryLogError` compatibility construction with D12 named variants (deliverable 1).
+- `crates/sc-observability/src/sinks.rs`: construct `LogSinkError::{Write, Flush}` with boxed `ErrorContext` (deliverable 1).
+- `crates/sc-observability/src/error_codes.rs`: preserve stable core error-code mapping (deliverable 1).
+- `crates/sc-observability/src/health.rs`: render typed diagnostic context without tuple-wrapper access (deliverable 1).
+- `crates/sc-observability/tests/logging_only.rs`: assert variant, code, and source identity (deliverable 1).
 
 ## Acceptance criteria
 

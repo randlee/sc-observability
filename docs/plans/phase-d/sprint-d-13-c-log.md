@@ -10,6 +10,7 @@
   - `crates/sc-observability/src/settings.rs`
   - `crates/sc-observability/src/typed.rs`
   - `crates/sc-observability-log/src/lib.rs`
+  - `crates/sc-observability-types/src/typed.rs`
 
 ## Deliverables
 
@@ -225,6 +226,10 @@ impl LoggerBuilder {
     pub fn register_typed_sink(&mut self, sink: Arc<dyn TypedLogSink>) -> Result<&mut Self, SinkRegistrationError>;
 }
 ```
+
+## Typed error bridge
+
+`crates/sc-observability-types/src/typed.rs` owns `LogFailure` and `TryLogFailure` and their conversions to D12 `LogSinkError::{Write, Flush}` and `ShutdownError::{Timeout, Drain}`.
 
 ## Acceptance criteria
 

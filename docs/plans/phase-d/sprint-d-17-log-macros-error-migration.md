@@ -1,46 +1,49 @@
-# d-17: Log macros error migration
+# d-17: Log consumer error migration
 
 ## Plan metadata
 
 - Wave: 15
 - Branch: `sprint/d-17-log-macros-error-migration`
 - PR target: `sprint/d-16-dto-error-migration`
-- Blocked by: `obs-d-12-sanity`
+- Blocked by: `obs-d-12-sanity`, `obs-d-13-sanity`
 - Owned paths:
-  - `crates/sc-observability-log-macros/**`
+  - `crates/sc-observability-log-consumer-check/src/lib.rs`
+  - `crates/sc-observability-log-consumer-check/tests/control_consumer.rs`
+  - `examples/atm-adapter-example/src/main.rs`
+  - `examples/custom-sink-example/src/main.rs`
+  - `examples/tauri-logging/src-tauri/src/main.rs`
 
 ## Deliverables
 
-1. Migrate the event, fields, and instrument macro diagnostics in sc-observability-log-macros to the D.12 non-exhaustive error enums carrying Box<ErrorContext>.
-2. Remove local legacy error wrappers and update every call site within sc-observability-log-macros.
-3. Update the crate tests to assert typed variants, stable diagnostics, and preserved source context.
-4. Update the sprint documentation for the migrated error surface.
+1. Migrate the log-consumer check and the three named consumer examples to D12/D13 typed error signatures.
+2. Retype consumer tests and example compile checks to preserve typed error handling.
+3. Update the consumer migration sprint documentation.
 
 ## This Sprint Does Not Close
 
-Workspace-wide wrapper removal, public re-exports, and release/API approval are closed by D.18.
+Log-crate internal construction is D16; bridge implementation is D2; workspace API/release evidence is D18.
 
 ## Design
 
 ## Migration recipe
 
-| Current wrapper/error | D12 enum variant | ErrorContext fields | Call-site count on develop | Tests to retype |
-| --- | --- | --- | --- | --- |
-| macro parse diagnostics | `EventError::Context` | `code, source, macro_site` | `rg -n 'macro' crates` recorded before edit | `crates/sc-observability-log-macros/src/fields.rs` |
+| Current type | Contract target | ErrorContext fields | Count | Tests to retype |
+| --- | --- | --- | ---: | --- |
+| FlushError | `FlushError::Drain` | code, source, queue_depth | 4 | `crates/sc-observability-log-consumer-check/tests/control_consumer.rs` |
+| LogSinkError | `LogSinkError::Write` | code, source, sink | 4 | example compile checks |
+| TelemetryError | `ExportError::Lifecycle` | code, source, backend | 3 | `examples/atm-adapter-example/src/main.rs` |
+| ShutdownError | `ShutdownError::Drain` | code, source, deadline_ms | 8 | `examples/tauri-logging/src-tauri/src/main.rs` |
 
 ```rust
-// before
-return Err(LegacyError::from(context));
-// after
-return Err(EventError::Context(Box::new(context)));
+// examples/custom-sink-example/src/main.rs
+// before: return Err(LogSinkError(context));
+// after:  return Err(LogSinkError::Write { context });
 ```
 
 ## Implementation targets
 
-- `crates/sc-observability-log-macros/src/fields.rs`: replace the listed construction sites and preserve `ErrorContext` source identity (deliverable 1).
-- `crates/sc-observability-log-macros/src/fields.rs`: delete local wrappers only after each call site is typed (deliverable 2).
-- `crates/sc-observability-log-macros/src/fields.rs`: add variant, stable diagnostic, and source-context assertions (deliverable 3).
-- Sprint documentation: record the migrated surface (deliverable 4).
+- `crates/sc-observability-log-consumer-check/src/lib.rs` and `tests/control_consumer.rs`: migrate `FlushError` handling (deliverables 1–2).
+- `examples/atm-adapter-example/src/main.rs`, `custom-sink-example/src/main.rs`, and `tauri-logging/src-tauri/src/main.rs`: migrate the tabled consumer types (deliverable 1).
 
 ## Acceptance criteria
 

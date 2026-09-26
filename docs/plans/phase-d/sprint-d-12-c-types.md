@@ -15,6 +15,10 @@
   - `crates/sc-observability-types/tests/neutral_contracts.rs`
   - `crates/sc-observability-otlp/src/lib.rs`
   - `crates/sc-observability-otlp/Cargo.toml`
+  - `crates/sc-observability-types/src/diagnostic.rs`
+  - `crates/sc-observability-types/src/lib.rs`
+  - `crates/sc-observability-types/src/process.rs`
+  - `crates/sc-observability-types/src/projection.rs`
 
 ## Deliverables
 
@@ -37,22 +41,21 @@ No production exporter adapter, signal projection, wrapper migration, or public 
 
 ## D.4 canonical error-enum inventory
 
-D.12 replaces the retained wrappers with these nine public, `#[non_exhaustive]` enums. Every contextual payload is `Box<ErrorContext>`; no variant stores an unbounded string, secret, or erased error.
-
-`IdentityError`, `InitError`, `EventError`, `FlushError`, `ShutdownError`, `ProjectionError`, `SubscriberError`, `LogSinkError`, and `ExportError` each expose named stable variants and a `Context(Box<ErrorContext>)` recovery-preserving variant. The typed aliases in `typed.rs` map every legacy construction to one of these variants, preserving `DiagnosticInfo` and source identity.
+D12 owns the nine public, `#[non_exhaustive]` error enums. Each named variant carries `Box<ErrorContext>`; callers preserve the diagnostic source rather than constructing a tuple wrapper. These are the only migration targets used by D14–D17.
 
 ```rust
-#[non_exhaustive]
-pub enum ExportError {
-    Transport { context: Box<ErrorContext> },
-    Context(Box<ErrorContext>),
-}
-#[non_exhaustive]
-pub enum InitError {
-    InvalidConfiguration { context: Box<ErrorContext> },
-    Context(Box<ErrorContext>),
-}
+#[non_exhaustive] pub enum IdentityError { Process { context: Box<ErrorContext> } }
+#[non_exhaustive] pub enum InitError { Configuration { context: Box<ErrorContext> }, Runtime { context: Box<ErrorContext> } }
+#[non_exhaustive] pub enum EventError { Validation { context: Box<ErrorContext> }, Routing { context: Box<ErrorContext> } }
+#[non_exhaustive] pub enum FlushError { Drain { context: Box<ErrorContext> } }
+#[non_exhaustive] pub enum ShutdownError { Timeout { context: Box<ErrorContext> }, Drain { context: Box<ErrorContext> } }
+#[non_exhaustive] pub enum ProjectionError { Projection { context: Box<ErrorContext> } }
+#[non_exhaustive] pub enum SubscriberError { Subscriber { context: Box<ErrorContext> } }
+#[non_exhaustive] pub enum LogSinkError { Write { context: Box<ErrorContext> }, Flush { context: Box<ErrorContext> } }
+#[non_exhaustive] pub enum ExportError { Transport { context: Box<ErrorContext> }, Lifecycle { context: Box<ErrorContext> } }
 ```
+
+`sc-observability-types/src/diagnostic.rs`, `lib.rs`, `process.rs`, and `projection.rs` expose the supporting context, re-exports, process, and projection signatures. `typed.rs` is the D13 logging-contract owner because it defines `LogFailure` and `TryLogFailure`.
 
 ## Public contract
 
