@@ -66,6 +66,10 @@ ADR-015 constrains the embedded-Python/shared-binding assumptions of the Python 
 D.10 provides this exact policy row for D.18 to write in `release/python-platform-policy.json`: `platform=windows-arm64; machine=ARM64; wheel_tag=win_arm64; rust_target=aarch64-pc-windows-msvc; interpreters=3.10,3.11,3.12,3.13,3.14; native_cells=5`.
 
 The only file fence is `metadata.owned_paths`; paths mentioned as dependencies are read-only unless that metadata grants ownership.
+
+### Handoff to aobs
+
+The supported Python invariant is `Requires-Python >=3.10`, with no upper bound or exclusion, and `abi3-py310`/`cp310-abi3` remains the artifact contract. Raising the floor or introducing an upper/exclusion bound requires a separately approved compatibility decision, an updated interpreter matrix, and updated guard expected values; it must not arrive as an incidental packaging edit. This specification is handed to aobs for the shared plan; `docs/project-plan.md` remains outside the D.10 fence.
 ## Acceptance criteria
 
 ## Acceptance criteria

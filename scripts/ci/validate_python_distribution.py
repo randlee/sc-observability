@@ -39,7 +39,7 @@ def verify_resolution(metadata: dict, artifact: Path) -> list[dict]:
 
 
 def linkage(wheel: Path, policy: dict, sandbox: Sandbox, directory: Path) -> dict:
-    details = inspect_wheel(wheel, policy, '1.4.0')
+    details = inspect_wheel(wheel, policy, policy.get('candidate_version', '1.4.0'))
     with zipfile.ZipFile(wheel) as archive:
         native = directory / Path(details['native_member']).name
         native.write_bytes(archive.read(details['native_member']))
@@ -193,9 +193,14 @@ def build(args) -> None:
         source = verify_source(root)
         policy = policy_at(root)
         actual = actual_cell(policy)
-        selected = next(item for item in policy['platforms'] if item['id'] == args.platform)
+        selected = {**next(item for item in policy['platforms'] if item['id'] == args.platform),
+                    'expected_requires_python': source['expected_requires_python'],
+                    'candidate_version': source['version']}
         if actual['platform'] != args.platform:
             raise DistributionError('build runner architecture differs from requested platform')
+        if args.platform == 'windows-arm64':
+            from python_arm64 import require_native_windows_arm64
+            require_native_windows_arm64()
         # Tools were provisioned before entering isolation. Cargo uses a fresh empty home/target.
         with Sandbox(scratch, checkouts) as sandbox:
             if 'deployment_target' in selected:
@@ -212,6 +217,8 @@ def build(args) -> None:
             del sandbox.env['PYTHONHOME']
             command = [sys.executable, '-m', 'maturin', 'build', '--locked', '--offline', '--release',
                        '--out', str(scratch / 'wheels')]
+            if selected.get('rust_target'):
+                command += ['--target', selected['rust_target']]
             if args.platform.startswith('linux'):
                 command += ['--compatibility', 'manylinux_2_28']
             sandbox.run(command, root)
@@ -244,6 +251,7 @@ def build(args) -> None:
             verify_source(root)
             record = {'schema_version': 1, 'status': 'passed', 'development_only': source.get('development_only', False), 'source_commit': source['source_commit'],
                       'sdist_sha256': digest(args.sdist), 'platform': args.platform,
+                      'expected_requires_python': source['expected_requires_python'],
                       'build_interpreter': actual, 'wheel': linked, 'instrumented': instrumented, 'resolution': resolution,
                       'isolation': probes, 'native_runtime_tests': 'passed', 'native_test_count': native_count, 'embedding': 'passed', 'embedding_interpreter': embedded, 'negative_results': negatives,
                       'commands': sandbox.commands, 'publication': 'pending_B.7'}
@@ -261,8 +269,14 @@ def cell(args) -> None:
         source = verify_source(root)
         if (source.get('development_only') or not source['runtime_suite'].get('runtime_complete')) and not args.allow_incomplete_runtime:
             raise DistributionError('development/incomplete runtime artifact cannot qualify an installed cell')
-        actual = actual_cell(policy_at(root))
-        selected = next(item for item in policy_at(root)['platforms'] if item['id'] == actual['platform'])
+        policy = policy_at(root)
+        actual = actual_cell(policy)
+        if actual['platform'] == 'windows-arm64':
+            from python_arm64 import require_native_windows_arm64
+            require_native_windows_arm64()
+        selected = {**next(item for item in policy['platforms'] if item['id'] == actual['platform']),
+                    'expected_requires_python': source['expected_requires_python'],
+                    'candidate_version': source['version']}
         wheel = inspect_wheel(args.wheel, selected, source['version'])
         execute([sys.executable, '-m', 'venv', str(scratch / 'venv')])
         python = str(scratch / 'venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python'))
@@ -347,6 +361,7 @@ def cell(args) -> None:
             record = {'schema_version': 1, 'status': 'passed', **actual,
                       'development_only': args.allow_incomplete_runtime or source.get('development_only', False),
                       'source_commit': source['source_commit'], 'sdist_sha256': digest(args.sdist),
+                      'expected_requires_python': source['expected_requires_python'],
                       'wheel': wheel, 'runtime_suite': contract, 'test_count': len(cases),
                       'test_cases': sorted(case.attrib.get('classname', '') + '::' + case.attrib['name'] for case in cases),
                       'installed_extension': imported.strip(), 'production_hooks_absent': True,
@@ -364,8 +379,8 @@ def aggregate(args) -> None:
     cell_paths = list(args.evidence.rglob('cell-result.json'))
     builds = [json.loads(path.read_text()) for path in build_paths]
     cells = [json.loads(path.read_text()) for path in cell_paths]
-    if len(builds) != 5 or len(cells) != 25:
-        raise DistributionError('all five builds and all 25 execution cells are required')
+    if len(policy['platforms']) != 6 or len(builds) != 6 or len(cells) != 30:
+        raise DistributionError('all six builds and all 30 execution cells are required')
     if {(cell['platform'], cell['python']) for cell in cells} != expected:
         raise DistributionError('matrix contains missing, duplicate or unsupported cells')
     wheel_hashes = {build['platform']: build['wheel']['sha256'] for build in builds}
@@ -385,6 +400,9 @@ def aggregate(args) -> None:
             raise DistributionError('source contract is not a completed qualification candidate')
         runtime_options(contract)
         production_features = sorted(tomllib.loads((root / 'pyproject.toml').read_text())['tool']['maturin']['features'])
+        expected_requires_python = source['expected_requires_python']
+    if any(item.get('expected_requires_python') != expected_requires_python for item in builds + cells):
+        raise DistributionError('source and build/cell Requires-Python metadata disagree')
     for item in cells:
         if item.get('runtime_suite') != contract:
             raise DistributionError('cell contract differs from the immutable source contract')
@@ -441,6 +459,8 @@ def aggregate(args) -> None:
         selected = next(item for item in policy['platforms'] if item['id'] == build['platform'])
         wheel = confined(path.parent, build['wheel']['wheel'])
         production_paths.append(wheel)
+        selected = {**selected, 'expected_requires_python': expected_requires_python,
+                    'candidate_version': policy['candidate_version']}
         inspected = inspect_wheel(wheel, selected, policy['candidate_version'])
         if fault_paths(contract):
             private = build.get('instrumented') or {}
@@ -464,7 +484,7 @@ def aggregate(args) -> None:
             shutil.copyfile(artifact, dist / artifact.name)
     if getattr(args, 'output', None):
         args.output.write_text(json.dumps(publication, indent=2) + '\n')
-    print('B4A_QUALIFIED: five ABI wheels, 25 installed full-suite cells, offline sdist and embedding')
+    print('B4A_QUALIFIED: six ABI wheels, 30 installed full-suite cells, offline sdist and embedding')
 
 
 def main() -> None:

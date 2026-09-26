@@ -60,7 +60,8 @@ jobs:
           import json, os
           policy = json.load(open('release/python-platform-policy.json'))
           cells = [{**platform, 'python': version} for platform in policy['platforms'] for version in policy['interpreters']]
-          assert len(cells) == 25
+          assert len(policy['platforms']) == 6
+          assert len(cells) == 30
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write('platforms=' + json.dumps(policy['platforms']) + '\n')
               out.write('cells=' + json.dumps(cells) + '\n')
@@ -79,6 +80,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+      - if: matrix.id == 'windows-arm64'
+        name: Reject emulated Windows ARM64 build evidence
+        shell: pwsh
+        run: |
+          python -c "import platform,sys; assert platform.system() == 'Windows' and platform.machine().upper() == 'ARM64', (platform.system(), platform.machine()); assert sys.implementation.name == 'cpython'"
+          rustup target add aarch64-pc-windows-msvc
       - run: python -m pip install -r scripts/ci/python-packaging-requirements.txt
       - name: Build sole-helper source bundle and immutable maturin sdist
         shell: bash
@@ -117,6 +124,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'
+      - if: matrix.id == 'windows-arm64'
+        name: Reject emulated Windows ARM64 installed cell
+        shell: pwsh
+        run: |
+          python -c "import platform,sys; assert platform.system() == 'Windows' and platform.machine().upper() == 'ARM64', (platform.system(), platform.machine()); assert sys.implementation.name == 'cpython'"
       - uses: actions/download-artifact@v7
         with:
           name: b4a-sdist
@@ -233,7 +245,7 @@ jobs:
         with:
           pattern: b4a-*
           path: ${{ runner.temp }}/b4a-evidence
-      - name: Require all 25 cells against the same five wheels and sdist
+      - name: Require all 30 cells against the same six wheels and sdist
         id: qualify
         shell: bash
         run: |
