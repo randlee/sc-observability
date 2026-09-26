@@ -760,12 +760,12 @@ graph TD
 
 The OTLP dependency allowlist explicitly permits the feature-gated
 `legacy-http-json` feature and its reviewed `reqwest`, `httpdate`, `getrandom`,
-and Tokio `rt`/`sync` dependencies; obs-d-12 owns this normative declaration.
+and Tokio `rt`/`sync` dependencies; obs-d-21 owns this normative declaration.
 The legacy transport uses `reqwest =0.12.28` with `blocking`, `json`,
 `rustls-tls` and default features off, and `httpdate =1.0.3`; its transitive
 Tokio use does not impose a caller-owned runtime. The separate `otlp-sdk`
 feature admits the reviewed `opentelemetry*` SDK family and its explicitly
-reviewed transport dependencies only. obs-d-12 records exact remaining pins
+reviewed transport dependencies only. obs-d-21 records exact remaining pins
 in Cargo.lock and the existing boundaries manifest at implementation review.
 No wildcard approval covers an unrelated dependency. ADR-019 records this
 amendment to ADR-018; the existing boundary manifest is the single machine
@@ -1182,7 +1182,7 @@ ADR navigation index (status is recorded in each decision below):
 - **Decision — ADR-018 amendment**: Section 6's Phase D transport allowlist
   refines ADR-018 with the legacy feature's reqwest/httpdate pins, explicit
   getrandom and Tokio rt/sync use, and independently gated SDK dependencies.
-  obs-d-12 records the reviewed exact Cargo.lock/manifest pins. obs-d-8 uses
+  obs-d-21 records the reviewed exact Cargo.lock/manifest pins. obs-d-8 uses
   this declaration without adding a second allowlist or editing ADR-018's
   accepted historical text.
 - **Decision — ADR-005 registry ownership**: All `OTLP_*` constants used by

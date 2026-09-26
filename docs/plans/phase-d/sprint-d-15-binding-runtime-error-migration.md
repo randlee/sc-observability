@@ -5,7 +5,7 @@ Generated projection of `obs-d-15`; the bead is authoritative.
 ## Plan metadata
 
 - Wave: 2
-- Layer: 13
+- Layer: 14
 - Assignee / model: lobs / luna
 - Relation: `parallel_safe`
 - Closure: `boundary`
@@ -22,51 +22,58 @@ Generated projection of `obs-d-15`; the bead is authoritative.
 
 ## Deliverables
 
-1. Migrate the Callback, conversion, coordinator, operation, spawn, sync, and timer errors in sc-observability-binding-runtime to the D.12 non-exhaustive error enums carrying Box<ErrorContext>.
+1. Migrate the Callback, conversion, coordinator, operation, spawn, sync, and timer errors in `sc-observability-binding-runtime` to the D.12 non-exhaustive error enums carrying `Box<ErrorContext>`.
 2. Retype every owned call site while preserving native ownership, DTO outcomes, synchronization state, and observer timeout semantics.
 3. Update the crate tests to assert typed variants, stable diagnostics, and preserved source context.
 
-
 ## This Sprint Does Not Close
 
-Canonical boundary activation, workspace-wide compatibility retirement, public re-exports, and release/API approval are owned by obs-d-18. The sprint doc is explanatory evidence, not a separate closure gate.
+Canonical boundary activation, workspace-wide compatibility retirement, public re-exports, and release/API approval are owned by `obs-d-18`.
+Update the sprint doc as explanatory evidence alongside the migration; documentation is not a separate closure gate.
+
 
 ## Design
 
 ## Seven-family migration recipe
 
-Consume obs-d-12 cause mapping/ErrorContext (ADR-017, PHD-001), preserving the binding runtime's existing operation/DTO semantics (PHB-002/010–013, ADR-014/015). This is a cause mapping, not a blanket conversion of every local runtime error to a sink failure.
+Consume `obs-d-12`'s cause mapping and `ErrorContext` contract (ADR-017, PHD-001), preserving the binding runtime's existing operation/DTO semantics (PHB-002/010–013, ADR-014/015). This is cause mapping, not a blanket conversion of every local runtime error to a sink failure.
 
 | Family | Mapping/action | Fixture |
 | --- | --- | --- |
-| Callback | subscriber callback -> SubscriberError::Subscriber; sink callback -> LogSinkError::Write/Flush by operation; preserve foreign failure details | callback failure/source tests |
-| conversion | invalid event -> EventError::Validation; invalid initialization input -> InitError::Configuration; preserve DTO tagged outcome | conversion.rs tests |
-| coordinator | flush -> FlushError::Drain; shutdown deadline -> ShutdownError::Timeout; other shutdown failure -> ShutdownError::Drain | coordinator terminal-result tests |
+| Callback | subscriber callback -> `SubscriberError::Subscriber`; sink callback -> `LogSinkError::Write/Flush` by operation; preserve foreign failure details | callback failure/source tests |
+| conversion | invalid event -> `EventError::Validation`; invalid initialization input -> `InitError::Configuration`; preserve DTO tagged outcome | conversion.rs tests |
+| coordinator | flush -> `FlushError::Drain`; shutdown deadline -> `ShutdownError::Timeout`; other shutdown failure -> `ShutdownError::Drain` | coordinator terminal-result tests |
 | operation | preserve operation identity/receipt distinction and exact underlying canonical source; no error-to-success conversion | operation result tests |
-| spawn | native startup failure -> InitError::Runtime; retain source/remediation | worker spawn failure tests |
+| spawn | native startup failure -> `InitError::Runtime`; retain source/remediation | worker spawn failure tests |
 | sync | preserve local synchronization state error and its cause; map only at the existing operation boundary to the relevant flush/shutdown error | concurrent completion tests |
-| timer | deadline -> operation-specific FlushError::Drain or ShutdownError::Timeout; observer cancellation never cancels native work | timeout/cancellation tests |
+| timer | deadline -> operation-specific `FlushError::Drain` or `ShutdownError::Timeout`; observer cancellation never cancels native work | timeout/cancellation tests |
 
-All seven retain their local structural error families where they are not canonical shared errors; do not add duplicate shared wrappers or classifiers. Migrate neutral model consumers and DTO conversion calls in this crate without changing schema ownership. Context keys live in bounded Diagnostic.details. No blanket TryLogFailure -> sink write conversion: preserve invalid-event/queue-full/shutdown distinctions.
+All seven retain their local structural error families where they are not canonical shared errors; do not add duplicate shared wrappers or classifiers. Migrate neutral model consumers and DTO conversion calls in this crate without changing schema ownership. Context keys live in bounded `Diagnostic.details`. No blanket `TryLogFailure -> sink write` conversion: preserve invalid-event/queue-full/shutdown distinctions.
 
 ## Canonical boundary and handoff
 
-This bead retargets owned call sites and tests to the accepted ADR-017 surface. Existing transitional compatibility is consumed by obs-d-18, which owns canonical activation and final compatibility retirement. Contract ties are TYP-035/036, LOG-046, and LAY-006.
+This bead retargets owned call sites and tests to the accepted ADR-017 surface. Any transitional compatibility needed by unfinished sibling consumers is limited to the existing boundary and is consumed by `obs-d-18`, which owns canonical activation and final compatibility retirement. No new legacy feature or duplicate classifier is introduced. Every boundary close still has a green all-features workspace check and workspace tests.
 
-The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
+The only file fence is `metadata.owned_paths`; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
 ## Handoff to obs-d-18 (wave 3)
 
-Created/staged by obs-d-15, owned by obs-d-18 from wave 3; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion or final compatibility retirement.
+Created/staged by `obs-d-15`, owned by `obs-d-18` from wave 3; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion and final compatibility retirement.
 
 - `crates/sc-observability-binding-runtime/src/conversion.rs`
 - `crates/sc-observability-binding-runtime/src/lib.rs`
 - `crates/sc-observability-binding-runtime/src/tests.rs`
 
+## Contract ties
+
+- `TYP-035`/`TYP-036` govern the shared `QueryError` vocabulary and stable codes consumed by typed binding-facing query outcomes.
+- `LOG-046` governs the preserved shutdown drain/timeout behavior.
+- `LAY-006` remains because the binding runtime consumes lower-layer contracts without moving binding concerns into them.
+
+
 ## Acceptance criteria
 
-- [ ] `cargo test -p sc-observability-binding-runtime --locked` executes all seven family fixtures and checks code, remediation, typed source, and tagged DTO outcome (obs-d-15#1/#3).
-- [ ] Owned source preserves native ownership, shutdown results, observer timeout semantics, and canonical shared error usage (obs-d-15#2).
-- [ ] Language wrapper/schema generation, canonical activation, and release/API proof remain with obs-d-18.
-
-- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; obs-d-18 additionally runs all-features release tests and semver/removal gates.
+- [ ] `cargo test -p sc-observability-binding-runtime --locked` executes all seven family fixtures named in the recipe and checks code, remediation, typed source, and tagged DTO outcome (`obs-d-15#1/#3`).
+- [ ] Owned source files preserve native ownership, retained shutdown results, observer timeout semantics, and canonical shared error usage (`obs-d-15#2`).
+- [ ] This sprint does not close language wrapper/schema generation, canonical activation, or release/API proof; `obs-d-18` does.
+- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; `obs-d-18` additionally runs all-features release tests and semver/removal gates.
