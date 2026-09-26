@@ -81,6 +81,106 @@ fn contract_tests_stable_failure_codes() {
     );
 }
 
+fn sdk_config() -> OtelConfig {
+    OtelConfig {
+        enabled: true,
+        backend: ExporterBackend::OpenTelemetrySdk,
+        ..OtelConfig::default()
+    }
+}
+
+fn assert_sdk_not_applicable_field(config: &OtelConfig, expected_field: &str) {
+    let error = validated_transport_bounds(config).expect_err("SDK rejects legacy retry fields");
+    assert!(matches!(
+        error,
+        ConfigFailure::ConfigFieldNotApplicable { .. }
+    ));
+    assert_eq!(
+        error.diagnostic().details["field"].as_str(),
+        Some(expected_field)
+    );
+}
+
+#[test]
+#[allow(deprecated)]
+fn contract_tests_sdk_reports_max_retries_as_the_first_supplied_legacy_field() {
+    assert_sdk_not_applicable_field(
+        &OtelConfig {
+            max_retries: constants::DEFAULT_OTLP_MAX_RETRIES + 1,
+            ..sdk_config()
+        },
+        "MaxRetries",
+    );
+    assert_sdk_not_applicable_field(
+        &OtelConfig {
+            legacy_retry: Some(LegacyRetryPolicy {
+                max_retries: Some(constants::DEFAULT_OTLP_MAX_RETRIES),
+                ..LegacyRetryPolicy::default()
+            }),
+            ..sdk_config()
+        },
+        "MaxRetries",
+    );
+}
+
+#[test]
+#[allow(deprecated)]
+fn contract_tests_sdk_reports_initial_backoff_as_the_first_supplied_legacy_field() {
+    assert_sdk_not_applicable_field(
+        &OtelConfig {
+            initial_backoff_ms: (constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS + 1).into(),
+            ..sdk_config()
+        },
+        "InitialBackoff",
+    );
+    assert_sdk_not_applicable_field(
+        &OtelConfig {
+            legacy_retry: Some(LegacyRetryPolicy {
+                initial_backoff_ms: Some(constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS.into()),
+                ..LegacyRetryPolicy::default()
+            }),
+            ..sdk_config()
+        },
+        "InitialBackoff",
+    );
+}
+
+#[test]
+#[allow(deprecated)]
+fn contract_tests_sdk_reports_max_backoff_as_the_first_supplied_legacy_field() {
+    assert_sdk_not_applicable_field(
+        &OtelConfig {
+            max_backoff_ms: (constants::DEFAULT_OTLP_MAX_BACKOFF_MS + 1).into(),
+            ..sdk_config()
+        },
+        "MaxBackoff",
+    );
+    assert_sdk_not_applicable_field(
+        &OtelConfig {
+            legacy_retry: Some(LegacyRetryPolicy {
+                max_backoff_ms: Some(constants::DEFAULT_OTLP_MAX_BACKOFF_MS.into()),
+                ..LegacyRetryPolicy::default()
+            }),
+            ..sdk_config()
+        },
+        "MaxBackoff",
+    );
+}
+
+#[test]
+fn contract_tests_sdk_reports_retry_jitter_as_the_first_supplied_legacy_field() {
+    assert_sdk_not_applicable_field(
+        &OtelConfig {
+            legacy_retry: Some(LegacyRetryPolicy {
+                retry_jitter_percent: Some(constants::DEFAULT_OTLP_RETRY_JITTER_PERCENT),
+                ..LegacyRetryPolicy::default()
+            }),
+            ..sdk_config()
+        },
+        "RetryJitterPercent",
+    );
+}
+
 #[test]
 fn contract_tests_record_and_byte_capacity() {
     let records = validated_transport_bounds(&OtelConfig {
