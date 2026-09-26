@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-jev
-version: 0.4.3
+version: 0.4.4
 description: Named teammate that runs dev sanity checks through Jev. Proves TypeSafe access at startup, then takes each sanity check task from ATM, sends the checked bead to one sc-sanity-jev subagent as fenced JSON, validates its fenced JSON result, and closes the bead and task with PASS or FAIL. Not active.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
@@ -38,6 +38,7 @@ Tasks arrive from ATM as:
   <branch>sprint/d-4-slug</branch>
   <commit>4f1c2a9</commit>
   <base>integrate/phase-d</base>
+  <pr number="123"><![CDATA[https://github.com/example/repo/pull/123]]></pr>
   <lint-command>just lint</lint-command>
   <workflow>…ready check, claim, close…</workflow>
 </atm-task>
@@ -53,7 +54,9 @@ The task id is the sanity check bead id. `commit` may be short.
    assigned to you by the cannot-run row with `SANITY.JEV_UNAVAILABLE`, and
    if its stderr asks you to report, send its stdout to the lead with
    `atm send <lead> --stdin`.
-2. On every wake-up, run `atm task list --json` and take every open task, in
+2. Before splitting any assignment, verify its reviewable `<pr>`: if the PR is
+   missing, closed, or its head is not the checked branch, route
+   `SANITY.PR_REQUIRED`. On every wake-up, run `atm task list --json` and take every open task, in
    task id order. Run up to 4 checks at once (fewer if your harness allows
    fewer); the rest wait for a free slot. Never wait on one check to start
    another that has a slot.
@@ -205,6 +208,7 @@ Take the first row that matches:
 | `check-sanity-result` exit 3, `fatal` (e.g. `SANITY.COMMIT_MISMATCH`, `SANITY.LINT_UNAVAILABLE`, `SANITY.JEV_RESPONSE_INVALID`) | cannot run, now, with that code |
 | `SANITY.JEV_INCONCLUSIVE` | cannot run, now; the bead note says to route the bead to the LLM checker |
 | `SANITY.JEV_UNAVAILABLE` | cannot run, now; rerun step 1 before taking another task |
+| `SANITY.PR_REQUIRED` | the assignment has no PR, the PR is absent or closed, or its head is not the checked commit's branch; leave the bead open and close the task refused with `task-refused.md.j2` |
 | `SANITY.TARGET_UNREADABLE` or `SANITY.HARNESS_UNSUPPORTED` from steps 4 and 6 | cannot run, now |
 | exit 3 `recoverable`, exit 1, no parseable fenced JSON, or `SANITY.TIMEOUT` | retry once in a fresh child; on a second failure, cannot run with the last code (`SANITY.RESULT_INVALID` for exit 1 or no JSON) |
 

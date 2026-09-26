@@ -6,6 +6,8 @@
   "branch": "sprint/d-4-otlp-sync-exporter",
   "commit": "4f1c2a9e7b3d5f60812a4c9e0b7d3f5a1c2e4b6d",
   "base": "sprint/d-3-otlp-config",
+  "pr_number": 231,
+  "pr_url": "https://github.com/randlee/sc-observability/pull/231",
   "lead": "obs-lead",
   "cc": ""
 }
