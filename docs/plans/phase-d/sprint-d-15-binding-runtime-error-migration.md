@@ -1,22 +1,12 @@
 # d-15: Binding runtime error migration
 
-Generated projection of `obs-d-15`; the bead is authoritative.
-
 ## Plan metadata
 
-- Wave: 2
-- Layer: 13
-- Assignee / model: lobs / luna
-- Relation: `parallel_safe`
-- Closure: `boundary`
-- Target boundary: sc-observability-binding-runtime
+- Wave: 13
 - Branch: `sprint/d-15-binding-runtime-error-migration`
-- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-15-binding-runtime-error-migration`
-- PR target (merge order only): `sprint/d-14-observe-error-migration`
+- PR target: `sprint/d-14-observe-error-migration`
 - Blocked by: `obs-d-12-sanity`
-- Requirements: LAY-001, LAY-002, LAY-003, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-007, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-047, LOG-048, NFR-001, NFR-002, NFR-005, NFR-006, NFR-007, NFR-009, NFR-012, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, PHB-012, PHB-013, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
-- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-014, ADR-015, ADR-017
-- Owned paths (metadata projection):
+- Owned paths:
   - `crates/sc-observability-binding-runtime/src/**`
   - `docs/plans/phase-d/sprint-d-15-binding-runtime-error-migration.md`
 
@@ -31,6 +21,7 @@ Generated projection of `obs-d-15`; the bead is authoritative.
 
 Workspace-wide wrapper removal, public re-exports, and release/API approval are closed by D.18.
 Update the sprint doc as explanatory evidence alongside code; documentation is not a separate closure gate.
+
 
 ## Design
 
@@ -64,6 +55,7 @@ Created/staged by obs-d-15, owned by obs-d-18 from wave 3; after this bead close
 - `crates/sc-observability-binding-runtime/src/lib.rs`
 - `crates/sc-observability-binding-runtime/src/tests.rs`
 
+
 ## Acceptance criteria
 
 - [ ] `cargo test -p sc-observability-binding-runtime --locked` executes all seven family fixtures named in the recipe and checks code, remediation, typed source and tagged DTO outcome (D1/D3).
@@ -71,3 +63,4 @@ Created/staged by obs-d-15, owned by obs-d-18 from wave 3; after this bead close
 - [ ] This sprint does not close language wrapper/schema generation or release/API proof; D.18 does.
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
+

@@ -1,22 +1,12 @@
 # d-13: Logging contract
 
-Generated projection of `obs-d-13`; the bead is authoritative.
-
 ## Plan metadata
 
-- Wave: 1
-- Layer: 2
-- Assignee / model: cobs / terra
-- Relation: `root`
-- Closure: `contract`
-- Target boundary: logging contract
+- Wave: 2
 - Branch: `sprint/d-13-logging-contract`
-- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-13-logging-contract`
-- PR target (merge order only): `sprint/d-12-types-and-otlp-contract`
+- PR target: `sprint/d-12-types-and-otlp-contract`
 - Blocked by: `obs-phase-d-plan-qa`
-- Requirements: LAY-001, LAY-002, LAY-006, LAY-007, LOG-001, LOG-002, LOG-003, LOG-004, LOG-005, LOG-006, LOG-007, LOG-008, LOG-009, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-020, LOG-021, LOG-023, LOG-037, LOG-038, LOG-040, LOG-043, LOG-047, LOG-048, NFR-001, NFR-002, NFR-005, NFR-006, NFR-007, NFR-009, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-025, TYP-026, TYP-027, TYP-030, TYP-031, TYP-039
-- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-017
-- Owned paths (metadata projection):
+- Owned paths:
   - `crates/sc-observability-log/src/bridge.rs`
   - `crates/sc-observability-log/src/lib.rs`
   - `crates/sc-observability-log/tests/attachment_contracts.rs`
@@ -45,6 +35,7 @@ Freeze the logging contracts against ADR-017 and PHB-002 without waiting for D.1
 ## This Sprint Does Not Close
 
 D.1 resolves settings in the runtime, D.2 implements the process-global attachment, and D.3 implements builder registration. End-to-end logging and major-release approvals close in D.18.
+
 
 ## Design
 
@@ -291,6 +282,7 @@ Created/staged by obs-d-13, owned by obs-d-1 from wave 2; after this bead closes
 
 - `crates/sc-observability/src/runtime.rs`
 
+
 ## Acceptance criteria
 
 - [ ] `cargo test -p sc-observability --test log_contracts --locked` runs nonzero settings_serde_defaults, log_root_validation, canonical_sink_object_safety and registration_error_codes contract cases (D1/D3).
@@ -299,3 +291,4 @@ Created/staged by obs-d-13, owned by obs-d-1 from wave 2; after this bead closes
 - [ ] Contract checks use only owned test targets, without wildcard cargo test names or D.1/D.2/D.3 implementation fixtures. PHB-003/005 historical 1.x rules are not asserted as the new 2.0 compatibility gate.
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
+

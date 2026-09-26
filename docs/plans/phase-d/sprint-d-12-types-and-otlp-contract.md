@@ -1,22 +1,12 @@
 # d-12: Types and OTLP contract
 
-Generated projection of `obs-d-12`; the bead is authoritative.
-
 ## Plan metadata
 
 - Wave: 1
-- Layer: 1
-- Assignee / model: lobs / luna
-- Relation: `root`
-- Closure: `contract`
-- Target boundary: sc-observability-types and OTLP contract
 - Branch: `sprint/d-12-types-and-otlp-contract`
-- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-12-types-and-otlp-contract`
-- PR target (merge order only): `integrate/phase-d`
+- PR target: `integrate/phase-d`
 - Blocked by: `obs-phase-d-plan-qa`
-- Requirements: LAY-001, LAY-002, LAY-004, LAY-005, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-007, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-047, LOG-048, NFR-001, NFR-002, NFR-004, NFR-005, NFR-006, NFR-007, NFR-008, NFR-009, NFR-010, NFR-011, NFR-012, OTLP-001, OTLP-002, OTLP-003, OTLP-004, OTLP-005, OTLP-006, OTLP-007, OTLP-008, OTLP-009, OTLP-010, OTLP-011, OTLP-012, OTLP-013, OTLP-014, OTLP-015, OTLP-016, OTLP-017, OTLP-018, OTLP-019, OTLP-020, OTLP-021, OTLP-022, OTLP-023, OTLP-024, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-020, TYP-021, TYP-022, TYP-023, TYP-024, TYP-025, TYP-026, TYP-027, TYP-028, TYP-029, TYP-030, TYP-031, TYP-032, TYP-033, TYP-034, TYP-035, TYP-036, TYP-037, TYP-038, TYP-039, TYP-040
-- ADRs: ADR-001, ADR-002, ADR-003, ADR-004, ADR-005, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-014, ADR-015, ADR-017, ADR-018
-- Owned paths (metadata projection):
+- Owned paths:
   - `Cargo.lock`
   - `Cargo.toml`
   - `bindings/python/sc-observability-py/Cargo.toml`
@@ -109,6 +99,7 @@ Close the types/OTLP contract boundary before independent implementations. ADR a
 ## This Sprint Does Not Close
 
 Production adapters, lifecycle implementation, local duplicate-removal migrations and final release/public API composition close in D.1–D.8/D.14–D.18; no collector or publication claim is made here.
+
 
 ## Design
 
@@ -636,6 +627,7 @@ Created/staged by obs-d-12, owned by obs-d-7 from wave 2; after this bead closes
 - `crates/sc-observability-otlp/src/sdk/mod.rs`
 - `crates/sc-observability-otlp/src/sdk/tests.rs`
 
+
 ## Acceptance criteria
 
 - [ ] Acceptance record cites merged PR #225 dated 2026-09-26; ADR-017/018, partial ADR-012 supersession, status header and boundary records agree (D1).
@@ -645,3 +637,4 @@ Created/staged by obs-d-12, owned by obs-d-7 from wave 2; after this bead closes
 - [ ] Cargo metadata reports the 2.0 package/dependency version everywhere; Cargo.lock resolves that graph. Normative doc review confirms OTLP-005 conversion, OTLP-020/021 ownership, ADR status and the exact same contract; release documents are deliberately D.18 closure (D6).
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
+
