@@ -124,7 +124,18 @@ required_otlp = {
     "thiserror",
     "sc-observability-types",
 }
-allowed_otlp = required_otlp | {"sc-observability"}
+# ADR-019's single Phase-D transport allowlist. The OTLP manifest keeps every
+# transport entry optional and binds it to one of its two backend features.
+allowed_otlp = required_otlp | {
+    "sc-observability",
+    "opentelemetry",
+    "opentelemetry_sdk",
+    "opentelemetry-otlp",
+    "reqwest",
+    "httpdate",
+    "getrandom",
+    "tokio",
+}
 if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
     raise SystemExit(
         "sc-observability-otlp runtime dependency set drifted from allowed baseline: "

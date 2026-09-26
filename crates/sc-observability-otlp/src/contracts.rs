@@ -1,9 +1,15 @@
 //! Crate-private OTLP exporter contracts.
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::{CompleteSpan, LogEvent, MetricRecord};
 use sc_observability_types::typed::ExportFailure;
+use sc_observability_types::v2::ExportError;
+
+/// Object-safe asynchronous lifecycle result used by both backend adapters.
+pub(crate) type LifecycleFuture = Pin<Box<dyn Future<Output = Result<(), ExportError>> + Send>>;
 
 /// Object-safe lifecycle operations shared by exporter backends.
 #[allow(
@@ -11,11 +17,20 @@ use sc_observability_types::typed::ExportFailure;
     reason = "D.21 stages this private contract before D.6 supplies its lifecycle implementation"
 )]
 pub(crate) trait ExporterLifecycle: Send + Sync {
+    /// Performs backend checks that are safe only outside an async lifecycle.
+    fn blocking_preflight(&self) -> Result<(), ExportError>;
+
     /// Flushes all work admitted before the backend's barrier.
-    fn flush_blocking(&self) -> Result<(), ExportFailure>;
+    fn flush_async(&self) -> LifecycleFuture;
 
     /// Shuts the backend down after its ordered barrier.
-    fn shutdown_blocking(&self) -> Result<(), ExportFailure>;
+    fn shutdown_async(&self) -> LifecycleFuture;
+
+    /// Flushes all work admitted before the backend's barrier.
+    fn flush_blocking(&self) -> Result<(), ExportError>;
+
+    /// Shuts the backend down after its ordered barrier.
+    fn shutdown_blocking(&self) -> Result<(), ExportError>;
 }
 
 /// Object-safe exporter for projected log records.

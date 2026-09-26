@@ -57,7 +57,19 @@ if "sc-observability-otlp" in obs_deps or "sc-observe" in obs_deps:
 if "sc-observability-otlp" in observe_runtime_deps:
     raise SystemExit("sc-observe must not depend on sc-observability-otlp")
 required_otlp = {"serde_json", "thiserror", "sc-observability-types"}
-allowed_otlp = required_otlp | {"sc-observability"}
+# ADR-019's single Phase-D allowlist: all transport dependencies remain
+# optional and feature-gated in the OTLP crate. No other workspace crate may
+# acquire this surface (the layer check below remains authoritative).
+allowed_otlp = required_otlp | {
+    "sc-observability",
+    "opentelemetry",
+    "opentelemetry_sdk",
+    "opentelemetry-otlp",
+    "reqwest",
+    "httpdate",
+    "getrandom",
+    "tokio",
+}
 if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
     raise SystemExit(
         "sc-observability-otlp runtime dependencies drifted from allowed baseline"

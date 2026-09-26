@@ -11,14 +11,21 @@ description = "Standalone OTLP export adapter for sc-observability."
 
 [features]
 default = []
-otlp-sdk = []
-legacy-http-json = []
+otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp"]
+legacy-http-json = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:tokio"]
 
 [dependencies]
 serde_json.workspace = true
 thiserror.workspace = true
 sc-observability.workspace = true
 sc-observability-types.workspace = true
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+httpdate = { workspace = true, optional = true }
+getrandom = { workspace = true, optional = true }
+tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 
 [dev-dependencies]
 sc-observe.workspace = true
