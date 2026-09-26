@@ -148,10 +148,10 @@ fn log_sink_failure_matches_owning_registry() {
 }
 
 fn assert_metric_model_failure(
-    error: MetricModelError,
-    expected: sc_observability_types::ErrorCode,
+    error: &MetricModelError,
+    expected: &sc_observability_types::ErrorCode,
 ) {
-    assert_eq!(error.diagnostic().code, expected);
+    assert_eq!(&error.diagnostic().code, expected);
     let context = std::error::Error::source(&error).expect("preserved error context source");
     assert!(
         std::error::Error::source(context).is_none(),
@@ -182,8 +182,8 @@ fn metric_model_failures_match_types_owned_registry_and_preserve_source() {
     )
     .expect_err("one bound requires two buckets");
     assert_metric_model_failure(
-        invalid_histogram,
-        sc_observability_types::error_codes::SC_METRIC_INVALID_HISTOGRAM,
+        &invalid_histogram,
+        &sc_observability_types::error_codes::SC_METRIC_INVALID_HISTOGRAM,
     );
 
     let invalid_temporality = metric(
@@ -197,8 +197,8 @@ fn metric_model_failures_match_types_owned_registry_and_preserve_source() {
     )
     .expect_err("delta requires a nonempty interval");
     assert_metric_model_failure(
-        invalid_temporality,
-        sc_observability_types::error_codes::SC_METRIC_INVALID_TEMPORALITY,
+        &invalid_temporality,
+        &sc_observability_types::error_codes::SC_METRIC_INVALID_TEMPORALITY,
     );
 
     let invalid_interval = metric(
@@ -212,7 +212,7 @@ fn metric_model_failures_match_types_owned_registry_and_preserve_source() {
     )
     .expect_err("start cannot follow the point timestamp");
     assert_metric_model_failure(
-        invalid_interval,
-        sc_observability_types::error_codes::SC_METRIC_INVALID_INTERVAL,
+        &invalid_interval,
+        &sc_observability_types::error_codes::SC_METRIC_INVALID_INTERVAL,
     );
 }

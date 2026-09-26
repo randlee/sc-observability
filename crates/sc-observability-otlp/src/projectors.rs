@@ -351,7 +351,7 @@ mod tests {
         assert_eq!(projected_point.explicit_bounds(), &[1.0, 10.0]);
         assert_eq!(projected_point.bucket_counts(), &[2, 3, 5]);
         assert_eq!(projected_point.count(), 10);
-        assert_eq!(projected_point.sum().get(), 37.5);
+        assert!((projected_point.sum().get() - 37.5).abs() < f64::EPSILON);
         assert_eq!(*temporality, AggregationTemporality::Delta);
         assert_eq!(*start_time, start);
     }
