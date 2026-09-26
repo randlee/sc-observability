@@ -24,11 +24,26 @@ use sc_observability_types::typed::{
     ProjectionFailure, TypedLogProjector, TypedMetricProjector, TypedSpanProjector,
     typed_log_projector, typed_metric_projector, typed_span_projector,
 };
+use sc_observability_types::v2::MetricRecord as V2MetricRecord;
 use sc_observability_types::{
     ErrorContext, LogEvent, LogProjector, MetricProjector, MetricRecord, Observable, Observation,
     ObservationFilter, ProjectionError, ProjectionRegistration, Remediation, SpanProjector,
     SpanSignal,
 };
+
+/// Carries one validated 2.0 metric into the OTLP implementation layer.
+///
+/// Histogram structure and interval semantics are type-owned. Projection is
+/// intentionally an identity transfer: rebuilding a scalar metric here would
+/// lose histogram buckets or duplicate `MetricModelError` validation already
+/// performed by `MetricRecord::try_new` and deserialization.
+#[allow(
+    dead_code,
+    reason = "D.18 activates this staged 2.0 projector after the canonical re-export switch"
+)]
+pub(crate) fn project_v2_metric(metric: V2MetricRecord) -> V2MetricRecord {
+    metric
+}
 
 /// Public helper for attaching telemetry export to ordinary observation projection registration.
 #[expect(
@@ -246,5 +261,98 @@ fn telemetry_to_projection_failure(
         sc_observability_types::TelemetryError::ExportFailure(context) => {
             ProjectionFailure::from_context(context)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::project_v2_metric;
+    use sc_observability_types::v2::{
+        AggregationTemporality, FiniteF64, HistogramPoint, MetricRecord, MetricValue,
+    };
+    use sc_observability_types::{MetricName, ServiceName, Timestamp};
+
+    fn metric(value: MetricValue) -> MetricRecord {
+        MetricRecord::try_new(
+            Timestamp::UNIX_EPOCH,
+            ServiceName::new("test-service").expect("valid service"),
+            MetricName::new("test.measurement").expect("valid metric"),
+            value,
+        )
+        .expect("validated metric")
+    }
+
+    fn one_second_after_epoch() -> Timestamp {
+        serde_json::from_str("\"1970-01-01T00:00:01Z\"").expect("valid timestamp")
+    }
+
+    #[test]
+    fn v2_metric_projection_preserves_gauge_without_scalar_conversion() {
+        let metric = metric(MetricValue::Gauge(
+            FiniteF64::new(12.5).expect("finite gauge"),
+        ));
+
+        assert_eq!(project_v2_metric(metric.clone()), metric);
+    }
+
+    #[test]
+    fn v2_metric_projection_preserves_sum_temporality_and_start_time() {
+        let start = Timestamp::UNIX_EPOCH;
+        let end = one_second_after_epoch();
+        let metric = MetricRecord::try_new(
+            end,
+            ServiceName::new("test-service").expect("valid service"),
+            MetricName::new("test.sum").expect("valid metric"),
+            MetricValue::Sum {
+                value: FiniteF64::new(42.0).expect("finite sum"),
+                monotonic: true,
+                temporality: AggregationTemporality::Delta,
+                start_time: start,
+            },
+        )
+        .expect("validated sum");
+
+        assert_eq!(project_v2_metric(metric.clone()), metric);
+    }
+
+    #[test]
+    fn v2_metric_projection_preserves_every_histogram_bucket_and_interval() {
+        let start = Timestamp::UNIX_EPOCH;
+        let end = one_second_after_epoch();
+        let point = HistogramPoint::try_new(
+            vec![1.0, 10.0],
+            vec![2, 3, 5],
+            10,
+            FiniteF64::new(37.5).expect("finite histogram sum"),
+        )
+        .expect("validated histogram");
+        let metric = MetricRecord::try_new(
+            end,
+            ServiceName::new("test-service").expect("valid service"),
+            MetricName::new("test.histogram").expect("valid metric"),
+            MetricValue::Histogram {
+                point: point.clone(),
+                temporality: AggregationTemporality::Delta,
+                start_time: start,
+            },
+        )
+        .expect("validated histogram metric");
+
+        let projected = project_v2_metric(metric);
+        let MetricValue::Histogram {
+            point: projected_point,
+            temporality,
+            start_time,
+        } = projected.value()
+        else {
+            panic!("histogram must not be replaced with a scalar placeholder");
+        };
+        assert_eq!(projected_point, &point);
+        assert_eq!(projected_point.explicit_bounds(), &[1.0, 10.0]);
+        assert_eq!(projected_point.bucket_counts(), &[2, 3, 5]);
+        assert_eq!(projected_point.count(), 10);
+        assert_eq!(projected_point.sum().get(), 37.5);
+        assert_eq!(*temporality, AggregationTemporality::Delta);
+        assert_eq!(*start_time, start);
     }
 }
