@@ -25,7 +25,24 @@
     "bindings/schema/v1.json": "f294e210753c28a26220e1ac385cfdd6c23f0f00a817f86104dd4aa6d5639a1b",
     "bindings/typescript/src/generated/index.ts": "b85b0eee58e1192e955c4e40300318d35922189cfd3f5b53c449a4d6bd24688c"
   },
-  "source_revision": "9947cbdf9691fe39b715c5bd55fadd044b8c9ee1",
+  "source_blobs": {
+    "bindings/generation-toolchain.toml": "ac110f8781d41da9ea579bf6a0e9d7b6ef3ab1d7",
+    "bindings/schema-generator/Cargo.lock": "c7f0277b2714c75b4d5248bf0ae497ffb2bf1e78",
+    "bindings/schema-generator/Cargo.toml": "3f7913d708e16f955052469d57032b6fe992cd36",
+    "bindings/schema-generator/src/main.rs": "bb07f9bf511e13801416357e75cc742926bcc308",
+    "crates/sc-observability-dto/Cargo.toml": "24c25d7bfa4c2f5a859a7df8d033150d4bb2a6d4",
+    "crates/sc-observability-dto/src/conversion.rs": "8a2087167077425e5694bf166c464aac6f5e9e28",
+    "crates/sc-observability-dto/src/error_codes.rs": "752c4b032948bfeb2b01f5b353fa64ffe3004f99",
+    "crates/sc-observability-dto/src/wire.rs": "4b118035f4606367f77388678593b1eae1a6c0fa",
+    "crates/sc-observability-dto/src/wire/events.rs": "7bb2d41ba2bea3fb6563c4a1596416c50a6abaa0",
+    "crates/sc-observability-dto/src/wire/health.rs": "b3f791c4590718804a268005d0b99be0f891afd5",
+    "crates/sc-observability-dto/src/wire/operations.rs": "4bb94bf71ba9237c7c293100457d85ff1e6dda17",
+    "crates/sc-observability-dto/src/wire/primitives.rs": "488207a0c41fe271ce8d7c309ed44095bf5e8a9f",
+    "rust-toolchain.toml": "b1dd491cdce6f8b98cfe02f6807980c0dfe48784",
+    "scripts/_binding_schema.py": "2147c85421a0f546b40bc0d33f2d481a55637df6",
+    "scripts/generate_python_bindings.py": "d9fd09c08aa10c6f50959bb09c12025d76d75e29",
+    "scripts/generate_typescript_bindings.py": "d3695e6de459ed8642f90b9ca5df1c3cf714e656"
+  },
   "toolchain": {
     "python": "3.12.10",
     "rust": "1.94.1",
