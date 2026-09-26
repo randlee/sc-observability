@@ -10,9 +10,12 @@ use std::sync::Arc;
 
 use sc_observability::{RetainedLogPolicy, SinkHealth};
 use sc_observability_types::{
-    ErrorCode, ErrorContext, LevelFilter, Remediation, SinkHealthState, SinkName,
+    ActionName, ErrorCode, ErrorContext, Level, LevelFilter, LogEvent,
+    OBSERVATION_ENVELOPE_VERSION, ProcessIdentity, Remediation, SchemaVersion, ServiceName,
+    SinkHealthState, SinkName, TargetCategory, Timestamp,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Map;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
@@ -91,6 +94,17 @@ impl LogSettings {
         } = inputs;
         let application_env = application_env.unwrap_or_default();
         let file = file.unwrap_or_default();
+        // A root's presence is significant even when it is empty.  Validate
+        // every supplied source before precedence can choose another value.
+        for root in [
+            file.log_root.as_ref(),
+            shared_env.log_root.as_ref(),
+            application_env.log_root.as_ref(),
+        ] {
+            if root.is_some_and(|root| root.as_os_str().is_empty()) {
+                return Err(LogSettingsError::InvalidValue);
+            }
+        }
         let level = application_env
             .level
             .or(shared_env.level)
@@ -100,7 +114,6 @@ impl LogSettings {
         // the normal field precedence: a non-empty file root wins outright.
         let root = file
             .log_root
-            .filter(|root| !root.as_os_str().is_empty())
             .or(application_env.log_root)
             .or(shared_env.log_root)
             .unwrap_or(default_root);
@@ -133,7 +146,7 @@ impl LogSettings {
 /// Private only: wave one checks object safety without defining a new public
 /// typed-sink error or a duplicate classification surface.
 trait PrivateSinkContract<E>: Send + Sync {
-    fn write(&self) -> Result<(), E>;
+    fn write(&self, event: &LogEvent) -> Result<(), E>;
     fn flush(&self) -> Result<(), E>;
     fn health(&self) -> SinkHealth;
 }
@@ -205,6 +218,44 @@ fn log_root_validation() {
     let error = LogRoot::new(PathBuf::new()).expect_err("empty root is rejected");
     assert_eq!(error, LogSettingsError::InvalidValue);
     assert_eq!(error.code(), "LOG-004");
+
+    let error = LogSettings::resolve(LogSettingsInputs {
+        file: Some(LogSettings {
+            log_root: Some(PathBuf::new()),
+            ..LogSettings::default()
+        }),
+        shared_env: LogSettings {
+            log_root: Some(PathBuf::from("shared")),
+            ..LogSettings::default()
+        },
+        application_env: Some(LogSettings {
+            log_root: Some(PathBuf::from("application")),
+            ..LogSettings::default()
+        }),
+        default_root: PathBuf::from("default"),
+    })
+    .expect_err("an explicitly empty JSON root is invalid, never overridden");
+    assert_eq!(error, LogSettingsError::InvalidValue);
+}
+
+fn contract_event() -> LogEvent {
+    LogEvent {
+        version: SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("static schema version"),
+        timestamp: Timestamp::UNIX_EPOCH,
+        level: Level::Info,
+        service: ServiceName::new("contract").expect("static service name"),
+        target: TargetCategory::new("contract").expect("static target category"),
+        action: ActionName::new("write").expect("static action name"),
+        message: None,
+        identity: ProcessIdentity::default(),
+        trace: None,
+        request_id: None,
+        correlation_id: None,
+        outcome: None,
+        diagnostic: None,
+        state_transition: None,
+        fields: Map::default(),
+    }
 }
 
 #[test]
@@ -212,7 +263,7 @@ fn private_sink_contract_object_safety() {
     struct ContractSink;
 
     impl PrivateSinkContract<HarnessError> for ContractSink {
-        fn write(&self) -> Result<(), HarnessError> {
+        fn write(&self, _: &LogEvent) -> Result<(), HarnessError> {
             Ok(())
         }
 
@@ -231,7 +282,7 @@ fn private_sink_contract_object_safety() {
 
     let sink: Arc<dyn PrivateSinkContract<HarnessError>> = Arc::new(ContractSink);
     assert_private_sink_object_safe(Arc::clone(&sink));
-    sink.write().expect("write contract");
+    sink.write(&contract_event()).expect("write contract");
     sink.flush().expect("flush contract");
     assert_eq!(sink.health().state, SinkHealthState::Healthy);
 }
@@ -296,4 +347,23 @@ fn contract_harness_preserves_context() {
     ] {
         assert!(error.code().starts_with("LOG-"));
     }
+
+    let payload = HarnessError(Box::new(
+        ErrorContext::new(
+            ErrorCode::new_static("SC_LOG_SINK_CONTRACT"),
+            "contract sink rejected the event",
+            Remediation::recoverable("repair the sink", ["retry registration"]),
+        )
+        .source(Box::new(std::io::Error::other("fixture source"))),
+    ));
+    assert_eq!(
+        payload.context().diagnostic().remediation,
+        Remediation::recoverable("repair the sink", ["retry registration"])
+    );
+    assert_eq!(
+        std::error::Error::source(payload.context())
+            .map(ToString::to_string)
+            .as_deref(),
+        Some("fixture source")
+    );
 }
