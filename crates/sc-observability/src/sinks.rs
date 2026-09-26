@@ -677,6 +677,7 @@ fn rotated_index_for_path(active_path: &Path, candidate: &Path) -> Option<usize>
 mod tests {
     use super::*;
     use crate::{FileCount, RetentionMaxAge};
+    use sc_observability_types::DiagnosticInfo;
     use sc_observability_types::typed::LogSinkFailure;
     use sc_observability_types::{
         ActionName, Level, OutcomeLabel, ProcessIdentity, SchemaVersion, ServiceName,
