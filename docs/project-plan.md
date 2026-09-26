@@ -503,8 +503,9 @@ The detailed sprint-by-sprint execution record remains in
 The authoritative execution plan is the obs-phase-d bead, projected in
 [the Phase D plan](plans/phase-d/plan-phase-d.md). Its corrected boundaries are:
 
-1. obs-d-12 owns the canonical error/signal and OTLP config/default/validation
-   contracts, Cargo 2.0 version bump, module registration and normative docs.
+1. obs-d-12 owns the canonical error/signal contracts and normative docs.
+   obs-d-21 owns the OTLP config/default/validation contracts, atomic Cargo
+   2.0 version bump and module registration.
    obs-d-13 owns the independent logging-contract specification.
 2. obs-d-1–8 and obs-d-14–17 implement their own logging/observation/transport
    boundaries after the relevant contract sanity gates. obs-d-19 owns DTO/schema

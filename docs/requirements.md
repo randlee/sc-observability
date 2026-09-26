@@ -341,9 +341,9 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
   - `initial_backoff_ms = 250`
   - `max_backoff_ms = 5000`
   - logs, traces, and metrics disabled unless explicitly configured
-  This list is the frozen 1.x baseline only. obs-d-12 exclusively owns the Phase
+  This list is the frozen 1.x baseline only. obs-d-21 exclusively owns the Phase
   D 2.0 candidate config/default/validation contract and its documentation;
-  under accepted ADR-018, obs-d-12 updates this requirement rather than allowing
+  under accepted ADR-018, obs-d-21 updates this requirement rather than allowing
   any later sprint to redefine that contract.
 - OTLP-021 Upon technical-lead acceptance of ADR-018, `Telemetry` lifecycle
   behavior shall be explicit as follows; until that acceptance these bullets
@@ -615,7 +615,7 @@ govern the reviewed Phase D major release and supersede only conflicting
   combinations shall be validated at construction, and enabled transports
   shall never silently fall back to no-op.
 - PHD-004 The Phase D 2.0 OTLP config, defaults and validation contract shall
-  be owned by obs-d-12 and consumed unchanged by backend implementations.
+  be owned by obs-d-21 and consumed unchanged by backend implementations.
   Queue bounds shall limit both record count and aggregate bytes; validated
   explicit config shall not be overridden by ambient OTEL_* environment values.
   Lifecycle implementations shall satisfy OTLP-021 for both backends.
