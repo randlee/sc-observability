@@ -1,51 +1,120 @@
 # d-12: Types and OTLP contract
 
+Generated projection of `obs-d-12`; the bead is authoritative.
+
 ## Plan metadata
 
 - Wave: 1
-- Branch: `sprint/d-12-c-types`
-- PR target: `integrate/phase-d`
+- Layer: 1
+- Assignee / model: lobs / luna
+- Relation: `root`
+- Closure: `contract`
+- Target boundary: sc-observability-types and OTLP contract
+- Branch: `sprint/d-12-types-and-otlp-contract`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-12-types-and-otlp-contract`
+- PR target (merge order only): `integrate/phase-d`
 - Blocked by: `obs-phase-d-plan-qa`
-- Owned paths:
-  - `crates/sc-observability-types/src/errors.rs`
-  - `crates/sc-observability-types/src/events.rs`
-  - `crates/sc-observability-types/src/metric.rs`
-  - `crates/sc-observability-types/src/span.rs`
-  - `crates/sc-observability-types/src/validation.rs`
-  - `crates/sc-observability-types/tests/neutral_contracts.rs`
-  - `crates/sc-observability-otlp/src/lib.rs`
+- Requirements: LAY-001, LAY-002, LAY-004, LAY-005, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-007, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-047, LOG-048, NFR-001, NFR-002, NFR-004, NFR-005, NFR-006, NFR-007, NFR-008, NFR-009, NFR-010, NFR-011, NFR-012, OTLP-001, OTLP-002, OTLP-003, OTLP-004, OTLP-005, OTLP-006, OTLP-007, OTLP-008, OTLP-009, OTLP-010, OTLP-011, OTLP-012, OTLP-013, OTLP-014, OTLP-015, OTLP-016, OTLP-017, OTLP-018, OTLP-019, OTLP-020, OTLP-021, OTLP-022, OTLP-023, OTLP-024, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-020, TYP-021, TYP-022, TYP-023, TYP-024, TYP-025, TYP-026, TYP-027, TYP-028, TYP-029, TYP-030, TYP-031, TYP-032, TYP-033, TYP-034, TYP-035, TYP-036, TYP-037, TYP-038, TYP-039, TYP-040
+- ADRs: ADR-001, ADR-002, ADR-003, ADR-004, ADR-005, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-014, ADR-015, ADR-017, ADR-018
+- Owned paths (metadata projection):
+  - `Cargo.lock`
+  - `Cargo.toml`
+  - `bindings/python/sc-observability-py/Cargo.toml`
+  - `bindings/schema-generator/Cargo.toml`
+  - `bindings/tauri/Cargo.toml`
+  - `boundaries/**`
+  - `crates/sc-observability-binding-runtime/Cargo.toml`
+  - `crates/sc-observability-dto/Cargo.toml`
+  - `crates/sc-observability-dto/src/error_codes.rs`
+  - `crates/sc-observability-log-consumer-check/Cargo.toml`
+  - `crates/sc-observability-log-macros/Cargo.toml`
+  - `crates/sc-observability-log/Cargo.toml`
+  - `crates/sc-observability-log/src/error_codes.rs`
   - `crates/sc-observability-otlp/Cargo.toml`
+  - `crates/sc-observability-otlp/src/config.rs`
+  - `crates/sc-observability-otlp/src/constants.rs`
+  - `crates/sc-observability-otlp/src/contract_tests.rs`
+  - `crates/sc-observability-otlp/src/contracts.rs`
+  - `crates/sc-observability-otlp/src/error_codes.rs`
+  - `crates/sc-observability-otlp/src/legacy_http_json/implementation.rs`
+  - `crates/sc-observability-otlp/src/legacy_http_json/mod.rs`
+  - `crates/sc-observability-otlp/src/legacy_http_json/tests.rs`
+  - `crates/sc-observability-otlp/src/lib.rs`
+  - `crates/sc-observability-otlp/src/lifecycle.rs`
+  - `crates/sc-observability-otlp/src/lifecycle_tests.rs`
+  - `crates/sc-observability-otlp/src/sdk/implementation.rs`
+  - `crates/sc-observability-otlp/src/sdk/mod.rs`
+  - `crates/sc-observability-otlp/src/sdk/tests.rs`
+  - `crates/sc-observability-otlp/src/testing.rs`
+  - `crates/sc-observability-types/Cargo.toml`
+  - `crates/sc-observability-types/src/constants.rs`
   - `crates/sc-observability-types/src/diagnostic.rs`
+  - `crates/sc-observability-types/src/error_codes.rs`
+  - `crates/sc-observability-types/src/errors.rs`
+  - `crates/sc-observability-types/src/errors_v2.rs`
+  - `crates/sc-observability-types/src/events.rs`
   - `crates/sc-observability-types/src/lib.rs`
+  - `crates/sc-observability-types/src/metric.rs`
   - `crates/sc-observability-types/src/process.rs`
   - `crates/sc-observability-types/src/projection.rs`
-  - `docs/architecture.md`
-  - `docs/requirements.md`
+  - `crates/sc-observability-types/src/signals_v2.rs`
+  - `crates/sc-observability-types/src/span.rs`
+  - `crates/sc-observability-types/src/tracing.rs`
+  - `crates/sc-observability-types/src/validation.rs`
+  - `crates/sc-observability-types/tests/neutral_contracts.rs`
+  - `crates/sc-observability/Cargo.toml`
+  - `crates/sc-observability/src/constants.rs`
+  - `crates/sc-observability/src/error_codes.rs`
+  - `crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-baseline/Cargo.toml`
+  - `crates/sc-observability/tests/fixtures/bp1-published-v1.2.0-consumer/Cargo.toml`
+  - `crates/sc-observe/Cargo.toml`
+  - `crates/sc-observe/src/constants.rs`
+  - `crates/sc-observe/src/error_codes.rs`
   - `docs/api-design.md`
+  - `docs/architecture.md`
+  - `docs/plans/phase-b/evidence/b3-final/Cargo.toml`
+  - `docs/plans/phase-d/sprint-d-12-types-and-otlp-contract.md`
+  - `docs/requirements.md`
+  - `examples/atm-adapter-example/Cargo.toml`
+  - `examples/custom-sink-example/Cargo.toml`
+  - `examples/log-settings/Cargo.toml`
+  - `examples/otlp-legacy/Cargo.toml`
+  - `examples/otlp-sdk/Cargo.toml`
+  - `examples/rust-python-logging/Cargo.toml`
+  - `examples/tauri-logging/src-tauri/Cargo.toml`
+  - `scripts/ci/fixtures/error-migration/legacy/Cargo.toml`
+  - `scripts/ci/fixtures/error-migration/migrated/Cargo.toml`
+  - `scripts/ci/fixtures/error-migration/partial/Cargo.toml`
+  - `scripts/ci/validate_dependency_bans.sh`
+  - `scripts/ci/validate_repo_boundaries.sh`
+
+## Goal
+
+Close the types/OTLP contract boundary before independent implementations. ADR acceptance is recorded by merged PR #225 (2026-09-26); verify its accepted contract when implementing.
 
 ## Deliverables
 
-1. Add the nine `#[non_exhaustive]` typed error enums carrying `Box<ErrorContext>` from D.4, with the public 2.0 error contract.
-2. Add neutral signal model types, serde contracts, and validation errors from D.5.
-3. Add `PositiveDuration`, `LifecycleBounds`, `RetryPolicy`, `BoundedPercent`, transport bounds, lifecycle config fields, the exporter trait, `ExporterSet`, factory, and fake exporter fixture from D.6.
-4. Record ADR-017, supersede only the conflicting ADR-012 portion, and align requirements/architecture/API design.
-5. Hoist OTLP `lib.rs` module declarations and Cargo feature declarations required by all implementation modules.
+1. Record the user's acceptance of ADR-017 and ADR-018 dated 2026-09-26 via merged PR #225; update both ADR status lines, architecture status header/navigation, section 6 and boundary records before production changes. The user ruling is recorded; verify the accepted status from PR #225. Supersede ADR-012/PHB-003/005 only for the enumerated 2.0 breaks; preserve their historical 1.x scope.
 
-```rust
-pub trait Exporter: Send + Sync { fn export(&self, batch: &[Signal]) -> Result<(), ExportError>; }
-pub struct ExporterSet { /* configured exporters */ }
-```
+2. Add the nine canonical non-exhaustive error enums under the temporary v2 module path while retaining functioning 1.x exports, ErrorContext semantics and the single cause-to-variant mapping below. Define MetricModelError and all OTLP ConfigFailure/runtime variants before implementation beads consume them; keep each crate's codes and constants in its one registry/module.
+
+3. Define the neutral span/metric contracts, validated HistogramPoint serde and temporal validation, and matching DTO conversion specifications. Keep transport dependencies out of neutral types.
+
+4. Define crate-private exporter/lifecycle traits, ExporterSet, factory/test-double contract, positive durations, dual record/byte admission bounds, defaults, validation order and stable failure mappings. Add named contract tests in contract_tests.rs and neutral_contracts.rs.
+
+5. Own all Cargo manifests, Cargo.lock, workspace member/feature declarations, OTLP module registration stubs, and dependency/boundary allowlists. Declare sdk/mod.rs and legacy_http_json/mod.rs once, with separate implementation.rs and tests.rs owned by D.7/D.8. Hoist the shared lifecycle interface into contracts.rs; declare D.6 lifecycle.rs and D.18 facade composition using the contract fixture until those owners supply production behavior.
+
+6. Apply the 2.0 workspace/package/dependency version bump and resolve Cargo.lock; update docs/requirements.md (including OTLP-005/020/021), docs/architecture.md and docs/api-design.md to this single contract. D.18 owns release notes, approvals and inventory alignment; no implementation bead edits manifests or normative docs.
 
 ## This Sprint Does Not Close
 
-No production exporter adapter, signal projection, wrapper migration, or public API composition is implemented here.
-
+Production adapters, lifecycle implementation, local duplicate-removal migrations and final release/public API composition close in D.1–D.8/D.14–D.18; no collector or publication claim is made here.
 
 ## Design
 
 ## D.4 canonical error-enum inventory
 
-D12 owns the nine public, `#[non_exhaustive]` error enums. Each named variant carries `Box<ErrorContext>`; callers preserve the diagnostic source rather than constructing a tuple wrapper. These are the only migration targets used by D14–D17.
+obs-d-12 (ADR-017/018) owns the nine public, `#[non_exhaustive]` error enums. Each named variant carries `Box<ErrorContext>`; callers preserve the diagnostic source rather than constructing a tuple wrapper. These are the only migration targets used by D14–D17.
 
 ```rust
 #[non_exhaustive] pub enum IdentityError { Process { context: Box<ErrorContext> } }
@@ -56,10 +125,23 @@ D12 owns the nine public, `#[non_exhaustive]` error enums. Each named variant ca
 #[non_exhaustive] pub enum ProjectionError { Projection { context: Box<ErrorContext> } }
 #[non_exhaustive] pub enum SubscriberError { Subscriber { context: Box<ErrorContext> } }
 #[non_exhaustive] pub enum LogSinkError { Write { context: Box<ErrorContext> }, Flush { context: Box<ErrorContext> } }
-#[non_exhaustive] pub enum ExportError { Transport { context: Box<ErrorContext> }, Lifecycle { context: Box<ErrorContext> } }
+#[non_exhaustive] pub enum ExportError {
+    Transport { context: Box<ErrorContext> },
+    BlockingBackendInAsyncContext { context: Box<ErrorContext> },
+    AsyncLifecycleRequired { context: Box<ErrorContext> },
+    RuntimeTerminated { context: Box<ErrorContext> },
+    LifecycleTimeout { context: Box<ErrorContext> },
+    QueueFull { context: Box<ErrorContext> },
+    WorkerTerminated { context: Box<ErrorContext> },
+    ShutdownCancelledRetry { context: Box<ErrorContext> },
+    RetryDeadlineExhausted { context: Box<ErrorContext> },
+    NonRetryableHttpStatus { context: Box<ErrorContext> },
+    RetryAttemptsExhausted { context: Box<ErrorContext> },
+    TerminalExportFailure { context: Box<ErrorContext> },
+}
 ```
 
-`sc-observability-types/src/diagnostic.rs`, `lib.rs`, `process.rs`, and `projection.rs` expose the supporting context, re-exports, process, and projection signatures. `typed.rs` is the D13 logging-contract owner because it defines `LogFailure` and `TryLogFailure`.
+`sc-observability-types/src/diagnostic.rs`, `lib.rs`, `process.rs`, and `projection.rs` expose the supporting context, re-exports, process, and projection signatures. `typed.rs` is the obs-d-13 logging-contract owner because it defines `LogFailure` and `TryLogFailure`.
 
 ## Public contract
 
@@ -213,9 +295,9 @@ values are validated before provider/worker construction; malformed endpoints,
 invalid header syntax, and forbidden credential placement return named
 construction failures without retaining secret values.
 
-### D.6-owned validated transport contract
+### Validated transport contract
 
-D.6 is the sole owner of every transport-bound field, default, validation,
+D.12 is the sole contract owner of every transport-bound field, default, validation,
 and configuration error. The 2.0 wire surface uses direct shared transport
 fields plus a grouped `legacy_retry` object:
 
@@ -232,8 +314,7 @@ fields plus a grouped `legacy_retry` object:
 | `legacy_retry.retry_after_cap_ms` | legacy only, optional on wire | `5_000` |
 | `legacy_retry.retry_jitter_percent` | legacy only, optional on wire | `20` |
 
-`queue_capacity` is validated as `1..=65_536`; records are split before
-admission at `512` records or `1 MiB`. A 413 is terminal for that split batch,
+`queue_capacity` counts admitted records, not batches, and is validated as `1..=65_536`. A separate checked `queue_byte_capacity` defaults to 16 MiB, has a hard 64 MiB maximum, and bounds the serialized payload bytes held by all queued/in-flight batches. Admission reserves both record and byte credits atomically; either exhausted budget returns QueueFull. Records larger than 1 MiB are rejected before enqueue; batches split at 512 records or 1 MiB. The queue cannot retain 65,536 one-MiB batches. A 413 is terminal for that split batch,
 which is counted once as failed/dropped rather than retried as a larger batch.
 `shutdown_async_typed` has one drain budget: it starts at shutdown entry and
 covers cancellation, the in-flight request, barrier, and worker join. On
@@ -272,6 +353,7 @@ pub enum OtlpConfigField {
     LifecycleFlushTimeout,
     LifecycleShutdownTimeout,
     QueueCapacity,
+    QueueByteCapacity,
     MaxRetries,
     InitialBackoff,
     MaxBackoff,
@@ -317,6 +399,8 @@ pub(crate) struct RetryPolicy {
 }
 
 pub(crate) struct ValidatedTransportBounds {
+    queue_capacity: QueueCapacity,
+    queue_byte_capacity: QueueByteCapacity,
     request_timeout: PositiveDuration,
     lifecycle: LifecycleBounds,
     backend: BackendTransportBounds,
@@ -397,20 +481,20 @@ InvalidHeader { field: OtlpConfigField }
 TransportConstructionFailed { backend: ExporterBackend, source: Diagnostic }
 ```
 
-### D.6 stable failure inventory
+### Stable failure inventory
 
-This is D.6's complete transport/lifecycle/configuration stable-error
-inventory. D.6 exclusively owns these variants, codes, owning types, mappings,
-and documentation; D.5 separately owns its `MetricModelError` rows, and later
+This is the complete transport/lifecycle/configuration stable-error
+inventory. D.12 exclusively owns these variants, codes, owning types, mappings,
+and documentation; D.12 also defines the `MetricModelError` rows, and later
 sprints consume both tables without adding or restating rows. Configuration
 rows are construction-only `ConfigFailure` variants. Every runtime/lifecycle
-variant except `Shutdown` is owned by D.4's canonical `ExportError`; `Shutdown`
+variant except `Shutdown` is owned by D.12 canonical `ExportError`; `Shutdown`
 is owned by `TelemetryError`. Construction never uses an additional wrapper variant: it
 returns the named `ConfigFailure` rows below. A legacy async-context failure
 during construction is the redacted `Diagnostic` source of
 `TransportConstructionFailed`; the same condition during synchronous lifecycle
 is `BlockingBackendInAsyncContext` directly. Emit/lifecycle façades convert
-runtime failures to `TelemetryError`, D.4's canonical `FlushError`, or D.4's
+runtime failures to `TelemetryError`, D.12 canonical `FlushError`, or D.4's
 canonical `ShutdownError` without changing their stable code or typed source.
 In particular, `QueueFull` is created as an
 `ExportError`; emit converts it through `From<ExportError> for
@@ -465,13 +549,99 @@ otlp-sdk = []
 legacy-http-json = []
 ```
 
-## Implementation targets
+## Ownership and one cause-to-variant mapping
 
-- `docs/architecture.md`, `docs/requirements.md`, and `docs/api-design.md`: record ADR-017, the scoped ADR-012 supersession, and the same accepted decision (deliverable 4).
+The shared nine definitions survive in sc-observability-types. D.16 removes same-name sc-observability-log copies (the PHB-002 exception remains only for companion-specific errors such as DetachError); D.4 removes core copies; D.14 removes sc-observe copies. D.1 migrates constructions in runtime.rs, D.3 in builder.rs, and D.13 in settings.rs/typed.rs. D.18 migrates the OTLP facade and binding/DTO composition. One file has one owner in a wave. Later owners may edit only recorded handoff paths; stable registry and normative-doc ownership stays D.12.
+
+| Cause | Canonical variant |
+| --- | --- |
+| process identity validation | IdentityError::Process |
+| invalid configuration before construction | InitError::Configuration |
+| thread/client/provider startup failure | InitError::Runtime |
+| invalid event payload | EventError::Validation |
+| event routing failure | EventError::Routing |
+| flush drain/export failure, including timeout at flush | FlushError::Drain |
+| shutdown deadline exceeded | ShutdownError::Timeout |
+| other shutdown drain/provider failure | ShutdownError::Drain |
+| projection/subscriber callback failure | ProjectionError::Projection / SubscriberError::Subscriber respectively |
+| sink write / flush failure | LogSinkError::Write / LogSinkError::Flush respectively |
+| OTLP runtime cause | the identically named ExportError variant in the stable failure inventory |
+
+Do not replace the existing ObservationError::{Shutdown,QueueFull,RoutingFailure} runtime guards with EventError; preserve them and migrate their nested shared sources. TelemetryError::Shutdown remains its existing runtime guard; export errors are wrapped preserving the precise ExportError variant and code. No generic ExportError::Lifecycle mapping is permitted.
+
+ErrorContext is the existing diagnostic context, not a new bag of public fields: retain Diagnostic's code/message/remediation/docs/details plus its typed source/backtrace. Construct through the remediation-required constructor; code and remediation are mandatory. Process, route, sink, projector, config_field, queue_depth and deadline_ms are redacted bounded Diagnostic.details keys, never invented ErrorContext struct fields. Preserve the original typed source identity. ConfigFailure is the detailed OTLP construction error; Telemetry::new returns InitError::Configuration with ConfigFailure as its typed source for invalid configuration, or InitError::Runtime for actual initialization failure, satisfying OTLP-005. No second competing construction return type.
+
+MetricModelError is defined in types as non-exhaustive InvalidHistogram, InvalidTemporality and InvalidInterval, each carrying boxed ErrorContext and a stable SC_METRIC_* registry code. A histogram validates finite ordered bounds, bucket length and sum/count before constructing; temporal validation retains the specified Delta/Cumulative start-time rules.
+
+ValidatedTransportBounds includes checked QueueCapacity and QueueByteCapacity. Byte arithmetic is checked; each admitted record/batch releases both credits exactly once on success/drop. Accessors provide Duration/usize/u8 values and AsRef where appropriate; no DerefMut or unchecked constructor bypasses validation. Record defaults and upper bounds only in constants.rs.
+
+## Dependency and module declaration contract
+
+D.12 records the optional otlp-sdk feature's reviewed opentelemetry family pins and the legacy-http-json feature's reqwest =0.12.28 (blocking/json/rustls-tls, default features off), httpdate =1.0.3, getrandom and tokio rt/sync allowlist once in ADR-018/architecture section 6. Legacy requires no caller runtime and no SDK/tonic dependency; reqwest's internal Tokio graph is explicit. Existing boundary validators and Cargo feature tests enforce this; no new parallel validator framework.
+
+The only exporter traits and ExporterSet are pub(crate), as OTLP-011 and ADR-018 require. No public Exporter, undefined Signal, public ExporterSet or facade re-export is added. D.12's factory contract and recording test doubles compile without real SDK/legacy implementations. Module declarations expose separate contract and implementation files so D.7 and D.8 are siblings. D.12 also registers the future log-settings/OTLP examples and their manifests; implementation beads edit their source only.
+
+Contract tests are self-contained and do not require completed production adapters. Any compatibility scaffolding needed for the existing workspace is explicitly transitional contract glue, not a claimed production implementation; each retiring consumer is named above, and D.18's migration gate rejects any leftover obsolete wrapper. Contract closure requires workspace compilation, not production collector behavior.
+
+## Green intermediate workspace and staged 2.0 contract
+
+Lead ruling 2026-09-26: contract closure cannot break implementation crates. D.12 introduces canonical errors in errors_v2.rs and neutral models in signals_v2.rs, exposed under an explicit v2 module path; existing 1.x wrappers and operational signatures remain functioning until D.18 activates canonical re-exports. D.13 stages its new sink/settings/attachment contract additively alongside the working old typed surface. Replacement/removal is the final ADR-017 state, while coexistence is temporary phase sequencing only. Do not delete live wrapper/typed compatibility used by another crate in this wave. D.18 retires it after every migration owner is green. Tests distinguish contract fixtures from production behavior; enabled production construction never silently chooses a stub/no-op.
+
+Module/interface stubs and test doubles are genuine contract artifacts allowed in this contract sprint. They live in the explicit cross-wave handoff files listed below, compile in the workspace with all features, and return typed not-yet-implemented/unsupported construction errors where necessary; they do not claim production transport completion. Implementation beads replace their handed-off stubs before boundary closure. Existing production 1.x paths remain operational so workspace tests stay green.
+
+The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
+
+## Handoff to obs-d-18 (wave 3)
+
+Created/staged by obs-d-12, owned by obs-d-18 from wave 3; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion or final compatibility retirement.
+
+- `crates/sc-observability-dto/src/error_codes.rs`
+- `crates/sc-observability-otlp/src/config.rs`
+- `crates/sc-observability-otlp/src/contracts.rs`
+- `crates/sc-observability-otlp/src/lib.rs`
+- `crates/sc-observability-types/src/diagnostic.rs`
+- `crates/sc-observability-types/src/errors.rs`
+- `crates/sc-observability-types/src/errors_v2.rs`
+- `crates/sc-observability-types/src/events.rs`
+- `crates/sc-observability-types/src/lib.rs`
+- `crates/sc-observability-types/src/metric.rs`
+- `crates/sc-observability-types/src/process.rs`
+- `crates/sc-observability-types/src/projection.rs`
+- `crates/sc-observability-types/src/signals_v2.rs`
+- `crates/sc-observability-types/src/span.rs`
+- `crates/sc-observability-types/src/tracing.rs`
+- `crates/sc-observability-types/src/validation.rs`
+- `crates/sc-observability-types/tests/neutral_contracts.rs`
+
+## Handoff to obs-d-8 (wave 2)
+
+Created/staged by obs-d-12, owned by obs-d-8 from wave 2; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion or final compatibility retirement.
+
+- `crates/sc-observability-otlp/src/legacy_http_json/implementation.rs`
+- `crates/sc-observability-otlp/src/legacy_http_json/mod.rs`
+- `crates/sc-observability-otlp/src/legacy_http_json/tests.rs`
+
+## Handoff to obs-d-6 (wave 2)
+
+Created/staged by obs-d-12, owned by obs-d-6 from wave 2; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion or final compatibility retirement.
+
+- `crates/sc-observability-otlp/src/lifecycle.rs`
+- `crates/sc-observability-otlp/src/lifecycle_tests.rs`
+
+## Handoff to obs-d-7 (wave 2)
+
+Created/staged by obs-d-12, owned by obs-d-7 from wave 2; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion or final compatibility retirement.
+
+- `crates/sc-observability-otlp/src/sdk/implementation.rs`
+- `crates/sc-observability-otlp/src/sdk/mod.rs`
+- `crates/sc-observability-otlp/src/sdk/tests.rs`
 
 ## Acceptance criteria
 
-- `cargo test -p sc-observability-types --test neutral_contracts` passes and names all nine `#[non_exhaustive]` enums with `Box<ErrorContext>` (deliverable 1).
-- `cargo test -p sc-observability-types` passes the neutral signal serde/validation cases (deliverable 2).
-- `cargo check -p sc-observability-otlp --all-features` compiles the declared modules and feature gates (deliverables 3–4).
-- `rg "ADR-017|ADR-012" docs/architecture.md docs/requirements.md docs/api-design.md` shows the recorded decision (deliverable 4).
+- [ ] Acceptance record cites merged PR #225 dated 2026-09-26; ADR-017/018, partial ADR-012 supersession, status header and boundary records agree (D1).
+- [ ] `cargo test -p sc-observability-types --test neutral_contracts --locked` executes named canonical_error_variants_preserve_context, metric_model_failures and histogram_point_serde_rejects_invalid tests (D2–D3).
+- [ ] `cargo test -p sc-observability-otlp --lib contract_tests --all-features --locked` executes validation_order, resolved_defaults, stable_failure_codes, record_and_byte_capacity and fake_exporter_contract tests in D.12-owned files (D4). Verify test count is nonzero.
+- [ ] `cargo check --workspace --all-features --locked` and `bash scripts/ci/validate_repo_boundaries.sh` pass using contract fixtures/stubs without a production adapter (D5).
+- [ ] Cargo metadata reports the 2.0 package/dependency version everywhere; Cargo.lock resolves that graph. Normative doc review confirms OTLP-005 conversion, OTLP-020/021 ownership, ADR status and the exact same contract; release documents are deliberately D.18 closure (D6).
+
+- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.

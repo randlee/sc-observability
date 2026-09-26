@@ -1,104 +1,62 @@
 # d-5: OTLP 2.0 signal model
 
+Generated projection of `obs-d-5`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 8
+- Wave: 2
+- Layer: 8
+- Assignee / model: cobs / terra
+- Relation: `parallel_safe`
+- Closure: `boundary`
+- Target boundary: OTLP signal projectors
 - Branch: `sprint/d-5-otlp-signal-model`
-- PR target: `sprint/d-4-error-enums-2-0`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-5-otlp-signal-model`
+- PR target (merge order only): `sprint/d-4-error-enums-2-0`
 - Blocked by: `obs-d-12-sanity`
-- Owned paths:
+- Requirements: LAY-001, LAY-004, LAY-005, LAY-006, NFR-001, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, OTLP-001, OTLP-002, OTLP-003, OTLP-004, OTLP-005, OTLP-006, OTLP-007, OTLP-008, OTLP-009, OTLP-010, OTLP-011, OTLP-012, OTLP-013, OTLP-014, OTLP-015, OTLP-016, OTLP-017, OTLP-018, OTLP-019, OTLP-020, OTLP-021, OTLP-022, PHB-003, PHB-004, PHB-005, PHB-006, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-021, TYP-023, TYP-024, TYP-030, TYP-031
+- ADRs: ADR-001, ADR-002, ADR-004, ADR-005, ADR-009, ADR-012, ADR-017, ADR-018
+- Owned paths (metadata projection):
+  - `crates/sc-observability-otlp/src/assembly.rs`
   - `crates/sc-observability-otlp/src/projectors.rs`
   - `crates/sc-observability-otlp/tests/error_registry_parity.rs`
+  - `docs/plans/phase-d/sprint-d-5-otlp-signal-model.md`
 
-## Goal and dependency
+## Goal
 
-Define the spec-correct neutral signal model that both real exporters consume.
-It must follow D.4: D.4 owns the 2.0 version bump, break approval, and
-canonical errors used here. D.6 and D.8 may not invent transport-local
-substitutes.
-
+Implement OTLP signal projection and assembly against obs-d-12 neutral signal contracts; no lower-crate or binding migration is owned here.
 
 ## Deliverables
 
-1. Migrate span assembly/projectors so start/event/end processing preserves
-   kind, flags, links, status, timing, attributes, and diagnostics without
-   creating OTLP transport dependencies in lower crates.
+1. Migrate projectors.rs and assembly.rs to preserve span kind/flags/links/events/status/timing/resource/scope and the completed-span invariant.
 
-2. Migrate metric projectors and fixtures to `MetricValue`; enforce histogram
-   invariants: `bucket_counts.len() == explicit_bounds.len() + 1`, finite
-   ordered bounds, `sum(bucket_counts) == count`, finite sum, and no invalid
-   negative count representation.
-   Preserve aggregation temporality and data-point start time for sums and
-   histograms; `Delta` requires an explicit start time no later than the point
-   timestamp, while `Cumulative` permits `Timestamp::UNIX_EPOCH` or an earlier
-   explicit start. Reject inconsistent intervals.
+2. Project MetricValue gauge/sum/histogram without scalar placeholders; preserve temporality/start time and consume the D.12 validated HistogramPoint/MetricModelError contract.
 
-3. Record the breaking 1.x-to-2.0 source/serde migration in
-   `docs/migration.md`, the public API approval, and the OTLP-020/OTLP-021
-   requirements changes.
+3. Add focused assembly/projector cases and error_registry_parity.rs assertions for invalid histogram, temporality and interval failures using D.12 stable codes.
 
-4. Migrate consumers in `sc-observability-types`,
-   `sc-observability-dto` (`TraceContextDto` included), `sc-observe`,
-   `sc-observability`, `sc-observability-otlp`, binding runtime, generated
-   Python/TypeScript models, examples, and public fixtures.
+## This Sprint Does Not Close
 
-5. Add `InvalidHistogram`, invalid temporality, and invalid interval failures
-   to the D.5-owned `MetricModelError` rows of the central error inventory
-   with stable codes and remediation. D.6 owns only transport, lifecycle, and
-   configuration rows.
-
-
-## Non-closure
-
-No network exporter, SDK dependency, collector smoke test, or dashboard work.
-
+Neutral type definitions/serde are D.12; sc-observe consumers D.14; binding-runtime D.15; DTO/language conversion and migration docs D.18; actual collector equivalence D.9.
 
 ## Design
 
-Contract: obs-d-12 design, section "Public contract".
+## Implementation contract
 
-## Owned Paths and Exact Targets
+Use obs-d-12 Public contract and MetricModelError mapping (ADR-017/018). This boundary is OTLP projectors/SpanAssembler only. Histogram invariants are validated by types constructors; projection preserves every bucket and finite sum instead of duplicating validation or synthesizing a one-bucket value. Assembly drops unfinished spans only at the contracted final flush/shutdown. No shared docs, manifests, SDK or binding edits.
 
-- `crates/**`
-- `bindings/**`
-- `examples/**`
-- `release/public-api-policy.json`
-- `scripts/ci/fixtures/**`
-- `docs/api-approvals/d-5-*.json`
-- `docs/requirements.md`
-- `docs/architecture.md`
-- `docs/api-design.md`
-- `docs/migration.md`
+The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
+## Handoff to obs-d-18 (wave 3)
 
-## Implementation targets
+Created/staged by obs-d-5, owned by obs-d-18 from wave 3; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion or final compatibility retirement.
 
-
-- `crates/sc-observability-otlp/src/projectors.rs`: project spans and metrics with D12 neutral types (deliverable 2).
-- `crates/sc-observability-otlp/tests/error_registry_parity.rs`: assert model validation and error-code parity (deliverable 3).
+- `crates/sc-observability-otlp/src/assembly.rs`
+- `crates/sc-observability-otlp/src/projectors.rs`
 
 ## Acceptance criteria
 
-## Acceptance criteria
+- [ ] `cargo test -p sc-observability-otlp --lib assembly --locked` and `cargo test -p sc-observability-otlp --lib projectors --locked` run nonzero tests for the D1/D2 cases.
+- [ ] `cargo test -p sc-observability-otlp --test error_registry_parity --locked` checks model failure code/source mapping and malformed inputs (D3).
+- [ ] This sprint does not close neutral serde, other-crate consumers, release evidence or collector wire equivalence; the named owners above do.
 
-- All known call sites use the new types; no production histogram is represented
-  by a single scalar or synthesized one-bucket placeholder.
-- Span assembly round-trips kind, sampled state, links, events, parent, status,
-  and timing through start/end completion.
-- Valid zero/one/many-bucket histograms round-trip; every malformed invariant
-  above returns a stable typed failure before export.
-- `sc-observability-types` and projectors remain transport/SDK independent.
-- API approval and migration docs identify every intentional 2.0 break.
-
-
-## Required validation
-
-- Focused type serde/negative tests and span-assembly/projector tests.
-- `cargo test -p sc-observability-types -p sc-observability-dto -p sc-observe -p sc-observability-binding-runtime -p sc-observability-otlp --locked`.
-- Workspace clippy/rustdoc and the reviewed 1.4.1-to-2.0 public API
-  comparison/rebaseline mechanism.
-
-
+- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.

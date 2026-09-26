@@ -1,20 +1,31 @@
 # d-11: Open-ended Python distribution regression guard
 
+Generated projection of `obs-d-11`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 18
+- Wave: 4
+- Layer: 18
+- Assignee / model: lobs / luna
+- Relation: `must_follow`
+- Closure: `integration`
+- Target boundary: Python distribution guard
 - Branch: `sprint/d-11-python-open-ended-guard`
-- PR target: `sprint/d-9-otlp-conformance`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-11-python-open-ended-guard`
+- PR target (merge order only): `sprint/d-9-otlp-conformance`
 - Blocked by: `obs-d-18-sanity`
-- Owned paths:
-  - `scripts/ci/_python_distribution.py`
-  - `scripts/ci/validate_python_distribution.py`
-  - `scripts/ci/tests/test_python_distribution.py`
+- Requirements: NFR-011, PHB-013, PHB-014, PHC-001, PHC-003, PHC-004, PHC-006
+- ADRs: ADR-014, ADR-015, ADR-016
+- Owned paths (metadata projection):
+  - `docs/plans/phase-d/sprint-d-11-python-open-ended-guard.md`
   - `docs/project-plan.md`
+  - `scripts/ci/_python_distribution.py`
+  - `scripts/ci/tests/test_python_distribution.py`
+  - `scripts/ci/validate_python_distribution.py`
 
 ## Goal and dependency
 
-After D.10, make CI fail if the Python distribution stops being open-ended.
+After D.18 activates D.10's release policy, make CI fail if the Python distribution stops being open-ended.
 The required contract is PyO3 `abi3-py310`, built wheels tagged `cp310-abi3`,
 and `requires-python = ">=3.10"` with no upper bound.
 
@@ -27,52 +38,28 @@ and `requires-python = ">=3.10"` with no upper bound.
    `requires-python` has lower bound 3.10 and no upper/exclusion cap. Retain
    the existing PyO3/maturin and `cp310-abi3` tag validators; do not create a
    second wheel-tag validator.
-2. Run the extension in `.github/workflows/b4a-python-distributions.yml`, in the
-   existing aggregate distribution-validation job before
+2. Expose the extension through the validator already invoked by the existing B.4a aggregate job before
    publishing eligibility, and add unit fixtures that fail for `>=3.10,<3.13`,
    non-abi3/cp311 ABI tags, missing abi3 feature, and a wrong platform tag.
-3. Add only the missing source/artifact metadata comparison; CI pass/fail is
-   the consumer-facing result.
+3. Wire D.10's PE ARM64 helper into verify_native_architecture, require six wheels/30 native cells from one immutable source, and reject missing/duplicate/wrong-target records alongside the source/artifact metadata comparison.
 4. Document the invariant and explicit change-control rule: raising the floor
    or adding an upper bound requires a separately approved compatibility
    decision, updated supported-interpreter matrix, and this guard's expected
    values—not an incidental packaging edit.
 
 
-## Non-closure
+## This Sprint Does Not Close
 
 This guard does not add future Python versions, alter the minimum version, or
 implement #88/OTEL functionality.
 
-
 ## Design
 
+## Python qualification boundary
 
+D.11 consumes D.18's six-platform release policy and D.10's ARM64 helper. Extend the existing _python_distribution.py/validate_python_distribution.py consumer and existing unit fixtures; do not create a second tag parser or change D.10's workflow. Its existing aggregate invocation picks up the validator behavior. Parse source TOML and wheel METADATA using existing parsers, reject upper/exclusion bounds, and retain abi3-py310/cp310-abi3. The final matrix is six builds and 30 installed-suite cells (Python 3.10–3.14) on native platforms at the same source/version. Preserve original missing/duplicate/architecture/feature checks. docs/project-plan.md records qualification and change control. The pr_target after D.9 is merge order only; obs-d-18-sanity is the actual blocker. Wave 4 awaits the root user ruling.
 
-## Owned Paths and Exact Targets
-
-- `.github/workflows/b4a-python-distributions.yml`
-- `scripts/ci/_python_distribution.py`
-- `scripts/ci/validate_python_distribution.py`
-- `scripts/ci/tests/test_python_distribution.py`
-- `docs/project-plan.md`
-- `release/python-platform-policy.json`
-
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
-
-`_python_distribution.py` owns the source/wheel inspection and architecture
-checks; reuse its existing result and the existing B.4a aggregate job.
-The Python Cargo/pyproject metadata is inspected, not changed by this sprint.
-
-## Implementation targets
-
-
-- `scripts/ci/_python_distribution.py`: implement open-ended platform inventory assertions (deliverable 1).
-- `scripts/ci/validate_python_distribution.py`: expose the regression guard command (deliverable 2).
-- `scripts/ci/tests/test_python_distribution.py`: cover discovered platform matrix changes (deliverable 3).
-- `docs/project-plan.md`: document guard ownership (deliverable 4).
+The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
 ## Acceptance criteria
 
@@ -104,3 +91,6 @@ A dispatch receipt is not a pass: the immutable-source workflow and aggregate
 job must finish successfully with the matrix required above.
 
 
+- Final immutable-source evidence covers six wheel builds and 30 native installed-suite cells; PE ARM64 is validated via D.10 helper and missing/duplicate/wrong-target evidence fails. A dispatch receipt never counts as pass.
+
+- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.

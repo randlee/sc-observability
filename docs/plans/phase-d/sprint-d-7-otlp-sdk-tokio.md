@@ -1,85 +1,68 @@
 # d-7: Official SDK/Tokio adapter
 
+Generated projection of `obs-d-7`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 10
+- Wave: 2
+- Layer: 10
+- Assignee / model: cobs / terra
+- Relation: `must_follow`
+- Closure: `boundary`
+- Target boundary: OTLP SDK adapter module
 - Branch: `sprint/d-7-otlp-sdk-tokio`
-- PR target: `sprint/d-6-otlp-lifecycle-core`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-7-otlp-sdk-tokio`
+- PR target (merge order only): `sprint/d-6-otlp-lifecycle-core`
 - Blocked by: `obs-d-12-sanity`
-- Owned paths:
-  - `crates/sc-observability-otlp/src/assembly.rs`
-  - `examples/otlp-sdk/**`
+- Requirements: LAY-001, LAY-004, LAY-005, LAY-006, NFR-001, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, OTLP-001, OTLP-002, OTLP-003, OTLP-004, OTLP-005, OTLP-006, OTLP-007, OTLP-008, OTLP-009, OTLP-010, OTLP-011, OTLP-012, OTLP-013, OTLP-014, OTLP-015, OTLP-016, OTLP-017, OTLP-018, OTLP-019, OTLP-020, OTLP-021, OTLP-022, PHB-003, PHB-004, PHB-005, PHB-006, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-021, TYP-023, TYP-024, TYP-030, TYP-031
+- ADRs: ADR-002, ADR-004, ADR-005, ADR-009, ADR-017, ADR-018
+- Owned paths (metadata projection):
+  - `crates/sc-observability-otlp/src/sdk/implementation.rs`
+  - `crates/sc-observability-otlp/src/sdk/mod.rs`
+  - `crates/sc-observability-otlp/src/sdk/tests.rs`
+  - `docs/plans/phase-d/sprint-d-7-otlp-sdk-tokio.md`
+  - `examples/otlp-sdk/src/**`
 
-## Goal and dependency
+## Goal
 
-After D.6, wire the reviewed official OpenTelemetry SDK adapter into the shared
-lifecycle core. This sprint owns the Tokio-hosted adapter and its public
-consumer fixture, not lifecycle state, error definitions, or a downstream
-`atm-core` integration.
-
+Implement the official SDK/Tokio adapter against obs-d-12 crate-private contracts, parallel with D.6/D.8.
 
 ## Deliverables
 
-1. Pin reviewed `opentelemetry`, `opentelemetry_sdk`, and
-   `opentelemetry-otlp` versions/features; document the feature-gated
-   dependency boundary in architecture §6.
-2. Implement adapters from D.5 neutral logs, traces, and metrics to the SDK.
-   Preserve resource/scope metadata, trace kind/flags/links/events/status, and
-   complete histogram data.
-3. Use D.6's factory, lifecycle commands, bounds, health, and canonical
-   failure types. `OpenTelemetrySdk` with `Grpc` is the default enabled
-   backend/protocol pair; unsupported pairs fail construction before admission.
-4. Add a Tokio-hosted public consumer and loopback collector fixture covering
-   all signals, redaction, queue pressure, timeout, flush, shutdown,
-   cancellation, and host teardown after awaited completion.
+1. Consume the SDK dependency pins, features and module declarations recorded by D.12; implement only sdk/implementation.rs and sdk/tests.rs.
 
+2. Convert neutral logs/spans/metrics into SDK data without losing resource/scope, trace kind/flags/links/events/status or histogram buckets and temporal metadata.
 
-## Non-closure
+3. Implement the common exporter/lifecycle interface with the caller Tokio runtime and SDK batch processor; use explicit validated settings and preserve all stable failure/accounting outcomes.
 
-No legacy HTTP/JSON implementation, operational dashboard work, Python OTEL
-surface, or `atm-core` code.
+4. Add adapter loopback fixtures and examples/otlp-sdk source for all signals, pressure, timeout, async completion and host-runtime teardown using the D.12 contract fixture.
 
+## This Sprint Does Not Close
+
+D.12 owns manifests/allowlists/registries; D.6 owns the shared lifecycle implementation; D.18 composes the production pieces; D.9 qualifies both backends against collectors.
 
 ## Design
 
+## SDK implementation contract
 
+Only sdk/implementation.rs and sdk/tests.rs implement the SDK adapter. D.12 owns sdk/mod.rs, config, dependency pins and shared ExporterLifecycle. Use the frozen recording lifecycle fixture to test independently of D.6. D.18 performs final factory composition, so no sibling dependency is needed.
 
-## Owned Paths and Exact Targets
+SDK retry behavior is delegated exclusively to the pinned official SDK exporter; add no second retry loop, per-request queue or hidden runtime. SDK-supported transient retry must remain inside the configured request/export and lifecycle deadlines; terminal/expired outcomes map to D.12's TerminalExportFailure/LifecycleTimeout with exact accounting. Document the pinned SDK's actual retry capability in sdk module docs; if it cannot meet a bound, fail construction rather than silently override it. Legacy-only retry fields reject as ConfigFieldNotApplicable. Set all builder values explicitly; ambient OTEL_* defaults never override validated config. No provider is built before matrix/runtime validation, and enabled construction never substitutes no-op.
 
-- `crates/sc-observability-otlp/**`
-- `Cargo.toml`
-- `Cargo.lock`
-- `examples/otlp-sdk/**`
-- `scripts/ci/validate_dependency_bans.sh`
-- `scripts/ci/validate_repo_boundaries.sh`
-- `docs/architecture.md`
-- `docs/api-design.md`
+The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
+## Handoff from obs-d-12 (wave 1)
 
-## Implementation targets
+Created by obs-d-12, owned here from wave 2. Consume its completed sanity-gated artifact; preserve the contract while implementing or retiring staged compatibility. This serial handoff is why relation is must_follow; no same-wave sibling shares these paths.
 
-
-- `crates/sc-observability-otlp/src/assembly.rs`: construct the SDK/Tokio exporter adapter from D12 `ExporterSet` (deliverable 1).
-- `examples/otlp-sdk/**`: exercise async lifecycle and typed failures (deliverable 2).
+- `crates/sc-observability-otlp/src/sdk/implementation.rs`
+- `crates/sc-observability-otlp/src/sdk/mod.rs`
+- `crates/sc-observability-otlp/src/sdk/tests.rs`
 
 ## Acceptance criteria
 
-## Acceptance criteria
+- [ ] `cargo test -p sc-observability-otlp --lib sdk::tests --features otlp-sdk --locked` runs all signal mappings, retry-deadline/terminal, explicit-config-vs-env, queue-pressure, shutdown and caller-runtime teardown tests (D1–D3).
+- [ ] `cargo check --manifest-path examples/otlp-sdk/Cargo.toml --locked` passes the Tokio-hosted 2.0 consumer against contract interfaces (D4).
+- [ ] This sprint does not close real shared-core composition or dual collector equivalence; D.18/D.9 do.
 
-- The adapter adds no dispatcher, hidden runtime, process-global provider, or
-  second lifecycle/error contract.
-- Awaited shutdown reports terminal export failure and permits immediate host
-  runtime teardown after success.
-- SDK-only feature tests prove no legacy HTTP/JSON dependency is enabled.
-
-
-## Required validation
-
-- Focused SDK adapter/collector tests and the Tokio consumer fixture.
-- `cargo test --workspace --locked`, clippy with warnings denied, rustdoc, and
-  the existing dependency-boundary checks.
-
-
+- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.

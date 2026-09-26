@@ -1,118 +1,59 @@
 # d-10: Windows ARM64 Python wheel support
 
+Generated projection of `obs-d-10`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 3
+- Wave: 1
+- Layer: 3
+- Assignee / model: lobs / luna
+- Relation: `root`
+- Closure: `boundary`
+- Target boundary: Windows ARM64 Python distribution
 - Branch: `sprint/d-10-windows-arm64-wheel`
-- PR target: `sprint/d-13-c-log`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-10-windows-arm64-wheel`
+- PR target (merge order only): `sprint/d-13-logging-contract`
 - Blocked by: `obs-phase-d-plan-qa`
-- Owned paths:
+- Requirements: NFR-011, PHB-013, PHB-014, PHC-001, PHC-003, PHC-004, PHC-006
+- ADRs: ADR-014, ADR-015, ADR-016
+- Owned paths (metadata projection):
   - `.github/workflows/b4a-python-distributions.yml`
+  - `docs/plans/phase-d/sprint-d-10-windows-arm64-wheel.md`
   - `scripts/ci/prepare_python_distributions.py`
-  - `release/python-platform-policy.json`
+  - `scripts/ci/python_arm64.py`
+  - `scripts/ci/tests/test_python_arm64.py`
 
-## Goal and dependency
+## Goal
 
-D.10 follows D.4 for release-inventory ownership and remains independent of D.5–D.9. Extend the qualified Python
-distribution platform matrix from five to six wheels by adding native Windows
-ARM64 support. The Rust target is `aarch64-pc-windows-msvc`; the wheel tag is
-`win_arm64`.
-
+Close the independent native Windows ARM64 build adapter boundary. D.18 owns release policy/inventory and D.11 qualifies the completed six-platform metadata matrix.
 
 ## Deliverables
 
-1. Preflight GitHub-hosted Windows ARM64 and native CPython ARM64 availability
-   for every supported 3.10–3.14 interpreter. If any cell is unavailable, D.10
-   remains open; x64 emulation or a cross-build is not native evidence. Then
-   add a `windows-arm64` policy row with an ARM64 Windows runner,
-   `machine: ARM64`, `wheel_platform: win_arm64`, and explicit target-triple
-   handling. Update every policy cardinality/assertion and artifact inventory
-   from five/25 to six/30 cells without weakening duplicate/missing checks.
-2. Update the reusable B.4a workflow so the ARM64 wheel is built from the same
-   immutable sdist/source commit and installed on native Windows ARM64 for all
-   currently supported Python interpreters. Preserve Windows supervision and
-   bounded async proof behavior.
-3. Extend `_python_distribution.py::verify_native_architecture` with the PE
-   ARM64 machine value `0xAA64` for `win_arm64`, and add positive/negative PE
-   fixtures. Extend all policy JSON, platform maps, cardinality assertions,
-   and distribution validators to require a `cp310-abi3-win_arm64` wheel,
-   correct architecture/linkage metadata, one wheel per platform, the same
-   production feature set, and one same-source sdist across all six platforms.
-4. Add documentation and release inventory entries describing the six-platform
-   matrix and target triple; retain current five platforms unchanged.
+1. Preflight a native ARM64 Windows runner and native CPython 3.10–3.14; reject x64 emulation/cross-build as native evidence. Add Windows ARM64 runner/target handling to the existing B.4a workflow using source-SHA-pinned jobs.
 
+2. Update prepare_python_distributions.py for aarch64-pc-windows-msvc/win_arm64 and six-platform artifact preparation without editing release policy files.
 
-## Non-closure
+3. Implement native PE 0xAA64 inspection in python_arm64.py with positive/x86/x64/malformed fixtures in test_python_arm64.py; expose the helper to D.11's shared inspector contract.
 
-No Windows ARM64 registry publication, universal Windows wheel, or support for
-another Python ABI baseline.
+4. Document the six-platform policy row and target triple in this sprint doc for D.18's release/python-platform-policy.json and release-inventory update; existing five platforms remain unchanged.
 
+## This Sprint Does Not Close
+
+Release policy/inventory activation is D.18; source/wheel metadata guard and final six-build/30-cell evidence are D.11. No publication or new ABI baseline.
 
 ## Design
 
+## Python build boundary
 
+D.10 owns native ARM64 build/prepare behavior and a focused PE helper, avoiding edits to D.11's shared _python_distribution.py/validator/test files. The helper takes wheel bytes/tag and returns the existing typed validation shape; D.11 wires it into verify_native_architecture once. D.18 owns all release/** policy activation. Workflow jobs execute against one immutable sdist/source commit, never cross-built evidence disguised as native execution. Existing aggregate invocation remains the integration hook, requiring no D.11 workflow edit. This independent root sprint can preflight/build/test its adapter before release inventory activation; it cannot claim the final 30-cell aggregate.
 
-## Owned Paths and Exact Targets
-
-- `.github/workflows/b4a-python-distributions.yml`
-- `scripts/ci/_python_distribution.py`
-- `scripts/ci/prepare_python_distributions.py`
-- `scripts/ci/validate_python_distribution.py`
-- `scripts/ci/tests/test_python_distribution.py`
-- `release/release-inventory.json`
-- `docs/project-plan.md`
-- `release/python-platform-policy.json`
-
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
-
-Must follow D.4 because both update release/release-inventory.json and the version-bearing distribution baseline. It remains independent of D.5–D.9; Python policy remains D.10-owned.
-
-`_python_distribution.py` owns the source/wheel inspection and architecture
-checks; reuse its existing result and the existing B.4a aggregate job.
-The Python Cargo/pyproject metadata is inspected, not changed by this sprint.
-
-## Implementation targets
-
-
-- `.github/workflows/b4a-python-distributions.yml`: add Windows ARM64 wheel job and artifact assertions (deliverable 1).
-- `scripts/ci/prepare_python_distributions.py`: select the ARM64 target deterministically (deliverable 2).
-- `release/python-platform-policy.json`: record supported wheel policy (deliverable 3).
+The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
 ## Acceptance criteria
 
-## Acceptance criteria
+- [ ] `python3 -m unittest discover -s scripts/ci/tests -p test_python_arm64.py` passes actual PE ARM64 and wrong-architecture cases (D3).
+- [ ] The D.10-owned workflow/prepare path demonstrates a native Windows ARM64 wheel and installed-suite execution for 3.10–3.14 at an immutable source SHA; unavailable native cells keep D.10 open (D1/D2).
+- [ ] Sprint policy handoff specifies windows-arm64, machine ARM64, win_arm64 and aarch64-pc-windows-msvc consistently; no release/** file is edited (D4).
+- [ ] This sprint does not close final six-platform/30-cell aggregate qualification; D.11 does after D.18 activates policy.
 
-- An immutable-source CI run has one successful native wheel build and five
-  successful installed-suite cells for `windows-arm64`; all six wheel builds
-  and 30 cells pass aggregate validation from one immutable source/version
-  baseline.
-- The ARM64 wheel installs in an isolated ARM64 Windows environment and passes
-  the same public suite, typing, embedding, negative/offline, and private
-  companion checks as the other Windows wheel where applicable.
-- Aggregate validation rejects a missing, duplicate, wrong-tag, wrong-target,
-  or cross-built-but-not-native-executed ARM64 evidence record.
-- `_python_distribution.py::verify_native_architecture` accepts an authentic
-  PE `0xAA64` binary and rejects x86/x64/malformed payloads labeled ARM64.
-
-
-## Required validation
-
-- Focused policy/validator tests including negative ARM64 fixtures.
-- Reusable B.4a workflow dispatched at an exact SHA and aggregate validation
-  of the six wheels/30 cells.
-- Existing workspace/Python packaging gates remain green.
-
-Concrete validation commands (dispatch at the reviewed implementation SHA):
-
-```bash
-python3 -m unittest discover -s scripts/ci/tests -p test_python_distribution.py
-bash scripts/ci/validate_docs_consistency.sh
-gh workflow run b4a-python-distributions.yml --ref "$(git rev-parse HEAD)" -f source_commit="$(git rev-parse HEAD)"
-```
-
-A dispatch receipt is not a pass: the immutable-source workflow and aggregate
-job must finish successfully with the matrix required above.
-
-
+- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.

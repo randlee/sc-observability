@@ -1,22 +1,32 @@
 # d-2: Host-owned logger bridge and event policy (#204)
 
+Generated projection of `obs-d-2`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 5
+- Wave: 2
+- Layer: 5
+- Assignee / model: lobs / luna
+- Relation: `must_follow`
+- Closure: `boundary`
+- Target boundary: sc-observability-log bridge module
 - Branch: `sprint/d-2-host-logger-bridge`
-- PR target: `sprint/d-1-log-settings`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-2-host-logger-bridge`
+- PR target (merge order only): `sprint/d-1-log-settings`
 - Blocked by: `obs-d-13-sanity`
-- Owned paths:
+- Requirements: DOC-003, LAY-001, LAY-002, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-007, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-046, LOG-047, LOG-048, NFR-001, NFR-002, NFR-005, NFR-006, NFR-007, NFR-009, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-017
+- Owned paths (metadata projection):
   - `crates/sc-observability-log/src/bridge.rs`
   - `crates/sc-observability-log/tests/bridge_*.rs`
   - `docs/logging/d-2-host-logger-bridge.md`
+  - `docs/plans/phase-d/sprint-d-2-host-logger-bridge.md`
 
 ## Goal and dependency
 
 Let `sc-observability-log` route `log` macros and
 `#[instrument]` records to an existing `Arc<sc_observability::Logger>` without
-creating another writer, file sink, shutdown owner, or level owner. This is
-additive 1.x API work; it does not change direct logger admission semantics or
+creating another writer, file sink, shutdown owner, or level owner. This is 2.0 contract implementation; it does not change direct logger admission semantics or
 the existing public `BridgeOptions` shape.
 
 
@@ -29,8 +39,7 @@ the existing public `BridgeOptions` shape.
 
 2. Apply policy on the reused `CoreLoggerBackend`/`bridge_backend` path before
    every `try_log`. Rejection records the existing `DropCause::InvalidEvent`
-   accounting bucket and never calls the sink; this preserves the exhaustive
-   1.x `DropCause` ABI. Do not add a second counter or redaction system.
+   accounting bucket and never calls the sink; this preserves the existing `DropCause` accounting contract. Do not add a second counter or redaction system.
    Policy panics are contained at the boundary.
 
 3. Preserve current owned-init and `ForeignLoggerInstalled` behavior. Document
@@ -41,74 +50,38 @@ the existing public `BridgeOptions` shape.
    recording sink; allowlist/redaction, bounded-payload, rejection, panic,
    foreign-facade, concurrent detach, and ownership recovery cases.
 
-5. Define the `#[non_exhaustive]`
-   `DetachError::{Timeout, NotInstalled, ForeignLoggerInstalled}` with stable
-   diagnostics; test every slot transition, reattachment, stale control,
-   foreign ownership, and the one shared drain. This is the explicit TYP-030
-   forward-compatibility exception for this public error.
+5. Consume D.13 DetachError and test every slot transition, reattachment, stale control, foreign ownership, timeout retry and the shared drain; define no competing error type.
 
-
-## Non-closure
+## This Sprint Does Not Close
 
 No tracing redesign, global facade replacement, owner-capability duplication,
 OTLP export, or #88 work.
 
-
 ## Design
 
-Contract: obs-d-13 design, section "Public contract".
+## Implementation contract
 
-## Owned Paths and Exact Targets
+Consume obs-d-13 Attachment contract (ADR-011/017); implement only bridge.rs and its bridge_* test targets. Route policy through one shared backend, preserve redaction once, contain policy panic, and maintain Empty/Owned/Attached/Closing slots. detach(&mut self, timeout) retains the handle on Timeout and releases all attachment references on success; never gains shutdown or LevelOwner authority. Reuse D.13 DetachError and D.12 registry codes. D.16 owns non-bridge log modules. Canonical errors are 2.0, with no blanket 1.x semver assertion.
 
-- `crates/sc-observability-log/**`
-- `crates/sc-observability-log-consumer-check/**`
-- `docs/api-approvals/d-2-*.json`
-- `docs/logging/d-2-host-logger-bridge.md`
+The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
+## Handoff from obs-d-13 (wave 1)
 
-Parallel-safe with the other additive logging sprints: this sprint owns its separate additive document and scoped API approval. D.4 owns linking these documents from the shared API design. No shared normative document or release baseline is edited here.
+Created by obs-d-13, owned here from wave 2. Consume its completed sanity-gated artifact; preserve the contract while implementing or retiring staged compatibility. This serial handoff is why relation is must_follow; no same-wave sibling shares these paths.
 
-## Implementation targets
+- `crates/sc-observability-log/src/bridge.rs`
 
+## Handoff to obs-d-18 (wave 3)
 
-- `crates/sc-observability-log/src/bridge.rs`: implement `attach_logger` and `LogAttachment::detach` against the D13 policy contract (deliverables 2–3).
-- `crates/sc-observability-log/tests/bridge_*.rs`: assert admission, detach drain, and host ownership (deliverable 3).
-- `docs/logging/d-2-host-logger-bridge.md`: record bridge lifecycle semantics (deliverable 4).
+Created/staged by obs-d-2, owned by obs-d-18 from wave 3; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion or final compatibility retirement.
+
+- `crates/sc-observability-log/tests/bridge_jsonl.rs`
 
 ## Acceptance criteria
 
-## Acceptance criteria
+- [ ] `cargo test -p sc-observability-log --test bridge_jsonl --locked` and individual explicitly named bridge attachment/policy test targets added by D.2 pass; never pass bridge_* as a literal cargo target (D1–D5).
+- [ ] boundary:sc-observability-log — one recording-sink fixture proves policy admission/rejection/panic, one redaction pass, host-owned logger, no extra LevelOwner and exact dropped-event accounting (D1–D4).
+- [ ] boundary:sc-observability-log — foreign facade rejection, init/attach exclusion, detach timeout retry, stale NotInstalled, reattachment and Arc::try_unwrap after successful detach pass using D.13 errors (D5).
+- [ ] This sprint does not close cross-crate logging/release qualification; obs-d-18 does.
 
-- An unchanged downstream `BridgeOptions { default_action,
-  parse_bracket_action }` literal and existing `init` call compile under the
-  repository's 1.x semver fixture.
-- A host-created logger receives direct and macro-originated records through
-  one sink/writer, with no second logger or `LevelOwner` construction.
-- A rejected event is absent from the sink, is visible through existing
-  dropped-event accounting, and cannot bypass policy through `#[instrument]`
-  or `LogControl::try_log`; existing redaction still runs exactly once.
-- `LogAttachment` exposes no level mutation or shutdown authority. A public
-  fixture explicitly detaches, logs directly through the host logger, proves
-  `Arc::try_unwrap` succeeds, and calls the real consuming
-  `Logger::shutdown`.
-- Concurrent detach rejects new bridge admission, drains already-entered calls
-  within the bound, and returns a typed timeout rather than leaking ownership.
-- Existing owned `LogGuard`, foreign global logger, and tracing coexistence
-  fixtures retain their documented behavior.
-- Fixtures prove init/attach exclusion, reattachment, stable maximum-level
-  ownership, stale-control rejection, and no duplicated backend/drain loop.
-
-
-## Required validation
-
-- Focused `cargo test -p sc-observability-log` macro, policy, detach,
-  ownership-recovery, and foreign-facade fixtures.
-- An unchanged-old-struct-literal compile fixture plus public attachment
-  consumer fixture in the additive API/semver gate against published 1.4.1.
-- `cargo test --workspace --locked` and
-  `cargo clippy --workspace --all-targets -- -D warnings`.
-
-
+- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
