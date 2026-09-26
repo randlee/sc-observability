@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "candidate_version": "2.0.0",
+  "source_commit": "5d8eebc4aad01622243f375b814ee9a78fb3bfb8",
+  "crates": {
+    "sc-observability-types": {
+      "status": "approved",
+      "reviewer": "team-lead (obs-d-21.10)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "target/public-api/sc-observability-types-diff.log",
+      "api_sha256": "6bc548422457b2fcd2443d2359a1204e5974fdb42222ba2702823197de136b13"
+    },
+    "sc-observability": {
+      "status": "approved",
+      "reviewer": "team-lead (obs-d-21.10)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "target/public-api/sc-observability-diff.log",
+      "api_sha256": "565c75c1fbfb20c575ba62b5d4ac31eaeef3b7c7eb306008df0d040f9eb63c85"
+    },
+    "sc-observability-otlp": {
+      "status": "approved",
+      "reviewer": "team-lead (obs-d-21.10)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "target/public-api/sc-observability-otlp-diff.log",
+      "api_sha256": "4e578a417be416eac6073885cd846ee08833bd9bfc998042a2e3e95a117870d6"
+    },
+    "sc-observability-log": {
+      "status": "approved",
+      "reviewer": "team-lead (obs-d-21.10)",
+      "scope": [
+        "public-api"
+      ],
+      "evidence": "target/public-api/sc-observability-log-diff.log",
+      "api_sha256": "7c121e4c74f3a66d46eedf3a27bf0b314cacf700f72eae3614a985db29b6fa14"
+    }
+  },
+  "approved_at": "2026-09-26T19:30:00Z",
+  "approval_scope": "Lead-authorized Phase D 2.0 major-break approval for the four public surfaces changed by obs-d-21.10. The remaining public crates are unchanged against the published 1.4.0 baseline; semver and release gates remain active."
+}
