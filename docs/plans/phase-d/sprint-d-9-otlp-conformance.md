@@ -1,23 +1,15 @@
----
-id: D.9
-status: planned
-branch: sprint/d-9-otlp-conformance
-base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-9-otlp-conformance
-depends_on: ["D.7", "D.8"]
-relation: must_follow
-assignee: aobs
-model_class: astra
-requirements: ["OTLP-001", "OTLP-023", "OTLP-024", "OTLP-008", "OTLP-009", "OTLP-010", "OTLP-012", "OTLP-021"]
-owned_docs: ["docs/observability/otlp"]
-release_train: "2.0"
-adrs: ["ADR-004", "ADR-018"]
-closure_type: integration
-target_boundary: "dual-backend OTLP conformance"
-owned_paths: ["crates/sc-observability-otlp/tests/**", "docs/observability/otlp/**", "scripts/ci/verify_otlp_grafana_smoke.py", "scripts/ci/otlp_dev_install_smoke.py", "scripts/ci/fixtures/otlp/**", ".github/workflows/ci.yml", ".github/workflows/otlp-conformance.yml"]
----
+# d-9: Cross-path qualification and observability docs
 
-# D.9 — Cross-path qualification and observability docs
+## Plan metadata
+
+- Wave: 4
+- Branch: `sprint/d-9-otlp-conformance`
+- PR target: `sprint/d-18-integration-and-public-api`
+- Blocked by: `obs-d-18-sanity`
+- Owned paths:
+  - `crates/sc-observability-otlp/tests/full_stack_integration.rs`
+  - `docs/observability/otlp/**`
+  - `scripts/ci/fixtures/otlp/**`
 
 ## Goal and dependency
 
@@ -25,24 +17,6 @@ Qualify the complete restored OTLP surface and close the regression with
 collector evidence and current-schema documentation. D.9 `must_follow`s D.7
 and D.8; it adds no third transport.
 
-## Shared conformance contract
-
-```rust
-struct OtlpConformanceCase {
-    logs: Vec<LogEvent>,
-    spans: Vec<CompleteSpan>,
-    metrics: Vec<MetricRecord>,
-}
-
-fn assert_collector_semantics(
-    backend: ExporterBackend,
-    case: &OtlpConformanceCase,
-    captured: &CollectorCapture,
-);
-```
-
-The same logical fixture corpus must run through both production backends;
-wire/protocol differences are allowed, signal meaning loss is not.
 
 ## Deliverables
 
@@ -66,6 +40,53 @@ wire/protocol differences are allowed, signal meaning loss is not.
    `docs/observability/otlp/` and `scripts/ci/`; validate the import manifest's
    pinned-source and allowed-delta checks.
 
+
+## Non-closure
+
+No `atm-core` implementation, Python OTEL binding (#88), registry publication,
+or new transport beyond the two qualified paths.
+
+
+## Design
+
+## Shared conformance contract
+
+```rust
+struct OtlpConformanceCase {
+    logs: Vec<LogEvent>,
+    spans: Vec<CompleteSpan>,
+    metrics: Vec<MetricRecord>,
+}
+
+fn assert_collector_semantics(
+    backend: ExporterBackend,
+    case: &OtlpConformanceCase,
+    captured: &CollectorCapture,
+);
+```
+
+The same logical fixture corpus must run through both production backends;
+wire/protocol differences are allowed, signal meaning loss is not.
+
+
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability-otlp/tests/**`
+- `docs/observability/otlp/**`
+- `scripts/ci/verify_otlp_grafana_smoke.py`
+- `scripts/ci/otlp_dev_install_smoke.py`
+- `scripts/ci/fixtures/otlp/**`
+- `.github/workflows/ci.yml`
+- `.github/workflows/otlp-conformance.yml`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+
+
+## Acceptance criteria
+
 ## Acceptance criteria
 
 - Both backends export all three signal families from the shared corpus and
@@ -86,6 +107,7 @@ wire/protocol differences are allowed, signal meaning loss is not.
 - Import provenance validates pinned source commit/blob ids and the named
   allowed deltas for transplanted destinations.
 
+
 ## Required validation
 
 - Shared dual-backend conformance suite and negative matrix.
@@ -95,21 +117,4 @@ wire/protocol differences are allowed, signal meaning loss is not.
   public API/semver, dependency/license, and CI workflow validation.
 - Local collector smoke commands for both backends.
 
-## Owned Paths and Exact Targets
 
-- `crates/sc-observability-otlp/tests/**`
-- `docs/observability/otlp/**`
-- `scripts/ci/verify_otlp_grafana_smoke.py`
-- `scripts/ci/otlp_dev_install_smoke.py`
-- `scripts/ci/fixtures/otlp/**`
-- `.github/workflows/ci.yml`
-- `.github/workflows/otlp-conformance.yml`
-
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
-
-## Non-closure
-
-No `atm-core` implementation, Python OTEL binding (#88), registry publication,
-or new transport beyond the two qualified paths.

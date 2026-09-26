@@ -1,22 +1,15 @@
----
-id: D.2
-status: planned
-branch: sprint/d-2-host-logger-bridge
-base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-2-host-logger-bridge
-depends_on: []
-relation: parallel_safe
-assignee: cobs
-model_class: terra
-requirements: ["LOG-001", "LOG-010", "LOG-015", "TYP-030", "PHB-002"]
-owned_docs: ["docs/logging/d-2-host-logger-bridge.md"]
-adrs: ["ADR-011", "ADR-013"]
-closure_type: integration
-target_boundary: "host logger attachment and facade admission"
-owned_paths: ["crates/sc-observability-log/**", "crates/sc-observability-log-consumer-check/**", "docs/api-approvals/d-2-*.json", "docs/logging/d-2-host-logger-bridge.md"]
----
+# d-2: Host-owned logger bridge and event policy (#204)
 
-# D.2 — Host-owned logger bridge and event policy (#204)
+## Plan metadata
+
+- Wave: 2
+- Branch: `sprint/d-2-host-logger-bridge`
+- PR target: `sprint/d-13-c-log`
+- Blocked by: `obs-d-13-sanity`
+- Owned paths:
+  - `crates/sc-observability-log/src/bridge.rs`
+  - `crates/sc-observability-log/tests/bridge_*.rs`
+  - `docs/logging/d-2-host-logger-bridge.md`
 
 ## Goal and dependency
 
@@ -25,6 +18,42 @@ Let `sc-observability-log` route `log` macros and
 creating another writer, file sink, shutdown owner, or level owner. This is
 additive 1.x API work; it does not change direct logger admission semantics or
 the existing public `BridgeOptions` shape.
+
+
+## Deliverables
+
+1. Add the separate policy-bearing `AttachmentOptions`, `BridgeEventPolicy`,
+   `BridgeEventDecision`, and non-owning `LogAttachment` contracts above. Do
+   not add a field to `BridgeOptions` or alter existing `init`/`LogGuard`.
+2. Implement `attach_logger` without constructing a logger or acquiring,
+   cloning, or synthesizing `LevelOwner`. Coordinate slot closure and in-flight
+   bridge calls so successful explicit detach releases every attachment-owned
+   `Arc<Logger>` reference.
+3. Apply policy on the reused `CoreLoggerBackend`/`bridge_backend` path before
+   every `try_log`. Rejection records the existing `DropCause::InvalidEvent`
+   accounting bucket and never calls the sink; this preserves the exhaustive
+   1.x `DropCause` ABI. Do not add a second counter or redaction system.
+   Policy panics are contained at the boundary.
+4. Preserve current owned-init and `ForeignLoggerInstalled` behavior. Document
+   facade ownership with a tracing bridge and distinguish the owned `LogGuard`
+   lifecycle from the non-owning attachment lifecycle.
+5. Add public integration fixtures for direct plus macro logging through one
+   recording sink; allowlist/redaction, bounded-payload, rejection, panic,
+   foreign-facade, concurrent detach, and ownership recovery cases.
+6. Define the `#[non_exhaustive]`
+   `DetachError::{Timeout, NotInstalled, ForeignLoggerInstalled}` with stable
+   diagnostics; test every slot transition, reattachment, stale control,
+   foreign ownership, and the one shared drain. This is the explicit TYP-030
+   forward-compatibility exception for this public error.
+
+
+## Non-closure
+
+No tracing redesign, global facade replacement, owner-capability duplication,
+OTLP export, or #88 work.
+
+
+## Design
 
 ## Public contract
 
@@ -101,31 +130,23 @@ foreign logger is always rejected. A saved `LogControl` after detach returns
 the stable `NotInstalled` failure. Owned shutdown and attachment detach call
 one `close_and_drain` primitive; detach never shuts down the host logger.
 
-## Deliverables
 
-1. Add the separate policy-bearing `AttachmentOptions`, `BridgeEventPolicy`,
-   `BridgeEventDecision`, and non-owning `LogAttachment` contracts above. Do
-   not add a field to `BridgeOptions` or alter existing `init`/`LogGuard`.
-2. Implement `attach_logger` without constructing a logger or acquiring,
-   cloning, or synthesizing `LevelOwner`. Coordinate slot closure and in-flight
-   bridge calls so successful explicit detach releases every attachment-owned
-   `Arc<Logger>` reference.
-3. Apply policy on the reused `CoreLoggerBackend`/`bridge_backend` path before
-   every `try_log`. Rejection records the existing `DropCause::InvalidEvent`
-   accounting bucket and never calls the sink; this preserves the exhaustive
-   1.x `DropCause` ABI. Do not add a second counter or redaction system.
-   Policy panics are contained at the boundary.
-4. Preserve current owned-init and `ForeignLoggerInstalled` behavior. Document
-   facade ownership with a tracing bridge and distinguish the owned `LogGuard`
-   lifecycle from the non-owning attachment lifecycle.
-5. Add public integration fixtures for direct plus macro logging through one
-   recording sink; allowlist/redaction, bounded-payload, rejection, panic,
-   foreign-facade, concurrent detach, and ownership recovery cases.
-6. Define the `#[non_exhaustive]`
-   `DetachError::{Timeout, NotInstalled, ForeignLoggerInstalled}` with stable
-   diagnostics; test every slot transition, reattachment, stale control,
-   foreign ownership, and the one shared drain. This is the explicit TYP-030
-   forward-compatibility exception for this public error.
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability-log/**`
+- `crates/sc-observability-log-consumer-check/**`
+- `docs/api-approvals/d-2-*.json`
+- `docs/logging/d-2-host-logger-bridge.md`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+Parallel-safe with the other additive logging sprints: this sprint owns its separate additive document and scoped API approval. D.4 owns linking these documents from the shared API design. No shared normative document or release baseline is edited here.
+
+
+
+## Acceptance criteria
 
 ## Acceptance criteria
 
@@ -148,6 +169,7 @@ one `close_and_drain` primitive; detach never shuts down the host logger.
 - Fixtures prove init/attach exclusion, reattachment, stable maximum-level
   ownership, stale-control rejection, and no duplicated backend/drain loop.
 
+
 ## Required validation
 
 - Focused `cargo test -p sc-observability-log` macro, policy, detach,
@@ -157,20 +179,4 @@ one `close_and_drain` primitive; detach never shuts down the host logger.
 - `cargo test --workspace --locked` and
   `cargo clippy --workspace --all-targets -- -D warnings`.
 
-## Owned Paths and Exact Targets
 
-- `crates/sc-observability-log/**`
-- `crates/sc-observability-log-consumer-check/**`
-- `docs/api-approvals/d-2-*.json`
-- `docs/logging/d-2-host-logger-bridge.md`
-
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
-
-Parallel-safe with the other additive logging sprints: this sprint owns its separate additive document and scoped API approval. D.4 owns linking these documents from the shared API design. No shared normative document or release baseline is edited here.
-
-## Non-closure
-
-No tracing redesign, global facade replacement, owner-capability duplication,
-OTLP export, or #88 work.

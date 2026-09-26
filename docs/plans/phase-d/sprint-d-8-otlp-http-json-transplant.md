@@ -1,23 +1,15 @@
----
-id: D.8
-status: planned
-branch: sprint/d-8-otlp-http-json-transplant
-base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-8-otlp-http-json-transplant
-depends_on: ["D.6", "D.7"]
-relation: must_follow
-assignee: aobs
-model_class: astra
-owned_docs: ["docs/architecture.md", "docs/plans/phase-d/legacy-otlp-provenance.json"]
-release_train: "2.0"
-requirements: ["OTLP-011", "OTLP-012", "OTLP-013", "OTLP-020", "OTLP-021", "OTLP-023"]
-adrs: ["ADR-004", "ADR-018"]
-closure_type: boundary
-target_boundary: "legacy HTTP/JSON exporter adapter"
-owned_paths: ["crates/sc-observability-otlp/**", "Cargo.toml", "Cargo.lock", "examples/otlp-legacy/**", "scripts/ci/validate_log_import.py", "scripts/ci/tests/test_validate_log_import.py", "scripts/ci/validate_dependency_bans.sh", "scripts/ci/validate_repo_boundaries.sh", "docs/architecture.md", "docs/plans/phase-d/legacy-otlp-provenance.json"]
----
+# d-8: Legacy HTTP/JSON source transplant
 
-# D.8 — Legacy HTTP/JSON source transplant
+## Plan metadata
+
+- Wave: 2
+- Branch: `sprint/d-8-otlp-http-json-transplant`
+- PR target: `sprint/d-12-c-types`
+- Blocked by: `obs-d-12-sanity`
+- Owned paths:
+  - `crates/sc-observability-otlp/src/error_codes.rs`
+  - `examples/otlp-legacy/**`
+  - `docs/plans/phase-d/legacy-otlp-provenance.json`
 
 ## Goal and dependency
 
@@ -65,6 +57,49 @@ The transient scratchpad path is not part of the implementation contract.
 The complete immutable source/blob/destination and documentation disposition
 is [`legacy-otlp-provenance.json`](legacy-otlp-provenance.json); that manifest,
 not a local clone path, is the transplant authority.
+
+
+## Deliverables
+
+1. Copy the exporter implementation and its `/v1/logs`, `/v1/traces`,
+   `/v1/metrics`, authorization, CA, retry, and payload tests into this crate.
+2. Commit a source-to-destination matrix naming every copied symbol/test and
+   every changed, omitted, or newly wrapped behavior with its exact current-API
+   incompatibility rationale. The worker is an ownership/context adapter around
+   copied transport code; no HTTP/client configuration/retry redesign beyond
+   the four enumerated safety deltas is permitted.
+   Extend `scripts/ci/validate_log_import.py` to verify the manifest's pinned
+   commit/blob/SHA and compare each transplant destination with its source blob.
+   Permit only the named matrix deltas; this prevents a rewrite being presented
+   as a transplant. Translation/reference rows validate only their disposition.
+3. Adapt inputs to current `TelemetryConfig`, D.5 signal types, diagnostic
+   errors, D.6 backend selector, and common crate-private exporter traits while
+   preserving the original HTTP/JSON behavior and current
+   health/dropped-count facade contract.
+4. Implement bounded command admission, ordered barrier completion, and the
+   exact construction/use/drop contract above. The worker alone constructs,
+   calls, and drops reqwest outside telemetry locks. Context preflight occurs
+   before mutation; credentials remain redacted.
+   Reuse D.6's state/deadline/accounting core and implement the reserved
+   control path, retry cancellation, worker-panic propagation, and oneshot
+   async barrier described above.
+5. Add public external-consumer-style construction/flush/shutdown proof with
+   no caller-owned Tokio runtime and no official OTel SDK/tonic dependencies.
+6. Record the exact reqwest features/version and legacy-only dependency
+   boundary in architecture §6. D.8 owns legacy runtime/provenance and
+   architecture-boundary documentation; it does not redefine D.6 contracts.
+   Run the repository's existing `just lint` boundary check after the
+   transplant; no separate identifier-scrub process is introduced.
+
+
+## Non-closure
+
+No SDK changes beyond consuming D.6's selector, no rewrite, no dashboards,
+no Python binding change (the binding is a motivating consumer only), and no
+publication.
+
+
+## Design
 
 ## Retained implementation contract
 
@@ -197,43 +232,36 @@ successful retry is not a drop. Transient, terminal, and recovery accounting
 follow the D.6 health contract without additional D.8 fields or
 transitions.
 
+
 ## Failure contract
 
 D.8 uses the complete D.6 stable-failure table. Runtime paths return its
 named outcomes through the owning types and façade mappings defined there;
 D.8 owns no error variant, stable code, mapping, or error documentation.
 
-## Deliverables
 
-1. Copy the exporter implementation and its `/v1/logs`, `/v1/traces`,
-   `/v1/metrics`, authorization, CA, retry, and payload tests into this crate.
-2. Commit a source-to-destination matrix naming every copied symbol/test and
-   every changed, omitted, or newly wrapped behavior with its exact current-API
-   incompatibility rationale. The worker is an ownership/context adapter around
-   copied transport code; no HTTP/client configuration/retry redesign beyond
-   the four enumerated safety deltas is permitted.
-   Extend `scripts/ci/validate_log_import.py` to verify the manifest's pinned
-   commit/blob/SHA and compare each transplant destination with its source blob.
-   Permit only the named matrix deltas; this prevents a rewrite being presented
-   as a transplant. Translation/reference rows validate only their disposition.
-3. Adapt inputs to current `TelemetryConfig`, D.5 signal types, diagnostic
-   errors, D.6 backend selector, and common crate-private exporter traits while
-   preserving the original HTTP/JSON behavior and current
-   health/dropped-count facade contract.
-4. Implement bounded command admission, ordered barrier completion, and the
-   exact construction/use/drop contract above. The worker alone constructs,
-   calls, and drops reqwest outside telemetry locks. Context preflight occurs
-   before mutation; credentials remain redacted.
-   Reuse D.6's state/deadline/accounting core and implement the reserved
-   control path, retry cancellation, worker-panic propagation, and oneshot
-   async barrier described above.
-5. Add public external-consumer-style construction/flush/shutdown proof with
-   no caller-owned Tokio runtime and no official OTel SDK/tonic dependencies.
-6. Record the exact reqwest features/version and legacy-only dependency
-   boundary in architecture §6. D.8 owns legacy runtime/provenance and
-   architecture-boundary documentation; it does not redefine D.6 contracts.
-   Run the repository's existing `just lint` boundary check after the
-   transplant; no separate identifier-scrub process is introduced.
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability-otlp/**`
+- `Cargo.toml`
+- `Cargo.lock`
+- `examples/otlp-legacy/**`
+- `scripts/ci/validate_log_import.py`
+- `scripts/ci/tests/test_validate_log_import.py`
+- `scripts/ci/validate_dependency_bans.sh`
+- `scripts/ci/validate_repo_boundaries.sh`
+- `docs/architecture.md`
+- `docs/plans/phase-d/legacy-otlp-provenance.json`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+Must also follow D.7 because both edit the OTLP crate manifest/factory, Cargo.lock, dependency allowlists, and docs/architecture.md. The two backend scopes stay distinct.
+
+
+
+## Acceptance criteria
 
 ## Acceptance criteria
 
@@ -282,6 +310,7 @@ D.8 owns no error variant, stable code, mapping, or error documentation.
   attempt accounting, one terminal drop after exhaustion, and zero drops after
   a retried-then-successful batch.
 
+
 ## Required validation
 
 - Copied legacy unit/loopback tests plus current public facade fixtures.
@@ -293,27 +322,4 @@ D.8 owns no error variant, stable code, mapping, or error documentation.
 - Import-provenance validation and automated no-exporter/legacy-only/combined
   dependency graph gates; module line-count validation.
 
-## Owned Paths and Exact Targets
 
-- `crates/sc-observability-otlp/**`
-- `Cargo.toml`
-- `Cargo.lock`
-- `examples/otlp-legacy/**`
-- `scripts/ci/validate_log_import.py`
-- `scripts/ci/tests/test_validate_log_import.py`
-- `scripts/ci/validate_dependency_bans.sh`
-- `scripts/ci/validate_repo_boundaries.sh`
-- `docs/architecture.md`
-- `docs/plans/phase-d/legacy-otlp-provenance.json`
-
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
-
-Must also follow D.7 because both edit the OTLP crate manifest/factory, Cargo.lock, dependency allowlists, and docs/architecture.md. The two backend scopes stay distinct.
-
-## Non-closure
-
-No SDK changes beyond consuming D.6's selector, no rewrite, no dashboards,
-no Python binding change (the binding is a motivating consumer only), and no
-publication.

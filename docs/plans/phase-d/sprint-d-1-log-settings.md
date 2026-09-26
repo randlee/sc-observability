@@ -1,22 +1,15 @@
----
-id: D.1
-status: planned
-branch: sprint/d-1-log-settings
-base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-1-log-settings
-depends_on: []
-relation: parallel_safe
-assignee: cobs
-model_class: terra
-requirements: ["LOG-009", "LOG-040", "LOG-042", "LOG-002", "TYP-026"]
-owned_docs: ["docs/logging/d-1-log-settings.md"]
-adrs: ["ADR-003", "ADR-010"]
-closure_type: boundary
-target_boundary: "startup logging settings resolution"
-owned_paths: ["crates/sc-observability/src/lib.rs", "crates/sc-observability/src/settings.rs", "crates/sc-observability/tests/log_settings.rs", "examples/log-settings/**", "docs/api-approvals/d-1-*.json", "docs/logging/d-1-log-settings.md"]
----
+# d-1: Shared startup `LogSettings` (#96)
 
-# D.1 — Shared startup `LogSettings` (#96)
+## Plan metadata
+
+- Wave: 2
+- Branch: `sprint/d-1-log-settings`
+- PR target: `sprint/d-13-c-log`
+- Blocked by: `obs-d-13-sanity`
+- Owned paths:
+  - `crates/sc-observability/src/runtime.rs`
+  - `crates/sc-observability/tests/log_settings.rs`
+  - `docs/logging/d-1-log-settings.md`
 
 ## Goal and dependency
 
@@ -24,6 +17,35 @@ Create the single serde-stable, binding-friendly configuration value in
 `sc-observability` that applications resolve before constructing a `Logger`.
 It is parallel-safe with D.2 and D.3 because neither consumes this type. This
 is additive 1.x work checked against the published 1.4.1 API/semver baseline.
+
+
+## Deliverables
+
+1. Add the public source/resolved types, typed errors, stable codes, rustdoc,
+   serde behavior, and signatures above by reusing `EnvPrefix`,
+   `LevelFilter`, and `RetainedLogPolicy`; add no parallel owners.
+2. Implement deterministic environment parsing for the complete inventory and
+   field-wise resolution in the documented order including the LOG-009 root
+   exception. Parsing uses a named `EnvSnapshot` so one resolution cannot mix
+   process states.
+3. Convert the resolved value to `LoggerConfig` and its strong policy types,
+   preserving all non-inventory defaults and introducing no post-construction
+   mutation.
+4. Document the table, precedence, null/unset behavior, prefix rules, failure
+   codes, and startup-only lifecycle. Add a public example embedding settings
+   under an application's `logging` JSON key. Document the compact stable-error
+   table: `PrefixCollision`/`LOG-001`, `InvalidEnvironment`/`LOG-002`,
+   `UnknownKey`/`LOG-003`, `InvalidValue`/`LOG-004`, and
+   `Resolution`/`LOG-005`.
+
+
+## Non-closure
+
+Do not migrate consumer applications, add fields outside the inventory,
+implement dynamic reload, or plan #88 bindings/OTEL work.
+
+
+## Design
 
 ## Public contract
 
@@ -82,6 +104,7 @@ environment`. To preserve LOG-009, an explicitly non-empty JSON `logRoot`
 wins over `SC_LOG_ROOT`; the environment root is consulted only when JSON root
 is absent/empty, then the application root wins if configured.
 
+
 ## Authoritative field inventory
 
 The following is the complete D.1 schema. No other `SC_LOG_*` key is accepted.
@@ -121,24 +144,25 @@ environment scan, any key beginning with the exact selected `${prefix}LOG_`
 namespace but not listed above is an unknown-key error; unrelated environment
 keys are ignored. Duplicate/case-variant environment keys are rejected.
 
-## Deliverables
 
-1. Add the public source/resolved types, typed errors, stable codes, rustdoc,
-   serde behavior, and signatures above by reusing `EnvPrefix`,
-   `LevelFilter`, and `RetainedLogPolicy`; add no parallel owners.
-2. Implement deterministic environment parsing for the complete inventory and
-   field-wise resolution in the documented order including the LOG-009 root
-   exception. Parsing uses a named `EnvSnapshot` so one resolution cannot mix
-   process states.
-3. Convert the resolved value to `LoggerConfig` and its strong policy types,
-   preserving all non-inventory defaults and introducing no post-construction
-   mutation.
-4. Document the table, precedence, null/unset behavior, prefix rules, failure
-   codes, and startup-only lifecycle. Add a public example embedding settings
-   under an application's `logging` JSON key. Document the compact stable-error
-   table: `PrefixCollision`/`LOG-001`, `InvalidEnvironment`/`LOG-002`,
-   `UnknownKey`/`LOG-003`, `InvalidValue`/`LOG-004`, and
-   `Resolution`/`LOG-005`.
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability/src/lib.rs`
+- `crates/sc-observability/src/settings.rs`
+- `crates/sc-observability/tests/log_settings.rs`
+- `examples/log-settings/**`
+- `docs/api-approvals/d-1-*.json`
+- `docs/logging/d-1-log-settings.md`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+Parallel-safe with the other additive logging sprints: this sprint owns its separate additive document and scoped API approval. D.4 owns linking these documents from the shared API design. No shared normative document or release baseline is edited here.
+
+
+
+## Acceptance criteria
 
 ## Acceptance criteria
 
@@ -158,6 +182,7 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
 - Configuration is fully resolved before logger construction; no setter,
   watcher, or late reload is introduced.
 
+
 ## Required validation
 
 - Table-driven unit tests generated from the authoritative inventory for JSON,
@@ -166,22 +191,4 @@ keys are ignored. Duplicate/case-variant environment keys are rejected.
 - Docs consistency, rustdoc, public API, and semver gates used by the repository
   at execution time.
 
-## Owned Paths and Exact Targets
 
-- `crates/sc-observability/src/lib.rs`
-- `crates/sc-observability/src/settings.rs`
-- `crates/sc-observability/tests/log_settings.rs`
-- `examples/log-settings/**`
-- `docs/api-approvals/d-1-*.json`
-- `docs/logging/d-1-log-settings.md`
-
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
-
-Parallel-safe with the other additive logging sprints: this sprint owns its separate additive document and scoped API approval. D.4 owns linking these documents from the shared API design. No shared normative document or release baseline is edited here.
-
-## Non-closure
-
-Do not migrate consumer applications, add fields outside the inventory,
-implement dynamic reload, or plan #88 bindings/OTEL work.

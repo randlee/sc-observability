@@ -1,23 +1,14 @@
----
-id: D.6
-status: planned
-branch: sprint/d-6-otlp-lifecycle-core
-base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-6-otlp-lifecycle-core
-depends_on: ["D.4", "D.5"]
-relation: must_follow
-assignee: aobs
-model_class: astra
-owned_docs: ["docs/requirements.md", "docs/architecture.md", "docs/api-design.md"]
-release_train: "2.0"
-requirements: ["OTLP-009", "OTLP-011", "OTLP-012", "OTLP-013", "OTLP-018", "OTLP-019", "OTLP-020", "OTLP-021"]
-adrs: ["ADR-004", "ADR-005", "ADR-018"]
-closure_type: boundary
-target_boundary: "backend-neutral OTLP lifecycle"
-owned_paths: ["crates/sc-observability-otlp/**", "crates/sc-observability-types/**", "Cargo.toml", "Cargo.lock", "release/public-api-policy.json", "docs/migration.md", "scripts/ci/validate_dependency_bans.sh", "scripts/ci/validate_repo_boundaries.sh", "docs/api-approvals/d-6-*.json", "docs/requirements.md", "docs/architecture.md", "docs/api-design.md"]
----
+# d-6: OTLP lifecycle core
 
-# D.6 — OTLP lifecycle core
+## Plan metadata
+
+- Wave: 2
+- Branch: `sprint/d-6-otlp-lifecycle-core`
+- PR target: `sprint/d-12-c-types`
+- Blocked by: `obs-d-12-sanity`
+- Owned paths:
+  - `crates/sc-observability-otlp/src/config.rs`
+  - `crates/sc-observability-otlp/src/constants.rs`
 
 ## Goal and dependency
 
@@ -25,6 +16,51 @@ Define the backend-neutral lifecycle core used by both exporters, preserving
 synchronous emit admission and giving asynchronous transport lifecycle an
 honest awaitable completion surface. D.6 `must_follow`s D.4 and D.5. No
 `atm-core` code or PR is part of the sprint.
+
+
+## Deliverables
+
+1. Implement D.6's shared lifecycle core, factory, `ExporterSet`, bounds,
+   health/accounting, and fake exporter fixture. D.7 and D.8 inject their
+   transport adapters through this interface.
+2. Convert D.5 neutral signals at the core boundary without losing
+   resource/scope metadata, kind, flags, links, events, status, or histogram
+   content.
+   D.6 owns `PositiveDuration`, `LifecycleBounds`, `RetryPolicy`,
+   `BoundedPercent`, `BackendTransportBounds`, `ValidatedTransportBounds`,
+   `OtlpConfigField`, `OtlpConfigTarget`, `ValueOrigin`, `ResolvedField`, the
+   sole backend-aware validation constructor, and the complete stable-error
+   inventory above. The four public payload types and public `ConfigFailure`
+   shapes are included in API approval and the 2.0 semver manifest.
+3. Implement the exact ordering/state/cancellation contract above without
+   `block_on`, a hidden runtime, a process-global provider, mutex-held network
+   waits, or executor-worker blocking.
+4. Preserve fail-open health/dropped behavior for immediate admission,
+   terminal export, runtime cancellation, and lifecycle failures. Invalid or
+   unsupported combinations fail construction with stable typed errors.
+   Health exposes bounded queue depth/capacity, worker/provider state,
+   `last_terminal_failure`, per-signal overflow counts, and
+   `retry_attempt_failures` without credentials. Transient attempts never overwrite the terminal
+   field; the next successful export while `Open` clears it and records
+   recovery, while `Closing`/`Shutdown` retains it. D.7 and D.8 use the same
+   model.
+5. Add lifecycle fixtures with fake exporters for bounded channel pressure,
+   timeout, late failure, flush barriers, concurrent admission, shutdown, and
+   cancellation. D.7 owns the Tokio-hosted consumer and collector fixture.
+6. Record the lifecycle ADR, OTLP-020/021 revisions, API approval, rustdoc, and
+   migration from synchronous 1.x lifecycle to the backend-neutral async 2.0
+   completion API. D.6 owns those config/error/lifecycle documents and their
+   shared validation fixtures; D.7 may only verify them by reference.
+   The technical lead must accept ADR-018 before D.6 production code.
+
+
+## Non-closure
+
+`LegacyHttpJson` is not operational until D.8. No downstream `atm-core` work,
+Python binding, dashboard restoration, or publication.
+
+
+## Design
 
 ## Backend and trait contract
 
@@ -341,6 +377,7 @@ corresponding typed lifecycle failure.
 | `TerminalExportFailure` | `OTLP_EXPORT_TERMINAL` | `ExportError` | SDK or legacy provider returned a terminal export failure | inspect the preserved source and collector state | bounded typed source; no credentials | source-dependent |
 | `Shutdown` | `OTLP_TELEMETRY_SHUTDOWN` | `TelemetryError` | emit was attempted after shutdown began | construct a new telemetry instance | no dynamic data | only on a new instance |
 
+
 ## 2.0 lifecycle decision
 
 Synchronous `emit_*` remains admission-only for the SDK backend. Construction
@@ -408,46 +445,36 @@ terminates first, dispatcher/task drop guards resolve waiters with a typed
 dropped/degraded. Accepted ADR-018 activates and verifies the conditional
 OTLP-021 contract; the sprint also updates the 1.x-to-2.0 migration guide.
 
+
 ## Implementation order
 
 Land the backend-neutral lifecycle core before wiring the official SDK adapter
 and Tokio fixture. D.7 consumes that shared core and must not build a second
 dispatcher or lifecycle state machine.
 
-## Deliverables
 
-1. Implement D.6's shared lifecycle core, factory, `ExporterSet`, bounds,
-   health/accounting, and fake exporter fixture. D.7 and D.8 inject their
-   transport adapters through this interface.
-2. Convert D.5 neutral signals at the core boundary without losing
-   resource/scope metadata, kind, flags, links, events, status, or histogram
-   content.
-   D.6 owns `PositiveDuration`, `LifecycleBounds`, `RetryPolicy`,
-   `BoundedPercent`, `BackendTransportBounds`, `ValidatedTransportBounds`,
-   `OtlpConfigField`, `OtlpConfigTarget`, `ValueOrigin`, `ResolvedField`, the
-   sole backend-aware validation constructor, and the complete stable-error
-   inventory above. The four public payload types and public `ConfigFailure`
-   shapes are included in API approval and the 2.0 semver manifest.
-3. Implement the exact ordering/state/cancellation contract above without
-   `block_on`, a hidden runtime, a process-global provider, mutex-held network
-   waits, or executor-worker blocking.
-4. Preserve fail-open health/dropped behavior for immediate admission,
-   terminal export, runtime cancellation, and lifecycle failures. Invalid or
-   unsupported combinations fail construction with stable typed errors.
-   Health exposes bounded queue depth/capacity, worker/provider state,
-   `last_terminal_failure`, per-signal overflow counts, and
-   `retry_attempt_failures` without credentials. Transient attempts never overwrite the terminal
-   field; the next successful export while `Open` clears it and records
-   recovery, while `Closing`/`Shutdown` retains it. D.7 and D.8 use the same
-   model.
-5. Add lifecycle fixtures with fake exporters for bounded channel pressure,
-   timeout, late failure, flush barriers, concurrent admission, shutdown, and
-   cancellation. D.7 owns the Tokio-hosted consumer and collector fixture.
-6. Record the lifecycle ADR, OTLP-020/021 revisions, API approval, rustdoc, and
-   migration from synchronous 1.x lifecycle to the backend-neutral async 2.0
-   completion API. D.6 owns those config/error/lifecycle documents and their
-   shared validation fixtures; D.7 may only verify them by reference.
-   The technical lead must accept ADR-018 before D.6 production code.
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability-otlp/**`
+- `crates/sc-observability-types/**`
+- `Cargo.toml`
+- `Cargo.lock`
+- `release/public-api-policy.json`
+- `docs/migration.md`
+- `scripts/ci/validate_dependency_bans.sh`
+- `scripts/ci/validate_repo_boundaries.sh`
+- `docs/api-approvals/d-6-*.json`
+- `docs/requirements.md`
+- `docs/architecture.md`
+- `docs/api-design.md`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+
+
+## Acceptance criteria
 
 ## D.6 validation fixtures
 
@@ -476,6 +503,7 @@ dispatcher or lifecycle state machine.
   a valid server delay is `min(retry_after, retry_after_cap,
   remaining_sequence_budget)`. Cover both `max_backoff < retry_after_cap` and
   `retry_after_cap < max_backoff`; neither cap silently truncates the other.
+
 
 ## Acceptance criteria
 
@@ -510,6 +538,7 @@ dispatcher or lifecycle state machine.
   shorter than transport timeout, exact 30-second defaults, deterministic
   first-error ordering, and monotonic expiry.
 
+
 ## Required validation
 
 - Focused common-trait/factory, dispatcher-ordering, current-thread,
@@ -520,26 +549,4 @@ dispatcher or lifecycle state machine.
 - Automated feature graph gates for no-exporter and SDK-only builds, including
   the updated repository-boundary/dependency-ban allowlists.
 
-## Owned Paths and Exact Targets
 
-- `crates/sc-observability-otlp/**`
-- `crates/sc-observability-types/**`
-- `Cargo.toml`
-- `Cargo.lock`
-- `release/public-api-policy.json`
-- `docs/migration.md`
-- `scripts/ci/validate_dependency_bans.sh`
-- `scripts/ci/validate_repo_boundaries.sh`
-- `docs/api-approvals/d-6-*.json`
-- `docs/requirements.md`
-- `docs/architecture.md`
-- `docs/api-design.md`
-
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
-
-## Non-closure
-
-`LegacyHttpJson` is not operational until D.8. No downstream `atm-core` work,
-Python binding, dashboard restoration, or publication.

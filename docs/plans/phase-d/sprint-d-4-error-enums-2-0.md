@@ -1,23 +1,15 @@
----
-id: D.4
-status: planned
-branch: sprint/d-4-error-enums-2-0
-base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-4-error-enums-2-0
-depends_on: ["D.1", "D.2", "D.3"]
-relation: must_follow
-assignee: lobs
-model_class: luna
-owned_docs: ["docs/architecture.md", "docs/requirements.md", "docs/api-design.md"]
-requirements: ["TYP-003", "TYP-004", "TYP-006", "TYP-030", "PHB-003", "PHB-004", "PHB-005", "PHB-006"]
-adrs: ["ADR-011", "ADR-012", "ADR-017"]
-closure_type: integration
-target_boundary: "canonical 2.0 error surface and consumer migration"
-release_train: "2.0"
-owned_paths: ["Cargo.toml", "Cargo.lock", "crates/**", "bindings/**", "examples/**", "release/public-api-major-breaks.toml", "release/public-api-policy.json", "release/release-inventory.json", "release/bindings-artifacts.toml", "release/publish-artifacts.toml", "release/bp2-publish-artifacts.toml", "release/RELEASE-NOTES-*.md", "CHANGELOG.md", "docs/migration-guide.md", "docs/migration.md", "docs/publishing.md", "docs/public-api-checklist.md", "scripts/ci/validate_public_api_semver.py", "scripts/ci/validate_public_api.py", "scripts/ci/validate_version_literals.py", "scripts/ci/validate_error_migration.py", "scripts/ci/fixtures/**", "scripts/ci/validate_python_distribution.py", ".github/workflows/**", "docs/api-approvals/**", "docs/architecture.md", "docs/requirements.md", "docs/api-design.md"]
----
+# d-4: 2.0 discriminated error enum migration (#92)
 
-# D.4 — 2.0 discriminated error enum migration (#92)
+## Plan metadata
+
+- Wave: 2
+- Branch: `sprint/d-4-error-enums-2-0`
+- PR target: `sprint/d-12-c-types`
+- Blocked by: `obs-d-12-sanity`
+- Owned paths:
+  - `crates/sc-observability/src/error_codes.rs`
+  - `crates/sc-observability/src/health.rs`
+  - `crates/sc-observability/tests/logging_only.rs`
 
 ## Goal and dependency
 
@@ -27,6 +19,7 @@ to same-name discriminated enums. Before public code changes, the technical
 lead must accept ADR-017, which precisely supersedes ADR-012 for this listed
 2.0 migration while retaining ADR-011's diagnostic boundary. A proposed ADR,
 silence, or issue label is not approval.
+
 
 ## Deliverables
 
@@ -67,22 +60,14 @@ silence, or issue label is not approval.
    break in reviewed `release/public-api-major-breaks.toml` linked to accepted
    ADR-017, fail unlisted changes, then generate/review the 2.0 baseline.
 
-## Acceptance criteria
 
-- All nine former wrappers are public discriminated enums.
-- Every retained diagnostic property is tested per enum variant, including
-  source chain and serde shape where public serialization is promised.
-- A 1.x consumer fixture fails only at intentional wrapper-construction or
-  exhaustive-match boundaries; its paired 2.0 fixture compiles without
-  deprecated/error-wrapper dependencies.
-- Version, lock/manifests, changelog, migration guide, API approval, and ADR
-  acceptance all name 2.0 and agree on the breaking scope.
+## Non-closure
 
-## Required validation
+No 1.x compatibility promise, registry publication, or unrelated error-model
+redesign. #88 remains excluded.
 
-- Focused type/error-code matrix tests and cross-crate consumer fixtures.
-- `cargo test --workspace --locked`, `cargo clippy --workspace --all-targets -- -D warnings`, rustdoc, and the explicit major-release API comparison against published 1.4.1 followed by reviewed 2.0 rebaseline.
-- Documentation consistency and release-manifest validation.
+
+## Design
 
 ## Owned Paths and Exact Targets
 
@@ -121,7 +106,26 @@ New modules stay inside the listed crate fences. No unrelated changes are author
 
 Must follow D.1, D.2, and D.3 because migration edits core src/lib.rs, types src/errors.rs and the log bridge files they own. These are code conflicts, not documentation-only edges. Link their separate additive documents from docs/api-design.md while retaining D.4 sole ownership of the 2.0 baseline.
 
-## Non-closure
 
-No 1.x compatibility promise, registry publication, or unrelated error-model
-redesign. #88 remains excluded.
+
+## Acceptance criteria
+
+## Acceptance criteria
+
+- All nine former wrappers are public discriminated enums.
+- Every retained diagnostic property is tested per enum variant, including
+  source chain and serde shape where public serialization is promised.
+- A 1.x consumer fixture fails only at intentional wrapper-construction or
+  exhaustive-match boundaries; its paired 2.0 fixture compiles without
+  deprecated/error-wrapper dependencies.
+- Version, lock/manifests, changelog, migration guide, API approval, and ADR
+  acceptance all name 2.0 and agree on the breaking scope.
+
+
+## Required validation
+
+- Focused type/error-code matrix tests and cross-crate consumer fixtures.
+- `cargo test --workspace --locked`, `cargo clippy --workspace --all-targets -- -D warnings`, rustdoc, and the explicit major-release API comparison against published 1.4.1 followed by reviewed 2.0 rebaseline.
+- Documentation consistency and release-manifest validation.
+
+
