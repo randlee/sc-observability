@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-llm
-version: 0.7.5
+version: 0.7.6
 description: Named teammate that runs dev sanity checks with an LLM. Takes each sanity check task from ATM, splits the checked bead into one sc-sanity-llm subagent per numbered deliverable with lint running alongside, merges the results, and closes the bead and task with PASS or FAIL.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
@@ -65,6 +65,13 @@ Per task, with `S=.claude/skills/atm-bd-orchestration/scripts`:
 1. The task's ready check, then `atm task start <task> "sanity check
    <checked-bead>"` if this task is your active one, and
    `bd update <task> --claim`.
+   Before any code inspection, require an open, reviewable PR for the task
+   branch: `gh pr list --head <branch> --state open --json number --jq
+   '.[0].number'`. If it is empty, immediately send the lead the task, branch,
+   and `SANITY.PR_REQUIRED` with `atm send <lead> --stdin`; do not inspect the
+   worktree and take the cannot-run route. Save the returned number as
+   `$pr_number`. At the instant the check actually begins, save
+   `run_started_at=$(date +%s)` for the status table.
 2. Split:
 
    ```bash
@@ -123,6 +130,41 @@ delivers the report to the lead, with this fenced status:
   "finding_bead_ids": ["obs-d-4.1"]
 }
 ```
+
+## Run Status Table
+
+After every completed PASS or FAIL task close succeeds, immediately send the
+lead the compact status table for the newest six completed sanity runs. Do not
+send a table for a refused check. The table is derived only from the JSON vars
+below; it is not a substitute for the full completion report.
+
+```bash
+iteration=$(atm task events "$task" --all --json \
+  | jq '[.events[] | select(.event == "completed")] | length')
+jq -n \
+  --arg task "$task" --arg sprint "$sprint" --argjson pr_number "$pr_number" \
+  --argjson findings "$(jq '.findings_count' "$scratch/sanity-$task-vars.json")" \
+  --arg verdict "$(jq -r '.verdict' "$scratch/sanity-$task-vars.json")" \
+  --argjson iteration "$iteration" --argjson started_at "$run_started_at" \
+  '{task: $task, sprint: $sprint, pr_number: $pr_number, findings: $findings,
+    verdict: $verdict, iteration: $iteration, started_at: $started_at}' \
+  > "$scratch/sanity-$task-run.json"
+.claude/skills/atm-bd-orchestration/scripts/sanity-run-history \
+  --record-file "$scratch/sanity-$task-run.json" \
+  --output "$scratch/sanity-$task-table-vars.json" --limit 6
+sc-compose render --strict \
+  --file .claude/skills/atm-bd-orchestration/templates/sanity-run-table.md.j2 \
+  --var-file "$scratch/sanity-$task-table-vars.json" \
+  > "$scratch/sanity-$task-table.md"
+atm send <lead> --stdin < "$scratch/sanity-$task-table.md"
+```
+
+`sanity-run-history` records the finished timestamp in the host's local
+timezone, calculates elapsed time from `$run_started_at`, and serializes
+parallel checks in its shared state file. Its output is exactly
+`{"runs": [ ... ]}`, already ordered newest first for the template. The PR is never
+shown as a vague state: a completed run has `#<number>`; a missing PR was
+already reported and refused.
 
 ## FAIL Finding Handoff
 
