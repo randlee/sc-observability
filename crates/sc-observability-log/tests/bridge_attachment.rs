@@ -28,6 +28,32 @@ impl BridgeEventPolicy for Admit {
     }
 }
 
+struct RecordingSink {
+    events: Arc<Mutex<Vec<LogEvent>>>,
+}
+
+#[allow(deprecated)]
+impl LogSink for RecordingSink {
+    fn write(
+        &self,
+        event: &sc_observability_types::LogEvent,
+    ) -> Result<(), sc_observability_types::LogSinkError> {
+        self.events
+            .lock()
+            .expect("recording lock")
+            .push(event.clone());
+        Ok(())
+    }
+
+    fn health(&self) -> SinkHealth {
+        SinkHealth {
+            name: SinkName::new("attachment-recording").expect("sink name"),
+            state: SinkHealthState::Healthy,
+            last_error: None,
+        }
+    }
+}
+
 struct Blocking {
     entered: Mutex<Option<mpsc::Sender<()>>>,
     release: Mutex<Option<mpsc::Receiver<()>>>,
@@ -75,6 +101,24 @@ fn logger() -> Arc<sc_observability::Logger> {
         ))
         .expect("host logger"),
     )
+}
+
+fn recording_logger() -> (Arc<sc_observability::Logger>, Arc<Mutex<Vec<LogEvent>>>) {
+    let root = tempfile::tempdir().expect("temp root");
+    let root = Box::leak(Box::new(root));
+    let mut config = LoggerConfig::default_for(
+        ServiceName::new("attachment-recording").expect("service"),
+        root.path().to_path_buf(),
+    );
+    config.enable_file_sink = false;
+    config.enable_console_sink = false;
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let mut builder = sc_observability::LoggerBuilder::new_typed(config).expect("builder");
+    builder.register_sink(SinkRegistration::new(Arc::new(RecordingSink {
+        events: Arc::clone(&events),
+    })));
+    let logger = builder.build_typed().expect("host logger");
+    (Arc::new(logger), events)
 }
 
 struct BlockingFlushSink {
@@ -155,7 +199,7 @@ fn event() -> BridgeEvent {
 #[test]
 fn attachment_routes_direct_and_macro_calls_and_recovers_host_ownership() {
     let _serial = TEST_LOCK.lock().expect("test lock");
-    let host = logger();
+    let (host, events) = recording_logger();
     let mut attachment =
         attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("attach host logger");
     let control = attachment.control();
@@ -163,6 +207,18 @@ fn attachment_routes_direct_and_macro_calls_and_recovers_host_ownership() {
     control.try_log(event()).expect("direct event");
     log::info!(target: "attachment::macro", "macro event");
     control.flush(Duration::from_secs(2)).expect("flush");
+    let events = events.lock().expect("recording lock");
+    assert_eq!(events.len(), 2, "direct and macro events share one sink");
+    assert!(
+        events
+            .iter()
+            .any(|event| { event.message.as_deref() == Some("direct attachment event") })
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event.message.as_deref() == Some("macro event"))
+    );
     attachment.detach(Duration::from_secs(2)).expect("detach");
 
     let host =

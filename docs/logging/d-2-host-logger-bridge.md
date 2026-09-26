@@ -5,12 +5,15 @@
 it does not construct a writer, acquire a `LevelOwner`, flush the host as a
 shutdown operation, or change the host logger's level.
 
-The process slot has four operational states: `Empty`, `Owned`, `Attached`,
-and `Closing`. Owned `init` remains the existing `LogGuard` lifecycle. An
-attachment closes admission first, removes the slot, and waits for calls that
-already entered the shared bridge path. A timeout restores `Attached` so the
-same handle can retry. Successful detach releases the attachment's logger
-reference, allowing a host-held `Arc<Logger>` to recover unique ownership.
+The process slot has six operational states: `Empty`, `Owned`, `Attached`,
+`Closing`, `Detached`, and `Stopped`. `Owned` remains the existing `LogGuard`
+lifecycle. An attachment closes admission first, removes the slot, and waits
+for calls that already entered the shared bridge path. A timeout restores
+`Attached` so the same handle can retry. Successful detach transitions through
+`Detached` and releases the attachment's logger reference, allowing a
+host-held `Arc<Logger>` to recover unique ownership; `Stopped` is the terminal
+state reported when the saved attachment control can no longer upgrade its
+weak token.
 
 `BridgeEventPolicy` runs on the assembled event immediately before every
 facade, macro, and attached-control `try_log`. Rejections use the existing
