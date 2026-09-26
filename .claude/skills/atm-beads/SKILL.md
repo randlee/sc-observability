@@ -66,6 +66,10 @@ Every phase plan must include a committed `docs/plans/phase-<x>/sprints.json`
 listing only the phase root ID and paired dev/sanity bead IDs that define the phase’s work; creating and updating
 this list is a mandatory planning step before plan review or dispatch. Beads
 are the source of truth; bead content is not duplicated in the index.
+The initial `docs/plans/phase-<x>/phase-<x>-dag.html` (embedded SVG) must also be
+committed and pushed with the index on the phase integration branch before
+plan review. `sprint-review --root <root>` produces both without a viewer;
+`--view` optionally opens Wyvern in the background.
 
 ## Validation
 

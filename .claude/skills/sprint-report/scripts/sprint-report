@@ -202,13 +202,16 @@ def main() -> int:
     mode.add_argument("--table", action="store_true", help="render the compact table (default)")
     mode.add_argument("--detailed", action="store_true", help="render detailed sprint blocks")
     mode.add_argument("--dag", action="store_true", help="render the plan dependency DAG as SVG and PNG")
-    parser.add_argument("--output", type=Path, help="DAG output prefix (default: scratchpad/phase-<p>-dag/phase-<p>-dag)")
+    mode.add_argument("--view", action="store_true", help="render the SVG DAG in an HTML artifact and open it in Wyvern")
+    parser.add_argument("--output", type=Path, help="local DAG export prefix; skips default integration-branch publication")
     parser.add_argument("--open", action="store_true", help="open DAG PNG in Preview on macOS, default viewer elsewhere")
     parser.add_argument("--root", help="phase root bead id")
     parser.add_argument("--index", type=Path, help="committed sprints.json path")
     args = parser.parse_args()
-    if (args.output or args.open) and not args.dag:
-        parser.error("--output and --open require --dag")
+    if args.output and not (args.dag or args.view):
+        parser.error("--output requires --dag or --view")
+    if args.open and not args.dag:
+        parser.error("--open requires --dag; use --view to open HTML in Wyvern")
 
     try:
         repo = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
@@ -226,9 +229,11 @@ def main() -> int:
         rows = index.get("sprints")
         if not isinstance(rows, list) or not rows:
             raise RuntimeError("sprint index contains no sprints")
-        if args.dag:
+        if args.dag or args.view:
             from sprint_dag import generate
-            return generate(repo, index, sanity_runs, phase, args.output, args.open)
+            branch = None if args.output else str(metadata(root_bead).get("integration_branch") or "")
+            return generate(repo, index, sanity_runs, phase, args.output, args.open, args.view,
+                            publish_branch=branch)
         row_ids = list(index_bead_pairs(index))
         all_beads = run_json(repo, "bd", "list", "--all", "-n", "0", "--json")
         blocked_ids = {bead["id"] for bead in run_json(repo, "bd", "blocked", "--json")}

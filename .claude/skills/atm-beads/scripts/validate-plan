@@ -15,6 +15,7 @@
 #   4. every assignee is an ATM member of this team, and every sanity check
 #      bead is assigned to the dev-sanity role's member (scripts/resolve-role);
 #   5. the committed sprint index matches a fresh export (root mode only);
+#      the initial SVG-in-HTML artifact and index are pushed on integration;
 #   6. the integration branch exists on origin (warning only).
 # Exit 0 = valid, 5 = problems listed, 2 = could not run.
 set -uo pipefail
@@ -123,6 +124,14 @@ if [ -n "$root" ] && [ -z "$file" ]; then
         ;;
       *) problems+=("could not compare committed sprint index $index") ;;
     esac
+  fi
+fi
+
+# 2d. A permanent phase diagram is required before plan review/dispatch.
+# Import JSONL is validated before bead creation; only live-root mode can render it.
+if [ -n "$root" ] && [ -z "$file" ] && [ -f "${fresh_index:-}" ]; then
+  if ! artifact_check=$("$here/check-phase-artifact" --root "$root" --index "$fresh_index" 2>&1); then
+    problems+=("$artifact_check")
   fi
 fi
 

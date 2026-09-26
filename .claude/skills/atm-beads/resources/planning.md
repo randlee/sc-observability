@@ -52,8 +52,11 @@ rather than reaching an agent:
    (`atm-bd-orchestration` "Plan Gate", step 2). Then
    export and commit the mandatory phase sprint list with
    `.claude/skills/atm-beads/scripts/export-sprint-index --root <root> --out docs/plans/phase-<x>/sprints.json`
-   and `git add docs/plans/phase-<x>/sprints.json && git commit`, then run
-   `validate-plan --root <root>` on the imported beads, and `bd sync`.
+   then run `.claude/skills/sprint-review/scripts/sprint-review --root <root>`.
+   This creates the required initial `docs/plans/phase-<x>/phase-<x>-dag.html`
+   with embedded SVG and commits/pushes it together with `sprints.json` on the
+   root bead's integration branch. No viewer opens without `--view`.
+   Then run `validate-plan --root <root>` on the imported beads, and `bd sync`.
 
 The plan then goes to plan review (`atm-bd-orchestration` "Plan Gate").
 Nothing is dispatched until it passes.
@@ -93,6 +96,13 @@ a suffix. Missing or ambiguous gates fail export. Consumers validate unique
 pairs and matching live edges. `validate-plan` compares membership with a
 fresh ID-only export; changing a title, dependency, owner or status does not
 require copying that change into the index.
+
+The initial `phase-<x>-dag.html` is a required plan-review artifact alongside
+`sprints.json`. Live-root validation verifies both files on the remote
+integration branch and checks that the HTML embeds SVG for this phase root.
+Later `/sprint-review` runs refresh and push the same page; `--view` only
+controls optional background viewing in Wyvern. Import JSONL validation runs
+before beads exist, so it does not require this generated artifact yet.
 
 ## Phase Root
 

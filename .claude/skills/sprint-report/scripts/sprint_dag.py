@@ -2,10 +2,13 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from graphlib import TopologicalSorter, CycleError
+from html import escape
 import json
 from pathlib import Path
 import re
+import shutil
 import subprocess
+from string import Template
 import sys
 import xml.etree.ElementTree as ET
 
@@ -297,7 +300,43 @@ def render(mode, source, target):
     subprocess.run(['node', str(RENDERER / 'render.cjs'), mode, str(source), str(target)], check=True)
 
 
-def generate(repo, index, counts, phase, output=None, open_image=False):
+def html_view(svg, phase, root_bead_id):
+    template = (RENDERER.parent / 'dag-view.html').read_text()
+    return Template(template).substitute(
+        title=escape(f'Sprint review · Phase {phase.upper()}'), svg=svg,
+        root_bead_id=escape(root_bead_id, quote=True))
+
+
+def open_wyvern(artifact):
+    """Leave the viewer running until the user closes it, without holding the CLI."""
+    log_path = artifact.with_suffix('.wyvern.log')
+    executable = shutil.which('wyvern')
+    if executable is None:
+        print('Wyvern unavailable; artifact saved without opening a viewer.', file=sys.stderr)
+        return False
+    try:
+        with log_path.open('w') as log:
+            process = subprocess.Popen(
+                [executable, str(artifact), '--viewer', 'embedded'],
+                stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+    except OSError as exc:
+        print(f'Wyvern unavailable: {exc}; artifact remains saved.', file=sys.stderr)
+        return False
+    try:
+        result = process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        print(f'Wyvern launched (PID {process.pid}); log: {log_path}')
+        return True
+    if result:
+        print(f'Wyvern could not open the saved artifact; see {log_path}', file=sys.stderr)
+        return False
+    return True
+
+
+def generate(repo, index, counts, phase, output=None, open_image=False, open_view=False,
+             publish_branch=None):
     if not (RENDERER / 'node_modules/@viz-js/viz').exists():
         raise RuntimeError(f'DAG renderer dependencies missing; run npm ci --prefix {RENDERER}')
     phase = str(phase).removeprefix('phase-')
@@ -319,17 +358,27 @@ def generate(repo, index, counts, phase, output=None, open_image=False):
     path('.dot').write_text(source)
     if not reuse:
         render('layout', path('.dot'), path('-layout.svg'))
-    path('.svg').write_text(overlay(path('-layout.svg').read_text(), icons, snapshot['captured_at'], qa))
+    svg = overlay(path('-layout.svg').read_text(), icons, snapshot['captured_at'], qa)
+    path('.svg').write_text(svg)
+    path('.html').write_text(html_view(svg, phase, index['root_bead_id']))
     render('png', path('.svg'), path('.png'))
     for suffix, data in [('-data.json', graph), ('-state.json', snapshot), ('-icons.json', icons)]:
         path(suffix).write_text(json.dumps(data, indent=2) + '\n')
     if snapshot['errors']:
         print('sprint-report: some ATM evidence unavailable; affected states are unconfirmed (see state JSON)', file=sys.stderr)
-    for suffix in ('.svg', '.png', '-state.json'):
+    for suffix in ('.svg', '.html', '.png', '-state.json'):
         print(path(suffix))
+    if publish_branch is not None:
+        from phase_artifact import publish_artifact
+        published = publish_artifact(repo, publish_branch, phase, path('.html').read_text(),
+                                     json.dumps(index, indent=2) + '\n')
+        path('-published.json').write_text(json.dumps(published, indent=2) + '\n')
+        print(f"Published {published['html_path']} on {publish_branch} at {published['commit'][:12]}")
     if open_image:
         if sys.platform == 'darwin':
             subprocess.run(['open', '-a', 'Preview', str(path('.png'))], check=True)
         else:
             subprocess.run(['xdg-open', str(path('.png'))], check=True)
+    if open_view:
+        open_wyvern(path('.html'))
     return 0
