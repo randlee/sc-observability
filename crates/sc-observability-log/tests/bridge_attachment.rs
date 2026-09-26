@@ -9,10 +9,12 @@
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
+#[allow(deprecated)]
+use sc_observability::{LogSink, SinkHealth, SinkHealthState, SinkName, SinkRegistration};
 use sc_observability_log::{
     ActionName, AttachmentOptions, BridgeEvent, BridgeEventDecision, BridgeEventPolicy,
-    BridgeOptions, DetachError, EventLevel, LoggerConfig, ServiceName, TargetCategory,
-    attach_logger,
+    BridgeOptions, DetachError, EventLevel, FlushError, InitError, LoggerConfig, ServiceName,
+    TargetCategory, attach_logger,
 };
 use sc_observability_types::LogEvent;
 
@@ -73,6 +75,67 @@ fn logger() -> Arc<sc_observability::Logger> {
         ))
         .expect("host logger"),
     )
+}
+
+struct BlockingFlushSink {
+    entered: Mutex<Option<mpsc::Sender<()>>>,
+    release: Mutex<Option<mpsc::Receiver<()>>>,
+}
+
+impl BlockingFlushSink {
+    fn new(entered: mpsc::Sender<()>, release: mpsc::Receiver<()>) -> Self {
+        Self {
+            entered: Mutex::new(Some(entered)),
+            release: Mutex::new(Some(release)),
+        }
+    }
+}
+
+#[allow(deprecated)]
+impl LogSink for BlockingFlushSink {
+    fn write(
+        &self,
+        _event: &sc_observability_types::LogEvent,
+    ) -> Result<(), sc_observability_types::LogSinkError> {
+        Ok(())
+    }
+
+    fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
+        if let Some(entered) = self.entered.lock().expect("entered lock").take() {
+            entered.send(()).expect("flush entered receiver");
+        }
+        if let Some(release) = self.release.lock().expect("release lock").take() {
+            release.recv().expect("flush release sender");
+        }
+        Ok(())
+    }
+
+    fn health(&self) -> SinkHealth {
+        SinkHealth {
+            name: SinkName::new("blocking-flush").expect("sink name"),
+            state: SinkHealthState::Healthy,
+            last_error: None,
+        }
+    }
+}
+
+fn blocking_logger(
+    entered: mpsc::Sender<()>,
+    release: mpsc::Receiver<()>,
+) -> Arc<sc_observability::Logger> {
+    let root = tempfile::tempdir().expect("temp root");
+    let root = Box::leak(Box::new(root));
+    let mut config = LoggerConfig::default_for(
+        ServiceName::new("attachment-blocking-flush").expect("service"),
+        root.path().to_path_buf(),
+    );
+    config.enable_file_sink = false;
+    config.enable_console_sink = false;
+    let mut builder = sc_observability::LoggerBuilder::new_typed(config).expect("builder");
+    builder.register_sink(SinkRegistration::new(Arc::new(BlockingFlushSink::new(
+        entered, release,
+    ))));
+    Arc::new(builder.build_typed().expect("host logger"))
 }
 
 fn event() -> BridgeEvent {
@@ -139,4 +202,75 @@ fn timeout_retains_attachment_for_retry_and_stale_control_is_rejected() {
     let host =
         Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases attachment logger"));
     let _ = host.shutdown();
+}
+
+#[test]
+fn timed_out_flush_keeps_attachment_owned_logger_until_helper_drains() {
+    let _serial = TEST_LOCK.lock().expect("test lock");
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let host = blocking_logger(entered_tx, release_rx);
+    let mut attachment =
+        attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("attach");
+    let control = attachment.control();
+    let flush = std::thread::spawn(move || control.flush(Duration::ZERO));
+
+    entered_rx.recv().expect("flush entered sink");
+    assert!(matches!(
+        attachment.detach(Duration::ZERO),
+        Err(DetachError::Timeout { .. })
+    ));
+
+    release_tx.send(()).expect("release flush");
+    assert!(matches!(
+        flush.join().expect("flush worker"),
+        Err(FlushError::TimedOut { .. })
+    ));
+    attachment
+        .detach(Duration::from_secs(2))
+        .expect("drained flush detaches");
+
+    let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases logger"));
+    host.shutdown();
+}
+
+#[test]
+fn reattachment_rejects_old_control_and_init_while_attached() {
+    let _serial = TEST_LOCK.lock().expect("test lock");
+    let host = logger();
+    let mut first =
+        attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("first attach");
+    let stale = first.control();
+    assert!(matches!(
+        sc_observability_log::init(
+            LoggerConfig::default_for(
+                ServiceName::new("owned-conflict").expect("service"),
+                std::env::temp_dir().join("owned-conflict"),
+            ),
+            BridgeOptions {
+                default_action: ActionName::new("log.record").expect("action"),
+                parse_bracket_action: false,
+            },
+        ),
+        Err(InitError::AlreadyInitialized)
+    ));
+    first.detach(Duration::from_secs(2)).expect("first detach");
+    let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("first detach releases logger"));
+    host.shutdown();
+
+    let host = logger();
+    let mut second = attach_logger(Arc::clone(&host), options(Arc::new(Admit))).expect("reattach");
+    assert!(matches!(
+        stale.try_log(event()),
+        Err(sc_observability_log::EmitError::NotRunning { .. })
+    ));
+    second
+        .control()
+        .try_log(event())
+        .expect("new attachment control");
+    second
+        .detach(Duration::from_secs(2))
+        .expect("second detach");
+    let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("second detach releases logger"));
+    host.shutdown();
 }

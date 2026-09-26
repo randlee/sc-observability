@@ -19,9 +19,16 @@ by the existing guarded submission boundary. Redaction remains solely the
 host logger's responsibility, so the bridge does not introduce a second
 redaction or accounting system.
 
-Controls consult the attachment slot at admission time. After detach they
-return a typed not-running result rather than silently routing through an
-empty slot.
+Each attachment control carries only a weak token for its originating
+attachment. Admission and bounded flush therefore remain tied to that
+attachment; after detach, including after a later reattachment, stale
+controls return a typed not-running result rather than silently routing
+through the current global slot. A timed-out flush keeps its in-flight call
+and attachment logger reference until the helper exits, so a successful retry
+is the point at which `Arc::try_unwrap` can recover host ownership.
 The public integration fixtures in `bridge_attachment.rs` and
-`bridge_policy.rs` cover direct/macro routing, policy rejection and panic,
-concurrent detach timeout/retry, stale controls, and host ownership recovery.
+`bridge_policy.rs`, plus the isolated foreign/owned-facade fixtures, cover
+direct/macro routing, policy allowlisting, bounded payload rejection, host
+redaction, policy panic, foreign-facade rejection, init/attach exclusion,
+concurrent detach timeout/retry, reattachment, stale controls, and host
+ownership recovery.

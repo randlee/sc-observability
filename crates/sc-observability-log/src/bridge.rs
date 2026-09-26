@@ -234,7 +234,9 @@ impl LogAttachment {
     /// Returns a cloneable, non-owning control for this attachment.
     #[must_use]
     pub fn control(&self) -> LogControl {
-        LogControl::new()
+        self.state
+            .as_ref()
+            .map_or_else(LogControl::stale_attachment, LogControl::for_attachment)
     }
 
     /// Closes admission, drains entered calls, and releases attachment references.
@@ -566,17 +568,21 @@ pub(crate) fn flush_attached(
     let state = saved.upgrade().ok_or(crate::FlushError::NotRunning {
         phase: crate::LifecyclePhase::Stopped,
     })?;
-    let Some(_call) = state.enter() else {
+    let Some(call) = state.enter() else {
         return Err(crate::FlushError::NotRunning {
             phase: crate::LifecyclePhase::Stopping,
         });
     };
-    let logger = Arc::clone(&state.logger);
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     std::thread::Builder::new()
         .name("sc-observability-log-attachment-flush".to_owned())
         .spawn(move || {
-            let _ = sender.send(logger.flush());
+            // Keep the attachment call alive until the helper exits.  A timed-out
+            // caller must not be able to detach while this helper still owns the
+            // attachment's logger reference.
+            let result = call.state.logger.flush();
+            let _ = sender.send(result);
+            drop(call);
         })
         .map_err(|source| crate::FlushError::HelperSpawn {
             diagnostic: OperationDiagnostic {
