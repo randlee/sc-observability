@@ -24,6 +24,7 @@ required_variables:
   - description
   - remedy
   - evidence
+  - difficulty
 optional_variables:
   - assignee
   - blocked_by
@@ -33,13 +34,14 @@ defaults:
 ---
 {% if severity not in ["blocking", "important", "minor"] %}ERROR: severity must be blocking, important or minor, got {{ severity }}
 {% endif %}{% if screen not in ["keep", "not_applicable", "ceremony", "concern_valid_remedy_ceremony"] %}ERROR: screen must be a ceremony-finding-screen verdict, got {{ screen }}
+{% endif %}{% if difficulty not in ["hard", "normal", "fast"] %}ERROR: difficulty must be hard, normal, or fast
 {% endif %}{% for k, v in [["requirements", requirements], ["adrs", adrs]] %}{% if not v or ("NONE" in v and v | length > 1) %}ERROR: {{ k }} must list ids or be exactly ["NONE"]
 {% endif %}{% endfor %}{
   "id": {{ id | tojson }},
   "title": {{ (sprint ~ " " ~ severity ~ ": " ~ title) | tojson }},
   "issue_type": "bug",
   "status": "open",
-  "priority": {{ {"blocking": 1, "important": 3, "minor": 4}[severity] }},
+  "priority": {{ {"blocking": 1, "important": 2, "minor": 4}[severity] }},
   "assignee": {{ assignee | tojson }},
   "description": {{ (description ~ "\n\nEvidence:\n" ~ evidence ~ "\n\nFixed on a new layer at the top of stack " ~ stack ~ ". QA verifies the fix after its sanity check; the sanity check judges only the acceptance criteria below.") | tojson }},
   "design": {{ remedy | tojson }},
@@ -58,6 +60,7 @@ defaults:
     "found_on_layer": {{ found_on_layer | tojson }},
     "found_at_commit": {{ found_at_commit | tojson }},
     "severity": {{ severity | tojson }},
+    "difficulty": {{ difficulty | tojson }},
     "screen": {{ screen | tojson }},
     "reviewer": {{ reviewer | tojson }},
     "finding_ref": {{ finding_ref | tojson }},

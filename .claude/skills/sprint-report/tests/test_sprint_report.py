@@ -160,6 +160,17 @@ class SprintReportTests(unittest.TestCase):
         self.assertTrue(report.related_bead(finding, 'qa-2', 'discovered-from'))
         self.assertFalse(report.related_bead({'id': 'qa-2-f1'}, 'qa-2', 'discovered-from'))
 
+    def test_dispatch_prioritizes_and_never_assigns_unclassified(self):
+        rows = report.dispatch_rows([
+            {'id': 'minor', 'priority': 4, 'metadata': {'layer': 3, 'difficulty': 'fast'}},
+            {'id': 'blocking', 'priority': 1, 'metadata': {'layer': 2, 'severity': 'blocking', 'difficulty': 'hard'}},
+            {'id': 'unknown', 'priority': 2, 'metadata': {'layer': 1}},
+        ], [{'identity': 'luna', 'model': 'gpt-6-luna'}, {'identity': 'astra', 'model': 'gpt-6-astra'}], set())
+        self.assertEqual([row['id'] for row in rows], ['blocking', 'unknown', 'minor'])
+        self.assertEqual(rows[0]['agents'], 'astra')
+        self.assertEqual(rows[1]['agents'], 'UNCLASSIFIED')
+        self.assertIn('UNCLASSIFIED', report.render_dispatch(rows))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -22,6 +22,9 @@ from pathlib import Path
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "atm-beads/scripts"))
+from plan_contract import priority_for_severity
+
 
 class HandoffError(RuntimeError):
     pass
@@ -97,10 +100,6 @@ def main() -> int:
         if len(selectors) != len(findings):
             raise HandoffError("two findings share a deliverable/file/line selector")
         parent = json.loads(command(["bd", "show", args.bead, "--json"], args.actor, capture=True))[0]
-        parent_priority = parent.get("priority")
-        if not isinstance(parent_priority, int) or isinstance(parent_priority, bool):
-            raise HandoffError("checked bead has no integer priority")
-        child_priority = min(parent_priority + 1, 4)
         parent_metadata = parent.get("metadata")
         if not isinstance(parent_metadata, dict):
             raise HandoffError("checked bead has no metadata")
@@ -111,6 +110,9 @@ def main() -> int:
         phase, sprint, stack = (parent_metadata["phase"], parent_metadata["sprint"], parent_metadata["stack"])
         if not all(isinstance(value, str) and value for value in (phase, sprint, stack)):
             raise HandoffError("checked bead phase, sprint, and stack metadata must be non-empty strings")
+        difficulty = parent_metadata.get("difficulty")
+        if difficulty not in ("hard", "normal", "fast"):
+            raise HandoffError("checked bead has no valid difficulty")
         labels = [f"phase-{phase}", "stage:finding", f"stack:{stack}"]
         children = existing_children(args.bead, args.actor, args.task, report["commit"])
         created = []
@@ -127,11 +129,17 @@ def main() -> int:
                 "file": finding["file"], "line": finding["line"],
                 "issue": finding["issue"], "depends_on": finding.get("depends_on", []),
             }
+            severity = str(finding.get("severity") or "").lower()
+            try:
+                priority = priority_for_severity(severity)
+            except KeyError as exc:
+                raise HandoffError(f"invalid finding severity: {severity}") from exc
             provenance = {
                 "phase": phase, "sprint": sprint, "stack": stack,
                 "found_on_layer": parent_metadata["layer"],
                 "found_at_commit": report["commit"], "reviewer": args.reviewer,
-                "finding_ref": ref, "sprint_bead": args.bead,
+                "finding_ref": ref, "sprint_bead": args.bead, "severity": severity,
+                "difficulty": difficulty,
             }
             metadata = {**provenance, "sanity_finding": payload}
             description = "Sanity finding; the JSON below is the source report data.\n\n```json\n" + json.dumps(payload, indent=2, sort_keys=True) + "\n```"
@@ -141,7 +149,7 @@ def main() -> int:
                 "bd", "create", title, "--type", "bug", "--status", "open",
                 "--parent", args.bead, "--description", description,
                 "--acceptance", acceptance,
-                "--priority", str(child_priority),
+                "--priority", str(priority),
                 "--labels", ",".join(labels), "--no-inherit-labels",
                 "--metadata", json.dumps(metadata), "--silent",
             ], args.actor, capture=True)
@@ -149,8 +157,9 @@ def main() -> int:
                 raise HandoffError(f"bd create returned no id for {ref}")
             children[ref] = child
             created.append(child)
-        for child in children.values():
-            command(["bd", "update", child, "--priority", str(child_priority)], args.actor)
+        for finding in findings:
+            severity = str(finding.get("severity") or "").lower()
+            command(["bd", "update", children[finding["finding_ref"]], "--priority", str(priority_for_severity(severity))], args.actor)
         for finding in findings:
             child = children[finding["finding_ref"]]
             dependencies = finding.get("depends_on", [])

@@ -100,7 +100,7 @@ screen said. What happens next depends on the verdict:
 | `concern_valid_remedy_ceremony` | filed open with `remedy` rewritten to the existing mechanism the screen names |
 | `ceremony` | filed, then closed at once: `bd close <finding> --reason "ceremony: <reason>"` |
 
-- Severity sets priority: blocking P1, important P3, minor P4. Planned dev is
+- Severity sets priority: blocking P1, important P2, minor P4. Planned dev is
   P2, so a blocking finding comes up ahead of the next dev bead. Reviewers
   spell severity their own way; normalize before rendering: `critical`,
   `Blocking`, `BLOCKING` → `blocking`; `Important` → `important`; `Minor`,
