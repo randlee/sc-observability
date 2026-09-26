@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 2
+- Wave: 5
 - Branch: `sprint/d-2-host-logger-bridge`
-- PR target: `sprint/d-13-c-log`
+- PR target: `sprint/d-1-log-settings`
 - Blocked by: `obs-d-13-sanity`
 - Owned paths:
   - `crates/sc-observability-log/src/bridge.rs`

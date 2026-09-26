@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 2
+- Wave: 11
 - Branch: `sprint/d-8-otlp-http-json-transplant`
-- PR target: `sprint/d-12-c-types`
+- PR target: `sprint/d-7-otlp-sdk-tokio`
 - Blocked by: `obs-d-12-sanity`
 - Owned paths:
   - `crates/sc-observability-otlp/src/error_codes.rs`

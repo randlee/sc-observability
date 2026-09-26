@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 2
+- Wave: 13
 - Branch: `sprint/d-15-binding-runtime-error-migration`
-- PR target: `sprint/d-12-c-types`
+- PR target: `sprint/d-14-observe-error-migration`
 - Blocked by: `obs-d-12-sanity`
 - Owned paths:
   - `crates/sc-observability-binding-runtime/**`

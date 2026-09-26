@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 4
+- Wave: 18
 - Branch: `sprint/d-11-python-open-ended-guard`
-- PR target: `sprint/d-18-integration-and-public-api`
+- PR target: `sprint/d-9-otlp-conformance`
 - Blocked by: `obs-d-18-sanity`
 - Owned paths:
   - `scripts/ci/_python_distribution.py`

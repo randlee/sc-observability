@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 2
+- Wave: 4
 - Branch: `sprint/d-1-log-settings`
-- PR target: `sprint/d-13-c-log`
+- PR target: `sprint/d-10-windows-arm64-wheel`
 - Blocked by: `obs-d-13-sanity`
 - Owned paths:
   - `crates/sc-observability/src/runtime.rs`

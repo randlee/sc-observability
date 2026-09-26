@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 2
+- Wave: 7
 - Branch: `sprint/d-4-error-enums-2-0`
-- PR target: `sprint/d-12-c-types`
+- PR target: `sprint/d-3-typed-sink-registration`
 - Blocked by: `obs-d-12-sanity`
 - Owned paths:
   - `crates/sc-observability/src/error_codes.rs`

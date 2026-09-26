@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 2
+- Wave: 15
 - Branch: `sprint/d-17-log-macros-error-migration`
-- PR target: `sprint/d-12-c-types`
+- PR target: `sprint/d-16-dto-error-migration`
 - Blocked by: `obs-d-12-sanity`
 - Owned paths:
   - `crates/sc-observability-log-macros/**`

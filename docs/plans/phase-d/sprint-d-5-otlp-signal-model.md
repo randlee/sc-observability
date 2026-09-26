@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 2
+- Wave: 8
 - Branch: `sprint/d-5-otlp-signal-model`
-- PR target: `sprint/d-12-c-types`
+- PR target: `sprint/d-4-error-enums-2-0`
 - Blocked by: `obs-d-12-sanity`
 - Owned paths:
   - `crates/sc-observability-otlp/src/projectors.rs`

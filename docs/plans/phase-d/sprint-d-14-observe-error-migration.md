@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 2
+- Wave: 12
 - Branch: `sprint/d-14-observe-error-migration`
-- PR target: `sprint/d-12-c-types`
+- PR target: `sprint/d-8-otlp-http-json-transplant`
 - Blocked by: `obs-d-12-sanity`
 - Owned paths:
   - `crates/sc-observe/**`

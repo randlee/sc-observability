@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 2
+- Wave: 10
 - Branch: `sprint/d-7-otlp-sdk-tokio`
-- PR target: `sprint/d-12-c-types`
+- PR target: `sprint/d-6-otlp-lifecycle-core`
 - Blocked by: `obs-d-12-sanity`
 - Owned paths:
   - `crates/sc-observability-otlp/src/assembly.rs`

@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 2
+- Wave: 6
 - Branch: `sprint/d-3-typed-sink-registration`
-- PR target: `sprint/d-13-c-log`
+- PR target: `sprint/d-2-host-logger-bridge`
 - Blocked by: `obs-d-13-sanity`
 - Owned paths:
   - `crates/sc-observability/src/builder.rs`

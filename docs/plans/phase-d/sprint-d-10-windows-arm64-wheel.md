@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 1
+- Wave: 3
 - Branch: `sprint/d-10-windows-arm64-wheel`
-- PR target: `integrate/phase-d`
+- PR target: `sprint/d-13-c-log`
 - Blocked by: `obs-phase-d-plan-qa`
 - Owned paths:
   - `.github/workflows/b4a-python-distributions.yml`

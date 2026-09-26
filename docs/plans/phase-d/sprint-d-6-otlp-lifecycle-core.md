@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 2
+- Wave: 9
 - Branch: `sprint/d-6-otlp-lifecycle-core`
-- PR target: `sprint/d-12-c-types`
+- PR target: `sprint/d-5-otlp-signal-model`
 - Blocked by: `obs-d-12-sanity`
 - Owned paths:
   - `crates/sc-observability-otlp/src/config.rs`

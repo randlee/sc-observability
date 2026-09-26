@@ -2,7 +2,7 @@
 
 ## Plan metadata
 
-- Wave: 4
+- Wave: 17
 - Branch: `sprint/d-9-otlp-conformance`
 - PR target: `sprint/d-18-integration-and-public-api`
 - Blocked by: `obs-d-18-sanity`

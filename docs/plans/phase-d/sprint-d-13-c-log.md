@@ -2,9 +2,9 @@
 
 ## Plan metadata
 
-- Wave: 1
+- Wave: 2
 - Branch: `sprint/d-13-c-log`
-- PR target: `integrate/phase-d`
+- PR target: `sprint/d-12-c-types`
 - Blocked by: `obs-phase-d-plan-qa`
 - Owned paths:
   - `crates/sc-observability/src/settings.rs`
