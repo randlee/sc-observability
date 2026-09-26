@@ -756,6 +756,21 @@ graph TD
   Python -. "LoggerConfig construction only, no shutdown ownership" .-> Core
 ```
 
+### Phase D transport allowlist
+
+The OTLP dependency allowlist explicitly permits the feature-gated
+`legacy-http-json` feature and its reviewed `reqwest`, `httpdate`, `getrandom`,
+and Tokio `rt`/`sync` dependencies; obs-d-12 owns this normative declaration.
+The legacy transport uses `reqwest =0.12.28` with `blocking`, `json`,
+`rustls-tls` and default features off, and `httpdate =1.0.3`; its transitive
+Tokio use does not impose a caller-owned runtime. The separate `otlp-sdk`
+feature admits the reviewed `opentelemetry*` SDK family and its explicitly
+reviewed transport dependencies only. obs-d-12 records exact remaining pins
+in Cargo.lock and the existing boundaries manifest at implementation review.
+No wildcard approval covers an unrelated dependency. ADR-019 records this
+amendment to ADR-018; the existing boundary manifest is the single machine
+allowlist and this section is its normative explanation.
+
 ## 6.1 Query/Follow Dependency Order
 
 The implementation dependency order for the query/follow work is:
@@ -795,6 +810,8 @@ ADR navigation index (status is recorded in each decision below):
 - [ADR-013: Owner-Controlled Shared Runtime Level](#adr-013-owner-controlled-shared-runtime-level)
 - [ADR-014: Result-Preserving Language Boundaries](#adr-014-result-preserving-language-boundaries)
 - [ADR-015: Embedded Python And Shared Binding Runtime](#adr-015-embedded-python-and-shared-binding-runtime)
+
+- [ADR-019: Phase D Implementation Decisions](#adr-019-phase-d-implementation-decisions)
 
 ### ADR-001: Observation-First Producers
 
@@ -1154,6 +1171,53 @@ ADR navigation index (status is recorded in each decision below):
   matrix, async 2.0 lifecycle, queue/deadline behavior, and source provenance
   before D.6 lands production code.
 - **Contracts**: OTLP-001–024; Phase D D.5–D.8.
+
+### ADR-019: Phase D Implementation Decisions
+
+- **Status**: Proposed; accepted when the plan-fix PR merges.
+- **Context**: ADR-017/018 establish the 2.0 surface and dual transports. The
+  plan must also record the reviewed dependency-pin amendment, registry owner,
+  logging structural choices and consumer migration recipe without inventing
+  a second contract owner or serializing the two wave-1 contract sprints.
+- **Decision — ADR-018 amendment**: Section 6's Phase D transport allowlist
+  refines ADR-018 with the legacy feature's reqwest/httpdate pins, explicit
+  getrandom and Tokio rt/sync use, and independently gated SDK dependencies.
+  obs-d-12 records the reviewed exact Cargo.lock/manifest pins. obs-d-8 uses
+  this declaration without adding a second allowlist or editing ADR-018's
+  accepted historical text.
+- **Decision — ADR-005 registry ownership**: All `OTLP_*` constants used by
+  types-owned `ExportError`, `ConfigFailure` and `TelemetryError` live in
+  `crates/sc-observability-types/src/error_codes.rs`, including a named
+  `otlp` submodule within that single registry. OTLP's own `error_codes.rs`
+  re-exports these constants; it does not redefine their string values.
+  Companion-only detach codes live in the bridge's sole error_codes.rs;
+  core-only registration/settings codes live in core's sole error_codes.rs.
+  obs-d-12 owns the shared names and registry rows. Constants remain separate.
+- **Decision — logging contracts**: obs-d-13 owns the settings shape, atomic
+  retained-policy resolution and explicit JSON-root precedence; an empty
+  explicit root is invalid. The host bridge uses an open object-safe policy
+  trait and a non-owning attachment; detach takes `&mut self`, retains a
+  timed-out handle for retry, and cannot shut down or change the host's level.
+  Stale cloned controls return NotInstalled through the runtime slot check.
+  Open typed sink contracts preserve source/remediation; no duplicate failure
+  classifier is introduced. Final canonical signatures are specified in
+  obs-d-13, but its wave-1 compiled fixtures use an error-parameterized private
+  harness and existing baseline types, without importing obs-d-12's new
+  errors or registry rows. Wave-2 runtime/bridge/builder consumers bind both
+  contract artifacts; obs-d-18 activates the canonical public exports.
+- **Decision — consumer migration**: obs-d-17 migrates the consumer-check and
+  custom-sink/Tauri examples to canonical cause variants at each construction
+  and match site, preserving diagnostic/source data and owner-only lifecycle
+  capabilities. It compiles downstream open-trait implementations with
+  deprecated usage denied. It does not reimplement runtime mappings or remove
+  1.x wrappers; obs-d-18 owns final removal and semver/release gates.
+- **Consequences**: Contract ownership is independent in wave 1. Shared
+  artifacts have producer/consumer handoffs, and backend implementations use
+  the common lifecycle. No new boundary-rule framework is authorized. Cargo
+  dependency graphs and Rust privacy enforce structural restrictions; existing
+  validators retain source/provenance checks they alone can enforce.
+- **Contracts**: PHD-001–004, PHB-002/010/013, LOG-004/009/042/046,
+  OTLP-011/021/023, SRC-001–004; obs-d-12/13/17/8.
 
 ## 8. API-Design Consistency
 

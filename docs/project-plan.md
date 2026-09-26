@@ -500,25 +500,38 @@ The detailed sprint-by-sprint execution record remains in
 
 ## Phase D — Host logging, OTLP restoration, and distribution completion
 
-The finalized Phase D plan is
-[`docs/plans/phase-d/plan-phase-d.md`](plans/phase-d/plan-phase-d.md). Its
-streams are:
+The authoritative execution plan is the obs-phase-d bead, projected in
+[the Phase D plan](plans/phase-d/plan-phase-d.md). Its corrected boundaries are:
 
-1. Parallel-safe [D.1 startup settings](plans/phase-d/sprint-d-1-log-settings.md), [D.2 host logger bridge](plans/phase-d/sprint-d-2-host-logger-bridge.md), and [D.3 1.x typed-sink bridge](plans/phase-d/sprint-d-3-typed-sink-registration.md)
-2. [D.4 2.0 error enums and release baseline](plans/phase-d/sprint-d-4-error-enums-2-0.md) → [D.5 OTLP signal model](plans/phase-d/sprint-d-5-otlp-signal-model.md) → [D.6 lifecycle core](plans/phase-d/sprint-d-6-otlp-lifecycle-core.md) → parallel [D.7 SDK adapter](plans/phase-d/sprint-d-7-otlp-sdk-tokio.md) and [D.8 legacy transplant](plans/phase-d/sprint-d-8-otlp-http-json-transplant.md) → [D.9 conformance](plans/phase-d/sprint-d-9-otlp-conformance.md)
-3. [D.10 Windows ARM64 wheel](plans/phase-d/sprint-d-10-windows-arm64-wheel.md) → [D.11 open-ended Python metadata guard](plans/phase-d/sprint-d-11-python-open-ended-guard.md)
+1. obs-d-12 owns the canonical error/signal and OTLP config/default/validation
+   contracts, Cargo 2.0 version bump, module registration and normative docs.
+   obs-d-13 owns the independent logging-contract specification.
+2. obs-d-1–8 and obs-d-14–17 implement their own logging/observation/transport
+   boundaries after the relevant contract sanity gates. obs-d-19 owns DTO/schema
+   and generated models; obs-d-20 owns language adapters. These implementations
+   run in wave 2 with disjoint fences; stack order is not a dependency chain.
+3. obs-d-18 integrates completed artifacts, activates canonical exports, removes
+   1.x compatibility and owns the final release baseline, approvals, migration
+   guide, inventories and semver gates. obs-d-4 is a core error migration, not
+   the owner of the Cargo version bump or release baseline.
+4. obs-d-10 combines native Windows ARM64 preparation and the former obs-d-11
+   open-ended Python guard. obs-d-9 is the sole wave-4 collector qualification
+   bead; the lead accepted that fourth wave and critical path four on 2026-09-26
+   under authority delegated by the user.
 
-The detailed plan names branches, worktrees, agents, and the final integration
-step. The logging trio is serial only because cobs owns it; its artifacts are
-otherwise parallel-safe. D.4 precedes all 2.0 OTLP work.
+The Python contract is PyO3 abi3-py310, cp310-abi3 wheels and requires-python
+>=3.10 without an upper/exclusion cap. The target matrix has six platforms and
+30 native installed-suite cells at one immutable source. Raising the floor or
+adding a cap requires a separately approved compatibility decision, an updated
+supported-interpreter matrix and guard expectations; it is not an incidental
+packaging edit. obs-d-10 supplies the guard and policy specification; obs-d-18
+activates release policy/inventory and checks combined release evidence.
 
-Only concrete code-consumption edges are `must_follow`; D.4 alone owns release
-baseline alignment before its children begin, while final integration is
-merge-only. D.1–D.3 remain additive against the 1.4.1
-baseline. Planning
-or implementation does not authorize a release, tag, registry publication,
-or downstream `atm-core` change. Issue #88 (Python OTEL/structured logging)
-is expressly excluded.
+ADR-017/018 were accepted through PR #225 on 2026-09-26. ADR-019 remains
+proposed until the plan-fix PR merges. PHD-001–004 govern 2.0; PHB-003/004/005
+remain the historical 1.x compatibility contract. Planning or implementation
+does not authorize a release, tag, registry publication or downstream atm-core
+change. Issue #88 (Python OTEL/structured logging) remains excluded.
 
 ## Consumer Usability Baseline
 
