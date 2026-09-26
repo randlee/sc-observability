@@ -17,6 +17,7 @@ mod primitives;
 mod process;
 mod projection;
 mod query;
+pub mod retry;
 mod span;
 mod tracing;
 pub mod typed;
