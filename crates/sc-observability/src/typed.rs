@@ -4,24 +4,19 @@
 //! These adapters let new sink implementations use neutral typed failures
 //! without changing legacy consumers or introducing root trait ambiguity.
 
-#![allow(
-    deprecated,
-    reason = "typed sink adapters must preserve the published LogSinkError boundary"
-)]
-
 use std::sync::Arc;
 
-use sc_observability_types::typed::LogSinkFailure;
+use sc_observability_types::v2::LogSinkError;
 
-use crate::{LogEvent, LogSink, LogSinkError, SinkHealth};
+use crate::{LogEvent, LogSink, SinkHealth};
 
 /// A logger sink that reports neutral typed failures.
 pub trait TypedLogSink: Send + Sync {
     /// Writes one event to the sink.
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure>;
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
 
     /// Flushes buffered state.
-    fn flush(&self) -> Result<(), LogSinkFailure> {
+    fn flush(&self) -> Result<(), LogSinkError> {
         Ok(())
     }
 
@@ -47,11 +42,11 @@ struct LegacySinkAdapter {
 
 impl LogSink for LegacySinkAdapter {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        self.value.write(event).map_err(Into::into)
+        self.value.write(event)
     }
 
     fn flush(&self) -> Result<(), LogSinkError> {
-        self.value.flush().map_err(Into::into)
+        self.value.flush()
     }
 
     fn health(&self) -> SinkHealth {
@@ -64,12 +59,12 @@ struct TypedSinkAdapter {
 }
 
 impl TypedLogSink for TypedSinkAdapter {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkFailure> {
-        self.value.write(event).map_err(Into::into)
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        self.value.write(event)
     }
 
-    fn flush(&self) -> Result<(), LogSinkFailure> {
-        self.value.flush().map_err(Into::into)
+    fn flush(&self) -> Result<(), LogSinkError> {
+        self.value.flush()
     }
 
     fn health(&self) -> SinkHealth {
