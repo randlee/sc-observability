@@ -58,6 +58,12 @@ def metadata(bead: dict[str, Any]) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def list_value(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
 def choose_qa(candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not candidates:
         return None
@@ -150,9 +156,9 @@ def main() -> int:
             "sanity_bead": (sanity_by_dev.get(str(bead["id"])) or {}).get("id"),
             "qa_bead": qa.get("id") if qa else None,
             "deliverable_count": deliverable_count(bead.get("description", "")),
-            "owned_paths": bead_meta.get("owned_paths") or [],
-            "requirements": bead_meta.get("requirements") or [],
-            "adrs": bead_meta.get("adrs") or [],
+            "owned_paths": list_value(bead_meta.get("owned_paths")),
+            "requirements": list_value(bead_meta.get("requirements")),
+            "adrs": list_value(bead_meta.get("adrs")),
         }
         sprints.append(row)
 

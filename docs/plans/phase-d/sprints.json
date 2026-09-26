@@ -1199,7 +1199,9 @@
         "PHC-003",
         "PHC-004"
       ],
-      "adrs": "NONE"
+      "adrs": [
+        "NONE"
+      ]
     },
     {
       "id": "obs-d-20",
