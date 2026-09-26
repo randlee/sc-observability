@@ -28,25 +28,11 @@ The signatures belong to D.13; 2.0 wrapper removal belongs to D.18.
 
 ## Design
 
-## Owned Paths and Exact Targets
+## Implementation targets
 
-- `crates/sc-observability/src/builder.rs`
-- `crates/sc-observability/src/typed.rs`
-- `crates/sc-observability-types/src/errors.rs`
-- `crates/sc-observability/tests/typed_registration.rs`
-- `docs/api-approvals/d-3-*.json`
-- `docs/logging/d-3-typed-sink-registration.md`
-
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
-
-Parallel-safe with the other additive logging sprints: this sprint owns its separate additive document and scoped API approval. D.4 owns linking these documents from the shared API design. No shared normative document or release baseline is edited here.
-
-Implement both inherent registration entry points in core `builder.rs` and
-reuse `typed.rs`; update the existing error deprecation at its types owner.
-The same-crate inherent impl for `SinkRegistration` avoids editing D.1-owned `lib.rs`.
-
+- `crates/sc-observability/src/builder.rs`: implement `SinkRegistration::typed` with the D.13 adapter contract (deliverable 1) and `LoggerBuilder::register_typed_sink` chaining/error behavior (deliverable 2).
+- `crates/sc-observability/tests/typed_registration.rs`: add typed registration, flush, health, and failure-fidelity assertions (deliverables 2–3).
+- `docs/logging/d-3-typed-sink-registration.md`: document the retained migration path (deliverable 3).
 
 
 ## Acceptance criteria
