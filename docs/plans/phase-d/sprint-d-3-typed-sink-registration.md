@@ -13,31 +13,17 @@
 
 ## Goal and dependency
 
-In a compatible 1.x release, remove the consumer need to use deprecated `LogSinkError` or
-manually call `typed::legacy_sink()` when registering a `TypedLogSink`.
-This additive surface is checked against published 1.4.1. It is a deliberate
-one-release bridge. D.4 may remove this bridge only in its later 2.0 release.
-
+Implement the D.13 typed-sink adapter contract in the existing logging builder.
 
 ## Deliverables
 
-1. Add `SinkRegistration::typed(Arc<dyn TypedLogSink>) -> Self` that applies
-   the existing legacy adapter internally and preserves registration metadata.
-2. Add `LoggerBuilder::register_typed_sink(...)` mirroring the retained
-   registration flow, including chaining/error behavior and sink health/flush
-   behavior.
-3. Update `LogSinkError` deprecation/rustdoc and the additive API/migration
-   sections in `docs/logging/d-3-typed-sink-registration.md` to
-   name `TypedLogSink`, `SinkRegistration::typed`, and builder registration.
-4. Add public-only consumer fixtures implementing `TypedLogSink` without
-   `#[allow(deprecated)]`, proving write, explicit flush, health, registration,
-   and typed failure fidelity. Retain legacy `LogSink` compatibility fixtures.
-
+1. Implement the D.13 `SinkRegistration::typed` adapter path using the existing legacy adapter internally while preserving registration metadata.
+2. Implement the D.13 `LoggerBuilder::register_typed_sink` registration flow, chaining, failure, sink-health, and flush behavior.
+3. Update deprecation/rustdoc, migration documentation, and public consumer fixtures for the retained typed registration surface.
 
 ## Non-closure
 
-The retained `LogSink`/`LogSinkError` ABI is not removed here; the separate
-D.4 major-version migration owns any later removal.
+The signatures belong to D.13; 2.0 wrapper removal belongs to D.18.
 
 
 ## Design

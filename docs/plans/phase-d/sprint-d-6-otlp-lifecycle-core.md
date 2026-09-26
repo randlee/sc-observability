@@ -10,54 +10,16 @@
   - `crates/sc-observability-otlp/src/config.rs`
   - `crates/sc-observability-otlp/src/constants.rs`
 
-## Goal and dependency
-
-Define the backend-neutral lifecycle core used by both exporters, preserving
-synchronous emit admission and giving asynchronous transport lifecycle an
-honest awaitable completion surface. D.6 `must_follow`s D.4 and D.5. No
-`atm-core` code or PR is part of the sprint.
-
-
 ## Deliverables
 
-1. Implement D.6's shared lifecycle core, factory, `ExporterSet`, bounds,
-   health/accounting, and fake exporter fixture. D.7 and D.8 inject their
-   transport adapters through this interface.
-2. Convert D.5 neutral signals at the core boundary without losing
-   resource/scope metadata, kind, flags, links, events, status, or histogram
-   content.
-   D.6 owns `PositiveDuration`, `LifecycleBounds`, `RetryPolicy`,
-   `BoundedPercent`, `BackendTransportBounds`, `ValidatedTransportBounds`,
-   `OtlpConfigField`, `OtlpConfigTarget`, `ValueOrigin`, `ResolvedField`, the
-   sole backend-aware validation constructor, and the complete stable-error
-   inventory above. The four public payload types and public `ConfigFailure`
-   shapes are included in API approval and the 2.0 semver manifest.
-3. Implement the exact ordering/state/cancellation contract above without
-   `block_on`, a hidden runtime, a process-global provider, mutex-held network
-   waits, or executor-worker blocking.
-4. Preserve fail-open health/dropped behavior for immediate admission,
-   terminal export, runtime cancellation, and lifecycle failures. Invalid or
-   unsupported combinations fail construction with stable typed errors.
-   Health exposes bounded queue depth/capacity, worker/provider state,
-   `last_terminal_failure`, per-signal overflow counts, and
-   `retry_attempt_failures` without credentials. Transient attempts never overwrite the terminal
-   field; the next successful export while `Open` clears it and records
-   recovery, while `Closing`/`Shutdown` retains it. D.7 and D.8 use the same
-   model.
-5. Add lifecycle fixtures with fake exporters for bounded channel pressure,
-   timeout, late failure, flush barriers, concurrent admission, shutdown, and
-   cancellation. D.7 owns the Tokio-hosted consumer and collector fixture.
-6. Record the lifecycle ADR, OTLP-020/021 revisions, API approval, rustdoc, and
-   migration from synchronous 1.x lifecycle to the backend-neutral async 2.0
-   completion API. D.6 owns those config/error/lifecycle documents and their
-   shared validation fixtures; D.7 may only verify them by reference.
-   The technical lead must accept ADR-018 before D.6 production code.
-
+1. Implement the lifecycle core behind the D.12 exporter trait: state transitions, bounded admission, factory use, health/accounting, and adapter injection points.
+2. Convert D.12 neutral signals at the core boundary without loss of resource/scope metadata, flags, links, events, status, or histogram content.
+3. Implement lifecycle ordering, cancellation, fail-open health/dropped behavior, and fake-exporter fixtures using the D.12 bounds, retry policy, configuration fields, `ExporterSet`, and factory contract.
+4. Document and test the lifecycle implementation and its backend-neutral async completion behavior.
 
 ## Non-closure
 
-`LegacyHttpJson` is not operational until D.8. No downstream `atm-core` work,
-Python binding, dashboard restoration, or publication.
+D.12 owns the types, factory, `ExporterSet`, and fake fixture contract; D.7/D.8 own transport adapters; D.18 owns public API integration.
 
 
 ## Design
