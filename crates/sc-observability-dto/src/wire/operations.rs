@@ -456,3 +456,149 @@ pub struct FailureCountsDto {
     /// Wire unknown remote.
     pub unknown_remote: DecimalDto,
 }
+
+/// Additive operational failures preserving canonical diagnostic metadata.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CanonicalFailureDto {
+    /// Wire validation.
+    Validation {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+        /// Wire field.
+        field: String,
+    },
+    /// Wire queue full.
+    QueueFull {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+    },
+    /// Wire below baseline.
+    BelowBaseline {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+        /// Wire requested.
+        requested: LevelFilterDto,
+        /// Wire configured.
+        configured: LevelFilterDto,
+    },
+    /// Wire unsupported level.
+    UnsupportedLevel {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+        /// Wire requested.
+        requested: LevelFilterDto,
+        /// Wire available.
+        available: LevelFilterDto,
+    },
+    /// Wire permission denied.
+    PermissionDenied {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+    },
+    /// Wire closed.
+    Closed {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+    },
+    /// Wire unavailable.
+    Unavailable {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+    },
+    /// Wire io.
+    Io {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+    },
+    /// Wire timeout.
+    Timeout {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+        /// Wire operation.
+        operation: String,
+    },
+    /// Wire cancelled.
+    Cancelled {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+        /// Wire operation.
+        operation: String,
+    },
+    /// Wire unsupported version.
+    UnsupportedVersion {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+        /// Wire received.
+        received: u32,
+    },
+    /// Wire internal.
+    Internal {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+    },
+    /// Wire unknown remote.
+    UnknownRemote {
+        #[serde(flatten)]
+        /// Wire diagnostic.
+        diagnostic: Box<super::events::CanonicalDiagnosticDto>,
+        /// Wire remote kind.
+        remote_kind: String,
+    },
+}
+
+impl CanonicalFailureDto {
+    /// Returns the original diagnostic without parsing display text.
+    pub fn diagnostic(&self) -> &super::events::CanonicalDiagnosticDto {
+        match self {
+            Self::Validation { diagnostic, .. }
+            | Self::QueueFull { diagnostic, .. }
+            | Self::BelowBaseline { diagnostic, .. }
+            | Self::UnsupportedLevel { diagnostic, .. }
+            | Self::PermissionDenied { diagnostic, .. }
+            | Self::Closed { diagnostic, .. }
+            | Self::Unavailable { diagnostic, .. }
+            | Self::Io { diagnostic, .. }
+            | Self::Timeout { diagnostic, .. }
+            | Self::Cancelled { diagnostic, .. }
+            | Self::UnsupportedVersion { diagnostic, .. }
+            | Self::Internal { diagnostic, .. }
+            | Self::UnknownRemote { diagnostic, .. } => diagnostic,
+        }
+    }
+}
+/// Staged envelope with unchanged schema/version/discriminants and richer diagnostics.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CanonicalWireEnvelope<T> {
+    /// Wire ok.
+    Ok {
+        /// Active variant schema version.
+        #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+        schema_version: u32,
+        /// Active variant value.
+        value: T,
+    },
+    /// Wire error.
+    Error {
+        /// Active variant schema version.
+        #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1)))]
+        schema_version: u32,
+        /// Active variant error.
+        error: CanonicalFailureDto,
+    },
+}
