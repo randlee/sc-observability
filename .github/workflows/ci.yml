@@ -130,7 +130,6 @@ jobs:
         run: bash scripts/ci/validate_public_api_diff.sh
 
       - name: Validate public API semver compatibility
-        continue-on-error: ${{ github.base_ref != 'develop' && github.base_ref != 'main' }}
         if: always()
         run: python3 scripts/ci/validate_public_api_semver.py
 
@@ -139,17 +138,17 @@ jobs:
         if: always()
         run: bash scripts/ci/validate_public_api_docs.sh
 
-      - name: Summarize report-only API findings
+      - name: Summarize report-only API approval findings
         if: ${{ always() && github.base_ref != 'develop' && github.base_ref != 'main' }}
         run: |
-          echo "::warning::Public API governance is report-only for this base; review the API diff summary and artifact before promotion to develop or main."
+          echo "::warning::Scoped API approvals are report-only for this base; semver remains strict. Review the API diff summary and artifact before promotion to develop or main."
           python3 - <<'PYTHON'
           import html
           import os
           from pathlib import Path
           reports = Path('target/public-api')
           with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
-              summary.write('## Public API report (non-blocking)\n\nStrict governance applies only to PR bases `develop` and `main`.\n\n')
+              summary.write('## Public API approval report (non-blocking)\n\nSemver remains strict on every PR. Scoped approvals are strict only for PR bases `develop` and `main`.\n\n')
               logs = sorted(reports.glob('*-diff.log'))
               if not logs:
                   summary.write('No API diff was produced; inspect the failed diff step.\n')
