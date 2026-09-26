@@ -6,8 +6,8 @@
 use std::sync::Arc;
 
 use sc_observability_otlp::{
-    LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, Telemetry, TelemetryConfigBuilder,
-    TelemetryProjectors, TracesConfig,
+    LogsConfig, MetricsConfig, OtelConfig, Telemetry, TelemetryConfigBuilder, TelemetryProjectors,
+    TracesConfig,
 };
 use sc_observability_types::typed::{
     TypedLogProjector, TypedMetricProjector, TypedSpanProjector, legacy_log_projector,
@@ -142,10 +142,9 @@ fn telemetry_config() -> sc_observability_otlp::TelemetryConfig {
         .enable_traces(TracesConfig::default())
         .enable_metrics(MetricsConfig::default())
         .with_transport(OtelConfig {
-            enabled: true,
-            endpoint: Some(
-                OtlpEndpoint::new("https://otel.example.internal").expect("valid endpoint"),
-            ),
+            // These integration fixtures validate routing fan-out, not a real
+            // OTLP backend. Disabled is the only no-network construction path.
+            enabled: false,
             ..OtelConfig::default()
         })
         .build()
@@ -259,14 +258,14 @@ fn builder_registration_attaches_logs_spans_and_metrics() {
     let runtime_health = runtime.health();
 
     assert!(contents.contains("\"action\":\"agent.observe\""));
-    assert_eq!(health.state, TelemetryHealthState::Healthy);
+    assert_eq!(health.state, TelemetryHealthState::Disabled);
     assert_eq!(health.dropped_exports_total, 0);
     assert_eq!(
         runtime_health
             .telemetry
             .expect("attached telemetry health")
             .state,
-        TelemetryHealthState::Healthy
+        TelemetryHealthState::Disabled
     );
     assert!(
         health
@@ -314,5 +313,5 @@ fn typed_projector_inputs_forward_through_retained_registration() {
             .expect("read projected log file")
             .contains("\"action\":\"agent.observe\"")
     );
-    assert_eq!(telemetry.health().state, TelemetryHealthState::Healthy);
+    assert_eq!(telemetry.health().state, TelemetryHealthState::Disabled);
 }
