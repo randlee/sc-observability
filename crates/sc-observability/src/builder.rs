@@ -16,10 +16,22 @@ use sc_observability_types::typed::InitFailure;
 )]
 use sc_observability_types::{InitError, Remediation};
 
+use crate::typed::{TypedLogSink, legacy_sink};
 use crate::{
     ConsoleSink, JsonlFileSink, LevelControl, LevelOwner, Logger, LoggerConfig, LoggerRuntime,
     Running, SinkRegistration, default_log_path,
 };
+
+impl SinkRegistration {
+    /// Registers a typed sink through the retained open [`crate::LogSink`] boundary.
+    ///
+    /// The D13 adapter keeps the typed sink's structured diagnostic and source
+    /// intact while this registration retains any sink-local filter metadata.
+    #[must_use]
+    pub fn typed(sink: Arc<dyn TypedLogSink>) -> Self {
+        Self::new(legacy_sink(sink))
+    }
+}
 
 /// Construction-time logger builder that owns sink registration.
 #[expect(
@@ -98,6 +110,14 @@ impl LoggerBuilder {
     pub fn register_sink(&mut self, registration: SinkRegistration) -> &mut Self {
         self.sinks.push(registration);
         self
+    }
+
+    /// Registers a typed sink before the logger runtime is built.
+    ///
+    /// This is equivalent to registering [`SinkRegistration::typed`] and
+    /// returns the builder so callers can continue fluent configuration.
+    pub fn register_typed_sink(&mut self, sink: Arc<dyn TypedLogSink>) -> &mut Self {
+        self.register_sink(SinkRegistration::typed(sink))
     }
 
     /// Finalizes construction and returns the logger runtime.
