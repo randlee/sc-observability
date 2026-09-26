@@ -77,6 +77,15 @@ pub const ALL: &[ErrorCode] = &[
     SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS,
 ];
 
+/// Canonical sc log detach timeout failure.
+pub const SC_LOG_DETACH_TIMEOUT: ErrorCode = ErrorCode::new_static("SC_LOG_DETACH_TIMEOUT");
+/// Canonical sc log detach not installed failure.
+pub const SC_LOG_DETACH_NOT_INSTALLED: ErrorCode =
+    ErrorCode::new_static("SC_LOG_DETACH_NOT_INSTALLED");
+/// Canonical sc log foreign logger installed failure.
+pub const SC_LOG_FOREIGN_LOGGER_INSTALLED: ErrorCode =
+    ErrorCode::new_static("SC_LOG_FOREIGN_LOGGER_INSTALLED");
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -94,12 +103,3 @@ mod tests {
         assert_eq!(ALL.len(), 19);
     }
 }
-
-/// Canonical sc log detach timeout failure.
-pub const SC_LOG_DETACH_TIMEOUT: ErrorCode = ErrorCode::new_static("SC_LOG_DETACH_TIMEOUT");
-/// Canonical sc log detach not installed failure.
-pub const SC_LOG_DETACH_NOT_INSTALLED: ErrorCode =
-    ErrorCode::new_static("SC_LOG_DETACH_NOT_INSTALLED");
-/// Canonical sc log foreign logger installed failure.
-pub const SC_LOG_FOREIGN_LOGGER_INSTALLED: ErrorCode =
-    ErrorCode::new_static("SC_LOG_FOREIGN_LOGGER_INSTALLED");
