@@ -7,6 +7,7 @@ use super::config::{
     BackendTransportBounds, ExporterBackend, LegacyRetryPolicy, OtelConfig, OtlpProtocol,
     validated_transport_bounds,
 };
+use super::constants;
 use super::contracts::{
     ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, MetricExporter, TraceExporter,
 };
@@ -104,6 +105,49 @@ fn contract_tests_record_and_byte_capacity() {
     ));
     assert_eq!(
         bytes.diagnostic().code,
+        otlp::OTLP_CONFIG_QUEUE_BYTE_CAPACITY
+    );
+
+    let upper_bounds = validated_transport_bounds(&OtelConfig {
+        queue_capacity: Some(constants::MAX_OTLP_QUEUE_CAPACITY),
+        queue_byte_capacity: Some(constants::MAX_OTLP_QUEUE_BYTE_CAPACITY),
+        ..legacy_config()
+    })
+    .expect("record and byte upper bounds are accepted");
+    assert_eq!(
+        upper_bounds.queue_capacity,
+        constants::MAX_OTLP_QUEUE_CAPACITY
+    );
+    assert_eq!(
+        upper_bounds.queue_byte_capacity,
+        constants::MAX_OTLP_QUEUE_BYTE_CAPACITY
+    );
+
+    let records_overflow = validated_transport_bounds(&OtelConfig {
+        queue_capacity: Some(constants::MAX_OTLP_QUEUE_CAPACITY + 1),
+        ..legacy_config()
+    })
+    .expect_err("record capacity above the upper bound is invalid");
+    assert!(matches!(
+        records_overflow,
+        ConfigFailure::InvalidQueueCapacity { .. }
+    ));
+    assert_eq!(
+        records_overflow.diagnostic().code,
+        otlp::OTLP_CONFIG_QUEUE_CAPACITY
+    );
+
+    let bytes_overflow = validated_transport_bounds(&OtelConfig {
+        queue_byte_capacity: Some(constants::MAX_OTLP_QUEUE_BYTE_CAPACITY + 1),
+        ..legacy_config()
+    })
+    .expect_err("byte capacity above the upper bound is invalid");
+    assert!(matches!(
+        bytes_overflow,
+        ConfigFailure::InvalidQueueByteCapacity { .. }
+    ));
+    assert_eq!(
+        bytes_overflow.diagnostic().code,
         otlp::OTLP_CONFIG_QUEUE_BYTE_CAPACITY
     );
 }

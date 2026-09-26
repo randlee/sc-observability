@@ -149,28 +149,30 @@ impl OtlpEndpoint {
         note = "Use OtlpEndpoint::new_typed(); see migrate-error-api.md."
     )]
     pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
-        Self::new_typed(value).map_err(Into::into)
+        Self::new_typed(value)
+            .map_err(config_failure_to_init_failure)
+            .map_err(Into::into)
     }
 
-    /// Creates a validated OTLP endpoint with a neutral initialization failure.
+    /// Creates a validated OTLP endpoint with a canonical configuration failure.
     ///
     /// Emptiness is checked against the trimmed value, but the original,
     /// untrimmed `value` is stored: this is intentional retained legacy
     /// behavior, not an oversight, and both the legacy [`OtlpEndpoint::new`]
     /// and this typed constructor preserve it identically. Callers that
     /// require a trimmed endpoint must trim before calling.
-    pub fn new_typed(value: impl Into<String>) -> Result<Self, InitFailure> {
+    pub fn new_typed(value: impl Into<String>) -> Result<Self, ConfigFailure> {
         let value = value.into();
         if value.trim().is_empty() {
-            return Err(invalid_transport_value_typed(
+            return Err(invalid_endpoint(
                 "endpoint must not be empty",
                 "set an explicit http:// or https:// OTLP endpoint",
             ));
         }
-        if !(value.starts_with("http://") || value.starts_with("https://")) {
-            return Err(invalid_transport_value_typed(
-                "endpoint must start with http:// or https://",
-                "set an OTLP endpoint with an explicit HTTP(S) scheme",
+        if !is_valid_http_endpoint(&value) {
+            return Err(invalid_endpoint(
+                "endpoint must be a valid http:// or https:// URL with a host",
+                "set an OTLP endpoint with an explicit HTTP(S) scheme and host",
             ));
         }
         Ok(Self(value))
@@ -202,7 +204,9 @@ impl TryFrom<String> for OtlpEndpoint {
     type Error = InitError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new_typed(value).map_err(Into::into)
+        Self::new_typed(value)
+            .map_err(config_failure_to_init_failure)
+            .map_err(Into::into)
     }
 }
 
@@ -234,22 +238,30 @@ impl AuthHeader {
         note = "Use AuthHeader::new_typed(); see migrate-error-api.md."
     )]
     pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
-        Self::new_typed(value).map_err(Into::into)
+        Self::new_typed(value)
+            .map_err(config_failure_to_init_failure)
+            .map_err(Into::into)
     }
 
-    /// Creates a validated authorization header with a neutral initialization failure.
+    /// Creates a validated authorization header with a canonical configuration failure.
     ///
     /// Emptiness is checked against the trimmed value, but the original,
     /// untrimmed `value` is stored: this is intentional retained legacy
     /// behavior, not an oversight, and both the legacy [`AuthHeader::new`]
     /// and this typed constructor preserve it identically. Callers that
     /// require a trimmed header value must trim before calling.
-    pub fn new_typed(value: impl Into<String>) -> Result<Self, InitFailure> {
+    pub fn new_typed(value: impl Into<String>) -> Result<Self, ConfigFailure> {
         let value = value.into();
         if value.trim().is_empty() {
-            return Err(invalid_transport_value_typed(
+            return Err(invalid_header(
                 "auth header must not be empty",
                 "set a non-empty authorization header or omit it entirely",
+            ));
+        }
+        if value.chars().any(char::is_control) {
+            return Err(invalid_header(
+                "auth header must not contain control characters",
+                "remove CR, LF, and other control characters from the authorization header",
             ));
         }
         Ok(Self(value))
@@ -281,7 +293,9 @@ impl TryFrom<String> for AuthHeader {
     type Error = InitError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new_typed(value).map_err(Into::into)
+        Self::new_typed(value)
+            .map_err(config_failure_to_init_failure)
+            .map_err(Into::into)
     }
 }
 
@@ -1008,12 +1022,67 @@ fn config_failure_to_init_failure(error: ConfigFailure) -> InitFailure {
     InitFailure::from_context(error.into_context())
 }
 
-fn invalid_transport_value_typed(message: &str, remediation: &str) -> InitFailure {
-    InitFailure::from_context(Box::new(ErrorContext::new(
-        error_codes::TELEMETRY_INVALID_CONFIG,
-        message,
-        Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
-    )))
+fn is_valid_http_endpoint(value: &str) -> bool {
+    // Preserve the retained raw-value behavior for harmless trailing spaces,
+    // while validating the URL-shaped portion and rejecting control bytes.
+    if value.chars().any(char::is_control) {
+        return false;
+    }
+    let value = value.trim_end();
+    let Some((scheme, remainder)) = value.split_once("://") else {
+        return false;
+    };
+    if !matches!(scheme, "http" | "https") {
+        return false;
+    }
+    let authority = remainder.split(['/', '?', '#']).next().unwrap_or_default();
+    if authority.is_empty()
+        || authority.contains('@')
+        || authority.contains('\\')
+        || authority.chars().any(char::is_whitespace)
+    {
+        return false;
+    }
+
+    if let Some(bracketed) = authority.strip_prefix('[') {
+        let Some((host, port)) = bracketed.split_once(']') else {
+            return false;
+        };
+        return !host.is_empty()
+            && (port.is_empty()
+                || port.strip_prefix(':').is_some_and(|value| {
+                    !value.is_empty() && value.chars().all(|ch| ch.is_ascii_digit())
+                }));
+    }
+
+    let (host, port) = authority
+        .rsplit_once(':')
+        .map_or((authority, None), |(host, port)| (host, Some(port)));
+    !host.is_empty()
+        && host
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-'))
+        && port.is_none_or(|value| !value.is_empty() && value.chars().all(|ch| ch.is_ascii_digit()))
+}
+
+fn invalid_endpoint(message: &str, remediation: &str) -> ConfigFailure {
+    ConfigFailure::InvalidEndpoint {
+        context: Box::new(ErrorContext::new(
+            otlp_error_codes::OTLP_CONFIG_INVALID_ENDPOINT,
+            message,
+            Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
+        )),
+    }
+}
+
+fn invalid_header(message: &str, remediation: &str) -> ConfigFailure {
+    ConfigFailure::InvalidHeader {
+        context: Box::new(ErrorContext::new(
+            otlp_error_codes::OTLP_CONFIG_INVALID_HEADER,
+            message,
+            Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
+        )),
+    }
 }
 
 #[cfg(test)]
@@ -1023,6 +1092,7 @@ fn invalid_transport_value_typed(message: &str, remediation: &str) -> InitFailur
 )]
 mod tests {
     use super::*;
+    use sc_observability_types::v2::ConfigFailure;
     use sc_observability_types::{DiagnosticInfo, ServiceName};
 
     #[test]
@@ -1089,9 +1159,37 @@ mod tests {
     }
 
     #[test]
+    fn typed_endpoint_rejects_missing_hosts_with_the_canonical_failure() {
+        for value in ["https://", "http://", "https://?signal=logs", "not-a-url"] {
+            let error = OtlpEndpoint::new_typed(value).expect_err("invalid endpoint");
+            assert!(matches!(error, ConfigFailure::InvalidEndpoint { .. }));
+            assert_eq!(
+                error.diagnostic().code,
+                otlp_error_codes::OTLP_CONFIG_INVALID_ENDPOINT
+            );
+        }
+    }
+
+    #[test]
     fn auth_header_rejects_empty_values() {
         assert!(AuthHeader::new("").is_err());
         assert!(AuthHeader::new("   ").is_err());
+    }
+
+    #[test]
+    fn typed_auth_header_rejects_control_characters_with_the_canonical_failure() {
+        for value in [
+            "Bearer token\r\nInjected: true",
+            "Bearer\u{0000}token",
+            "Bearer\t token",
+        ] {
+            let error = AuthHeader::new_typed(value).expect_err("invalid header");
+            assert!(matches!(error, ConfigFailure::InvalidHeader { .. }));
+            assert_eq!(
+                error.diagnostic().code,
+                otlp_error_codes::OTLP_CONFIG_INVALID_HEADER
+            );
+        }
     }
 
     #[test]
