@@ -13,10 +13,10 @@ or `main`, push events and manual runs are strict. There is no head-branch
 condition. API diff exit 1 means a change to assess; diff tool failures are
 blocking in strict mode. Local `just public-api` remains an explicit strict check.
 
-Platform qualification has a separate rule: PRs into `develop`, `main` or
-`integrate/*`, explicit dispatch and reusable/non-PR qualification run all
+Platform qualification has a separate rule: PRs into `develop` or `main`,
+explicit dispatch and reusable/non-PR qualification run all
 platforms.
-Relevant-path filters apply before jobs start. An intermediate PR retains
+Relevant-path filters apply before jobs start. An intermediate PR, including one into `integrate/*`, retains
 Ubuntu coverage; Windows/macOS and real IPC qualification run at integration.
 Aggregators run under the same condition as their required platform proofs;
 no aggregator accepts a partial platform inventory. Release workflows and

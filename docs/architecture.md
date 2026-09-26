@@ -976,7 +976,10 @@ ADR navigation index (status is recorded in each decision below):
 - **Contracts**: PHB-001/002/014; [target API](plans/phase-b/target-bridge-api.md).
 
 **Amendment (2026-09-26, CI retirement)**: The pre-copy contract is historical
-acceptance evidence, not a permanent byte-identity restriction. The crates are
+acceptance evidence, not a permanent byte-identity restriction. The exact-blob
+rule prevented the sc-obs team from redesigning a crate already working and
+in use by BTIT. BTIT is moving to the new libraries, and the sc-obs team now
+owns the shared API, so that check is outdated. The crates are
 published and maintained here; reviewed Phase D changes intentionally evolve
 them. Retire the BTIT import/snapshot comparison jobs and adaptation records.
 Cargo compilation, behavioral tests, package verification and the existing
