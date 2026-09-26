@@ -25,7 +25,8 @@
 1. Add the nine `#[non_exhaustive]` typed error enums carrying `Box<ErrorContext>` from D.4, with the public 2.0 error contract.
 2. Add neutral signal model types, serde contracts, and validation errors from D.5.
 3. Add `PositiveDuration`, `LifecycleBounds`, `RetryPolicy`, `BoundedPercent`, transport bounds, lifecycle config fields, the exporter trait, `ExporterSet`, factory, and fake exporter fixture from D.6.
-4. Hoist OTLP `lib.rs` module declarations and Cargo feature declarations required by all implementation modules.
+4. Record ADR-017, supersede only the conflicting ADR-012 portion, and align requirements/architecture/API design.
+5. Hoist OTLP `lib.rs` module declarations and Cargo feature declarations required by all implementation modules.
 
 ```rust
 pub trait Exporter: Send + Sync { fn export(&self, batch: &[Signal]) -> Result<(), ExportError>; }

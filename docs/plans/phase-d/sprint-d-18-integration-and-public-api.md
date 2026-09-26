@@ -18,7 +18,8 @@
 1. Compile the workspace against the D.12 enums and remove legacy wrappers and `error_wrapper!` usage from the remaining composition surface.
 2. Construct `ExporterSet`, add public re-exports, and wire feature-gated builders to the completed exporter implementations.
 3. Apply the 2.0 version bump and update `release/public-api-major-breaks.toml`, API-approval JSON, and `release/release-inventory.json`.
-4. Update bindings error-surface integration where required and verify public API evidence.
+4. Operate the controlled major-release baseline gate and error-migration validator.
+5. Update bindings error-surface integration where required and verify public API evidence.
 
 ## This Sprint Does Not Close
 

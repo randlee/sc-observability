@@ -24,6 +24,8 @@ pub fn attach_logger(logger: Arc<Logger>, options: AttachmentOptions) -> Result<
 pub fn register_typed_sink(&mut self, sink: Arc<dyn TypedLogSink>) -> Result<&mut Self, SinkRegistrationError>;
 ```
 
+4. Remove typed Failure duplicates and `impl_legacy_classification!`; document the retained D3 `TypedLogSink`/`legacy_sink` adapter boundary.
+
 ## This Sprint Does Not Close
 
 Environment resolution, bridge lifecycle, and typed-sink implementation are closed by D.1, D.2, and D.3 respectively.
