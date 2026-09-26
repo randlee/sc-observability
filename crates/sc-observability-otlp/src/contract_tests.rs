@@ -214,6 +214,24 @@ fn contract_tests_sdk_reports_retry_jitter_as_the_first_supplied_legacy_field() 
 }
 
 #[test]
+fn contract_tests_sdk_reports_retry_sequence_timeout_before_later_wire_fields() {
+    assert_sdk_not_applicable_field(
+        &OtelConfig {
+            legacy_retry: Some(LegacyRetryPolicy {
+                retry_sequence_timeout_ms: Some(
+                    constants::DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS.into(),
+                ),
+                retry_after_cap_ms: Some(constants::DEFAULT_OTLP_RETRY_AFTER_CAP_MS.into()),
+                retry_jitter_percent: Some(constants::DEFAULT_OTLP_RETRY_JITTER_PERCENT),
+                ..LegacyRetryPolicy::default()
+            }),
+            ..sdk_config()
+        },
+        "RetrySequenceTimeout",
+    );
+}
+
+#[test]
 fn contract_tests_record_and_byte_capacity() {
     let records = validated_transport_bounds(&OtelConfig {
         queue_capacity: Some(0),

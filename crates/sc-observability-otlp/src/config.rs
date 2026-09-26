@@ -839,14 +839,14 @@ fn first_legacy_retry_field(config: &OtelConfig) -> Option<OtlpConfigField> {
     {
         return Some(OtlpConfigField::MaxBackoff);
     }
-    if retry.is_some_and(|value| value.retry_jitter_percent.is_some()) {
-        return Some(OtlpConfigField::RetryJitterPercent);
-    }
     if retry.is_some_and(|value| value.retry_sequence_timeout_ms.is_some()) {
         return Some(OtlpConfigField::RetrySequenceTimeout);
     }
     if retry.is_some_and(|value| value.retry_after_cap_ms.is_some()) {
         return Some(OtlpConfigField::RetryAfterCap);
+    }
+    if retry.is_some_and(|value| value.retry_jitter_percent.is_some()) {
+        return Some(OtlpConfigField::RetryJitterPercent);
     }
 
     // An explicitly supplied but empty compatibility block is still
