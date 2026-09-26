@@ -61,7 +61,9 @@ pub use config::{
 #[doc(inline)]
 pub use projectors::TelemetryProjectors;
 
-use contracts::{LogExporter, MetricExporter, TraceExporter};
+use contracts::{
+    ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, MetricExporter, TraceExporter,
+};
 
 /// OTLP-backed telemetry runtime.
 #[expect(
@@ -71,9 +73,7 @@ use contracts::{LogExporter, MetricExporter, TraceExporter};
 pub struct Telemetry {
     config: TelemetryConfig,
     shutdown: AtomicBool,
-    log_exporter: Arc<dyn LogExporter>,
-    trace_exporter: Arc<dyn TraceExporter>,
-    metric_exporter: Arc<dyn MetricExporter>,
+    exporters: ExporterSet,
     // MUTEX: exporter flush/shutdown paths mutate buffers and per-signal runtime health together;
     // Mutex keeps the buffered state and last_error snapshot consistent, and RwLock would not help
     // because these operations are write-heavy critical sections.
@@ -147,6 +147,7 @@ static METRICS_EXPORTER_NAME: LazyLock<SinkName> =
 struct DisabledLogExporter;
 struct DisabledTraceExporter;
 struct DisabledMetricExporter;
+struct DisabledLifecycle;
 
 impl LogExporter for DisabledLogExporter {
     fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
@@ -166,30 +167,66 @@ impl MetricExporter for DisabledMetricExporter {
     }
 }
 
+impl ExporterLifecycle for DisabledLifecycle {
+    fn blocking_preflight(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn flush_async(&self) -> LifecycleFuture {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn shutdown_async(&self) -> LifecycleFuture {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn flush_blocking(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn shutdown_blocking(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+struct TestLifecycle;
+
+#[cfg(test)]
+impl ExporterLifecycle for TestLifecycle {
+    fn blocking_preflight(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn flush_async(&self) -> LifecycleFuture {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn shutdown_async(&self) -> LifecycleFuture {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn flush_blocking(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn shutdown_blocking(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+}
+
 /// Consumes the fully validated transport bounds before selecting one common
 /// exporter shape. Enabled backends cannot silently fall back to disabled
 /// exporters while their concrete implementations are still staged elsewhere.
-#[expect(
-    clippy::type_complexity,
-    reason = "the three exporter traits are the deliberate common factory contract"
-)]
-fn exporter_factory(
-    config: &TelemetryConfig,
-) -> Result<
-    (
-        Arc<dyn LogExporter>,
-        Arc<dyn TraceExporter>,
-        Arc<dyn MetricExporter>,
-    ),
-    ConfigFailure,
-> {
+fn exporter_factory(config: &TelemetryConfig) -> Result<ExporterSet, ConfigFailure> {
     let bounds = validated_transport_bounds(&config.transport)?;
     match bounds.backend {
-        BackendTransportBounds::Disabled => Ok((
-            Arc::new(DisabledLogExporter),
-            Arc::new(DisabledTraceExporter),
-            Arc::new(DisabledMetricExporter),
-        )),
+        BackendTransportBounds::Disabled => Ok(ExporterSet {
+            logs: Arc::new(DisabledLogExporter),
+            traces: Arc::new(DisabledTraceExporter),
+            metrics: Arc::new(DisabledMetricExporter),
+            lifecycle: Arc::new(DisabledLifecycle),
+        }),
         BackendTransportBounds::Sdk | BackendTransportBounds::Legacy(_) => {
             Err(ConfigFailure::UnsupportedBackend {
                 context: Box::new(ErrorContext::new(
@@ -221,9 +258,9 @@ impl Telemetry {
 
     /// Creates a telemetry runtime with neutral initialization failures.
     pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure> {
-        let (log_exporter, trace_exporter, metric_exporter) = exporter_factory(&config)
+        let exporters = exporter_factory(&config)
             .map_err(|error| InitFailure::from_context(error.into_context()))?;
-        Self::new_with_exporters_typed(config, log_exporter, trace_exporter, metric_exporter)
+        Self::new_with_exporter_set_typed(config, exporters)
     }
 
     #[cfg(test)]
@@ -241,19 +278,33 @@ impl Telemetry {
             .map_err(Into::into)
     }
 
+    #[cfg(test)]
     fn new_with_exporters_typed(
         config: TelemetryConfig,
         log_exporter: Arc<dyn LogExporter>,
         trace_exporter: Arc<dyn TraceExporter>,
         metric_exporter: Arc<dyn MetricExporter>,
     ) -> Result<Self, InitFailure> {
+        Self::new_with_exporter_set_typed(
+            config,
+            ExporterSet {
+                logs: log_exporter,
+                traces: trace_exporter,
+                metrics: metric_exporter,
+                lifecycle: Arc::new(TestLifecycle),
+            },
+        )
+    }
+
+    fn new_with_exporter_set_typed(
+        config: TelemetryConfig,
+        exporters: ExporterSet,
+    ) -> Result<Self, InitFailure> {
         validate_config_typed(&config)?;
         Ok(Self {
             config,
             shutdown: AtomicBool::new(false),
-            log_exporter,
-            trace_exporter,
-            metric_exporter,
+            exporters,
             runtime: Mutex::new(TelemetryRuntime::default()),
             dropped_exports_total: AtomicU64::new(0),
             malformed_spans_total: AtomicU64::new(0),
@@ -397,7 +448,7 @@ impl Telemetry {
         let mut export_failure = None;
 
         if !log_batch.is_empty() {
-            match self.log_exporter.export_logs(&log_batch) {
+            match self.exporters.logs.export_logs(&log_batch) {
                 Ok(()) => self.record_export_success(ExporterKind::Logs),
                 Err(err) => {
                     self.record_export_failure(ExporterKind::Logs, log_batch.len() as u64, &err);
@@ -407,7 +458,7 @@ impl Telemetry {
         }
 
         if !span_batch.is_empty() {
-            match self.trace_exporter.export_spans(&span_batch) {
+            match self.exporters.traces.export_spans(&span_batch) {
                 Ok(()) => self.record_export_success(ExporterKind::Traces),
                 Err(err) => {
                     self.record_export_failure(ExporterKind::Traces, span_batch.len() as u64, &err);
@@ -417,7 +468,7 @@ impl Telemetry {
         }
 
         if !metric_batch.is_empty() {
-            match self.metric_exporter.export_metrics(&metric_batch) {
+            match self.exporters.metrics.export_metrics(&metric_batch) {
                 Ok(()) => self.record_export_success(ExporterKind::Metrics),
                 Err(err) => {
                     self.record_export_failure(
@@ -993,6 +1044,31 @@ mod tests {
             constructor_error.diagnostic().code,
             sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
         );
+    }
+
+    #[test]
+    fn disabled_factory_constructs_and_telemetry_carries_one_exporter_set() {
+        let config = TelemetryConfigBuilder::new(service_name())
+            .build()
+            .expect("disabled configuration is valid");
+        let exporters = exporter_factory(&config).expect("disabled factory set");
+        exporters.logs.export_logs(&[]).expect("disabled logs");
+        exporters.traces.export_spans(&[]).expect("disabled traces");
+        exporters
+            .metrics
+            .export_metrics(&[])
+            .expect("disabled metrics");
+        exporters
+            .lifecycle
+            .blocking_preflight()
+            .expect("disabled lifecycle");
+
+        let telemetry = Telemetry::new_typed(config).expect("disabled telemetry");
+        telemetry
+            .exporters
+            .lifecycle
+            .flush_blocking()
+            .expect("telemetry owns the factory lifecycle");
     }
 
     #[test]
