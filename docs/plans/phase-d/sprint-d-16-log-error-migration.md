@@ -1,12 +1,22 @@
 # d-16: Log error migration
 
+Generated projection of `obs-d-16`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 14
+- Wave: 2
+- Layer: 14
+- Assignee / model: cobs / terra
+- Relation: `parallel_safe`
+- Closure: `boundary`
+- Target boundary: sc-observability-log error migration
 - Branch: `sprint/d-16-log-error-migration`
-- PR target: `sprint/d-15-binding-runtime-error-migration`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-16-log-error-migration`
+- PR target (merge order only): `sprint/d-15-binding-runtime-error-migration`
 - Blocked by: `obs-d-12-sanity`
-- Owned paths:
+- Requirements: LAY-001, LAY-002, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-007, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-047, LOG-048, NFR-001, NFR-002, NFR-005, NFR-006, NFR-007, NFR-009, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-017
+- Owned paths (metadata projection):
   - `crates/sc-observability-log/src/control.rs`
   - `crates/sc-observability-log/src/error.rs`
   - `crates/sc-observability-log/src/handle.rs`
@@ -28,7 +38,6 @@
 
 The bridge API is D2, the typed sink signature is obs-d-13 (ADR-017), consumer/examples are D17, and workspace integration is D18.
 Update the sprint doc as explanatory evidence alongside code; documentation is not a separate closure gate.
-
 
 ## Design
 
@@ -56,7 +65,6 @@ Created/staged by obs-d-16, owned by obs-d-18 from wave 3; after this bead close
 - `crates/sc-observability-log/tests/shutdown_timeout.rs`
 - `crates/sc-observability-log/tests/static_level_cap.rs`
 
-
 ## Acceptance criteria
 
 - [ ] `cargo test -p sc-observability-log --test api_freeze --test flush_single_flight --test init_runtime_start --test shutdown_timeout --test static_level_cap --locked` asserts the canonical variants and source identity (D1/D2).
@@ -64,4 +72,3 @@ Created/staged by obs-d-16, owned by obs-d-18 from wave 3; after this bead close
 - [ ] Sprint doc explains the completed cause mapping; it is supporting evidence, not an independent gate (D3). This sprint does not close bridge behavior, consumers or release; D.2/D.17/D.18 do.
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
-

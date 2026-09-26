@@ -1,12 +1,22 @@
 # d-11: Open-ended Python distribution regression guard
 
+Generated projection of `obs-d-11`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 18
+- Wave: 4
+- Layer: 18
+- Assignee / model: lobs / luna
+- Relation: `must_follow`
+- Closure: `integration`
+- Target boundary: Python distribution guard
 - Branch: `sprint/d-11-python-open-ended-guard`
-- PR target: `sprint/d-9-otlp-conformance`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-11-python-open-ended-guard`
+- PR target (merge order only): `sprint/d-9-otlp-conformance`
 - Blocked by: `obs-d-18-sanity`
-- Owned paths:
+- Requirements: NFR-011, PHB-013, PHB-014, PHC-001, PHC-003, PHC-004, PHC-006
+- ADRs: ADR-014, ADR-015, ADR-016
+- Owned paths (metadata projection):
   - `docs/plans/phase-d/sprint-d-11-python-open-ended-guard.md`
   - `docs/project-plan.md`
   - `scripts/ci/_python_distribution.py`
@@ -43,7 +53,6 @@ and `requires-python = ">=3.10"` with no upper bound.
 This guard does not add future Python versions, alter the minimum version, or
 implement #88/OTEL functionality.
 
-
 ## Design
 
 ## Python qualification boundary
@@ -51,7 +60,6 @@ implement #88/OTEL functionality.
 D.11 consumes D.18's six-platform release policy and D.10's ARM64 helper. Extend the existing _python_distribution.py/validate_python_distribution.py consumer and existing unit fixtures; do not create a second tag parser or change D.10's workflow. Its existing aggregate invocation picks up the validator behavior. Parse source TOML and wheel METADATA using existing parsers, reject upper/exclusion bounds, and retain abi3-py310/cp310-abi3. The final matrix is six builds and 30 installed-suite cells (Python 3.10–3.14) on native platforms at the same source/version. Preserve original missing/duplicate/architecture/feature checks. docs/project-plan.md records qualification and change control. The pr_target after D.9 is merge order only; obs-d-18-sanity is the actual blocker. Wave 4 awaits the root user ruling.
 
 The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
-
 
 ## Acceptance criteria
 
@@ -86,4 +94,3 @@ job must finish successfully with the matrix required above.
 - Final immutable-source evidence covers six wheel builds and 30 native installed-suite cells; PE ARM64 is validated via D.10 helper and missing/duplicate/wrong-target evidence fails. A dispatch receipt never counts as pass.
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
-

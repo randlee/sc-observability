@@ -1,12 +1,22 @@
 # d-9: Cross-path qualification and observability docs
 
+Generated projection of `obs-d-9`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 17
+- Wave: 4
+- Layer: 17
+- Assignee / model: cobs / terra
+- Relation: `must_follow`
+- Closure: `integration`
+- Target boundary: OTLP dual-path qualification
 - Branch: `sprint/d-9-otlp-conformance`
-- PR target: `sprint/d-18-integration-and-public-api`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-9-otlp-conformance`
+- PR target (merge order only): `sprint/d-18-integration-and-public-api`
 - Blocked by: `obs-d-18-sanity`
-- Owned paths:
+- Requirements: DOC-001, DOC-004, LAY-001, LAY-004, LAY-005, LAY-006, NFR-001, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, OTLP-001, OTLP-002, OTLP-003, OTLP-004, OTLP-005, OTLP-006, OTLP-007, OTLP-008, OTLP-009, OTLP-010, OTLP-011, OTLP-012, OTLP-013, OTLP-014, OTLP-015, OTLP-016, OTLP-017, OTLP-018, OTLP-019, OTLP-020, OTLP-021, OTLP-022, OTLP-023, OTLP-024, PHB-003, PHB-004, PHB-005, PHB-006, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-021, TYP-023, TYP-024, TYP-030, TYP-031
+- ADRs: ADR-001, ADR-002, ADR-004, ADR-005, ADR-006, ADR-008, ADR-009, ADR-017, ADR-018
+- Owned paths (metadata projection):
   - `.github/workflows/otlp-conformance.yml`
   - `crates/sc-observability-otlp/tests/full_stack_integration.rs`
   - `docs/observability/otlp/**`
@@ -49,7 +59,6 @@ collector evidence and current-schema documentation. D.9 follows obs-d-18-sanity
 No `atm-core` implementation, Python OTEL binding (#88), registry publication,
 or new transport beyond the two qualified paths.
 
-
 ## Design
 
 ## Qualification contract
@@ -63,7 +72,6 @@ The only file fence is metadata.owned_paths; paths mentioned as dependencies are
 Created by obs-d-18, owned here from wave 4. Consume its completed sanity-gated artifact; preserve the contract while implementing or retiring staged compatibility. This serial handoff is why relation is must_follow; no same-wave sibling shares these paths.
 
 - `crates/sc-observability-otlp/tests/full_stack_integration.rs`
-
 
 ## Acceptance criteria
 
@@ -101,4 +109,3 @@ Created by obs-d-18, owned here from wave 4. Consume its completed sanity-gated 
 - `cargo test -p sc-observability-otlp --test full_stack_integration --features otlp-sdk,legacy-http-json --locked` runs a nonzero hermetic dual-backend corpus. This is the sole collector-equivalence feature gate.
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
-

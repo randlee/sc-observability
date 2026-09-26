@@ -1,12 +1,22 @@
 # d-6: OTLP lifecycle core
 
+Generated projection of `obs-d-6`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 9
+- Wave: 2
+- Layer: 9
+- Assignee / model: lobs / luna
+- Relation: `must_follow`
+- Closure: `boundary`
+- Target boundary: OTLP lifecycle module
 - Branch: `sprint/d-6-otlp-lifecycle-core`
-- PR target: `sprint/d-5-otlp-signal-model`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-6-otlp-lifecycle-core`
+- PR target (merge order only): `sprint/d-5-otlp-signal-model`
 - Blocked by: `obs-d-12-sanity`
-- Owned paths:
+- Requirements: LAY-001, LAY-004, LAY-005, LAY-006, NFR-001, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, OTLP-001, OTLP-002, OTLP-003, OTLP-004, OTLP-005, OTLP-006, OTLP-007, OTLP-008, OTLP-009, OTLP-010, OTLP-011, OTLP-012, OTLP-013, OTLP-014, OTLP-015, OTLP-016, OTLP-017, OTLP-018, OTLP-019, OTLP-020, OTLP-021, OTLP-022, PHB-003, PHB-004, PHB-005, PHB-006, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-021, TYP-023, TYP-024, TYP-030, TYP-031
+- ADRs: ADR-002, ADR-004, ADR-005, ADR-009, ADR-012, ADR-017, ADR-018
+- Owned paths (metadata projection):
   - `crates/sc-observability-otlp/src/lifecycle.rs`
   - `crates/sc-observability-otlp/src/lifecycle_tests.rs`
   - `docs/plans/phase-d/sprint-d-6-otlp-lifecycle-core.md`
@@ -21,7 +31,6 @@
 ## This Sprint Does Not Close
 
 D.12 owns the types, factory, `ExporterSet`, and fake fixture contract; D.7/D.8 own transport adapters; D.18 owns public API integration.
-
 
 ## Design
 
@@ -105,7 +114,6 @@ Created by obs-d-12, owned here from wave 2. Consume its completed sanity-gated 
 - `crates/sc-observability-otlp/src/lifecycle.rs`
 - `crates/sc-observability-otlp/src/lifecycle_tests.rs`
 
-
 ## Acceptance criteria
 
 - [ ] `cargo test -p sc-observability-otlp --lib lifecycle_tests --all-features --locked` runs barrier_order, repeated_shutdown, cancelled_waiter, request_deadline, runtime_terminated and exact_once_drop_count against D.12 recording exporters (D1/D3).
@@ -114,4 +122,3 @@ Created by obs-d-12, owned here from wave 2. Consume its completed sanity-gated 
 - [ ] This sprint does not close real SDK/legacy transport or collector behavior; D.7/D.8 and D.18/D.9 close those.
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
-

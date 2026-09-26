@@ -1,12 +1,22 @@
 # d-8: Legacy HTTP/JSON source transplant
 
+Generated projection of `obs-d-8`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 11
+- Wave: 2
+- Layer: 11
+- Assignee / model: lobs / luna
+- Relation: `must_follow`
+- Closure: `boundary`
+- Target boundary: OTLP HTTP JSON module
 - Branch: `sprint/d-8-otlp-http-json-transplant`
-- PR target: `sprint/d-7-otlp-sdk-tokio`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-8-otlp-http-json-transplant`
+- PR target (merge order only): `sprint/d-7-otlp-sdk-tokio`
 - Blocked by: `obs-d-12-sanity`
-- Owned paths:
+- Requirements: LAY-001, LAY-004, LAY-005, LAY-006, NFR-001, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, OTLP-001, OTLP-002, OTLP-003, OTLP-004, OTLP-005, OTLP-006, OTLP-007, OTLP-008, OTLP-009, OTLP-010, OTLP-011, OTLP-012, OTLP-013, OTLP-014, OTLP-015, OTLP-016, OTLP-017, OTLP-018, OTLP-019, OTLP-020, OTLP-021, OTLP-022, OTLP-023, PHB-003, PHB-004, PHB-005, PHB-006, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-021, TYP-023, TYP-024, TYP-030, TYP-031
+- ADRs: ADR-002, ADR-004, ADR-005, ADR-006, ADR-008, ADR-009, ADR-017, ADR-018
+- Owned paths (metadata projection):
   - `crates/sc-observability-otlp/src/legacy_http_json/implementation.rs`
   - `crates/sc-observability-otlp/src/legacy_http_json/mod.rs`
   - `crates/sc-observability-otlp/src/legacy_http_json/tests.rs`
@@ -34,7 +44,6 @@ Transplant the immutable 7b39f4e7f72b6845edec4eab4cd671611661445f HTTP/JSON expo
 ## This Sprint Does Not Close
 
 No SDK implementation, normative/manifest/registry edit, additional validator framework, Python binding implementation or publication. D.18 composes real backends; D.9 owns collector/dashboard qualification.
-
 
 ## Design
 
@@ -184,7 +193,6 @@ Created by obs-d-12, owned here from wave 2. Consume its completed sanity-gated 
 - `crates/sc-observability-otlp/src/legacy_http_json/mod.rs`
 - `crates/sc-observability-otlp/src/legacy_http_json/tests.rs`
 
-
 ## Acceptance criteria
 
 ## Acceptance criteria
@@ -250,4 +258,3 @@ Created by obs-d-12, owned here from wave 2. Consume its completed sanity-gated 
 - This sprint does not close production composition or collector equivalence; D.18/D.9 do.
 
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
-
