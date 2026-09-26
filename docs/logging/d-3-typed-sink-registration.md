@@ -2,21 +2,21 @@
 
 `SinkRegistration::typed` and `LoggerBuilder::register_typed_sink` accept an
 `Arc<dyn TypedLogSink>` without requiring a consumer to invoke `legacy_sink`.
-Both paths use the D13 adapter internally, so typed failures retain their
-structured diagnostic code and original source at the retained `LogSink`
-boundary.
+Both paths use the D13 adapter internally, so canonical v2 `LogSinkError`
+failures retain their structured diagnostic code and original source at the
+retained `LogSink` boundary.
 
 ```rust,no_run
 use std::sync::Arc;
 use sc_observability::{LoggerBuilder, LoggerConfig, SinkHealth};
 use sc_observability::typed::TypedLogSink;
 use sc_observability_types::{LogEvent, SinkHealthState, SinkName};
-use sc_observability_types::typed::LogSinkFailure;
+use sc_observability_types::v2::LogSinkError;
 
 struct CustomSink;
 
 impl TypedLogSink for CustomSink {
-    fn write(&self, _: &LogEvent) -> Result<(), LogSinkFailure> {
+    fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
         Ok(())
     }
 

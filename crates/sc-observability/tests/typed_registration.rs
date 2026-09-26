@@ -6,8 +6,7 @@ use std::sync::{Arc, RwLock};
 
 use sc_observability::typed::{TypedLogSink, legacy_sink};
 use sc_observability::*;
-use sc_observability_types::DiagnosticInfo;
-use sc_observability_types::typed::LogSinkFailure;
+use sc_observability_types::v2::LogSinkError;
 use serde_json::Map;
 
 struct RecordingTypedSink {
@@ -37,12 +36,12 @@ impl RecordingTypedSink {
 }
 
 impl TypedLogSink for RecordingTypedSink {
-    fn write(&self, _: &LogEvent) -> Result<(), LogSinkFailure> {
+    fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
         self.writes.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 
-    fn flush(&self) -> Result<(), LogSinkFailure> {
+    fn flush(&self) -> Result<(), LogSinkError> {
         self.flushes.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -111,9 +110,9 @@ fn typed_registration_entry_points_preserve_metadata_chaining_and_single_dispatc
 
     for sink in [&registration_sink, &builder_sink, &chained_sink] {
         assert_eq!(sink.writes.load(Ordering::SeqCst), 1);
-        // The writer flushes the admitted batch once, then flush_typed() performs
-        // the requested second operation. Registration never duplicates either.
-        assert_eq!(sink.flushes.load(Ordering::SeqCst), 2);
+        // The explicit flush is the sole sink flush for the admitted event.
+        // Registration never duplicates either operation.
+        assert_eq!(sink.flushes.load(Ordering::SeqCst), 1);
         assert_eq!(sink.health_snapshot().state, SinkHealthState::Healthy);
     }
 }
@@ -123,15 +122,17 @@ fn typed_registration_adapter_preserves_failure_diagnostic_and_source() {
     struct FailingTypedSink;
 
     impl TypedLogSink for FailingTypedSink {
-        fn write(&self, _: &LogEvent) -> Result<(), LogSinkFailure> {
-            Err(LogSinkFailure::from_context(Box::new(
-                ErrorContext::new(
-                    ErrorCode::new_static("TYPED_REGISTRATION_WRITE"),
-                    "typed sink write failed",
-                    Remediation::recoverable("repair the typed sink", ["retry registration"]),
-                )
-                .source(Box::new(io::Error::other("typed source"))),
-            )))
+        fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
+            Err(LogSinkError::Write {
+                context: Box::new(
+                    ErrorContext::new(
+                        ErrorCode::new_static("TYPED_REGISTRATION_WRITE"),
+                        "typed sink write failed",
+                        Remediation::recoverable("repair the typed sink", ["retry registration"]),
+                    )
+                    .source(Box::new(io::Error::other("typed source"))),
+                ),
+            })
         }
 
         fn health(&self) -> SinkHealth {
