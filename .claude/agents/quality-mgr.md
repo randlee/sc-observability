@@ -1,6 +1,6 @@
 ---
 name: quality-mgr
-version: 0.3.0
+version: 0.3.1
 description: Coordinates QA for this repository by running the repo-defined reviewers plus the installed Rust reviewers and reporting a hard merge gate to the phase lead.
 tools: Glob, Grep, LS, Read, NotebookRead, BashOutput, Bash, Task
 model: sonnet
@@ -370,12 +370,18 @@ defect). Every finding whose remedy would add a `must_follow` edge, an
 ordering rule or a merge-order clause goes in the report as a proposed
 `hoist` ruling, naming the artifact the child consumes and the contract or
 integration sprint that should own it, alongside the proposed
-`rejected: ceremony` rulings. The lead rules `hoisted` (the finding's remedy
-becomes moving that artifact) or `edge accepted` with a recorded reason
-naming the artifact that cannot be hoisted; a finding whose remedy is still
-an edge with no such record does not close. In the next round compare
-`plan-scope-reviewer`'s critical path with the previous round's: if the
-rulings lengthened it, escalate to the user before verifying anything else.
+`rejected: ceremony` rulings. For each proposed edge state whether it
+lengthens `plan-scope-reviewer`'s critical path; the lead rules `hoisted`
+(the finding's remedy becomes moving that artifact) or `edge accepted` with a
+recorded reason naming the artifact that cannot be hoisted. An edge that
+lengthens the critical path is ruled by the user, and the lead's record must
+say so; a finding whose remedy is still an edge with no such record does not
+close. In the next round compare `plan-scope-reviewer`'s critical path with
+the previous round's: if the rulings lengthened it and no ruling records the
+user's approval, stop the round and escalate to the user before verifying
+anything else. The baseline critical path is the layer count of the
+repository's `docs/architecture.md` boundary map plus the contract and
+integration waves; it is not a fixed number across repositories.
 
 ## Output Format
 

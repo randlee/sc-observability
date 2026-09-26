@@ -54,10 +54,17 @@ their own prompts.
   edge. `quality-mgr` lists every finding whose remedy would add a
   `must_follow` edge, an ordering rule or a merge-order clause as a proposed
   `hoist` ruling for the lead (`quality-mgr.md`, "Hoist Rulings"), in the
-  same way as its proposed `rejected: ceremony` rulings. The lead accepts an edge only with a recorded
-  reason naming the artifact that could not be hoisted, and recomputes the
-  wave table's critical path, width and sprint count after each round of
-  rulings; a round whose rulings lengthen the critical path is redone
+  same way as its proposed `rejected: ceremony` rulings. The lead accepts an
+  edge only with a recorded reason naming the artifact that could not be
+  hoisted, and recomputes the wave table's critical path, width and sprint
+  count after each round of rulings. An edge that lengthens the critical
+  path is the user's ruling, not the lead's: the lead puts the proposed edge,
+  the artifact and the new critical path to the user and records the answer
+  in the ruling; without that record the round is redone. The baseline
+  critical path is the architecture's layer count (contract, the layers
+  `docs/architecture.md` defines, integration), which differs per repository;
+  a plan is not held to a fixed number of waves, but every wave past that
+  baseline carries a user-approved reason
 - `ceremony-finding-screen`: every sprint or plan QA round that has
   findings, over all of them, before the report is posted
 - Phase-end review: the initial implementation set plus `flaky-test-qa`

@@ -1,6 +1,6 @@
 ---
 name: plan-scope-reviewer
-version: 0.4.0
+version: 0.4.1
 description: Reviews sprint shape, boundary-scoped closure, parallel width, deliverable ownership, early split decisions, and direct sprint-doc consumability before hardening fixes.
 tools: Glob, Grep, LS, Read, BashOutput
 model: sonnet
@@ -162,8 +162,12 @@ For the current plan state, verify:
   not be hoisted into the contract sprint
 - no `must_follow` rationale is "same file" or "same crate"; that is a split
   defect to be re-cut, not an ordering to be accepted
-- the critical path is three waves (contract, layers, integration) or every
-  extra edge carries a checkable reason; report the critical path and width
+- the critical path is the baseline for this repository: one contract wave,
+  the implementation layers the architecture's boundary map defines
+  (`docs/architecture.md`; usually one wave, since layers of one feature
+  are cut by ownership, not stacked), and one integration wave. Every wave
+  past that baseline carries a checkable reason and a recorded user
+  approval; report the baseline you derived and the critical path and width
   you computed
 - the plan is balanced per "Tracks And Balance": independent changes inside
   one boundary are separate sprints or one stacked track; independent
@@ -195,8 +199,8 @@ For the current plan state, verify:
 - `VERTICAL-SLICE` (multi-boundary sprint without an accepted
   `vertical_rationale`, or feature-level criteria inside a layer sprint)
 - `SERIAL-RISK` (`must_follow` without a named contract artifact, same-file
-  rationale, overlapping `owned_paths`, or an unexplained critical path
-  longer than three waves)
+  rationale, overlapping `owned_paths`, or a critical path longer than the
+  architecture's baseline without a recorded user approval)
 - `OVER-SPLIT` (thin or pass-through sprint, a layer cut that creates no
   parallel work, one phase-wide integration checkpoint, or a contract sprint
   that makes unrelated tracks wait)
