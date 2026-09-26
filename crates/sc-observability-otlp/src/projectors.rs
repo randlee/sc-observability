@@ -238,7 +238,7 @@ fn telemetry_to_projection_failure(
     match error {
         sc_observability_types::TelemetryError::Shutdown => {
             ProjectionFailure::from_context(Box::new(ErrorContext::new(
-                error_codes::TELEMETRY_EXPORT_FAILED,
+                error_codes::OTLP_EXPORT_TERMINAL,
                 "telemetry runtime is shut down",
                 Remediation::not_recoverable("do not project telemetry after shutdown"),
             )))

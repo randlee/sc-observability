@@ -11,13 +11,14 @@ members = [
   "crates/sc-observability-binding-runtime",
   "bindings/python/sc-observability-py",
   "examples/rust-python-logging",
+  "examples/otlp-legacy",
 ]
 exclude = ["examples/atm-adapter-example"]
 resolver = "2"
 
 [workspace.package]
 authors = ["Rand Lee"]
-version = "1.4.0"
+version = "2.0.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.94.1"
@@ -25,23 +26,29 @@ repository = "https://github.com/randlee/sc-observability"
 homepage = "https://github.com/randlee/sc-observability"
 
 [workspace.dependencies]
-sc-observability-dto = { version = "1.4.0", path = "crates/sc-observability-dto" }
+sc-observability-dto = { version = "2.0.0", path = "crates/sc-observability-dto" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
-sc-observability-types = { version = "1.4.0", path = "crates/sc-observability-types" }
-sc-observability = { version = "1.4.0", path = "crates/sc-observability" }
-sc-observability-log = { version = "1.4.0", path = "crates/sc-observability-log" }
-sc-observe = { version = "1.4.0", path = "crates/sc-observe" }
-sc-observability-otlp = { version = "1.4.0", path = "crates/sc-observability-otlp" }
-sc-observability-log-macros = { version = "=1.4.0", path = "crates/sc-observability-log-macros" }
+sc-observability-types = { version = "2.0.0", path = "crates/sc-observability-types" }
+sc-observability = { version = "2.0.0", path = "crates/sc-observability" }
+sc-observability-log = { version = "2.0.0", path = "crates/sc-observability-log" }
+sc-observe = { version = "2.0.0", path = "crates/sc-observe" }
+sc-observability-otlp = { version = "2.0.0", path = "crates/sc-observability-otlp" }
+sc-observability-log-macros = { version = "=2.0.0", path = "crates/sc-observability-log-macros" }
 log = { version = "0.4", features = ["std", "kv"] }
 hostname = "0.4"
 tempfile = "3"
 trybuild = "1"
 tracing = "0.1"
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time"] }
+tokio = { version = "=1.53.1", features = ["rt", "rt-multi-thread", "macros", "time"] }
+opentelemetry = "=0.33.0"
+opentelemetry_sdk = "=0.33.0"
+opentelemetry-otlp = { version = "=0.33.0", default-features = false }
+reqwest = { version = "=0.12.28", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+httpdate = "=1.0.3"
+getrandom = "=0.4.3"
 syn = { version = "2", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
