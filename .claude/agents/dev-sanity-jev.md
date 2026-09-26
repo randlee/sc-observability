@@ -171,7 +171,10 @@ status:
 After every completed PASS or FAIL task close succeeds, immediately send the
 lead the compact status table for the newest six completed sanity runs. Do not
 send a table for a refused check. The table is derived only from the JSON vars
-below; it is not a substitute for the full completion report.
+below; it is not a substitute for the full completion report. This is
+best-effort after the close: a history, render, or send failure must not alter
+the verdict or reopen the task; send the lead `SANITY.STATUS_TABLE_UNAVAILABLE`
+with the error instead.
 
 ```bash
 iteration=$(atm task events "$task" --all --json \
@@ -199,7 +202,8 @@ timezone, calculates elapsed time from `$run_started_at`, and serializes
 parallel checks in its shared state file. Its output is exactly
 `{"runs": [ ... ]}`, already ordered newest first for the template. The PR is never
 shown as a vague state: a completed run has `#<number>`; a missing PR was
-already reported and refused.
+already reported and refused. Calculate `iteration` only after `atm task close`
+has succeeded, so it includes the just-closed completion event.
 
 ## FAIL Finding Handoff
 

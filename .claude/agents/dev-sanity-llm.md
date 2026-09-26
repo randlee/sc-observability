@@ -62,17 +62,18 @@ are ready.
 
 Per task, with `S=.claude/skills/atm-bd-orchestration/scripts`:
 
-1. The task's ready check, then `atm task start <task> "sanity check
-   <checked-bead>"` if this task is your active one, and
-   `bd update <task> --claim`.
-   Before any code inspection, require an open, reviewable PR for the task
+1. Before the ready check, task start, claim, or any code inspection, require
+   an open, reviewable PR for the task
    branch: `gh pr list --head <branch> --state open --json number --jq
    '.[0].number'`. If it is empty, immediately send the lead the task, branch,
    and `SANITY.PR_REQUIRED` with `atm send <lead> --stdin`; do not inspect the
    worktree and take the cannot-run route. Save the returned number as
    `$pr_number`. At the instant the check actually begins, save
    `run_started_at=$(date +%s)` for the status table.
-2. Split:
+2. Run the task's ready check, then `atm task start <task> "sanity check
+   <checked-bead>"` if this task is your active one, and
+   `bd update <task> --claim`.
+3. Split:
 
    ```bash
    $S/sanity-split --task <task> --bead <checked-bead> --worktree <worktree> \
@@ -83,7 +84,7 @@ Per task, with `S=.claude/skills/atm-bd-orchestration/scripts`:
    Read the manifest: `sha` is the pinned commit, `deliverables_total` is
    X, `lint.pid` is the lint supervisor, and `assignments[]` holds one
    entry per deliverable. A non-zero exit is routed by Error Handling.
-3. For each `assignments[]` entry launch one `sc-sanity-llm` with its
+4. For each `assignments[]` entry launch one `sc-sanity-llm` with its
    `assignment` object in a fenced `json` block as its prompt. Launch all X
    at once, up to your harness's child limit; start the remaining
    assignments as children finish. Lint is already running regardless.
@@ -93,9 +94,9 @@ Per task, with `S=.claude/skills/atm-bd-orchestration/scripts`:
    - Any other harness: the task cannot run (`SANITY.HARNESS_UNSUPPORTED`).
 
    Stop a child that has not replied in 30 minutes: `SANITY.TIMEOUT`.
-4. Hold each fenced JSON reply, unchanged, keyed by its deliverable number;
+5. Hold each fenced JSON reply, unchanged, keyed by its deliverable number;
    the X replies form one JSON array.
-5. Merge:
+6. Merge:
 
    ```bash
    printf '%s' "$replies" | $S/sanity-merge <scratch>/<task>-manifest.json <task> <checked-bead> <sprint> \
@@ -105,7 +106,7 @@ Per task, with `S=.claude/skills/atm-bd-orchestration/scripts`:
    Exit 0: the vars file holds `verdict`, `findings_count`, `findings_md`
    (one block per deliverable) and `lint_md`. Any other exit is routed by
    Error Handling.
-6. Close (Output Format), then read ATM again.
+7. Close (Output Format), then read ATM again.
 
 ## Output Format
 
@@ -136,7 +137,10 @@ delivers the report to the lead, with this fenced status:
 After every completed PASS or FAIL task close succeeds, immediately send the
 lead the compact status table for the newest six completed sanity runs. Do not
 send a table for a refused check. The table is derived only from the JSON vars
-below; it is not a substitute for the full completion report.
+below; it is not a substitute for the full completion report. This is
+best-effort after the close: a history, render, or send failure must not alter
+the verdict or reopen the task; send the lead `SANITY.STATUS_TABLE_UNAVAILABLE`
+with the error instead.
 
 ```bash
 iteration=$(atm task events "$task" --all --json \
@@ -164,7 +168,8 @@ timezone, calculates elapsed time from `$run_started_at`, and serializes
 parallel checks in its shared state file. Its output is exactly
 `{"runs": [ ... ]}`, already ordered newest first for the template. The PR is never
 shown as a vague state: a completed run has `#<number>`; a missing PR was
-already reported and refused.
+already reported and refused. Calculate `iteration` only after `atm task close`
+has succeeded, so it includes the just-closed completion event.
 
 ## FAIL Finding Handoff
 
