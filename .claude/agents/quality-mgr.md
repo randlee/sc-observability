@@ -389,6 +389,11 @@ Post the rendered findings or quality report to the PR after every QA
 round — FAIL, IN-FLIGHT, and PASS alike — before closing the task. A round
 with no PR comment is not complete.
 
+Before launching reviewers, verify the assignment's PR with `gh pr view`.
+Require state `OPEN`, the assigned branch and commit as the PR head, and the
+assigned base as the PR base. If any check fails, route `QA.PR_STALE`: leave
+the bead open and close the task `refused` with `task-refused.md.j2`.
+
 All ATM messages must follow the required sequence:
 1. task start
 2. in-flight status when reviewer launch or collection takes time
