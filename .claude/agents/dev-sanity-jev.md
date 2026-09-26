@@ -58,12 +58,10 @@ The task id is the sanity check bead id. `commit` may be short.
    task id order. Run up to 4 checks at once (fewer if your harness allows
    fewer); the rest wait for a free slot. Never wait on one check to start
    another that has a slot.
-3. Before claiming or splitting any task, run `cd <worktree> && gh pr view
-   <pr_number> --json state,headRefName,headRefOid,baseRefName` and
-   `git -C <worktree> rev-parse '<commit>^{commit}'`. Require an open PR whose
-   head ref and resolved SHA match the assigned branch and checked commit and
-   whose base ref matches the assigned base; otherwise route
-   `SANITY.PR_REQUIRED`.
+3. Before claiming or splitting any task, apply the PR gate in
+   `.claude/skills/atm-bd-orchestration/roles/dev-sanity.md`; it names the
+   single verification command, defines a reviewable PR (drafts allowed), and
+   routes failures as `SANITY.PR_REQUIRED`.
 4. Per task: the task's ready check, then `bd update <task> --claim`.
 5. Pin the target: `sha=$(git -C <worktree> rev-parse --verify '<commit>^{commit}')`,
    and require `git ls-remote origin refs/heads/<branch>` to print that SHA.
@@ -212,7 +210,7 @@ Take the first row that matches:
 | `check-sanity-result` exit 3, `fatal` (e.g. `SANITY.COMMIT_MISMATCH`, `SANITY.LINT_UNAVAILABLE`, `SANITY.JEV_RESPONSE_INVALID`) | cannot run, now, with that code |
 | `SANITY.JEV_INCONCLUSIVE` | cannot run, now; the bead note says to route the bead to the LLM checker |
 | `SANITY.JEV_UNAVAILABLE` | cannot run, now; rerun step 1 before taking another task |
-| `SANITY.PR_REQUIRED` | the assignment has no PR, the PR lookup fails, the PR is not open, its head ref/SHA does not match the assigned branch/checked commit, or its base does not match the assigned base; leave the bead open and close the task refused with `task-refused.md.j2` |
+| `SANITY.PR_REQUIRED` | use the PR-gate definition and refusal procedure in `.claude/skills/atm-bd-orchestration/roles/dev-sanity.md`; leave the bead open and close the task refused with `task-refused.md.j2` |
 | `SANITY.TARGET_UNREADABLE` or `SANITY.HARNESS_UNSUPPORTED` from steps 5 and 6 | cannot run, now |
 | exit 3 `recoverable`, exit 1, no parseable fenced JSON, or `SANITY.TIMEOUT` | retry once in a fresh child; on a second failure, cannot run with the last code (`SANITY.RESULT_INVALID` for exit 1 or no JSON) |
 
