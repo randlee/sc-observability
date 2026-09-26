@@ -54,16 +54,16 @@ agents:
     version: 0.12.1
     path: .claude/agents/rust-service-hardening-agent.md
   dev-sanity-llm:
-    version: 0.5.0
+    version: 0.6.0
     path: .claude/agents/dev-sanity-llm.md
   sc-sanity-llm:
-    version: 0.2.0
+    version: 0.3.0
     path: .claude/agents/sc-sanity-llm.md
   dev-sanity-jev:
-    version: 0.3.0
+    version: 0.4.0
     path: .claude/agents/dev-sanity-jev.md
   sc-sanity-jev:
-    version: 0.2.0
+    version: 0.3.0
     path: .claude/agents/sc-sanity-jev.md
 
 # Role -> ATM member. Skills name the role; the member's startup prompt in
