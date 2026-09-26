@@ -9,6 +9,7 @@ pub mod constants;
 mod diagnostic;
 pub mod error_codes;
 mod errors;
+mod errors_v2;
 mod events;
 mod health;
 mod level;
@@ -17,6 +18,7 @@ mod primitives;
 mod process;
 mod projection;
 mod query;
+mod signals_v2;
 mod span;
 mod tracing;
 pub mod typed;
@@ -98,3 +100,23 @@ pub use validation::{
     ActionName, CorrelationId, EnvPrefix, MetricName, MetricUnit, OutcomeLabel, SchemaVersion,
     ServiceName, SinkName, StateName, TargetCategory, ToolName, ValueValidationError,
 };
+
+/// Staged 2.0 contracts; integration activates these names at the crate root.
+///
+/// The package remains at the workspace version until the atomic D.21 bump.
+/// Existing root exports retain their 1.x behavior during consumer migration.
+pub mod v2 {
+    #[doc(inline)]
+    pub use crate::errors_v2::{
+        ConfigFailure, EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError,
+        MetricModelError, ProjectionError, ShutdownError, SubscriberError, TelemetryError,
+    };
+    #[doc(inline)]
+    pub use crate::signals_v2::{
+        AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint,
+        MetricRecord, MetricValue, SpanEvent, SpanKind, SpanLink, SpanRecord, SpanSignal,
+        TraceContext, TraceFlags,
+    };
+    #[doc(inline)]
+    pub use crate::{SpanEnded, SpanStarted, SpanStatus};
+}
