@@ -14,11 +14,11 @@
     "crates/sc-observability-dto/src/wire/primitives.rs": "355a92983b612b4cf12b2b47a8b54bc87ecd4ab0b82b0256d54439d0cf651b66",
     "rust-toolchain.toml": "d52c5633ea77aefd345519d0a6c87e19c2636a1e90178585c30db481b3de9de0",
     "scripts/_binding_schema.py": "227a8d3344c32f14d94d1103b1f4f97ee1a9af53d1c0b0411b36c23425451ffa",
-    "scripts/generate_python_bindings.py": "cd709fa6e8a641504ea82fd5a82bd6f6398a8267780effdf92b2a97f9c3b8558",
+    "scripts/generate_python_bindings.py": "270dc73877f89bd95d52f14066991637c104f6b6e597a7c6e815f0b64638a4ab",
     "scripts/generate_typescript_bindings.py": "4ad56bd38d1949e95c0ac42fa626dd324716706b2861cc2f6d9feaccd1cbd99a"
   },
   "outputs": {
-    "bindings/python/sc-observability-py/python/sc_observability/generated/__init__.py": "658edd8df52396e1a8f8e1170261ea6e7a4da7919364764b8190e54f5966e233",
+    "bindings/python/sc-observability-py/python/sc_observability/generated/__init__.py": "38cb6f4d7442f4421746c6329878c519b638a3434f742ebbcecad4e8ec20594d",
     "bindings/python/sc-observability-py/python/sc_observability/generated/__init__.pyi": "515e4692ca2afd18074d0b4a082c31490f41beb260131829c0858d5943111f1f",
     "bindings/python/sc-observability-py/python/sc_observability/generated/py.typed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "bindings/schema/errors-v1.json": "aa7d43390670a6592cb16bc759dc34db4343cdb602b0a43a18cf0e53171e8fd8",
