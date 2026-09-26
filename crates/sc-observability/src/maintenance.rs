@@ -586,7 +586,6 @@ fn writer_worker(
                                 &writer_tracker,
                                 dropped_events_total.as_ref(),
                                 last_error.as_ref(),
-                                &mut pending_flush,
                             );
                             flush_sinks(
                                 &sinks,
@@ -621,7 +620,6 @@ fn writer_worker(
                         &writer_tracker,
                         dropped_events_total.as_ref(),
                         last_error.as_ref(),
-                        &mut pending_flush,
                     );
                     flush_sinks(
                         &sinks,
@@ -638,7 +636,6 @@ fn writer_worker(
                     &writer_tracker,
                     dropped_events_total.as_ref(),
                     last_error.as_ref(),
-                    &mut pending_flush,
                 );
                 flush_sinks(
                     &sinks,
@@ -664,7 +661,6 @@ fn writer_worker(
                     &writer_tracker,
                     dropped_events_total.as_ref(),
                     last_error.as_ref(),
-                    &mut pending_flush,
                 );
                 flush_sinks(
                     &sinks,
@@ -710,12 +706,8 @@ fn flush_batch(
     writer_tracker: &WriterTracker,
     dropped_events_total: &AtomicU64,
     last_error: &Mutex<Option<DiagnosticSummary>>,
-    pending_flush: &mut Vec<mpsc::Sender<Result<(), DiagnosticSummary>>>,
 ) {
     if batch.is_empty() {
-        if !pending_flush.is_empty() {
-            flush_sinks(sinks, writer_tracker, last_error, pending_flush);
-        }
         return;
     }
 
@@ -748,10 +740,6 @@ fn flush_batch(
             }
         }
         writer_tracker.record_write_completion(1);
-    }
-
-    if !pending_flush.is_empty() {
-        flush_sinks(sinks, writer_tracker, last_error, pending_flush);
     }
 }
 
