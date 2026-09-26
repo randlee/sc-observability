@@ -173,9 +173,13 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     arm64 = next((item for item in policy['platforms'] if item['id'] == 'windows-arm64'), None)
     required_arm64 = {'id': 'windows-arm64', 'machine': 'ARM64',
                       'wheel_platform': 'win_arm64', 'rust_target': 'aarch64-pc-windows-msvc'}
-    if arm64 is not None and any(arm64.get(key) != value for key, value in required_arm64.items()):
+    if arm64 is None:
+        arm64 = {**required_arm64, 'runner': 'windows-11-arm'}
+        policy['platforms'].append(arm64)
+    elif any(arm64.get(key) != value for key, value in required_arm64.items()):
         raise DistributionError('Windows ARM64 policy row differs from the D.10 handoff')
-    shutil.copyfile(source / 'release/python-platform-policy.json', qualification / 'platform-policy.json')
+    arm64.setdefault('runner', 'windows-11-arm')
+    (qualification / 'platform-policy.json').write_text(json.dumps(policy, indent=2) + '\n')
     shutil.copyfile(bundle / 'Cargo.lock', staging / 'Cargo.lock')
     run(['cargo', 'metadata', '--offline', '--format-version', '1'], staging, log)
     shutil.copyfile(bundle / 'Cargo.lock', staging / 'embedding/Cargo.lock')

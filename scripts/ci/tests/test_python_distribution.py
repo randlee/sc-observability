@@ -121,6 +121,13 @@ class DistributionTests(unittest.TestCase):
         with self.assertRaisesRegex(DistributionError, 'architecture'):
             verify_native_architecture(b'MZ', 'win_amd64')
 
+    def test_verify_native_architecture_uses_arm64_helper_once(self):
+        from unittest.mock import patch
+        from _python_distribution import verify_native_architecture
+        with patch('python_arm64.is_pe_arm64', return_value=True) as helper:
+            verify_native_architecture(b'fixture', 'win_arm64')
+        helper.assert_called_once_with(b'fixture')
+
     def test_requires_python_is_open_ended_and_has_the_abi3_floor(self):
         self.assertEqual(validate_requires_python('>=3.10'), '>=3.10')
         for value in ('>=3.10,<3.13', '>=3.10,!=3.12', '>=3.11', '==3.10'):
@@ -263,7 +270,7 @@ class DistributionTests(unittest.TestCase):
         policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
                                     'wheel_platform': 'win_arm64',
                                     'rust_target': 'aarch64-pc-windows-msvc'})
-        for mutation in ('missing', 'duplicate', 'mixed-source'):
+        for mutation in ('missing', 'duplicate', 'wrong-target', 'mixed-source'):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 policy_fixture = root / 'policy.json'
@@ -279,6 +286,8 @@ class DistributionTests(unittest.TestCase):
                     record = {**common, 'platform': platform['id'], 'wheel': {'sha256': 'fixture'}}
                     if mutation == 'mixed-source' and index == 0:
                         record['source_commit'] = 'b' * 40
+                    if mutation == 'wrong-target' and index == 0:
+                        record['platform'] = 'unsupported-platform'
                     (directory / 'build-result.json').write_text(json.dumps(record))
                     for count, version in enumerate(policy['interpreters']):
                         if mutation == 'missing' and index == 0 and count == 0:
