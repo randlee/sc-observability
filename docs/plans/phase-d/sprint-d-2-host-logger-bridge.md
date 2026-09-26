@@ -1,22 +1,12 @@
 # d-2: Host-owned logger bridge and event policy (#204)
 
-Generated projection of `obs-d-2`; the bead is authoritative.
-
 ## Plan metadata
 
-- Wave: 2
-- Layer: 5
-- Assignee / model: lobs / luna
-- Relation: `must_follow`
-- Closure: `boundary`
-- Target boundary: sc-observability-log bridge module
+- Wave: 5
 - Branch: `sprint/d-2-host-logger-bridge`
-- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-2-host-logger-bridge`
-- PR target (merge order only): `sprint/d-1-log-settings`
+- PR target: `sprint/d-1-log-settings`
 - Blocked by: `obs-d-13-sanity`
-- Requirements: DOC-003, LAY-001, LAY-002, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-007, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-046, LOG-047, LOG-048, NFR-001, NFR-002, NFR-005, NFR-006, NFR-007, NFR-009, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
-- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-017
-- Owned paths (metadata projection):
+- Owned paths:
   - `crates/sc-observability-log/src/bridge.rs`
   - `crates/sc-observability-log/tests/bridge_*.rs`
   - `docs/logging/d-2-host-logger-bridge.md`
@@ -57,6 +47,7 @@ the existing public `BridgeOptions` shape.
 No tracing redesign, global facade replacement, owner-capability duplication,
 OTLP export, or #88 work.
 
+
 ## Design
 
 ## Implementation contract
@@ -77,11 +68,13 @@ Created/staged by obs-d-2, owned by obs-d-18 from wave 3; after this bead closes
 
 - `crates/sc-observability-log/tests/bridge_jsonl.rs`
 
+## Handoff from obs-d-12 and obs-d-13 (wave 1)
+
+Consume obs-d-13's frozen concrete attachment signature specification and obs-d-12's canonical error/registry artifact. In wave 2, bind the resulting errors and codes only in owned `bridge.rs`; do not alter either producer contract.
+
 ## Acceptance criteria
 
 - [ ] `cargo test -p sc-observability-log --test bridge_jsonl --locked` and individual explicitly named bridge attachment/policy test targets added by D.2 pass; never pass bridge_* as a literal cargo target (D1–D5).
 - [ ] boundary:sc-observability-log — one recording-sink fixture proves policy admission/rejection/panic, one redaction pass, host-owned logger, no extra LevelOwner and exact dropped-event accounting (D1–D4).
 - [ ] boundary:sc-observability-log — foreign facade rejection, init/attach exclusion, detach timeout retry, stale NotInstalled, reattachment and Arc::try_unwrap after successful detach pass using D.13 errors (D5).
 - [ ] This sprint does not close cross-crate logging/release qualification; obs-d-18 does.
-
-- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.

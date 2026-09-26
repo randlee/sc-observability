@@ -1,22 +1,12 @@
 # d-1: Shared startup `LogSettings` (#96)
 
-Generated projection of `obs-d-1`; the bead is authoritative.
-
 ## Plan metadata
 
-- Wave: 2
-- Layer: 4
-- Assignee / model: cobs / terra
-- Relation: `must_follow`
-- Closure: `boundary`
-- Target boundary: sc-observability logging settings implementation
+- Wave: 4
 - Branch: `sprint/d-1-log-settings`
-- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-1-log-settings`
-- PR target (merge order only): `sprint/d-10-windows-arm64-wheel`
+- PR target: `sprint/d-10-windows-arm64-wheel`
 - Blocked by: `obs-d-13-sanity`
-- Requirements: DOC-003, DOC-004, LAY-001, LAY-002, LAY-006, LAY-007, LOG-001, LOG-002, LOG-003, LOG-004, LOG-005, LOG-006, LOG-007, LOG-008, LOG-009, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-020, LOG-021, LOG-023, LOG-037, LOG-038, LOG-040, LOG-043, LOG-047, LOG-048, NFR-001, NFR-002, NFR-005, NFR-006, NFR-007, NFR-009, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-025, TYP-026, TYP-027, TYP-030, TYP-031, TYP-039
-- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-017
-- Owned paths (metadata projection):
+- Owned paths:
   - `crates/sc-observability/src/runtime.rs`
   - `crates/sc-observability/tests/log_settings.rs`
   - `docs/logging/d-1-log-settings.md`
@@ -32,16 +22,16 @@ It is parallel-safe with D.2 and D.3 because neither consumes this type. This is
 
 ## Deliverables
 
-1. Implement deterministic environment parsing for the complete inventory and
+1. [REQ: LOG-001, LOG-002, LOG-003, LOG-004, LOG-005, LOG-009, LOG-039, LOG-042] Implement deterministic environment parsing for the complete inventory and
    field-wise resolution in the documented order including the LOG-009 root
    exception. Parsing uses a named `EnvSnapshot` so one resolution cannot mix
    process states.
 
-2. Convert the resolved value to `LoggerConfig` and its strong policy types,
+2. [REQ: LOG-006, LOG-007, LOG-008, LOG-010, NFR-012] Convert the resolved value to `LoggerConfig` and its strong policy types,
    preserving all non-inventory defaults and introducing no post-construction
    mutation.
 
-3. Document the table, precedence, null/unset behavior, prefix rules, failure
+3. [REQ: PHB-014] Document the table, precedence, null/unset behavior, prefix rules, failure
    codes, and startup-only lifecycle. Add a public example embedding settings
    under an application's `logging` JSON key. Document the compact stable-error
    table: `PrefixCollision`/`LOG-001`, `InvalidEnvironment`/`LOG-002`,
@@ -53,6 +43,7 @@ It is parallel-safe with D.2 and D.3 because neither consumes this type. This is
 
 Do not migrate consumer applications, add fields outside the inventory,
 implement dynamic reload, or plan #88 bindings/OTEL work.
+
 
 ## Design
 
@@ -74,11 +65,13 @@ Created/staged by obs-d-1, owned by obs-d-18 from wave 3; after this bead closes
 
 - `crates/sc-observability/src/runtime.rs`
 
+## Handoff from obs-d-12 and obs-d-13 (wave 1)
+
+Consume obs-d-13's frozen concrete settings signature specification and obs-d-12's canonical error/registry artifact. In wave 2, bind the resulting errors and codes only in owned `runtime.rs`; do not alter either producer contract.
+
 ## Acceptance criteria
 
 - [ ] boundary:sc-observability — `cargo test -p sc-observability --test log_settings --locked` runs defaults/JSON/shared-env/app-env/precedence for every D.13 inventory row, invalid/empty/unknown/case/non-UTF8 prefix cases, and atomic retained-policy replacement (D1).
 - [ ] boundary:sc-observability — config conversion parity preserves unrelated LoggerConfig defaults, validates LogRoot and performs no post-construction mutation; runtime.rs uses canonical 2.0 errors and preserves source (D2).
 - [ ] `cargo check --manifest-path examples/log-settings/Cargo.toml --locked` passes the 2.0 public settings example and docs/logging/d-1-log-settings.md matches the contract table and LOG-001..005 diagnostics (D3).
 - [ ] This sprint does not close combined logging feature/release/API behavior; obs-d-18 does.
-
-- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
