@@ -5,7 +5,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::{CompleteSpan, LogEvent, MetricRecord};
-use sc_observability_types::typed::ExportFailure;
 use sc_observability_types::v2::ExportError;
 
 /// Object-safe asynchronous lifecycle result used by both backend adapters.
@@ -36,19 +35,19 @@ pub(crate) trait ExporterLifecycle: Send + Sync {
 /// Object-safe exporter for projected log records.
 pub(crate) trait LogExporter: Send + Sync {
     /// Exports one batch of log events.
-    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportFailure>;
+    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError>;
 }
 
 /// Object-safe exporter for completed spans.
 pub(crate) trait TraceExporter: Send + Sync {
     /// Exports one batch of completed spans.
-    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportFailure>;
+    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError>;
 }
 
 /// Object-safe exporter for projected metrics.
 pub(crate) trait MetricExporter: Send + Sync {
     /// Exports one batch of metric records.
-    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportFailure>;
+    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError>;
 }
 
 /// Backend-neutral set of private exporter capabilities.

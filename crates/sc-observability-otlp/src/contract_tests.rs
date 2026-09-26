@@ -12,7 +12,6 @@ use super::contracts::{
 };
 use super::{CompleteSpan, LogEvent, MetricRecord};
 use sc_observability_types::error_codes::otlp;
-use sc_observability_types::typed::ExportFailure;
 use sc_observability_types::v2::{ConfigFailure, ExportError};
 
 fn legacy_config() -> OtelConfig {
@@ -130,19 +129,19 @@ impl ExporterLifecycle for FakeLifecycle {
 
 struct FakeLog;
 impl LogExporter for FakeLog {
-    fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportFailure> {
+    fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 struct FakeTrace;
 impl TraceExporter for FakeTrace {
-    fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportFailure> {
+    fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 struct FakeMetric;
 impl MetricExporter for FakeMetric {
-    fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportFailure> {
+    fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportError> {
         Ok(())
     }
 }

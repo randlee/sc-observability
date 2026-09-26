@@ -31,15 +31,14 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use config::validate_config_typed;
-use sc_observability_types::typed::{
-    EventFailure, ExportFailure, FlushFailure, InitFailure, ShutdownFailure,
-};
+use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
+use sc_observability_types::v2::ExportError;
 #[allow(
     deprecated,
     reason = "telemetry retains legacy error names in its published compatibility signatures"
 )]
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, ErrorContext, FlushError, InitError, LogEvent, MetricRecord,
+    DiagnosticSummary, ErrorContext, FlushError, InitError, LogEvent, MetricRecord,
     ObservabilityHealthProvider, Remediation, ShutdownError, SinkName, SpanSignal,
     telemetry_health_provider_sealed,
 };
@@ -87,7 +86,7 @@ struct FlushOutcome {
     /// The final exporter failure in deterministic flush order. Health retains
     /// summaries for every failing exporter, while shutdown keeps this owned
     /// value so callers can traverse its native source chain.
-    export_failure: Option<ExportFailure>,
+    export_failure: Option<ExportError>,
 }
 
 #[derive(Default)]
@@ -146,19 +145,19 @@ struct NoopTraceExporter;
 struct NoopMetricExporter;
 
 impl LogExporter for NoopLogExporter {
-    fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportFailure> {
+    fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
 impl TraceExporter for NoopTraceExporter {
-    fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportFailure> {
+    fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
 impl MetricExporter for NoopMetricExporter {
-    fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportFailure> {
+    fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportError> {
         Ok(())
     }
 }
@@ -524,7 +523,7 @@ impl Telemetry {
         &self,
         exporter_kind: ExporterKind,
         dropped: u64,
-        error: &ExportFailure,
+        error: &ExportError,
     ) {
         self.dropped_exports_total
             .fetch_add(dropped, Ordering::SeqCst);
@@ -631,7 +630,7 @@ fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
 }
 
 fn shutdown_export_failure_typed(
-    error: ExportFailure,
+    error: ExportError,
     diagnostic_summary: Option<DiagnosticSummary>,
 ) -> ShutdownFailure {
     // The legacy shutdown path selected `runtime.last_error` after incomplete
@@ -663,6 +662,7 @@ fn shutdown_export_failure_typed(
 )]
 mod tests {
     use super::*;
+    use sc_observability_types::DiagnosticInfo;
     use sc_observability_types::{
         ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
         ProcessIdentity, ServiceName, SpanEvent, SpanId, SpanRecord, SpanStarted, StateTransition,
@@ -679,14 +679,16 @@ mod tests {
     }
 
     impl LogExporter for RecordingLogExporter {
-        fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportFailure> {
+        fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError> {
             self.calls.lock().expect("calls poisoned").push(batch.len());
             if self.fail.load(Ordering::SeqCst) {
-                Err(ExportFailure::from_context(Box::new(ErrorContext::new(
-                    error_codes::TELEMETRY_EXPORT_FAILED,
-                    "log export failed",
-                    Remediation::not_recoverable("test exporter failure"),
-                ))))
+                Err(ExportError::Transport {
+                    context: Box::new(ErrorContext::new(
+                        error_codes::TELEMETRY_EXPORT_FAILED,
+                        "log export failed",
+                        Remediation::not_recoverable("test exporter failure"),
+                    )),
+                })
             } else {
                 Ok(())
             }
@@ -700,14 +702,16 @@ mod tests {
     }
 
     impl TraceExporter for RecordingTraceExporter {
-        fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportFailure> {
+        fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError> {
             self.calls.lock().expect("calls poisoned").push(batch.len());
             if self.fail.load(Ordering::SeqCst) {
-                Err(ExportFailure::from_context(Box::new(ErrorContext::new(
-                    error_codes::TELEMETRY_EXPORT_FAILED,
-                    "trace export failed",
-                    Remediation::not_recoverable("test exporter failure"),
-                ))))
+                Err(ExportError::Transport {
+                    context: Box::new(ErrorContext::new(
+                        error_codes::TELEMETRY_EXPORT_FAILED,
+                        "trace export failed",
+                        Remediation::not_recoverable("test exporter failure"),
+                    )),
+                })
             } else {
                 Ok(())
             }
@@ -721,14 +725,16 @@ mod tests {
     }
 
     impl MetricExporter for RecordingMetricExporter {
-        fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportFailure> {
+        fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError> {
             self.calls.lock().expect("calls poisoned").push(batch.len());
             if self.fail.load(Ordering::SeqCst) {
-                Err(ExportFailure::from_context(Box::new(ErrorContext::new(
-                    error_codes::TELEMETRY_EXPORT_FAILED,
-                    "metric export failed",
-                    Remediation::not_recoverable("test exporter failure"),
-                ))))
+                Err(ExportError::Transport {
+                    context: Box::new(ErrorContext::new(
+                        error_codes::TELEMETRY_EXPORT_FAILED,
+                        "metric export failed",
+                        Remediation::not_recoverable("test exporter failure"),
+                    )),
+                })
             } else {
                 Ok(())
             }
@@ -738,17 +744,19 @@ mod tests {
     struct SourcePreservingLogExporter;
 
     impl LogExporter for SourcePreservingLogExporter {
-        fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportFailure> {
-            Err(ExportFailure::from_context(Box::new(
-                ErrorContext::new(
-                    ErrorCode::new_static("SC_TEST_CUSTOM_EXPORT"),
-                    "custom log exporter failed",
-                    Remediation::not_recoverable("test native exporter source retention"),
-                )
-                .source(Box::new(std::io::Error::other(
-                    "custom exporter native source",
-                ))),
-            )))
+        fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
+            Err(ExportError::Transport {
+                context: Box::new(
+                    ErrorContext::new(
+                        ErrorCode::new_static("SC_TEST_CUSTOM_EXPORT"),
+                        "custom log exporter failed",
+                        Remediation::not_recoverable("test native exporter source retention"),
+                    )
+                    .source(Box::new(std::io::Error::other(
+                        "custom exporter native source",
+                    ))),
+                ),
+            })
         }
     }
 

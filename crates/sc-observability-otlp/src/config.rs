@@ -555,6 +555,7 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
 }
 
 pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), InitFailure> {
+    validated_transport_bounds(&config.transport).map_err(config_failure_to_init_failure)?;
     if config.transport.enabled && config.transport.endpoint.is_none() {
         return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::TELEMETRY_INVALID_CONFIG,
@@ -565,7 +566,6 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
             ),
         ))));
     }
-    validated_transport_bounds(&config.transport).map_err(config_failure_to_init_failure)?;
     if config.transport.enabled
         && config.logs.is_none()
         && config.traces.is_none()
@@ -1298,6 +1298,29 @@ mod tests {
         let typed = validate_config_typed(&config).expect_err("typed zero timeout");
         assert_eq!(legacy.diagnostic().code, typed.diagnostic().code);
         assert_eq!(legacy.diagnostic().message, typed.diagnostic().message);
+    }
+
+    #[test]
+    fn validate_config_checks_transport_before_missing_enabled_endpoint() {
+        let config = TelemetryConfig {
+            service_name: ServiceName::new("demo").expect("service"),
+            resource: ResourceAttributes::default(),
+            transport: OtelConfig {
+                enabled: true,
+                timeout_ms: 0_u64.into(),
+                ..OtelConfig::default()
+            },
+            logs: Some(LogsConfig::default()),
+            traces: None,
+            metrics: None,
+        };
+
+        let typed = validate_config_typed(&config)
+            .expect_err("transport validation precedes the missing endpoint check");
+        assert_eq!(
+            typed.diagnostic().code,
+            otlp_error_codes::OTLP_CONFIG_ZERO_DURATION
+        );
     }
 
     #[test]
