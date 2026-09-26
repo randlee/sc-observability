@@ -14,8 +14,8 @@ Generated projection of `obs-d-6`; the bead is authoritative.
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-6-otlp-lifecycle-core`
 - PR target (merge order only): `sprint/d-5-otlp-signal-model`
 - Blocked by: `obs-d-12-sanity`
-- Requirements: LAY-001, LAY-004, LAY-005, LAY-006, NFR-001, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, OTLP-001, OTLP-002, OTLP-003, OTLP-004, OTLP-005, OTLP-006, OTLP-007, OTLP-008, OTLP-009, OTLP-010, OTLP-011, OTLP-012, OTLP-013, OTLP-014, OTLP-015, OTLP-016, OTLP-017, OTLP-018, OTLP-019, OTLP-020, OTLP-021, OTLP-022, PHB-003, PHB-004, PHB-005, PHB-006, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-021, TYP-023, TYP-024, TYP-030, TYP-031
-- ADRs: ADR-002, ADR-004, ADR-005, ADR-009, ADR-012, ADR-017, ADR-018
+- Requirements: LAY-005, NFR-007, OTLP-012, OTLP-013, OTLP-021, PHD-003, PHD-004
+- ADRs: ADR-018
 - Owned paths (metadata projection):
   - `crates/sc-observability-otlp/src/lifecycle.rs`
   - `crates/sc-observability-otlp/src/lifecycle_tests.rs`
@@ -23,102 +23,40 @@ Generated projection of `obs-d-6`; the bead is authoritative.
 
 ## Deliverables
 
-1. Implement the lifecycle core behind the D.12 exporter trait: state transitions, bounded admission, factory use, health/accounting, and adapter injection points.
-2. Convert D.12 neutral signals at the core boundary without loss of resource/scope metadata, flags, links, events, status, or histogram content.
-3. Implement lifecycle ordering, cancellation, fail-open health/dropped behavior, and fake-exporter fixtures using the D.12 bounds, retry policy, configuration fields, `ExporterSet`, and factory contract.
-4. Document and test the lifecycle implementation and its backend-neutral async completion behavior.
+1. Implement the shared lifecycle core in `lifecycle.rs`: ordered barriers, bounded record/byte admission, shutdown ordering, cancellation, health/accounting, and adapter injection points.
+2. Consume D.12 neutral signals and validated bounds without redefining types, config/defaults, factories, `ExporterSet`, error variants, or registries.
+3. Prove fail-open admission, terminal lifecycle outcomes, and backend-neutral completion with D.12 recording-exporter fixtures.
+4. Document and test the shared lifecycle contract.
 
 ## This Sprint Does Not Close
 
-D.12 owns the types, factory, `ExporterSet`, and fake fixture contract; D.7/D.8 own transport adapters; D.18 owns public API integration.
+D.12 owns types, config/defaults/validation, factory, `ExporterSet`, and fixtures. D.7 and D.8 own only backend behavior and call this lifecycle core. D.18 owns the public `Telemetry` facade and its `lib.rs` integration.
 
 ## Design
 
-Contract: obs-d-12 design, sections "Backend and trait contract" and "Validated transport contract".
+## Ownership split
 
-## 2.0 lifecycle decision
+D.6 exclusively owns the lifecycle barrier, shutdown ordering, and admission control in `lifecycle.rs` and `lifecycle_tests.rs`. D.7 and D.8 call this core and own only SDK and legacy HTTP/JSON backend behavior respectively; neither owns a second lifecycle state machine, barrier, shutdown policy, or admission policy.
 
-Synchronous `emit_*` remains admission-only for the SDK backend. Construction
-requires an entered Tokio handle and fails before mutation outside a runtime.
-D.7 owns the SDK provider/batch-processor dispatcher; this sprint implements only the shared lifecycle/admission contract and tests it with D.12 recording exporters. Trait calls clone owned batches and use nonblocking bounded
-admission; they never call `block_on`, create another runtime, wait for queue
-capacity, or perform network I/O. Capacity is a validated configuration value;
-full/closed queues fail open, increment existing per-signal dropped counters,
-set degraded/unavailable health, and return stable `QueueFull`/worker failures.
+D.6 consumes D.12’s frozen contracts, validated record/byte bounds, config/defaults, factory, `ExporterSet`, and recording fixtures unchanged. It defines no exporter trait, config field, error variant, constant, registry, module declaration, or public facade behavior.
 
-The canonical 2.0 completion surface is:
+## Lifecycle contract
 
-```rust
-impl Telemetry {
-    pub async fn flush_async_typed(&self) -> Result<(), FlushError>;
-    pub async fn shutdown_async_typed(&self) -> Result<(), ShutdownError>;
-}
-```
+One short admission lock gives each export or lifecycle command a monotonic sequence. A flush barrier completes only after all earlier admissions have terminal outcomes. Shutdown atomically changes `Open -> Closing`, rejects later emits with `TelemetryError::Shutdown`, drains prior admissions, performs provider shutdown once, stores its terminal result, and changes `Closing -> Shutdown`; concurrent callers share that completion and later terminal calls are idempotent. Full or closed admission fails open, increments per-signal dropped accounting, and records degraded health without waiting.
 
-The existing synchronous `flush_typed`/`shutdown_typed` compatibility methods
-call `ExporterLifecycle::blocking_preflight` before removing buffers, changing
-lifecycle state, or calling any signal exporter, then call `*_blocking`, all
-without inspecting the backend enum. The legacy implementation completes there
-synchronously from supported plain threads. The SDK preflight returns the
-stable typed `AsyncLifecycleRequired` failure before any mutation; callers then
-use the async method. This avoids returning success before a future collector
-failure is known and avoids blocking a Tokio worker.
-
-Every public lifecycle entry point is dispositioned together: untyped
-`flush()`/`shutdown()` delegate once to the typed synchronous methods;
-`flush_typed()`/`shutdown_typed()` perform backend-neutral preflight; and
-`flush_async_typed()`/`shutdown_async_typed()` use the same shared barriers.
-No entry point branches on `ExporterBackend`, bypasses ordering, or starts a
-second completion path.
-
-The dispatcher linearizes every export and lifecycle command under one short
-admission lock with a monotonic sequence. A flush barrier completes only after
-all commands sequenced before it have terminal outcomes. Concurrent emission
-is either sequenced before that barrier or after it for the next flush. Async
-shutdown atomically changes `Open -> Closing` under the same lock, rejects all
-new emit calls synchronously with `TelemetryError::Shutdown`, drains all prior
-admissions, performs provider shutdown exactly once, stores the terminal
-result, and changes `Closing -> Shutdown`. Concurrent/repeated shutdown awaits
-the shared completion while it is in flight; later calls after terminal
-completion are idempotent and return `Ok(())`, preserving the existing
-first-caller failure rule.
-
-Every async flush/shutdown derives its finite deadline from those validated
-fields; there is no unbounded or caller-implicit default.
-Timeout resolves all waiters with `LifecycleTimeout`, leaves a truthful
-degraded terminal state, and never reports success while work is pending.
-Synchronous SDK lifecycle always returns `AsyncLifecycleRequired`, including
-from a plain thread; it never uses `spawn_blocking` or blocks a current-thread
-runtime. Typestate was considered and rejected because existing `Telemetry`
-must support runtime-selected backends; the explicit shared state machine plus
-typed preflight is the reviewable 2.0 contract.
-
-Dropping an awaiter does not cancel the queued lifecycle command. The host must
-keep its Tokio runtime alive until `shutdown_async_typed().await` completes;
-after completion it may tear the runtime down immediately. If the host runtime
-terminates first, dispatcher/task drop guards resolve waiters with a typed
-`RuntimeTerminated` failure and account every uncompleted admitted record as
-dropped/degraded. Accepted ADR-018 activates and verifies the conditional
-OTLP-021 contract; D.12 owns its normative requirement update and D.18 owns the migration guide.
-
-## Implementation ownership
-
-Implement lifecycle.rs/lifecycle_tests.rs against obs-d-12 contracts.rs/config.rs; define no exporter trait, config field, error variant, constant or registry. D.7 and D.8 independently implement the same already-frozen interface, then D.18 connects production lifecycle and exporters. Adapter builders must set every validated endpoint/header/timeout/batch parameter explicitly and must not read ambient OTEL_* environment over the validated configuration. A fixture sets conflicting OTEL_* values and proves they cannot change the factory's resolved contract. Config validation itself remains D.12.
-
-The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
+D.6 supplies internal backend-neutral barriers and preflight hooks. It does not expose or integrate the public `Telemetry` facade: **Handoff to obs-d-18:** integrate those internal lifecycle operations into `Telemetry` and `lib.rs` while preserving the same ordering, typed outcomes, and no-backend-branch rule.
 
 ## Handoff from obs-d-12 (wave 1)
 
-Created by obs-d-12, owned here from wave 2. Consume its completed sanity-gated artifact; preserve the contract while implementing or retiring staged compatibility. This serial handoff is why relation is must_follow; no same-wave sibling shares these paths.
+Consume D.12’s sanity-gated contract artifact without changing its ownership.
 
 - `crates/sc-observability-otlp/src/lifecycle.rs`
 - `crates/sc-observability-otlp/src/lifecycle_tests.rs`
 
 ## Acceptance criteria
 
-- [ ] `cargo test -p sc-observability-otlp --lib lifecycle_tests --all-features --locked` runs barrier_order, repeated_shutdown, cancelled_waiter, request_deadline, runtime_terminated and exact_once_drop_count against D.12 recording exporters (D1/D3).
-- [ ] boundary:OTLP lifecycle — resource/scope/flags/links/histogram payloads remain unchanged across admission, record and byte credit bounds are enforced, and failed admission is nonblocking (D2).
-- [ ] Conflicting ambient OTEL_* settings cannot override explicitly validated config in the factory test; no block_on/second runtime or backend switch appears in shared emit/lifecycle dispatch (D4).
-- [ ] This sprint does not close real SDK/legacy transport or collector behavior; D.7/D.8 and D.18/D.9 close those.
-
-- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
+- [ ] Deliverable 1: `cargo test -p sc-observability-otlp --lib lifecycle_tests --all-features --locked` externally exercises ordered barriers, repeated shutdown, cancelled waiters, deadlines, runtime termination, and exact-once drop accounting.
+- [ ] Deliverable 2: an external lifecycle test proves resource/scope/flags/links/histogram payload preservation and enforced nonblocking record/byte admission.
+- [ ] Deliverable 3: fixture tests prove fail-open full/closed admission, degraded health, and stable terminal outcomes without `block_on`, a second runtime, or a backend branch.
+- [ ] Deliverable 4: `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass.
+- [ ] D.6 does not close SDK/legacy transport behavior or public-facade integration; D.7/D.8 and D.18 own those outcomes.
