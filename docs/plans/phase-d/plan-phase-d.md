@@ -138,7 +138,7 @@ Source: the 56 numbered deliverables of D.1 to D.11 as written in develop's `doc
 
 ## Current deliverable additions
 
-D.12#4–6 supply contracts, registrations and version ownership; D.13#4 stages compatibility retirement; D.14/D.15#3 and D.16/D.17#2 supply local migration tests; D.18#1–5 close canonical activation, composition, release gates and language integration. Per-sprint documentation is supporting evidence, not a separate dev gate.
+Items not in the original 56 (measured from the numbered deliverables, 2026-09-26): D.4#2, D.14#3, D.15#3, D.16#2 and D.17#2 retype the local tests of each migration boundary; D.16#3 and D.17#3 update that sprint's own documentation. D.12#4–6 (contracts, registrations, version ownership) and D.13#4 (staged compatibility retirement) are hoisted 1.x items and appear in the mapping above.; D.18#1–5 close canonical activation, composition, release gates and language integration. Per-sprint documentation is supporting evidence, not a separate dev gate.
 
 Relation counts: root=3, parallel_safe=6, must_follow=9.
 
