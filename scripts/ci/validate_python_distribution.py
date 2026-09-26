@@ -390,6 +390,9 @@ def aggregate(args) -> None:
         raise DistributionError('platform policy contains duplicate identifiers')
     if platform_count not in (5, 6) or len(builds) != platform_count or len(cells) != platform_count * len(policy['interpreters']):
         raise DistributionError('all policy builds and installed-suite cells are required')
+    build_platforms = [build.get('platform') for build in builds]
+    if set(build_platforms) != platform_ids or len(build_platforms) != len(set(build_platforms)):
+        raise DistributionError('build records contain missing, duplicate or unsupported platforms')
     if {(cell['platform'], cell['python']) for cell in cells} != expected:
         raise DistributionError('matrix contains missing, duplicate or unsupported cells')
     wheel_hashes = {build['platform']: build['wheel']['sha256'] for build in builds}
@@ -465,7 +468,9 @@ def aggregate(args) -> None:
         if sorted(production.get('maturin_features', [])) != production_features:
             raise DistributionError('production feature identity differs from immutable source')
         publication_wheels.append({'platform': build['platform'], **production})
-        selected = next(item for item in policy['platforms'] if item['id'] == build['platform'])
+        selected = next((item for item in policy['platforms'] if item['id'] == build.get('platform')), None)
+        if selected is None:
+            raise DistributionError('build record contains unsupported platform')
         wheel = confined(path.parent, build['wheel']['wheel'])
         production_paths.append(wheel)
         selected = {**selected, 'expected_requires_python': expected_requires_python,

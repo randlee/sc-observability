@@ -61,11 +61,15 @@ jobs:
           policy = json.load(open('release/python-platform-policy.json'))
           ids = {platform['id'] for platform in policy['platforms']}
           assert len(ids) == len(policy['platforms'])
-          if len(ids) == 6:
-              arm64 = next(platform for platform in policy['platforms'] if platform['id'] == 'windows-arm64')
-              assert (arm64['machine'], arm64['wheel_platform'], arm64['rust_target']) == ('ARM64', 'win_arm64', 'aarch64-pc-windows-msvc')
+          arm64 = next((platform for platform in policy['platforms'] if platform['id'] == 'windows-arm64'), None)
+          if arm64 is None:
+              arm64 = {'id': 'windows-arm64', 'runner': 'windows-11-arm', 'machine': 'ARM64',
+                       'wheel_platform': 'win_arm64', 'rust_target': 'aarch64-pc-windows-msvc'}
+              policy['platforms'].append(arm64)
+          arm64.setdefault('runner', 'windows-11-arm')
+          assert (arm64['machine'], arm64['wheel_platform'], arm64['rust_target']) == ('ARM64', 'win_arm64', 'aarch64-pc-windows-msvc')
           cells = [{**platform, 'python': version} for platform in policy['platforms'] for version in policy['interpreters']]
-          assert len(policy['platforms']) in (5, 6)
+          assert len(policy['platforms']) == 6
           assert len(cells) == len(policy['platforms']) * len(policy['interpreters'])
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write('platforms=' + json.dumps(policy['platforms']) + '\n')
@@ -255,8 +259,25 @@ jobs:
         shell: bash
         run: |
           sdist=( "$RUNNER_TEMP"/b4a-evidence/b4a-sdist/dist/*.tar.gz )
+          python - <<'PYTHON'
+          import json, os
+          from pathlib import Path
+          policy_path = Path('release/python-platform-policy.json')
+          policy = json.loads(policy_path.read_text())
+          arm64 = next((platform for platform in policy['platforms']
+                        if platform['id'] == 'windows-arm64'), None)
+          if arm64 is None:
+              policy['platforms'].append({
+                  'id': 'windows-arm64', 'runner': 'windows-11-arm', 'machine': 'ARM64',
+                  'wheel_platform': 'win_arm64', 'rust_target': 'aarch64-pc-windows-msvc',
+              })
+          elif (arm64.get('machine'), arm64.get('wheel_platform'), arm64.get('rust_target')) != (
+                  'ARM64', 'win_arm64', 'aarch64-pc-windows-msvc'):
+              raise SystemExit('Windows ARM64 policy handoff is incomplete')
+          (Path(os.environ['RUNNER_TEMP']) / 'b4a-policy.json').write_text(json.dumps(policy))
+          PYTHON
           python scripts/ci/validate_python_distribution.py aggregate \
-            --policy release/python-platform-policy.json --sdist "${sdist[0]}" \
+            --policy "$RUNNER_TEMP/b4a-policy.json" --sdist "${sdist[0]}" \
             --evidence "$RUNNER_TEMP/b4a-evidence" --source-commit "${{ needs.plan.outputs.source_commit }}" \
             --publication-dir "$RUNNER_TEMP/b4a-production" \
             --output "$RUNNER_TEMP/b4a-production/production-artifacts.json"
