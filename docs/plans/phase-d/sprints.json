@@ -1,0 +1,85 @@
+{
+  "root_bead_id": "obs-phase-d",
+  "sprints": [
+    {
+      "dev_bead_id": "obs-d-1",
+      "sanity_bead_id": "obs-d-1-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-2",
+      "sanity_bead_id": "obs-d-2-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-3",
+      "sanity_bead_id": "obs-d-3-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-4",
+      "sanity_bead_id": "obs-d-4-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-5",
+      "sanity_bead_id": "obs-d-5-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-6",
+      "sanity_bead_id": "obs-d-6-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-7",
+      "sanity_bead_id": "obs-d-7-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-8",
+      "sanity_bead_id": "obs-d-8-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-9",
+      "sanity_bead_id": "obs-d-9-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-10",
+      "sanity_bead_id": "obs-d-10-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-12",
+      "sanity_bead_id": "obs-d-12-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-13",
+      "sanity_bead_id": "obs-d-13-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-14",
+      "sanity_bead_id": "obs-d-14-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-15",
+      "sanity_bead_id": "obs-d-15-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-16",
+      "sanity_bead_id": "obs-d-16-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-17",
+      "sanity_bead_id": "obs-d-17-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-18",
+      "sanity_bead_id": "obs-d-18-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-19",
+      "sanity_bead_id": "obs-d-19-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-20",
+      "sanity_bead_id": "obs-d-20-sanity"
+    },
+    {
+      "dev_bead_id": "obs-d-21",
+      "sanity_bead_id": "obs-d-21-sanity"
+    }
+  ]
+}
