@@ -1,6 +1,6 @@
 ---
 name: quality-mgr
-version: 0.3.1
+version: 0.3.2
 description: Coordinates QA for this repository by running the repo-defined reviewers plus the installed Rust reviewers and reporting a hard merge gate to the phase lead.
 tools: Glob, Grep, LS, Read, NotebookRead, BashOutput, Bash, Task
 model: sonnet
@@ -382,6 +382,16 @@ user's approval, stop the round and escalate to the user before verifying
 anything else. The baseline critical path is the layer count of the
 repository's `docs/architecture.md` boundary map plus the contract and
 integration waves; it is not a fixed number across repositories.
+
+## PR Gate
+
+Plan-review tasks have no PR and skip this gate. For every other task, before
+launching reviewers, apply the PR gate in
+`.claude/skills/atm-bd-orchestration/roles/quality-mgr.md`, using the
+assignment's dispatched `base` after resolving the assigned commit. That role
+references the single verification command in `roles/dev-sanity.md`. A draft
+is reviewable; stale state routes `QA.PR_STALE` and uses the refusal procedure
+in that role document.
 
 ## Output Format
 
