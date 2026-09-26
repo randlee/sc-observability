@@ -24,11 +24,40 @@ use sc_observability_types::typed::{
     ProjectionFailure, TypedLogProjector, TypedMetricProjector, TypedSpanProjector,
     typed_log_projector, typed_metric_projector, typed_span_projector,
 };
+use sc_observability_types::v2::{MetricRecord as V2MetricRecord, SpanSignal as V2SpanSignal};
 use sc_observability_types::{
     ErrorContext, LogEvent, LogProjector, MetricProjector, MetricRecord, Observable, Observation,
     ObservationFilter, ProjectionError, ProjectionRegistration, Remediation, SpanProjector,
     SpanSignal,
 };
+
+/// Carries one validated 2.0 metric into the OTLP implementation layer.
+///
+/// Histogram structure and interval semantics are type-owned. Projection is
+/// intentionally an identity transfer: rebuilding a scalar metric here would
+/// lose histogram buckets or duplicate `MetricModelError` validation already
+/// performed by `MetricRecord::try_new` and deserialization.
+#[allow(
+    dead_code,
+    reason = "D.18 activates this staged 2.0 projector after the canonical re-export switch"
+)]
+pub(crate) fn project_v2_metric(metric: V2MetricRecord) -> V2MetricRecord {
+    metric
+}
+
+/// Carries one validated 2.0 span signal into the OTLP implementation layer.
+///
+/// Span lifecycle values are already typestate-validated by the neutral model.
+/// Projection therefore preserves their trace flags, kind, links, status,
+/// timing, attributes, and events until [`crate::assembly::V2SpanAssembler`]
+/// establishes the completed-span invariant.
+#[allow(
+    dead_code,
+    reason = "D.18 activates this staged 2.0 projector after the canonical re-export switch"
+)]
+pub(crate) fn project_v2_span(signal: V2SpanSignal) -> V2SpanSignal {
+    signal
+}
 
 /// Public helper for attaching telemetry export to ordinary observation projection registration.
 #[expect(
@@ -246,5 +275,160 @@ fn telemetry_to_projection_failure(
         sc_observability_types::TelemetryError::ExportFailure(context) => {
             ProjectionFailure::from_context(context)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{project_v2_metric, project_v2_span};
+    use sc_observability_types::v2::{
+        AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint,
+        MetricRecord, MetricValue, SpanEvent, SpanKind, SpanLink, SpanRecord, SpanSignal,
+        SpanStarted, SpanStatus, TraceContext, TraceFlags,
+    };
+    use sc_observability_types::{
+        ActionName, DurationMs, MetricName, ServiceName, SpanId, Timestamp, TraceId,
+    };
+
+    fn metric(value: MetricValue) -> MetricRecord {
+        MetricRecord::try_new(
+            Timestamp::UNIX_EPOCH,
+            ServiceName::new("test-service").expect("valid service"),
+            MetricName::new("test.measurement").expect("valid metric"),
+            value,
+        )
+        .expect("validated metric")
+    }
+
+    fn one_second_after_epoch() -> Timestamp {
+        serde_json::from_str("\"1970-01-01T00:00:01Z\"").expect("valid timestamp")
+    }
+
+    fn trace_context() -> TraceContext {
+        TraceContext::new(
+            TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
+            SpanId::new("0123456789abcdef").expect("valid span id"),
+            TraceFlags::new(0xa5),
+        )
+    }
+
+    #[test]
+    fn v2_span_projection_preserves_lifecycle_fields_without_legacy_conversion() {
+        let trace = trace_context();
+        let link = SpanLink::new(
+            TraceId::new("fedcba9876543210fedcba9876543210").expect("valid linked trace"),
+            SpanId::new("fedcba9876543210").expect("valid linked span"),
+            TraceFlags::new(0x01),
+            Attributes::from([(
+                "link.kind".to_owned(),
+                AttributeValue::String("parent".to_owned()),
+            )]),
+        );
+        let started = SpanRecord::<SpanStarted>::new(
+            Timestamp::UNIX_EPOCH,
+            ServiceName::new("test-service").expect("valid service"),
+            ActionName::new("test.operation").expect("valid action"),
+            trace.clone(),
+            Attributes::from([(
+                "scope.name".to_owned(),
+                AttributeValue::String("test".to_owned()),
+            )]),
+        )
+        .with_kind(SpanKind::Server)
+        .with_links(vec![link]);
+        let ended = started.clone().end(SpanStatus::Ok, DurationMs::from(9));
+        let event = SpanEvent {
+            timestamp: Timestamp::UNIX_EPOCH,
+            trace,
+            name: ActionName::new("test.event").expect("valid event"),
+            attributes: Attributes::from([("event.count".to_owned(), AttributeValue::UInt(1))]),
+            diagnostic: None,
+        };
+
+        let projected_started = project_v2_span(SpanSignal::Started(started.clone()));
+        let projected_event = project_v2_span(SpanSignal::Event(event.clone()));
+        let projected_ended = project_v2_span(SpanSignal::Ended(ended.clone()));
+
+        assert_eq!(projected_started, SpanSignal::Started(started));
+        assert_eq!(projected_event, SpanSignal::Event(event));
+        assert_eq!(projected_ended, SpanSignal::Ended(ended.clone()));
+        let SpanSignal::Ended(projected) = projected_ended else {
+            panic!("ended span must remain ended through projection");
+        };
+        assert_eq!(projected.kind(), SpanKind::Server);
+        assert_eq!(projected.trace().flags.bits(), 0xa5);
+        assert_eq!(projected.links().len(), 1);
+        assert_eq!(projected.status(), SpanStatus::Ok);
+        assert_eq!(projected.duration_ms(), Some(DurationMs::from(9)));
+    }
+
+    #[test]
+    fn v2_metric_projection_preserves_gauge_without_scalar_conversion() {
+        let metric = metric(MetricValue::Gauge(
+            FiniteF64::new(12.5).expect("finite gauge"),
+        ));
+
+        assert_eq!(project_v2_metric(metric.clone()), metric);
+    }
+
+    #[test]
+    fn v2_metric_projection_preserves_sum_temporality_and_start_time() {
+        let start = Timestamp::UNIX_EPOCH;
+        let end = one_second_after_epoch();
+        let metric = MetricRecord::try_new(
+            end,
+            ServiceName::new("test-service").expect("valid service"),
+            MetricName::new("test.sum").expect("valid metric"),
+            MetricValue::Sum {
+                value: FiniteF64::new(42.0).expect("finite sum"),
+                monotonic: true,
+                temporality: AggregationTemporality::Delta,
+                start_time: start,
+            },
+        )
+        .expect("validated sum");
+
+        assert_eq!(project_v2_metric(metric.clone()), metric);
+    }
+
+    #[test]
+    fn v2_metric_projection_preserves_every_histogram_bucket_and_interval() {
+        let start = Timestamp::UNIX_EPOCH;
+        let end = one_second_after_epoch();
+        let point = HistogramPoint::try_new(
+            vec![1.0, 10.0],
+            vec![2, 3, 5],
+            10,
+            FiniteF64::new(37.5).expect("finite histogram sum"),
+        )
+        .expect("validated histogram");
+        let metric = MetricRecord::try_new(
+            end,
+            ServiceName::new("test-service").expect("valid service"),
+            MetricName::new("test.histogram").expect("valid metric"),
+            MetricValue::Histogram {
+                point: point.clone(),
+                temporality: AggregationTemporality::Delta,
+                start_time: start,
+            },
+        )
+        .expect("validated histogram metric");
+
+        let projected = project_v2_metric(metric);
+        let MetricValue::Histogram {
+            point: projected_point,
+            temporality,
+            start_time,
+        } = projected.value()
+        else {
+            panic!("histogram must not be replaced with a scalar placeholder");
+        };
+        assert_eq!(projected_point, &point);
+        assert_eq!(projected_point.explicit_bounds(), &[1.0, 10.0]);
+        assert_eq!(projected_point.bucket_counts(), &[2, 3, 5]);
+        assert_eq!(projected_point.count(), 10);
+        assert!((projected_point.sum().get() - 37.5).abs() < f64::EPSILON);
+        assert_eq!(*temporality, AggregationTemporality::Delta);
+        assert_eq!(*start_time, start);
     }
 }

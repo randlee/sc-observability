@@ -64,8 +64,17 @@ ADR-019 governs the consumed types-owned OTLP error-code registry and projector
 mappings; D.5 defines neither a second registry nor transport configuration.
 ## Acceptance criteria
 
-- [ ] Deliverable 1: `cargo test -p sc-observability-otlp --lib assembly --locked` and `cargo test -p sc-observability-otlp --lib projectors --locked` each run nonzero tests covering span completion and field-preserving projection.
-- [ ] Deliverable 2: the projector tests assert gauge, sum, and histogram temporality/start-time/bucket output and consume the D.12 validation contract without scalar placeholders.
-- [ ] Deliverable 3: `cargo test -p sc-observability-otlp --test error_registry_parity --locked` checks model-failure code/source mapping and malformed histogram, temporality, and interval inputs.
-- [ ] The bead does not close neutral serde, other-crate consumers, release evidence, or collector wire equivalence; those remain with the named owners.
-- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass as the lead's intermediate-workspace invariant.
+- [x] Deliverable 1: `cargo test -p sc-observability-otlp --lib assembly --locked` and `cargo test -p sc-observability-otlp --lib projectors --locked` each run nonzero tests covering span completion and field-preserving projection.
+- [x] Deliverable 2: the projector tests assert gauge, sum, and histogram temporality/start-time/bucket output and consume the D.12 validation contract without scalar placeholders.
+- [x] Deliverable 3: `cargo test -p sc-observability-otlp --test error_registry_parity --locked` checks model-failure code/source mapping and malformed histogram, temporality, and interval inputs.
+- [x] The bead does not close neutral serde, other-crate consumers, release evidence, or collector wire equivalence; those remain with the named owners.
+- [x] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass as the lead's intermediate-workspace invariant.
+
+## Completion evidence
+
+`V2SpanAssembler` and `project_v2_metric` retain the D.12 validated model in
+OTLP staging without a scalar or transport-shaped conversion. The retained 1.x
+facade remains untouched until the D.18 activation handoff. Validation passed:
+the focused assembly/projector/parity tests, `cargo check --workspace
+--all-features --locked`, `cargo test --workspace --locked`, and `just
+validate`.
