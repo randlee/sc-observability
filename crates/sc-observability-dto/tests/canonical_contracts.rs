@@ -148,3 +148,29 @@ fn unknown_errors_remain_tagged_failures() {
         _ => panic!("unknown error was not retained"),
     }
 }
+
+#[test]
+fn nested_export_timeout_keeps_lifecycle_category_and_code() {
+    let code = core::error_codes::otlp::OTLP_LIFECYCLE_TIMEOUT;
+    let context = || {
+        Box::new(core::ErrorContext::new(
+            code.clone(),
+            "deadline elapsed",
+            core::Remediation::recoverable("inspect health", [] as [&str; 0]),
+        ))
+    };
+    let nested = v2::ExportError::LifecycleTimeout { context: context() };
+    let error = v2::FlushError::Drain {
+        context: Box::new(
+            core::ErrorContext::new(
+                code.clone(),
+                "flush failed",
+                core::Remediation::recoverable("inspect health", [] as [&str; 0]),
+            )
+            .source(Box::new(nested)),
+        ),
+    };
+    let wire = CanonicalFailureDto::try_from(&error).unwrap();
+    assert!(matches!(wire, CanonicalFailureDto::Timeout { .. }));
+    assert_eq!(wire.diagnostic().diagnostic.code, code.as_str());
+}
