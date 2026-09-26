@@ -3,8 +3,8 @@
 ## Plan metadata
 
 - Wave: 15
-- Branch: `sprint/d-17-log-macros-error-migration`
-- PR target: `sprint/d-16-dto-error-migration`
+- Branch: `sprint/d-17-log-consumer-error-migration`
+- PR target: `sprint/d-16-log-error-migration`
 - Blocked by: `obs-d-12-sanity`, `obs-d-13-sanity`
 - Owned paths:
   - `crates/sc-observability-log-consumer-check/src/lib.rs`
