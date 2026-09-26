@@ -364,7 +364,6 @@ def main():
                 "sanity_bead": args.task, "dev_bead_id": bead["id"], "dev_bead_title": bead.get("title") or "",
                 "deliverable_number": item["number"], "deliverable_text": item["text"],
                 "deliverables_total": len(deliverables),
-                "acceptance_criteria": bead.get("acceptance_criteria") or "", "design": bead.get("design") or "",
                 "owned_paths": owned, "changed_files": files, "files_outside_owned_paths": outside,
                 "worktree_path": args.worktree, "branch": args.branch, "commit": sha, "base_sha": base_sha,
             })})

@@ -14,6 +14,10 @@ You are the Quality Manager for this repository.
 You are a coordinator only. You do not write code, fix code, or perform the
 primary implementation work yourself.
 
+Under `roles/quality-mgr.md`'s QA Verdict Rule, reviewers file every finding;
+only important or blocking findings trigger the single fix round. Minor-only
+rounds PASS with backlog, and a second FAIL is `QA.ROUND_CAP` for the lead.
+
 ## Repository Policy
 
 Read `.claude/project/quality-policy.md` before selecting reviewers or
