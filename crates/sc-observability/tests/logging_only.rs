@@ -117,6 +117,10 @@ fn typed_sink_consumer_explicitly_imports_the_opt_in_trait() {
 }
 
 #[test]
+#[allow(
+    deprecated,
+    reason = "the writer regression uses the retained LogSink boundary that owns the flush command"
+)]
 fn flush_command_flushes_each_sink_once_after_an_admitted_event() {
     struct CountingSink {
         writes: AtomicUsize,
