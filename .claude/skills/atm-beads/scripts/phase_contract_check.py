@@ -561,6 +561,8 @@ class PhaseCheck:
             if not fsan:
                 self.problem(fid, "blocking finding has no stage:dev-sanity bead; its fix cannot gate downstream work")
                 continue
+            if fid not in deps(self.by.get(fsan, {}), "blocks"):
+                self.problem(fsan, f"sanity gate of blocking finding {fid} does not block on it, so it is ready before the fix lands (bd dep add {fsan} {fid})")
             for target in self.downstream_targets(sprint):
                 if fsan not in deps(self.by[target], "blocks"):
                     self.problem(target, f"not blocked by blocking finding {fid}'s sanity bead {fsan} (bd dep add {target} {fsan})")

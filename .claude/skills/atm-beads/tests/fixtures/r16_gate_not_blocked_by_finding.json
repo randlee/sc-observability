@@ -64,7 +64,7 @@
   },
   {
    "id": "x-t-1-sanity",
-   "status": "closed",
+   "status": "open",
    "labels": [
     "stage:dev-sanity"
    ],
@@ -81,13 +81,11 @@
      "depends_on_id": "x-t-1"
     }
    ],
-   "parent": "x-phase-t",
-   "close_reason": "PASS",
-   "closed_at": "2026-09-26T12:00:00Z"
+   "parent": "x-phase-t"
   },
   {
    "id": "x-t-2",
-   "status": "in_progress",
+   "status": "open",
    "labels": [
     "stage:dev",
     "stage:sprint"
@@ -116,13 +114,15 @@
     {
      "dependency_type": "blocks",
      "depends_on_id": "x-t-1-sanity"
+    },
+    {
+     "dependency_type": "blocks",
+     "depends_on_id": "x-t-1-qa-f1-sanity"
     }
    ],
    "parent": "x-phase-t",
    "description": "## Goal\nx\n\n## Deliverables\n1. one\n2. two\n3. three\n",
-   "acceptance_criteria": "- [ ] #1: a\n- [ ] #2\u20133: b\n",
-   "started_at": "2026-09-26T13:00:00Z",
-   "assignee": "dev1"
+   "acceptance_criteria": "- [ ] #1: a\n- [ ] #2\u20133: b\n"
   },
   {
    "id": "x-t-2-sanity",
@@ -236,12 +236,7 @@
     "dev_bead": "x-t-1-qa-f1",
     "difficulty": "normal"
    },
-   "dependencies": [
-    {
-     "dependency_type": "blocks",
-     "depends_on_id": "x-t-1-qa-f1"
-    }
-   ],
+   "dependencies": [],
    "parent": "x-t-1"
   },
   {
@@ -258,23 +253,13 @@
     "sprint_bead": "x-t-2",
     "difficulty": "normal"
    },
-   "dependencies": [],
-   "parent": "x-t-2",
-   "assignee": "dev1"
-  },
-  {
-   "id": "x-t-1-qa",
-   "status": "open",
-   "labels": [
-    "stage:qa"
+   "dependencies": [
+    {
+     "dependency_type": "blocks",
+     "depends_on_id": "x-t-1-qa-f1-sanity"
+    }
    ],
-   "priority": 2,
-   "issue_type": "task",
-   "metadata": {
-    "checked_bead": "x-t-1"
-   },
-   "dependencies": [],
-   "parent": "x-t-1"
+   "parent": "x-t-2"
   }
  ],
  "history": {},

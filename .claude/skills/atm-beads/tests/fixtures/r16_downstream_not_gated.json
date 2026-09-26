@@ -228,8 +228,13 @@
     "dev_bead": "x-t-1-qa-f1",
     "difficulty": "normal"
    },
-   "dependencies": [],
-   "parent": "x-t-1-qa-f1"
+   "dependencies": [
+    {
+     "dependency_type": "blocks",
+     "depends_on_id": "x-t-1-qa-f1"
+    }
+   ],
+   "parent": "x-t-1"
   },
   {
    "id": "x-t-2-qa-f1",

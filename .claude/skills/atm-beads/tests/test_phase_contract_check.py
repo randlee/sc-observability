@@ -59,6 +59,7 @@ EXPECT: dict[str, tuple[str, str] | None] = {
     "r16_downstream_not_gated": ("x-t-2", "not blocked by blocking finding x-t-1-qa-f1's sanity bead x-t-1-qa-f1-sanity"),
     "r16_in_progress_exempt_warns": None,
     "r16_blocking_finding_without_sanity": ("x-t-1-qa-f1", "no stage:dev-sanity bead"),
+    "r16_gate_not_blocked_by_finding": ("x-t-1-qa-f1-sanity", "does not block on it"),
 }
 
 

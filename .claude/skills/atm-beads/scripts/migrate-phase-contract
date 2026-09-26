@@ -196,8 +196,12 @@ class Migration:
                        "--description", f"Sanity check of the fix for blocking finding {fid} on {sprint}. While open it blocks every "
                                         f"not-started downstream dev bead and every open, unclaimed finding or fix on a downstream sprint (R16). "
                                         f"Closes PASS with the fix commit; a FAIL stays open.")
-                self.w(f"{gate}: parent, label, dev_bead", "update", gate, "--parent", fid, "--add-label", C.SANITY_LABEL,
-                       "--set-metadata", f"dev_bead={fid}", "--set-metadata", f"difficulty={diff}", "--set-metadata", f"sprint_bead={sprint}")
+                self.w(f"{gate}: parent (the sprint, like every dev-sanity bead), label, dev_bead", "update", gate, "--parent", sprint,
+                       "--add-label", C.SANITY_LABEL, "--set-metadata", f"dev_bead={fid}", "--set-metadata", f"difficulty={diff}",
+                       "--set-metadata", f"sprint_bead={sprint}")
+                self.w(f"{gate}: not ready until the fix of {fid} lands", "dep", "add", gate, fid)
+            elif fid not in pcc.deps(self.by[gate], "blocks"):
+                self.w(f"{gate}: not ready until the fix of {fid} lands", "dep", "add", gate, fid)
             for target in self.check.downstream_targets(sprint):
                 if gate not in pcc.deps(self.by[target], "blocks"):
                     self.w(f"{target}: gated by blocking finding {fid}", "dep", "add", target, gate)
