@@ -1,6 +1,6 @@
 ---
 name: codex-orchestration
-version: 0.2.0
+version: 0.2.1
 description: Orchestrate sprint work where an appointed lead coordinates, the developer the lead assigns each sprint to is its sole developer, and quality-mgr enforces the QA gate.
 depends_on:
   quality-management-gh: 1.x
@@ -213,6 +213,9 @@ of the stack.
    include the phase-plan document as `sprint_doc`, and
    that plan document is the authoritative scope source for plan QA.
 4. `quality-mgr` treats `review_mode: plan` as docs-only review and launches:
+   - `plan-scope-reviewer` (every plan round in full; its shape numbers and
+     its proposed `hoist` rulings go in each report, see `quality-mgr.md`
+     "Hoist Rulings")
    - `req-qa`
    - `arch-qa`
    - `ruthless-boundary-qa`

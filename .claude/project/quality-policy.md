@@ -28,16 +28,36 @@ their own prompts.
   `rust-best-practices-agent`, or `rust-service-hardening-agent` only to
   verify its own QA-1 findings, verification-locked to those ids; a reviewer
   that raised no QA-1 findings is not re-run
-- Plan review QA-1: `req-qa`, `arch-qa`, `ruthless-boundary-qa`,
-  `rust-best-practices-agent`, `rust-service-hardening-agent`, and
-  `ceremony-qa`
+- Plan review QA-1: `plan-scope-reviewer`, `req-qa`, `arch-qa`,
+  `ruthless-boundary-qa`, `rust-best-practices-agent`,
+  `rust-service-hardening-agent`, and `ceremony-qa`. `plan-scope-reviewer`
+  judges the plan's shape against the architecture's boundary map: the wave
+  table, the critical path and width it recomputes from the bead graph,
+  `owned_paths` disjointness within a wave, and the contract artifact named
+  by every `must_follow` edge. Its assignment is rendered with
+  `plan-scope-reviewer-assignment.json.j2` (codex-orchestration for a plan in
+  markdown, atm-bd-orchestration for a plan in beads) over the same plan
+  files as `req-qa` and `arch-qa`, plus the phase plan or root
 - Plan review QA-2 and later: `req-qa` and `arch-qa` scoped to the
-  dispatched findings; re-dispatch `ruthless-boundary-qa`,
-  `rust-best-practices-agent`, `rust-service-hardening-agent`, or
-  `ceremony-qa` only to verify its own QA-1 findings, verification-locked to
-  those ids. Plan QA is capped at 3 rounds (`plan_qa_cycle_limit`); a round
-  that leaves only minor findings reports
-  `PASS — minor fixes required, no re-QA`
+  dispatched findings, and `plan-scope-reviewer` in full again every round:
+  its checks are recomputed from the graph, not carried, so a fix round that
+  lengthens the critical path, adds an ordering rule or moves a shared file
+  into a layer sprint fails the round even when every carried finding is
+  fixed. Re-dispatch `ruthless-boundary-qa`, `rust-best-practices-agent`,
+  `rust-service-hardening-agent`, or `ceremony-qa` only to verify its own
+  QA-1 findings, verification-locked to those ids. Plan QA is capped at 3
+  rounds (`plan_qa_cycle_limit`); a round that leaves only minor findings
+  reports `PASS — minor fixes required, no re-QA`
+- Plan review rulings: the remedy for shared types, shared files or a shared
+  version baseline is to hoist the artifact into the contract or integration
+  sprint (plan guidelines, "Ownership And Dependency Relations"), never an
+  edge. `quality-mgr` lists every finding whose remedy would add a
+  `must_follow` edge, an ordering rule or a merge-order clause as a proposed
+  `hoist` ruling for the lead (`quality-mgr.md`, "Hoist Rulings"), in the
+  same way as its proposed `rejected: ceremony` rulings. The lead accepts an edge only with a recorded
+  reason naming the artifact that could not be hoisted, and recomputes the
+  wave table's critical path, width and sprint count after each round of
+  rulings; a round whose rulings lengthen the critical path is redone
 - `ceremony-finding-screen`: every sprint or plan QA round that has
   findings, over all of them, before the report is posted
 - Phase-end review: the initial implementation set plus `flaky-test-qa`
