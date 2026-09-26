@@ -25,6 +25,14 @@ Completed investigation and draft adapter: [sanity-jev](investigations/sanity-je
 (`obs-sanity-jev-1`, branch `feature/sanity-jev`, stacked on PR #216).
 Live Jev evaluation and switching the obs-sanity directive remain user decisions.
 
+## Phase D beads import
+
+Plan translation: `obs-phase-d-import`, branch `plan/phase-d-beads-import`,
+worktree `/Users/randlee/github/sc-observability-worktrees/plan/phase-d-beads-import`.
+[Phase D source](plans/phase-d/plan-phase-d.md) supplies eleven development
+beads and eleven sanity checks under `obs-phase-d`. `obs-phase-d-plan-qa`
+gates the root sprints before dispatch; the lead owns synchronization.
+
 ## Near-Term Work
 
 1. Keep repo workflow and review discipline aligned with ATM.
