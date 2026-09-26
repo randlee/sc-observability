@@ -34,20 +34,16 @@ class TemplateContractTests(unittest.TestCase):
 
     def test_assignment_examples_render_strictly(self):
         examples = ROOT / "examples"
-        mapping = {
-            "dev-template-vars.json": "dev-template.xml.j2",
-            "dev-fix-vars.json": "dev-fix.xml.j2",
-            "dev-sanity-template-vars.json": "dev-sanity-template.xml.j2",
-            "finding-bead-vars.json": "finding-bead.json.j2",
-            "fix-assignment-vars.json": "fix-assignment.xml.j2",
-            "qa-template-vars.json": "qa-template.xml.j2",
-            "review-template-vars.json": "review-template.xml.j2",
-        }
-        for variables, template in mapping.items():
-            with self.subTest(template=template):
+        templates = sorted((ROOT / "templates").glob("*.j2"))
+        self.assertTrue(templates, "templates directory must not be empty")
+        for template_path in templates:
+            fixture_name = template_path.name.removesuffix(".j2").rsplit(".", 1)[0] + "-vars.json"
+            variables = examples / fixture_name
+            with self.subTest(template=template_path.name):
+                self.assertTrue(variables.is_file(), f"missing strict-render fixture: {fixture_name}")
                 result = subprocess.run([
-                    "sc-compose", "render", "--file", str(ROOT / "templates" / template),
-                    "--var-file", str(examples / variables), "--strict"], capture_output=True, text=True)
+                    "sc-compose", "render", "--file", str(template_path),
+                    "--var-file", str(variables), "--strict"], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
 

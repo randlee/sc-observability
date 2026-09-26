@@ -28,6 +28,20 @@ verdict. The open finding beads carry the remaining work.
 Run every open QA task at once. Each has its own background reviewers; close
 each as soon as its verdict is ready, in any order.
 
+## Pre-claim refusals
+
+Before claim, run `gh pr view "$PR_NUMBER" --json baseRefName,headRefOid`,
+read the pinned PASS commit with `bd show "$CHECKED_BEAD" --json | jq -r
+'.[0].metadata.sanity_pass_commit'`, and run `git rev-parse HEAD`. The PR base
+must equal `metadata.pr_target`, its head must equal the sanity PASS commit,
+and the QA worktree HEAD must equal that PR head. Otherwise refuse
+`SANITY_STALE`; no layer or quick fix lacking QA PASS at that pinned head is
+mergeable. Before the refusal message or task close, strictly render
+`templates/workflow-issue-bead.json.j2` with id `$TASK_ID-wf-SANITY_STALE`,
+`bd import <scratch>/$TASK_ID-wf-SANITY_STALE.json`, and include the created id
+in the refusal. The same render/import-before-refusal rule applies to any
+other QA cannot-run path.
+
 ## Plan Review
 
 A plan-review task (`plan-review-template.xml.j2`) reviews the beads under a
