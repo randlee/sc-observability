@@ -31,7 +31,10 @@ pub mod error_codes;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
-use config::{BackendTransportBounds, validate_config_typed, validated_transport_bounds};
+use config::{
+    BackendTransportBounds, ValidatedTransportBounds, validate_config_typed,
+    validated_transport_bounds,
+};
 use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::{ConfigFailure, ExportError};
 #[allow(
@@ -215,39 +218,10 @@ impl ExporterLifecycle for TestLifecycle {
     }
 }
 
-/// Consumes the fully validated transport bounds before selecting one common
+/// Consumes only fully validated transport bounds before selecting one common
 /// exporter shape. Enabled backends cannot silently fall back to disabled
 /// exporters while their concrete implementations are still staged elsewhere.
-fn exporter_factory(config: &TelemetryConfig) -> Result<ExporterSet, ConfigFailure> {
-    let bounds = validated_transport_bounds(&config.transport)?;
-    if config.transport.enabled
-        && matches!(config.transport.backend, ExporterBackend::LegacyHttpJson)
-        && config.transport.protocol != OtlpProtocol::HttpJson
-    {
-        return Err(ConfigFailure::UnsupportedProtocol {
-            context: Box::new(
-                ErrorContext::new(
-                    sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_PROTOCOL,
-                    "the legacy HTTP/JSON exporter requires the HTTP/JSON protocol",
-                    Remediation::recoverable(
-                        "select HttpJson when using the legacy HTTP/JSON exporter",
-                        [
-                            "select HttpJson",
-                            "or select a backend that supports the configured protocol",
-                        ],
-                    ),
-                )
-                .detail("backend", Value::String("LegacyHttpJson".to_owned()))
-                .detail(
-                    "protocol",
-                    Value::String(format!(
-                        "{protocol:?}",
-                        protocol = config.transport.protocol
-                    )),
-                ),
-            ),
-        });
-    }
+fn exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet, ConfigFailure> {
     match bounds.backend {
         BackendTransportBounds::Disabled => Ok(ExporterSet {
             logs: Arc::new(DisabledLogExporter),
@@ -286,7 +260,9 @@ impl Telemetry {
 
     /// Creates a telemetry runtime with neutral initialization failures.
     pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure> {
-        let exporters = exporter_factory(&config)
+        let bounds = validated_transport_bounds(&config.transport)
+            .map_err(|error| InitFailure::from_context(error.into_context()))?;
+        let exporters = exporter_factory(&bounds)
             .map_err(|error| InitFailure::from_context(error.into_context()))?;
         Self::new_with_exporter_set_typed(config, exporters)
     }
@@ -1070,7 +1046,9 @@ mod tests {
 
     #[test]
     fn enabled_backend_factory_returns_canonical_unsupported_backend() {
-        let Err(factory_error) = exporter_factory(&telemetry_config()) else {
+        let config = telemetry_config();
+        let bounds = validated_transport_bounds(&config.transport).expect("valid transport");
+        let Err(factory_error) = exporter_factory(&bounds) else {
             panic!("an enabled backend needs an installed implementation");
         };
         assert!(matches!(
@@ -1093,10 +1071,10 @@ mod tests {
 
     #[test]
     fn legacy_factory_rejects_non_json_protocol_before_backend_availability() {
-        let Err(protocol_error) =
-            exporter_factory(&legacy_telemetry_config(OtlpProtocol::HttpBinary))
-        else {
-            panic!("the legacy HTTP/JSON backend must reject a binary protocol");
+        let mut invalid_config = legacy_telemetry_config(OtlpProtocol::HttpJson);
+        invalid_config.transport.protocol = OtlpProtocol::HttpBinary;
+        let Err(protocol_error) = validated_transport_bounds(&invalid_config.transport) else {
+            panic!("the legacy HTTP/JSON configuration must reject a binary protocol");
         };
         assert!(matches!(
             protocol_error,
@@ -1107,8 +1085,9 @@ mod tests {
             sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_PROTOCOL
         );
 
-        let Err(backend_error) = exporter_factory(&legacy_telemetry_config(OtlpProtocol::HttpJson))
-        else {
+        let config = legacy_telemetry_config(OtlpProtocol::HttpJson);
+        let bounds = validated_transport_bounds(&config.transport).expect("valid transport");
+        let Err(backend_error) = exporter_factory(&bounds) else {
             panic!("the configured legacy backend remains unavailable");
         };
         assert!(matches!(
@@ -1126,7 +1105,8 @@ mod tests {
         let config = TelemetryConfigBuilder::new(service_name())
             .build()
             .expect("disabled configuration is valid");
-        let exporters = exporter_factory(&config).expect("disabled factory set");
+        let bounds = validated_transport_bounds(&config.transport).expect("valid transport");
+        let exporters = exporter_factory(&bounds).expect("disabled factory set");
         exporters.logs.export_logs(&[]).expect("disabled logs");
         exporters.traces.export_spans(&[]).expect("disabled traces");
         exporters
