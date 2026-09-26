@@ -108,6 +108,7 @@ jobs:
           path: target/tauri-npm/
           if-no-files-found: error
   real-ipc-artifacts:
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' }}
     needs: schema-and-contract
     strategy:
       fail-fast: false
@@ -188,6 +189,7 @@ jobs:
           path: target/tauri-qualification/
           if-no-files-found: error
   all-platforms:
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' }}
     outputs:
       source_commit: ${{ steps.summary.outputs.source_commit }}
       inventory_sha256: ${{ steps.summary.outputs.inventory_sha256 }}

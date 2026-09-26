@@ -3,6 +3,9 @@ name: B.2 staged package qualification
 on:
   pull_request:
     paths:
+      - '.github/scripts/**'
+      - 'rust-toolchain.toml'
+      - 'bindings/**'
       - 'Cargo.*'
       - 'crates/**'
       - 'scripts/ci/**'
@@ -48,6 +51,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   staged-consumer:
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' }}
     needs: package-stage
     strategy:
       fail-fast: false
@@ -85,6 +89,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   aggregate-platform-evidence:
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' }}
     needs: staged-consumer
     runs-on: ubuntu-latest
     steps:
