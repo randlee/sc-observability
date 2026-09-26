@@ -23,14 +23,18 @@ fn context(code: sc_observability_types::ErrorCode) -> Box<ErrorContext> {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one exhaustive inventory proves the same context contract for every variant"
+)]
 fn canonical_error_variants_preserve_context() {
     macro_rules! check {
         ($name:ident::$variant:ident, $code:expr) => {{
             let original = context($code);
             let diagnostic = original.diagnostic().clone();
-            let pointer = &*original as *const ErrorContext;
+            let pointer = std::ptr::from_ref(&*original);
             let error = $name::$variant { context: original };
-            assert_eq!(error.context() as *const ErrorContext, pointer);
+            assert_eq!(std::ptr::from_ref(error.context()), pointer);
             assert_eq!(DiagnosticInfo::diagnostic(&error), &diagnostic);
             let original_source = error
                 .source()
@@ -46,7 +50,7 @@ fn canonical_error_variants_preserve_context() {
                 saved["context"]["diagnostic"]["remediation"]["kind"],
                 "recoverable"
             );
-            assert_eq!(&*error.into_context() as *const ErrorContext, pointer);
+            assert_eq!(std::ptr::from_ref(&*error.into_context()), pointer);
         }};
     }
     check!(IdentityError::Process, error_codes::DIAGNOSTIC_INVALID);
@@ -180,7 +184,7 @@ fn stable_failure_codes() {
         assert!(seen.insert(code.as_str()), "duplicate {code}");
     }
     assert_eq!(error_codes::otlp::ALL.len(), 26);
-    for capacity in [0u64, 65_537, u64::MAX] {
+    for (capacity, byte_capacity) in [(0u64, 0u64), (65_537, 67_108_865), (u64::MAX, u64::MAX)] {
         let record = ConfigFailure::InvalidQueueCapacity {
             context: Box::new(
                 ErrorContext::new(
@@ -198,7 +202,7 @@ fn stable_failure_codes() {
                     "invalid bytes",
                     Remediation::recoverable("choose 1..=64 MiB", [] as [&str; 0]),
                 )
-                .detail("value", json!(capacity)),
+                .detail("value", json!(byte_capacity)),
             ),
         };
         assert_ne!(record.diagnostic().code, bytes.diagnostic().code);
