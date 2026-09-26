@@ -8,72 +8,78 @@
 - Blocked by: `obs-d-13-sanity`
 - Owned paths:
   - `crates/sc-observability/src/builder.rs`
+  - `crates/sc-observability/src/sinks.rs`
   - `crates/sc-observability/tests/typed_registration.rs`
   - `docs/logging/d-3-typed-sink-registration.md`
+  - `docs/plans/phase-d/sprint-d-3-typed-sink-registration.md`
 
-## Goal and dependency
+## Goal
 
-Implement the D.13 typed-sink adapter contract in the existing logging builder.
+Implement canonical 2.0 typed sink registration using obs-d-13 contracts.
 
 ## Deliverables
 
-1. Implement the D.13 `SinkRegistration::typed` adapter path using the existing legacy adapter internally while preserving registration metadata.
-2. Implement the D.13 `LoggerBuilder::register_typed_sink` registration flow, chaining, failure, sink-health, and flush behavior.
-3. Update deprecation/rustdoc, migration documentation, and public consumer fixtures for the retained typed registration surface.
+1. [REQ: LOG-004, LOG-013, LOG-037] Implement `SinkRegistration::typed` in `builder.rs` against
+   the canonical open-sink contract, preserving registration metadata and using
+   the D.13 signature.
 
-## Non-closure
+2. [REQ: LOG-004, LOG-013, LOG-037, NFR-012] Implement `LoggerBuilder::register_typed_sink` with
+   chaining, typed registration errors, one write/flush per operation, and
+   preserved sink health/source diagnostics.
 
-The signatures belong to D.13; 2.0 wrapper removal belongs to D.18.
+3. [REQ: LOG-004, LOG-013, LOG-037, NFR-012] Own the complete `sinks.rs`
+   migration, including existing `LogSink` implementors and all eleven
+   error-type call sites, to the canonical 2.0 `LogSinkError` signature; update
+   the typed-registration consumer fixtures and documentation.
+   `examples/custom-sink-example` remains D.17's owned example.
+
+## This Sprint Does Not Close
+
+D.13 owns staged `typed.rs` definitions. D.18 alone retires transitional
+wrappers/adapters and owns public approvals, migration guides, and full logging
+integration. D.4 owns the remaining core facade/sink construction-site migration.
 
 
 ## Design
 
-Contract: obs-d-13 design, section "Typed sink signatures".
+## Implementation contract
 
-## Owned Paths and Exact Targets
+Consume obs-d-13 Typed sink signatures and ownership decisions. Both inherent
+registration implementations live in `builder.rs`; do not edit `typed.rs` or
+invent a competing opaque-error API. D.3 owns the complete `sinks.rs` file for
+the canonical `LogSinkError` migration, including existing `LogSink`
+implementors and all eleven error-type call sites; D.4 neither owns nor edits
+that file. `examples/custom-sink-example` remains D.17's fence. D.18 alone
+removes transitional wrappers/adapters during canonical-export activation.
 
+The only file fence is metadata.owned_paths; paths mentioned as dependencies
+are read-only unless that metadata grants ownership.
 
-## Owned Paths and Exact Targets
+## Handoff from obs-d-13 (wave 1)
+
+Created by obs-d-13, owned here from wave 2. Consume its completed sanity-gated
+artifact and preserve the contract while implementing the consumer-side
+registration paths. This serial handoff is why relation is must_follow; no
+same-wave sibling shares these paths.
 
 - `crates/sc-observability/src/builder.rs`
-- `crates/sc-observability/src/typed.rs`
-- `crates/sc-observability-types/src/errors.rs`
-- `crates/sc-observability/tests/typed_registration.rs`
-- `docs/api-approvals/d-3-*.json`
-- `docs/logging/d-3-typed-sink-registration.md`
 
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
+## Handoff to obs-d-18 (wave 3)
 
-Parallel-safe with the other additive logging sprints: this sprint owns its separate additive document and scoped API approval. D.4 owns linking these documents from the shared API design. No shared normative document or release baseline is edited here.
+Created/staged by obs-d-3, owned by obs-d-18 from wave 3; after this bead closes
+it makes no further edits. The receiver owns production completion and final
+compatibility retirement.
 
-Implement both inherent registration entry points in core `builder.rs` and
-reuse `typed.rs`; update the existing error deprecation at its types owner.
-The same-crate inherent impl for `SinkRegistration` avoids editing D.1-owned `lib.rs`.
+- `crates/sc-observability/src/builder.rs`
 
-## Implementation targets
-
-
-- `crates/sc-observability/src/builder.rs`: implement `LoggerBuilder::register_typed_sink` using D13 signatures (deliverable 1).
-- `crates/sc-observability/src/typed.rs`: implement `legacy_sink`/`typed_sink` adapters (deliverable 2).
-- `crates/sc-observability/tests/typed_registration.rs`: test typed registration and source preservation (deliverable 3).
 
 ## Acceptance criteria
 
-## Acceptance criteria
-
-- A consumer can register `Arc<dyn TypedLogSink>` through both public APIs
-  without importing or calling `legacy_sink` and with no deprecated warning.
-- The adapter performs one write/flush per request and preserves typed error
-  diagnostic code, source, and health state.
-- Existing legacy custom sinks still register and execute unchanged in 1.x.
-
-
-## Required validation
-
-- Focused core and external consumer tests, with warnings denied for the new
-  typed consumer fixture.
-- `cargo test --workspace --locked` and public API/semver validation.
-
-
+- [ ] `cargo test -p sc-observability --test typed_registration --locked` runs
+  both registration entry points with a custom `LogSink` implementation using
+  the canonical error signature (D1/D3).
+- [ ] boundary:sc-observability — registration metadata, chaining,
+  duplicate/invalid/closed failure, one write/flush, health and source identity
+  are asserted against the D.13 contract (D2).
+- [ ] This sprint does not close the 1.4.1-to-2.0 release migration; obs-d-18
+  owns that gate.

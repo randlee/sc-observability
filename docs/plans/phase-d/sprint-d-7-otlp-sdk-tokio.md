@@ -1,85 +1,61 @@
 # d-7: Official SDK/Tokio adapter
 
+Generated projection of `obs-d-7`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 10
+- Wave: 2
+- Layer: 10
+- Assignee / model: cobs / terra
+- Relation: `must_follow`
+- Closure: `boundary`
+- Target boundary: OTLP SDK adapter module
 - Branch: `sprint/d-7-otlp-sdk-tokio`
-- PR target: `sprint/d-6-otlp-lifecycle-core`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-7-otlp-sdk-tokio`
+- PR target (merge order only): `sprint/d-6-otlp-lifecycle-core`
 - Blocked by: `obs-d-12-sanity`
-- Owned paths:
-  - `crates/sc-observability-otlp/src/assembly.rs`
-  - `examples/otlp-sdk/**`
+- Requirements: LAY-005, NFR-004, NFR-007, OTLP-012, OTLP-013, OTLP-021, PHD-003, PHD-004
+- ADRs: ADR-014, ADR-018
+- Owned paths (metadata projection):
+  - `crates/sc-observability-otlp/src/sdk/implementation.rs`
+  - `crates/sc-observability-otlp/src/sdk/tests.rs`
+  - `docs/plans/phase-d/sprint-d-7-otlp-sdk-tokio.md`
+  - `examples/otlp-sdk/Cargo.toml`
+  - `examples/otlp-sdk/src/**`
 
-## Goal and dependency
+## Goal
 
-After D.6, wire the reviewed official OpenTelemetry SDK adapter into the shared
-lifecycle core. This sprint owns the Tokio-hosted adapter and its public
-consumer fixture, not lifecycle state, error definitions, or a downstream
-`atm-core` integration.
-
+Implement the official SDK/Tokio adapter against D.12 crate-private contracts, using the D.6 lifecycle core without owning lifecycle policy.
 
 ## Deliverables
 
-1. Pin reviewed `opentelemetry`, `opentelemetry_sdk`, and
-   `opentelemetry-otlp` versions/features; document the feature-gated
-   dependency boundary in architecture §6.
-2. Implement adapters from D.5 neutral logs, traces, and metrics to the SDK.
-   Preserve resource/scope metadata, trace kind/flags/links/events/status, and
-   complete histogram data.
-3. Use D.6's factory, lifecycle commands, bounds, health, and canonical
-   failure types. `OpenTelemetrySdk` with `Grpc` is the default enabled
-   backend/protocol pair; unsupported pairs fail construction before admission.
-4. Add a Tokio-hosted public consumer and loopback collector fixture covering
-   all signals, redaction, queue pressure, timeout, flush, shutdown,
-   cancellation, and host teardown after awaited completion.
+1. Consume D.12’s SDK pins, feature allowlist, and `sdk/mod.rs`; implement only `sdk/implementation.rs` and `sdk/tests.rs`.
+2. Convert neutral logs, spans, and metrics to SDK data without loss of resource/scope, trace, status, histogram, or temporal data.
+3. Call D.6’s shared lifecycle/admission core from the caller Tokio runtime and preserve D.12’s explicit validated settings and typed accounting outcomes.
+4. Own `examples/otlp-sdk/Cargo.toml` and source fixtures that externally exercise signal mappings, pressure, deadlines, async completion, and host-runtime teardown.
 
+## This Sprint Does Not Close
 
-## Non-closure
-
-No legacy HTTP/JSON implementation, operational dashboard work, Python OTEL
-surface, or `atm-core` code.
-
+D.12 owns manifests, allowlists, registries, module declarations, config, and contract types; D.6 owns lifecycle policy; D.18 composes production pieces; D.9 qualifies both backends against collectors.
 
 ## Design
 
+## SDK implementation contract
 
+D.7 owns only `sdk/implementation.rs`, `sdk/tests.rs`, `examples/otlp-sdk/Cargo.toml`, and `examples/otlp-sdk/src/**`. D.12 owns and stubs `sdk/mod.rs`, the feature/dependency declarations, config, contracts, and shared `ExporterLifecycle`; D.7 must consume them unchanged. D.6 owns the shared lifecycle barrier, shutdown ordering, and admission control. D.7 calls that core and owns only SDK provider/batch-processor behavior.
 
-## Owned Paths and Exact Targets
+The adapter delegates retry exclusively to the pinned official SDK, sets validated builder values explicitly, never lets ambient `OTEL_*` defaults override them, and never creates a hidden runtime or substitutes no-op. It preserves D.12 typed terminal/deadline/accounting results at its supported external consumer boundary; expected failures remain results rather than panics or false success (ADR-014).
 
-- `crates/sc-observability-otlp/**`
-- `Cargo.toml`
-- `Cargo.lock`
-- `examples/otlp-sdk/**`
-- `scripts/ci/validate_dependency_bans.sh`
-- `scripts/ci/validate_repo_boundaries.sh`
-- `docs/architecture.md`
-- `docs/api-design.md`
+## Handoff from obs-d-12 (wave 1)
 
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
+Consume D.12’s sanity-gated interfaces without altering its module or manifest ownership.
 
-## Implementation targets
-
-
-- `crates/sc-observability-otlp/src/assembly.rs`: construct the SDK/Tokio exporter adapter from D12 `ExporterSet` (deliverable 1).
-- `examples/otlp-sdk/**`: exercise async lifecycle and typed failures (deliverable 2).
+- `crates/sc-observability-otlp/src/sdk/implementation.rs`
+- `crates/sc-observability-otlp/src/sdk/tests.rs`
 
 ## Acceptance criteria
 
-## Acceptance criteria
-
-- The adapter adds no dispatcher, hidden runtime, process-global provider, or
-  second lifecycle/error contract.
-- Awaited shutdown reports terminal export failure and permits immediate host
-  runtime teardown after success.
-- SDK-only feature tests prove no legacy HTTP/JSON dependency is enabled.
-
-
-## Required validation
-
-- Focused SDK adapter/collector tests and the Tokio consumer fixture.
-- `cargo test --workspace --locked`, clippy with warnings denied, rustdoc, and
-  the existing dependency-boundary checks.
-
-
+- [ ] `cargo test -p sc-observability-otlp --lib sdk::tests --features otlp-sdk --locked` runs all signal mappings, retry-deadline/terminal, explicit-config-vs-env, queue-pressure, shutdown and caller-runtime teardown tests (D1–D3).
+- [ ] `cargo check --manifest-path examples/otlp-sdk/Cargo.toml --locked` passes the Tokio-hosted 2.0 consumer against contract interfaces (D4).
+- [ ] This sprint does not close real shared-core composition or dual collector equivalence; D.18/D.9 do.
+- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.

@@ -1,106 +1,56 @@
 # d-8: Legacy HTTP/JSON source transplant
 
+Generated projection of `obs-d-8`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 11
+- Wave: 2
+- Layer: 11
+- Assignee / model: lobs / luna
+- Relation: `must_follow`
+- Closure: `boundary`
+- Target boundary: OTLP HTTP JSON module
 - Branch: `sprint/d-8-otlp-http-json-transplant`
-- PR target: `sprint/d-7-otlp-sdk-tokio`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-8-otlp-http-json-transplant`
+- PR target (merge order only): `sprint/d-7-otlp-sdk-tokio`
 - Blocked by: `obs-d-12-sanity`
-- Owned paths:
-  - `crates/sc-observability-otlp/src/error_codes.rs`
-  - `examples/otlp-legacy/**`
+- Requirements: LAY-005, NFR-004, NFR-007, OTLP-012, OTLP-013, OTLP-021, OTLP-023, PHD-003, PHD-004
+- ADRs: ADR-005, ADR-014, ADR-018, ADR-019
+- Owned paths (metadata projection):
+  - `crates/sc-observability-otlp/src/legacy_http_json/implementation.rs`
+  - `crates/sc-observability-otlp/src/legacy_http_json/tests.rs`
+  - `docs/plans/phase-d/sprint-d-8-otlp-http-json-transplant.md`
+  - `examples/otlp-legacy/src/**`
 
-## Goal and dependency
+## Goal
 
-Make `ExporterBackend::LegacyHttpJson` operational by transplanting—not
-rewriting—the tested synchronous exporter and its tests from
-`agent-team-mail`. D.8 `must_follow`s D.6 because both touch the same config,
-crate dependencies, facade, and exporter ownership boundary.
-
-`sc-observability-py` is the concrete in-repository motivating consumer: a
-simple Python application should not need to host Tokio or pull in the full
-SDK/tonic/protobuf stack merely to send OTLP records. The synchronous route is
-also already proven by the legacy implementation. There is no historical ADR
-that makes it the only route, so it coexists with—not replaces—the SDK backend.
-
-“Synchronous” means a consumer needs no caller-owned Tokio runtime. It does
-**not** mean the dependency graph contains no Tokio: `reqwest::blocking` uses
-an internal Tokio runtime and its client construction, request waits, and final
-drop cannot safely be owned by a Tokio executor thread.
-
-This sprint therefore fixes one ownership model now: one plain owned worker
-thread constructs, exclusively owns, uses, and finally drops the blocking
-reqwest client. Public exporter handles contain only a bounded command sender
-and shared completion state—never the reqwest client or its worker join. Plain
-synchronous lifecycle waits for an ordered worker barrier. Async lifecycle
-awaits the same barrier receiver without blocking an executor. Final handle
-`Drop` is nonblocking in every context: it closes its sender; after draining
-already-admitted commands, the worker drops the client on its own plain thread
-and exits. No caller directly creates or drops a reqwest blocking client.
-
-Construction synchronously waits for worker/client initialization and is
-supported only from a plain thread. If a Tokio runtime is entered, construction
-returns the D.6 transport-construction failure whose redacted diagnostic
-source is its blocking-backend-in-async-context outcome, before spawning the
-worker or calling reqwest. Synchronous flush/shutdown instead return that
-D.6 runtime outcome directly after preflighting the calling context and
-before removing buffered records or sending commands. The nonblocking
-signal-admission methods and async lifecycle may be used from either context
-because all blocking transport work stays on the owned worker. Tokio-first
-hosts should normally select D.6.
-
-Authoritative source evidence is commit
-`7b39f4e7f72b6845edec4eab4cd671611661445f`, path
-`crates/sc-observability-otlp/src/lib.rs`, from the read-only legacy repository.
-The transient scratchpad path is not part of the implementation contract.
-The complete immutable source/blob/destination and documentation disposition
-is [`legacy-otlp-provenance.json`](legacy-otlp-provenance.json); that manifest,
-not a local clone path, is the transplant authority.
-
+Transplant the immutable 7b39f4e7f72b6845edec4eab4cd671611661445f HTTP/JSON exporter into the legacy adapter boundary, parallel with D.7. A plain owned worker exclusively constructs/uses/drops reqwest; no caller runtime is required.
 
 ## Deliverables
 
-1. Copy the exporter implementation and its `/v1/logs`, `/v1/traces`,
-   `/v1/metrics`, authorization, CA, retry, and payload tests into this crate.
-2. Commit a source-to-destination matrix naming every copied symbol/test and
-   every changed, omitted, or newly wrapped behavior with its exact current-API
-   incompatibility rationale. The worker is an ownership/context adapter around
-   copied transport code; no HTTP/client configuration/retry redesign beyond
-   the four enumerated safety deltas is permitted.
-   Extend `scripts/ci/validate_log_import.py` to verify the manifest's pinned
-   commit/blob/SHA and compare each transplant destination with its source blob.
-   Permit only the named matrix deltas; this prevents a rewrite being presented
-   as a transplant. Translation/reference rows validate only their disposition.
-3. Adapt inputs to current `TelemetryConfig`, D.5 signal types, diagnostic
-   errors, D.6 backend selector, and common crate-private exporter traits while
-   preserving the original HTTP/JSON behavior and current
-   health/dropped-count facade contract.
-4. Implement bounded command admission, ordered barrier completion, and the
-   exact construction/use/drop contract above. The worker alone constructs,
-   calls, and drops reqwest outside telemetry locks. Context preflight occurs
-   before mutation; credentials remain redacted.
-   Reuse D.6's state/deadline/accounting core and implement the reserved
-   control path, retry cancellation, worker-panic propagation, and oneshot
-   async barrier described above.
-5. Add public external-consumer-style construction/flush/shutdown proof with
-   no caller-owned Tokio runtime and no official OTel SDK/tonic dependencies.
-6. Record the exact reqwest features/version and legacy-only dependency
-   boundary in architecture §6. D.8 owns legacy runtime/provenance and
-   architecture-boundary documentation; it does not redefine D.6 contracts.
-   Run the repository's existing `just lint` boundary check after the
-   transplant; no separate identifier-scrub process is introduced.
+1. Copy the transport and endpoint/auth/CA/payload tests identified by the existing legacy-otlp-provenance.json into legacy_http_json/implementation.rs and tests.rs; keep exact source/blob provenance readable to transplant QA.
 
+2. Preserve copied HTTP/client behavior and document only the four authorized safety deltas in module docs and tests: retry classification, bounded server pacing/jitter, shutdown cancellation and overall retry deadline. No additional provenance matrix or JSON is required.
 
-## Non-closure
+3. Adapt neutral D.12 signals, configuration and crate-private exporter interfaces without adding error variants or changing the single failure mapping.
 
-No SDK changes beyond consuming D.6's selector, no rewrite, no dashboards,
-no Python binding change (the binding is a motivating consumer only), and no
-publication.
+4. Implement bounded record/byte admission, capacity-one control saturation behavior, ordered barrier completion, worker panic/exit propagation, finite construction handshake and drop-without-shutdown accounting as specified below.
 
+5. Add plain-thread, entered-Tokio rejection, async responsiveness, request/backoff cancellation, retry bounds and response-loss accounting tests; add examples/otlp-legacy source using the D.12 contract fixture.
+
+6. Run existing dependency/boundary validation and prove the legacy-only build excludes the official SDK/tonic while acknowledging reqwest's internal Tokio graph; consume D.12's pins unchanged.
+
+## This Sprint Does Not Close
+
+No SDK implementation, normative/manifest/registry edit, additional validator framework, Python binding implementation or publication. D.18 composes real backends; D.9 owns collector/dashboard qualification.
 
 ## Design
 
+## Ownership split
 
+D.8 owns only legacy HTTP/JSON backend behavior in `legacy_http_json/implementation.rs` and `legacy_http_json/tests.rs`; it calls D.6’s shared lifecycle core and owns no lifecycle barrier, shutdown ordering, admission policy, public facade, config/default, registry, manifest, feature allowlist, or module declaration. D.12 owns and stubs `legacy_http_json/mod.rs` and the `legacy-http-json` feature/dependency allowlist. `ExporterSet` is crate-private and owned by D.12.
+
+D.8 preserves typed terminal results at its supported external consumer boundary; expected failures remain result values rather than panics or false success (ADR-014). ADR-005 requires the named OTLP retry-limit constants module supplied by D.12; D.8 consumes those constants without defining inline policy values. ADR-019 amends ADR-018 with the D.12-owned section-6 legacy-http-json `reqwest`/`httpdate`/`getrandom`/Tokio `rt`/`sync` allowlist and pins; D.8 consumes it without a second allowlist.
 
 ## Retained implementation contract
 
@@ -131,20 +81,20 @@ thread, has no `Retry-After` handling or jitter, and has no sequence-wide
 deadline or shutdown cancellation. The following bounded safety corrections
 are authorized deltas—not claims about the legacy implementation:
 
-| Legacy behavior | Authorized transplant delta | Required matrix disposition |
+| Legacy behavior | Authorized transplant delta | Existing manifest disposition |
 | --- | --- | --- |
 | retry every non-success status | retry connection errors, 408, 429, and 5xx; terminate other 4xx | `changed: retry classification` |
-| capped exponential delay only | honor bounded `Retry-After`; otherwise add per-instance-seeded bounded jitter (deterministic under an injected test seed), consuming D.6's independently capped server/fallback paths | `changed: server pacing/jitter and independent caps` |
+| capped exponential delay only | honor bounded `Retry-After`; otherwise add per-instance-seeded bounded jitter (deterministic under an injected test seed), consuming D.12's independently capped server/fallback paths | `changed: server pacing/jitter and independent caps` |
 | `thread::sleep` cannot be interrupted | use worker-owned cancelable wait woken by shutdown | `changed: shutdown cancellation` |
 | per-request timeout but no overall bound | add finite sequence deadline covering attempts and waits | `changed: retry deadline` |
 
 The no-redesign rule applies to payload encoding, endpoints, client/auth/CA
 construction, request execution, maximum attempts, and the exponential/cap
 algorithm. It explicitly carves out only the four safety deltas above. The
-source-to-destination matrix must name each delta and preserve copied tests
+existing immutable provenance manifest must name each delta and preserve copied tests
 alongside new delta-specific fixtures.
 
-D.8 consumes the validated legacy payload defined by D.6. D.6 is
+D.8 consumes the validated legacy payload defined by D.12. D.12 is
 authoritative for every raw field, default, applicability rule, checked type,
 ordering rule, config error, origin metadata, and shared validation fixture;
 D.8 does not redefine them.
@@ -158,24 +108,10 @@ so instances do not synchronize against a recovering collector. The retry
 component accepts a crate-private injected seed/source for deterministic tests;
 the seed is neither public configuration nor serialized evidence.
 
-Pin the transplanted client to the legacy tested selection
-`reqwest = "=0.12.28"` with `default-features = false` and features
-`["blocking", "json", "rustls-tls"]`, subject only to a separately reviewed
-security update. Add a minimal optional direct Tokio dependency with only the
-`rt` feature (`Handle::try_current` construction/synchronous-lifecycle context
-preflight) and the `sync` feature (the async-waiter `oneshot`); it does not
-create or own a runtime. The feature/dependency evidence must explicitly show
-reqwest's transitive Tokio/hyper/rustls graph and the absence of
-`opentelemetry`, `opentelemetry_sdk`, `opentelemetry-otlp`, and tonic in the
-legacy-only build.
-Pin `httpdate = "=1.0.3"` for RFC 7231 HTTP-date `Retry-After` parsing, record
-its license/dependency disposition, and keep it inside the legacy-only feature.
-The direct Tokio dependency enables only Tokio's `rt` and `sync` features; the
-per-exporter jitter seed uses OS-backed `getrandom` entropy, with the injected
-test source remaining crate-private.
+D.12 owns the `legacy-http-json` dependency/version/feature allowlist and `legacy_http_json/mod.rs`; D.8 consumes that contract unchanged and owns only `implementation.rs` and `tests.rs`.
 
 Each transplanted exporter implements the same crate-private `LogExporter`,
-`TraceExporter`, or `MetricExporter` trait used by D.6, and its backend state
+`TraceExporter`, or `MetricExporter` trait used by D.12, and its backend state
 implements the separate common `ExporterLifecycle`. Signal methods clone and
 enqueue owned batches; the worker executes the copied blocking request/retry
 code outside telemetry locks. `flush_blocking`/`shutdown_blocking` wait for the
@@ -183,7 +119,7 @@ ordered barrier's real terminal result on plain callers; async lifecycle awaits
 the same result. Backend choice remains construction/injection; no legacy
 branch is added to `Telemetry::emit_*`, flush, or shutdown.
 
-Legacy commands use the D.6 lifecycle core. A bounded data `sync_channel` and
+Legacy commands use the D.12 lifecycle core. A bounded data `sync_channel` and
 a separate capacity-one control `sync_channel` feed the same worker; it drains
 control with `try_recv` before waiting briefly for data. Thus flush/shutdown
 barriers cannot be starved by saturated admission. There is no second lifecycle
@@ -192,33 +128,33 @@ full/closed fails open, records exactly one per-signal drop and health change,
 and never waits. Barriers have a reserved control path so saturated data cannot
 starve them; async waiters use a Tokio `oneshot` completed by the plain worker,
 never a blocking receive on an executor. Worker/client initialization failure
-returns D.6's transport-construction failure before the handle is published.
+returns D.12's transport-construction failure before the handle is published.
 After successful initialization, panic, unexpected exit, or sender closure
 stores its worker-termination outcome, resolves every pending barrier, accounts
 abandoned admissions once, and never hangs.
 
-Legacy uses the authoritative D.6 health/accounting contract without adding
-fields or transitions. The legacy worker consumes D.6's shared fixtures
+Legacy uses the authoritative D.12 health/accounting contract without adding
+fields or transitions. The legacy worker consumes D.12's shared fixtures
 unchanged, including redaction coverage.
 
 Each request/retry sequence has a finite overall deadline. Shutdown enters
 `Closing`, cancels retry backoff, and drains only work before its barrier.
 Connection errors, 408, 429, and 5xx are retryable; other 4xx are terminal.
 For every retry, choose exactly one delay path and apply either the validated
-D.6 fallback cap or its independent server-delay cap, then the remaining
+D.12 fallback cap or its independent server-delay cap, then the remaining
 sequence budget. D.8 consumes the cap semantics and ordering frozen by the
-D.6 matrix/fixtures without redefining them. If no positive budget remains,
-return the D.6 retry-deadline outcome without sleeping or issuing a
+D.12 matrix/fixtures without redefining them. If no positive budget remains,
+return the D.12 retry-deadline outcome without sleeping or issuing a
 zero-budget attempt. No request, backoff, barrier, join, or client drop is
 unbounded.
 
-Shutdown cancellation of a pre-barrier retry sequence returns the D.6
+Shutdown cancellation of a pre-barrier retry sequence returns the D.12
 shutdown-cancelled-retry outcome: account that admitted batch as dropped
-exactly once, apply D.6 terminal-health accounting, and return the failure from the
+exactly once, apply D.12 terminal-health accounting, and return the failure from the
 first/in-flight shutdown completion. Cancelable backoff wakes immediately. A
 currently blocking reqwest call cannot be interrupted, but its remaining wait
-is bounded by the D.6 request and sequence budgets; public shutdown is
-bounded by the D.6 lifecycle budget or returns its lifecycle-timeout
+is bounded by the D.12 request and sequence budgets; public shutdown is
+bounded by the D.12 lifecycle budget or returns its lifecycle-timeout
 outcome. All timing bounds arrive already validated; D.8 performs no second
 validation.
 
@@ -230,101 +166,43 @@ temporality and must not infer exactly-once delivery. Attempts are recorded
 separately, while an admitted batch is
 counted as dropped exactly once only if the sequence exhausts/terminates; a
 successful retry is not a drop. Transient, terminal, and recovery accounting
-follow the D.6 health contract without additional D.8 fields or
+follow the D.12 health contract without additional D.8 fields or
 transitions.
 
 
 ## Failure contract
 
-D.8 uses the complete D.6 stable-failure table. Runtime paths return its
+D.8 uses the complete D.12 stable-failure table. Runtime paths return its
 named outcomes through the owning types and façade mappings defined there;
 D.8 owns no error variant, stable code, mapping, or error documentation.
 
+## Saturation, construction and drop bounds
 
-## Owned Paths and Exact Targets
+The capacity-one control channel stores the earliest admitted barrier. A flush arriving while it is occupied joins that barrier if its sequence covers the caller's admission; otherwise it records the maximum pending sequence in one fixed-size shared slot and awaits the next barrier under the same finite deadline. Shutdown atomically closes admission, upgrades the pending control intent to shutdown, wakes retry backoff, and shares one completion with all shutdown callers. No blocking control send, unbounded waiter queue or independent lifecycle state machine is allowed; timed-out observers detach without cancelling the native command.
 
-- `crates/sc-observability-otlp/**`
-- `Cargo.toml`
-- `Cargo.lock`
-- `examples/otlp-legacy/**`
-- `scripts/ci/validate_log_import.py`
-- `scripts/ci/tests/test_validate_log_import.py`
-- `scripts/ci/validate_dependency_bans.sh`
-- `scripts/ci/validate_repo_boundaries.sh`
-- `docs/architecture.md`
-- `docs/plans/phase-d/legacy-otlp-provenance.json`
+Construction handshake uses the validated request timeout, capped by the lifecycle shutdown bound. A failed/timed-out handshake cancels startup and returns InitError::Runtime with the ConfigFailure::TransportConstructionFailed source; the plain worker is responsible for client disposal and bounded termination. No live exporter handle is published until readiness succeeds.
 
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
+Drop without explicit shutdown closes admission and signals the existing worker cancellation path nonblockingly. All admitted but unfinished records consume the same shared record/byte budgets and are counted exactly once as dropped if they cannot finish by the existing shutdown deadline; the in-flight request cannot outlive its request timeout. Remaining barrier observers resolve WorkerTerminated, counters remain visible through shared health until the last observer releases it, and client destruction occurs on the worker. Explicit shutdown remains the only success/completion proof. Test final handle drop on Tokio and on a plain thread.
 
-Must also follow D.7 because both edit the OTLP crate manifest/factory, Cargo.lock, dependency allowlists, and docs/architecture.md. The two backend scopes stay distinct.
+## Existing provenance consumer
 
-## Implementation targets
+OTLP-023 still requires the existing immutable docs/plans/phase-d/legacy-otlp-provenance.json. D.8 reads it as source authority; D.9 consumes it to validate restored documentation. The existing manifest's consumer is transplant QA/source-blob verification, gating OTLP-023 against the observed loss of the legacy exporter. Retain it for as long as transplanted code is maintained. No additional provenance JSON/matrix, line-count gate, graph artifact, or validate_log_import.py extension is created. Add source-pin/disposition assertions to the owned adapter tests; use existing dependency/boundary checks only for actual forbidden edges.
 
+The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
-- `crates/sc-observability-otlp/src/error_codes.rs`: map legacy HTTP/JSON failures to D12 variants (deliverable 1).
-- `examples/otlp-legacy/**`: demonstrate the transplanted backend and retry behavior (deliverable 2).
+## Handoff from obs-d-12 (wave 1)
+
+Created by obs-d-12, owned here from wave 2. Consume its completed sanity-gated artifact; preserve the contract while implementing or retiring staged compatibility. This serial handoff is why relation is must_follow; no same-wave sibling shares these paths.
+
+- `crates/sc-observability-otlp/src/legacy_http_json/implementation.rs`
+- `crates/sc-observability-otlp/src/legacy_http_json/tests.rs`
 
 ## Acceptance criteria
 
-## Acceptance criteria
-
-- Every relevant legacy implementation symbol and test has a disposition; all
-  copied tests execute in this repository against the transplanted code.
-- Captured requests preserve exact signal endpoints, content type, auth, CA,
-  timeout, and retry behavior while carrying D.5's current neutral fields.
-- The synchronous backend works from a plain thread without a caller-owned
-  Tokio runtime and never silently falls back to no-op when enabled.
-- Plain-thread construction plus sync flush/shutdown return real results.
-  Construction and synchronous lifecycle from current-thread/multi-thread
-  Tokio reject before worker creation, buffer drain, or command admission.
-  The construction fixture asserts the D.6 wrapped construction form and
-  redacted blocking-context diagnostic source; lifecycle fixtures assert its
-  direct runtime-failure form.
-- Async lifecycle from Tokio remains responsive while the plain worker performs
-  transport; dropping the final exporter handle on Tokio merely closes the
-  sender, and instrumentation proves the reqwest client is ultimately dropped
-  and the worker exits on its plain thread. No nested-runtime panic escapes.
-- `Telemetry` uses the same trait-object call sites for both backends; only
-  construction/injection selects the synchronous implementations.
-- Any behavior/assertion not copied is identified by a concrete API
-  incompatibility; structural rewrite or alternate HTTP/retry logic beyond the
-  four authorized safety deltas fails QA.
-- Failures remain fail-open at the facade and update health/dropped counts.
-- Legacy health satisfies the complete D.6 health/accounting contract
-  equivalently to SDK, without adding or restating fields.
-- Capacity-one saturation cannot block or starve flush/shutdown; injected
-  worker panic/exit resolves every sync/async waiter within the deadline.
-- Retry fixtures freeze classification, bounded `Retry-After`, jitter/backoff,
-  overall deadline, and prompt shutdown cancellation.
-- Retry bound fixtures cover delta-seconds and HTTP-date, negative, malformed,
-  past, and huge `Retry-After` values; distinct production instance seeds;
-  deterministic injected seeds; and
-  positive jitter at the sequence deadline proving the D.6 fallback clamp
-  and no zero-budget attempt. The shared cap-ordering fixture remains owned by
-  D.6 and is consumed unchanged.
-- Shutdown-during-backoff asserts the D.6 cancellation outcome, its exact
-  accounting/facade mapping, and prompt wake.
-- Shutdown-during-request has three fixtures: a successful in-flight response
-  completes with no drop; an ordinary terminal response fails/drops once with
-  its D.6 terminal outcome; a retryable response becomes the D.6
-  cancellation outcome and drops once. Every case is accounted exactly once
-  and finishes within the D.6 lifecycle contract.
-- A response-loss fixture proves at-least-once duplicate delivery, separate
-  attempt accounting, one terminal drop after exhaustion, and zero drops after
-  a retried-then-successful batch.
-
-
-## Required validation
-
-- Copied legacy unit/loopback tests plus current public facade fixtures.
-- `cargo test -p sc-observability-otlp --features legacy-http-json --locked`.
-- A plain synchronous external-consumer fixture; current-thread/multi-thread
-  construction and sync-lifecycle rejection; async barrier responsiveness;
-  cross-context final-handle drop/worker-exit tests; workspace
-  tests/clippy/rustdoc; and review of the source-transplant matrix.
-- Import-provenance validation and automated no-exporter/legacy-only/combined
-  dependency graph gates; module line-count validation.
-
-
+- [ ] Deliverable 1: source-pin/disposition tests externally prove every relevant legacy implementation symbol and copied transport/endpoint/auth/CA/payload test is retained from the immutable provenance source.
+- [ ] Deliverable 2: loopback tests externally verify the retained request behavior and exactly the four authorized deltas: retry classification, bounded Retry-After/jitter, shutdown cancellation, and sequence deadline.
+- [ ] Deliverable 3: `cargo test -p sc-observability-otlp --features legacy-http-json --locked` proves D.12 neutral payload/config/typed-result consumption without new error mappings or inline retry constants.
+- [ ] Deliverable 4: external saturation tests prove nonblocking record/byte admission, capacity-one control progress, ordered barrier completion, bounded construction, and exact-once worker exit/drop accounting through D.6’s lifecycle core.
+- [ ] Deliverable 5: external fixtures prove plain-thread operation, entered-Tokio rejection, async responsiveness, cancellation, bounded Retry-After parsing, and response-loss accounting.
+- [ ] Deliverable 6: existing dependency/boundary validation proves the legacy-only build excludes the official SDK/tonic and consumes the D.12 allowlist unchanged.
+- [ ] This sprint does not close production composition or collector equivalence; D.18 and D.9 own those outcomes.

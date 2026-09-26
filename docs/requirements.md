@@ -341,9 +341,9 @@ This crate is the OTel/OTLP layer built on top of `sc-observe`.
   - `initial_backoff_ms = 250`
   - `max_backoff_ms = 5000`
   - logs, traces, and metrics disabled unless explicitly configured
-  This list is the frozen 1.x baseline only. D.6 exclusively owns the Phase
+  This list is the frozen 1.x baseline only. obs-d-12 exclusively owns the Phase
   D 2.0 candidate config/default/validation contract and its documentation;
-  upon ADR-018 acceptance, D.6 updates this requirement rather than allowing
+  under accepted ADR-018, obs-d-12 updates this requirement rather than allowing
   any later sprint to redefine that contract.
 - OTLP-021 Upon technical-lead acceptance of ADR-018, `Telemetry` lifecycle
   behavior shall be explicit as follows; until that acceptance these bullets
@@ -454,12 +454,14 @@ record the proposed architecture. No item below asserts implementation closure.
   to neutral DTOs without a reverse dependency from DTOs to the bridge. A shared
   native binding-runtime crate owns core/bridge backends and conversions for both
   Tauri and Python; language adapters do not repeat those runtime mappings.
-- PHB-003 Phase B shall schedule no breaking change to a published API. Preserve
+- PHB-003 For Phase B and the 1.x release line only, schedule no breaking change
+  to a published API. Preserve
   existing signatures, trait implementability/object safety and method resolution,
   public struct construction, error variants, serialization and lifecycle behavior. New error
   types/methods/traits coexist with old ones; no existing enum gains
   `#[non_exhaustive]`. An API approval artifact cannot waive this requirement.
-- PHB-004 Issue #92 shall provide improved typed error implementations and usable
+- PHB-004 For Phase B and the 1.x release line only, Issue #92 shall provide
+  improved typed error implementations and usable
   improved operation/extension entry points, with total typed classification and
   mandatory diagnostic/remediation preservation. Unknown/custom legacy codes
   remain explicit unclassified failures. Existing source/backtrace data shall
@@ -467,7 +469,8 @@ record the proposed architecture. No item below asserts implementation closure.
   Conversion shall not claim recovery of data already discarded by the original
   operation. DiagnosticSummary remains its existing optional-code/message/time
   shape; new OperationDiagnostic carries required code/message/remediation/time.
-- PHB-005 Legacy interfaces shall remain functional with actionable compiler
+- PHB-005 For Phase B and the 1.x release line only, legacy interfaces shall
+  remain functional with actionable compiler
   deprecation warnings only after working replacements exist. Removal and a
   breaking representation conversion remain unscheduled. Default-lint legacy
   consumer fixtures shall still work; migrated fixtures shall deny deprecated
@@ -585,3 +588,34 @@ closure, and Phase C shall not publish, tag, or execute BTIT integration tests.
   installs the shared package, verified by an added workflow action-runtime
   validation gate — not recorded as an accepted regression closed out by a
   follow-up ticket.
+
+## 12. Phase D — Reviewed 2.0 Contracts
+
+ADR-017 and ADR-018 were accepted on 2026-09-26 by the user's merge of
+PR #225. PHB-003/004/005 govern Phase B and 1.x; the requirements below
+govern the reviewed Phase D major release and supersede only conflicting
+1.x compatibility obligations. Unlisted breaking changes remain prohibited.
+
+- PHD-001 For 2.0, the nine inventoried diagnostic-wrapper error types shall
+  become same-name non-exhaustive discriminated enums owned by
+  `sc-observability-types` and re-exported by their consuming crates. Each
+  failure cause shall have one typed variant preserving diagnostic code,
+  remediation, structured context and available source data. Local construction
+  sites, consumers and language conversions shall use those canonical types.
+- PHD-002 The 2.0 integration shall remove superseded 1.x wrappers, typed/legacy
+  adapters and classification surfaces after consumers have migrated. The
+  reviewed major-break manifest shall enumerate every break against the frozen
+  1.4.1 API; the existing semver gate shall reject any unlisted break before
+  a reviewed 2.0 baseline is generated. Migration guidance shall have executable
+  consumer fixtures.
+- PHD-003 OTLP shall provide both an official SDK/Tokio backend requiring a
+  caller-owned runtime and a bounded plain-thread legacy HTTP/JSON backend.
+  They shall share crate-private contracts, ordered admission/lifecycle
+  barriers, deadlines and health/drop accounting. Backend/protocol/runtime
+  combinations shall be validated at construction, and enabled transports
+  shall never silently fall back to no-op.
+- PHD-004 The Phase D 2.0 OTLP config, defaults and validation contract shall
+  be owned by obs-d-12 and consumed unchanged by backend implementations.
+  Queue bounds shall limit both record count and aggregate bytes; validated
+  explicit config shall not be overridden by ambient OTEL_* environment values.
+  Lifecycle implementations shall satisfy OTLP-021 for both backends.
