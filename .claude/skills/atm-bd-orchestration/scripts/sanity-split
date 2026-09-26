@@ -1,0 +1,254 @@
+#!/usr/bin/env python3
+"""Split one dev sanity check into one assignment per numbered deliverable.
+
+Usage:
+  sanity-split --task <sanity bead> --bead <dev bead> --worktree <path>
+               --branch <branch> --commit <commit> --base <base>
+               --lint-command '<cmd>' --scratch <dir>
+               [--bead-json <file>] [--split-only] [--template <path>]
+
+Reads the checked bead (`bd show <bead> --json`, or `--bead-json`), parses the
+numbered list under `## Deliverables`, pins the target commit, lists the files
+changed since the base, renders `dev-sanity-assignment.json.j2` once per
+deliverable with `sc-compose`, starts the lint command detached in the
+worktree, and prints one JSON manifest to stdout:
+
+  {sha, base_sha, sanity_bead, dev_bead, branch, worktree_path,
+   deliverables_total, changed_files, files_outside_owned_paths,
+   lint: {command, log, exit_file} | null,
+   assignments: [{number, assignment: <rendered object>}]}
+
+`--split-only` parses and renders only: no git pinning and no lint.
+
+Exit codes (the code and message are printed on stderr):
+  0  ok
+  1  usage
+  2  SANITY.PLAN_INVALID      no numbered `## Deliverables` list (planning failed)
+  3  SANITY.TARGET_UNREADABLE worktree, commit, base or remote unreadable
+  4  SANITY.COMMIT_MISMATCH   HEAD, branch, dirty tree, or branch not pushed at SHA
+  5  RENDER_FAILED            sc-compose could not render an assignment
+"""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import subprocess
+import sys
+import tempfile
+
+HERE = Path(__file__).resolve().parent
+TEMPLATE = HERE.parent / "templates" / "dev-sanity-assignment.json.j2"
+CODES = {2: "SANITY.PLAN_INVALID", 3: "SANITY.TARGET_UNREADABLE", 4: "SANITY.COMMIT_MISMATCH", 5: "RENDER_FAILED"}
+
+
+class Fail(Exception):
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
+def die(code, message):
+    print(f"{CODES.get(code, 'USAGE')}: {message}", file=sys.stderr)
+    return code
+
+
+def load_bead(args):
+    if args.bead_json:
+        try:
+            data = json.loads(Path(args.bead_json).read_text())
+        except (OSError, ValueError) as exc:
+            raise Fail(1, f"cannot read --bead-json: {exc}")
+    else:
+        run = subprocess.run(["bd", "show", args.bead, "--json"], capture_output=True, text=True)
+        if run.returncode != 0:
+            raise Fail(3, f"bd show {args.bead} failed: {run.stderr.strip()}")
+        try:
+            data = json.loads(run.stdout)
+        except ValueError:
+            raise Fail(3, f"bd show {args.bead} did not print JSON")
+    if isinstance(data, list):
+        data = data[0] if data else None
+    if not isinstance(data, dict) or data.get("id") != args.bead:
+        raise Fail(3, f"bead {args.bead} not found in bead JSON")
+    return data
+
+
+ITEM = re.compile(r"^\s{0,3}(\d+)\.\s+(\S.*)$")
+
+
+def parse_deliverables(description):
+    match = re.search(r"^## Deliverables[ \t]*$", description or "", re.M)
+    if not match:
+        raise Fail(2, "bead has no `## Deliverables` section")
+    body = description[match.end():]
+    end = re.search(r"^#{1,2} ", body, re.M)
+    if end:
+        body = body[: end.start()]
+    items = []
+    for line in body.splitlines():
+        item = ITEM.match(line)
+        if item:
+            items.append([int(item.group(1)), item.group(2).strip()])
+        elif items and line.strip():
+            items[-1][1] += " " + line.strip()
+        elif items and not line.strip():
+            continue
+    if not items:
+        raise Fail(2, "`## Deliverables` has no numbered items (`1. ...`)")
+    numbers = [n for n, _ in items]
+    if numbers != list(range(1, len(items) + 1)):
+        raise Fail(2, f"`## Deliverables` numbering is not 1..{len(items)}: {numbers}")
+    return [{"number": n, "text": t} for n, t in items]
+
+
+def git(worktree, *argv, code=3, what=None):
+    try:
+        run = subprocess.run(["git", "-C", worktree, *argv], capture_output=True, text=True)
+    except OSError as exc:
+        raise Fail(3, f"git unavailable: {exc}")
+    if run.returncode != 0:
+        raise Fail(code, what or f"git {' '.join(argv)} failed: {run.stderr.strip()}")
+    return run.stdout
+
+
+def pin(args):
+    if not Path(args.worktree).is_dir():
+        raise Fail(3, f"worktree {args.worktree} is not a directory")
+    sha = git(args.worktree, "rev-parse", "--verify", "--quiet", f"{args.commit}^{{commit}}",
+              what=f"commit {args.commit} is not in {args.worktree}").strip()
+    base_sha = git(args.worktree, "rev-parse", "--verify", "--quiet", f"origin/{args.base}^{{commit}}",
+                   what=f"origin/{args.base} is not in {args.worktree}").strip()
+    head = git(args.worktree, "rev-parse", "HEAD").strip()
+    if head != sha:
+        raise Fail(4, f"HEAD is {head}, not {sha}")
+    branch = git(args.worktree, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    if branch != args.branch:
+        raise Fail(4, f"checked-out branch is {branch}, not {args.branch}")
+    if git(args.worktree, "status", "--porcelain").strip():
+        raise Fail(4, "worktree has uncommitted or untracked changes")
+    remote = git(args.worktree, "ls-remote", "origin", f"refs/heads/{args.branch}",
+                 what=f"cannot read origin refs/heads/{args.branch}")
+    remote_sha = remote.split()[0] if remote.split() else ""
+    if remote_sha != sha:
+        raise Fail(4, f"origin/{args.branch} is {remote_sha or 'absent'}, not {sha}")
+    return sha, base_sha
+
+
+def changed_files(worktree, base_sha, sha):
+    out = git(worktree, "diff", "--name-status", f"{base_sha}...{sha}")
+    files = []
+    for line in out.splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 2:
+            files.append(parts[-1])
+    return files
+
+
+def glob_regex(pattern):
+    out, i = "", 0
+    while i < len(pattern):
+        c = pattern[i]
+        if pattern.startswith("**/", i):
+            out += "(?:.*/)?"
+            i += 3
+            continue
+        if pattern.startswith("**", i):
+            out += ".*"
+            i += 2
+            continue
+        out += "[^/]*" if c == "*" else "[^/]" if c == "?" else re.escape(c)
+        i += 1
+    return re.compile(f"^{out}$")
+
+
+def outside_fence(files, owned_paths):
+    if not owned_paths:
+        return []
+    fences = [glob_regex(p) for p in owned_paths]
+    return [f for f in files if not any(r.match(f) for r in fences)]
+
+
+def render(template, variables):
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+        json.dump(variables, handle)
+        var_file = handle.name
+    try:
+        run = subprocess.run(
+            ["sc-compose", "render", "--strict", "--root", str(template.parent), "--file", template.name,
+             "--var-file", var_file], capture_output=True, text=True)
+    except OSError as exc:
+        raise Fail(5, f"sc-compose unavailable: {exc}")
+    finally:
+        os.unlink(var_file)
+    if run.returncode != 0:
+        raise Fail(5, f"sc-compose render failed for deliverable {variables['deliverable_number']}: "
+                      f"{run.stderr.strip().splitlines()[0] if run.stderr.strip() else run.returncode}")
+    try:
+        return json.loads(run.stdout)
+    except ValueError:
+        raise Fail(5, f"rendered assignment {variables['deliverable_number']} is not JSON")
+
+
+def start_lint(args):
+    scratch = Path(args.scratch)
+    scratch.mkdir(parents=True, exist_ok=True)
+    log = scratch / f"{args.task}-lint.log"
+    exit_file = scratch / f"{args.task}-lint.exit"
+    for stale in (log, exit_file):
+        if stale.exists():
+            stale.unlink()
+    script = (f"cd {shlex.quote(args.worktree)} && {args.lint_command} > {shlex.quote(str(log))} 2>&1; "
+              f"echo $? > {shlex.quote(str(exit_file))}")
+    subprocess.Popen(["sh", "-c", script], start_new_session=True, stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"command": args.lint_command, "log": str(log), "exit_file": str(exit_file)}
+
+
+def main():
+    parser = argparse.ArgumentParser(add_help=True)
+    for flag in ("--task", "--bead", "--worktree", "--branch", "--commit", "--base", "--lint-command", "--scratch"):
+        parser.add_argument(flag, required=True)
+    parser.add_argument("--bead-json")
+    parser.add_argument("--split-only", action="store_true")
+    parser.add_argument("--template", type=Path, default=TEMPLATE)
+    try:
+        args = parser.parse_args()
+    except SystemExit:
+        return 1
+    try:
+        bead = load_bead(args)
+        deliverables = parse_deliverables(bead.get("description") or "")
+        owned = (bead.get("metadata") or {}).get("owned_paths") or []
+        if args.split_only:
+            sha, base_sha, files, lint = args.commit, args.base, [], None
+        else:
+            sha, base_sha = pin(args)
+            files = changed_files(args.worktree, base_sha, sha)
+            lint = None
+        outside = outside_fence(files, owned)
+        assignments = []
+        for item in deliverables:
+            assignments.append({"number": item["number"], "assignment": render(args.template, {
+                "sanity_bead": args.task, "dev_bead_id": bead["id"], "dev_bead_title": bead.get("title") or "",
+                "deliverable_number": item["number"], "deliverable_text": item["text"],
+                "deliverables_total": len(deliverables),
+                "acceptance_criteria": bead.get("acceptance_criteria") or "", "design": bead.get("design") or "",
+                "owned_paths": owned, "changed_files": files, "files_outside_owned_paths": outside,
+                "worktree_path": args.worktree, "branch": args.branch, "commit": sha, "base_sha": base_sha,
+            })})
+        if not args.split_only:
+            lint = start_lint(args)
+    except Fail as exc:
+        return die(exc.code, str(exc))
+    json.dump({"sha": sha, "base_sha": base_sha, "sanity_bead": args.task, "dev_bead": bead["id"],
+               "branch": args.branch, "worktree_path": args.worktree, "deliverables_total": len(deliverables),
+               "changed_files": files, "files_outside_owned_paths": outside, "lint": lint,
+               "assignments": assignments}, sys.stdout, indent=2)
+    print()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

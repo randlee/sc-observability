@@ -30,18 +30,35 @@ and the task id is the bead id. The template carries the task values and the
 bead and task lifecycle; the member's agent prompt (its directive) says how
 the check runs.
 
-Sanity checks gate dependent dev work, so speed matters: run open sanity
-check tasks concurrently, up to the limit in the member's directive, and
-queue the rest; never serialize unrelated checks below that limit.
+Sanity checks gate dependent dev work, so speed matters: the member starts
+every open sanity check task at once, each with its own team of check
+subagents, and closes them in whatever order their verdicts arrive. Nothing
+waits on another check.
 
 ## Check Contract
 
-A directive sends the checked bead to a check subagent as fenced JSON and
-reads a fenced JSON result back. The subagent owns that contract, in its
-`## Inputs` and `## Output Format`:
-[`.claude/agents/sc-sanity-llm.md`](../../../agents/sc-sanity-llm.md). Every
-check subagent (`sc-sanity-jev.md` too) keeps the same payload and result, so
-a repository switches checks by switching the directive in `.atm.toml`.
+One check is one closed bead at one pinned commit, split per deliverable:
+
+- `scripts/sanity-split` reads the bead, parses the numbered list under
+  `## Deliverables`, pins the commit, lists the changed files against the
+  bead's `owned_paths`, starts the lint command in the background, and
+  renders one assignment per deliverable from
+  `templates/dev-sanity-assignment.json.j2`.
+- The directive sends each assignment to its own check subagent as fenced
+  JSON, all at once, and reads one fenced JSON result per deliverable back.
+  The subagent owns that contract, in its `## Inputs` and `## Output Format`:
+  [`.claude/agents/sc-sanity-llm.md`](../../../agents/sc-sanity-llm.md).
+  Every check subagent (`sc-sanity-jev.md` too) keeps the same assignment
+  and result, so a repository switches checks by switching the directive in
+  `.atm.toml`.
+- `scripts/sanity-merge` accepts exactly one result per deliverable at the
+  pinned SHA, folds in the lint exit code and diagnostics, and writes the
+  verdict and the report vars.
+
+There is no fallback. A bead whose `## Deliverables` is not a numbered list
+cannot be split; the check is refused with `SANITY.PLAN_INVALID` and the
+lead is told that planning failed for that bead. Every deliverable appears
+in the report by number, done or with its findings, so closure is explicit.
 
 ## Verdicts
 

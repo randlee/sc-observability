@@ -67,15 +67,6 @@ Every assignment pairs `atm task start` with `atm task close --template`; that
 pair is the task's span. When the task id is also a bead, `bd update <id>
 --claim` runs with the start and `bd close <id>` with the close.
 
-**Concurrent coordinator exception (dev-sanity only).** ATM allows one active
-task per agent, but the member filling the dev-sanity role runs several
-checks at once. For that role only, the bead claim is the start of execution:
-it claims each ready sanity check bead and runs its check without an ATM
-start, then, one task at a time as verdicts arrive, runs `atm task start`
-immediately followed by the close. A running check is visible as an
-`in_progress` bead assigned to that member; the ATM span covers only the
-report. Every other role starts its task before executing it.
-
 Paths are under `.claude/skills/`. `refused` and `cancelled` closes carry
 a reason instead of a report.
 
