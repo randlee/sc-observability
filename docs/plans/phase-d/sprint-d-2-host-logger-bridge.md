@@ -1,15 +1,19 @@
 ---
 id: D.2
 status: planned
-branch: feature/phase-d-2-host-logger-bridge
+branch: sprint/d-2-host-logger-bridge
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-2-host-logger-bridge
+worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-2-host-logger-bridge
 depends_on: []
 relation: parallel_safe
 assignee: cobs
 model_class: terra
-requirements: [LOG-001, LOG-010, LOG-015]
-owned_docs: [docs/requirements.md, docs/api-design.md]
+requirements: ["LOG-001", "LOG-010", "LOG-015", "TYP-030", "PHB-002"]
+owned_docs: ["docs/logging/d-2-host-logger-bridge.md"]
+adrs: ["ADR-011", "ADR-013"]
+closure_type: integration
+target_boundary: "host logger attachment and facade admission"
+owned_paths: ["crates/sc-observability-log/**", "crates/sc-observability-log-consumer-check/**", "docs/api-approvals/d-2-*.json", "docs/logging/d-2-host-logger-bridge.md"]
 ---
 
 # D.2 — Host-owned logger bridge and event policy (#204)
@@ -152,6 +156,19 @@ one `close_and_drain` primitive; detach never shuts down the host logger.
   consumer fixture in the additive API/semver gate against published 1.4.1.
 - `cargo test --workspace --locked` and
   `cargo clippy --workspace --all-targets -- -D warnings`.
+
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability-log/**`
+- `crates/sc-observability-log-consumer-check/**`
+- `docs/api-approvals/d-2-*.json`
+- `docs/logging/d-2-host-logger-bridge.md`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+Parallel-safe with the other additive logging sprints: this sprint owns its separate additive document and scoped API approval. D.4 owns linking these documents from the shared API design. No shared normative document or release baseline is edited here.
 
 ## Non-closure
 

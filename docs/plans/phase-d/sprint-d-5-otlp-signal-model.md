@@ -1,16 +1,20 @@
 ---
 id: D.5
 status: planned
-branch: feature/phase-d-5-otlp-signal-model
+branch: sprint/d-5-otlp-signal-model
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-5-otlp-signal-model
-depends_on: [D.4]
+worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-5-otlp-signal-model
+depends_on: ["D.4"]
 relation: must_follow
 assignee: aobs
 model_class: astra
-requirements: [OTLP-008, OTLP-009, OTLP-010]
-owned_docs: [docs/requirements.md, docs/architecture.md, docs/api-design.md, docs/migration.md]
-release_train: '2.0'
+requirements: ["OTLP-008", "OTLP-009", "OTLP-010", "OTLP-020", "OTLP-021"]
+owned_docs: ["docs/requirements.md", "docs/architecture.md", "docs/api-design.md", "docs/migration.md"]
+release_train: "2.0"
+adrs: ["ADR-002", "ADR-004", "ADR-017", "ADR-018"]
+closure_type: integration
+target_boundary: "neutral OTLP signal model and consumer migration"
+owned_paths: ["crates/**", "bindings/**", "examples/**", "release/public-api-policy.json", "scripts/ci/fixtures/**", "docs/api-approvals/d-5-*.json", "docs/requirements.md", "docs/architecture.md", "docs/api-design.md", "docs/migration.md"]
 ---
 
 # D.5 — OTLP 2.0 signal model
@@ -132,6 +136,23 @@ rather than depend on exhaustive future shape.
 - `cargo test -p sc-observability-types -p sc-observability-dto -p sc-observe -p sc-observability-binding-runtime -p sc-observability-otlp --locked`.
 - Workspace clippy/rustdoc and the reviewed 1.4.1-to-2.0 public API
   comparison/rebaseline mechanism.
+
+## Owned Paths and Exact Targets
+
+- `crates/**`
+- `bindings/**`
+- `examples/**`
+- `release/public-api-policy.json`
+- `scripts/ci/fixtures/**`
+- `docs/api-approvals/d-5-*.json`
+- `docs/requirements.md`
+- `docs/architecture.md`
+- `docs/api-design.md`
+- `docs/migration.md`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
 
 ## Non-closure
 

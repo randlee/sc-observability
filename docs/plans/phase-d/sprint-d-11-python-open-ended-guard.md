@@ -1,14 +1,19 @@
 ---
 id: D.11
 status: planned
-branch: feature/phase-d-11-python-open-ended-guard
+branch: sprint/d-11-python-open-ended-guard
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-11-python-open-ended-guard
-depends_on: [D.10]
+worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-11-python-open-ended-guard
+depends_on: ["D.10"]
 relation: must_follow
 assignee: cobs
 model_class: terra
-owned_docs: [docs/project-plan.md, release/python-platform-policy.json]
+owned_docs: ["docs/project-plan.md", "release/python-platform-policy.json"]
+requirements: ["PHB-013"]
+adrs: ["ADR-015"]
+closure_type: integration
+target_boundary: "Python source/artifact compatibility guard"
+owned_paths: [".github/workflows/b4a-python-distributions.yml", "scripts/ci/_python_distribution.py", "scripts/ci/validate_python_distribution.py", "scripts/ci/tests/test_python_distribution.py", "docs/project-plan.md", "release/python-platform-policy.json"]
 ---
 
 # D.11 — Open-ended Python distribution regression guard
@@ -52,6 +57,34 @@ and `requires-python = ">=3.10"` with no upper bound.
 - Validator unit/negative tests, source-build validation, and a full B.4a
   reusable workflow run at an immutable SHA.
 - Docs consistency plus source/artifact metadata verification.
+
+Concrete validation commands (dispatch at the reviewed implementation SHA):
+
+```bash
+python3 -m unittest discover -s scripts/ci/tests -p test_python_distribution.py
+bash scripts/ci/validate_docs_consistency.sh
+gh workflow run b4a-python-distributions.yml --ref "$(git rev-parse HEAD)" -f source_commit="$(git rev-parse HEAD)"
+```
+
+A dispatch receipt is not a pass: the immutable-source workflow and aggregate
+job must finish successfully with the matrix required above.
+
+## Owned Paths and Exact Targets
+
+- `.github/workflows/b4a-python-distributions.yml`
+- `scripts/ci/_python_distribution.py`
+- `scripts/ci/validate_python_distribution.py`
+- `scripts/ci/tests/test_python_distribution.py`
+- `docs/project-plan.md`
+- `release/python-platform-policy.json`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
+
+`_python_distribution.py` owns the source/wheel inspection and architecture
+checks; reuse its existing result and the existing B.4a aggregate job.
+The Python Cargo/pyproject metadata is inspected, not changed by this sprint.
 
 ## Non-closure
 

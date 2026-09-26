@@ -1,16 +1,20 @@
 ---
 id: D.9
 status: planned
-branch: feature/phase-d-9-otlp-conformance
+branch: sprint/d-9-otlp-conformance
 base: develop
-worktree: /Users/randlee/github/sc-observability-worktrees/feature/phase-d-9-otlp-conformance
-depends_on: [D.7, D.8]
+worktree: /Users/randlee/github/sc-observability-worktrees/sprint/d-9-otlp-conformance
+depends_on: ["D.7", "D.8"]
 relation: must_follow
 assignee: aobs
 model_class: astra
-requirements: [OTLP-001, OTLP-023, OTLP-024]
-owned_docs: [docs/observability/otlp]
-release_train: '2.0'
+requirements: ["OTLP-001", "OTLP-023", "OTLP-024", "OTLP-008", "OTLP-009", "OTLP-010", "OTLP-012", "OTLP-021"]
+owned_docs: ["docs/observability/otlp"]
+release_train: "2.0"
+adrs: ["ADR-004", "ADR-018"]
+closure_type: integration
+target_boundary: "dual-backend OTLP conformance"
+owned_paths: ["crates/sc-observability-otlp/tests/**", "docs/observability/otlp/**", "scripts/ci/verify_otlp_grafana_smoke.py", "scripts/ci/otlp_dev_install_smoke.py", "scripts/ci/fixtures/otlp/**", ".github/workflows/ci.yml", ".github/workflows/otlp-conformance.yml"]
 ---
 
 # D.9 — Cross-path qualification and observability docs
@@ -90,6 +94,20 @@ wire/protocol differences are allowed, signal meaning loss is not.
 - `cargo test --workspace --locked`, clippy with warnings denied, rustdoc,
   public API/semver, dependency/license, and CI workflow validation.
 - Local collector smoke commands for both backends.
+
+## Owned Paths and Exact Targets
+
+- `crates/sc-observability-otlp/tests/**`
+- `docs/observability/otlp/**`
+- `scripts/ci/verify_otlp_grafana_smoke.py`
+- `scripts/ci/otlp_dev_install_smoke.py`
+- `scripts/ci/fixtures/otlp/**`
+- `.github/workflows/ci.yml`
+- `.github/workflows/otlp-conformance.yml`
+
+These are edit fences for the deliverables above, including their tests and
+public API approval where listed; reading dependencies does not claim ownership.
+New modules stay inside the listed crate fences. No unrelated changes are authorized.
 
 ## Non-closure
 
