@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-jev
-version: 0.4.3
+version: 0.4.5
 description: Named teammate that runs dev sanity checks through Jev. Proves TypeSafe access at startup, then takes each sanity check task from ATM, sends the checked bead to one sc-sanity-jev subagent as fenced JSON, validates its fenced JSON result, and closes the bead and task with PASS or FAIL. Not active.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
@@ -57,7 +57,14 @@ The task id is the sanity check bead id. `commit` may be short.
    task id order. Run up to 4 checks at once (fewer if your harness allows
    fewer); the rest wait for a free slot. Never wait on one check to start
    another that has a slot.
-3. Per task: the task's ready check, then `bd update <task> --claim`.
+3. Per task: before any code inspection, require an open, reviewable PR for
+   the task branch: `gh pr list --head <branch> --state open --json number
+   --jq '.[0].number'`. If it is empty, immediately send the lead the task,
+   branch, and `SANITY.PR_REQUIRED` with `atm send <lead> --stdin`; do not
+   inspect the worktree and take the cannot-run route. Save the returned number
+   as `$pr_number`. Then do the task's ready check, `bd update <task> --claim`,
+   and at the instant the check actually begins save
+   `run_started_at=$(date +%s)` for the status table.
 4. Pin the target: `sha=$(git -C <worktree> rev-parse --verify '<commit>^{commit}')`,
    and require `git ls-remote origin refs/heads/<branch>` to print that SHA.
    If either fails, the task cannot run (`SANITY.TARGET_UNREADABLE`).
@@ -158,6 +165,38 @@ status:
   "finding_bead_ids": ["obs-d-4.1"]
 }
 ```
+
+## Run Status Table
+
+After every completed PASS or FAIL task close succeeds, render the compact
+status table for the newest six completed sanity runs and print it as your
+user-visible completion summary. Do not render a table for a refused check.
+This is best-effort after the close: a history or render failure must not alter
+the verdict or reopen the task; state `SANITY.STATUS_TABLE_UNAVAILABLE` in the
+same completion summary. Do not send a separate ATM message to the lead.
+
+```bash
+iteration=$(atm task events "$task" --all --json \
+  | jq '[.events[] | select(.event == "completed")] | length')
+.claude/skills/atm-bd-orchestration/scripts/sanity-run-history \
+  --vars "$scratch/sanity-$task-vars.json" --task "$task" --bead "$checked_bead" \
+  --pr-number "$pr_number" --iteration "$iteration" \
+  --started-at "$run_started_at" --output "$scratch/sanity-$task-table-vars.json" --limit 6
+sc-compose render --strict \
+  --file .claude/skills/atm-bd-orchestration/templates/sanity-run-table.md.j2 \
+  --var-file "$scratch/sanity-$task-table-vars.json" \
+  > "$scratch/sanity-$task-table.md"
+```
+
+`sanity-run-history` reads the completion vars directly, appends one record to
+`.sc/sanity-log/phase-<phase>.jsonl` in the repository's primary checkout, and
+returns exactly `{"runs": [ ... ]}`, already ordered newest first for the
+template. It derives `phase` from the checked bead metadata, with a sprint-name
+fallback. The PR is never shown as a vague state: a completed run has
+`#<number>`; a missing PR was already reported and refused. Calculate
+`iteration` only after `atm task close` has succeeded, so it includes the
+just-closed completion event. `--limit 6` is the normal view; use another
+positive limit on request, or `--limit 0` for the entire phase log.
 
 ## FAIL Finding Handoff
 

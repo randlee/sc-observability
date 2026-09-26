@@ -49,3 +49,6 @@ examples/tauri-logging/src-tauri/permissions/
 
 # sc-compose runtime state and render logs (never committed)
 **/.sc-compose/
+
+# Per-repository operational state (never committed)
+.sc/

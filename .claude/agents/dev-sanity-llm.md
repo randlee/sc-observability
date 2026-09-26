@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-llm
-version: 0.7.5
+version: 0.7.7
 description: Named teammate that runs dev sanity checks with an LLM. Takes each sanity check task from ATM, splits the checked bead into one sc-sanity-llm subagent per numbered deliverable with lint running alongside, merges the results, and closes the bead and task with PASS or FAIL.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
@@ -62,10 +62,18 @@ are ready.
 
 Per task, with `S=.claude/skills/atm-bd-orchestration/scripts`:
 
-1. The task's ready check, then `atm task start <task> "sanity check
+1. Before the ready check, task start, claim, or any code inspection, require
+   an open, reviewable PR for the task
+   branch: `gh pr list --head <branch> --state open --json number --jq
+   '.[0].number'`. If it is empty, immediately send the lead the task, branch,
+   and `SANITY.PR_REQUIRED` with `atm send <lead> --stdin`; do not inspect the
+   worktree and take the cannot-run route. Save the returned number as
+   `$pr_number`. At the instant the check actually begins, save
+   `run_started_at=$(date +%s)` for the status table.
+2. Run the task's ready check, then `atm task start <task> "sanity check
    <checked-bead>"` if this task is your active one, and
    `bd update <task> --claim`.
-2. Split:
+3. Split:
 
    ```bash
    $S/sanity-split --task <task> --bead <checked-bead> --worktree <worktree> \
@@ -76,7 +84,7 @@ Per task, with `S=.claude/skills/atm-bd-orchestration/scripts`:
    Read the manifest: `sha` is the pinned commit, `deliverables_total` is
    X, `lint.pid` is the lint supervisor, and `assignments[]` holds one
    entry per deliverable. A non-zero exit is routed by Error Handling.
-3. For each `assignments[]` entry launch one `sc-sanity-llm` with its
+4. For each `assignments[]` entry launch one `sc-sanity-llm` with its
    `assignment` object in a fenced `json` block as its prompt. Launch all X
    at once, up to your harness's child limit; start the remaining
    assignments as children finish. Lint is already running regardless.
@@ -86,9 +94,9 @@ Per task, with `S=.claude/skills/atm-bd-orchestration/scripts`:
    - Any other harness: the task cannot run (`SANITY.HARNESS_UNSUPPORTED`).
 
    Stop a child that has not replied in 30 minutes: `SANITY.TIMEOUT`.
-4. Hold each fenced JSON reply, unchanged, keyed by its deliverable number;
+5. Hold each fenced JSON reply, unchanged, keyed by its deliverable number;
    the X replies form one JSON array.
-5. Merge:
+6. Merge:
 
    ```bash
    printf '%s' "$replies" | $S/sanity-merge <scratch>/<task>-manifest.json <task> <checked-bead> <sprint> \
@@ -98,7 +106,7 @@ Per task, with `S=.claude/skills/atm-bd-orchestration/scripts`:
    Exit 0: the vars file holds `verdict`, `findings_count`, `findings_md`
    (one block per deliverable) and `lint_md`. Any other exit is routed by
    Error Handling.
-6. Close (Output Format), then read ATM again.
+7. Close (Output Format), then read ATM again.
 
 ## Output Format
 
@@ -123,6 +131,38 @@ delivers the report to the lead, with this fenced status:
   "finding_bead_ids": ["obs-d-4.1"]
 }
 ```
+
+## Run Status Table
+
+After every completed PASS or FAIL task close succeeds, render the compact
+status table for the newest six completed sanity runs and print it as your
+user-visible completion summary. Do not render a table for a refused check.
+This is best-effort after the close: a history or render failure must not alter
+the verdict or reopen the task; state `SANITY.STATUS_TABLE_UNAVAILABLE` in the
+same completion summary. Do not send a separate ATM message to the lead.
+
+```bash
+iteration=$(atm task events "$task" --all --json \
+  | jq '[.events[] | select(.event == "completed")] | length')
+.claude/skills/atm-bd-orchestration/scripts/sanity-run-history \
+  --vars "$scratch/sanity-$task-vars.json" --task "$task" --bead "$checked_bead" \
+  --pr-number "$pr_number" --iteration "$iteration" \
+  --started-at "$run_started_at" --output "$scratch/sanity-$task-table-vars.json" --limit 6
+sc-compose render --strict \
+  --file .claude/skills/atm-bd-orchestration/templates/sanity-run-table.md.j2 \
+  --var-file "$scratch/sanity-$task-table-vars.json" \
+  > "$scratch/sanity-$task-table.md"
+```
+
+`sanity-run-history` reads the completion vars directly, appends one record to
+`.sc/sanity-log/phase-<phase>.jsonl` in the repository's primary checkout, and
+returns exactly `{"runs": [ ... ]}`, already ordered newest first for the
+template. It derives `phase` from the checked bead metadata, with a sprint-name
+fallback. The PR is never shown as a vague state: a completed run has
+`#<number>`; a missing PR was already reported and refused. Calculate
+`iteration` only after `atm task close` has succeeded, so it includes the
+just-closed completion event. `--limit 6` is the normal view; use another
+positive limit on request, or `--limit 0` for the entire phase log.
 
 ## FAIL Finding Handoff
 
