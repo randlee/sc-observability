@@ -14,8 +14,8 @@ Generated projection of `obs-d-14`; the bead is authoritative.
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-14-observe-error-migration`
 - PR target (merge order only): `sprint/d-8-otlp-http-json-transplant`
 - Blocked by: `obs-d-12-sanity`
-- Requirements: LAY-001, LAY-002, LAY-003, LAY-004, LAY-006, LAY-007, LOG-004, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-047, LOG-048, NFR-001, NFR-002, NFR-003, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, OBS-001, OBS-002, OBS-003, OBS-004, OBS-005, OBS-006, OBS-007, OBS-008, OBS-009, OBS-010, OBS-011, OBS-012, OBS-013, OBS-014, OBS-015, OBS-016, OBS-017, OBS-018, OBS-019, OBS-020, OBS-021, OBS-022, OBS-023, OBS-024, OBS-025, PHB-003, PHB-004, PHB-005, PHB-006, PHB-010, PHB-011, PHD-001, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
-- ADRs: ADR-001, ADR-002, ADR-003, ADR-004, ADR-005, ADR-007, ADR-009, ADR-010, ADR-014, ADR-017
+- Requirements: LAY-001, LAY-002, LAY-003, LAY-004, LAY-006, LAY-007, LOG-004, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-047, LOG-048, NFR-001, NFR-002, NFR-003, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, OBS-001, OBS-002, OBS-003, OBS-004, OBS-005, OBS-006, OBS-007, OBS-008, OBS-009, OBS-010, OBS-011, OBS-012, OBS-013, OBS-014, OBS-015, OBS-016, OBS-017, OBS-018, OBS-019, OBS-020, OBS-021, OBS-022, OBS-023, OBS-024, OBS-025, PHB-010, PHB-011, PHD-001, PHD-002, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
+- ADRs: ADR-001, ADR-002, ADR-003, ADR-004, ADR-005, ADR-007, ADR-009, ADR-010, ADR-014, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observe/src/lib.rs`
   - `crates/sc-observe/tests/**`
@@ -37,7 +37,7 @@ Update the sprint doc as explanatory evidence alongside the migration; documenta
 
 ## Migration recipe
 
-Consume `obs-d-12`'s cause-to-variant mapping and `ErrorContext` contract (ADR-017, PHD-001). Use the canonical sc-observability-types definitions and re-export them where the existing `sc-observe` surface requires it. Preserve `ObservationError` runtime guards (`Shutdown`, `QueueFull`, `RoutingFailure`) and their nested sources; do not rename the runtime guard into `EventError`. Init validation maps `Configuration`, startup failure `Runtime`; flush maps `Drain`; shutdown deadline maps `Timeout` and other drain/provider failure `Drain`; sink write/flush map their distinct variants; projection/subscriber failures keep their exact canonical categories. Migrate neutral span/metric consumers inside this crate as D.12 specifies; never add an OTLP runtime dependency. Use structured `Diagnostic.details` for route/projector/etc., not invented `ErrorContext` fields. Retype `routing_integration.rs` and `typed_observation.rs` with per-cause assertions.
+Consume `obs-d-12`'s cause-to-variant mapping and `ErrorContext` contract (ADR-017, PHD-001). Use the canonical sc-observability-types definitions and re-export them where the existing `sc-observe` surface requires it. Preserve `ObservationError` runtime guards (`Shutdown`, `QueueFull`, `RoutingFailure`) and their nested sources; do not rename the runtime guard into `EventError`. Init validation maps `Configuration`, startup failure `Runtime`; flush maps `Drain`; shutdown deadline maps `Timeout` and other drain/provider failure `Drain`; sink write/flush map their distinct variants; projection/subscriber failures keep their exact canonical categories. Migrate neutral span/metric consumers inside this crate as D.12 specifies; never add an OTLP runtime dependency. Use structured `Diagnostic.details` for route/projector/etc., not invented `ErrorContext` fields. Retype `routing_integration.rs` and `typed_observation.rs` with per-cause assertions. obs-d-14 owns the `LogSink` implementors in `crates/sc-observe/src/lib.rs`—the test fixtures `BlockingFlushSink` and `FlushFailSink`—and migrates their canonical `LogSinkError` signatures with the rest of the crate's owned call sites.
 
 ## Canonical boundary and handoff
 
@@ -58,7 +58,6 @@ Created/staged by `obs-d-14`, owned by `obs-d-18` from wave 3; after this bead c
 - `PHD-001` governs canonical same-name error variants, cause mapping, and retained source/diagnostic information.
 - `NFR-004` and `ADR-004` constrain this crate to remain free of OTLP transport complexity.
 - `ADR-014` is retained for result-preserving error boundaries consumed by downstream language-facing callers.
-
 
 ## Acceptance criteria
 
