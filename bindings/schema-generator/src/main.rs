@@ -123,6 +123,28 @@ fn definitions(output: bool) -> Result<(SchemaMap, SchemaMap), Box<dyn Error>> {
         &mut entries,
         "WireEnvelopeClientStatus",
     )?;
+    register::<CanonicalDiagnosticDto>(&mut generator, &mut entries, "CanonicalDiagnosticDto")?;
+    register::<CanonicalFailureDto>(&mut generator, &mut entries, "CanonicalFailureDto")?;
+    register::<TraceContextV2Dto>(&mut generator, &mut entries, "TraceContextV2Dto")?;
+    register::<SpanLinkDto>(&mut generator, &mut entries, "SpanLinkDto")?;
+    register::<SpanKindDto>(&mut generator, &mut entries, "SpanKindDto")?;
+    register::<AggregationTemporalityDto>(
+        &mut generator,
+        &mut entries,
+        "AggregationTemporalityDto",
+    )?;
+    register::<HistogramPointDto>(&mut generator, &mut entries, "HistogramPointDto")?;
+    register::<MetricValueDto>(&mut generator, &mut entries, "MetricValueDto")?;
+    register::<MetricRecordDto>(&mut generator, &mut entries, "MetricRecordDto")?;
+    register::<SpanStatusDto>(&mut generator, &mut entries, "SpanStatusDto")?;
+    register::<SpanRecordDto>(&mut generator, &mut entries, "SpanRecordDto")?;
+    register::<SpanEventDto>(&mut generator, &mut entries, "SpanEventDto")?;
+    register::<SpanSignalDto>(&mut generator, &mut entries, "SpanSignalDto")?;
+    register::<CanonicalWireEnvelope<AdmissionDto>>(
+        &mut generator,
+        &mut entries,
+        "CanonicalWireEnvelopeAdmissionDto",
+    )?;
     Ok((generator.take_definitions(true), entries))
 }
 fn input_strict(value: &mut Value, output: bool) {
