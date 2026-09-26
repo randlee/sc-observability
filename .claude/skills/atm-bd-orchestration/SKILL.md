@@ -1,6 +1,6 @@
 ---
 name: atm-bd-orchestration
-version: 0.3.0
+version: 0.3.4
 description: Bead-driven phase orchestration for the lead. Use when running a phase whose plan is in beads, dispatching from `bd ready` with ATM tasks, and landing it as one gh stack.
 requires:
   cli:
@@ -306,7 +306,7 @@ templates. Each is a requirement for the planned combined `atm bd claim` /
 
 | Gap | Interim rule | `atm bd` requirement |
 | --- | --- | --- |
-| one active task per agent | dev-sanity and quality-mgr claim every bead and close tasks they could not start | several active tasks for a coordinator role |
+| one active task per agent | ATM nudges one active task at a time; dev-sanity and quality-mgr execute every open task at once (`atm task start` for the active one, `bd update --claim` for all) and close a queued task without starting it | several active tasks for a coordinator role |
 | `BEADS_ACTOR` empty falls back to git `user.name` | `--actor "$ATM_IDENTITY"` on every `bd` write | the actor is always `ATM_IDENTITY` |
 | claim fails when the bead is assigned to someone else | lead sets the assignee before `atm task assign`; returned beads clear it | claim reassigns the bead to the task's assignee |
 | only the original assigner can re-dispatch a closed task id | the lead that dispatched a bead re-dispatches it; after a lead handover, the outgoing lead re-dispatches the beads it had already dispatched | the current lead may take over closed tasks |

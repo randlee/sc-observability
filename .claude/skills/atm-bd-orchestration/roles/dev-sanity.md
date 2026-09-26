@@ -26,51 +26,45 @@ changes the directive in `.atm.toml`, not this skill.
 ## Tasks
 
 Every task is a sanity check bead rendered from `dev-sanity-template.xml.j2`,
-and the task id is the bead id. Follow its steps in order.
+and the task id is the bead id. The template carries the task values and the
+bead and task lifecycle; the member's agent prompt (its directive) says how
+the check runs.
 
-Sanity checks gate dependent dev work, so speed matters: run every open
-sanity check task at once and never serialize unrelated checks on purpose.
+Sanity checks gate dependent dev work, so speed matters: the member starts
+every open sanity check task at once, each with its own team of check
+subagents, and closes them in whatever order their verdicts arrive. Nothing
+waits on another check.
 
-The template writes one payload file per check. Your directive says how the
-check runs on it; whatever runs it never runs `bd` or `atm`. You check its
-result, then close the task and the bead yourself.
+## Check Contract
 
-## Payload
+One check is one closed bead at one pinned commit, split per deliverable:
 
-```json
-{
-  "sanity_bead": "obs-d-4-sanity",
-  "dev_bead": {"id": "obs-d-4", "title": "...", "description": "...", "design": "...",
-               "acceptance_criteria": "...", "metadata": {}},
-  "worktree_path": "/absolute/path/to/worktree",
-  "branch": "sprint/d-4-slug",
-  "commit": "0123abcd",
-  "base": "integrate/phase-d",
-  "lint_command": "just lint"
-}
-```
+- `scripts/sanity-split` reads the bead, parses the numbered list under
+  `## Deliverables`, pins the commit, lists the changed files against the
+  bead's `owned_paths`, starts the lint command in the background, and
+  renders one assignment per deliverable from
+  `templates/dev-sanity-assignment.json.j2`.
+- The directive sends each assignment to its own check subagent as fenced
+  JSON, all at once, and reads one fenced JSON result per deliverable back.
+  The subagent owns that contract, in its `## Inputs` and `## Output Format`:
+  [`.claude/agents/sc-sanity-llm.md`](../../../agents/sc-sanity-llm.md).
+  Every check subagent (`sc-sanity-jev.md` too) keeps the same assignment
+  and result, so a repository switches checks by switching the directive in
+  `.atm.toml`.
+- `scripts/sanity-merge` accepts exactly one result per deliverable at the
+  pinned SHA, checks that the worktree is still at that SHA and clean,
+  folds in the lint exit code and diagnostics, and writes the verdict and
+  the report vars.
 
-## Result
+The check leaves nothing in the repository: `sanity-split` writes only the
+lint log and the lint exit file under `--scratch`, the renderer's transient
+input file is deleted once each assignment is rendered, and sc-compose keeps
+its own log under `.sc-compose/`, which is gitignored.
 
-Every directive returns this envelope:
-
-```json
-{
-  "success": true,
-  "data": {
-    "sanity_bead": "obs-d-4-sanity",
-    "dev_bead": "obs-d-4",
-    "commit_checked": "0123abcd",
-    "verdict": "PASS | FAIL",
-    "findings": [{"kind": "skipped | error | lint", "file": "...", "line": 42, "issue": "..."}],
-    "lint": {"command": "just lint", "exit_code": 0, "summary": "..."}
-  },
-  "error": null
-}
-```
-
-`success: false` carries `error` = `{code, message, recoverable,
-suggested_action}` and means the check did not run.
+There is no fallback. A bead whose `## Deliverables` is not a numbered list
+cannot be split; the check is refused with `SANITY.PLAN_INVALID` and the
+lead is told that planning failed for that bead. Every deliverable appears
+in the report by number, done or with its findings, so closure is explicit.
 
 ## Verdicts
 
