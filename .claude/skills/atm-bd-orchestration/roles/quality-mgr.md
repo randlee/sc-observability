@@ -129,9 +129,11 @@ screen said. What happens next depends on the verdict:
 - `difficulty` is required when rendering a finding. Copy it from the
   checked sprint/finding; never select a default. The dispatch report prints
   `UNCLASSIFIED` and no agent for a live bead missing it.
-- After filing a blocking finding, run `blocking-finding-gates.py --finding
-  <id>` before dispatch. Its sanity gate blocks only open downstream dev and
-  unclaimed finding/fix work; important and minor findings do not add gates.
+- After filing every blocking finding, run `blocking-finding-gates.py --finding
+  <id>` before dispatch. `<id>-sanity` is the finding's sole sanity gate, not
+  a duplicate: it is parented under the finding's sprint dev bead and waits on
+  the finding through a `blocks` edge, then blocks only open downstream dev and
+  unclaimed finding/fix work. Important and minor findings do not add gates.
 - Findings are `parallel_safe` by default. Set `blocked_by` only when one fix
   needs another finding's fix first.
 - Ids are `<qa bead>-f<n>`, numbered in report order.

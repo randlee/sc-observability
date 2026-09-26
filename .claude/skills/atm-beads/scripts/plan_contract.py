@@ -25,11 +25,15 @@ DIFFICULTIES: tuple[str, ...] = tuple(DIFFICULTY_MODELS)
 # Legacy `metadata.model_class` values and the difficulty each migrates to.
 MODEL_CLASS_TO_DIFFICULTY: dict[str, str] = {"astra": "hard", "terra": "normal", "luna": "fast"}
 
-# Label that marks a planned sprint dev bead (in addition to the unconstrained `stage:dev`).
+# Labels and dependency relation names shared by orchestration scripts.  Keep
+# these here so a graph rule cannot silently diverge from the plan contract.
+DEV_LABEL: str = "stage:dev"
 SPRINT_LABEL: str = "stage:sprint"
 SANITY_LABEL: str = "stage:dev-sanity"
 FINDING_LABEL: str = "stage:finding"
 FIX_LABEL: str = "stage:fix"
+BLOCKS_RELATION: str = "blocks"
+PARENT_CHILD_RELATION: str = "parent-child"
 
 # validate-plan exit codes and output contract.
 EXIT_VALID: int = 0
