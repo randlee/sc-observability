@@ -935,7 +935,7 @@ canonical_projection!(
     FlushError,
     value,
     match value {
-        core::v2::FlushError::Drain { .. } => io_failure,
+        core::v2::FlushError::Drain { context } => drain_category(context),
         _ => unknown_failure,
     }
 );
@@ -944,7 +944,7 @@ canonical_projection!(
     value,
     match value {
         core::v2::ShutdownError::Timeout { .. } => timeout_failure,
-        core::v2::ShutdownError::Drain { .. } => io_failure,
+        core::v2::ShutdownError::Drain { context } => drain_category(context),
         _ => unknown_failure,
     }
 );
@@ -1003,30 +1003,40 @@ canonical_projection!(
         _ => unknown_failure,
     }
 );
-canonical_projection!(
-    ExportError,
-    value,
+fn export_category(
+    value: &core::v2::ExportError,
+) -> fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
     match value {
         core::v2::ExportError::Transport { .. } => io_failure,
         core::v2::ExportError::BlockingBackendInAsyncContext { .. } => validation_failure,
         core::v2::ExportError::AsyncLifecycleRequired { .. } => validation_failure,
         core::v2::ExportError::RuntimeTerminated { .. } => unavailable_failure,
         core::v2::ExportError::LifecycleTimeout { .. } => timeout_failure,
-        core::v2::ExportError::QueueFull { .. } =>
-            |diagnostic| CanonicalFailureDto::QueueFull { diagnostic },
+        core::v2::ExportError::QueueFull { .. } => {
+            |diagnostic| CanonicalFailureDto::QueueFull { diagnostic }
+        }
         core::v2::ExportError::WorkerTerminated { .. } => unavailable_failure,
-        core::v2::ExportError::ShutdownCancelledRetry { .. } =>
+        core::v2::ExportError::ShutdownCancelledRetry { .. } => {
             |diagnostic| CanonicalFailureDto::Cancelled {
                 diagnostic,
-                operation: "shutdown".into()
-            },
+                operation: "shutdown".into(),
+            }
+        }
         core::v2::ExportError::RetryDeadlineExhausted { .. } => timeout_failure,
         core::v2::ExportError::NonRetryableHttpStatus { .. } => io_failure,
         core::v2::ExportError::RetryAttemptsExhausted { .. } => io_failure,
         core::v2::ExportError::TerminalExportFailure { .. } => io_failure,
         _ => unknown_failure,
     }
-);
+}
+fn drain_category(
+    context: &core::ErrorContext,
+) -> fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
+    std::error::Error::source(context)
+        .and_then(|source| source.downcast_ref::<core::v2::ExportError>())
+        .map_or(io_failure, export_category)
+}
+canonical_projection!(ExportError, value, export_category(value));
 
 impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
     type Error = Failure;
