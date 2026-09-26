@@ -99,8 +99,10 @@ schema is `docs/plans/sprints.schema.json`.
 The file is never generated from beads and beads are never generated from the
 file. A plan change is one planner transaction: change the beads, edit the
 file, commit both. `validate-plan --root <root>` passes only when the
-children of the root are exactly the listed pairs (plan-gate beads
-`stage:plan*` and absorbed sprints closed "folded into ..." excepted), each
+children of the root are exactly the listed pairs (excepted: plan-gate beads
+`stage:plan*`, gate beads, absorbed sprints closed "folded into ...", QA beads
+that `validates` a phase bead and findings `caused-by` one, because bd keeps
+one edge type per bead pair and that edge is their sprint membership), each
 sanity bead blocks on its dev bead, and every listed dev bead carries
 `stage:sprint` with the sprint schema (`phase_contract_check.py`). It must
 stay green from plan approval to phase end; every template runs it before a

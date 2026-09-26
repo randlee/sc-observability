@@ -11,8 +11,9 @@ Writes, in order:
   1. every listed sprint dev bead gets label stage:sprint, `difficulty` from `model_class`
      (astra->hard, terra->normal, luna->fast) and priority P2; its sanity bead gets the same difficulty and P2
   2. the pr_target sprint's sanity bead is added as a blocker of every dev bead whose closure lacks it
-  3. finding, QA, fix and fix-sanity beads parented on the phase root are re-parented under their sprint
-     (metadata.sprint_bead / checked_bead / dev_bead); unresolvable ones are listed, not moved
+  3. finding, fix and fix-sanity beads parented on the phase root are re-parented under their sprint
+     (metadata.sprint_bead / checked_bead / dev_bead); a QA bead that `validates` a phase bead or a finding
+     `caused-by` one stays where it is (bd keeps one edge type per pair; the edge is the membership)
   4. open findings: priority from the severity map (blocking P1, important P2, minor P4); closed findings
      without `difficulty` get `normal` (history only); every open finding without `difficulty` is looked up in
      the difficulty csv (columns: id,difficulty) and refused if absent: the worklist is printed
@@ -133,6 +134,8 @@ class Migration:
                 continue
             md = pcc.meta(b)
             st = pcc.stage(b)
+            if self.check.edge_sprint(bid):
+                continue  # `validates` / `caused-by` edge into the phase is the membership (one edge type per pair in bd)
             target = ""
             if st == C.FINDING_LABEL or st == C.FIX_LABEL:
                 target = str(md.get("sprint_bead") or "")
@@ -145,7 +148,12 @@ class Migration:
                 target = dev_of  # a fix/finding sanity lives under the bead it checks
             if not target:
                 target = str(md.get("sprint_bead") or md.get("checked_bead") or "")
-            if target in devs or (target in self.by and self.check.sprint_of(target) in devs):
+            if target and target not in devs and target in self.by and self.check.sprint_of(target) in devs:
+                target = self.check.sprint_of(target)  # findings on a fix: the fix already has caused-by edges to them
+            if target in devs:
+                if target in pcc.deps(b, "caused-by") or target in pcc.deps(b, "validates"):
+                    self.unresolved.append(f"{bid}: has a {'validates' if target in pcc.deps(b, 'validates') else 'caused-by'} edge to {target}; bd allows one edge type per pair, so it cannot also be its child")
+                    continue
                 self.w(f"{bid}: {st or 'unlabelled'} bead belongs under {target}", "update", bid, "--parent", target)
             else:
                 self.unresolved.append(f"{bid}: {st or 'unlabelled'} child of {self.root} with no resolvable sprint (sprint_bead/checked_bead/dev_bead); reparent by hand")

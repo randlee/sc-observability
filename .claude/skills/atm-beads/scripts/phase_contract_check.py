@@ -10,7 +10,8 @@ Run by validate-plan after check-plan.jq. Prints one problem per line as `<bead-
 
 Checks (bead obs-bo-10 deliverables 1-4):
   membership   the children of the phase root are exactly the pairs listed in sprints.json
-               (plus plan-gate beads: stage:plan, stage:plan-review, stage:plan-fix); each pair is linked
+               (plus plan-gate beads stage:plan*, gate beads, QA beads that `validates` a phase bead and findings
+               `caused-by` one: bd keeps one edge type per pair, so the edge is the membership); each pair is linked
   schema       every listed dev bead is a stage:sprint with N >= 1 numbered deliverables, acceptance
                criteria covering exactly 1..N, non-empty owned_paths, a valid difficulty; its sanity bead too
   graph        the pr_target sprint's sanity bead is in the dev bead's blocker closure; relation matches the
@@ -294,12 +295,29 @@ class PhaseCheck:
                         stack.append(dev_of)
         return seen
 
+    def edge_sprint(self, bid: str) -> str:
+        """The phase bead a QA bead `validates` or a finding is `caused-by`, when that bead is in the phase."""
+        b = self.by.get(bid, {})
+        kinds = ("validates",) if has_label(b, QA_LABEL) else ("caused-by",) if stage(b) == C.FINDING_LABEL else ()
+        for kind in kinds:
+            for t in deps(b, kind):
+                if t in self.phase_ids and t != self.root_id:
+                    return t
+        return ""
+
     def sprint_of(self, bid: str) -> str:
-        """The listed sprint dev bead a finding/fix/QA bead belongs to (metadata.sprint_bead or ancestry)."""
+        """The listed sprint dev bead a finding/fix/QA bead belongs to (metadata.sprint_bead, edges or ancestry)."""
         devs = set(self.devs())
         sb = str(meta(self.by.get(bid, {})).get("sprint_bead") or "")
         if sb in devs:
             return sb
+        es = self.edge_sprint(bid)
+        if es in devs:
+            return es
+        if es and es != bid:
+            up = self.sprint_of(es)
+            if up:
+                return up
         cur, seen = parent_of(self.by.get(bid, {})), set()
         while cur and cur not in seen:
             if cur in devs:
@@ -356,6 +374,9 @@ class PhaseCheck:
             if is_folded(b) or (has_label(b, C.SANITY_LABEL) and b.get("status") == "closed"
                                 and is_folded(self.by.get(str(meta(b).get("dev_bead") or ""), {}))):
                 continue  # absorbed sprint and its sanity bead: history, not membership
+            if self.edge_sprint(bid):
+                continue  # bd keeps one edge type per pair: a QA bead that `validates` its sprint, or a finding
+                          # `caused-by` it, cannot also be its child; the edge is the membership
             st = stage(b) or "unlabelled"
             self.problem(bid, f"{st} bead is a child of {self.root_id} but not a listed sprint pair; parent it under its sprint dev bead")
 

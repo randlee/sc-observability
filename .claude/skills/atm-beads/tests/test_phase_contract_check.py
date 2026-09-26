@@ -25,6 +25,8 @@ EXPECT: dict[str, tuple[str, str] | None] = {
     "valid_phase": None,
     "valid_index_with_policy": None,
     "valid_pass_with_qa": None,
+    "valid_qa_under_root_validates": None,
+    "valid_finding_under_root_caused_by": None,
     "valid_closed_finding_without_difficulty": None,
     "valid_r16_gated": None,
     "valid_waived_reopen": None,
