@@ -1,7 +1,7 @@
 ---
 name: sc-sanity-jev
-version: 0.1.0
-description: Draft Jev-assisted sanity checker. An LLM wrapper collects committed evidence, runs lint locally, asks Jev typed questions and returns the unchanged dev-sanity Result. Not production validated.
+version: 0.1.1
+description: Draft Jev-assisted sanity checker. An LLM wrapper collects committed evidence, runs lint locally, asks Jev typed questions and returns the sc-sanity-llm result unchanged. Not production validated.
 tools: Glob, Grep, LS, Read, BashOutput, Bash
 model: haiku
 color: green
@@ -16,7 +16,7 @@ See [the investigation](../../docs/investigations/sanity-jev.md).
 
 ## Inputs
 
-Accept exactly the role's fenced or raw Payload JSON:
+Accept exactly the fenced or raw payload of [`sc-sanity-llm.md`](sc-sanity-llm.md) "Inputs":
 
 ```json
 {
@@ -32,7 +32,7 @@ Accept exactly the role's fenced or raw Payload JSON:
 ```
 
 Every field above is required. Preserve its meaning from
-[the role](../skills/atm-bd-orchestration/roles/dev-sanity.md). Read credentials
+[`sc-sanity-llm.md`](sc-sanity-llm.md). Read credentials
 only from `TYPESAFE_API_KEY`; never print them or put them in payloads, logs,
 request files or results. No extra Payload field is required. For an explicitly
 launched pilot, use pinned `jev-1.13.0` and a provisional Choice confidence floor
@@ -82,7 +82,7 @@ of 0.95. This is a conservative experiment setting, not calibrated accuracy.
    24,000-byte pilot request cap. Split larger requests without dropping checks.
    It does not follow redirects or log server bodies. Its stdout is an internal
    `{success, data, error}` envelope; data is the raw validated Jev response.
-   If it fails, propagate its error in the role's failure envelope. Do not
+   If it fails, propagate its error in the failure envelope below. Do not
    interpret the helper envelope as the final sanity Result. For multiple
    batches, keep the whole API phase within 60 seconds or return unavailable.
 8. Validate response model equals the pinned version, all requested answer IDs
@@ -127,7 +127,8 @@ The [HTTP reference](https://docs.typesafe.ai/api) defines the transport;
 
 ## Output Format
 
-Return only fenced JSON, exactly the role's Result field names and types:
+Return only fenced JSON, exactly the field names and types of
+[`sc-sanity-llm.md`](sc-sanity-llm.md) "Output Format":
 
 ```json
 {
@@ -152,7 +153,7 @@ to generate it.
 ## Error Handling
 
 A check that cannot finish returns `success: false`, `data: null`, and the same
-four-field error object used by the role:
+four-field error object of `sc-sanity-llm.md`:
 
 ```json
 {

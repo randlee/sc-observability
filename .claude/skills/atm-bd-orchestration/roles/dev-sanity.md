@@ -26,51 +26,21 @@ changes the directive in `.atm.toml`, not this skill.
 ## Tasks
 
 Every task is a sanity check bead rendered from `dev-sanity-template.xml.j2`,
-and the task id is the bead id. Follow its steps in order.
+and the task id is the bead id. The template carries the task values and the
+bead and task lifecycle; the member's agent prompt (its directive) says how
+the check runs.
 
 Sanity checks gate dependent dev work, so speed matters: run every open
 sanity check task at once and never serialize unrelated checks on purpose.
 
-The template writes one payload file per check. Your directive says how the
-check runs on it; whatever runs it never runs `bd` or `atm`. You check its
-result, then close the task and the bead yourself.
+## Check Contract
 
-## Payload
-
-```json
-{
-  "sanity_bead": "obs-d-4-sanity",
-  "dev_bead": {"id": "obs-d-4", "title": "...", "description": "...", "design": "...",
-               "acceptance_criteria": "...", "metadata": {}},
-  "worktree_path": "/absolute/path/to/worktree",
-  "branch": "sprint/d-4-slug",
-  "commit": "0123abcd",
-  "base": "integrate/phase-d",
-  "lint_command": "just lint"
-}
-```
-
-## Result
-
-Every directive returns this envelope:
-
-```json
-{
-  "success": true,
-  "data": {
-    "sanity_bead": "obs-d-4-sanity",
-    "dev_bead": "obs-d-4",
-    "commit_checked": "0123abcd",
-    "verdict": "PASS | FAIL",
-    "findings": [{"kind": "skipped | error | lint", "file": "...", "line": 42, "issue": "..."}],
-    "lint": {"command": "just lint", "exit_code": 0, "summary": "..."}
-  },
-  "error": null
-}
-```
-
-`success: false` carries `error` = `{code, message, recoverable,
-suggested_action}` and means the check did not run.
+A directive sends the checked bead to a check subagent as fenced JSON and
+reads a fenced JSON result back. The subagent owns that contract, in its
+`## Inputs` and `## Output Format`:
+[`.claude/agents/sc-sanity-llm.md`](../../../agents/sc-sanity-llm.md). Every
+check subagent (`sc-sanity-jev.md` too) keeps the same payload and result, so
+a repository switches checks by switching the directive in `.atm.toml`.
 
 ## Verdicts
 

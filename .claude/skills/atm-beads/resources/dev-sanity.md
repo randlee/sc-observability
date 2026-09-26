@@ -27,7 +27,7 @@ and subagent, chosen in `.atm.toml`.
 ## Message
 
 The dev-sanity member sends the check this message with the dev bead in
-its JSON payload (the role contract, "Payload"). The sanity check bead's description
+its fenced JSON payload (`.claude/agents/sc-sanity-llm.md` "Inputs"). The sanity check bead's description
 carries the same message, so the instruction can be taken from it:
 `bd show <dev-sanity-bead> --json | jq -r '.[0].description'`.
 

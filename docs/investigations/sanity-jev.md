@@ -84,7 +84,7 @@ advice. A timeout or exhausted retry is “cannot run”, never PASS.
 Proposed mapping of Jev behavior — **untested: no API key**. Local field-name
 compatibility is checked separately.
 
-The role's [Payload and Result](../../.claude/skills/atm-bd-orchestration/roles/dev-sanity.md)
+The [payload and result](../../.claude/agents/sc-sanity-llm.md) ("Inputs", "Output Format")
 remain authoritative. `roles.dev-sanity` resolves to `obs-sanity`; its startup
 directive currently launches `sc-sanity-llm`. A future switch changes only the
 startup directive path in `.atm.toml`, after the alternative prompts ship.
