@@ -160,11 +160,7 @@ the designs drift apart.
 
 No dev bead is dispatched until the plan passes review.
 
-1. Validate the plan:
-   `.claude/skills/atm-beads/scripts/validate-plan --root <root>`, run from
-   the repository root. It runs `bd doctor`, `check-plan.jq`, the REQ/ADR
-   existence check and the ATM member check. Exit 0 or stop.
-2. Create the plan-review bead right after the import (the import
+1. Create the plan-review bead right after the import (the import
    procedures do this as their next step), so that it blocks every root sprint (every dev
    bead with no sanity check blocker). For sprints imported into a running
    phase, use `<root>-plan-qa-<n>` (the next free number) and block only the
@@ -175,6 +171,16 @@ No dev bead is dispatched until the plan passes review.
      -l phase-<x>,stage:plan-review --assignee quality-mgr \
      --title "phase-<x>: plan review" --deps blocks:<root sprint>,blocks:<root sprint>
    ```
+
+2. Generate and publish the initial phase diagram before review:
+   `.claude/skills/sprint-review/scripts/sprint-review --root <root>`.
+   The phase integration branch must contain the committed/pushed
+   `docs/plans/phase-<x>/sprints.json` bead-ID index and
+   `docs/plans/phase-<x>/phase-<x>-dag.html` with embedded SVG. Do not open the
+   diagram unless `--view` was requested and Wyvern is available.
+   Then run `.claude/skills/atm-beads/scripts/validate-plan --root <root>`
+   from the repository root. It checks beads, REQ/ADR references, ATM members,
+   index membership, and the published artifacts. Exit 0 or stop.
 
 3. Dispatch it with
    [`plan-review-template.xml.j2`](templates/plan-review-template.xml.j2).
