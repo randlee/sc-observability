@@ -125,12 +125,12 @@ fn flush_command_flushes_each_sink_once_after_an_admitted_event() {
     }
 
     impl LogSink for CountingSink {
-        fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+        fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
             self.writes.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
 
-        fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
+        fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
             self.flushes.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
