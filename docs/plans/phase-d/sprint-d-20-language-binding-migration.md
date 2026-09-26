@@ -13,9 +13,9 @@ Generated projection of `obs-d-20`; the bead is authoritative.
 - Branch: `sprint/d-20-language-binding-migration`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-20-language-binding-migration`
 - PR target (merge order only): `sprint/d-19-dto-and-schema-migration`
-- Blocked by: `obs-phase-d-plan-qa`, `obs-d-12-sanity`
-- Requirements: PHB-002, PHB-010, PHB-011, PHB-012, PHB-013, PHD-001, TYP-003, TYP-004, TYP-005
-- ADRs: ADR-002, ADR-011, ADR-014, ADR-015, ADR-017
+- Blocked by: `obs-phase-d-plan-qa, obs-d-12-sanity`
+- Requirements: PHB-002, PHB-010, PHB-011, PHB-012, PHB-013, PHD-001, PHD-002, TYP-003, TYP-004, TYP-005
+- ADRs: ADR-002, ADR-011, ADR-014, ADR-015, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `bindings/API-COVERAGE.md`
   - `bindings/python/sc-observability-py/LICENSE`
@@ -84,6 +84,8 @@ obs-d-19 owns DTO/schema and generated language models; obs-d-15 owns shared nat
 ## Independent adapter closure
 
 Use obs-d-12's frozen canonical error projection and stable operational wire envelope; do not wait for obs-d-19's generated output or obs-d-15's implementation. Existing envelope APIs plus local fake native backends exercise extraction/transport semantics. Neither fixture nor adapter duplicates native policy/conversion; actual native backend composition closes in obs-d-18. New neutral signal fields do not force adapters to consume unfinished schema work: adapters transport the frozen envelope without interpreting signal payload internals. Runtime callbacks stay outside Python GIL ownership and host shutdown remains unavailable to attached handles. Preserve source/remediation in the allowed neutral projection, not raw Rust object exchange or strings parsed back into errors.
+
+PHD-001/PHD-002 and ADR-019 govern the canonical language error projection and integration handoff consumed by this sprint.
 
 ## Handoff from obs-d-12
 

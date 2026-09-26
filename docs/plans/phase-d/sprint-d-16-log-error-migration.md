@@ -14,8 +14,8 @@ Generated projection of `obs-d-16`; the bead is authoritative.
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-16-log-error-migration`
 - PR target (merge order only): `sprint/d-15-binding-runtime-error-migration`
 - Blocked by: `obs-d-12-sanity`
-- Requirements: LAY-001, LAY-002, LAY-006, LAY-007, LOG-001, LOG-003, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-046, LOG-047, LOG-048, NFR-001, NFR-002, NFR-005, NFR-006, NFR-007, NFR-009, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, PHD-001, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
-- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-014, ADR-017
+- Requirements: LAY-001, LAY-002, LAY-006, LAY-007, LOG-001, LOG-003, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-046, LOG-047, LOG-048, NFR-001, NFR-002, NFR-005, NFR-006, NFR-007, NFR-009, PHB-002, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, PHD-001, PHD-002, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-014, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability-log/src/control.rs`
   - `crates/sc-observability-log/src/error.rs`
@@ -45,6 +45,8 @@ The sprint document is supporting context and is not a separate closure gate.
 
 Consume `obs-d-12`'s canonical cause mapping and `ErrorContext` contract (ADR-017, PHD-001). Use the canonical types definitions for `IdentityError`, `InitError`, `FlushError`, and `ShutdownError` in the owned modules. `PHB-002` still permits companion-only `DetachError` from `obs-d-13`; preserve that distinct boundary. `control.rs`/`handle.rs`/`mapping.rs` convert per cause: validation -> `InitError::Configuration`, startup -> `Runtime`, flush -> `Drain`, shutdown deadline -> `Timeout` and other shutdown failure -> `Drain`. Preserve stable codes and source identity through mapping; registry constants are D.12-owned. Retype exactly `api_freeze`, `flush_single_flight`, `init_runtime_start`, `shutdown_timeout`, and `static_level_cap` tests. Bridge fixtures belong to `obs-d-2`, not this bead.
 
+Consumed artifact: obs-d-12's canonical error enums under the v2 module path and its ErrorContext contract.
+
 ## Canonical boundary and handoff
 
 This bead retargets owned call sites and tests to the accepted ADR-017 surface. Any transitional compatibility needed by unfinished sibling consumers is limited to the existing boundary and is consumed by `obs-d-18`, which owns canonical activation and final compatibility retirement. No new legacy feature or duplicate classifier is introduced. Every boundary close still has a green all-features workspace check and workspace tests.
@@ -69,7 +71,6 @@ Created/staged by `obs-d-16`, owned by `obs-d-18` from wave 3; after this bead c
 
 - `LOG-046` governs the retained shutdown drain/timeout mapping.
 - `ADR-014` governs preservation of typed operational results at downstream language boundaries.
-
 
 ## Acceptance criteria
 
