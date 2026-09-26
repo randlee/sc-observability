@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create one child finding bead for every merged sanity finding.
+"""Create one child finding bead for every unfinished deliverable.
 
 Usage:
   sanity-create-findings --task <sanity-bead> --bead <checked-bead> \
@@ -48,7 +48,7 @@ def load_vars(path: Path, task: str, bead: str) -> dict:
         raise HandoffError("finding children may be created only for a FAIL report")
     if not isinstance(report.get("commit"), str) or not report["commit"]:
         raise HandoffError("sanity vars lacks pinned commit")
-    if not isinstance(report.get("findings"), list) or not report["findings"]:
+    if not isinstance(report.get("findings"), list):
         raise HandoffError("FAIL report lacks structured findings")
     return report
 
@@ -63,6 +63,26 @@ def finding_key(finding: dict) -> tuple[int, str, int]:
             or not isinstance(line, int) or isinstance(line, bool)):
         raise HandoffError(f"invalid finding selector: {finding!r}")
     return deliverable, file, line
+
+
+def undone_findings(findings: list[dict]) -> list[dict]:
+    undone = []
+    numbers = set()
+    for finding in findings:
+        if not isinstance(finding, dict):
+            raise HandoffError(f"invalid finding: {finding!r}")
+        if finding.get("kind") != "skipped":
+            continue
+        deliverable = finding.get("deliverable")
+        text = finding.get("deliverable_text")
+        if (not isinstance(deliverable, int) or isinstance(deliverable, bool) or deliverable < 1
+                or not isinstance(text, str) or not text.strip()):
+            raise HandoffError(f"invalid undone deliverable finding: {finding!r}")
+        if deliverable in numbers:
+            raise HandoffError(f"more than one skipped finding for deliverable {deliverable}")
+        numbers.add(deliverable)
+        undone.append(finding)
+    return undone
 
 
 def existing_children(bead: str, actor: str, task: str, commit: str) -> dict[str, str]:
@@ -92,7 +112,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         report = load_vars(args.vars, args.task, args.bead)
-        findings = report["findings"]
+        findings = undone_findings(report["findings"])
         selectors = {finding_key(finding): finding for finding in findings}
         if len(selectors) != len(findings):
             raise HandoffError("two findings share a deliverable/file/line selector")
@@ -120,12 +140,14 @@ def main() -> int:
                 raise HandoffError(f"finding has no finding_ref: {finding!r}")
             if ref in children:
                 continue
+            deliverable_text = finding["deliverable_text"].strip()
             payload = {
                 "sanity_bead": args.task, "checked_bead": args.bead,
                 "commit_checked": report["commit"], "finding_ref": ref,
                 "deliverable": finding["deliverable"], "kind": finding["kind"],
                 "file": finding["file"], "line": finding["line"],
                 "issue": finding["issue"], "depends_on": finding.get("depends_on", []),
+                "deliverable_text": deliverable_text,
             }
             provenance = {
                 "phase": phase, "sprint": sprint, "stack": stack,
@@ -134,9 +156,10 @@ def main() -> int:
                 "finding_ref": ref, "sprint_bead": args.bead,
             }
             metadata = {**provenance, "sanity_finding": payload}
-            description = "Sanity finding; the JSON below is the source report data.\n\n```json\n" + json.dumps(payload, indent=2, sort_keys=True) + "\n```"
+            description = (f"Undone deliverable D{finding['deliverable']}:\n\n{deliverable_text}\n\n"
+                           "## Checker evidence\n\n```json\n" + json.dumps(payload, indent=2, sort_keys=True) + "\n```")
             acceptance = "- [ ] this finding is fixed at every occurrence in scope\n- [ ] a targeted reproducer or check passes\n- [ ] repository validation passes"
-            title = f"{args.bead} {ref}: {finding['file']}:{finding['line']}"
+            title = f"{args.bead} D{finding['deliverable']} not done: {deliverable_text[:80]}"
             child = command([
                 "bd", "create", title, "--type", "bug", "--status", "open",
                 "--parent", args.bead, "--description", description,

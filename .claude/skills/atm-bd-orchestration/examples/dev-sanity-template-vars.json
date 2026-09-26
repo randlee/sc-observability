@@ -10,4 +10,14 @@
   "pr_url": "https://github.com/randlee/sc-observability/pull/231",
   "lead": "obs-lead",
   "cc": ""
+  ,"sanity_bead": "obs-d-4-sanity"
+  ,"dev_bead_id": "obs-d-4"
+  ,"dev_bead_title": "d-4: OTLP sync exporter"
+  ,"deliverable_number": 1
+  ,"deliverable_text": "Implement the pinned deliverable."
+  ,"deliverables_total": 1
+  ,"owned_paths": ["crates/sc-observability-otlp/src/sync.rs"]
+  ,"changed_files": ["crates/sc-observability-otlp/src/sync.rs"]
+  ,"files_outside_owned_paths": []
+  ,"base_sha": "sprint/d-3-otlp-config"
 }
