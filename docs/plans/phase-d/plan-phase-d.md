@@ -40,66 +40,73 @@ composition. Shared-file overlap is never a dependency rationale.
 
 ## Requirement mapping
 
+Source: the 56 numbered deliverables of D.1 to D.11 as written in develop's `docs/plans/phase-d` sprint docs, mapped by content to the bead items that carry the work after the re-cut. Verified by the lead on 2026-09-26 against each bead's numbered deliverables. Retire this section when phase d closes.
+
 | Original item | Bead#item(s) |
 | --- | --- |
-| D.1.1 | D1#1 |
-| D.1.2 | D1#2 |
-| D.1.3 | D1#3 |
-| D.1.4 | D1#4 |
-| D.2.1 | D2#1 |
-| D.2.2 | D2#2 |
-| D.2.3 | D2#3 |
-| D.2.4 | D2#4 |
-| D.2.5 | D2#5 |
-| D.2.6 | D2#6 |
-| D.3.1 | D3#1 |
-| D.3.2 | D3#2 |
-| D.3.3 | D3#3 |
-| D.3.4 | D3#4 |
-| D.4.1 | D12#1 |
-| D.4.2 | D12#1 |
-| D.4.3 | D18#1 |
-| D.4.4 | D18#3 |
-| D.4.5 | D12#4, D18#4 |
-| D.4.6 | D13#4, D4#2 |
-| D.4.7 | D18#3 |
-| D.4.8 | D18#4 |
-| D.5.1 | D5#1 |
-| D.5.2 | D5#2 |
-| D.5.3 | D5#3 |
-| D.5.4 | D5#4 |
-| D.5.5 | D5#5 |
-| D.5.6 | D5#6 |
-| D.6.1 | D6#1 |
-| D.6.2 | D6#2 |
-| D.6.3 | D6#3 |
-| D.6.4 | D6#4 |
-| D.6.5 | D6#5 |
-| D.6.6 | D6#6 |
-| D.7.1 | D7#1 |
-| D.7.2 | D7#2 |
-| D.7.3 | D7#3 |
-| D.7.4 | D7#4 |
-| D.8.1 | D8#1 |
-| D.8.2 | D8#2 |
-| D.8.3 | D8#3 |
-| D.8.4 | D8#4 |
-| D.8.5 | D8#5 |
-| D.8.6 | D8#6 |
-| D.9.1 | D9#1 |
-| D.9.2 | D9#2 |
-| D.9.3 | D9#3 |
-| D.9.4 | D9#4 |
-| D.10.1 | D10#1 |
-| D.10.2 | D10#2 |
-| D.10.3 | D10#3 |
-| D.10.4 | D10#4 |
-| D.11.1 | D11#1 |
-| D.11.2 | D11#2 |
-| D.11.3 | D11#3 |
-| D.11.4 | D11#4 |
+| D.1.1 | d-13#1 |
+| D.1.2 | d-1#1 |
+| D.1.3 | d-1#2 |
+| D.1.4 | d-1#3 |
+| D.2.1 | d-13#2 |
+| D.2.2 | d-2#1 |
+| D.2.3 | d-2#2 |
+| D.2.4 | d-2#3 |
+| D.2.5 | d-2#4 |
+| D.2.6 | d-2#5 |
+| D.3.1 | d-13#3, d-3#1 |
+| D.3.2 | d-13#3, d-3#2 |
+| D.3.3 | d-3#3 |
+| D.3.4 | d-3#3 |
+| D.4.1 | d-12#1 |
+| D.4.2 | d-12#1 |
+| D.4.3 | d-4#1, d-14#1, d-14#2, d-15#1, d-15#2, d-16#1, d-17#1, d-18#1, d-18#5 |
+| D.4.4 | d-18#3 |
+| D.4.5 | d-12#4, d-18#4 |
+| D.4.6 | d-13#4, d-4#1, d-4#2 |
+| D.4.7 | d-18#3 |
+| D.4.8 | d-18#4 |
+| D.5.1 | d-12#2 |
+| D.5.2 | d-5#1 |
+| D.5.3 | d-5#2 |
+| D.5.4 | d-5#3 |
+| D.5.5 | d-5#4 |
+| D.5.6 | d-5#5 |
+| D.6.1 | d-12#3, d-6#1 |
+| D.6.2 | d-6#2 |
+| D.6.3 | d-6#3 |
+| D.6.4 | d-6#3 |
+| D.6.5 | d-6#3 |
+| D.6.6 | d-6#4, d-18#3 |
+| D.7.1 | d-7#1 |
+| D.7.2 | d-7#2 |
+| D.7.3 | d-7#3, d-18#2 |
+| D.7.4 | d-7#4 |
+| D.8.1 | d-8#1 |
+| D.8.2 | d-8#2 |
+| D.8.3 | d-8#3 |
+| D.8.4 | d-8#4 |
+| D.8.5 | d-8#5 |
+| D.8.6 | d-8#6 |
+| D.9.1 | d-9#1 |
+| D.9.2 | d-9#2 |
+| D.9.3 | d-9#3 |
+| D.9.4 | d-9#4 |
+| D.10.1 | d-10#1 |
+| D.10.2 | d-10#2 |
+| D.10.3 | d-10#3 |
+| D.10.4 | d-10#4 |
+| D.11.1 | d-11#1 |
+| D.11.2 | d-11#2 |
+| D.11.3 | d-11#3 |
+| D.11.4 | d-11#4 |
+
+Current bead items no original item names; each exists because the re-cut split contracts, migrations and composition out of the original sprints:
 
 | Current bead item not referenced | Reason |
 | --- | --- |
-| D12#5 | OTLP module/feature registration is a contract split from D6. |
-| D14#4–D17#3 | per-crate migration evidence and documentation. |
+| d-12#5 | OTLP module and feature declarations hoisted into the contract layer so every implementation sprint compiles against one registration (from D.6/D.7 crate setup). |
+| d-14#3, d-14#4 | sc-observe migration tests and sprint documentation (evidence for D.4.3 in that crate). |
+| d-15#3, d-15#4 | binding-runtime migration tests and sprint documentation (evidence for D.4.3 in that crate). |
+| d-16#2, d-16#3 | sc-observability-log migration tests and sprint documentation (evidence for D.4.3 in that crate). |
+| d-17#2, d-17#3 | consumer-check and example migration tests and sprint documentation (evidence for D.4.3 in those targets). |
