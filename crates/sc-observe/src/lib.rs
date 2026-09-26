@@ -37,7 +37,10 @@ use std::sync::{Arc, Condvar, Mutex};
     reason = "the facade retains legacy error names in its public compatibility signatures"
 )]
 use sc_observability::{LogError, Logger, LoggerConfig, RetainedLogPolicy, Running, Stopped};
-use sc_observability_types::typed::{FlushFailure, InitFailure, ShutdownFailure};
+use sc_observability_types::v2::{
+    FlushError as CanonicalFlushError, InitError as CanonicalInitError,
+    ShutdownError as CanonicalShutdownError,
+};
 #[allow(
     deprecated,
     reason = "the facade retains legacy error names in its published compatibility signatures"
@@ -52,6 +55,30 @@ use sc_observability_types::{
 pub use sc_observability_types::{
     ObservabilityHealthReport, ObservationError, ObservationHealthState,
 };
+
+#[allow(
+    deprecated,
+    reason = "the 1.x facade remains a narrow compatibility boundary until D.18 activates canonical exports"
+)]
+fn legacy_init_error(error: CanonicalInitError) -> InitError {
+    InitError(error.into_context())
+}
+
+#[allow(
+    deprecated,
+    reason = "the 1.x facade remains a narrow compatibility boundary until D.18 activates canonical exports"
+)]
+fn legacy_flush_error(error: CanonicalFlushError) -> FlushError {
+    FlushError(error.into_context())
+}
+
+#[allow(
+    deprecated,
+    reason = "the 1.x facade remains a narrow compatibility boundary until D.18 activates canonical exports"
+)]
+fn legacy_shutdown_error(error: CanonicalShutdownError) -> ShutdownError {
+    ShutdownError(error.into_context())
+}
 
 /// Top-level configuration for the observation routing runtime.
 ///
@@ -104,24 +131,30 @@ impl ObservabilityConfig {
         note = "Use ObservabilityConfig::default_for_typed(); see migrate-error-api.md."
     )]
     pub fn default_for(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitError> {
-        Self::default_for_typed(tool_name, log_root).map_err(Into::into)
+        Self::default_for_typed(tool_name, log_root).map_err(legacy_init_error)
     }
 
     /// Builds the documented defaults with a typed construction failure.
-    pub fn default_for_typed(tool_name: ToolName, log_root: PathBuf) -> Result<Self, InitFailure> {
+    pub fn default_for_typed(
+        tool_name: ToolName,
+        log_root: PathBuf,
+    ) -> Result<Self, CanonicalInitError> {
         let env_prefix = EnvPrefix::new(
             tool_name
                 .as_str()
                 .replace(['-', '.'], "_")
                 .to_ascii_uppercase(),
         )
-        .map_err(|err| {
-            InitFailure::observation_initialization(
-                "failed to derive env prefix",
-                Remediation::not_recoverable("use an explicit valid env prefix"),
-            )
-            .cause(err.to_string())
-            .source(Box::new(err))
+        .map_err(|err| CanonicalInitError::Configuration {
+            context: Box::new(
+                ErrorContext::new(
+                    error_codes::OBSERVABILITY_INIT_FAILED,
+                    "failed to derive env prefix",
+                    Remediation::not_recoverable("use an explicit valid env prefix"),
+                )
+                .cause(err.to_string())
+                .source(Box::new(err)),
+            ),
         })?;
         Ok(Self {
             tool_name,
@@ -146,22 +179,25 @@ impl ObservabilityConfig {
         note = "Use ObservabilityConfig::service_name_typed(); see migrate-error-api.md."
     )]
     pub fn service_name(&self) -> Result<ServiceName, InitError> {
-        self.service_name_typed().map_err(Into::into)
+        self.service_name_typed().map_err(legacy_init_error)
     }
 
     /// Derives the logging/telemetry service name with a typed failure.
-    pub fn service_name_typed(&self) -> Result<ServiceName, InitFailure> {
-        ServiceName::new(self.tool_name.as_str()).map_err(|err| {
-            InitFailure::observation_initialization(
-                "failed to derive service name",
-                Remediation::not_recoverable("use a valid tool name"),
-            )
-            .cause(err.to_string())
-            .source(Box::new(err))
+    pub fn service_name_typed(&self) -> Result<ServiceName, CanonicalInitError> {
+        ServiceName::new(self.tool_name.as_str()).map_err(|err| CanonicalInitError::Configuration {
+            context: Box::new(
+                ErrorContext::new(
+                    error_codes::OBSERVABILITY_INIT_FAILED,
+                    "failed to derive service name",
+                    Remediation::not_recoverable("use a valid tool name"),
+                )
+                .cause(err.to_string())
+                .source(Box::new(err)),
+            ),
         })
     }
 
-    fn logger_config_typed(&self) -> Result<LoggerConfig, InitFailure> {
+    fn logger_config_typed(&self) -> Result<LoggerConfig, CanonicalInitError> {
         let mut config =
             LoggerConfig::default_for(self.service_name_typed()?, self.log_root.clone());
         config.queue_capacity = self.queue_capacity;
@@ -275,11 +311,11 @@ impl Observability {
         note = "Use Observability::new_typed(); see migrate-error-api.md."
     )]
     pub fn new(config: ObservabilityConfig) -> Result<Self, InitError> {
-        Self::new_typed(config).map_err(Into::into)
+        Self::new_typed(config).map_err(legacy_init_error)
     }
 
     /// Builds a runtime using typed construction and initialization failures.
-    pub fn new_typed(config: ObservabilityConfig) -> Result<Self, InitFailure> {
+    pub fn new_typed(config: ObservabilityConfig) -> Result<Self, CanonicalInitError> {
         Self::builder(config).build_typed()
     }
 
@@ -405,7 +441,7 @@ impl Observability {
         note = "Use Observability::flush_typed(); see migrate-error-api.md."
     )]
     pub fn flush(&self) -> Result<(), FlushError> {
-        self.flush_typed().map_err(Into::into)
+        self.flush_typed().map_err(legacy_flush_error)
     }
 
     /// Flushes the attached logger with a typed failure.
@@ -414,7 +450,7 @@ impl Observability {
     ///
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing its registered sinks.
-    pub fn flush_typed(&self) -> Result<(), FlushFailure> {
+    pub fn flush_typed(&self) -> Result<(), CanonicalFlushError> {
         let mut logger = self.logger.lock().expect("observability logger poisoned");
         while matches!(&*logger, LoggerHandle::ShuttingDown) {
             #[cfg(test)]
@@ -427,7 +463,13 @@ impl Observability {
                 .expect("observability logger poisoned");
         }
         match &*logger {
-            LoggerHandle::Running(logger) => logger.flush_typed(),
+            LoggerHandle::Running(logger) => {
+                logger
+                    .flush_typed()
+                    .map_err(|error| CanonicalFlushError::Drain {
+                        context: error.into_context(),
+                    })
+            }
             LoggerHandle::ShuttingDown | LoggerHandle::Stopped(_) => Ok(()),
         }
     }
@@ -451,7 +493,7 @@ impl Observability {
         note = "Use Observability::shutdown_typed(); see migrate-error-api.md."
     )]
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
-        self.shutdown_typed().map_err(Into::into)
+        self.shutdown_typed().map_err(legacy_shutdown_error)
     }
 
     /// Shuts down the routing runtime with a typed failure. Repeated calls are
@@ -461,7 +503,7 @@ impl Observability {
     ///
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// shutting down its writer runtime.
-    pub fn shutdown_typed(&self) -> Result<(), ShutdownFailure> {
+    pub fn shutdown_typed(&self) -> Result<(), CanonicalShutdownError> {
         if self.shutdown.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
@@ -707,21 +749,28 @@ impl ObservabilityBuilder {
         note = "Use ObservabilityBuilder::build_typed(); see migrate-error-api.md."
     )]
     pub fn build(self) -> Result<Observability, InitError> {
-        self.build_typed().map_err(Into::into)
+        self.build_typed().map_err(legacy_init_error)
     }
 
     /// Finalizes registration and constructs the runtime with typed failures.
-    pub fn build_typed(self) -> Result<Observability, InitFailure> {
+    pub fn build_typed(self) -> Result<Observability, CanonicalInitError> {
         if self.subscribers.is_empty() && self.projections.is_empty() {
-            return Err(InitFailure::observation_initialization(
-                "at least one subscriber or projector route must be registered",
-                Remediation::recoverable(
-                    "register a subscriber or projector before building observability",
-                    ["add at least one route for the observation types you emit"],
-                ),
-            ));
+            return Err(CanonicalInitError::Configuration {
+                context: Box::new(ErrorContext::new(
+                    error_codes::OBSERVABILITY_INIT_FAILED,
+                    "at least one subscriber or projector route must be registered",
+                    Remediation::recoverable(
+                        "register a subscriber or projector before building observability",
+                        ["add at least one route for the observation types you emit"],
+                    ),
+                )),
+            });
         }
-        let logger = Logger::new_typed(self.config.logger_config_typed()?)?;
+        let logger = Logger::new_typed(self.config.logger_config_typed()?).map_err(|error| {
+            CanonicalInitError::Runtime {
+                context: error.into_context(),
+            }
+        })?;
         Ok(Observability {
             logger: Mutex::new(LoggerHandle::Running(logger)),
             logger_changed: Condvar::new(),
@@ -774,8 +823,7 @@ mod tests {
     use super::*;
     use sc_observability::{LogSink, LoggerConfig, SinkHealth, SinkHealthState, SinkRegistration};
     use sc_observability_types::typed::{
-        ClassifiedError, FlushFailureKind, InitFailureKind, SubscriberFailure,
-        TypedObservationSubscriber, legacy_subscriber,
+        SubscriberFailure, TypedObservationSubscriber, legacy_subscriber,
     };
     use sc_observability_types::{
         ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
@@ -1274,7 +1322,11 @@ mod tests {
         .build_typed() else {
             panic!("empty routes must fail");
         };
-        assert_eq!(empty.kind(), InitFailureKind::ObservationInitialization);
+        assert!(matches!(&empty, CanonicalInitError::Configuration { .. }));
+        assert_eq!(
+            empty.diagnostic().code,
+            error_codes::OBSERVABILITY_INIT_FAILED
+        );
 
         let mut config =
             ObservabilityConfig::default_for_typed(tool_name(), temp_path("typed-init-failure"))
@@ -1290,7 +1342,31 @@ mod tests {
         else {
             panic!("zero queue capacity must fail");
         };
-        assert_eq!(error.kind(), InitFailureKind::LoggerInitialization);
+        assert!(matches!(&error, CanonicalInitError::Runtime { .. }));
+    }
+
+    #[test]
+    fn legacy_compatibility_boundary_preserves_canonical_source_context() {
+        let legacy = legacy_flush_error(CanonicalFlushError::Drain {
+            context: Box::new(
+                ErrorContext::new(
+                    ErrorCode::new_static("SC_OBSERVE_TEST_DRAIN"),
+                    "canonical drain failed",
+                    Remediation::not_recoverable("inspect the drain failure"),
+                )
+                .source(Box::new(std::io::Error::other(
+                    "canonical drain fixture source",
+                ))),
+            ),
+        });
+
+        assert_eq!(legacy.diagnostic().code.as_str(), "SC_OBSERVE_TEST_DRAIN");
+        assert!(
+            std::error::Error::source(&legacy)
+                .expect("legacy boundary retains canonical source")
+                .to_string()
+                .contains("canonical drain fixture source")
+        );
     }
 
     #[test]
@@ -1509,7 +1585,9 @@ mod tests {
             let shutdown_runtime = runtime.clone();
             let shutdown = std::thread::spawn(move || {
                 let result = if legacy {
-                    shutdown_runtime.shutdown().map_err(ShutdownFailure::from)
+                    shutdown_runtime
+                        .shutdown()
+                        .map_err(|error| CanonicalShutdownError::Drain { context: error.0 })
                 } else {
                     shutdown_runtime.shutdown_typed()
                 };
@@ -1534,7 +1612,9 @@ mod tests {
             let flush_runtime = runtime.clone();
             let flush = std::thread::spawn(move || {
                 let result = if legacy {
-                    flush_runtime.flush().map_err(FlushFailure::from)
+                    flush_runtime
+                        .flush()
+                        .map_err(|error| CanonicalFlushError::Drain { context: error.0 })
                 } else {
                     flush_runtime.flush_typed()
                 };
@@ -1737,8 +1817,11 @@ mod tests {
         let Err(typed_error) = typed_runtime.flush_typed() else {
             panic!("typed flush must report sink failure");
         };
-        assert_eq!(legacy_error.kind(), FlushFailureKind::LoggerFlush);
-        assert_eq!(typed_error.kind(), FlushFailureKind::LoggerFlush);
+        assert!(matches!(&typed_error, CanonicalFlushError::Drain { .. }));
+        assert_eq!(
+            legacy_error.diagnostic().code,
+            typed_error.diagnostic().code
+        );
         typed_second_flush_rx
             .recv_timeout(std::time::Duration::from_secs(1))
             .expect("bounded typed second flush completion");

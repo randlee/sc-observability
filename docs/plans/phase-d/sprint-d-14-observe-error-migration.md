@@ -59,6 +59,23 @@ Created/staged by `obs-d-14`, owned by `obs-d-18` from wave 3; after this bead c
 - `NFR-004` and `ADR-004` constrain this crate to remain free of OTLP transport complexity.
 - `ADR-014` is retained for result-preserving error boundaries consumed by downstream language-facing callers.
 
+## Implementation evidence
+
+- `*_typed` construction and lifecycle APIs now return the staged
+  `sc_observability_types::v2::{InitError, FlushError, ShutdownError}` values.
+  Validation uses `InitError::Configuration`, logger startup uses
+  `InitError::Runtime`, and logger drain failures use `FlushError::Drain`.
+- The retained 1.x methods form the only compatibility boundary: they consume
+  the canonical error's original boxed context without rebuilding its
+  diagnostic or source chain. `ObservationError::{Shutdown, QueueFull,
+  RoutingFailure}` remains the runtime admission/routing guard contract.
+- Focused tests assert canonical variants, stable diagnostic codes, and the
+  original source context across the canonical-to-legacy compatibility
+  boundary. The currently
+  published subscriber/projector and `LogSink` traits still expose their 1.x
+  callback signatures; their final public-surface activation is handed to
+  `obs-d-18`.
+
 
 ## Acceptance criteria
 
