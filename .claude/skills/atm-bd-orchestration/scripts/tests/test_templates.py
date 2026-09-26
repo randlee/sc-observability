@@ -20,6 +20,17 @@ class TemplateContractTests(unittest.TestCase):
         self.assertIn("- difficulty", text)
         self.assertIn('"important": 2', text)
         self.assertIn('"difficulty"', text)
+        self.assertIn("## Deliverables\\n1.", text)
+
+    def test_sanity_assignment_has_pr_and_exact_checks(self):
+        text = (ROOT / "templates/dev-sanity-template.xml.j2").read_text()
+        self.assertIn("- pr_number", text)
+        self.assertIn("- pr_url", text)
+        self.assertIn("gh pr view", text)
+        self.assertIn("SANITY.ZERO_DELTA", text)
+
+    def test_workflow_issue_template_exists(self):
+        self.assertTrue((ROOT / "templates/workflow-issue-bead.json.j2").exists())
 
     def test_assignment_examples_render_strictly(self):
         examples = ROOT / "examples"
