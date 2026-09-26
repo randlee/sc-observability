@@ -14,8 +14,8 @@ Generated projection of `obs-d-15`; the bead is authoritative.
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-15-binding-runtime-error-migration`
 - PR target (merge order only): `sprint/d-14-observe-error-migration`
 - Blocked by: `obs-d-12-sanity`
-- Requirements: LAY-001, LAY-002, LAY-003, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-007, LOG-010, LOG-014, LOG-015, LOG-016, LOG-017, LOG-018, LOG-019, LOG-023, LOG-037, LOG-038, LOG-047, LOG-048, NFR-001, NFR-002, NFR-005, NFR-006, NFR-007, NFR-009, NFR-012, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, PHB-012, PHB-013, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
-- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-014, ADR-015, ADR-017
+- Requirements: LAY-001, LAY-002, LAY-003, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-014, LOG-015, LOG-016, LOG-018, LOG-023, LOG-037, LOG-038, LOG-046, LOG-047, LOG-048, NFR-001, NFR-002, NFR-005, NFR-006, NFR-007, NFR-009, NFR-012, PHB-002, PHB-003, PHB-004, PHB-005, PHB-006, PHB-007, PHB-008, PHB-009, PHB-010, PHB-011, PHB-012, PHB-013, PHD-001, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-023, TYP-024, TYP-030, TYP-031, TYP-035, TYP-036, TYP-039
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-014, ADR-015, ADR-017
 - Owned paths (metadata projection):
   - `crates/sc-observability-binding-runtime/src/**`
   - `docs/plans/phase-d/sprint-d-15-binding-runtime-error-migration.md`
@@ -23,20 +23,19 @@ Generated projection of `obs-d-15`; the bead is authoritative.
 ## Deliverables
 
 1. Migrate the Callback, conversion, coordinator, operation, spawn, sync, and timer errors in sc-observability-binding-runtime to the D.12 non-exhaustive error enums carrying Box<ErrorContext>.
-2. Remove local legacy error wrappers and update every call site within sc-observability-binding-runtime.
+2. Retype every owned call site while preserving native ownership, DTO outcomes, synchronization state, and observer timeout semantics.
 3. Update the crate tests to assert typed variants, stable diagnostics, and preserved source context.
 
 
 ## This Sprint Does Not Close
 
-Workspace-wide wrapper removal, public re-exports, and release/API approval are closed by D.18.
-Update the sprint doc as explanatory evidence alongside code; documentation is not a separate closure gate.
+Canonical boundary activation, workspace-wide compatibility retirement, public re-exports, and release/API approval are owned by obs-d-18. The sprint doc is explanatory evidence, not a separate closure gate.
 
 ## Design
 
 ## Seven-family migration recipe
 
-Consume obs-d-12 cause mapping/ErrorContext (ADR-017), preserving the binding runtime's existing operation/DTO semantics (PHB-002/010–013, ADR-014/015). This is a cause mapping, not a blanket conversion of every local runtime error to a sink failure.
+Consume obs-d-12 cause mapping/ErrorContext (ADR-017, PHD-001), preserving the binding runtime's existing operation/DTO semantics (PHB-002/010–013, ADR-014/015). This is a cause mapping, not a blanket conversion of every local runtime error to a sink failure.
 
 | Family | Mapping/action | Fixture |
 | --- | --- | --- |
@@ -48,11 +47,11 @@ Consume obs-d-12 cause mapping/ErrorContext (ADR-017), preserving the binding ru
 | sync | preserve local synchronization state error and its cause; map only at the existing operation boundary to the relevant flush/shutdown error | concurrent completion tests |
 | timer | deadline -> operation-specific FlushError::Drain or ShutdownError::Timeout; observer cancellation never cancels native work | timeout/cancellation tests |
 
-All seven retain their local structural error families where not among the nine replaced wrappers; remove only duplicate legacy shared wrappers/classification. Migrate neutral model consumers and DTO conversion calls in this crate without changing schema ownership. Context keys live in bounded Diagnostic.details. No blanket TryLogFailure -> sink write conversion: preserve invalid-event/queue-full/shutdown distinctions.
+All seven retain their local structural error families where they are not canonical shared errors; do not add duplicate shared wrappers or classifiers. Migrate neutral model consumers and DTO conversion calls in this crate without changing schema ownership. Context keys live in bounded Diagnostic.details. No blanket TryLogFailure -> sink write conversion: preserve invalid-event/queue-full/shutdown distinctions.
 
-## Replace vs coexist
+## Canonical boundary and handoff
 
-The final ADR-017 surface replaces the nine wrappers; it does not permanently coexist with them. During this boundary wave use obs-d-12's v2 definitions and retain the minimal existing legacy-facing conversion needed for unfinished sibling consumers to compile and pass tests. No new legacy feature or duplicate classifier is introduced. D.18 receives the explicit handoff and removes all transitional wrappers/adapters when activating canonical exports. References above to removal/replacement apply to this bead's migrated v2 implementation; old public entry-point compatibility is retired only by D.18. Every boundary close still has a green all-features workspace check and workspace tests.
+This bead retargets owned call sites and tests to the accepted ADR-017 surface. Existing transitional compatibility is consumed by obs-d-18, which owns canonical activation and final compatibility retirement. Contract ties are TYP-035/036, LOG-046, and LAY-006.
 
 The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
@@ -66,8 +65,8 @@ Created/staged by obs-d-15, owned by obs-d-18 from wave 3; after this bead close
 
 ## Acceptance criteria
 
-- [ ] `cargo test -p sc-observability-binding-runtime --locked` executes all seven family fixtures named in the recipe and checks code, remediation, typed source and tagged DTO outcome (D1/D3).
-- [ ] The owned src files have no obsolete shared wrapper construction/classification; native ownership, retained shutdown results and observer timeout semantics remain unchanged (D2).
-- [ ] This sprint does not close language wrapper/schema generation or release/API proof; D.18 does.
+- [ ] `cargo test -p sc-observability-binding-runtime --locked` executes all seven family fixtures and checks code, remediation, typed source, and tagged DTO outcome (obs-d-15#1/#3).
+- [ ] Owned source preserves native ownership, shutdown results, observer timeout semantics, and canonical shared error usage (obs-d-15#2).
+- [ ] Language wrapper/schema generation, canonical activation, and release/API proof remain with obs-d-18.
 
-- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; D.18 additionally runs all-features release tests and semver/removal gates.
+- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; obs-d-18 additionally runs all-features release tests and semver/removal gates.
