@@ -34,4 +34,6 @@ Contract owner for shared logging public signatures.
 
 ## Acceptance criteria
 
-boundary:logging: public signatures compile; run target crate tests and boundary validation.
+- `cargo test -p sc-observability-log` passes with BridgeEventPolicy, AttachmentOptions, and LogAttachment contracts.
+- `cargo test -p sc-observability --test log_settings` passes with the LogSettings contract.
+- `rg "register_typed_sink|SinkRegistration::typed" crates/sc-observability` finds the typed-sink API.

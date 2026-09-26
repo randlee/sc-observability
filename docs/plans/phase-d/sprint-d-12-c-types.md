@@ -39,4 +39,6 @@ Contract owner for shared types and OTLP module declarations.
 
 ## Acceptance criteria
 
-boundary:sc-observability-types: contract types and fixture compile; run workspace build and boundary validation.
+- `cargo test -p sc-observability-types --test neutral_contracts` passes with the typed-error and neutral-signal contract.
+- `cargo check -p sc-observability-otlp --all-features` passes using declared module and feature contracts.
+- `rg "trait Exporter|struct ExporterSet|struct RetryPolicy" crates/sc-observability-types crates/sc-observability-otlp` finds the declarations.
