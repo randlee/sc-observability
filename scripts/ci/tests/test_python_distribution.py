@@ -90,6 +90,10 @@ class DistributionTests(unittest.TestCase):
                 inspect_wheel(wheel, {'wheel_platform': 'win_amd64'}, '1.4.0')
             with self.assertRaisesRegex(DistributionError, 'wrong wheel ABI/platform'):
                 inspect_wheel(wheel, {'wheel_platform': 'manylinux_2_28_x86_64'}, '1.4.0')
+            cp311 = Path(temporary) / 'sc_observability-1.4.0-cp311-abi3-win_amd64.whl'
+            cp311.write_bytes(wheel.read_bytes())
+            with self.assertRaisesRegex(DistributionError, 'wrong wheel ABI/platform'):
+                inspect_wheel(cp311, {'wheel_platform': 'win_amd64'}, '1.4.0')
 
     def test_debug_contract_reaches_isolated_python_and_rejects_invalid_values(self):
         import subprocess
@@ -171,13 +175,17 @@ class DistributionTests(unittest.TestCase):
         with self.assertRaises(DistributionError):
             fault_paths({'fault_pytest_paths': ['tests/']})
 
-    def test_policy_preserves_all_twenty_five_cells(self):
+    def test_policy_preserves_base_and_d18_arm64_matrix_sizes(self):
         path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
         policy = json.loads(path.read_text())
         self.assertEqual(policy['interpreters'], ['3.10', '3.11', '3.12', '3.13', '3.14'])
         self.assertEqual({p['id'] for p in policy['platforms']},
                          {'macos-arm64', 'macos-x86_64', 'linux-x86_64', 'linux-aarch64', 'windows-x86_64'})
         self.assertEqual(len(policy['interpreters']) * len(policy['platforms']), 25)
+        policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
+                                    'wheel_platform': 'win_arm64',
+                                    'rust_target': 'aarch64-pc-windows-msvc'})
+        self.assertEqual(len(policy['interpreters']) * len(policy['platforms']), 30)
 
     def test_frozen_inventory_rejects_tampering_missing_lock_and_extra_files(self):
         required = ('Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'pyproject.toml',
@@ -231,6 +239,7 @@ class DistributionTests(unittest.TestCase):
                 with tarfile.open(sdist, 'w:gz') as archive:
                     archive.add(source, arcname='source')
                 common = {'status': 'passed', 'source_commit': 'a' * 40, 'sdist_sha256': digest(sdist),
+                          'expected_requires_python': '>=3.10',
                           'isolation': {'checkout': True, 'cargo_cache': True, 'network': True},
                           'wheel': {'sha256': 'fixture'}}
                 for index, platform in enumerate(policy['platforms']):
@@ -251,13 +260,19 @@ class DistributionTests(unittest.TestCase):
         from validate_python_distribution import aggregate
         policy_path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
         policy = json.loads(policy_path.read_text())
+        policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
+                                    'wheel_platform': 'win_arm64',
+                                    'rust_target': 'aarch64-pc-windows-msvc'})
         for mutation in ('missing', 'duplicate', 'mixed-source'):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
+                policy_fixture = root / 'policy.json'
+                policy_fixture.write_text(json.dumps(policy))
                 sdist = root / 'fixture.tar.gz'
                 sdist.write_bytes(b'fixture')
                 common = {'status': 'passed', 'source_commit': 'a' * 40,
                           'sdist_sha256': digest(sdist),
+                          'expected_requires_python': '>=3.10',
                           'isolation': {'checkout': True, 'cargo_cache': True, 'network': True}}
                 for index, platform in enumerate(policy['platforms']):
                     directory = root / f'build-{index}'; directory.mkdir()
@@ -274,4 +289,4 @@ class DistributionTests(unittest.TestCase):
                             record['python'] = '3.11'
                         (directory / 'cell-result.json').write_text(json.dumps(record))
                 with self.assertRaises(DistributionError):
-                    aggregate(Namespace(policy=policy_path, evidence=root, sdist=sdist, source_commit='a' * 40))
+                    aggregate(Namespace(policy=policy_fixture, evidence=root, sdist=sdist, source_commit='a' * 40))

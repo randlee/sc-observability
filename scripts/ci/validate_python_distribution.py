@@ -379,12 +379,21 @@ def aggregate(args) -> None:
     cell_paths = list(args.evidence.rglob('cell-result.json'))
     builds = [json.loads(path.read_text()) for path in build_paths]
     cells = [json.loads(path.read_text()) for path in cell_paths]
-    if len(policy['platforms']) != 6 or len(builds) != 6 or len(cells) != 30:
-        raise DistributionError('all six builds and all 30 execution cells are required')
+    platform_count = len(policy['platforms'])
+    platform_ids = {platform['id'] for platform in policy['platforms']}
+    if platform_count == 6:
+        arm64 = next((platform for platform in policy['platforms'] if platform['id'] == 'windows-arm64'), None)
+        if arm64 is None or (arm64.get('machine'), arm64.get('wheel_platform'), arm64.get('rust_target')) != (
+                'ARM64', 'win_arm64', 'aarch64-pc-windows-msvc'):
+            raise DistributionError('Windows ARM64 policy handoff is incomplete')
+    if len(platform_ids) != platform_count:
+        raise DistributionError('platform policy contains duplicate identifiers')
+    if platform_count not in (5, 6) or len(builds) != platform_count or len(cells) != platform_count * len(policy['interpreters']):
+        raise DistributionError('all policy builds and installed-suite cells are required')
     if {(cell['platform'], cell['python']) for cell in cells} != expected:
         raise DistributionError('matrix contains missing, duplicate or unsupported cells')
     wheel_hashes = {build['platform']: build['wheel']['sha256'] for build in builds}
-    if len(wheel_hashes) != 5:
+    if len(wheel_hashes) != platform_count:
         raise DistributionError('missing or duplicate platform wheels')
     for item in builds + cells:
         if (item.get('status') != 'passed' or item.get('development_only') or item.get('source_commit') != args.source_commit
@@ -484,7 +493,7 @@ def aggregate(args) -> None:
             shutil.copyfile(artifact, dist / artifact.name)
     if getattr(args, 'output', None):
         args.output.write_text(json.dumps(publication, indent=2) + '\n')
-    print('B4A_QUALIFIED: six ABI wheels, 30 installed full-suite cells, offline sdist and embedding')
+    print(f'B4A_QUALIFIED: {platform_count} ABI wheels, {platform_count * len(policy["interpreters"])} installed full-suite cells, offline sdist and embedding')
 
 
 def main() -> None:
