@@ -16,7 +16,7 @@ allowed_dependents = []
 allowed_dependencies = ["sc-observability", "sc-observability-types", "sc-observe"]
 # Reviewed Phase-D transport pins: reqwest is legacy HTTP/JSON only; SDK
 # dependencies are independently feature-gated by the owner manifest.
-transport_pins = ["reqwest=0.12.28", "httpdate=1.0.3", "getrandom=0.4.3", "opentelemetry=0.33.0", "opentelemetry_sdk=0.33.0", "opentelemetry-otlp=0.33.0", "tokio=1"]
+transport_pins = ["reqwest=0.12.28", "httpdate=1.0.3", "getrandom=0.4.3", "opentelemetry=0.33.0", "opentelemetry_sdk=0.33.0", "opentelemetry-otlp=0.33.0", "tokio=1.53.1"]
 forbidden_edges = []
 [references]
 scope = "outside_owner_crate"
