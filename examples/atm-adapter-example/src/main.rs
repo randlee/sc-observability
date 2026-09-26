@@ -1,4 +1,5 @@
 //! Runnable ATM adapter example built on the shared observability crates.
+#![deny(deprecated)]
 
 mod constants;
 
@@ -428,11 +429,10 @@ fn telemetry_to_projection_failure(
 ) -> ProjectionFailure {
     match error {
         sc_observability_types::TelemetryError::Shutdown => {
-            ProjectionFailure::from_context(Box::new(sc_observability_types::ErrorContext::new(
-                sc_observability_types::ErrorCode::new_static("SC_ATM_EXAMPLE_SHUTDOWN"),
+            ProjectionFailure::telemetry_closed(
                 "telemetry runtime is shut down",
                 Remediation::not_recoverable("do not project telemetry after shutdown"),
-            )))
+            )
         }
         sc_observability_types::TelemetryError::ExportFailure(context) => {
             ProjectionFailure::from_context(context)

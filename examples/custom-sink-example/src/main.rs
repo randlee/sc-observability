@@ -2,6 +2,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+#[allow(deprecated)]
 use sc_observability::{
     ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, Level, LogEvent,
     LogFilter, LogSink, LogSinkError, LoggerBuilder, LoggerConfig, OutcomeLabel,
@@ -48,6 +49,12 @@ struct AuditSink {
     health: Mutex<SinkHealth>,
 }
 
+#[derive(Clone, Copy)]
+enum SinkOperation {
+    Write,
+    Flush,
+}
+
 impl AuditSink {
     fn new() -> Self {
         Self {
@@ -59,20 +66,28 @@ impl AuditSink {
         }
     }
 
-    fn mark_failure<E>(&self, error: E) -> LogSinkError
+    #[allow(deprecated)]
+    fn mark_failure<E>(&self, error: E, operation: SinkOperation) -> LogSinkError
     where
         E: std::error::Error + Send + Sync + 'static,
     {
         let message = error.to_string();
         let context = ErrorContext::new(
-            sc_observability::error_codes::LOGGER_SINK_WRITE_FAILED,
-            "custom sink write failed",
+            match operation {
+                SinkOperation::Write => sc_observability::error_codes::LOGGER_SINK_WRITE_FAILED,
+                SinkOperation::Flush => sc_observability::error_codes::LOGGER_MAINTENANCE_FAILED,
+            },
+            match operation {
+                SinkOperation::Write => "custom sink write failed",
+                SinkOperation::Flush => "custom sink flush failed",
+            },
             Remediation::recoverable(
-                "inspect stderr output permissions and retry the custom sink write",
-                ["retry the write"],
+                "inspect stderr output permissions and retry the custom sink operation",
+                ["retry the sink operation"],
             ),
         )
-        .cause(message);
+        .cause(message)
+        .source(Box::new(error));
 
         let mut health = self.health.lock().expect("custom sink health poisoned");
         health.state = SinkHealthState::DegradedDropping;
@@ -81,6 +96,7 @@ impl AuditSink {
     }
 }
 
+#[allow(deprecated)]
 impl LogSink for AuditSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         let mut stderr = io::stderr().lock();
@@ -91,8 +107,18 @@ impl LogSink for AuditSink {
             event.action.as_str(),
             event.message.as_deref().unwrap_or("<no-message>")
         )
-        .map_err(|err| self.mark_failure(err))?;
+        .map_err(|err| self.mark_failure(err, SinkOperation::Write))?;
+        let mut health = self.health.lock().expect("custom sink health poisoned");
+        health.state = SinkHealthState::Healthy;
+        health.last_error = None;
+        Ok(())
+    }
 
+    fn flush(&self) -> Result<(), LogSinkError> {
+        io::stderr()
+            .lock()
+            .flush()
+            .map_err(|err| self.mark_failure(err, SinkOperation::Flush))?;
         let mut health = self.health.lock().expect("custom sink health poisoned");
         health.state = SinkHealthState::Healthy;
         health.last_error = None;
@@ -161,26 +187,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = ServiceName::new("custom-sink-example")?;
     let root = std::env::temp_dir().join("sc-observability-custom-sink-example");
     let mut builder =
-        LoggerBuilder::new(LoggerConfig::default_for(service.clone(), PathBuf::from(root)))?;
+        LoggerBuilder::new_typed(LoggerConfig::default_for(service.clone(), PathBuf::from(root)))?;
 
     builder.register_sink(
         SinkRegistration::new(Arc::new(AuditSink::new())).with_filter(Arc::new(AuditOnly)),
     );
-    let logger = builder.build();
+    let logger = builder.build_typed()?;
 
-    logger.log(build_event(
+    logger.log_typed(build_event(
         service.clone(),
         TARGET_AUDIT,
         ACTION_STARTUP,
         MESSAGE_AUDIT_ACCEPTED,
     ))?;
-    if let Err(err) = logger.try_log(build_event(
+    if let Err(err) = logger.try_log_typed(build_event(
         service.clone(),
         TARGET_CORE,
         ACTION_HEARTBEAT,
         MESSAGE_FILE_ONLY,
     )) {
-        logger.log(build_health_event(
+        logger.log_typed(build_health_event(
             service.clone(),
             Level::Warn,
             ACTION_WRITER_WARNING,
@@ -188,10 +214,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             serde_json::Map::from_iter([(FIELD_ERROR.to_string(), json!(err.to_string()))]),
         ))?;
     }
-    logger.flush()?;
+    logger.flush_typed()?;
 
     let health = logger.health();
-    logger.log(build_health_event(
+    logger.log_typed(build_health_event(
         service.clone(),
         Level::Info,
         ACTION_LOGGER_HEALTH,
@@ -220,7 +246,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ))?;
 
     if health.queue_full_drops_total != 0 {
-        logger.log(build_health_event(
+        logger.log_typed(build_health_event(
             service.clone(),
             Level::Warn,
             ACTION_WRITER_WARNING,
@@ -233,7 +259,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if health.writer_state != WriterState::Running {
-        logger.log(build_health_event(
+        logger.log_typed(build_health_event(
             service.clone(),
             Level::Warn,
             ACTION_WRITER_WARNING,
@@ -246,7 +272,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Some(error) = &health.last_writer_error {
-        logger.log(build_health_event(
+        logger.log_typed(build_health_event(
             service.clone(),
             Level::Warn,
             ACTION_WRITER_WARNING,
@@ -270,7 +296,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             Level::Warn
         };
-        logger.log(build_health_event(
+        logger.log_typed(build_health_event(
             service.clone(),
             level,
             ACTION_SINK_HEALTH,
@@ -282,7 +308,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))?;
     }
 
-    logger.flush()?;
+    logger.flush_typed()?;
     let _stopped = logger.shutdown();
 
     Ok(())

@@ -2,6 +2,7 @@
 //! `sc-observability-log` dependency: this package declares no other
 //! `[dependencies]`, so any expansion path outside `::sc_observability_log`,
 //! `::core` or `::std` fails to resolve.
+#![deny(deprecated)]
 
 use sc_observability_log::{Level, debug, error, event, info, instrument, trace, warn};
 
