@@ -481,14 +481,13 @@ record the proposed architecture. No item below asserts implementation closure.
 - PHB-006 Existing adoption guidance shall cover incremental upgrades, exact
   symbol mappings, custom extension adapters, typed matching, diagnostic
   preservation and verification. A downstream fixture shall execute that guide.
-  B.2 qualification is release preflight run on demand before publishing, not
-  a sprint or integration PR gate; its original 1.4.x release obligation is satisfied.
+  Qualification follows the [ADR-013 preflight amendment](architecture.md#adr-013-owner-controlled-shared-runtime-level).
 
 The B.1e implementation record supplies the exact migration routing, warning
 inventory, downstream Cargo fixtures and JSON diagnostic validator for
 PHB-005/PHB-006. The typed methods and failures remain additive, and the
-warning rollout is active at the selected `1.4.0` next-minor candidate. B.2
-qualifies the B.1e result; B.7 alone publishes it. No removal schedule or
+warning rollout was qualified for the selected `1.4.0` next-minor candidate. B.2
+qualified the B.1e result for that release; B.7 alone owned publication. No removal schedule or
 major-release claim is introduced.
 - PHB-007 Issue #97 shall add one core-owned effective level shared by every
   producer path, with immutable LoggerConfig baseline and owner-only temporary
@@ -529,14 +528,13 @@ major-release claim is introduced.
   results are observable; timed-out flush has no prior-result retrieval API,
   and bridge-native timeout follows the documented separate adapter/native slots.
 - PHB-014 Release closure shall require downloadable immutable artifacts and
-  registry-only consumer evidence. B.P2 shall qualify immutable staged
-  runtime-level artifacts before B.P3 BTIT integration; B.7 alone publishes
-  those artifacts and runs registry-only consumer proof. Migrated Rust companions
+  registry-only consumer evidence. For the 1.4.x release, B.P2 qualified immutable
+  staged runtime-level artifacts before B.P3 BTIT integration; B.7 alone owned
+  publication and registry-only consumer proof. Migrated Rust companions
   and subsequent language artifacts have their own release gates. Go, Node.js
   and sc-runtime process/interpreter topology remain deferred. #96 configuration
   loading is independent.
-  Release preflight uses B.P2 qualification on demand before publishing, not
-  as a sprint or integration PR gate; its original 1.4.x release obligation is satisfied.
+  Qualification follows the [ADR-013 preflight amendment](architecture.md#adr-013-owner-controlled-shared-runtime-level).
 
 ## 11. Phase C Additions — Proposed for Review
 

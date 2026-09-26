@@ -18,7 +18,7 @@ explicit dispatch and reusable/non-PR qualification run all
 platforms.
 Relevant-path filters apply before jobs start. An intermediate PR, including one into `integrate/*`, retains
 Ubuntu coverage; Windows/macOS and real IPC qualification run at integration.
-Aggregators run under the same condition as their required platform proofs;
+For PR-triggered workflows, aggregators run under the same condition as their required platform proofs;
 no aggregator accepts a partial platform inventory. Release workflows and
 publication checks remain strict.
 
@@ -71,6 +71,19 @@ packages are in use by BTIT; running their published-package checks on Phase D
 sprint changes is inappropriate because the published 1.4.x dependencies lack
 the new API. The package-stage, staged-consumer and complete-platform evidence
 jobs, scripts, fixtures and tests remain available for release qualification.
+The publisher runs the retained checks by dispatching both workflows on the
+candidate ref before publishing and verifying successful completion. B.2 runs
+`test_log_staging.py` and `test_generation_provenance.py`; B.P2 runs
+`test_validate_runtime_level_qualification_metadata.py`,
+`test_validate_runtime_level_platform_evidence.py`,
+`validate_runtime_level_qualification_metadata.py` and the `rustfmt --check`
+check on `scripts/ci/fixtures/runtime-level-consumer/*.rs`. These checks run
+only on dispatch in CI. No PR workflow discovers all of `scripts/ci/tests`:
+`ci.yml` runs `test_prepare_release_staged_packages` and
+`test_publish_retry_idempotency`, while other PR workflows select their own
+binding, packaging and platform suites. Those suites do not run the six
+preflight checks listed here. The preflight aggregators always run after their
+platform consumers succeed, retaining complete-platform evidence requirements.
 
 ## Retired historical gates
 
