@@ -146,6 +146,8 @@ Source: the 56 numbered deliverables of D.1 to D.11 as written in develop's `doc
 
 obs-d-19 #1–3 own DTO/schema/generated-model migration formerly included in obs-d-18 #5; obs-d-20 #1–3 own language adapter migration. obs-d-18 #5 now qualifies their real composition with logging and transport artifacts. Former obs-d-11 #1–4 map to obs-d-10 #5–8. Per-sprint document projection is supporting review material, not an independent closure gate.
 
+Measured against the 56 original deliverables (lead, 2026-09-26, fix round 2): nine items are additions with no original row: d-4#2, d-14#3, d-15#3, d-16#2 and d-17#2 retype the local tests of each migration boundary; d-18#5 qualifies the composed d-19/d-20 outputs; d-19#2 and d-19#3 update the schema generator, conformance corpus and typing checks; d-20#3 updates transport/runtime/typing fixtures and examples. Every other item in every bead has an original row above.
+
 ## Acceptance criteria
 
 - [ ] every sprint of the phase closed

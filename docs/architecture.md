@@ -1174,7 +1174,7 @@ ADR navigation index (status is recorded in each decision below):
 
 ### ADR-019: Phase D Implementation Decisions
 
-- **Status**: Proposed; accepted when the plan-fix PR merges.
+- **Status**: Accepted 2026-09-26 by the technical lead (PR #227 is the acceptance record).
 - **Context**: ADR-017/018 establish the 2.0 surface and dual transports. The
   plan must also record the reviewed dependency-pin amendment, registry owner,
   logging structural choices and consumer migration recipe without inventing
