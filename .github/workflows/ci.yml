@@ -13,10 +13,11 @@ on:
       - 'scripts/ci/**'
       - '.github/scripts/**'
       - '.github/actions/**'
-      - '.github/workflows/ci.yml'
+      - '.github/workflows/**'
       - 'release/**'
       - 'boundaries/**'
       - 'install.json'
+      - 'install.py'
       - 'justfile'
   push:
     branches: [develop, main]
@@ -126,21 +127,25 @@ jobs:
 
       - name: Validate public API diff visibility
         id: public_api_diff
-        continue-on-error: true
-        run: bash scripts/ci/validate_public_api_diff.sh
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'develop' && github.base_ref != 'main' }}
+        run: |
+          status=0
+          bash scripts/ci/validate_public_api_diff.sh || status=$?
+          # Exit 1 reports an API change; higher codes mean the diff failed.
+          if [ "$status" -gt 1 ]; then exit "$status"; fi
 
       - name: Validate public API semver compatibility
-        continue-on-error: ${{ github.base_ref != 'develop' && github.base_ref != 'main' }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'develop' && github.base_ref != 'main' }}
         if: always()
         run: python3 scripts/ci/validate_public_api_semver.py
 
       - name: Validate public API documentation approvals
-        continue-on-error: ${{ github.base_ref != 'develop' && github.base_ref != 'main' }}
+        continue-on-error: ${{ github.event_name == 'pull_request' && github.base_ref != 'develop' && github.base_ref != 'main' }}
         if: always()
         run: bash scripts/ci/validate_public_api_docs.sh
 
       - name: Summarize report-only API findings
-        if: ${{ always() && github.base_ref != 'develop' && github.base_ref != 'main' }}
+        if: ${{ always() && github.event_name == 'pull_request' && github.base_ref != 'develop' && github.base_ref != 'main' }}
         run: |
           echo "::warning::Public API governance is report-only for this base; review the API diff summary and artifact before promotion to develop or main."
           python3 - <<'PYTHON'
@@ -149,7 +154,7 @@ jobs:
           from pathlib import Path
           reports = Path('target/public-api')
           with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
-              summary.write('## Public API report (non-blocking)\n\nStrict governance applies only to PR bases `develop` and `main`.\n\n')
+              summary.write('## Public API report (non-blocking)\n\nStrict governance applies to PR bases `develop` and `main`, pushes and manual runs.\n\n')
               logs = sorted(reports.glob('*-diff.log'))
               if not logs:
                   summary.write('No API diff was produced; inspect the failed diff step.\n')
@@ -242,7 +247,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name != 'pull_request' || github.base_ref == 'develop' || startsWith(github.base_ref, 'integrate/')) && '["ubuntu-latest","macos-latest","windows-latest"]' || '["ubuntu-latest"]') }}
+        os: ${{ fromJSON((github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' || startsWith(github.base_ref, 'integrate/')) && '["ubuntu-latest","macos-latest","windows-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5

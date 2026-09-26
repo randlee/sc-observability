@@ -6,15 +6,14 @@ gate, observed defect or existing regression case, and retirement condition.
 Without that record it does not run on a sprint PR. New checks require an
 identified need; historical evidence alone is not a permanent product gate.
 
-Public API governance is strict only when `github.base_ref` is `develop` or
-`main`. For every other base, both semver and approval checks run in report
-mode: findings do not fail the job, a warning annotation identifies report
-mode, and the step summary carries the API diff alongside the uploaded
-artifact. There is no head-branch condition. Push events have no PR base, so
-integration pushes are report-only too. Local `just public-api` remains an
-explicit strict check.
+Public API governance is report-only for pull requests whose base is neither
+`develop` nor `main`. Both semver and approval checks still run; findings
+produce a warning, step-summary diff and uploaded artifact. PRs into `develop`
+or `main`, push events and manual runs are strict. There is no head-branch
+condition. API diff exit 1 means a change to assess; diff tool failures are
+blocking in strict mode. Local `just public-api` remains an explicit strict check.
 
-Platform qualification has a separate rule: PRs into `develop` or
+Platform qualification has a separate rule: PRs into `develop`, `main` or
 `integrate/*`, explicit dispatch and reusable/non-PR qualification run all
 platforms.
 Relevant-path filters apply before jobs start. An intermediate PR retains
@@ -35,7 +34,7 @@ on PRs 233–235 are the observed reason for retiring those checks.
 | CI: `docs-consistency` | API consumers; normative docs and rustdoc agree | Existing docs consistency regression cases and missing-doc checks | Normative document generation replaces these checks |
 | CI: `dependency-bans` | Lower-layer consumers; neutral dependency graph | Existing forbidden-dependency and binding-runtime boundary checks | Architectural dependency restrictions are retired |
 | CI: `version-literals` | Package consumers; one coherent release train | Existing version and exact macro-pin mismatch rejection | Packages stop using a coordinated release train |
-| CI: `public-api-governance` | Integration reviewer; visible API diffs, report-only unless base is develop/main | Phase D missing scoped approvals before integration ownership closes | Integration no longer needs intermediate API reports |
+| CI: `public-api-governance` | Integration reviewer; visible API diffs, report-only for PRs except bases develop/main | Phase D missing scoped approvals before integration ownership closes | Integration no longer needs intermediate API reports |
 | CI: `manifest-validation` | Release maintainer; publish inventory, install contract, retry correctness | `test_release_artifacts`, `test_prepare_release_staged_packages`, `test_publish_retry_idempotency` | Publish/install tooling is replaced and its coverage moves with it |
 | CI: `test` (Ubuntu) | Rust crate consumers; workspace tests, doctests and log feature fixtures | Existing runtime/bridge regression tests | Consumer contract or supported platform is retired |
 | Binding runtime: `native-contract` (Ubuntu) | Core/bridge hosts; debug and release native contract | Existing native runtime conversion, ownership and lifecycle fixtures | Native binding runtime is retired or superseded |
@@ -71,3 +70,12 @@ existing `validate_binding_artifacts.py` remains the one input/output hash
 checker; schema generation, typing, runtime tests and Cargo package checks
 remain functional gates. Tests unrelated to these retired provenance checks
 are unchanged.
+
+Retired 2026-09-26: `validate_log_import.py`, `_log_metadata_adaptations.py`,
+`_log_release_adaptations.py`, Phase B `import-provenance.json`,
+`post-import-adaptations.json`, `release-adaptations-b-2.json` and Phase C
+`manifest-metadata-adaptations.json`. References in historical sprint plans,
+approvals and architecture records describe the acceptance gates at that time;
+they do not require restoring these retired gates. OTLP-023 is now enforced by
+D8 adapter tests using the retained Phase D `legacy-otlp-provenance.json` as
+source authority.

@@ -982,9 +982,6 @@ them. Retire the BTIT import/snapshot comparison jobs and adaptation records.
 Cargo compilation, behavioral tests, package verification and the existing
 single generated-binding input/output content-hash check remain the gates.
 No Git revision or historical blob pin is required for generated bindings.
-The [CI policy](ci-policy.md) records strict public API governance only for
-PR bases `develop` and `main`; all other bases receive warnings, a diff
-summary and artifacts in report mode.
 
 ### ADR-012: Additive Typed Errors And Warning-Only Migration
 

@@ -2,25 +2,23 @@ name: Binding runtime
 on:
   pull_request:
     paths:
+      - 'scripts/ci/**'
+      - '.github/scripts/**'
+      - 'boundaries/**'
       - 'Cargo.*'
       - 'rust-toolchain.toml'
       - 'crates/sc-observability*/**'
       - 'bindings/generation-*'
-      - 'scripts/ci/*binding*'
-      - 'scripts/ci/_*sandbox*'
-      - 'scripts/ci/_log_staging.py'
-      - 'scripts/ci/tests/*binding*'
-      - 'scripts/ci/fixtures/**'
       - '.github/workflows/binding-runtime.yml'
   push:
-    branches: ['feature/phase-b-3b-native-runtime', develop, main, 'integrate/*']
+    branches: [develop, main, 'integrate/*']
   workflow_dispatch:
 jobs:
   native-contract:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON((github.event_name != 'pull_request' || github.base_ref == 'develop' || startsWith(github.base_ref, 'integrate/')) && '["ubuntu-latest","macos-latest","windows-latest"]' || '["ubuntu-latest"]') }}
+        os: ${{ fromJSON((github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' || startsWith(github.base_ref, 'integrate/')) && '["ubuntu-latest","macos-latest","windows-latest"]' || '["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -43,7 +41,7 @@ jobs:
           path: target/binding-runtime-platforms
           if-no-files-found: error
   packaged-consumer:
-    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || startsWith(github.base_ref, 'integrate/') }}
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' || startsWith(github.base_ref, 'integrate/') }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
@@ -65,7 +63,7 @@ jobs:
             target/binding-runtime-bundle-manifest.json
           if-no-files-found: error
   complete-gate:
-    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || startsWith(github.base_ref, 'integrate/') }}
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' || startsWith(github.base_ref, 'integrate/') }}
     needs: [native-contract, packaged-consumer]
     runs-on: ubuntu-latest
     steps:

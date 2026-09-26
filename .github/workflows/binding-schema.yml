@@ -2,17 +2,15 @@ name: Binding schema
 on:
   pull_request:
     paths:
+      - 'scripts/ci/**'
+      - '.github/scripts/**'
+      - 'boundaries/**'
       - 'Cargo.*'
       - 'rust-toolchain.toml'
       - 'crates/sc-observability-types/**'
       - 'crates/sc-observability-dto/**'
       - 'bindings/**'
       - 'scripts/*binding*'
-      - 'scripts/ci/*binding*'
-      - 'scripts/ci/_*sandbox*'
-      - 'scripts/ci/_log_staging.py'
-      - 'scripts/ci/tests/*binding*'
-      - 'scripts/ci/fixtures/**'
       - '.github/workflows/binding-schema.yml'
   push:
     branches: [develop, main, 'integrate/*']
