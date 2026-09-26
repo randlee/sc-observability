@@ -15,7 +15,7 @@ Generated projection of `obs-d-7`; the bead is authoritative.
 - PR target (merge order only): `sprint/d-6-otlp-lifecycle-core`
 - Blocked by: `obs-d-21-sanity`
 - Requirements: LAY-005, NFR-004, NFR-007, OTLP-012, OTLP-013, OTLP-021, PHD-003, PHD-004
-- ADRs: ADR-014, ADR-018
+- ADRs: ADR-004, ADR-005, ADR-014, ADR-017, ADR-018, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability-otlp/src/sdk/implementation.rs`
   - `crates/sc-observability-otlp/src/sdk/tests.rs`
@@ -51,6 +51,13 @@ Consume D.21’s sanity-gated interfaces without altering its module or manifest
 
 - `crates/sc-observability-otlp/src/sdk/implementation.rs`
 - `crates/sc-observability-otlp/src/sdk/tests.rs`
+
+## Facade-composition handoff
+
+D.7 hands obs-d-18 the crate-private constructor contract at
+`crate::sdk::implementation::build_exporter_set`. Obs-d-18 composes it only
+through D.21’s `Telemetry` facade/module path; D.7 retains provider and
+batch-processor behavior.
 ## Acceptance criteria
 
 - [ ] `cargo test -p sc-observability-otlp --lib sdk::tests --features otlp-sdk --locked` runs all signal mappings, retry-deadline/terminal, explicit-config-vs-env, queue-pressure, shutdown and caller-runtime teardown tests (D1–D3).

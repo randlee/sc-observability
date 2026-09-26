@@ -14,8 +14,8 @@ Generated projection of `obs-d-3`; the bead is authoritative.
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-3-typed-sink-registration`
 - PR target (merge order only): `sprint/d-2-host-logger-bridge`
 - Blocked by: `obs-d-13-sanity`
-- Requirements: LOG-004, LOG-013, LOG-037, NFR-012
-- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-013, ADR-017
+- Requirements: LOG-004, LOG-013, LOG-037, NFR-012, PHD-001, PHD-002
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-013, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability/src/builder.rs`
   - `crates/sc-observability/src/sinks.rs`
@@ -72,6 +72,10 @@ registration paths. This serial handoff is why relation is must_follow; no
 same-wave sibling shares these paths.
 
 - `crates/sc-observability/src/builder.rs`
+
+## External sink-implementor disposition
+
+D.3 owns the canonical `LogSinkError` migration for every core sink-trait implementor, including the `#[cfg(test)]` implementors in `crates/sc-observability/src/lib.rs` and `scripts/ci/fixtures/error-migration/migrated/src/compatibility_matrix.rs`; D.4 retains only its non-sink `lib.rs` construction/handling sites. The `sc-observe` implementors are obs-d-14’s owned migration, and D.17 retains `examples/custom-sink-example`.
 
 ## Handoff to obs-d-18 (wave 3)
 

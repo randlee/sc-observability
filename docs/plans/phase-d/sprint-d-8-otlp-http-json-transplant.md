@@ -15,7 +15,7 @@ Generated projection of `obs-d-8`; the bead is authoritative.
 - PR target (merge order only): `sprint/d-7-otlp-sdk-tokio`
 - Blocked by: `obs-d-21-sanity`
 - Requirements: LAY-005, NFR-004, NFR-007, OTLP-012, OTLP-013, OTLP-021, OTLP-023, PHD-003, PHD-004
-- ADRs: ADR-005, ADR-014, ADR-018, ADR-019
+- ADRs: ADR-004, ADR-005, ADR-014, ADR-017, ADR-018, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability-otlp/src/legacy_http_json/implementation.rs`
   - `crates/sc-observability-otlp/src/legacy_http_json/tests.rs`
@@ -196,6 +196,13 @@ Created by obs-d-21, owned here from wave 2. Consume its completed sanity-gated 
 
 - `crates/sc-observability-otlp/src/legacy_http_json/implementation.rs`
 - `crates/sc-observability-otlp/src/legacy_http_json/tests.rs`
+
+## Facade-composition handoff
+
+D.8 hands obs-d-18 the crate-private constructor contract at
+`crate::legacy_http_json::implementation::build_exporter_set`. Obs-d-18
+composes it only through D.21’s `Telemetry` facade/module path; D.8 retains
+legacy-worker behavior.
 ## Acceptance criteria
 
 - [ ] Deliverable 1: source-pin/disposition tests externally prove every relevant legacy implementation symbol and copied transport/endpoint/auth/CA/payload test is retained from the immutable provenance source.
@@ -205,3 +212,4 @@ Created by obs-d-21, owned here from wave 2. Consume its completed sanity-gated 
 - [ ] Deliverable 5: external fixtures prove plain-thread operation, entered-Tokio rejection, async responsiveness, cancellation, bounded Retry-After parsing, and response-loss accounting.
 - [ ] Deliverable 6: existing dependency/boundary validation proves the legacy-only build excludes the official SDK/tonic and consumes the D.21 allowlist unchanged.
 - [ ] This sprint does not close production composition or collector equivalence; D.18 and D.9 own those outcomes.
+- [ ] RSH-005: a deterministic slow-initializer fixture delays legacy worker construction and proves the finite construction handshake returns the specified typed failure or publishes a ready handle; it never waits on scheduler speed.
