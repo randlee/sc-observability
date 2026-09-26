@@ -1030,6 +1030,12 @@ No Git revision or historical blob pin is required for generated bindings.
   filtering. #96 is not a dependency; no timer/lease stack is introduced.
 - **Contracts**: PHB-007–009; [runtime contract](plans/phase-b/runtime-level-contract.md).
 
+**Amendment (2026-09-26, release preflight)**: ADR-013’s original B.P2
+qualification obligation was satisfied by the 1.4.x release, now in use by BTIT;
+B.2/B.P2 qualification remains available as publisher-run, on-demand release
+preflight before publishing, not as a sprint or integration PR gate, as recorded
+in [the CI policy](ci-policy.md).
+
 ### ADR-014: Result-Preserving Language Boundaries
 
 - **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record).

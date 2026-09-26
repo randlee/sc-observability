@@ -73,6 +73,8 @@ cutover, new releases of these crate names must come from this repo instead.
 - B.P2's historical four-package stage uses `release/bp2-publish-artifacts.toml`.
   Its existing artifacts and evidence are not regenerated as B.2 evidence.
 
+Before publishing, the publisher dispatches `b2-staged-consumer.yml` and `bp2-staged-consumer.yml` on the candidate ref and verifies both complete successfully; these release preflight workflows run only via `workflow_dispatch`, never on PRs or pushes.
+
 ### B.2 candidate workflow (no publication)
 
 ```sh

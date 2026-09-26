@@ -1,16 +1,6 @@
 name: B.P2 staged consumer
 
 on:
-  pull_request:
-    paths:
-      - 'crates/**'
-      - 'release/publish-artifacts.toml'
-      - 'release/runtime-level-qualification.toml'
-      - 'scripts/ci/_runtime_level_common.py'
-      - 'scripts/ci/fixtures/runtime-level-consumer/**'
-      - 'scripts/ci/prepare_runtime_level_staged_packages.py'
-      - 'scripts/ci/validate_runtime_level_*'
-      - '.github/workflows/bp2-staged-consumer.yml'
   workflow_dispatch:
 
 jobs:
@@ -41,7 +31,6 @@ jobs:
           path: ${{ runner.temp }}/bp2-stage
           if-no-files-found: error
   staged-consumer:
-    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' }}
     needs: package-stage
     strategy:
       fail-fast: false
@@ -77,7 +66,6 @@ jobs:
           path: bp2-evidence
           if-no-files-found: error
   aggregate-platform-evidence:
-    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' }}
     needs: staged-consumer
     runs-on: ubuntu-latest
     steps:

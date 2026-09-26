@@ -16,6 +16,7 @@
 - [x] Publish manifest exists at `release/publish-artifacts.toml`.
 - [x] Publish order validation script exists and passes.
 - [x] Release preflight workflow exists.
+- [ ] Before publishing, the publisher dispatches `b2-staged-consumer.yml` and `bp2-staged-consumer.yml` on the candidate ref and verifies both complete successfully.
 - [x] Release workflow exists.
 - [x] CI includes docs-consistency and dependency-ban validation.
 - [x] Repo-boundary validation passes.
