@@ -5,7 +5,7 @@ Generated projection of `obs-d-9`; the bead is authoritative.
 ## Plan metadata
 
 - Wave: 4
-- Layer: 19
+- Layer: 20
 - Assignee / model: cobs / terra
 - Relation: `must_follow`
 - Closure: `integration`
@@ -32,20 +32,16 @@ Qualify the complete restored OTLP surface and close the regression with collect
 ## Deliverables
 
 1. Add a shared conformance corpus covering resources/scope, log severity/body/attributes, trace parent/kind/flags/links/events/status/timing, and counter, gauge, and zero/one/many-bucket histograms. The in-crate harness records normalized exporter-invocation traces for both adapters; the external integration gate asserts decoded semantic equivalence without attempting to name crate-private symbols.
-
 2. Run both backends against hermetic collectors and compare decoded semantic output. Add negative cases for disabled no-network, unsupported selections, invalid models, auth redaction, timeout, retry exhaustion, partial signal failure, recovery, flush, and idempotent shutdown. SDK cases await D.6's async lifecycle; legacy cases exercise its worker-barrier completion and synchronous compatibility lifecycle.
-
 3. Add CI jobs/features for both backends with hermetic collectors and no hidden external service requirement.
-
 4. Restore Grafana dashboard and LogQL/trace/metric recipes from legacy phases AV–AY only after translating them to the current neutral resource/attribute schema. No stale ATM-only label is presented as a generic contract. Use the exact blobs and destinations in `legacy-otlp-provenance.json`, including `docs/observability/otlp/` and `scripts/ci/`; validate the import manifest's pinned-source and allowed-delta checks.
 
 ## This Sprint Does Not Close
 
 No `atm-core` implementation, Python OTEL binding (#88), registry publication, or new transport beyond the two qualified paths.
-
 ## Design
 
-### Qualification contract
+## Qualification contract
 
 Consume D.18's production factory and D.12's authoritative model, lifecycle, and failure contracts. The same logical logs/spans/metrics corpus runs through both adapters; compare decoded semantic content, allowing only protocol differences. `full_stack_integration.rs`, the dedicated `otlp-conformance.yml` workflow, and `scripts/ci/fixtures/otlp` contain the hermetic collector proof. The two smoke scripts and `docs/observability/otlp` restore current-schema recipes from the existing immutable source manifest; do not create a second manifest or modify unrelated CI. This wave follows D.18 for the actual composed exporter artifact, not because of a shared file. Wave 4 remains pending the user ruling recorded in the root.
 
@@ -53,11 +49,12 @@ The in-crate trace/parity assertion is a unit-level check of the shared adapter 
 
 The only file fence is `metadata.owned_paths`; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
-### Handoff from obs-d-18 (wave 3)
+## Handoff from obs-d-18 (wave 3)
 
 Created by obs-d-18, owned here from wave 4. Consume its completed sanity-gated artifact; preserve the contract while implementing or retiring staged compatibility. This serial handoff is why relation is `must_follow`; no same-wave sibling shares these paths.
 
 - `crates/sc-observability-otlp/tests/full_stack_integration.rs`
+## Acceptance criteria
 
 ## Acceptance criteria
 

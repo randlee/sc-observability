@@ -1,12 +1,22 @@
 # d-1: Shared startup `LogSettings` (#96)
 
+Generated projection of `obs-d-1`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 4
+- Wave: 2
+- Layer: 5
+- Assignee / model: cobs / terra
+- Relation: `must_follow`
+- Closure: `boundary`
+- Target boundary: sc-observability logging settings implementation
 - Branch: `sprint/d-1-log-settings`
-- PR target: `sprint/d-10-windows-arm64-wheel`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-1-log-settings`
+- PR target (merge order only): `sprint/d-10-windows-arm64-wheel`
 - Blocked by: `obs-d-13-sanity`
-- Owned paths:
+- Requirements: LOG-001, LOG-002, LOG-003, LOG-004, LOG-005, LOG-006, LOG-007, LOG-008, LOG-009, LOG-010, LOG-039, LOG-042, PHB-014, NFR-012
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-006, ADR-009, ADR-010, ADR-013, ADR-014, ADR-017
+- Owned paths (metadata projection):
   - `crates/sc-observability/src/runtime.rs`
   - `crates/sc-observability/tests/log_settings.rs`
   - `docs/logging/d-1-log-settings.md`
@@ -44,7 +54,6 @@ It is parallel-safe with D.2 and D.3 because neither consumes this type. This is
 Do not migrate consumer applications, add fields outside the inventory,
 implement dynamic reload, or plan #88 bindings/OTEL work.
 
-
 ## Design
 
 ## Implementation contract
@@ -68,7 +77,6 @@ Created/staged by obs-d-1, owned by obs-d-18 from wave 3; after this bead closes
 ## Handoff from obs-d-12 and obs-d-13 (wave 1)
 
 Consume obs-d-13's frozen concrete settings signature specification and obs-d-12's canonical error/registry artifact. In wave 2, bind the resulting errors and codes only in owned `runtime.rs`; do not alter either producer contract.
-
 ## Acceptance criteria
 
 - [ ] boundary:sc-observability — `cargo test -p sc-observability --test log_settings --locked` runs defaults/JSON/shared-env/app-env/precedence for every D.13 inventory row, invalid/empty/unknown/case/non-UTF8 prefix cases, and atomic retained-policy replacement (D1).

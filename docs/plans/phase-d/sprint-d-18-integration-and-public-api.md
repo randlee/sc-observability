@@ -5,7 +5,7 @@ Generated projection of `obs-d-18`; the bead is authoritative.
 ## Plan metadata
 
 - Wave: 3
-- Layer: 18
+- Layer: 19
 - Assignee / model: cobs / terra
 - Relation: `must_follow`
 - Closure: `integration`
@@ -13,7 +13,7 @@ Generated projection of `obs-d-18`; the bead is authoritative.
 - Branch: `sprint/d-18-integration-and-public-api`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-18-integration-and-public-api`
 - PR target (merge order only): `sprint/d-20-language-binding-migration`
-- Blocked by: `obs-d-2-sanity`, `obs-d-3-sanity`, `obs-d-20-sanity`, `obs-d-16-sanity`, `obs-d-1-sanity`, `obs-d-10-sanity`, `obs-d-17-sanity`, `obs-d-14-sanity`, `obs-d-6-sanity`, `obs-d-4-sanity`, `obs-d-19-sanity`, `obs-d-5-sanity`, `obs-d-15-sanity`, `obs-d-8-sanity`, `obs-d-7-sanity`
+- Blocked by: `obs-d-2-sanity`, `obs-d-3-sanity`, `obs-d-21-sanity`, `obs-d-20-sanity`, `obs-d-16-sanity`, `obs-d-1-sanity`, `obs-d-10-sanity`, `obs-d-17-sanity`, `obs-d-14-sanity`, `obs-d-6-sanity`, `obs-d-4-sanity`, `obs-d-19-sanity`, `obs-d-5-sanity`, `obs-d-15-sanity`, `obs-d-8-sanity`, `obs-d-7-sanity`
 - Requirements: LAY-003, LAY-004, LAY-005, LOG-004, LOG-007, LOG-009, LOG-010, LOG-014, LOG-015, LOG-023, LOG-037, LOG-042, LOG-046, LOG-047, LOG-048, NFR-003, NFR-007, NFR-008, NFR-010, NFR-011, NFR-012, OBS-004, OBS-007, OBS-009, OBS-010, OBS-011, OBS-012, OBS-013, OBS-014, OBS-015, OBS-016, OBS-017, OBS-018, OBS-019, OBS-020, OBS-024, OTLP-001, OTLP-002, OTLP-005, OTLP-006, OTLP-007, OTLP-011, OTLP-012, OTLP-015, OTLP-017, OTLP-019, OTLP-021, OTLP-023, PHB-006, PHB-010, PHB-011, PHB-012, PHB-013, PHB-014, PHC-002, PHC-004, PHD-001, PHD-002, PHD-003, TYP-001, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-020, TYP-021, TYP-023, TYP-024, TYP-030
 - ADRs: ADR-001, ADR-002, ADR-003, ADR-004, ADR-006, ADR-010, ADR-011, ADR-013, ADR-014, ADR-015, ADR-016, ADR-017, ADR-018
 - Owned paths (metadata projection):
@@ -91,9 +91,9 @@ Activate the composed 2.0 library surface after the implementation sanity gates;
 
 1. Activate the canonical 2.0 re-exports and remove transitional 1.x wrappers/classification/adapters using the recorded contract/implementation-to-integration handoffs. Compile all crate and binding consumers; preserve typed source/remediation and neutral model fields.
 
-2. Compose the completed lifecycle, projectors and SDK/legacy implementations through D.12's private ExporterSet factory. Keep the exporter set/traits private; public Telemetry construction must fail for unsupported enabled transports and must never choose the disabled no-op path.
+2. Compose the completed lifecycle, projectors and SDK/legacy implementations through D.21's private ExporterSet factory. Keep the exporter set/traits private; public Telemetry construction must fail for unsupported enabled transports and must never choose the disabled no-op path.
 
-3. Align release/**, release notes, CHANGELOG.md, approval JSON and inventories with D.12's 2.0 Cargo versions. Activate obs-d-10's independently qualified six-platform Python policy row and artifact inventory; update docs/project-plan.md from the obs-d-10/12 handoff specifications. No Cargo or normative-doc ownership is moved here.
+3. Align release/**, release notes, CHANGELOG.md, approval JSON and inventories with D.21's 2.0 Cargo versions. Activate obs-d-10's independently qualified six-platform Python policy row and artifact inventory; update docs/project-plan.md from the obs-d-10/12 handoff specifications. No Cargo or normative-doc ownership is moved here.
 
 4. Run the existing public API/semver mechanism against frozen 1.4.1 with the consumed major-break manifest: require pass for exactly listed breaks and failure when a real listed break is temporarily omitted. Update validate_error_migration.py and its existing fixtures for canonical 2.0; publish complete migration-guide.md/migration.md/migrate-error-api.md.
 
@@ -107,7 +107,7 @@ D.9 owns hermetic dual-collector equivalence and operational recipes; obs-d-10 o
 
 ## Composition and retirement
 
-Consume the recorded handoffs from D.12/D.13 and the implementation beads. Following the root sequencing invariant, this sprint switches public re-exports to the new canonical definitions and deletes the compatibility modules/conversions. Do not add public Exporter/Signal/ExporterSet. The factory constructs a private ExporterSet and exposes only the approved Telemetry facade. All enabled backend/feature/protocol combinations either construct their real implementation or return an explicit typed initialization failure. Disabled mode is the only no-network implementation.
+Consume the recorded handoffs from D.12/D.13/D.21 and the implementation beads. Following the root sequencing invariant, this sprint switches public re-exports to the new canonical definitions and deletes the compatibility modules/conversions. Do not add public Exporter/Signal/ExporterSet. The factory constructs a private ExporterSet and exposes only the approved Telemetry facade. All enabled backend/feature/protocol combinations either construct their real implementation or return an explicit typed initialization failure. Disabled mode is the only no-network implementation.
 
 ## Existing gate consumers
 
@@ -133,9 +133,6 @@ Created by obs-d-15, owned here from wave 3. Consume its completed sanity-gated 
 
 Created by obs-d-12, owned here from wave 3. Consume its completed sanity-gated artifact; preserve the contract while implementing or retiring staged compatibility. This serial handoff is why relation is must_follow; no same-wave sibling shares these paths.
 
-- `crates/sc-observability-otlp/src/config.rs`
-- `crates/sc-observability-otlp/src/contracts.rs`
-- `crates/sc-observability-otlp/src/lib.rs`
 - `crates/sc-observability-types/src/diagnostic.rs`
 - `crates/sc-observability-types/src/errors.rs`
 - `crates/sc-observability-types/src/errors_v2.rs`
@@ -252,11 +249,20 @@ Final wrapper/classifier/adapter deletion is owned here only, following PHD-002.
 
 ## Handoff from obs-d-12 — project-plan row
 
-Consume obs-d-12 contract specification and write this exact row in owned docs/project-plan.md: "obs-d-12 owns the canonical error/signal and OTLP config/default/validation contracts and Cargo 2.0 version bump; obs-d-18 owns final release baseline, approvals, migration guidance and inventory alignment."
+Consume obs-d-12 contract specification and write this exact row in owned docs/project-plan.md: "obs-d-12 owns canonical errors, neutral signals and wire projection; obs-d-21 owns OTLP config/default/validation contracts and atomic Cargo 2.0 version activation; obs-d-18 owns final release baseline, approvals, migration guidance and inventory alignment."
 
 ## Handoff from obs-d-10
 
 Consume obs-d-10's independent six-wheel/30-native-cell proof and policy specification after obs-d-10-sanity. Activate release/python-platform-policy.json and inventory, then write in owned docs/project-plan.md: "Python uses abi3-py310, cp310-abi3 wheels and requires-python >=3.10 without an upper/exclusion cap; six platforms and 30 native installed-suite cells are proved from one immutable source. Raising the floor or adding a cap requires a separately approved compatibility decision, supported-interpreter matrix and guard expected-value update." obs-d-10 does not wait on this activation and does not edit this document.
+
+
+## Handoff from obs-d-21 (wave 1)
+
+Consume obs-d-21-sanity for OTLP contracts, module registration and atomic workspace-version activation. Created by obs-d-21, owned here from wave 3 for facade composition/retirement:
+
+- `crates/sc-observability-otlp/src/config.rs`
+- `crates/sc-observability-otlp/src/contracts.rs`
+- `crates/sc-observability-otlp/src/lib.rs`
 
 ## Acceptance criteria
 

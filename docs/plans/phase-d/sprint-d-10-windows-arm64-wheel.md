@@ -1,11 +1,11 @@
 # d-10: Windows ARM64 Python distribution and open-ended guard
 
-Generated projection of `obs-d-10`; the bead is authoritative. The former d-11 deliverables are folded into this boundary.
+Generated projection of `obs-d-10`; the bead is authoritative.
 
 ## Plan metadata
 
 - Wave: 1
-- Layer: 3
+- Layer: 4
 - Assignee / model: lobs / luna
 - Relation: `root`
 - Closure: `boundary`
@@ -15,7 +15,7 @@ Generated projection of `obs-d-10`; the bead is authoritative. The former d-11 d
 - PR target (merge order only): `sprint/d-13-logging-contract`
 - Blocked by: `obs-phase-d-plan-qa`
 - Requirements: NFR-010, PHB-013, PHB-014, PHC-001, PHC-003, PHC-004, PHC-006
-- ADRs: ADR-015, ADR-016 (accepted retroactively; embedded Python/shared binding and shared publishing-pipeline constraints).
+- ADRs: ADR-015, ADR-016
 - Owned paths (metadata projection):
   - `.github/workflows/b4a-python-distributions.yml`
   - `docs/plans/phase-d/sprint-d-10-windows-arm64-wheel.md`
@@ -44,17 +44,16 @@ Own the native Windows ARM64 build adapter and the open-ended Python distributio
 
 6. Expose the guard through the validator already invoked by the existing B.4a aggregate job before publishing eligibility. Add unit fixtures that fail for `>=3.10,<3.13`, non-abi3/cp311 ABI tags, a missing abi3 feature, a wrong platform tag, and source/artifact metadata disagreement.
 
-7. Wire the D.10 PE ARM64 helper into `verify_native_architecture`, require six wheels and 30 native installed-suite cells from one immutable source, and reject missing/duplicate/wrong-target records alongside source/artifact metadata comparison.
+7. Wire the D.10 PE ARM64 helper into `verify_native_architecture`, require six wheels and 30 native installed-suite cells from one immutable source, and reject missing/duplicate/wrong-target records alongside source/artifact metadata comparison. This evidence closes independently of D.18 release-policy activation.
 
 8. Provide a handoff/specification for aobs to record the invariant and explicit change-control rule in the shared plan: raising the floor or adding an upper bound requires a separately approved compatibility decision, an updated supported-interpreter matrix, and updated guard expected values, not an incidental packaging edit.
 
 ## This Sprint Does Not Close
 
 D.18 still owns `release/**` policy/inventory activation and publication. This sprint does not add future Python versions, alter the minimum version, implement #88/OTEL functionality, or claim release publication without the immutable six-platform evidence.
-
 ## Design
 
-### Python distribution boundary
+## Python distribution boundary
 
 D.10 owns native ARM64 build/prepare behavior, the focused PE helper, the source/wheel metadata guard, and the qualification tests in its combined fence. The helper consumes wheel bytes/tag and returns the existing typed validation shape; the validator wires it into `verify_native_architecture` once. Workflow jobs execute against one immutable sdist/source commit, never cross-built evidence disguised as native execution. The existing B.4a aggregate invocation remains the integration hook.
 
@@ -67,6 +66,7 @@ ADR-015 constrains the embedded-Python/shared-binding assumptions of the Python 
 D.10 provides this exact policy row for D.18 to write in `release/python-platform-policy.json`: `platform=windows-arm64; machine=ARM64; wheel_tag=win_arm64; rust_target=aarch64-pc-windows-msvc; interpreters=3.10,3.11,3.12,3.13,3.14; native_cells=5`.
 
 The only file fence is `metadata.owned_paths`; paths mentioned as dependencies are read-only unless that metadata grants ownership.
+## Acceptance criteria
 
 ## Acceptance criteria
 

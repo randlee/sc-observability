@@ -5,7 +5,7 @@ Generated projection of `obs-d-20`; the bead is authoritative.
 ## Plan metadata
 
 - Wave: 2
-- Layer: 17
+- Layer: 18
 - Assignee / model: lobs2 / luna
 - Relation: `must_follow`
 - Closure: `boundary`

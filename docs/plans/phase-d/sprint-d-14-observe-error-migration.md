@@ -5,7 +5,7 @@ Generated projection of `obs-d-14`; the bead is authoritative.
 ## Plan metadata
 
 - Wave: 2
-- Layer: 12
+- Layer: 13
 - Assignee / model: cobs / terra
 - Relation: `parallel_safe`
 - Closure: `boundary`
@@ -23,39 +23,46 @@ Generated projection of `obs-d-14`; the bead is authoritative.
 
 ## Deliverables
 
-1. Migrate the ObserveError and error call sites in sc-observe to the D.12 non-exhaustive error enums carrying Box<ErrorContext>.
-2. Retype every owned call site and preserve sc-observe runtime guards while consuming canonical types-crate definitions.
+1. Migrate the `ObserveError` and error call sites in `sc-observe` to the D.12 non-exhaustive error enums carrying `Box<ErrorContext>`.
+2. Retype every owned call site and preserve the `sc-observe` runtime guards while consuming the canonical types-crate definitions.
 3. Update the crate tests to assert typed variants, stable diagnostics, and preserved source context.
-
 
 ## This Sprint Does Not Close
 
-Canonical boundary activation, workspace-wide compatibility retirement, public re-exports, and release/API approval are owned by obs-d-18. The sprint doc is explanatory evidence, not a separate closure gate.
+Canonical boundary activation, workspace-wide compatibility retirement, public re-exports, and release/API approval are owned by `obs-d-18`.
+Update the sprint doc as explanatory evidence alongside the migration; documentation is not a separate closure gate.
+
 
 ## Design
 
 ## Migration recipe
 
-Consume obs-d-12's cause-to-variant mapping and ErrorContext contract (ADR-017, PHD-001). Use canonical sc-observability-types definitions and re-export them where the existing surface requires it. Preserve ObservationError runtime guards (Shutdown, QueueFull, RoutingFailure) and their nested sources; do not rename the runtime guard into EventError. Init validation maps Configuration, startup failure Runtime; flush maps Drain; shutdown deadline maps Timeout and other drain/provider failure Drain; sink write/flush map their distinct variants; projection/subscriber failures keep their exact canonical categories. Migrate neutral span/metric consumers inside this crate as D.12 specifies; never add an OTLP runtime dependency. Use structured Diagnostic.details for route/projector/etc., not invented ErrorContext fields. Retype routing_integration.rs and typed_observation.rs with per-cause assertions.
+Consume `obs-d-12`'s cause-to-variant mapping and `ErrorContext` contract (ADR-017, PHD-001). Use the canonical sc-observability-types definitions and re-export them where the existing `sc-observe` surface requires it. Preserve `ObservationError` runtime guards (`Shutdown`, `QueueFull`, `RoutingFailure`) and their nested sources; do not rename the runtime guard into `EventError`. Init validation maps `Configuration`, startup failure `Runtime`; flush maps `Drain`; shutdown deadline maps `Timeout` and other drain/provider failure `Drain`; sink write/flush map their distinct variants; projection/subscriber failures keep their exact canonical categories. Migrate neutral span/metric consumers inside this crate as D.12 specifies; never add an OTLP runtime dependency. Use structured `Diagnostic.details` for route/projector/etc., not invented `ErrorContext` fields. Retype `routing_integration.rs` and `typed_observation.rs` with per-cause assertions.
 
 ## Canonical boundary and handoff
 
-This bead retargets owned call sites and tests to the accepted ADR-017 surface. Existing transitional compatibility is consumed by obs-d-18, which owns canonical activation and final compatibility retirement. No new legacy feature or duplicate classifier is introduced. Contract ties are PHD-001, NFR-004/ADR-004, and ADR-014.
+This bead retargets owned call sites and tests to the accepted ADR-017 surface. Any transitional compatibility needed by unfinished sibling consumers is limited to the existing boundary and is consumed by `obs-d-18`, which owns canonical activation and final compatibility retirement. No new legacy feature or duplicate classifier is introduced. Every boundary close still has a green all-features workspace check and workspace tests.
 
-The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
+The only file fence is `metadata.owned_paths`; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
 ## Handoff to obs-d-18 (wave 3)
 
-Created/staged by obs-d-14, owned by obs-d-18 from wave 3; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion or final compatibility retirement.
+Created/staged by `obs-d-14`, owned by `obs-d-18` from wave 3; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion and final compatibility retirement.
 
 - `crates/sc-observe/src/lib.rs`
 - `crates/sc-observe/tests/routing_integration.rs`
 - `crates/sc-observe/tests/typed_observation.rs`
 
+## Contract ties
+
+- `PHD-001` governs canonical same-name error variants, cause mapping, and retained source/diagnostic information.
+- `NFR-004` and `ADR-004` constrain this crate to remain free of OTLP transport complexity.
+- `ADR-014` is retained for result-preserving error boundaries consumed by downstream language-facing callers.
+
+
 ## Acceptance criteria
 
-- [ ] `cargo test -p sc-observe --locked` passes guards, per-cause variants, and source identity (obs-d-14#1/#3).
-- [ ] Owned call sites use canonical definitions and preserve diagnostics/source identity (obs-d-14#2).
-- [ ] Workspace bindings, collector behavior, canonical activation, and release approvals remain with obs-d-18/obs-d-9.
-
-- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; obs-d-18 additionally runs all-features release tests and semver/removal gates.
+- [ ] `cargo test -p sc-observe --locked` passes canonical and neutral-model cases, including routing guards and per-cause variants/source identity (`obs-d-14#1/#3`).
+- [ ] Owned call sites use the canonical types-crate definitions and preserve runtime guards, diagnostics, and source identity (`obs-d-14#2`).
+- [ ] This sprint does not close workspace bindings, collector behavior, canonical activation, or release approvals; `obs-d-18`/`obs-d-9` do.
+- [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass. This is the lead's intermediate-workspace invariant; `obs-d-18` additionally runs all-features release tests and semver/removal gates.

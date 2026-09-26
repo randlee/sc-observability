@@ -1,12 +1,22 @@
 # d-3: Typed sink registration ergonomics (#203)
 
+Generated projection of `obs-d-3`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 6
+- Wave: 2
+- Layer: 7
+- Assignee / model: cobs / terra
+- Relation: `must_follow`
+- Closure: `boundary`
+- Target boundary: sc-observability typed sink module
 - Branch: `sprint/d-3-typed-sink-registration`
-- PR target: `sprint/d-2-host-logger-bridge`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-3-typed-sink-registration`
+- PR target (merge order only): `sprint/d-2-host-logger-bridge`
 - Blocked by: `obs-d-13-sanity`
-- Owned paths:
+- Requirements: LOG-004, LOG-013, LOG-037, NFR-012
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-013, ADR-017
+- Owned paths (metadata projection):
   - `crates/sc-observability/src/builder.rs`
   - `crates/sc-observability/src/sinks.rs`
   - `crates/sc-observability/tests/typed_registration.rs`
@@ -39,7 +49,6 @@ D.13 owns staged `typed.rs` definitions. D.18 alone retires transitional
 wrappers/adapters and owns public approvals, migration guides, and full logging
 integration. D.4 owns the remaining core facade/sink construction-site migration.
 
-
 ## Design
 
 ## Implementation contract
@@ -71,7 +80,6 @@ it makes no further edits. The receiver owns production completion and final
 compatibility retirement.
 
 - `crates/sc-observability/src/builder.rs`
-
 
 ## Acceptance criteria
 

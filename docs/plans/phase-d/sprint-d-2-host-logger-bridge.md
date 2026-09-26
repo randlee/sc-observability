@@ -1,12 +1,22 @@
 # d-2: Host-owned logger bridge and event policy (#204)
 
+Generated projection of `obs-d-2`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 5
+- Wave: 2
+- Layer: 6
+- Assignee / model: lobs / luna
+- Relation: `must_follow`
+- Closure: `boundary`
+- Target boundary: sc-observability-log bridge module
 - Branch: `sprint/d-2-host-logger-bridge`
-- PR target: `sprint/d-1-log-settings`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-2-host-logger-bridge`
+- PR target (merge order only): `sprint/d-1-log-settings`
 - Blocked by: `obs-d-13-sanity`
-- Owned paths:
+- Requirements: PHB-013, LOG-011, LOG-012, NFR-004, NFR-008, NFR-010, NFR-012
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-013, ADR-014, ADR-017
+- Owned paths (metadata projection):
   - `crates/sc-observability-log/src/bridge.rs`
   - `crates/sc-observability-log/tests/bridge_*.rs`
   - `docs/logging/d-2-host-logger-bridge.md`
@@ -47,7 +57,6 @@ the existing public `BridgeOptions` shape.
 No tracing redesign, global facade replacement, owner-capability duplication,
 OTLP export, or #88 work.
 
-
 ## Design
 
 ## Implementation contract
@@ -71,7 +80,6 @@ Created/staged by obs-d-2, owned by obs-d-18 from wave 3; after this bead closes
 ## Handoff from obs-d-12 and obs-d-13 (wave 1)
 
 Consume obs-d-13's frozen concrete attachment signature specification and obs-d-12's canonical error/registry artifact. In wave 2, bind the resulting errors and codes only in owned `bridge.rs`; do not alter either producer contract.
-
 ## Acceptance criteria
 
 - [ ] `cargo test -p sc-observability-log --test bridge_jsonl --locked` and individual explicitly named bridge attachment/policy test targets added by D.2 pass; never pass bridge_* as a literal cargo target (D1–D5).

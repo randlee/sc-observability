@@ -1,12 +1,22 @@
 # d-4: 2.0 discriminated error enum migration (#92)
 
+Generated projection of `obs-d-4`; the bead is authoritative.
+
 ## Plan metadata
 
-- Wave: 7
+- Wave: 2
+- Layer: 8
+- Assignee / model: lobs / luna
+- Relation: `parallel_safe`
+- Closure: `boundary`
+- Target boundary: sc-observability error migration
 - Branch: `sprint/d-4-error-enums-2-0`
-- PR target: `sprint/d-3-typed-sink-registration`
+- Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-4-error-enums-2-0`
+- PR target (merge order only): `sprint/d-3-typed-sink-registration`
 - Blocked by: `obs-d-12-sanity`
-- Owned paths:
+- Requirements: LOG-044, LOG-045, LOG-046, NFR-012, PHD-001
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-013, ADR-014, ADR-017
+- Owned paths (metadata projection):
   - `crates/sc-observability/src/health.rs`
   - `crates/sc-observability/src/lib.rs`
   - `crates/sc-observability/tests/error_migration.rs`
@@ -38,7 +48,6 @@ canonical definitions, registry constants, OTLP configuration, and the 2.0
 version bump. D.18 alone removes 1.x wrappers, classification, and adapters,
 and closes release/API evidence and migration docs.
 
-
 ## Design
 
 ## Construction-site disposition
@@ -65,7 +74,6 @@ production completion.
 
 - `crates/sc-observability/src/health.rs`
 - `crates/sc-observability/src/lib.rs`
-
 
 ## Acceptance criteria
 
