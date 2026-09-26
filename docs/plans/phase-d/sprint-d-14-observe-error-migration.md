@@ -9,7 +9,6 @@
 - Owned paths:
   - `crates/sc-observe/**`
   - `crates/sc-observe/tests/**`
-  - `docs/plans/phase-d/**`
 
 ## Deliverables
 

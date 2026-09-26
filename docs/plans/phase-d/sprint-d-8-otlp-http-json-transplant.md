@@ -9,7 +9,6 @@
 - Owned paths:
   - `crates/sc-observability-otlp/src/error_codes.rs`
   - `examples/otlp-legacy/**`
-  - `docs/plans/phase-d/legacy-otlp-provenance.json`
 
 ## Goal and dependency
 

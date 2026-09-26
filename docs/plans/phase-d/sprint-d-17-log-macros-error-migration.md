@@ -8,7 +8,6 @@
 - Blocked by: `obs-d-12-sanity`
 - Owned paths:
   - `crates/sc-observability-log-macros/**`
-  - `docs/plans/phase-d/**`
   - ``
 
 ## Deliverables
