@@ -62,6 +62,11 @@ Read only the one the current job needs.
 | [`resources/dev-sanity.md`](resources/dev-sanity.md) | writing or sending the sanity check assignment (recipient and message) |
 | [`resources/troubleshooting.md`](resources/troubleshooting.md) | a claim, close or assignee looks wrong, or `bd ready` misses assigned work |
 
+Every phase plan must include a committed `docs/plans/phase-<x>/sprints.json`
+listing only the phase root ID and paired dev/sanity bead IDs that define the phase’s work; creating and updating
+this list is a mandatory planning step before plan review or dispatch. Beads
+are the source of truth; bead content is not duplicated in the index.
+
 ## Validation
 
 Validation is mandatory before a plan is imported, before plan review and

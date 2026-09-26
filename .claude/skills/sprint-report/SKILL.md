@@ -1,6 +1,6 @@
 ---
 name: sprint-report
-description: Generate a sprint status report for the current phase. Default is --table.
+description: Generate a sprint status table, detailed report, or dependency DAG for the current phase. Default is --table.
 ---
 
 # Sprint Report Skill
@@ -9,7 +9,7 @@ description: Generate a sprint status report for the current phase. Default is -
 
 `--table` is the default mode; use `--detailed` for one block per sprint.
 
-Run the repository-local report command from the main checkout:
+Run the repository-local report command from the checkout or worktree being used:
 
 ```bash
 .claude/skills/sprint-report/scripts/sprint-report --table
@@ -19,21 +19,104 @@ Use `--detailed` for one block per sprint. The command reads the committed
 `docs/plans/phase-<p>/sprints.json`, then refreshes bead state and PR/CI state.
 Rows are never hand-typed.
 
+## Dependency diagram
+
+Use `--dag` to generate the execution-order diagram with development state,
+sanity state, and completed sanity iteration counts:
+
+```bash
+# First use in a checkout: install the pinned local renderer dependencies.
+npm ci --prefix .claude/skills/sprint-report/renderer --ignore-scripts
+.claude/skills/sprint-report/scripts/sprint-report --dag --open
+```
+
+Requires Python 3, Node/npm, `bd`, and `atm`. DAG mode does not query GitHub or
+invoke `sc-compose`. `--open` opens the PNG in Preview on macOS, and in the
+default image viewer on other platforms. SVG remains the editable artifact.
+It is mutually exclusive with `--table` and `--detailed`; both `--root` and
+`--index` work as in the other modes.
+
+The default output prefix is `scratchpad/phase-<p>-dag/phase-<p>-dag` within the
+current worktree. Override it with `--output <prefix>`. Each run writes `.svg`,
+`.png`, `.dot`, `-layout.svg`, `-data.json`, `-state.json`, and `-icons.json`.
+The JSON files preserve graph provenance, captured bead/ATM state, iteration
+counts, unavailable evidence, and the reason for each icon. Repeated runs reuse
+the layout when its DOT is unchanged; icons never change node or edge geometry.
+
+The index explicitly records `dev_bead_id` and `sanity_bead_id` for each sprint
+only. Both are verified against live
+`blocks` edges, which also select upstream plan-review gates. No finding, fix, or sprint QA beads
+are drawn, and no dependency is inferred from index order or PR stacks. Every
+displayed arrow is a real bead dependency, drawn **prerequisite → dependent**:
+work → its sanity gate → downstream work. Missing or duplicate sanity gates
+and dependency cycles stop generation with an error.
+
+Green checks require recorded dev completion and an explicit sanity PASS;
+sanity gates display a green check plus their completed iteration count.
+Counts use the maximum recorded `.sc` iteration and completed ATM events,
+including failed runs. Zero means no recorded runs; `?` means unavailable.
+Pending, active, blocked, open sanity findings, and an explicit
+user override have distinct states. A PASS predating the latest dev completion,
+or unavailable completion evidence, is marked unconfirmed rather than green.
+The SVG tooltips and `-icons.json` explain each state. These checks do **not**
+mean QA approval or merge readiness.
+
+The bottom badge shows the block's associated QA state using the same QA
+rules as the table: assigned, active, or passed. Failed QA (or any remaining
+open QA findings) displays red `b:i:m` counts across all QA rounds instead of
+an icon. A failed verdict remains `0:0:0` when all findings are closed until
+a later QA records PASS. Undispatched QA has no bottom badge. Sanity gates have no QA badge unless a QA bead explicitly
+validates that gate. QA badges are overlays and do not change the DAG layout.
+
 ## Data sources
 
-The index supplies plan-only sprint identity, layer, branch target,
-dependencies, deliverable count, owned paths, requirements and ADRs. The
-command derives sanity and QA beads from live graph edges, uses `bd show
---json` for each live bead, counts open `discovered-from` finding children,
-and uses `gh pr list --state all --json ...` to match each dev bead's head
-branch. The integration row matches the phase integration branch into
-`develop`.
+The beads are the source of truth. The phase index contains only the phase
+`root_bead_id` and a `sprints` array of `{dev_bead_id, sanity_bead_id}` pairs.
+It defines which foundational beads to query. Its schema is
+`docs/plans/sprints.schema.json`; it is separate from the import JSONL used
+to create and validate the beads. Bead content is never copied into this index.
 
-The QA cell is explicit per sprint: `R<round> <verdict> (<open> open)`; a
-sprint without a QA bead is `not dispatched`; a folded sprint is shown as
-`folded → <sprint>` in DEV, QA and CI. The verdict comes from QA metadata or
+The report reads phase identity and integration branch from the root bead,
+and sprint names, titles, stack layers, branches and dependencies from the
+live sprint beads. Table ordering follows current bead layer then sprint
+number. It verifies the indexed sanity pairing, derives QA beads from live
+graph edges, and counts open findings across QA rounds. Paginated `gh api`
+pull-request results match each dev bead's branch, then `gh pr view` fetches
+selected PR checks. The integration row matches the root bead's integration
+branch into `develop`.
+
+The table QA cell contains one icon: 📥 assigned, 🌀 in progress, ✅ pass,
+or 🚩 findings (a FAIL verdict or open findings). A sprint without a QA bead
+has an empty QA cell. Absorbed work is excluded from the sprint index and all
+report views; its historical bead is not a separate sprint.
+The verdict comes from QA metadata or
 the `PASS:`/`FAIL:` close-reason prefix. This is the authoritative
-round/verdict/open-finding presentation for the table.
+round/verdict/open-finding presentation for the detailed report:
+`R<round> <verdict> (<open> open)`.
+
+The FIND column shows open QA findings as `b:i:m` (blocking:important:minor),
+using finding severity metadata or labels across all QA rounds for the sprint.
+A newer round never hides open findings from an older round. It is empty before QA dispatch,
+and `0:0:0` when a dispatched QA has no open findings.
+The S column shows the highest completed `iteration` for the sprint's sanity
+task from `.sc/sanity-log/phase-<p>.jsonl` in the primary checkout (located
+through Git's common directory). This cumulative value includes completed
+PASS and FAIL runs; counting log lines would undercount older runs. When the
+log has no record for a sanity task, count its completed events from
+`atm task events <task> --all --json`. Blank S means zero completed runs;
+`?` means the history is unavailable, not that the task never ran.
+DEV uses 🚩 for sanity findings and 🔨 while those findings are being fixed;
+a missing sanity bead also uses 🚩. DEV uses 🚧 for explicit blocked status
+or unfinished dependencies reported by `bd blocked --json`.
+DEV is ✅ only when dev and sanity beads are both closed, sanity explicitly
+records PASS (verdict metadata or a PASS close-reason prefix), and no open
+sanity findings remain. Closed beads alone do not establish a sanity pass;
+a closed sanity bead without an explicit PASS is 🚩.
+CI uses 🚧 when merge is blocked and
+🚀 when GitHub reports an open, non-draft PR as clean and mergeable with
+completed passing checks, DEV is ✅, QA is closed with PASS, and no open QA
+findings remain. Green CI alone is ✅, never a merge-readiness claim.
+Failed checks take precedence as ❌.
 
 ## Render command
 
@@ -51,8 +134,8 @@ temporary file and run the same command from the repository root.
 ```json
 {
   "mode": "table",
-  "sprint_rows": "| d-12 | ✅ | R1 FAIL (16 open) | 🏁 | #233 |",
-  "integration_row": "| **integrate/phase-d** | | — | 🌀 | — |"
+  "sprint_rows": "| d-12 | ✅ | 3 | 🚩 | 2:10:4 | 🏁 | #233 |",
+  "integration_row": "| **integrate/phase-d** | | | | | 🌀 | — |"
 }
 ```
 
@@ -70,9 +153,12 @@ temporary file and run the same command from the repository root.
 
 | State | DEV | QA | CI |
 |-------|-----|----|----|
-| Assigned | 📥 | not dispatched | |
-| In progress | 🌀 | IN PROGRESS | 🌀 |
-| Done/pass | ✅ | PASS | ✅ |
-| Findings/fail | | FAIL | ❌ |
-| Blocked | 🚧 | | |
+| Assigned | 📥 | 📥 | |
+| In progress | 🌀 | 🌀 | 🌀 |
+| Done/pass | ✅ | ✅ | ✅ |
+| Findings | 🚩 | 🚩 | |
+| Fail | | | ❌ |
+| Fixing | 🔨 | | |
+| Blocked | 🚧 | | 🚧 |
 | Merged | | | 🏁 |
+| Ready to merge | | | 🚀 |

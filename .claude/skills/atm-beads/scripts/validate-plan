@@ -93,33 +93,36 @@ while IFS= read -r dep; do
 done < <(jq -rs '(map(.id)) as $ids | [.[] | (.dependencies // [])[] | select(.type == "blocks") | .depends_on_id]
   | unique | map(select(. as $d | $ids | index($d) | not)) | .[]' "$plan")
 
-# 2c. the committed sprint index is a deterministic projection of the live plan.
+# 2c. the committed index records foundational dev/sanity bead membership only.
 # `--write` is the explicit regeneration path used when accepting a plan change.
 index_needs_write=0
 if [ -n "$root" ] && [ -z "$file" ]; then
-  index=$("$here/phase-index-path" --root "$root") \
-    || { echo "validate-plan: could not determine the phase index path for $root" >&2; exit 2; }
-  if [ "$write_index" -eq 1 ]; then
-    index_needs_write=1
-  fi
   fresh_index="$scratch/fresh-sprints.json"
-  "$here/export-sprint-index" --root "$root" --out "$fresh_index" \
-    || { echo "validate-plan: fresh sprint index export failed for $root" >&2; exit 2; }
-  if [ ! -f "$index" ]; then
-    [ "$write_index" -eq 1 ] || problems+=("missing committed sprint index $index (run validate-plan --root $root --write)")
-  else
-    if index_diff=$(diff -u "$index" "$fresh_index"); then
-      index_needs_write=0
+  if ! index=$("$here/phase-index-path" --root "$root"); then
+    problems+=("could not determine the phase index path for $root")
+  elif ! "$here/export-sprint-index" --root "$root" --out "$fresh_index"; then
+    problems+=("fresh sprint index export failed for $root")
+  elif [ ! -f "$index" ]; then
+    if [ "$write_index" -eq 1 ]; then
+      index_needs_write=1
     else
-      diff_rc=$?
-      case "$diff_rc" in
-        1)
-          printf '%s\n' "$index_diff"
-          [ "$write_index" -eq 1 ] || problems+=("committed sprint index $index is out of date (run validate-plan --root $root --write)")
-          ;;
-        *) echo "validate-plan: could not compare committed sprint index $index" >&2; exit 2 ;;
-      esac
+      problems+=("missing committed sprint index $index (run validate-plan --root $root --write)")
     fi
+  elif index_diff=$(diff -u "$index" "$fresh_index"); then
+    index_needs_write=0
+  else
+    diff_rc=$?
+    case $diff_rc in
+      1)
+        printf '%s\n' "$index_diff"
+        if [ "$write_index" -eq 1 ]; then
+          index_needs_write=1
+        else
+          problems+=("committed sprint index $index is out of date (run validate-plan --root $root --write)")
+        fi
+        ;;
+      *) problems+=("could not compare committed sprint index $index") ;;
+    esac
   fi
 fi
 
@@ -134,8 +137,8 @@ while IFS=$'\t' read -r id kind ref owned; do
   docs=$reqdocs; [ "$kind" = "adrs" ] && docs=$adrdocs
   # shellcheck disable=SC2086
   grep -qw -- "$ref" $docs 2>/dev/null && continue
-  where=$(echo $docs | tr '\n' ' ')
-  if printf '%s\n' $docs | grep -qxF -f <(tr ' ' '\n' <<< "$owned") 2>/dev/null; then
+  where=$(echo "$docs" | tr '\n' ' ')
+  if printf '%s\n' "$docs" | grep -qxF -f <(tr ' ' '\n' <<< "$owned") 2>/dev/null; then
     warn "$id: $kind id $ref is not in $where yet; the sprint owns that doc and must add it"
   else
     problems+=("$id: $kind id $ref is not in $where")
@@ -169,7 +172,10 @@ fi
 
 if [ ${#problems[@]} -eq 0 ]; then
   if [ "$index_needs_write" -eq 1 ]; then
-    cp "$fresh_index" "$index"
+    if ! mkdir -p "$(dirname "$index")" || ! cp "$fresh_index" "$index"; then
+      echo "validate-plan: could not write sprint index $index" >&2
+      exit 2
+    fi
   fi
   echo "plan valid: $(jq -s '[.[] | select((.labels // []) | index("stage:dev"))] | length' "$plan") dev beads checked"
   exit 0

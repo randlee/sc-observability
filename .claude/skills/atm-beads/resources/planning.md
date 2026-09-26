@@ -49,13 +49,50 @@ rather than reaching an agent:
    every problem. Fix them all and render again.
 4. `bd import --dry-run -i <scratch>/plan.jsonl`, then `bd import -i
    <scratch>/plan.jsonl`. Right away, create the plan-review bead
-   (`atm-bd-orchestration` "Plan Gate", step 2). Then run
+   (`atm-bd-orchestration` "Plan Gate", step 2). Then
+   export and commit the mandatory phase sprint list with
+   `.claude/skills/atm-beads/scripts/export-sprint-index --root <root> --out docs/plans/phase-<x>/sprints.json`
+   and `git add docs/plans/phase-<x>/sprints.json && git commit`, then run
    `validate-plan --root <root>` on the imported beads, and `bd sync`.
 
 The plan then goes to plan review (`atm-bd-orchestration` "Plan Gate").
 Nothing is dispatched until it passes.
 
 Keep `<scratch>` outside the repository.
+
+## Sprint index schema
+
+The beads are the source of truth. Planning five sprints creates five dev beads
+and five triage/sanity gate beads through the validated import JSONL. The phase
+index records those bead IDs so reports know which foundational beads to query.
+It does not copy their contents.
+
+`docs/plans/phase-<x>/sprints.json` is a JSON document containing only:
+
+```json
+{
+  "root_bead_id": "obs-phase-d",
+  "sprints": [
+    {"dev_bead_id": "obs-d-1", "sanity_bead_id": "obs-d-1-sanity"}
+  ]
+}
+```
+
+This one-sprint example illustrates the structure; five sprints have five
+pairs. Both IDs are required, with no extra per-sprint fields. The formal
+schema is `docs/plans/sprints.schema.json`. Phase name, integration branch,
+sprint titles, ordering, dependencies, scope, ownership, requirements, ADRs,
+criteria and state are read from beads when needed. No `id` alias or copied
+bead metadata is stored here. Array order is deterministic ID order; reports
+get execution/stack ordering from live bead data.
+
+Absorbed work is excluded from the sprint array; its historical bead retains
+the absorption record. The exporter discovers sanity IDs through
+`stage:dev-sanity` beads with a `blocks` edge to the dev bead, never by adding
+a suffix. Missing or ambiguous gates fail export. Consumers validate unique
+pairs and matching live edges. `validate-plan` compares membership with a
+fresh ID-only export; changing a title, dependency, owner or status does not
+require copying that change into the index.
 
 ## Phase Root
 

@@ -1,20 +1,32 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env python3
+"""Locate a phase's committed sprint index."""
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+from sprint_index_common import phase_id, phase_path, run_json
 
-root=""
-phase=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --root) root=$2; shift 2 ;;
-    --phase) phase=$2; shift 2 ;;
-    *) echo "phase-index-path: unknown argument $1" >&2; exit 2 ;;
-  esac
-done
-[ -n "$root" ] || [ -n "$phase" ] || { echo "phase-index-path: pass --root or --phase" >&2; exit 2; }
-repo_root=$(git rev-parse --show-toplevel)
-if [ -n "$root" ]; then
-  phase=$(bd show "$root" --json 2>/dev/null | jq -r '.[0].metadata.phase // empty')
-  [ -n "$phase" ] || phase=$(sed -nE 's/^.*-phase-([a-z0-9]+)$/\1/p' <<< "$root")
-fi
-[ -n "$phase" ] || { echo "phase-index-path: could not determine phase" >&2; exit 2; }
-printf '%s/docs/plans/phase-%s/sprints.json\n' "$repo_root" "$phase"
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root")
+    parser.add_argument("--phase")
+    args = parser.parse_args()
+    if not args.root and not args.phase:
+        parser.error("pass --root or --phase")
+    repo = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
+    phase = args.phase
+    if args.root:
+        records = run_json(repo, "bd", "show", args.root, "--json")
+        if not records:
+            raise RuntimeError(f"root bead not found: {args.root}")
+        phase = phase_id(args.root, records[0])
+    print(phase_path(repo, phase))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (OSError, RuntimeError, ValueError, TypeError, subprocess.CalledProcessError) as exc:
+        print(f"phase-index-path: {exc}", file=sys.stderr)
+        raise SystemExit(2)

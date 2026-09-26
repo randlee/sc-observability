@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export the plan-only sprint index for a phase root bead."""
+"""Record the foundational dev/sanity bead IDs for a phase; beads remain authoritative."""
 
 from __future__ import annotations
 
@@ -11,38 +11,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from sprint_index_common import phase_id, run_json, validate_index
 
-DELIVERABLES = re.compile(
-    r"^##\s+Deliverables\s*$" r"(?P<body>.*?)" r"(?=^##\s+|\Z)",
-    re.MULTILINE | re.DOTALL | re.IGNORECASE,
-)
-NUMBERED_ITEM = re.compile(r"^\s*[0-9]+\.\s+", re.MULTILINE)
+
 FOLDED_INTO = re.compile(r"^folded into\s+(\S+)", re.IGNORECASE)
-
-
-def run_json(repo: Path, *args: str) -> Any:
-    result = subprocess.run(
-        list(args), cwd=repo, check=False, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE, text=True,
-    )
-    if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise RuntimeError(f"{' '.join(args)} failed: {detail}")
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"{' '.join(args)} returned invalid JSON: {exc}") from exc
 
 
 def metadata(bead: dict[str, Any]) -> dict[str, Any]:
     value = bead.get("metadata")
     return value if isinstance(value, dict) else {}
-
-
-def list_value(value: Any) -> list[Any]:
-    if value is None:
-        return []
-    return value if isinstance(value, list) else [value]
 
 
 def dependency_id(edge: dict[str, Any]) -> str:
@@ -51,11 +28,6 @@ def dependency_id(edge: dict[str, Any]) -> str:
 
 def dependency_type(edge: dict[str, Any]) -> str:
     return str(edge.get("type") or edge.get("dependency_type") or "")
-
-
-def deliverable_count(description: str) -> int:
-    match = DELIVERABLES.search(description or "")
-    return len(NUMBERED_ITEM.findall(match.group("body"))) if match else 0
 
 
 def main() -> int:
@@ -71,12 +43,7 @@ def main() -> int:
         if not root_records:
             raise RuntimeError(f"root bead not found: {args.root}")
         root_record = root_records[0]
-        phase = str(metadata(root_record).get("phase") or "")
-        if not phase:
-            match = re.search(r"-phase-([a-z0-9]+)$", args.root)
-            if not match:
-                raise RuntimeError(f"root bead {args.root} has no metadata.phase")
-            phase = match.group(1)
+        phase = phase_id(args.root, root_record)
         children = run_json(
             repo, "bd", "list", "--parent", args.root, "--all", "-n", "0", "--json"
         )
@@ -88,54 +55,39 @@ def main() -> int:
     dev_pattern = re.compile(rf"^{re.escape(prefix)}-{re.escape(phase)}-[0-9]+$")
     devs = [bead for bead in children if dev_pattern.fullmatch(str(bead.get("id", "")))]
 
-    def sprint_key(bead: dict[str, Any]) -> tuple[int, int, str]:
-        try:
-            layer = int(metadata(bead).get("layer"))
-        except (TypeError, ValueError):
-            layer = 2**31 - 1
+    def sprint_key(bead: dict[str, Any]) -> tuple[int, str]:
         match = re.search(r"(\d+)$", str(bead.get("id", "")))
-        number = int(match.group(1)) if match else 2**31 - 1
-        return layer, number, str(bead.get("id", ""))
+        return int(match.group(1)), str(bead["id"])
 
     sprints = []
     for bead in sorted(devs, key=sprint_key):
-        bead_meta = metadata(bead)
-        depends_on = sorted({
-            dependency_id(edge)
-            for edge in bead.get("dependencies") or []
-            if dependency_type(edge) != "parent-child" and dependency_id(edge)
+        # Absorbed work is history on its bead, not a sprint in the current plan.
+        if FOLDED_INTO.match(str(bead.get("close_reason") or "")):
+            continue
+        gates = [candidate for candidate in children
+                 if "stage:dev-sanity" in (candidate.get("labels") or [])
+                 and any(dependency_type(edge) == "blocks" and dependency_id(edge) == bead["id"]
+                         for edge in candidate.get("dependencies") or [])]
+        if len(gates) != 1:
+            raise RuntimeError(f"sprint bead {bead['id']} must have exactly one sanity gate; found {len(gates)}")
+        sprints.append({
+            "dev_bead_id": bead["id"],
+            "sanity_bead_id": gates[0]["id"],
         })
-        row = {
-            "id": bead["id"],
-            "sprint": bead_meta.get("sprint") or str(bead["id"]).removeprefix(f"{prefix}-"),
-            "title": bead.get("title", ""),
-            "layer": bead_meta.get("layer"),
-            "pr_target": bead_meta.get("pr_target"),
-            "stack": bead_meta.get("stack"),
-            "depends_on": depends_on,
-            "deliverable_count": deliverable_count(bead.get("description", "")),
-            "owned_paths": list_value(bead_meta.get("owned_paths")),
-            "requirements": list_value(bead_meta.get("requirements")),
-            "adrs": list_value(bead_meta.get("adrs")),
-        }
-        folded = FOLDED_INTO.match(str(bead.get("close_reason") or ""))
-        if folded:
-            row["folded_into"] = folded.group(1)
-        sprints.append(row)
-
-    if phase == "d" and sprints and not any(row["depends_on"] for row in sprints):
-        raise RuntimeError("Phase D sprint index has no dependency edges; bd dependency fields may have changed")
 
     output = {
-        "phase_id": phase,
         "root_bead_id": args.root,
-        "integration_branch": metadata(root_record).get("integration_branch") or "",
         "sprints": sprints,
     }
+    validate_index(output)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except (OSError, RuntimeError, ValueError, TypeError, KeyError) as exc:
+        print(f"export-sprint-index: {exc}", file=sys.stderr)
+        raise SystemExit(2)

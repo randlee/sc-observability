@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Phase foundational bead index",
+  "$comment": "Exporter, sprint-report, and DAG generation share validation for this contract. Dev and sanity IDs must be unique, distinct from each other and the root, and resolve to a valid live pair. Extra copied bead fields are rejected.",
+  "description": "Records only which beads are foundational to a phase. Plan JSONL creates and validates the sprint and triage/sanity beads; those beads are the source of truth. This JSON document retains their IDs for report scope and does not duplicate bead content or execution state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "root_bead_id",
+    "sprints"
+  ],
+  "properties": {
+    "root_bead_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Phase root bead ID. Phase identity and integration branch are read from this bead."
+    },
+    "sprints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sprint"
+      },
+      "description": "One pair per current planned sprint: five sprints means five entries referencing five dev beads and five triage/sanity beads. Absorbed work is not a separate sprint."
+    }
+  },
+  "$defs": {
+    "sprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dev_bead_id",
+        "sanity_bead_id"
+      ],
+      "properties": {
+        "dev_bead_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Sprint development bead ID. Read labels, scope, dependencies, ordering, ownership and state from the bead."
+        },
+        "sanity_bead_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Paired triage/sanity gate bead ID. The live bead must block on this entry's dev bead; its criteria, verdict and state are not copied here."
+        }
+      }
+    }
+  }
+}
