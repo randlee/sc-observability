@@ -81,6 +81,7 @@ all = [
 [startup.quality-mgr]
 all = [
   "read .claude/agents/quality-mgr.md for directive",
+  "When the phase runs under atm-bd-orchestration, also read .claude/skills/atm-bd-orchestration/roles/quality-mgr.md; where the two differ, the role file wins",
   "Use native atm send or atm ack for messages to team-lead, cobs, lobs, or aobs",
   "Use native atm read to read messages from team-members",
 ]
