@@ -14,8 +14,8 @@ Generated projection of `obs-d-13`; the bead is authoritative.
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-13-logging-contract`
 - PR target (merge order only): `sprint/d-21-otlp-contract`
 - Blocked by: `obs-phase-d-plan-qa`
-- Requirements: LAY-002, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-008, LOG-009, LOG-010, LOG-015, LOG-018, LOG-019, LOG-020, LOG-023, LOG-037, LOG-038, LOG-040, LOG-042, LOG-043, LOG-046, NFR-005, NFR-006, NFR-012, PHB-002, PHB-007, PHB-010, PHB-011, PHB-013, PHD-001, TYP-023, TYP-024, TYP-026, TYP-030, TYP-039
-- ADRs: ADR-002, ADR-003, ADR-006, ADR-010, ADR-011, ADR-013, ADR-014, ADR-015, ADR-017, ADR-019
+- Requirements: LAY-002, LAY-006, LAY-007, LOG-001, LOG-003, LOG-004, LOG-008, LOG-009, LOG-010, LOG-015, LOG-018, LOG-019, LOG-020, LOG-023, LOG-037, LOG-038, LOG-040, LOG-042, LOG-043, LOG-046, NFR-005, NFR-006, NFR-012, PHB-002, PHB-007, PHB-010, PHB-011, PHB-013, PHD-001, PHD-002, SRC-001, SRC-002, TYP-023, TYP-024, TYP-026, TYP-030, TYP-039
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-006, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-014, ADR-015, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability-log/src/bridge.rs`
   - `crates/sc-observability-log/src/lib.rs`
