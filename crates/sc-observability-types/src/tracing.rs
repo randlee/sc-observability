@@ -6,6 +6,7 @@ use crate::{ActionName, ErrorCode, StateName, TargetCategory, ValueValidationErr
 
 /// Validated 32-character lowercase hexadecimal trace identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct TraceId(String);
 
 impl TraceId {
@@ -54,6 +55,7 @@ impl TryFrom<String> for TraceId {
 
 /// Validated 16-character lowercase hexadecimal span identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct SpanId(String);
 
 impl SpanId {
