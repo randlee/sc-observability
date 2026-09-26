@@ -10,7 +10,7 @@ import tarfile
 import tomllib
 from pathlib import Path,PurePosixPath
 from _hashing import digest
-from _log_staging import verify_stage
+from _log_staging import read_stage_manifest, verify_stage
 
 class BundleError(ValueError):
     def __init__(self,code,message):super().__init__(f'{code}: {message}');self.code=code
@@ -78,26 +78,21 @@ def qualified_packages_for(evidence, source_sha):
         return {}
     return {package['name']: package for package in evidence['packages']}
 
-def qualified_stage_for_version(stage, root_version):
-    """Verify B.2 evidence before deciding whether this release train uses it."""
-    manifest=json.loads((stage/'stage-manifest.json').read_text(encoding='utf-8'))
+def qualified_stage_for_version(stage, root_version, source_sha):
+    """Return verified B.2 archives, or none when its release train differs.
+
+    Missing, unreadable, and malformed stage manifests are corrupt evidence,
+    not a version mismatch, and therefore fail the bundle build.
+    """
+    try:manifest=read_stage_manifest(stage)
+    except (OSError,ValueError) as exc:raise BundleError('BUNDLE_INVALID_STAGE',f'unreadable stage manifest: {exc}') from exc
     candidate_version=manifest.get('candidate_version')
-    if not isinstance(candidate_version,str):
-        # Keep malformed evidence on the existing failure path rather than
-        # allowing a missing version to look like a harmless mismatch.
-        return verify_stage(stage,root_version)
-    evidence=verify_stage(stage,candidate_version)
+    if not isinstance(candidate_version,str):raise BundleError('BUNDLE_INVALID_STAGE','stage manifest candidate_version must be a string')
+    evidence=verify_stage(stage,candidate_version,evidence=manifest)
     if candidate_version != root_version:
         print(f'stage evidence {candidate_version} does not match root {root_version}; using unpublished cargo packages')
-        return None
-    return evidence
-
-def qualified_source_commit_for(package_name, qualified, evidence):
-    """Keep source provenance only for archives selected from B.2 evidence."""
-    if package_name not in qualified:
-        return None
-    assert evidence is not None
-    return evidence['source_commit']
+        return {}
+    return qualified_packages_for(evidence,source_sha)
 
 def dependency_requirements(document, workspace=None):
     result={};tables=[('',document),*document.get('target',{}).items()]
@@ -238,16 +233,13 @@ def build(root_manifest,output):
     entries=[]
     qualified_stage=source_root/'docs/plans/phase-b/evidence/b2-final/stage'
     qualified={}
-    qualified_evidence=None
     if qualified_stage.exists():
-        qualified_evidence=qualified_stage_for_version(qualified_stage,root['version'])
-        if qualified_evidence is not None:
-            qualified=qualified_packages_for(qualified_evidence,source_sha)
+        qualified=qualified_stage_for_version(qualified_stage,root['version'],source_sha)
     for package in unpublished:
         stem=f'{package["name"]}-{package["version"]}'
         archive=archives/f'{stem}.crate'
-        if package['name'] in qualified:
-            staged=qualified[package['name']]
+        staged=qualified.get(package['name'])
+        if staged:
             shutil.copyfile(qualified_stage/staged['archive'],archive)
         else:shutil.copyfile(build_target/'package'/archive.name,archive)
         members=archive_members(archive)
@@ -257,7 +249,7 @@ def build(root_manifest,output):
         if normalized['package']['name']!=package['name'] or normalized['package']['version']!=package['version']:raise BundleError('BUNDLE_INVALID_MANIFEST','archive package identity mismatch')
         requirements=reviewed_requirements[str(Path(package['manifest_path']).resolve())]
         if dependency_requirements(normalized)!=requirements:raise BundleError('BUNDLE_REQUIREMENT_DRIFT',package['name'])
-        entries.append({'reviewed_requirements':requirements,'name':package['name'],'version':package['version'],'archive':archive.relative_to(output).as_posix(),'archive_sha256':digest(archive),'root':f'packages/{stem}','provenance':'qualified-B.2-archive' if package['name'] in qualified else 'unpublished-cargo-package','qualified_source_commit':qualified_source_commit_for(package['name'],qualified,qualified_evidence)})
+        entries.append({'reviewed_requirements':requirements,'name':package['name'],'version':package['version'],'archive':archive.relative_to(output).as_posix(),'archive_sha256':digest(archive),'root':f'packages/{stem}','provenance':'qualified-B.2-archive' if staged else 'unpublished-cargo-package','qualified_source_commit':source_sha if staged else None})
     shutil.rmtree(build_target)
     patches='\n'.join(f'{p["name"]} = {{ path = "{p["root"]}" }}' for p in entries)
     dependencies='\n'.join(f'{p["name"]} = "={p["version"]}"' for p in entries)

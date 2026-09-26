@@ -1,8 +1,10 @@
 """Boundary tests invoking the real helper before Cargo can follow bad paths."""
 import json
+import io
 import subprocess
 import sys
 import tempfile
+import tarfile
 import unittest
 from pathlib import Path
 import importlib.util
@@ -13,40 +15,79 @@ sys.path.insert(0,str(HELPER_DIR))
 HELPER=ROOT/'scripts/ci/build_binding_source_bundle.py'
 SPEC=importlib.util.spec_from_file_location('binding_source_bundle', HELPER)
 BUNDLE=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(BUNDLE)
+from _log_staging import PACKAGES, inspect_archive, sha256
+
 class SourceBoundaryTests(unittest.TestCase):
-    def stage(self,root,candidate_version):
-        stage=root/'stage';stage.mkdir()
-        (stage/'stage-manifest.json').write_text(json.dumps({'candidate_version':candidate_version}))
-        return stage
+    def command(self,root,*args):
+        return subprocess.run(args,cwd=root,check=True,capture_output=True,text=True)
 
-    def test_matching_stage_version_uses_qualified_archives(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            stage=self.stage(Path(temporary),'2.0.0')
-            evidence={'source_commit':'current','packages':[{'name':'binding-runtime'}]}
-            with mock.patch.object(BUNDLE,'verify_stage',return_value=evidence) as verify:
-                actual=BUNDLE.qualified_stage_for_version(stage,'2.0.0')
-            self.assertEqual(actual,evidence)
-            verify.assert_called_once_with(stage,'2.0.0')
-            self.assertEqual(BUNDLE.qualified_packages_for(actual,'current'),{'binding-runtime': {'name':'binding-runtime'}})
+    def staged_archive(self,stage,name,version,source_commit):
+        archive=stage/'archives'/f'{name}-{version}.crate';prefix=f'{name}-{version}'
+        manifest='[package]\nname='+json.dumps(name)+'\nversion='+json.dumps(version)+'\nedition="2024"\nlicense="MIT"\n'
+        if name=='sc-observability-types':manifest+='[dependencies]\nserde_json="1"\n'
+        if name=='sc-observability-log':manifest+='[dependencies]\nsc-observability-log-macros={version='+json.dumps(f'={version}')+'}\n'
+        files={f'{prefix}/Cargo.toml':manifest.encode(),f'{prefix}/LICENSE':b'MIT\n',f'{prefix}/src/lib.rs':b'pub fn fixture() {}\n',f'{prefix}/.cargo_vcs_info.json':json.dumps({'git':{'sha1':source_commit,'dirty':False}}).encode()}
+        with tarfile.open(archive,'w:gz') as contents:
+            for path,body in files.items():
+                member=tarfile.TarInfo(path);member.size=len(body)
+                contents.addfile(member,io.BytesIO(body))
+        return archive
 
-    def test_mismatched_stage_version_uses_unpublished_packages(self):
+    def project_with_stage(self,root,root_version,stage_version,*,corrupt=False,missing_candidate=False):
+        package=root/'crates/sc-observability-types';(package/'src').mkdir(parents=True)
+        (root/'Cargo.toml').write_text('[workspace]\nmembers=["crates/sc-observability-types"]\nresolver="2"\n')
+        (package/'Cargo.toml').write_text('[package]\nname="sc-observability-types"\nversion='+json.dumps(root_version)+'\nedition="2024"\nlicense="MIT"\n[dependencies]\nserde_json="1"\n')
+        (package/'src/lib.rs').write_text('pub fn fixture() {}\n')
+        (package/'LICENSE').write_text('MIT\n')
+        self.command(root,'cargo','generate-lockfile');self.command(root,'git','init','-q');self.command(root,'git','add','.')
+        self.command(root,'git','-c','user.name=Bundle Fixture','-c','user.email=bundle-fixture@example.invalid','commit','-qm','reviewed fixture')
+        source_commit=self.command(root,'git','rev-parse','HEAD').stdout.strip()
+        stage=root/'docs/plans/phase-b/evidence/b2-final/stage';(stage/'archives').mkdir(parents=True)
+        packages=[]
+        for name in PACKAGES:
+            archive=self.staged_archive(stage,name,stage_version,source_commit)
+            details=inspect_archive(archive,name,stage_version,source_commit)
+            packages.append({'name':name,'version':stage_version,'archive':archive.relative_to(stage).as_posix(),'archive_sha256':sha256(archive),**details})
+        manifest={'schema_version':1,'candidate_version':stage_version,'publication':'pending_B.7','source_commit':source_commit,'packages':packages}
+        if missing_candidate:manifest.pop('candidate_version')
+        if corrupt:manifest['packages'][0]['archive_sha256']='0'*64
+        (stage/'stage-manifest.json').write_text(json.dumps(manifest))
+        return package/'Cargo.toml'
+
+    def test_build_uses_matching_qualified_stage_archives(self):
         with tempfile.TemporaryDirectory() as temporary:
-            stage=self.stage(Path(temporary),'1.4.0')
-            evidence={'source_commit':'released','packages':[{'name':'binding-runtime'}]}
-            with mock.patch.object(BUNDLE,'verify_stage',return_value=evidence) as verify:
-                with mock.patch('builtins.print') as output:
-                    actual=BUNDLE.qualified_stage_for_version(stage,'2.0.0')
-            self.assertIsNone(actual)
-            verify.assert_called_once_with(stage,'1.4.0')
+            root=Path(temporary);manifest=self.project_with_stage(root,'1.4.0','1.4.0')
+            evidence=BUNDLE.build(manifest,root/'bundle')
+            self.assertEqual(evidence['packages'][0]['provenance'],'qualified-B.2-archive')
+            self.assertEqual(evidence['packages'][0]['qualified_source_commit'],evidence['source_commit'])
+
+    def test_build_uses_source_packages_for_a_verified_version_mismatch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);manifest=self.project_with_stage(root,'2.0.0','1.4.0')
+            with mock.patch('builtins.print') as output:
+                evidence=BUNDLE.build(manifest,root/'bundle')
+            self.assertEqual(evidence['packages'][0]['provenance'],'unpublished-cargo-package')
+            self.assertIsNone(evidence['packages'][0]['qualified_source_commit'])
             output.assert_called_once_with('stage evidence 1.4.0 does not match root 2.0.0; using unpublished cargo packages')
-            self.assertIsNone(BUNDLE.qualified_source_commit_for('binding-runtime',{},actual))
 
-    def test_corrupt_stage_still_raises(self):
+    def test_build_rejects_a_corrupt_stage_before_version_mismatch_fallback(self):
         with tempfile.TemporaryDirectory() as temporary:
-            stage=self.stage(Path(temporary),'1.4.0')
-            with mock.patch.object(BUNDLE,'verify_stage',side_effect=ValueError('archive checksum mismatch')):
-                with self.assertRaisesRegex(ValueError,'archive checksum mismatch'):
-                    BUNDLE.qualified_stage_for_version(stage,'2.0.0')
+            root=Path(temporary);manifest=self.project_with_stage(root,'2.0.0','1.4.0',corrupt=True)
+            with self.assertRaisesRegex(ValueError,'archive checksum mismatch'):
+                BUNDLE.build(manifest,root/'bundle')
+
+    def test_build_rejects_a_stage_without_candidate_version(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);manifest=self.project_with_stage(root,'2.0.0','1.4.0',missing_candidate=True)
+            with self.assertRaisesRegex(BUNDLE.BundleError,'candidate_version must be a string'):
+                BUNDLE.build(manifest,root/'bundle')
+
+    def test_build_rejects_a_non_object_stage_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);manifest=self.project_with_stage(root,'2.0.0','1.4.0')
+            stage=root/'docs/plans/phase-b/evidence/b2-final/stage/stage-manifest.json';stage.write_text('[]')
+            with self.assertRaisesRegex(BUNDLE.BundleError,'stage manifest must be a JSON object'):
+                BUNDLE.build(manifest,root/'bundle')
 
     def test_stale_qualified_archive_is_not_reused(self):
         evidence={'source_commit':'older','packages':[{'name':'binding-runtime'}]}

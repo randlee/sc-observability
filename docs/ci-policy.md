@@ -75,7 +75,9 @@ The publisher runs the retained checks by dispatching both workflows on the
 candidate ref before publishing and verifying successful completion. The
 binding source bundle uses B.2 qualified archives only when the B.2 candidate
 version matches the workspace release train; otherwise it builds unpublished
-Cargo packages from source (obs-ci-stage-bundle). B.2 runs
+Cargo packages from source (obs-ci-stage-bundle). A corrupt or unreadable B.2
+stage still fails the bundle build; only a verified release-train mismatch
+falls back to source. B.2 runs
 `test_log_staging.py` and `test_generation_provenance.py`; B.P2 runs
 `test_validate_runtime_level_qualification_metadata.py`,
 `test_validate_runtime_level_platform_evidence.py`,
