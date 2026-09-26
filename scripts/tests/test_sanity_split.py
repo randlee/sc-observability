@@ -150,6 +150,10 @@ class SanitySplit(unittest.TestCase):
             "unclosed fence": "## Deliverables\n1. One.\n```\n2. Two.\n",
             "numbered line inside a longer outer fence is not an item": (
                 "## Deliverables\n1. Document:\n````markdown\n```\n2. Example only.\n```\n````\n3. Tests.\n"),
+            "sub-heading inside the section": (
+                "## Deliverables\n1. Comment.\n### Required auth work\n- Add authorization check.\n2. Tests.\n"),
+            "fence closed by a longer mixed line": "## Deliverables\n1. Document:\n```\n```~\n2. Example only.\n",
+            "fence closed by a shorter line": "## Deliverables\n1. Document:\n````\n```\n2. Example only.\n",
             "heading inside a fence does not end the section": (
                 "## Deliverables\n1. Document:\n```markdown\n## Example\n- stray bullet after the fence\n```\n- stray\n2. Tests.\n"),
         }
@@ -161,6 +165,10 @@ class SanitySplit(unittest.TestCase):
                 self.assertFalse(self.scratch.exists(), "lint must not start for an invalid plan")
         out = self.run_split(bead(cases["numbered line inside a longer outer fence is not an item"]))
         self.assertIn("numbering is not 1..2: [1, 3]", out.stderr)
+        out = self.run_split(bead(cases["sub-heading inside the section"]))
+        self.assertIn("sub-heading, which is not part of a numbered list: '### Required auth work'", out.stderr)
+        for name in ("fence closed by a longer mixed line", "fence closed by a shorter line"):
+            self.assertIn("unclosed fenced block", self.run_split(bead(cases[name])).stderr, name)
 
     def test_plan_items_keep_wrapped_text_sub_bullets_and_fenced_examples(self):
         description = ("## Deliverables\n\n"
@@ -191,6 +199,12 @@ class SanitySplit(unittest.TestCase):
             "tildes do not close backticks": (
                 "## Deliverables\n1. Document:\n```\n~~~\n2. Example only.\n```\n2. Tests.\n",
                 ["Document: ``` ~~~ 2. Example only. ```", "Tests."]),
+            "closing fence may be longer and padded": (
+                "## Deliverables\n1. Document:\n```\n2. Example only.\n   `````  \n2. Tests.\n",
+                ["Document: ``` 2. Example only. `````", "Tests."]),
+            "a level-2 heading after the list ends the section": (
+                "## Deliverables\n1. One.\n2. Two.\n## Non-closure\n### Sub\n- bullets here are fine\n",
+                ["One.", "Two."]),
         }
         for name, (description, expected) in cases.items():
             with self.subTest(name):
@@ -342,6 +356,52 @@ class SanitySplit(unittest.TestCase):
                             "the TERM-resistant lint command survived the cancellation")
         leftover = subprocess.run(["pgrep", "-f", "resistant.py"], capture_output=True, text=True)
         self.assertEqual(leftover.stdout.strip(), "")
+
+    def resistant_descendant(self):
+        """A lint command whose shell backgrounds a SIGTERM-ignoring python and waits on it."""
+        marker = self.root / "descendant.pid"
+        helper = self.root / "descendant.py"
+        helper.write_text("import os, pathlib, signal, time\n"
+                          "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+                          f"pathlib.Path({str(marker)!r}).write_text(str(os.getpid()))\n"
+                          "time.sleep(3020)\n")
+        return f"{sys.executable} {helper} & wait", marker
+
+    def alive(self, pid):
+        return subprocess.run(["kill", "-0", str(pid)], capture_output=True).returncode == 0
+
+    def wait_gone(self, pid, seconds=10):
+        for _ in range(int(seconds / 0.05)):
+            if not self.alive(pid):
+                return
+            time.sleep(0.05)
+        self.fail(f"process {pid} is still alive")
+
+    def test_lint_supervisor_cancellation_kills_a_term_resistant_descendant(self):
+        lint, marker = self.resistant_descendant()
+        out = self.run_split(lint=lint)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        manifest = json.loads(out.stdout)
+        for _ in range(200):
+            if marker.exists():
+                break
+            time.sleep(0.05)
+        descendant = int(marker.read_text())
+        os.killpg(manifest["lint"]["pid"], signal.SIGTERM)
+        self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "cancelled")
+        self.wait_gone(manifest["lint"]["pid"])
+        self.assertFalse(self.alive(descendant), "the TERM-ignoring descendant survived the cancellation")
+        self.assertEqual(subprocess.run(["pgrep", "-f", "descendant.py"], capture_output=True, text=True).stdout, "")
+
+    def test_lint_supervisor_timeout_kills_a_term_resistant_descendant(self):
+        lint, marker = self.resistant_descendant()
+        out = self.run_split(None, None, None, "sprint/x", "develop", "--lint-timeout-seconds", "1", lint=lint)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        manifest = json.loads(out.stdout)
+        self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "timeout")
+        descendant = int(marker.read_text())
+        self.wait_gone(manifest["lint"]["pid"])
+        self.assertFalse(self.alive(descendant), "the TERM-ignoring descendant survived the timeout")
 
     def test_split_only_skips_git_and_lint(self):
         (self.repo.wt / "dirty.txt").write_text("would fail pinning")

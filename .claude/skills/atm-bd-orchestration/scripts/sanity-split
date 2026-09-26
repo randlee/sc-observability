@@ -27,17 +27,19 @@ The lint command runs under `lint-supervisor`, a detached process (its pid is
 `lint.pid`) that runs the command in a process group of its own, redirects the
 command's stdout and stderr to the log, waits at most `timeout_seconds`, and
 always writes the exit file: the exit code, or `timeout` (the command's group
-was killed), `cancelled` (the supervisor received SIGTERM or SIGINT: it sends
-SIGTERM to the command's group, waits up to 2 seconds, SIGKILLs the survivors
-and confirms the command is gone before writing) or `error`.
-`kill -- -<pid>` or `kill <pid>` stops the supervisor and the lint command.
+was killed), `cancelled` (the supervisor received SIGTERM or SIGINT) or `error`.
+On timeout and on cancellation the supervisor sends SIGTERM to the command's
+whole process group, waits up to 2 seconds, SIGKILLs every survivor and
+confirms the group is empty before writing; a group that still survives is
+written as `error`. `kill -- -<pid>` or `kill <pid>` stops the supervisor and
+the lint command with all its descendants.
 
 `## Deliverables` must be one top-level numbered list `1.` .. `X.`; wrapped
 lines, indented sub-bullets and blank lines belong to the item above them,
-fenced blocks (CommonMark: closed only by a fence of the same character at
-least as long as the opener) are text even when they contain headings or
-numbered lines, and anything else in the section is PLAN_INVALID. The section
-ends at the first heading outside a fence.
+fenced blocks (CommonMark: closed only by a line of the same fence character
+repeated at least the opening length) are text even when they contain headings
+or numbered lines, and anything else in the section, sub-headings included, is
+PLAN_INVALID. The section ends at the first `#` or `##` heading outside a fence.
 
 Exit codes (the code and message are printed on stderr):
   0  ok
@@ -56,6 +58,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 
 HERE = Path(__file__).resolve().parent
 TEMPLATE = HERE.parent / "templates" / "dev-sanity-assignment.json.j2"
@@ -97,7 +100,7 @@ def load_bead(args):
 ITEM = re.compile(r"^(\d+)\.\s+(\S.*)$")
 TOP_BULLET = re.compile(r"^[-*+]\s")
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
-HEADING = re.compile(r"^#{1,6} ")
+HEADING = re.compile(r"^(#{1,6}) ")
 
 
 def parse_deliverables(description):
@@ -109,11 +112,14 @@ def parse_deliverables(description):
         stripped = line.strip()
         if fence:                                   # fenced text belongs to the current item
             items[-1][1] += " " + stripped
-            if re.fullmatch(re.escape(fence) + r"[`~]*", stripped) and stripped[0] == fence[0]:
-                fence = None
+            if re.fullmatch(re.escape(fence[0]) + "{%d,}" % len(fence), stripped):
+                fence = None                        # same character, at least the opening length
             continue
-        if HEADING.match(line):
-            break                                   # the section ends at the next heading
+        heading = HEADING.match(line)
+        if heading:
+            if len(heading.group(1)) <= 2:
+                break                               # the section ends at the next `#`/`##` heading
+            raise Fail(2, f"`## Deliverables` has a sub-heading, which is not part of a numbered list: {stripped!r}")
         if not stripped:
             prev_blank = True
             continue
@@ -253,10 +259,44 @@ def start_lint(args):
 
 
 GRACE_SECONDS = 2
+KILL_WAIT_SECONDS = 5
 
 
 class Cancelled(Exception):
     pass
+
+
+def stop_group(pgid, child):
+    """TERM the lint process group, wait the grace period, KILL the survivors; True once the group is empty."""
+    def empty():
+        child.poll()                                # reap the direct child so it does not linger as a zombie
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:                     # macOS: a member is still exiting; poll again
+            pass
+        return False
+
+    def signal_group(sig):
+        try:
+            os.killpg(pgid, sig)
+        except ProcessLookupError:
+            pass
+
+    def wait_empty(seconds):
+        deadline = time.monotonic() + seconds
+        while not empty():
+            if time.monotonic() > deadline:
+                return False
+            time.sleep(0.05)
+        return True
+
+    signal_group(signal.SIGTERM)
+    if wait_empty(GRACE_SECONDS):
+        return True
+    signal_group(signal.SIGKILL)
+    return wait_empty(KILL_WAIT_SECONDS)
 
 
 def supervise(argv):
@@ -274,13 +314,6 @@ def supervise(argv):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
         raise Cancelled()
 
-    def stop(sig):
-        if child is not None and child.poll() is None:
-            try:
-                os.killpg(child.pid, sig)
-            except ProcessLookupError:
-                pass
-
     signal.signal(signal.SIGTERM, cancel)
     signal.signal(signal.SIGINT, cancel)
     try:
@@ -290,22 +323,13 @@ def supervise(argv):
             try:
                 outcome = str(child.wait(timeout=args.timeout_seconds))
             except subprocess.TimeoutExpired:
-                outcome = "timeout"
-                stop(signal.SIGKILL)
-                child.wait()
+                outcome = "timeout" if stop_group(child.pid, child) else "error"
     except Cancelled:
-        outcome = "cancelled"
-        if child is not None:
-            stop(signal.SIGTERM)
-            try:
-                child.wait(timeout=GRACE_SECONDS)
-            except subprocess.TimeoutExpired:
-                pass
-            stop(signal.SIGKILL)
-            child.wait()
+        outcome = "cancelled" if child is None or stop_group(child.pid, child) else "error"
     except Exception:
         outcome = "error"
-        stop(signal.SIGKILL)
+        if child is not None:
+            stop_group(child.pid, child)
     finally:
         exit_file.write_text(outcome + "\n")
     return 0 if outcome not in ("cancelled", "error") else 1
