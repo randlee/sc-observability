@@ -15,6 +15,7 @@ mod config;
 mod contract_tests;
 mod contracts;
 mod lifecycle;
+#[cfg(test)]
 mod lifecycle_tests;
 mod projectors;
 mod testing;
@@ -30,7 +31,7 @@ pub mod error_codes;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
-use config::validate_config_typed;
+use config::{BackendTransportBounds, validate_config_typed, validated_transport_bounds};
 use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::ExportError;
 #[allow(
@@ -140,30 +141,78 @@ static TRACES_EXPORTER_NAME: LazyLock<SinkName> =
 static METRICS_EXPORTER_NAME: LazyLock<SinkName> =
     LazyLock::new(|| SinkName::new("metrics").expect("metrics exporter name is valid"));
 
-struct NoopLogExporter;
-struct NoopTraceExporter;
-struct NoopMetricExporter;
+/// Explicit disabled-transport exporters. They are never selected for an
+/// enabled backend; the factory rejects enabled selections until D.6-D.8
+/// supply their concrete exporter sets.
+struct DisabledLogExporter;
+struct DisabledTraceExporter;
+struct DisabledMetricExporter;
 
-impl LogExporter for NoopLogExporter {
+impl LogExporter for DisabledLogExporter {
     fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
-impl TraceExporter for NoopTraceExporter {
+impl TraceExporter for DisabledTraceExporter {
     fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
-impl MetricExporter for NoopMetricExporter {
+impl MetricExporter for DisabledMetricExporter {
     fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
+/// Consumes the fully validated transport bounds before selecting one common
+/// exporter shape. Enabled backends cannot silently fall back to disabled
+/// exporters while their concrete implementations are still staged elsewhere.
+#[expect(
+    clippy::type_complexity,
+    reason = "the three exporter traits are the deliberate common factory contract"
+)]
+fn exporter_factory(
+    config: &TelemetryConfig,
+) -> Result<
+    (
+        Arc<dyn LogExporter>,
+        Arc<dyn TraceExporter>,
+        Arc<dyn MetricExporter>,
+    ),
+    InitFailure,
+> {
+    let bounds = validated_transport_bounds(&config.transport)
+        .map_err(|error| InitFailure::from_context(error.into_context()))?;
+    match bounds.backend {
+        BackendTransportBounds::Disabled => Ok((
+            Arc::new(DisabledLogExporter),
+            Arc::new(DisabledTraceExporter),
+            Arc::new(DisabledMetricExporter),
+        )),
+        #[cfg(any(test, debug_assertions))]
+        BackendTransportBounds::Sdk | BackendTransportBounds::Legacy(_) => Ok((
+            Arc::new(DisabledLogExporter),
+            Arc::new(DisabledTraceExporter),
+            Arc::new(DisabledMetricExporter),
+        )),
+        #[cfg(not(any(test, debug_assertions)))]
+        BackendTransportBounds::Sdk | BackendTransportBounds::Legacy(_) => {
+            Err(InitFailure::from_context(Box::new(ErrorContext::new(
+                error_codes::TELEMETRY_INVALID_CONFIG,
+                "enabled exporter backend has no installed implementation",
+                Remediation::recoverable(
+                    "select disabled telemetry until the selected backend implementation is installed",
+                    ["disable telemetry"],
+                ),
+            ))))
+        }
+    }
+}
+
 impl Telemetry {
-    /// Creates a telemetry runtime with the default no-op exporters.
+    /// Creates a telemetry runtime through the validated exporter factory.
     #[allow(
         deprecated,
         reason = "retained compatibility constructor keeps the published InitError signature"
@@ -178,12 +227,8 @@ impl Telemetry {
 
     /// Creates a telemetry runtime with neutral initialization failures.
     pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure> {
-        Self::new_with_exporters_typed(
-            config,
-            Arc::new(NoopLogExporter),
-            Arc::new(NoopTraceExporter),
-            Arc::new(NoopMetricExporter),
-        )
+        let (log_exporter, trace_exporter, metric_exporter) = exporter_factory(&config)?;
+        Self::new_with_exporters_typed(config, log_exporter, trace_exporter, metric_exporter)
     }
 
     #[cfg(test)]

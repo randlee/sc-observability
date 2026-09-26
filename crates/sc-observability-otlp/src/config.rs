@@ -642,9 +642,17 @@ pub(crate) struct ValidatedRetryPolicy {
 
 /// Resolves defaults and validates a transport in the documented first-failure
 /// order. This is crate-visible for backend factories and contract tests.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the normative validation order is intentionally visible and linear"
+)]
 pub(crate) fn validated_transport_bounds(
     config: &OtelConfig,
 ) -> Result<ValidatedTransportBounds, ConfigFailure> {
+    #[allow(deprecated)]
+    let direct_legacy_fields = config.max_retries != constants::DEFAULT_OTLP_MAX_RETRIES
+        || u64::from(config.initial_backoff_ms) != constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS
+        || u64::from(config.max_backoff_ms) != constants::DEFAULT_OTLP_MAX_BACKOFF_MS;
     let timeout = resolve_duration(
         OtlpConfigField::Timeout,
         Some(config.timeout_ms),
@@ -706,7 +714,7 @@ pub(crate) fn validated_transport_bounds(
     let backend = if config.enabled {
         match config.backend {
             ExporterBackend::OpenTelemetrySdk => {
-                if config.legacy_retry.is_some() {
+                if config.legacy_retry.is_some() || direct_legacy_fields {
                     return Err(not_applicable(
                         OtlpConfigField::MaxRetries,
                         OtlpConfigTarget::Backend(ExporterBackend::OpenTelemetrySdk),
@@ -715,12 +723,25 @@ pub(crate) fn validated_transport_bounds(
                 BackendTransportBounds::Sdk
             }
             ExporterBackend::LegacyHttpJson => {
-                let retry = resolve_retry(config.legacy_retry.as_ref(), &timeout)?;
+                #[allow(deprecated)]
+                let direct_retry = LegacyRetryPolicy {
+                    max_retries: Some(config.max_retries),
+                    initial_backoff_ms: Some(config.initial_backoff_ms),
+                    max_backoff_ms: Some(config.max_backoff_ms),
+                    ..LegacyRetryPolicy::default()
+                };
+                let retry = resolve_retry(
+                    config
+                        .legacy_retry
+                        .as_ref()
+                        .or(direct_legacy_fields.then_some(&direct_retry)),
+                    &timeout,
+                )?;
                 BackendTransportBounds::Legacy(retry)
             }
         }
     } else {
-        if config.legacy_retry.is_some() {
+        if config.legacy_retry.is_some() || direct_legacy_fields {
             return Err(not_applicable(
                 OtlpConfigField::MaxRetries,
                 OtlpConfigTarget::Disabled,
