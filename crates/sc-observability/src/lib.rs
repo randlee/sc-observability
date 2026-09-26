@@ -63,6 +63,20 @@ pub use sc_observability_types::{
     SchemaVersion, ServiceName, SinkHealth, SinkHealthState, SinkName, TargetCategory, Timestamp,
     WriterState,
 };
+
+/// Staged 2.0 error contracts.
+///
+/// The crate-root names remain the retained 1.x compatibility surface until
+/// the integration sprint activates the major-version API. New consumers can
+/// use this namespace to match the discriminated errors without losing the
+/// original diagnostic context or typed source.
+pub mod v2 {
+    #[doc(inline)]
+    pub use sc_observability_types::v2::{
+        ConfigFailure, EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError,
+        MetricModelError, ProjectionError, ShutdownError, SubscriberError, TelemetryError,
+    };
+}
 #[allow(
     deprecated,
     reason = "the facade retains legacy error names in its public compatibility surface"
@@ -710,7 +724,7 @@ mod sealed_emitters {
     reason = "the crate-local compatibility emitter preserves its EventError signature"
 )]
 pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
+    fn emit_log(&self, event: LogEvent) -> Result<(), v2::EventError>;
 }
 
 impl sealed_emitters::Sealed for Logger<Running> {}
@@ -720,15 +734,12 @@ impl sealed_emitters::Sealed for Logger<Running> {}
     reason = "the crate-local compatibility emitter delegates through the retained legacy logger boundary"
 )]
 impl LogEmitter for Logger<Running> {
-    fn emit_log(&self, event: LogEvent) -> Result<(), EventError> {
+    fn emit_log(&self, event: LogEvent) -> Result<(), v2::EventError> {
         self.log(event).map_err(|error| match error {
-            LogError::InvalidEvent(error) => error,
-            LogError::WriterDegraded(error) => {
-                EventError(Box::new(writer_degraded_error_context(&error.to_string())))
+            LogError::InvalidEvent(error) => v2::EventError::Validation { context: error.0 },
+            LogError::WriterDegraded(context) | LogError::ShutdownTimedOut(context) => {
+                v2::EventError::Routing { context }
             }
-            LogError::ShutdownTimedOut(error) => EventError(Box::new(
-                shutdown_timed_out_error_context(&error.to_string()),
-            )),
         })
     }
 }
