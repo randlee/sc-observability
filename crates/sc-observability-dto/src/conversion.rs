@@ -1,4 +1,8 @@
 //! Checked semantic conversion; no runtime or transport dependency.
+use crate::constants::{
+    MAX_CONTAINER_DEPTH, MAX_DIAGNOSTIC_FIELD_BYTES, MAX_QUERY_LIMIT, MAX_REMEDIATION_STEPS,
+    MAX_TIMEOUT_MS, MAX_WIRE_PAYLOAD_BYTES,
+};
 use crate::*;
 use sc_observability_types as core;
 use serde::de::DeserializeOwned;
@@ -63,16 +67,22 @@ fn version(version: u32) -> Result<(), Failure> {
 fn measure(value: &Value, depth: usize) -> Result<(), Failure> {
     match value {
         Value::Array(values) => {
-            if depth >= 32 {
-                return Err(invalid_input("request", "maximum container depth is 32"));
+            if depth >= MAX_CONTAINER_DEPTH {
+                return Err(invalid_input(
+                    "request",
+                    format!("maximum container depth is {MAX_CONTAINER_DEPTH}"),
+                ));
             }
             for value in values {
                 measure(value, depth + 1)?;
             }
         }
         Value::Object(values) => {
-            if depth >= 32 {
-                return Err(invalid_input("request", "maximum container depth is 32"));
+            if depth >= MAX_CONTAINER_DEPTH {
+                return Err(invalid_input(
+                    "request",
+                    format!("maximum container depth is {MAX_CONTAINER_DEPTH}"),
+                ));
             }
             for value in values.values() {
                 measure(value, depth + 1)?;
@@ -84,8 +94,11 @@ fn measure(value: &Value, depth: usize) -> Result<(), Failure> {
 }
 fn decode<T: DeserializeOwned>(value: Value, field: &str) -> Result<T, Failure> {
     measure(&value, 0)?;
-    if checked(serde_json::to_vec(&value), field)?.len() > 65536 {
-        return Err(invalid_input(field, "request exceeds 65536 UTF-8 bytes"));
+    if checked(serde_json::to_vec(&value), field)?.len() > MAX_WIRE_PAYLOAD_BYTES {
+        return Err(invalid_input(
+            field,
+            format!("request exceeds {MAX_WIRE_PAYLOAD_BYTES} UTF-8 bytes"),
+        ));
     }
     checked(serde_json::from_value(value), field)
 }
@@ -117,8 +130,13 @@ pub fn decode_level_request(value: Value) -> Result<LevelRequestDto, Failure> {
 pub fn decode_timeout(value: Value) -> Result<u32, Failure> {
     let timeout = value
         .as_u64()
-        .filter(|v| *v <= 60000)
-        .ok_or_else(|| invalid_input("timeout_ms", "expected integer milliseconds in 0..60000"))?;
+        .filter(|v| *v <= u64::from(MAX_TIMEOUT_MS))
+        .ok_or_else(|| {
+            invalid_input(
+                "timeout_ms",
+                format!("expected integer milliseconds in 0..{MAX_TIMEOUT_MS}"),
+            )
+        })?;
     Ok(timeout as u32)
 }
 fn timestamp(value: String, field: &str) -> Result<core::Timestamp, Failure> {
@@ -167,8 +185,11 @@ fn to_value(value: ValueDto, field: &str, protect: bool, depth: usize) -> Result
                 .ok_or_else(|| invalid_input(field, "float must be finite"))?,
         ),
         ValueDto::Array { value } => {
-            if depth >= 32 {
-                return Err(invalid_input(field, "maximum container depth is 32"));
+            if depth >= MAX_CONTAINER_DEPTH {
+                return Err(invalid_input(
+                    field,
+                    format!("maximum container depth is {MAX_CONTAINER_DEPTH}"),
+                ));
             }
             Value::Array(
                 value
@@ -179,8 +200,11 @@ fn to_value(value: ValueDto, field: &str, protect: bool, depth: usize) -> Result
             )
         }
         ValueDto::Object { value } => {
-            if depth >= 32 {
-                return Err(invalid_input(field, "maximum container depth is 32"));
+            if depth >= MAX_CONTAINER_DEPTH {
+                return Err(invalid_input(
+                    field,
+                    format!("maximum container depth is {MAX_CONTAINER_DEPTH}"),
+                ));
             }
             Value::Object(
                 value
@@ -318,13 +342,19 @@ pub fn to_core_event(dto: LogEventDto, stamp: EventStamp) -> Result<core::LogEve
 /// Converts a checked query; equal bounds remain inclusive.
 pub fn to_core_query(dto: LogQueryDto) -> Result<core::LogQuery, Failure> {
     version(dto.schema_version)?;
-    if !(1..=1000).contains(&dto.limit) {
-        return Err(invalid_input("limit", "query limit must be in 1..1000"));
+    if !(1..=MAX_QUERY_LIMIT).contains(&dto.limit) {
+        return Err(invalid_input(
+            "limit",
+            format!("query limit must be in 1..{MAX_QUERY_LIMIT}"),
+        ));
     }
     let raw = checked(serde_json::to_value(&dto), "query")?;
     measure(&raw, 0)?;
-    if checked(serde_json::to_vec(&dto), "query")?.len() > 65536 {
-        return Err(invalid_input("query", "request exceeds 65536 UTF-8 bytes"));
+    if checked(serde_json::to_vec(&dto), "query")?.len() > MAX_WIRE_PAYLOAD_BYTES {
+        return Err(invalid_input(
+            "query",
+            format!("request exceeds {MAX_WIRE_PAYLOAD_BYTES} UTF-8 bytes"),
+        ));
     }
     let query = core::LogQuery {
         service: dto
@@ -489,14 +519,17 @@ impl From<core::OperationDiagnostic> for Diagnostic {
 }
 /// Checks diagnostic bounds without truncating original data.
 pub fn validate_diagnostic(value: &Diagnostic, field: &str) -> Result<(), Failure> {
-    let oversized = value.at.len() > 4096
-        || value.code.len() > 4096
-        || value.message.len() > 4096
+    let oversized = value.at.len() > MAX_DIAGNOSTIC_FIELD_BYTES
+        || value.code.len() > MAX_DIAGNOSTIC_FIELD_BYTES
+        || value.message.len() > MAX_DIAGNOSTIC_FIELD_BYTES
         || match &value.remediation {
             RemediationDto::Recoverable { steps } => {
-                steps.len() > 32 || steps.iter().any(|s| s.len() > 4096)
+                steps.len() > MAX_REMEDIATION_STEPS
+                    || steps.iter().any(|s| s.len() > MAX_DIAGNOSTIC_FIELD_BYTES)
             }
-            RemediationDto::NotRecoverable { justification } => justification.len() > 4096,
+            RemediationDto::NotRecoverable { justification } => {
+                justification.len() > MAX_DIAGNOSTIC_FIELD_BYTES
+            }
         };
     if oversized {
         return Err(Failure::Validation {
@@ -784,8 +817,11 @@ fn strict_keys(value: &Value, allowed: &[&str], field: &str) -> Result<(), Failu
     Ok(())
 }
 fn check_value_keys(value: &Value, field: &str, depth: usize) -> Result<(), Failure> {
-    if depth > 32 {
-        return Err(invalid_input(field, "maximum container depth is 32"));
+    if depth > MAX_CONTAINER_DEPTH {
+        return Err(invalid_input(
+            field,
+            format!("maximum container depth is {MAX_CONTAINER_DEPTH}"),
+        ));
     }
     let tag = value.get("kind").and_then(Value::as_str);
     strict_keys(
@@ -842,12 +878,18 @@ pub fn from_canonical_diagnostic(
         remediation: value.remediation.clone().into(),
     };
     validate_diagnostic(&diagnostic, "diagnostic")?;
-    if value.cause.as_ref().is_some_and(|v| v.len() > 4096)
-        || value.docs.as_ref().is_some_and(|v| v.len() > 4096)
+    if value
+        .cause
+        .as_ref()
+        .is_some_and(|v| v.len() > MAX_DIAGNOSTIC_FIELD_BYTES)
+        || value
+            .docs
+            .as_ref()
+            .is_some_and(|v| v.len() > MAX_DIAGNOSTIC_FIELD_BYTES)
     {
         return Err(invalid_input(
             "diagnostic",
-            "diagnostic metadata exceeds 4096 bytes",
+            format!("diagnostic metadata exceeds {MAX_DIAGNOSTIC_FIELD_BYTES} bytes"),
         ));
     }
     let details = from_fields(value.details.clone())?;
@@ -859,10 +901,10 @@ pub fn from_canonical_diagnostic(
     };
     let wire = checked(serde_json::to_value(&result), "diagnostic")?;
     measure(&wire, 0)?;
-    if checked(serde_json::to_vec(&wire), "diagnostic")?.len() > 65536 {
+    if checked(serde_json::to_vec(&wire), "diagnostic")?.len() > MAX_WIRE_PAYLOAD_BYTES {
         return Err(invalid_input(
             "diagnostic",
-            "diagnostic exceeds 65536 bytes",
+            format!("diagnostic exceeds {MAX_WIRE_PAYLOAD_BYTES} bytes"),
         ));
     }
     Ok(result)
