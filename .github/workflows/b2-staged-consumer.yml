@@ -1,16 +1,6 @@
 name: B.2 staged package qualification
 
 on:
-  pull_request:
-    paths:
-      - '.github/scripts/**'
-      - 'rust-toolchain.toml'
-      - 'bindings/**'
-      - 'Cargo.*'
-      - 'crates/**'
-      - 'scripts/ci/**'
-      - 'release/**'
-      - '.github/workflows/b2-staged-consumer.yml'
   workflow_dispatch:
 
 permissions:

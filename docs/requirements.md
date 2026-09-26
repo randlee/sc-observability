@@ -481,6 +481,8 @@ record the proposed architecture. No item below asserts implementation closure.
 - PHB-006 Existing adoption guidance shall cover incremental upgrades, exact
   symbol mappings, custom extension adapters, typed matching, diagnostic
   preservation and verification. A downstream fixture shall execute that guide.
+  B.2 qualification is release preflight run on demand before publishing, not
+  a sprint or integration PR gate; its original 1.4.x release obligation is satisfied.
 
 The B.1e implementation record supplies the exact migration routing, warning
 inventory, downstream Cargo fixtures and JSON diagnostic validator for
@@ -533,6 +535,8 @@ major-release claim is introduced.
   and subsequent language artifacts have their own release gates. Go, Node.js
   and sc-runtime process/interpreter topology remain deferred. #96 configuration
   loading is independent.
+  Release preflight uses B.P2 qualification on demand before publishing, not
+  as a sprint or integration PR gate; its original 1.4.x release obligation is satisfied.
 
 ## 11. Phase C Additions — Proposed for Review
 

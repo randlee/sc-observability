@@ -47,8 +47,6 @@ on PRs 233–235 are the observed reason for retiring those checks.
 | Binding schema: `binding-schema` | Generated TS/Python model consumers; DTO, schema, typing and isolated bundle | Existing schema/conversion corpus, generator drift and isolated consumer negatives | These generated bindings are retired |
 | Python binding runtime: `python-source-runtime` | Owned/attached Python users; source runtime contract | Existing Python ownership, context, timeout and teardown fixtures | Python binding or supported interpreter contract is retired |
 | TypeScript/Tauri: `schema-and-contract` | Tauri adapter consumers; schema and packaged source/JS contract | Existing schema corpus, neutral boundaries and artifact build checks | Tauri binding is retired |
-| B.2: `package-stage` | Published Cargo users; verified six-package candidate | Existing archive tampering, version, private-package and ambient-resolution regressions | Six-package qualification is replaced by equivalent release coverage |
-| B.P2: `package-stage` | Runtime-level consumers; baseline/candidate package contract | Existing runtime-level metadata and evidence regression tests | Baseline migration qualification is retired |
 | Python packaging boundaries: `boundaries` | Wheel/sdist consumers; package and platform policy | `test_python_distribution.py` | Python distribution contract is retired |
 | sc-lint preflight: `source-consumer` (Ubuntu) | Install consumers; source installer and receipt contract | Existing receipt mismatch/rejection cases | Source-installed sc-lint is no longer supported |
 
@@ -58,12 +56,21 @@ on PRs 233–235 are the observed reason for retiring those checks.
   qualifies the composed integration instead of every intermediate layer.
 - Binding-runtime `packaged-consumer` and `complete-gate`: the macOS sandbox
   proof and all-platform aggregation need the full platform run.
-- B.2 and B.P2 `staged-consumer` and `aggregate-platform-evidence`: platform
-  package consumption and complete-evidence aggregation run together.
 - TypeScript/Tauri `real-ipc-artifacts` and `all-platforms`: real webview IPC
   and all-platform aggregation qualify integration/release artifacts.
 - sc-lint `source-consumer` on Windows: integration proves the second
   installer platform while intermediate PRs keep Ubuntu coverage.
+
+## Release preflight
+
+B.2 (`b2-staged-consumer.yml`) and B.P2 (`bp2-staged-consumer.yml`) staged
+qualification are release preflight run on demand through `workflow_dispatch`
+by the publisher before publishing, never on sprint or integration PRs or push
+events. Their original 1.4.x release qualification is satisfied and those
+packages are in use by BTIT; running their published-package checks on Phase D
+sprint changes is inappropriate because the published 1.4.x dependencies lack
+the new API. The package-stage, staged-consumer and complete-platform evidence
+jobs, scripts, fixtures and tests remain available for release qualification.
 
 ## Retired historical gates
 
