@@ -22,6 +22,12 @@ Aggregators run under the same condition as their required platform proofs;
 no aggregator accepts a partial platform inventory. Release workflows and
 publication checks remain strict.
 
+The CI workflow also targets PR bases `sprint/*` and `fix/*`: stacked sprint
+PRs target the layer below them (`sprint/<lower>`), and quick-fix PRs target
+`fix/*` or another layer. Without these bases, those stack layers get no CI
+from this workflow. Retire this added base coverage when stacks stop using
+`sprint/*` bases.
+
 ## Intermediate PR job inventory
 
 Each row names the existing regression motivating the check, rather than

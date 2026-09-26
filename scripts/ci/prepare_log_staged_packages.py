@@ -6,7 +6,6 @@ import argparse
 import json
 import shutil
 import subprocess
-import sys
 import tomllib
 from pathlib import Path
 

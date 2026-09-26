@@ -1226,7 +1226,8 @@ No Git revision or historical blob pin is required for generated bindings.
   artifacts have producer/consumer handoffs, and backend implementations use
   the common lifecycle. No new boundary-rule framework is authorized. Cargo
   dependency graphs and Rust privacy enforce structural restrictions; existing
-  validators retain source/provenance checks they alone can enforce.
+  validators check generated-binding input/output hashes, package integrity
+  and dependency boundaries.
 - **Contracts**: PHD-001–004, PHB-002/010/013, LOG-004/009/042/046,
   OTLP-011/021/023, SRC-001–004; obs-d-12/13/17/8.
 
