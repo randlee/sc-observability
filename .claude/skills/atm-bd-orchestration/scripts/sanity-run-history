@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Append one completed sanity run to a shared JSON history.
+"""Append one completed sanity run to its phase's private JSONL history.
 
-The rendered table is deliberately separate from the completion report.  This
-tool keeps only presentation records outside a worktree, serializes concurrent
-appenders, and emits the ``{"runs": [...]}`` object consumed by
+The rendered table is deliberately separate from the completion report. This
+tool keeps only presentation records in the repository's ignored ``.sc``
+directory, serializes concurrent appenders, and emits the ``{"runs": [...]}`` object consumed by
 ``templates/sanity-run-table.md.j2``.
 """
 
@@ -13,101 +13,125 @@ import argparse
 import fcntl
 import json
 import os
+import re
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
 
 def fail(message: str) -> None:
     raise SystemExit(f"sanity-run-history: {message}")
 
 
-def parse_record(path: Path) -> dict[str, object]:
+def parse_vars(path: Path) -> dict[str, object]:
     try:
         record = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
-        fail(f"cannot read record {path}: {exc}")
+        fail(f"cannot read completion vars {path}: {exc}")
     if not isinstance(record, dict):
-        fail("record must be a JSON object")
+        fail("completion vars must be a JSON object")
 
     required = {
-        "task": str,
         "sprint": str,
-        "pr_number": int,
-        "findings": int,
         "verdict": str,
-        "iteration": int,
-        "started_at": (int, float),
+        "findings_count": int,
     }
     for field, expected in required.items():
         value = record.get(field)
         if isinstance(value, bool) or not isinstance(value, expected):
-            fail(f"record.{field} must be {expected}")
-    if record["pr_number"] < 1 or record["findings"] < 0 or record["iteration"] < 1:
-        fail("pr_number and iteration must be positive; findings cannot be negative")
+            fail(f"completion vars.{field} must be {expected}")
+    if record["findings_count"] < 0:
+        fail("completion vars.findings_count cannot be negative")
     if record["verdict"] not in {"PASS", "FAIL"}:
-        fail("record.verdict must be PASS or FAIL")
+        fail("completion vars.verdict must be PASS or FAIL")
     return record
 
 
-def default_state() -> Path:
-    base = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
-    return base / "sc-observability" / "sanity-runs.json"
+def phase_from_sprint(sprint: str) -> str:
+    match = re.fullmatch(r"(?:phase-)?([a-z]+)(?:[-_]?\d+)?", sprint.lower())
+    if not match:
+        fail(f"cannot derive a phase from sprint {sprint!r}")
+    return match.group(1)
 
 
-def load_state(path: Path) -> list[dict[str, object]]:
+def repository_root() -> Path:
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        fail(f"cannot locate repository root: {exc}")
+    return Path(completed.stdout.strip())
+
+
+def load_log(path: Path) -> list[dict[str, object]]:
     if not path.exists():
         return []
+    runs = []
     try:
-        content = json.loads(path.read_text())
+        for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+            if not line.strip():
+                continue
+            run = json.loads(line)
+            if not isinstance(run, dict):
+                fail(f"log {path}:{line_number} is not a JSON object")
+            runs.append(run)
     except (OSError, json.JSONDecodeError) as exc:
-        fail(f"cannot read state {path}: {exc}")
-    runs = content.get("runs") if isinstance(content, dict) else None
-    if not isinstance(runs, list) or not all(isinstance(run, dict) for run in runs):
-        fail(f"state {path} does not contain a runs array")
+        fail(f"cannot read log {path}: {exc}")
     return runs
-
-
-def write_json_atomic(path: Path, value: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as temporary:
-        json.dump(value, temporary, indent=2, sort_keys=True)
-        temporary.write("\n")
-        temporary_path = Path(temporary.name)
-    temporary_path.replace(path)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--record-file", required=True, type=Path)
-    parser.add_argument("--state", type=Path, default=default_state())
+    parser.add_argument("--vars", required=True, type=Path,
+                        help="completed dev-sanity vars JSON")
+    parser.add_argument("--task", required=True)
+    parser.add_argument("--pr-number", required=True, type=int)
+    parser.add_argument("--iteration", required=True, type=int)
+    parser.add_argument("--started-at", required=True, type=float)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--limit", type=int, default=6)
     args = parser.parse_args()
-    if args.limit < 1:
-        fail("--limit must be positive")
+    if args.limit < 0:
+        fail("--limit must be zero (all) or positive")
 
-    record = parse_record(args.record_file)
+    if args.pr_number < 1 or args.iteration < 1:
+        fail("--pr-number and --iteration must be positive")
+    vars = parse_vars(args.vars)
     completed = datetime.now(timezone.utc)
-    elapsed_seconds = max(0, round(completed.timestamp() - float(record["started_at"])))
-    record.update(
-        completed_at=completed.isoformat().replace("+00:00", "Z"),
-        completed_local=completed.astimezone().strftime("%H:%M"),
-        duration=f"{elapsed_seconds // 60}m{elapsed_seconds % 60:02d}s",
-    )
+    elapsed_seconds = max(0, round(completed.timestamp() - args.started_at))
+    phase = phase_from_sprint(vars["sprint"])
+    record = {
+        "task": args.task,
+        "sprint": vars["sprint"],
+        "phase": phase,
+        "pr_number": args.pr_number,
+        "findings": vars["findings_count"],
+        "verdict": vars["verdict"],
+        "iteration": args.iteration,
+        "completed_at": completed.isoformat().replace("+00:00", "Z"),
+        "completed_local": completed.astimezone().strftime("%H:%M"),
+        "duration": f"{elapsed_seconds // 60}m{elapsed_seconds % 60:02d}s",
+    }
 
-    args.state.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = args.state.with_suffix(args.state.suffix + ".lock")
+    log_path = repository_root() / ".sc" / "sanity-log" / f"phase-{phase}.jsonl"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = log_path.with_suffix(log_path.suffix + ".lock")
     with lock_path.open("a+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        runs = load_state(args.state)
-        key = (record["task"], record["iteration"])
-        runs = [run for run in runs if (run.get("task"), run.get("iteration")) != key]
+        runs = load_log(log_path)
+        with log_path.open("a", encoding="utf-8") as log:
+            log.write(json.dumps(record, sort_keys=True) + "\n")
+            log.flush()
+            os.fsync(log.fileno())
         runs.append(record)
-        runs.sort(key=lambda run: str(run["completed_at"]), reverse=True)
-        write_json_atomic(args.state, {"runs": runs})
-        render_vars = {"runs": runs[: args.limit]}
-        write_json_atomic(args.output, render_vars)
+        newest_first = list(reversed(runs if args.limit == 0 else runs[-args.limit:]))
+        render_vars = {"runs": newest_first}
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(render_vars, indent=2, sort_keys=True) + "\n")
         fcntl.flock(lock, fcntl.LOCK_UN)
 
 
