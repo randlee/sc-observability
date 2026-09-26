@@ -1,10 +1,12 @@
 """Boundary tests invoking the real helper before Cargo can follow bad paths."""
+import json
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 import importlib.util
+from unittest import mock
 ROOT=Path(__file__).resolve().parents[3]
 HELPER_DIR=ROOT/'scripts/ci'
 sys.path.insert(0,str(HELPER_DIR))
@@ -12,6 +14,40 @@ HELPER=ROOT/'scripts/ci/build_binding_source_bundle.py'
 SPEC=importlib.util.spec_from_file_location('binding_source_bundle', HELPER)
 BUNDLE=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(BUNDLE)
 class SourceBoundaryTests(unittest.TestCase):
+    def stage(self,root,candidate_version):
+        stage=root/'stage';stage.mkdir()
+        (stage/'stage-manifest.json').write_text(json.dumps({'candidate_version':candidate_version}))
+        return stage
+
+    def test_matching_stage_version_uses_qualified_archives(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            stage=self.stage(Path(temporary),'2.0.0')
+            evidence={'source_commit':'current','packages':[{'name':'binding-runtime'}]}
+            with mock.patch.object(BUNDLE,'verify_stage',return_value=evidence) as verify:
+                actual=BUNDLE.qualified_stage_for_version(stage,'2.0.0')
+            self.assertEqual(actual,evidence)
+            verify.assert_called_once_with(stage,'2.0.0')
+            self.assertEqual(BUNDLE.qualified_packages_for(actual,'current'),{'binding-runtime': {'name':'binding-runtime'}})
+
+    def test_mismatched_stage_version_uses_unpublished_packages(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            stage=self.stage(Path(temporary),'1.4.0')
+            evidence={'source_commit':'released','packages':[{'name':'binding-runtime'}]}
+            with mock.patch.object(BUNDLE,'verify_stage',return_value=evidence) as verify:
+                with mock.patch('builtins.print') as output:
+                    actual=BUNDLE.qualified_stage_for_version(stage,'2.0.0')
+            self.assertIsNone(actual)
+            verify.assert_called_once_with(stage,'1.4.0')
+            output.assert_called_once_with('stage evidence 1.4.0 does not match root 2.0.0; using unpublished cargo packages')
+            self.assertIsNone(BUNDLE.qualified_source_commit_for('binding-runtime',{},actual))
+
+    def test_corrupt_stage_still_raises(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            stage=self.stage(Path(temporary),'1.4.0')
+            with mock.patch.object(BUNDLE,'verify_stage',side_effect=ValueError('archive checksum mismatch')):
+                with self.assertRaisesRegex(ValueError,'archive checksum mismatch'):
+                    BUNDLE.qualified_stage_for_version(stage,'2.0.0')
+
     def test_stale_qualified_archive_is_not_reused(self):
         evidence={'source_commit':'older','packages':[{'name':'binding-runtime'}]}
         self.assertEqual(BUNDLE.qualified_packages_for(evidence,'current'),{})
