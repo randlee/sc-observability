@@ -469,10 +469,10 @@ struct HeldSink {
     reason = "test sink preserves the public legacy LogSink trait"
 )]
 impl sc_observability::LogSink for HeldSink {
-    fn write(&self, _: &native::LogEvent) -> Result<(), native::LogSinkError> {
+    fn write(&self, _: &native::LogEvent) -> Result<(), native::v2::LogSinkError> {
         Ok(())
     }
-    fn flush(&self) -> Result<(), native::LogSinkError> {
+    fn flush(&self) -> Result<(), native::v2::LogSinkError> {
         self.flushes.fetch_add(1, Ordering::SeqCst);
         if self.armed.swap(false, Ordering::SeqCst) {
             self.gate.arrive();

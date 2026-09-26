@@ -95,10 +95,7 @@ fn typed_sink_consumer_explicitly_imports_the_opt_in_trait() {
     struct ConsumerTypedSink;
 
     impl TypedLogSink for ConsumerTypedSink {
-        fn write(
-            &self,
-            _event: &LogEvent,
-        ) -> Result<(), sc_observability_types::typed::LogSinkFailure> {
+        fn write(&self, _event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
             Ok(())
         }
 
