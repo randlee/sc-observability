@@ -827,3 +827,659 @@ fn check_event_keys(value: &Value) -> Result<(), Failure> {
     }
     Ok(())
 }
+
+/// Projects a canonical diagnostic without formatting or serializing native source objects.
+///
+/// # Errors
+/// Rejects overlarge diagnostics/details and invalid timestamps using existing boundary codes.
+pub fn from_canonical_diagnostic(
+    value: &core::Diagnostic,
+) -> Result<CanonicalDiagnosticDto, Failure> {
+    let diagnostic = Diagnostic {
+        at: value.timestamp.to_string(),
+        code: value.code.as_str().into(),
+        message: value.message.clone(),
+        remediation: value.remediation.clone().into(),
+    };
+    validate_diagnostic(&diagnostic, "diagnostic")?;
+    if value.cause.as_ref().is_some_and(|v| v.len() > 4096)
+        || value.docs.as_ref().is_some_and(|v| v.len() > 4096)
+    {
+        return Err(invalid_input(
+            "diagnostic",
+            "diagnostic metadata exceeds 4096 bytes",
+        ));
+    }
+    let details = from_fields(value.details.clone())?;
+    let result = CanonicalDiagnosticDto {
+        diagnostic,
+        cause: value.cause.clone(),
+        docs: value.docs.clone(),
+        details,
+    };
+    let wire = checked(serde_json::to_value(&result), "diagnostic")?;
+    measure(&wire, 0)?;
+    if checked(serde_json::to_vec(&wire), "diagnostic")?.len() > 65536 {
+        return Err(invalid_input(
+            "diagnostic",
+            "diagnostic exceeds 65536 bytes",
+        ));
+    }
+    Ok(result)
+}
+
+// Matching the canonical cause enum is the mapping; codes are preserved as data.
+macro_rules! canonical_projection {
+    ($ty:ident, $value:ident, $body:expr) => {
+        impl TryFrom<&core::v2::$ty> for CanonicalFailureDto {
+            type Error = Failure;
+            fn try_from($value: &core::v2::$ty) -> Result<Self, Self::Error> {
+                let diagnostic = Box::new(from_canonical_diagnostic($value.diagnostic())?);
+                let category: fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto = $body;
+                Ok(category(diagnostic))
+            }
+        }
+    };
+}
+fn validation_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
+    CanonicalFailureDto::Validation {
+        diagnostic,
+        field: "input".into(),
+    }
+}
+fn unavailable_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
+    CanonicalFailureDto::Unavailable { diagnostic }
+}
+fn io_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
+    CanonicalFailureDto::Io { diagnostic }
+}
+fn timeout_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
+    CanonicalFailureDto::Timeout {
+        diagnostic,
+        operation: "lifecycle".into(),
+    }
+}
+fn unknown_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
+    CanonicalFailureDto::UnknownRemote {
+        diagnostic,
+        remote_kind: "unknown_canonical_cause".into(),
+    }
+}
+canonical_projection!(
+    IdentityError,
+    value,
+    match value {
+        core::v2::IdentityError::Process { .. } => validation_failure,
+        _ => unknown_failure,
+    }
+);
+canonical_projection!(
+    InitError,
+    value,
+    match value {
+        core::v2::InitError::Configuration { .. } => validation_failure,
+        core::v2::InitError::Runtime { .. } => unavailable_failure,
+        _ => unknown_failure,
+    }
+);
+canonical_projection!(
+    EventError,
+    value,
+    match value {
+        core::v2::EventError::Validation { .. } => validation_failure,
+        core::v2::EventError::Routing { .. } => unavailable_failure,
+        _ => unknown_failure,
+    }
+);
+canonical_projection!(
+    FlushError,
+    value,
+    match value {
+        core::v2::FlushError::Drain { context } => drain_category(context),
+        _ => unknown_failure,
+    }
+);
+canonical_projection!(
+    ShutdownError,
+    value,
+    match value {
+        core::v2::ShutdownError::Timeout { .. } => timeout_failure,
+        core::v2::ShutdownError::Drain { context } => drain_category(context),
+        _ => unknown_failure,
+    }
+);
+canonical_projection!(
+    ProjectionError,
+    value,
+    match value {
+        core::v2::ProjectionError::Projection { .. } => validation_failure,
+        _ => unknown_failure,
+    }
+);
+canonical_projection!(
+    SubscriberError,
+    value,
+    match value {
+        core::v2::SubscriberError::Subscriber { .. } => unavailable_failure,
+        _ => unknown_failure,
+    }
+);
+canonical_projection!(
+    LogSinkError,
+    value,
+    match value {
+        core::v2::LogSinkError::Write { .. } | core::v2::LogSinkError::Flush { .. } => io_failure,
+        _ => unknown_failure,
+    }
+);
+canonical_projection!(
+    MetricModelError,
+    value,
+    match value {
+        core::v2::MetricModelError::InvalidHistogram { .. }
+        | core::v2::MetricModelError::InvalidTemporality { .. }
+        | core::v2::MetricModelError::InvalidInterval { .. } => validation_failure,
+        _ => unknown_failure,
+    }
+);
+canonical_projection!(
+    ConfigFailure,
+    value,
+    match value {
+        core::v2::ConfigFailure::ZeroDuration { .. } => validation_failure,
+        core::v2::ConfigFailure::DurationOverflow { .. } => validation_failure,
+        core::v2::ConfigFailure::InvalidBoundOrdering { .. } => validation_failure,
+        core::v2::ConfigFailure::InvalidJitterPercent { .. } => validation_failure,
+        core::v2::ConfigFailure::InvalidQueueCapacity { .. } => validation_failure,
+        core::v2::ConfigFailure::InvalidQueueByteCapacity { .. } => validation_failure,
+        core::v2::ConfigFailure::ConfigFieldNotApplicable { .. } => validation_failure,
+        core::v2::ConfigFailure::InsecureTransportRejected { .. } => validation_failure,
+        core::v2::ConfigFailure::InvalidEndpoint { .. } => validation_failure,
+        core::v2::ConfigFailure::InvalidHeader { .. } => validation_failure,
+        core::v2::ConfigFailure::TransportConstructionFailed { .. } => validation_failure,
+        core::v2::ConfigFailure::UnsupportedBackend { .. } => validation_failure,
+        core::v2::ConfigFailure::UnsupportedProtocol { .. } => validation_failure,
+        core::v2::ConfigFailure::TokioRuntimeRequired { .. } => validation_failure,
+        _ => unknown_failure,
+    }
+);
+fn export_category(
+    value: &core::v2::ExportError,
+) -> fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
+    match value {
+        core::v2::ExportError::Transport { .. } => io_failure,
+        core::v2::ExportError::BlockingBackendInAsyncContext { .. } => validation_failure,
+        core::v2::ExportError::AsyncLifecycleRequired { .. } => validation_failure,
+        core::v2::ExportError::RuntimeTerminated { .. } => unavailable_failure,
+        core::v2::ExportError::LifecycleTimeout { .. } => timeout_failure,
+        core::v2::ExportError::QueueFull { .. } => {
+            |diagnostic| CanonicalFailureDto::QueueFull { diagnostic }
+        }
+        core::v2::ExportError::WorkerTerminated { .. } => unavailable_failure,
+        core::v2::ExportError::ShutdownCancelledRetry { .. } => {
+            |diagnostic| CanonicalFailureDto::Cancelled {
+                diagnostic,
+                operation: "shutdown".into(),
+            }
+        }
+        core::v2::ExportError::RetryDeadlineExhausted { .. } => timeout_failure,
+        core::v2::ExportError::NonRetryableHttpStatus { .. } => io_failure,
+        core::v2::ExportError::RetryAttemptsExhausted { .. } => io_failure,
+        core::v2::ExportError::TerminalExportFailure { .. } => io_failure,
+        _ => unknown_failure,
+    }
+}
+fn drain_category(
+    context: &core::ErrorContext,
+) -> fn(Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
+    std::error::Error::source(context)
+        .and_then(|source| source.downcast_ref::<core::v2::ExportError>())
+        .map_or(io_failure, export_category)
+}
+canonical_projection!(ExportError, value, export_category(value));
+
+impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
+    type Error = Failure;
+    fn try_from(value: &core::v2::TelemetryError) -> Result<Self, Self::Error> {
+        match value {
+            core::v2::TelemetryError::ExportFailure(error) => Self::try_from(error),
+            core::v2::TelemetryError::Shutdown => {
+                let context = core::ErrorContext::new(
+                    core::error_codes::otlp::OTLP_TELEMETRY_SHUTDOWN,
+                    "telemetry runtime is shut down",
+                    core::Remediation::recoverable(
+                        "Construct a new telemetry instance",
+                        [] as [&str; 0],
+                    ),
+                );
+                Ok(Self::Closed {
+                    diagnostic: Box::new(from_canonical_diagnostic(context.diagnostic())?),
+                })
+            }
+            _ => Err(invalid_input("error", "unknown telemetry failure variant")),
+        }
+    }
+}
+fn model_failure(error: core::v2::MetricModelError) -> Failure {
+    let d = error.diagnostic();
+    Failure::Validation {
+        diagnostic: Box::new(Diagnostic {
+            at: d.timestamp.to_string(),
+            code: d.code.as_str().into(),
+            message: d.message.clone(),
+            remediation: d.remediation.clone().into(),
+        }),
+        field: "metric".into(),
+    }
+}
+fn finite(value: f64, field: &str) -> Result<core::v2::FiniteF64, Failure> {
+    checked(core::v2::FiniteF64::new(value), field)
+}
+fn to_attributes(value: BTreeMap<String, ValueDto>) -> Result<core::v2::Attributes, Failure> {
+    value
+        .into_iter()
+        .map(|(key, value)| {
+            let raw = to_value(value, "attributes", false, 0)?;
+            Ok((key, checked(serde_json::from_value(raw), "attributes")?))
+        })
+        .collect()
+}
+fn from_attributes(value: &core::v2::Attributes) -> Result<BTreeMap<String, ValueDto>, Failure> {
+    value
+        .iter()
+        .map(|(key, value)| {
+            Ok((
+                key.clone(),
+                from_json_value(checked(serde_json::to_value(value), "attributes")?)?,
+            ))
+        })
+        .collect()
+}
+impl From<AggregationTemporalityDto> for core::v2::AggregationTemporality {
+    fn from(value: AggregationTemporalityDto) -> Self {
+        match value {
+            AggregationTemporalityDto::Delta => Self::Delta,
+            AggregationTemporalityDto::Cumulative => Self::Cumulative,
+        }
+    }
+}
+impl TryFrom<core::v2::AggregationTemporality> for AggregationTemporalityDto {
+    type Error = Failure;
+    fn try_from(value: core::v2::AggregationTemporality) -> Result<Self, Self::Error> {
+        match value {
+            core::v2::AggregationTemporality::Delta => Ok(Self::Delta),
+            core::v2::AggregationTemporality::Cumulative => Ok(Self::Cumulative),
+            _ => Err(invalid_input(
+                "temporality",
+                "unknown aggregation temporality",
+            )),
+        }
+    }
+}
+impl TryFrom<HistogramPointDto> for core::v2::HistogramPoint {
+    type Error = Failure;
+    fn try_from(value: HistogramPointDto) -> Result<Self, Self::Error> {
+        Self::try_new(
+            value.explicit_bounds,
+            value
+                .bucket_counts
+                .into_iter()
+                .map(|v| checked(v.as_u64(), "bucket_counts"))
+                .collect::<Result<_, _>>()?,
+            checked(value.count.as_u64(), "count")?,
+            finite(value.sum, "sum")?,
+        )
+        .map_err(model_failure)
+    }
+}
+impl From<&core::v2::HistogramPoint> for HistogramPointDto {
+    fn from(value: &core::v2::HistogramPoint) -> Self {
+        Self {
+            explicit_bounds: value.explicit_bounds().to_vec(),
+            bucket_counts: value.bucket_counts().iter().map(|v| (*v).into()).collect(),
+            count: value.count().into(),
+            sum: value.sum().get(),
+        }
+    }
+}
+impl TryFrom<MetricRecordDto> for core::v2::MetricRecord {
+    type Error = Failure;
+    fn try_from(v: MetricRecordDto) -> Result<Self, Self::Error> {
+        let value = match v.value {
+            MetricValueDto::Gauge(value) => core::v2::MetricValue::Gauge(finite(value, "value")?),
+            MetricValueDto::Sum {
+                value,
+                monotonic,
+                temporality,
+                start_time,
+            } => core::v2::MetricValue::Sum {
+                value: finite(value, "value")?,
+                monotonic,
+                temporality: temporality.into(),
+                start_time: timestamp(start_time, "start_time")?,
+            },
+            MetricValueDto::Histogram {
+                point,
+                temporality,
+                start_time,
+            } => core::v2::MetricValue::Histogram {
+                point: point.try_into()?,
+                temporality: temporality.into(),
+                start_time: timestamp(start_time, "start_time")?,
+            },
+        };
+        let record = Self::try_new(
+            timestamp(v.timestamp, "timestamp")?,
+            checked(core::ServiceName::new(v.service), "service")?,
+            checked(core::MetricName::new(v.name), "name")?,
+            value,
+        )
+        .map_err(model_failure)?;
+        Ok(record
+            .with_unit(
+                v.unit
+                    .map(|v| checked(core::MetricUnit::new(v), "unit"))
+                    .transpose()?,
+            )
+            .with_attributes(to_attributes(v.attributes)?))
+    }
+}
+impl TryFrom<&core::v2::MetricRecord> for MetricRecordDto {
+    type Error = Failure;
+    fn try_from(v: &core::v2::MetricRecord) -> Result<Self, Self::Error> {
+        let value = match v.value() {
+            core::v2::MetricValue::Gauge(value) => MetricValueDto::Gauge(value.get()),
+            core::v2::MetricValue::Sum {
+                value,
+                monotonic,
+                temporality,
+                start_time,
+            } => MetricValueDto::Sum {
+                value: value.get(),
+                monotonic: *monotonic,
+                temporality: (*temporality).try_into()?,
+                start_time: start_time.to_string(),
+            },
+            core::v2::MetricValue::Histogram {
+                point,
+                temporality,
+                start_time,
+            } => MetricValueDto::Histogram {
+                point: point.into(),
+                temporality: (*temporality).try_into()?,
+                start_time: start_time.to_string(),
+            },
+            _ => return Err(invalid_input("metric", "unknown metric variant")),
+        };
+        Ok(Self {
+            timestamp: v.timestamp().to_string(),
+            service: v.service().as_str().into(),
+            name: v.name().as_str().into(),
+            value,
+            unit: v.unit().map(|v| v.as_str().into()),
+            attributes: from_attributes(v.attributes())?,
+        })
+    }
+}
+/// Decodes and validates a staged metric point, including histogram and temporal invariants.
+///
+/// # Errors
+/// Returns a tagged validation failure for malformed data or invalid native invariants.
+pub fn decode_metric(value: Value) -> Result<core::v2::MetricRecord, Failure> {
+    let dto: MetricRecordDto = decode(value, "metric")?;
+    dto.try_into()
+}
+
+impl TryFrom<TraceContextV2Dto> for core::v2::TraceContext {
+    type Error = Failure;
+    fn try_from(v: TraceContextV2Dto) -> Result<Self, Self::Error> {
+        let mut trace = Self::new(
+            checked(core::TraceId::new(v.trace_id), "trace_id")?,
+            checked(core::SpanId::new(v.span_id), "span_id")?,
+            core::v2::TraceFlags::new(v.flags),
+        );
+        if let Some(parent) = v.parent_span_id {
+            trace = trace.with_parent(checked(core::SpanId::new(parent), "parent_span_id")?);
+        }
+        Ok(trace)
+    }
+}
+impl From<&core::v2::TraceContext> for TraceContextV2Dto {
+    fn from(v: &core::v2::TraceContext) -> Self {
+        Self {
+            trace_id: v.trace_id.as_str().into(),
+            span_id: v.span_id.as_str().into(),
+            parent_span_id: v.parent_span_id.as_ref().map(|v| v.as_str().into()),
+            flags: v.flags.bits(),
+        }
+    }
+}
+impl TryFrom<SpanLinkDto> for core::v2::SpanLink {
+    type Error = Failure;
+    fn try_from(v: SpanLinkDto) -> Result<Self, Self::Error> {
+        Ok(Self::new(
+            checked(core::TraceId::new(v.trace_id), "trace_id")?,
+            checked(core::SpanId::new(v.span_id), "span_id")?,
+            core::v2::TraceFlags::new(v.flags),
+            to_attributes(v.attributes)?,
+        ))
+    }
+}
+impl TryFrom<&core::v2::SpanLink> for SpanLinkDto {
+    type Error = Failure;
+    fn try_from(v: &core::v2::SpanLink) -> Result<Self, Self::Error> {
+        Ok(Self {
+            trace_id: v.trace_id.as_str().into(),
+            span_id: v.span_id.as_str().into(),
+            flags: v.flags.bits(),
+            attributes: from_attributes(&v.attributes)?,
+        })
+    }
+}
+impl From<SpanKindDto> for core::v2::SpanKind {
+    fn from(v: SpanKindDto) -> Self {
+        match v {
+            SpanKindDto::Internal => Self::Internal,
+            SpanKindDto::Server => Self::Server,
+            SpanKindDto::Client => Self::Client,
+            SpanKindDto::Producer => Self::Producer,
+            SpanKindDto::Consumer => Self::Consumer,
+        }
+    }
+}
+impl TryFrom<core::v2::SpanKind> for SpanKindDto {
+    type Error = Failure;
+    fn try_from(v: core::v2::SpanKind) -> Result<Self, Self::Error> {
+        match v {
+            core::v2::SpanKind::Internal => Ok(Self::Internal),
+            core::v2::SpanKind::Server => Ok(Self::Server),
+            core::v2::SpanKind::Client => Ok(Self::Client),
+            core::v2::SpanKind::Producer => Ok(Self::Producer),
+            core::v2::SpanKind::Consumer => Ok(Self::Consumer),
+            _ => Err(invalid_input("kind", "unknown span kind")),
+        }
+    }
+}
+enum_map!(SpanStatusDto, SpanStatus, Ok, Error, Unset);
+fn stored_diagnostic(value: &core::Diagnostic) -> Result<StoredDiagnosticDto, Failure> {
+    let v = from_canonical_diagnostic(value)?;
+    Ok(StoredDiagnosticDto {
+        timestamp: v.diagnostic.at,
+        code: v.diagnostic.code,
+        message: v.diagnostic.message,
+        remediation: v.diagnostic.remediation,
+        cause: v.cause,
+        docs: v.docs,
+        details: v.details,
+    })
+}
+fn native_diagnostic(value: StoredDiagnosticDto) -> Result<core::Diagnostic, Failure> {
+    let remediation = match value.remediation {
+        RemediationDto::Recoverable { steps } => core::Remediation::Recoverable {
+            steps: core::RecoverableSteps::all(steps),
+        },
+        RemediationDto::NotRecoverable { justification } => {
+            core::Remediation::not_recoverable(justification)
+        }
+    };
+    let result = core::Diagnostic {
+        timestamp: timestamp(value.timestamp, "diagnostic.timestamp")?,
+        code: core::ErrorCode::new_owned(value.code),
+        message: value.message,
+        remediation,
+        cause: value.cause,
+        docs: value.docs,
+        details: value
+            .details
+            .into_iter()
+            .map(|(key, value)| Ok((key, to_value(value, "details", false, 0)?)))
+            .collect::<Result<_, Failure>>()?,
+    };
+    from_canonical_diagnostic(&result)?;
+    Ok(result)
+}
+fn start_span(v: SpanRecordDto) -> Result<core::v2::SpanRecord<core::SpanStarted>, Failure> {
+    let mut span = core::v2::SpanRecord::new(
+        timestamp(v.timestamp, "timestamp")?,
+        checked(core::ServiceName::new(v.service), "service")?,
+        checked(core::ActionName::new(v.name), "name")?,
+        v.trace.try_into()?,
+        to_attributes(v.attributes)?,
+    )
+    .with_kind(v.kind.into())
+    .with_links(
+        v.links
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?,
+    );
+    if let Some(diagnostic) = v.diagnostic {
+        span = span.with_diagnostic(native_diagnostic(diagnostic)?);
+    }
+    Ok(span)
+}
+impl TryFrom<SpanSignalDto> for core::v2::SpanSignal {
+    type Error = Failure;
+    fn try_from(value: SpanSignalDto) -> Result<Self, Self::Error> {
+        match value {
+            SpanSignalDto::Started(v) => {
+                if v.duration_ms.is_some() || v.status != SpanStatusDto::Unset {
+                    return Err(invalid_input(
+                        "span",
+                        "started spans require unset status and no duration",
+                    ));
+                }
+                Ok(Self::Started(start_span(v)?))
+            }
+            SpanSignalDto::Ended(v) => {
+                let duration = checked(
+                    v.duration_ms
+                        .as_ref()
+                        .ok_or_else(|| {
+                            invalid_input("duration_ms", "ended spans require duration_ms")
+                        })?
+                        .as_u64(),
+                    "duration_ms",
+                )?;
+                let status = v.status.into();
+                Ok(Self::Ended(start_span(v)?.end(status, duration.into())))
+            }
+            SpanSignalDto::Event(v) => Ok(Self::Event(core::v2::SpanEvent {
+                timestamp: timestamp(v.timestamp, "timestamp")?,
+                trace: v.trace.try_into()?,
+                name: checked(core::ActionName::new(v.name), "name")?,
+                attributes: to_attributes(v.attributes)?,
+                diagnostic: v.diagnostic.map(native_diagnostic).transpose()?,
+            })),
+        }
+    }
+}
+fn span_record<S>(
+    v: &core::v2::SpanRecord<S>,
+    duration: Option<core::DurationMs>,
+) -> Result<SpanRecordDto, Failure> {
+    Ok(SpanRecordDto {
+        timestamp: v.timestamp().to_string(),
+        service: v.service().as_str().into(),
+        name: v.name().as_str().into(),
+        trace: v.trace().into(),
+        status: v.status().into(),
+        diagnostic: v.diagnostic().map(stored_diagnostic).transpose()?,
+        attributes: from_attributes(v.attributes())?,
+        duration_ms: duration.map(|v| v.as_u64().into()),
+        kind: v.kind().try_into()?,
+        links: v
+            .links()
+            .iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?,
+    })
+}
+impl TryFrom<&core::v2::SpanSignal> for SpanSignalDto {
+    type Error = Failure;
+    fn try_from(v: &core::v2::SpanSignal) -> Result<Self, Self::Error> {
+        match v {
+            core::v2::SpanSignal::Started(v) => Ok(Self::Started(span_record(v, None)?)),
+            core::v2::SpanSignal::Ended(v) => Ok(Self::Ended(span_record(v, v.duration_ms())?)),
+            core::v2::SpanSignal::Event(v) => Ok(Self::Event(SpanEventDto {
+                timestamp: v.timestamp.to_string(),
+                trace: (&v.trace).into(),
+                name: v.name.as_str().into(),
+                attributes: from_attributes(&v.attributes)?,
+                diagnostic: v.diagnostic.as_ref().map(stored_diagnostic).transpose()?,
+            })),
+        }
+    }
+}
+/// Validates a span wire signal and reconstructs native typestate through its public API.
+///
+/// # Errors
+/// Rejects malformed correlation, attributes, diagnostics, unknown states or invalid lifecycle fields.
+pub fn decode_span(value: Value) -> Result<core::v2::SpanSignal, Failure> {
+    let dto: SpanSignalDto = decode(value, "span")?;
+    dto.try_into()
+}
+
+/// Decodes the compatible operational envelope while retaining additive canonical metadata.
+///
+/// # Errors
+/// Rejects malformed envelopes, overlarge metadata and invalid tagged payloads.
+/// Unknown error kinds remain `UnknownRemote`, never a successful result.
+pub fn decode_canonical_envelope<T: DeserializeOwned>(
+    value: Value,
+) -> Result<CanonicalWireEnvelope<T>, Failure> {
+    match decode_envelope::<T>(value.clone())? {
+        WireEnvelope::Ok {
+            schema_version,
+            value,
+        } => Ok(CanonicalWireEnvelope::Ok {
+            schema_version,
+            value,
+        }),
+        WireEnvelope::Error {
+            schema_version,
+            error,
+        } => {
+            let mut raw = value["error"].clone();
+            if let Failure::UnknownRemote { remote_kind, .. } = error {
+                raw["kind"] = Value::String("unknown_remote".into());
+                raw["remote_kind"] = Value::String(remote_kind);
+            }
+            let error: CanonicalFailureDto = decode(raw, "response.error")?;
+            let d = error.diagnostic();
+            native_diagnostic(StoredDiagnosticDto {
+                timestamp: d.diagnostic.at.clone(),
+                code: d.diagnostic.code.clone(),
+                message: d.diagnostic.message.clone(),
+                remediation: d.diagnostic.remediation.clone(),
+                cause: d.cause.clone(),
+                docs: d.docs.clone(),
+                details: d.details.clone(),
+            })?;
+            Ok(CanonicalWireEnvelope::Error {
+                schema_version,
+                error,
+            })
+        }
+    }
+}
