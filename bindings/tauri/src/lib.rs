@@ -11,6 +11,7 @@ use sc_observability_dto::{
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use sc_observability_types::v2;
 
 const SCHEMA_VERSION: u32 = 1;
 const MAX_REQUEST_BYTES: usize = 65_536;
@@ -86,6 +87,41 @@ fn invalid(field: &str, message: &str) -> Failure {
             message,
         )),
         field: field.to_owned(),
+    }
+}
+
+/// Projects an already-canonical D.12 error into the stable Tauri envelope.
+/// Native policy and core conversion remain in binding-runtime; this adapter
+/// only preserves the neutral diagnostic and canonical variant identity.
+/// Projects a canonical event error into the stable Tauri failure envelope.
+pub fn project_canonical_event(error: &v2::EventError) -> Failure {
+    let diagnostic = error.diagnostic();
+    Failure::Validation {
+        diagnostic: Box::new(sc_observability_dto::Diagnostic {
+            at: diagnostic.timestamp.to_string(),
+            code: diagnostic.code.as_str().to_owned(),
+            message: diagnostic.message.clone(),
+            remediation: diagnostic.remediation.clone().into(),
+        }),
+        field: match error {
+            v2::EventError::Validation { .. } => "EventError::Validation",
+            v2::EventError::Routing { .. } => "EventError::Routing",
+            _ => "EventError::Unknown",
+        }
+        .to_owned(),
+    }
+}
+
+/// Projects a canonical flush error into the stable Tauri failure envelope.
+pub fn project_canonical_flush(error: &v2::FlushError) -> Failure {
+    let diagnostic = error.diagnostic();
+    Failure::Io {
+        diagnostic: Box::new(sc_observability_dto::Diagnostic {
+            at: diagnostic.timestamp.to_string(),
+            code: diagnostic.code.as_str().to_owned(),
+            message: diagnostic.message.clone(),
+            remediation: diagnostic.remediation.clone().into(),
+        }),
     }
 }
 
@@ -311,10 +347,10 @@ impl Adapter {
             serde_json::to_value(request.query)
                 .map_err(|_| invalid("query", "query could not be serialized"))?,
         )?;
-        if let Some(target) = &query.target {
-            if !self.policy.allowed_targets.contains(target) {
-                return Err(invalid("query.target", "target is not allowed"));
-            }
+        if let Some(target) = &query.target
+            && !self.policy.allowed_targets.contains(target)
+        {
+            return Err(invalid("query.target", "target is not allowed"));
         }
         let targets: Vec<String> = query.target.clone().map_or_else(
             || self.policy.allowed_targets.iter().cloned().collect(),
@@ -453,6 +489,40 @@ mod tests {
     use super::*;
     use sc_observability_binding_runtime::{Operation, ProducerOrigin};
     use sc_observability_dto::{CompletionDto, LogQueryDto};
+
+    #[test]
+    fn canonical_v2_failures_keep_names_and_stable_codes() {
+        let event = v2::EventError::Validation {
+            context: Box::new(sc_observability_types::ErrorContext::new(
+                sc_observability_types::error_codes::VALUE_VALIDATION_FAILED,
+                "invalid event",
+                sc_observability_types::Remediation::recoverable("correct the event", [] as [&str; 0]),
+            )),
+        };
+        let projected = project_canonical_event(&event);
+        assert!(matches!(
+            projected,
+            Failure::Validation { diagnostic, field }
+                if field == "EventError::Validation"
+                    && diagnostic.code == sc_observability_types::error_codes::VALUE_VALIDATION_FAILED.as_str()
+        ));
+
+        let flush = v2::FlushError::Drain {
+            context: Box::new(sc_observability_types::ErrorContext::new(
+                sc_observability_types::error_codes::SC_LOG_QUERY_IO,
+                "flush failed",
+                sc_observability_types::Remediation::recoverable("retry flush", [] as [&str; 0]),
+            )),
+        };
+        let projected = project_canonical_flush(&flush);
+        assert!(matches!(
+            projected,
+            Failure::Io { diagnostic }
+                if diagnostic.code == sc_observability_types::error_codes::SC_LOG_QUERY_IO.as_str()
+        ));
+        assert_ne!("EventError::Validation", "ValidationError");
+        assert_ne!("FlushError::Drain", "FlushFailure");
+    }
 
     struct IpcBackend;
 

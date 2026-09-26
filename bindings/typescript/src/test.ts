@@ -1,6 +1,8 @@
 import {
   createClient,
   createTauriTransport,
+  canonicalErrorCode,
+  canonicalErrorNameForCode,
   encodeEvent,
   encodeValue,
   parseWireEnvelope,
@@ -28,6 +30,12 @@ const transport: JsonTransport = {
 };
 
 async function main(): Promise<void> {
+  assert(canonicalErrorCode("EventError::Validation") === "SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED",
+    "canonical v2 event name did not retain its stable code");
+  assert(canonicalErrorNameForCode("SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED") === "EventError::Validation",
+    "canonical v2 code did not resolve to its variant name");
+  assert(canonicalErrorNameForCode("SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED")?.startsWith("EventError::") === true,
+    "retained 1.x wrapper name was accepted as canonical");
   const maximum = encodeValue(18446744073709551615n);
   assert(maximum.kind === "ok" && maximum.value.kind === "integer" && maximum.value.value === "18446744073709551615", "maximum u64 was not encoded losslessly");
   const negative = encodeValue(-9223372036854775808n);
