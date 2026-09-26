@@ -18,9 +18,10 @@ Generated projection of `obs-d-2`; the bead is authoritative.
 - ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-013, ADR-014, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability-log/src/bridge.rs`
-  - `crates/sc-observability-log/tests/bridge_*.rs`
-  - `docs/logging/d-2-host-logger-bridge.md`
-  - `docs/plans/phase-d/sprint-d-2-host-logger-bridge.md`
+- `crates/sc-observability-log/tests/bridge_*.rs`
+- `docs/logging/d-2-host-logger-bridge.md`
+- `docs/plans/phase-d/sprint-d-2-host-logger-bridge.md`
+- `crates/sc-observability-log/src/control.rs (attachment control binding seam)`
 
 ## Goal and dependency
 
@@ -86,7 +87,18 @@ ADR-019 governs this consumer because it binds obs-d-13’s open host-attachment
 Consume obs-d-13's frozen concrete attachment signature specification and obs-d-12's canonical error/registry artifact. In wave 2, bind the resulting errors and codes only in owned `bridge.rs`; do not alter either producer contract.
 ## Acceptance criteria
 
-- [ ] `cargo test -p sc-observability-log --test bridge_jsonl --locked` and individual explicitly named bridge attachment/policy test targets added by D.2 pass; never pass bridge_* as a literal cargo target (D1–D5).
-- [ ] boundary:sc-observability-log — one recording-sink fixture proves policy admission/rejection/panic, one redaction pass, host-owned logger, no extra LevelOwner and exact dropped-event accounting (D1–D4).
-- [ ] boundary:sc-observability-log — foreign facade rejection, init/attach exclusion, detach timeout retry, stale NotInstalled, reattachment and Arc::try_unwrap after successful detach pass using D.13 errors (D5).
+- [x] `cargo test -p sc-observability-log --test bridge_jsonl --locked` and individual explicitly named bridge attachment/policy test targets added by D.2 pass; never pass bridge_* as a literal cargo target (D1–D5).
+- [x] boundary:sc-observability-log — recording-sink fixtures prove policy admission/rejection/panic, one redaction pass, bounded payload rejection, host-owned logger, no extra LevelOwner and exact dropped-event accounting (D1–D4).
+- [x] boundary:sc-observability-log — foreign facade rejection, init/attach exclusion, detach timeout retry, stale NotInstalled, reattachment and Arc::try_unwrap after successful detach pass using D.13 errors (D5).
 - [ ] This sprint does not close cross-crate logging/release qualification; obs-d-18 does.
+
+## Sanity-fix implementation notes
+
+- D1: attachment flush helpers now retain their in-flight call token until the
+  helper exits, preventing successful detach while the helper still owns the
+  attachment logger reference.
+- D4: `bridge_policy` now covers allowlist admission, bounded payload
+  rejection, host-owned redaction and exact rejection accounting; isolated
+  `bridge_foreign` and `bridge_owned` fixtures cover facade ownership.
+- D5: controls retain a weak token for their originating attachment, and the
+  attachment suite covers reattachment plus rejection of stale controls.

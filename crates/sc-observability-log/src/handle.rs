@@ -71,7 +71,7 @@ impl Rejection for crate::EmitError {
 
 /// Everything the emit path needs, shared behind one `Arc`.
 pub(crate) struct Installed {
-    pub(crate) logger: sc_observability::Logger,
+    pub(crate) logger: Arc<sc_observability::Logger>,
     pub(crate) service: sc_observability_types::ServiceName,
     pub(crate) identity: sc_observability_types::ProcessIdentity,
     pub(crate) options: crate::BridgeOptions,
@@ -421,6 +421,9 @@ pub(crate) fn dropped_events() -> DroppedEvents {
 /// evaluation. This is an optimization only: `try_log_with_outcome` remains the
 /// authoritative admission decision and no bridge-owned threshold is retained.
 pub(crate) fn core_enabled(level: sc_observability_types::Level) -> bool {
+    if let Some(enabled) = crate::bridge::attached_enabled(level) {
+        return enabled;
+    }
     let Some(installed) = current_installed() else {
         return false;
     };
@@ -542,6 +545,10 @@ pub(crate) fn submit_to(
 pub(crate) fn submit_installed(
     parts: EventParts,
 ) -> Result<sc_observability_types::AdmissionOutcome, DropCause> {
+    let parts = match crate::bridge::submit_parts_if_attached(parts) {
+        Ok(result) => return result,
+        Err(parts) => *parts,
+    };
     let installed = current_installed().ok_or(DropCause::NotInstalled)?;
     submit_to(&installed, parts)
 }
@@ -743,8 +750,9 @@ pub(crate) fn shutdown_installed(
             #[cfg(test)]
             run_shutdown_work_hook();
             let sole = take_sole(installed);
-            let flushed = sole.logger.flush();
-            let stopped = sole.logger.shutdown();
+            let logger = take_sole(sole.logger);
+            let flushed = logger.flush();
+            let stopped = logger.shutdown();
             health::store_level_state(stopped.level_state());
             if let Some(report) = health::read_report(&stopped) {
                 health::store_report(report);
@@ -819,6 +827,7 @@ pub(crate) fn shutdown_sequence(timeout: Duration) -> Result<(), ShutdownError> 
     if !begin_shutdown() {
         return Ok(());
     }
+    crate::bridge::mark_owned_stopped();
     set_lifecycle(BridgeLifecycle::ShuttingDown);
     // Runtime admission belongs exclusively to the staged core logger.  The
     // facade is disabled only because shutdown has started; it is never a
@@ -1022,7 +1031,7 @@ mod tests {
             return;
         };
         let installed = Arc::new(Installed {
-            logger,
+            logger: Arc::new(logger),
             service,
             identity: sc_observability_types::ProcessIdentity::default(),
             options: crate::BridgeOptions {

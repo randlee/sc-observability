@@ -6,10 +6,10 @@
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
-use sc_observability_log::BridgeOptions;
+use sc_observability_log::{BridgeOptions, DetachError};
 use sc_observability_types::{
-    ActionName, Level, LogEvent, OBSERVATION_ENVELOPE_VERSION, ProcessIdentity, SchemaVersion,
-    ServiceName, TargetCategory, Timestamp,
+    ActionName, ErrorCode, ErrorContext, Level, LogEvent, OBSERVATION_ENVELOPE_VERSION,
+    ProcessIdentity, Remediation, SchemaVersion, ServiceName, TargetCategory, Timestamp,
 };
 use serde_json::Map;
 
@@ -49,11 +49,33 @@ enum SlotState {
     Closing,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DetachError {
-    Timeout,
-    NotInstalled,
-    ForeignLoggerInstalled,
+fn fixture_context(code: &'static str) -> Box<ErrorContext> {
+    Box::new(ErrorContext::new(
+        ErrorCode::new_static(code),
+        "attachment contract fixture failure",
+        Remediation::recoverable(
+            "exercise the canonical attachment error",
+            std::iter::empty::<String>(),
+        ),
+    ))
+}
+
+fn timeout_error() -> DetachError {
+    DetachError::Timeout {
+        context: fixture_context("SC_LOG_DETACH_TIMEOUT"),
+    }
+}
+
+fn not_installed_error() -> DetachError {
+    DetachError::NotInstalled {
+        context: fixture_context("SC_LOG_DETACH_NOT_INSTALLED"),
+    }
+}
+
+fn foreign_logger_error() -> DetachError {
+    DetachError::ForeignLoggerInstalled {
+        context: fixture_context("SC_LOG_FOREIGN_LOGGER_INSTALLED"),
+    }
 }
 
 #[derive(Debug)]
@@ -82,7 +104,7 @@ impl LogAttachment {
                 })),
             }),
             SlotState::Owned | SlotState::Attached | SlotState::Closing => {
-                Err(DetachError::ForeignLoggerInstalled)
+                Err(foreign_logger_error())
             }
         }
     }
@@ -104,12 +126,12 @@ impl LogAttachment {
     fn detach(&mut self, timeout: Duration) -> Result<(), DetachError> {
         let mut state = self.state.lock().expect("fixture state lock");
         if state.slot != SlotState::Attached {
-            return Err(DetachError::NotInstalled);
+            return Err(not_installed_error());
         }
         state.slot = SlotState::Closing;
         if state.entered_calls != 0 && timeout.is_zero() {
             state.slot = SlotState::Attached;
-            return Err(DetachError::Timeout);
+            return Err(timeout_error());
         }
         state.entered_calls = 0;
         state.slot = SlotState::Empty;
@@ -119,10 +141,10 @@ impl LogAttachment {
 
 impl LogControl {
     fn submit(&self) -> Result<(), DetachError> {
-        let state = self.state.upgrade().ok_or(DetachError::NotInstalled)?;
+        let state = self.state.upgrade().ok_or_else(not_installed_error)?;
         (state.lock().expect("fixture state lock").slot == SlotState::Attached)
             .then_some(())
-            .ok_or(DetachError::NotInstalled)
+            .ok_or_else(not_installed_error)
     }
 }
 
@@ -160,7 +182,10 @@ fn contract_event() -> LogEvent {
 fn detach_retry_after_timeout() {
     let mut attachment = LogAttachment::attach(SlotState::Empty).expect("empty slot attaches");
     attachment.set_entered_calls(1);
-    assert_eq!(attachment.detach(Duration::ZERO), Err(DetachError::Timeout));
+    assert!(matches!(
+        attachment.detach(Duration::ZERO),
+        Err(DetachError::Timeout { .. })
+    ));
     assert_eq!(
         attachment.slot(),
         SlotState::Attached,
@@ -180,16 +205,19 @@ fn stale_control_not_installed() {
         .submit()
         .expect("saved control is live before detach");
     attachment.detach(Duration::from_millis(1)).expect("detach");
-    assert_eq!(control.submit(), Err(DetachError::NotInstalled));
+    assert!(matches!(
+        control.submit(),
+        Err(DetachError::NotInstalled { .. })
+    ));
 }
 
 #[test]
 fn foreign_logger_rejected() {
     for state in [SlotState::Owned, SlotState::Attached, SlotState::Closing] {
-        assert_eq!(
+        assert!(matches!(
             LogAttachment::attach(state).map(|_| ()),
-            Err(DetachError::ForeignLoggerInstalled)
-        );
+            Err(DetachError::ForeignLoggerInstalled { .. })
+        ));
     }
 }
 
