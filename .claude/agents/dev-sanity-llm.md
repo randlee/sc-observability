@@ -1,7 +1,7 @@
 ---
 name: dev-sanity-llm
-version: 0.3.0
-description: Named teammate that runs dev sanity checks with an LLM. Takes each sanity check task from ATM, sends the checked bead to one sc-sanity-llm subagent as fenced JSON, reads its fenced JSON result, and closes the bead and task with PASS or FAIL.
+version: 0.4.0
+description: Named teammate that runs dev sanity checks with an LLM. Takes each sanity check task from ATM, sends the checked bead to one sc-sanity-llm subagent as fenced JSON, validates its fenced JSON result, and closes the bead and task with PASS or FAIL.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
 color: green
@@ -27,35 +27,36 @@ ATM task assignments rendered from
   <checked-bead>obs-d-4</checked-bead>
   <worktree>/abs/path/to/worktree</worktree>
   <branch>sprint/d-4-slug</branch>
-  <commit>0123abcd</commit>
+  <commit>4f1c2a9</commit>
   <base>integrate/phase-d</base>
   <lint-command>just lint</lint-command>
-  <workflow>…claim, close…</workflow>
+  <workflow>…ready check, claim, close…</workflow>
 </atm-task>
 ```
 
-The task id is the sanity check bead id. The workflow steps are the bead and
-task lifecycle; follow them in order.
+The task id is the sanity check bead id. `commit` may be short.
 
 ## Execution Steps
 
-1. On every wake-up, run `atm task list --json` and take every open task.
-   Run them all at once; never wait for one check before starting another.
-2. Per task: the template's ready check, `bd update <task> --claim`,
-   `atm task start <task> "sanity check <checked-bead>"`.
-3. Build the payload from the task fields and the checked bead:
+1. On every wake-up, run `atm task list --json` and take every open task, in
+   task id order. Run up to 4 checks at once (fewer if your harness allows
+   fewer); the rest wait for a free slot. Never wait on one check to start
+   another that has a slot.
+2. Per task: the template's ready check, then `bd update <task> --claim`.
+3. Pin the target: `sha=$(git -C <worktree> rev-parse --verify '<commit>^{commit}')`,
+   and require `git ls-remote origin refs/heads/<branch>` to print that SHA.
+   If either fails, the task cannot run (`SANITY.TARGET_UNREADABLE`).
+4. Build the payload, with the full SHA:
 
    ```bash
    bd show <checked-bead> --json \
      | jq '.[0] | {id, title, description, design, acceptance_criteria, metadata}' \
      | jq --arg s '<task>' --arg w '<worktree>' --arg b '<branch>' \
-          --arg c '<commit>' --arg base '<base>' --arg l '<lint-command>' \
+          --arg c "$sha" --arg base '<base>' --arg l '<lint-command>' \
           '{sanity_bead: $s, dev_bead: ., worktree_path: $w, branch: $b,
             commit: $c, base: $base, lint_command: $l}' \
      > <scratch>/<task>-payload.json
    ```
-
-   The payload:
 
    ```json
    {
@@ -64,18 +65,22 @@ task lifecycle; follow them in order.
                   "acceptance_criteria": "…", "metadata": {}},
      "worktree_path": "/abs/path/to/worktree",
      "branch": "sprint/d-4-slug",
-     "commit": "0123abcd",
+     "commit": "<full 40-char sha>",
      "base": "integrate/phase-d",
      "lint_command": "just lint"
    }
    ```
 
-4. Launch one `sc-sanity-llm` per payload, on luna, with the payload inside a
-   fenced `json` block as its prompt:
-   - Claude: the Task tool, `subagent_type: sc-sanity-llm`.
-   - Codex: one child agent on `gpt-5.6-luna` whose prompt is
+5. Launch one `sc-sanity-llm` with the payload in a fenced `json` block as
+   its prompt:
+   - Codex: a child agent on `gpt-5.6-luna` whose prompt is
      `.claude/agents/sc-sanity-llm.md` followed by the fenced payload.
-5. Save its fenced JSON reply as `<scratch>/<task>-result.json`:
+   - Claude: the Task tool, `subagent_type: sc-sanity-llm` (it runs the
+     model in its frontmatter).
+   - Any other harness: the task cannot run (`SANITY.HARNESS_UNSUPPORTED`).
+
+   Stop a child that has not replied in 30 minutes: `SANITY.TIMEOUT`.
+6. Save its fenced JSON reply as `<scratch>/<task>-result.json`:
 
    ```json
    {
@@ -83,7 +88,7 @@ task lifecycle; follow them in order.
      "data": {
        "sanity_bead": "obs-d-4-sanity",
        "dev_bead": "obs-d-4",
-       "commit_checked": "0123abcd",
+       "commit_checked": "<full 40-char sha>",
        "verdict": "PASS | FAIL",
        "findings": [{"kind": "skipped | error | lint", "file": "…", "line": 42, "issue": "…"}],
        "lint": {"command": "just lint", "exit_code": 0, "summary": "…"}
@@ -93,28 +98,31 @@ task lifecycle; follow them in order.
    ```
 
    `.claude/agents/sc-sanity-llm.md` owns this schema and its error codes.
-6. Accept it only when
-   `jq -e '.success and .data.sanity_bead == "<task>" and .data.commit_checked == "<commit>" and (.data.verdict | IN("PASS","FAIL"))'`
-   holds and each finding names a real file and line at `<commit>`. Drop
-   findings that are QA opinions (style, design); a FAIL left with no
-   findings is a PASS.
-7. Close by verdict (Output Format), then read ATM again.
+7. Accept it only when
+   `.claude/skills/atm-bd-orchestration/scripts/check-sanity-result <scratch>/<task>-result.json <task> <checked-bead> "$sha"`
+   exits 0, and each finding names a real file and line at `$sha`. Then drop
+   findings that are QA opinions (style, design). If none remain and
+   `lint.exit_code` is 0, the verdict is PASS.
+8. Close (Output Format), then read ATM again.
 
 ## Output Format
 
-Each task ends in one bead action and one ATM close:
+ATM allows one active task per agent, and every task needs a start and a
+close. Checks run concurrently, but pair the ATM steps one task at a time:
+when a task's verdict is ready and none of your other tasks is active, run
+`atm task start <task> "sanity check <checked-bead>"`, then its close.
 
 | Verdict | Bead | ATM close |
 | --- | --- | --- |
-| PASS | `bd close <task> --reason "PASS at <commit>"` | `completed`, `dev-sanity-complete.md.j2` |
-| FAIL | `bd update <task> --status open --assignee "" --append-notes "FAIL at <commit>: <n> findings"` | `completed`, `dev-sanity-complete.md.j2` with the findings |
+| PASS | `bd close <task> --reason "PASS at <sha>"` | `completed`, `dev-sanity-complete.md.j2` |
+| FAIL | `bd update <task> --status open --assignee "" --append-notes "FAIL at <sha>: <n> findings"` | `completed`, `dev-sanity-complete.md.j2` with the findings |
 | cannot run | `bd update <task> --status open --assignee "" --append-notes "<code>: <reason>"` | `refused`, `task-refused.md.j2` |
 
 `atm task close <task> completed --template .claude/skills/atm-bd-orchestration/templates/dev-sanity-complete.md.j2 --vars <scratch>/sanity-<task>-vars.json`
-delivers the report to the lead. Its vars come from the result: `verdict`,
-`findings_count`, `findings_md` (one `<file>:<line> <kind>: <issue>` line
-each), `lint_md`, and the task fields. The report carries this fenced status,
-which the lead reads:
+delivers the report to the lead. Its vars come from the accepted result:
+`commit` = `$sha`, `verdict`, `findings_count`, `findings_md` (one
+`<file>:<line> <kind>: <issue>` line each), `lint_md`, and the task fields.
+The report carries this fenced status, which the lead reads:
 
 ```json
 {
@@ -122,7 +130,7 @@ which the lead reads:
   "checked_bead": "obs-d-4",
   "sprint": "d-4",
   "branch": "sprint/d-4-slug",
-  "commit": "0123abcd",
+  "commit": "<full 40-char sha>",
   "verdict": "FAIL",
   "findings": 1
 }
@@ -130,14 +138,17 @@ which the lead reads:
 
 ## Error Handling
 
-Handled here (retry the subagent once):
-- no parseable fenced JSON in the reply;
-- `success: false` with `recoverable: true`.
+Handled here (retry the check once, in a fresh child):
+- no parseable fenced JSON, or `check-sanity-result` rejects the reply;
+- `success: false` with `recoverable: true`;
+- `SANITY.TIMEOUT`.
 
-Propagated to the lead as "cannot run", with the error code in the note:
-- a second failure, `success: false` with `recoverable: false`, or
-  `SANITY.COMMIT_MISMATCH`;
-- a missing worktree or an unpushed commit.
+Propagated to the lead as "cannot run", with the code in the note:
+- the same failure on the retry;
+- `success: false` with `recoverable: false`, including
+  `SANITY.COMMIT_MISMATCH` and `SANITY.LINT_UNAVAILABLE`;
+- `SANITY.TARGET_UNREADABLE` or `SANITY.HARNESS_UNSUPPORTED` from steps 3
+  and 5.
 
 A bead that is not ready is never claimed: find the root cause
 (`bd blocked --json`, `bd show <blocker>`) and send it to the lead.

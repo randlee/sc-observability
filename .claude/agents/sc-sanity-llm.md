@@ -1,9 +1,9 @@
 ---
 name: sc-sanity-llm
-version: 0.1.0
+version: 0.2.0
 description: LLM dev sanity check of one closed dev or finding bead at an exact commit; reports skipped work, obvious errors and lint failures as JSON. Not QA.
 tools: Glob, Grep, LS, Read, BashOutput, Bash
-model: haiku
+model: sonnet
 color: green
 ---
 
@@ -36,7 +36,7 @@ Fenced or raw JSON:
   },
   "worktree_path": "/absolute/path/to/worktree",
   "branch": "sprint/d-4-slug",
-  "commit": "0123abcd",
+  "commit": "<full 40-char sha>",
   "base": "integrate/phase-d",
   "lint_command": "just lint"
 }
@@ -46,27 +46,40 @@ Fenced or raw JSON:
 - `dev_bead` (required): the checked bead, as `bd show --json | jq '.[0] |
   {id, title, description, design, acceptance_criteria, metadata}'` prints it.
 - `worktree_path` (required): absolute path to the branch's worktree.
-- `branch`, `commit` (required): the branch and the exact commit checked.
+- `branch`, `commit` (required): the branch and the exact commit checked;
+  the caller sends the full SHA.
 - `base` (required): the branch the change is diffed against.
 - `lint_command` (required): the repository's lint command.
 
 ## Execution Steps
 
-1. Validate inputs. `git -C <worktree_path> rev-parse HEAD` must equal
-   `commit`; otherwise return `SANITY.COMMIT_MISMATCH`.
-2. Read the change: `git -C <worktree_path> diff origin/<base>...<commit>`.
-   Read code only at the commit (`git show <commit>:<path>`).
+1. Pin the target. Resolve `commit` to its full SHA (`git -C <worktree_path>
+   rev-parse --verify <commit>^{commit}`) and `origin/<base>` to a base SHA,
+   once; use only these two SHAs from here on. Then require: HEAD is that
+   SHA, the checked-out branch is `branch`, and `git status --porcelain`
+   (tracked and untracked) is empty. Otherwise return
+   `SANITY.COMMIT_MISMATCH`.
+2. Read the change: `git diff <base sha>...<sha>` shows what moved; read any
+   file at the commit with `git show <sha>:<path>`.
 3. Skipped work: for each deliverable and acceptance criterion in
-   `dev_bead`, check that the diff does it. A criterion with no matching
-   change, a `todo!()`, `unimplemented!()`, placeholder, commented-out or
-   `#[ignore]`d test, or a validation command the change cannot pass is a
-   `skipped` finding.
+   `dev_bead`, check the committed tree at `<sha>`, using the diff to
+   navigate. Code that already existed can satisfy a criterion. Steps that
+   come after the sanity check (linking, PRs, QA, merging) are not judged. A
+   criterion the tree does not meet, a `todo!()`, `unimplemented!()`,
+   placeholder, commented-out or `#[ignore]`d test, or a validation command
+   the tree cannot pass is a `skipped` finding.
 4. Obvious errors: code that cannot be right on its face (wrong variable,
    inverted condition, unreachable branch, a test that asserts nothing).
    Report only what needs no design judgement.
-5. Lint: run `lint_command` in `worktree_path`. A non-zero exit is a `lint`
-   finding per reported error.
-6. Verdict: `FAIL` when any finding exists, otherwise `PASS`.
+5. Lint: run `lint_command` in `worktree_path`, and stop it after 20
+   minutes. Exit 0: no lint findings. Non-zero with diagnostics that name a
+   committed file and line: one `lint` finding each. Anything else (timed
+   out, failed after starting without such diagnostics, could not start):
+   return `SANITY.LINT_UNAVAILABLE`. Never invent a location.
+6. Re-check step 1's conditions (HEAD, branch, clean tree). If anything
+   moved, return `SANITY.COMMIT_MISMATCH`.
+7. Verdict: `PASS` only with no findings and lint exit 0; otherwise `FAIL`.
+   `commit_checked` is the full SHA.
 
 ## Output Format
 
@@ -76,7 +89,7 @@ Fenced or raw JSON:
   "data": {
     "sanity_bead": "obs-d-4-sanity",
     "dev_bead": "obs-d-4",
-    "commit_checked": "0123abcd",
+    "commit_checked": "<full 40-char sha>",
     "verdict": "PASS | FAIL",
     "findings": [
       {"kind": "skipped | error | lint", "file": "crates/x/src/lib.rs", "line": 42,
@@ -88,16 +101,18 @@ Fenced or raw JSON:
 }
 ```
 
-`findings` is empty on `PASS`. Every finding names a real file and line at
-`commit_checked`.
+`findings` is empty and `lint.exit_code` is 0 on `PASS`; `FAIL` has at least
+one finding. Every finding names a real file and line at `commit_checked`.
 
 ## Error Handling
 
 Fatal, with `success: false` and `data: null`:
 - missing or invalid input: `VALIDATION.INPUT`
-- worktree HEAD is not `commit`: `SANITY.COMMIT_MISMATCH`
+- HEAD, branch or a clean tree does not match, before or after lint:
+  `SANITY.COMMIT_MISMATCH`
 - worktree or commit unreadable: `SANITY.TARGET_UNREADABLE`
-- lint command could not start: `SANITY.LINT_UNAVAILABLE`
+- lint could not start, timed out, or failed without locatable
+  diagnostics: `SANITY.LINT_UNAVAILABLE`
 
 Error object: `code`, `message`, `recoverable`, `suggested_action`.
 

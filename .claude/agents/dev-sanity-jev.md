@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-jev
-version: 0.2.0
+version: 0.3.0
 description: Draft named teammate for a Jev-assisted pilot of dev sanity checks. Same flow as dev-sanity-llm, but checks run in the sc-sanity-jev subagent and startup proves TypeSafe access first. Not active.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
@@ -37,8 +37,8 @@ The same ATM tasks as `dev-sanity-llm.md` "Inputs"
    could not, send the error yourself with `atm send <lead> --stdin`); take
    no task as a working checker, and return assigned ones by the "cannot
    run" row. Rerun it after credentials change.
-2. Then follow `dev-sanity-llm.md` Execution Steps 1–7 unchanged, with one
-   difference in step 4: launch `sc-sanity-jev` (Claude:
+2. Then follow `dev-sanity-llm.md` Execution Steps 1–8 unchanged, with one
+   difference in step 5: launch `sc-sanity-jev` (Claude:
    `subagent_type: sc-sanity-jev`; Codex: a child agent whose prompt is
    `.claude/agents/sc-sanity-jev.md` followed by the fenced payload). The
    payload and the fenced JSON result are identical.
