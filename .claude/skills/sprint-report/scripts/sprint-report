@@ -71,6 +71,18 @@ def related_bead(bead: dict[str, Any], target: str, relation: str) -> bool:
                for edge in bead.get("dependencies") or [])
 
 
+def is_qa_of(bead: dict[str, Any], dev_id: str) -> bool:
+    """A QA round of dev_id: a stage:qa child of it (phase contract: QA lives under the bead it checks, and bd
+    keeps one edge type per pair) or, for rounds created before the contract, a bead that `validates` it."""
+    if related_bead(bead, dev_id, "validates"):
+        return True
+    if "stage:qa" not in (bead.get("labels") or []):
+        return False
+    metadata = bead.get("metadata") if isinstance(bead.get("metadata"), dict) else {}
+    return related_bead(bead, dev_id, "parent-child") or bead.get("parent") == dev_id \
+        or metadata.get("checked_bead") == dev_id
+
+
 def status_icon(dev: dict[str, Any], sanity: dict[str, Any] | None,
                 findings: list[dict[str, Any]] = (), blocked: bool = False) -> str:
     if blocked or dev.get("status") == "blocked":
@@ -244,7 +256,7 @@ def main() -> int:
             for dev_id in dev_ids:
                 if "stage:dev-sanity" in (bead.get("labels") or []) and related_bead(bead, dev_id, "blocks"):
                     sanity_by_dev[dev_id] = bead
-                if related_bead(bead, dev_id, "validates"):
+                if is_qa_of(bead, dev_id):
                     qa_by_dev.setdefault(dev_id, []).append(bead)
         selected_qa = {dev_id: choose_round(candidates) for dev_id, candidates in qa_by_dev.items()}
         for dev_id, gate_id in index_bead_pairs(index).items():

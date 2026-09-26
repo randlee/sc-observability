@@ -134,8 +134,6 @@ class Migration:
                 continue
             md = pcc.meta(b)
             st = pcc.stage(b)
-            if self.check.edge_sprint(bid):
-                continue  # `validates` / `caused-by` edge into the phase is the membership (one edge type per pair in bd)
             target = ""
             if st == C.FINDING_LABEL or st == C.FIX_LABEL:
                 target = str(md.get("sprint_bead") or "")
@@ -151,9 +149,9 @@ class Migration:
             if target and target not in devs and target in self.by and self.check.sprint_of(target) in devs:
                 target = self.check.sprint_of(target)  # findings on a fix: the fix already has caused-by edges to them
             if target in devs:
-                if target in pcc.deps(b, "caused-by") or target in pcc.deps(b, "validates"):
-                    self.unresolved.append(f"{bid}: has a {'validates' if target in pcc.deps(b, 'validates') else 'caused-by'} edge to {target}; bd allows one edge type per pair, so it cannot also be its child")
-                    continue
+                for kind in ("caused-by", "validates"):
+                    if target in pcc.deps(b, kind):  # bd keeps one edge type per pair: drop the edge, the parent link replaces it
+                        self.w(f"{bid}: {kind} edge to {target} gives way to the parent link", "dep", "remove", bid, target)
                 self.w(f"{bid}: {st or 'unlabelled'} bead belongs under {target}", "update", bid, "--parent", target)
             else:
                 self.unresolved.append(f"{bid}: {st or 'unlabelled'} child of {self.root} with no resolvable sprint (sprint_bead/checked_bead/dev_bead); reparent by hand")

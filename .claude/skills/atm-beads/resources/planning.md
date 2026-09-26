@@ -98,15 +98,34 @@ schema is `docs/plans/sprints.schema.json`.
 
 The file is never generated from beads and beads are never generated from the
 file. A plan change is one planner transaction: change the beads, edit the
-file, commit both. `validate-plan --root <root>` passes only when the
-children of the root are exactly the listed pairs (excepted: plan-gate beads
-`stage:plan*`, gate beads, absorbed sprints closed "folded into ...", QA beads
-that `validates` a phase bead and findings `caused-by` one, because bd keeps
-one edge type per bead pair and that edge is their sprint membership), each
-sanity bead blocks on its dev bead, and every listed dev bead carries
-`stage:sprint` with the sprint schema (`phase_contract_check.py`). It must
-stay green from plan approval to phase end; every template runs it before a
-claim.
+file, commit both. `validate-plan --root <root>` passes only when the bead
+hierarchy holds, each sanity bead blocks on its dev bead, and every listed dev
+bead carries `stage:sprint` with the sprint schema
+(`phase_contract_check.py`). It must stay green from plan approval to phase
+end; every template runs it before a claim.
+
+The hierarchy (user ruling 2026-09-26: several phases and teams share one
+beads database, so beads at the top level get mixed up):
+
+- the top level holds epics only; the phase root is an epic, or a `feature`
+  whose ancestors are all epics (phase d: epic `obs-c4v` → feature
+  `obs-phase-d`);
+- the children of the phase root are exactly the listed dev/sanity pairs
+  (excepted: plan-gate beads `stage:plan*`, `bd gate` beads, and absorbed
+  sprints closed "folded into ..." with their sanity beads);
+- QA rounds, findings, fix beads and their sanity gates are parented under
+  the sprint dev bead they belong to; a QA bead is a child of the bead it
+  checks (`metadata.checked_bead`), a finding is a child of its sprint
+  (`metadata.sprint_bead`) and keeps `discovered-from` → its QA bead;
+- workflow-issue beads live under `obs-workflow-issues`, never under a phase.
+
+bd keeps one edge type per bead pair, so a QA bead cannot both `validates` its
+sprint and be its child, and a finding cannot both be `caused-by` its sprint
+and be its child. The parent link is the membership; `migrate-phase-contract`
+prints `bd dep remove <bead> <sprint>` before each `bd update --parent`, and
+`sprint-report` finds QA rounds by parent + `stage:qa` (and still by
+`validates` for rounds created before this rule). Any other top-level bead in
+the database is reported as a warning naming it.
 
 The initial `phase-<x>-dag.html` is a required plan-review artifact alongside
 `sprints.json`. Live-root validation verifies both files on the remote

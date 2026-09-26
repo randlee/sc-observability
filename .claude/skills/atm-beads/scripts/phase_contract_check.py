@@ -374,11 +374,37 @@ class PhaseCheck:
             if is_folded(b) or (has_label(b, C.SANITY_LABEL) and b.get("status") == "closed"
                                 and is_folded(self.by.get(str(meta(b).get("dev_bead") or ""), {}))):
                 continue  # absorbed sprint and its sanity bead: history, not membership
-            if self.edge_sprint(bid):
-                continue  # bd keeps one edge type per pair: a QA bead that `validates` its sprint, or a finding
-                          # `caused-by` it, cannot also be its child; the edge is the membership
             st = stage(b) or "unlabelled"
-            self.problem(bid, f"{st} bead is a child of {self.root_id} but not a listed sprint pair; parent it under its sprint dev bead")
+            hint = "parent it under its sprint dev bead"
+            es = self.edge_sprint(bid)
+            if es:  # bd keeps one edge type per pair: the validates/caused-by edge must go before the reparent
+                kind = "validates" if has_label(b, QA_LABEL) else "caused-by"
+                hint = f"bd dep remove {bid} {es} ({kind}), then bd update {bid} --parent {es}"
+            self.problem(bid, f"{st} bead is a child of {self.root_id} but not a listed sprint pair; {hint}")
+
+    def check_hierarchy(self) -> None:
+        """Top level holds epics only (user ruling 2026-09-26: several phases share one repo, so beads at the
+        top level get mixed up). The phase root is an epic, or a feature whose ancestors are all epics."""
+        cur, seen = self.root_id, set()
+        while cur and cur not in seen:
+            seen.add(cur)
+            b = self.by.get(cur)
+            if not b:
+                self.problem(cur, "phase ancestor is not in beads")
+                return
+            kind = str(b.get("issue_type") or "")
+            parent = parent_of(b)
+            if cur == self.root_id and kind not in ("epic", "feature"):
+                self.problem(cur, f"phase root is a {kind or 'bead without issue_type'}; a phase root is an epic or a feature under an epic")
+            elif cur != self.root_id and kind != "epic":
+                self.problem(cur, f"phase ancestor is a {kind or 'bead without issue_type'}, not an epic; only epics may hold phases")
+            if not parent and kind != "epic":
+                self.problem(cur, f"{kind or 'bead'} at the top level; only epics live at the top level, parent it under its epic")
+            cur = parent
+        if self.live:
+            stray = sorted(bid for bid, b in self.by.items() if not parent_of(b) and str(b.get("issue_type") or "") != "epic")
+            if stray:
+                self.warn(f"{len(stray)} top-level beads are not epics (only epics live at the top level): {' '.join(stray)}")
 
     def check_schema(self) -> None:
         for dev in self.devs():
@@ -601,6 +627,7 @@ class PhaseCheck:
         if not self.root:
             self.problem(self.root_id, "phase root bead not found")
             return self.problems, self.warnings
+        self.check_hierarchy()
         self.check_membership()
         self.check_schema()
         self.check_graph()

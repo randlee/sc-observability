@@ -68,7 +68,10 @@ optional phase facts such as `policy.human_gates`). The planner writes it in
 the plan PR; it is never exported from beads. `validate-plan` requires the
 beads under the root to be exactly those pairs and must stay green from plan
 approval to phase end. Sprint content lives only in beads and is not
-duplicated in the file.
+duplicated in the file. The top level of the beads database holds epics only:
+a phase root is an epic or a feature under an epic, and every QA, finding,
+fix and fix-sanity bead is parented under its sprint dev bead (see
+`resources/planning.md`, "The hierarchy").
 The initial `docs/plans/phase-<x>/phase-<x>-dag.html` (embedded SVG) must also be
 committed and pushed with the index on the phase integration branch before
 plan review. `sprint-review --root <root>` produces both without a viewer;
