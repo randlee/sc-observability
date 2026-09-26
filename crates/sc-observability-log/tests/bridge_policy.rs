@@ -9,6 +9,8 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+#[allow(deprecated)]
+use sc_observability::{LogSink, SinkHealth, SinkHealthState, SinkName, SinkRegistration};
 use sc_observability_log::{
     ActionName, AttachmentOptions, BridgeEvent, BridgeEventDecision, BridgeEventPolicy,
     BridgeOptions, EventLevel, LoggerConfig, PolicyRejection, ServiceName, TargetCategory,
@@ -32,6 +34,29 @@ struct PanicPolicy;
 impl BridgeEventPolicy for PanicPolicy {
     fn decide(&self, _: &LogEvent) -> BridgeEventDecision {
         panic!("policy panic fixture")
+    }
+}
+
+struct RecordingSink {
+    events: Arc<Mutex<Vec<LogEvent>>>,
+}
+
+#[allow(deprecated)]
+impl LogSink for RecordingSink {
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+        self.events
+            .lock()
+            .expect("recording lock")
+            .push(event.clone());
+        Ok(())
+    }
+
+    fn health(&self) -> SinkHealth {
+        SinkHealth {
+            name: SinkName::new("policy-recording").expect("sink name"),
+            state: SinkHealthState::Healthy,
+            last_error: None,
+        }
     }
 }
 
@@ -74,6 +99,7 @@ fn attach_with(
 ) -> (
     sc_observability_log::LogAttachment,
     Arc<sc_observability::Logger>,
+    Arc<Mutex<Vec<LogEvent>>>,
 ) {
     attach_with_config(policy, |_| {})
 }
@@ -84,6 +110,7 @@ fn attach_with_config(
 ) -> (
     sc_observability_log::LogAttachment,
     Arc<sc_observability::Logger>,
+    Arc<Mutex<Vec<LogEvent>>>,
 ) {
     let root = tempfile::tempdir().expect("temp root");
     let root = Box::leak(Box::new(root));
@@ -92,7 +119,12 @@ fn attach_with_config(
         root.path().to_path_buf(),
     );
     configure(&mut config);
-    let logger = Arc::new(sc_observability::Logger::new_typed(config).expect("host logger"));
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let mut builder = sc_observability::LoggerBuilder::new_typed(config).expect("builder");
+    builder.register_sink(SinkRegistration::new(Arc::new(RecordingSink {
+        events: Arc::clone(&events),
+    })));
+    let logger = Arc::new(builder.build_typed().expect("host logger"));
     // Keep the host Arc in the attachment fixture; successful detach proves
     // that the attachment itself released its Arc in the lifecycle fixture.
     let options = AttachmentOptions::new(
@@ -103,13 +135,13 @@ fn attach_with_config(
         policy,
     );
     let attachment = attach_logger(Arc::clone(&logger), options).expect("attach");
-    (attachment, logger)
+    (attachment, logger, events)
 }
 
 #[test]
 fn policy_rejection_and_panic_are_counted_once_at_the_boundary() {
     let _serial = TEST_LOCK.lock().expect("test lock");
-    let (mut attachment, host) = attach_with(Arc::new(Deny));
+    let (mut attachment, host, events) = attach_with(Arc::new(Deny));
     let control = attachment.control();
     let before = control
         .dropped_events()
@@ -122,17 +154,19 @@ fn policy_rejection_and_panic_are_counted_once_at_the_boundary() {
         .dropped_events()
         .get(sc_observability_log::DropCause::InvalidEvent);
     assert_eq!(after, before + 1);
+    assert!(events.lock().expect("recording lock").is_empty());
     attachment.detach(Duration::from_secs(2)).expect("detach");
     let host =
         Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases attachment logger"));
     let _ = host.shutdown();
 
-    let (mut attachment, host) = attach_with(Arc::new(PanicPolicy));
+    let (mut attachment, host, events) = attach_with(Arc::new(PanicPolicy));
     let control = attachment.control();
     assert!(matches!(
         control.try_log(event()),
         Err(sc_observability_log::EmitError::Panicked)
     ));
+    assert!(events.lock().expect("recording lock").is_empty());
     attachment.detach(Duration::from_secs(2)).expect("detach");
     let host =
         Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases attachment logger"));
@@ -142,7 +176,7 @@ fn policy_rejection_and_panic_are_counted_once_at_the_boundary() {
 #[test]
 fn policy_allowlist_and_bound_run_before_host_redaction_and_sink_admission() {
     let _serial = TEST_LOCK.lock().expect("test lock");
-    let (mut attachment, host) = attach_with_config(
+    let (mut attachment, host, events) = attach_with_config(
         Arc::new(AllowlistAndBound {
             max_message_bytes: 64,
         }),
@@ -172,6 +206,7 @@ fn policy_allowlist_and_bound_run_before_host_redaction_and_sink_admission() {
             .get(sc_observability_log::DropCause::InvalidEvent),
         before + 2
     );
+    assert!(events.lock().expect("recording lock").is_empty());
 
     let path = host.health().active_log_path;
     let mut admitted = event();
@@ -181,6 +216,15 @@ fn policy_allowlist_and_bound_run_before_host_redaction_and_sink_admission() {
         .insert("token".to_owned(), json!("Bearer field-secret"));
     control.try_log(admitted).expect("allowlisted event");
     control.flush(Duration::from_secs(2)).expect("flush");
+    let events = events.lock().expect("recording lock");
+    assert_eq!(events.len(), 1, "only the admitted event reaches the sink");
+    assert_eq!(events[0].message.as_deref(), Some("Bearer [REDACTED]"));
+    assert!(
+        !events[0]
+            .fields
+            .values()
+            .any(|value| { value.as_str() == Some("Bearer field-secret") })
+    );
 
     attachment.detach(Duration::from_secs(2)).expect("detach");
     let host = Arc::try_unwrap(host).unwrap_or_else(|_| panic!("detach releases logger"));
