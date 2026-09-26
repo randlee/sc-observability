@@ -43,7 +43,7 @@ struct RecordingSink {
 
 #[allow(deprecated)]
 impl LogSink for RecordingSink {
-    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
         self.events
             .lock()
             .expect("recording lock")

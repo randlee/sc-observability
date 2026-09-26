@@ -37,7 +37,7 @@ impl LogSink for RecordingSink {
     fn write(
         &self,
         event: &sc_observability_types::LogEvent,
-    ) -> Result<(), sc_observability_types::LogSinkError> {
+    ) -> Result<(), sc_observability_types::v2::LogSinkError> {
         self.events
             .lock()
             .expect("recording lock")
@@ -140,11 +140,11 @@ impl LogSink for BlockingFlushSink {
     fn write(
         &self,
         _event: &sc_observability_types::LogEvent,
-    ) -> Result<(), sc_observability_types::LogSinkError> {
+    ) -> Result<(), sc_observability_types::v2::LogSinkError> {
         Ok(())
     }
 
-    fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
+    fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
         if let Some(entered) = self.entered.lock().expect("entered lock").take() {
             entered.send(()).expect("flush entered receiver");
         }
