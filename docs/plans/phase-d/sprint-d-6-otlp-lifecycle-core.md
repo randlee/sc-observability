@@ -65,3 +65,24 @@ D.6 configuration, constants, or facade ownership.
 - [ ] Deliverable 3: fixture tests prove fail-open full/closed admission, degraded health, and stable terminal outcomes without `block_on`, a second runtime, or a backend branch.
 - [ ] Deliverable 4: `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass.
 - [ ] D.6 does not close SDK/legacy transport behavior or public-facade integration; D.7/D.8 and D.18 own those outcomes.
+
+## Implementation notes
+
+The staged lifecycle core now provides the shared contract for D.7/D.8:
+
+- admission reserves record and byte capacity under one short lock and assigns
+  a monotonic sequence; releasing an admission wakes only the barriers that
+  can now advance;
+- flush and shutdown are shared futures, so concurrent callers do not create
+  duplicate provider operations; shutdown closes admission before draining and
+  transitions to the terminal state exactly once;
+- full queues, closed admission, dropped permits, backend failures, and
+  lifecycle deadlines update fail-open health/accounting without requiring an
+  executor-specific `block_on` path;
+- payloads remain neutral `T` values at this layer. Signal projectors and
+  backend adapters retain ownership of resource, scope, flags, links,
+  histogram, and wire-specific interpretation.
+
+The public facade and backend construction remain intentionally out of scope;
+obs-d-18 integrates these internal operations after D.7/D.8 provide their
+exporter adapters.
