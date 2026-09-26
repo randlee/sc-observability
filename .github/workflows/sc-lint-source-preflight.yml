@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2022]
+        os: ${{ fromJSON((github.event_name != 'pull_request' || github.base_ref == 'develop' || startsWith(github.base_ref, 'integrate/')) && '["ubuntu-latest","windows-2022"]' || '["ubuntu-latest"]') }}
     steps:
       - name: Check out consumer
         uses: actions/checkout@v5

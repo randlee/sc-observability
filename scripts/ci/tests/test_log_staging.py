@@ -13,7 +13,6 @@ from prepare_log_staged_packages import package_command
 from _log_staging import PRIVATE_PACKAGE, PACKAGES, inspect_archive, sha256, verify_stage
 from validate_log_staged_consumer import validate_resolution
 from validate_public_api import approval_for
-from _log_release_adaptations import apply_release_adaptations, blob
 from wait_for_registry_version import wait
 from prepare_runtime_level_staged_packages import candidate_workspace_manifest, normalized_lock
 
@@ -158,37 +157,6 @@ class StageTests(unittest.TestCase):
         with patch('wait_for_registry_version.visible', side_effect=[False, True]) as probe, patch('wait_for_registry_version.time.sleep'):
             wait('sc-observability', VERSION, 3, 0)
             self.assertEqual(probe.call_count, 2)
-
-    def test_release_adaptation_rejects_unrelated_manifest_and_license_edits(self):
-        import hashlib
-        root = self.root / 'release'
-        root.mkdir()
-        (root / 'LICENSE').write_bytes(b'MIT license bytes')
-        expected, flags, licenses = {}, {}, {}
-        for name in PACKAGES:
-            directory = root / 'crates' / name
-            directory.mkdir(parents=True)
-            (directory / 'LICENSE').write_bytes((root / 'LICENSE').read_bytes())
-            licenses[f'crates/{name}/LICENSE'] = blob((root / 'LICENSE').read_bytes())
-        for name in ('sc-observability-log', 'sc-observability-log-macros'):
-            relative = f'crates/{name}/Cargo.toml'
-            before = f'[package]\nname = "{name}"\npublish = false\n'.encode()
-            after = before.replace(b'false', b'true')
-            (root / relative).write_bytes(after)
-            expected[relative] = blob(before)
-            flags[relative] = {'before_blob': blob(before), 'after_blob': blob(after)}
-        record = root / 'record.json'
-        record.write_text(json.dumps({'schema_version': 1, 'candidate_version': VERSION, 'root_license_sha256': hashlib.sha256((root / 'LICENSE').read_bytes()).hexdigest(), 'license_copies': licenses, 'publish_flags': flags}))
-        apply_release_adaptations(expected, root, record)
-        changed = root / 'crates/sc-observability-log/Cargo.toml'
-        original = changed.read_bytes()
-        changed.write_bytes(original + b'description = "unrelated edit"\n')
-        with self.assertRaisesRegex(ValueError, 'exceeds'):
-            apply_release_adaptations(expected, root, record)
-        changed.write_bytes(original)
-        (root / 'crates/sc-observability-log/LICENSE').write_bytes(b'wrong license')
-        with self.assertRaisesRegex(ValueError, 'license copy'):
-            apply_release_adaptations(expected, root, record)
 
     def test_historical_staging_derives_current_workspace_version(self):
         import tomllib

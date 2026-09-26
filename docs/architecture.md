@@ -975,6 +975,14 @@ ADR navigation index (status is recorded in each decision below):
   EmitOutcome is an alias of core AdmissionOutcome, not a duplicate enum.
 - **Contracts**: PHB-001/002/014; [target API](plans/phase-b/target-bridge-api.md).
 
+**Amendment (2026-09-26, CI retirement)**: The pre-copy contract is historical
+acceptance evidence, not a permanent byte-identity restriction. The crates are
+published and maintained here; reviewed Phase D changes intentionally evolve
+them. Retire the BTIT import/snapshot comparison jobs and adaptation records.
+Cargo compilation, behavioral tests, package verification and the existing
+single generated-binding input/output content-hash check remain the gates.
+No Git revision or historical blob pin is required for generated bindings.
+
 ### ADR-012: Additive Typed Errors And Warning-Only Migration
 
 - **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record). Superseded in part by ADR-017 (2026-09-26) for the reviewed 2.0 breaks listed in `release/public-api-major-breaks.toml`; the 1.x additive decision recorded here is unchanged.

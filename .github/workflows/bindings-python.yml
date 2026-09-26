@@ -2,6 +2,23 @@ name: Python binding runtime
 
 on:
   pull_request:
+    paths:
+      - 'Cargo.*'
+      - 'rust-toolchain.toml'
+      - 'crates/sc-observability*/**'
+      - 'bindings/python/**'
+      - 'bindings/schema/**'
+      - 'bindings/generation-*'
+      - 'examples/rust-python-logging/**'
+      - 'scripts/*binding*'
+      - 'scripts/ci/*python*'
+      - 'scripts/ci/*binding*'
+      - 'scripts/ci/_*sandbox*'
+      - 'scripts/ci/_log_staging.py'
+      - 'scripts/ci/tests/*python*'
+      - 'scripts/ci/tests/*binding*'
+      - 'scripts/ci/fixtures/**'
+      - '.github/workflows/bindings-python.yml'
   push:
     branches: [feature/phase-b-4-python, develop, main, 'integrate/*']
   workflow_dispatch:

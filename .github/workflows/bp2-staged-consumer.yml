@@ -41,6 +41,7 @@ jobs:
           path: ${{ runner.temp }}/bp2-stage
           if-no-files-found: error
   staged-consumer:
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || startsWith(github.base_ref, 'integrate/') }}
     needs: package-stage
     strategy:
       fail-fast: false
@@ -76,6 +77,7 @@ jobs:
           path: bp2-evidence
           if-no-files-found: error
   aggregate-platform-evidence:
+    if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || startsWith(github.base_ref, 'integrate/') }}
     needs: staged-consumer
     runs-on: ubuntu-latest
     steps:
