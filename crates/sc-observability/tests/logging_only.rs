@@ -1,6 +1,8 @@
 use std::fs;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use sc_observability::constants::{DEFAULT_LOG_DIR_NAME, DEFAULT_LOG_FILE_SUFFIX};
 use sc_observability::typed::{TypedLogSink, legacy_sink};
@@ -112,4 +114,50 @@ fn typed_sink_consumer_explicitly_imports_the_opt_in_trait() {
     let sink = legacy_sink(std::sync::Arc::new(ConsumerTypedSink));
     sink.write(&event()).expect("legacy adapter write");
     sink.flush().expect("default typed flush");
+}
+
+#[test]
+fn flush_command_flushes_each_sink_once_after_an_admitted_event() {
+    struct CountingSink {
+        writes: AtomicUsize,
+        flushes: AtomicUsize,
+    }
+
+    impl LogSink for CountingSink {
+        fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+            self.writes.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
+            self.flushes.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn health(&self) -> SinkHealth {
+            SinkHealth {
+                name: SinkName::new("flush-counting").expect("valid sink name"),
+                state: SinkHealthState::Healthy,
+                last_error: None,
+            }
+        }
+    }
+
+    let sink = Arc::new(CountingSink {
+        writes: AtomicUsize::new(0),
+        flushes: AtomicUsize::new(0),
+    });
+    let root = temp_root("single-flush");
+    let mut config = LoggerConfig::default_for(service_name(), root.path_buf());
+    config.enable_file_sink = false;
+    config.enable_console_sink = false;
+    let mut builder = Logger::builder(config).expect("valid builder");
+    builder.register_sink(SinkRegistration::new(sink.clone()));
+    let logger = builder.build();
+
+    logger.log_typed(event()).expect("admit event");
+    logger.flush_typed().expect("flush barrier");
+
+    assert_eq!(sink.writes.load(Ordering::SeqCst), 1);
+    assert_eq!(sink.flushes.load(Ordering::SeqCst), 1);
 }
