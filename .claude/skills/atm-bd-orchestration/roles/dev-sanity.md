@@ -30,8 +30,9 @@ and the task id is the bead id. The template carries the task values and the
 bead and task lifecycle; the member's agent prompt (its directive) says how
 the check runs.
 
-Sanity checks gate dependent dev work, so speed matters: run every open
-sanity check task at once and never serialize unrelated checks on purpose.
+Sanity checks gate dependent dev work, so speed matters: run open sanity
+check tasks concurrently, up to the limit in the member's directive, and
+queue the rest; never serialize unrelated checks below that limit.
 
 ## Check Contract
 

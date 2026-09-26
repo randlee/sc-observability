@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 # Accept or reject a sanity check subagent's result envelope.
-#   check-sanity-result <result.json> <sanity_bead> <dev_bead> <full commit sha>
-# Exit 0 = a complete, consistent result for exactly this task; 1 = reject
-# (the reason is printed); 2 = usage. The schema is sc-sanity-llm.md "Output Format".
+#   check-sanity-result <result.json> <sanity_bead> <dev_bead> <full commit sha> <lint command>
+# Exit 0 = a complete, consistent result for exactly this task and lint command;
+# 1 = reject (malformed or wrong task; the reason is printed); 2 = usage;
+# 3 = a well-formed failure envelope, printed as "<code> recoverable" or
+# "<code> fatal". The schema is sc-sanity-llm.md "Output Format" and "Error Handling".
 set -uo pipefail
-[ $# -eq 4 ] || { echo "usage: check-sanity-result <result.json> <sanity_bead> <dev_bead> <full sha>" >&2; exit 2; }
-reason=$(jq -r --arg t "$2" --arg d "$3" --arg c "$4" '
+[ $# -eq 5 ] || { echo "usage: check-sanity-result <result.json> <sanity_bead> <dev_bead> <full sha> <lint command>" >&2; exit 2; }
+reason=$(jq -r --arg t "$2" --arg d "$3" --arg c "$4" --arg l "$5" '
   def str: type == "string" and length > 0;
-  if .success != true then "success is not true"
+  if .success == false then
+    if .data == null and (.error | type) == "object" and (.error.code | str) and (.error.message | str)
+       and (.error.recoverable | type) == "boolean" and (.error.suggested_action | str)
+    then "failure \(.error.code) \(if .error.recoverable then "recoverable" else "fatal" end)"
+    else "malformed failure envelope" end
+  elif .success != true then "success is not a boolean"
   elif .error != null then "error is not null"
   elif (.data | type) != "object" then "data missing"
   else .data |
@@ -18,8 +25,8 @@ reason=$(jq -r --arg t "$2" --arg d "$3" --arg c "$4" '
     elif (.findings | type) != "array" then "findings is not an array"
     elif any(.findings[]; (.kind | IN("skipped", "error", "lint") | not) or (.file | str | not)
          or (.line | type != "number" or . < 1) or (.issue | str | not)) then "a finding is malformed"
-    elif (.lint | type) != "object" or (.lint.command | str | not) or (.lint.exit_code | type) != "number"
-      then "lint is malformed"
+    elif (.lint | type) != "object" or (.lint.exit_code | type) != "number" then "lint is malformed"
+    elif .lint.command != $l then "lint command is \(.lint.command), expected \($l)"
     elif .verdict == "PASS" and (.findings | length) > 0 then "PASS with findings"
     elif .verdict == "PASS" and .lint.exit_code != 0 then "PASS with lint exit \(.lint.exit_code)"
     elif .verdict == "FAIL" and (.findings | length) == 0 then "FAIL with no findings"
@@ -27,5 +34,8 @@ reason=$(jq -r --arg t "$2" --arg d "$3" --arg c "$4" '
       then "lint exit \(.lint.exit_code) with no lint finding"
     else "ok" end
   end' "$1" 2>/dev/null) || { echo "reject: not parseable JSON"; exit 1; }
-[ "$reason" = ok ] && exit 0
-echo "reject: $reason"; exit 1
+case "$reason" in
+  ok) exit 0 ;;
+  "failure "*) echo "${reason#failure }"; exit 3 ;;
+  *) echo "reject: $reason"; exit 1 ;;
+esac

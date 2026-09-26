@@ -1,6 +1,6 @@
 ---
 name: dev-sanity-llm
-version: 0.4.0
+version: 0.5.0
 description: Named teammate that runs dev sanity checks with an LLM. Takes each sanity check task from ATM, sends the checked bead to one sc-sanity-llm subagent as fenced JSON, validates its fenced JSON result, and closes the bead and task with PASS or FAIL.
 tools: Glob, Grep, LS, Read, BashOutput, Bash, Task
 model: sonnet
@@ -98,18 +98,23 @@ The task id is the sanity check bead id. `commit` may be short.
    ```
 
    `.claude/agents/sc-sanity-llm.md` owns this schema and its error codes.
-7. Accept it only when
-   `.claude/skills/atm-bd-orchestration/scripts/check-sanity-result <scratch>/<task>-result.json <task> <checked-bead> "$sha"`
-   exits 0, and each finding names a real file and line at `$sha`. Then drop
-   findings that are QA opinions (style, design). If none remain and
-   `lint.exit_code` is 0, the verdict is PASS.
+7. Run
+   `.claude/skills/atm-bd-orchestration/scripts/check-sanity-result <scratch>/<task>-result.json <task> <checked-bead> "$sha" '<lint-command>'`.
+   - Exit 0: accept it if each finding names a real file and line at
+     `$sha`. Drop findings that are QA opinions (style, design). If none
+     remain and `lint.exit_code` is 0, the verdict is PASS.
+   - Exit 3: a well-formed failure; it prints `<code> recoverable` or
+     `<code> fatal`. Route it by Error Handling.
+   - Exit 1: a malformed or mismatched result (wrong task, SHA or lint
+     command). Route it by Error Handling.
 8. Close (Output Format), then read ATM again.
 
 ## Output Format
 
-ATM allows one active task per agent, and every task needs a start and a
-close. Checks run concurrently, but pair the ATM steps one task at a time:
-when a task's verdict is ready and none of your other tasks is active, run
+ATM allows one active task per agent, so this role follows the concurrent
+coordinator exception in `docs/team-protocol.md`: the bead claim marks a
+check as running, and the ATM start/close pair records its report. When a
+task's verdict is ready and none of your other tasks is active, run
 `atm task start <task> "sanity check <checked-bead>"`, then its close.
 
 | Verdict | Bead | ATM close |
@@ -138,17 +143,16 @@ The report carries this fenced status, which the lead reads:
 
 ## Error Handling
 
-Handled here (retry the check once, in a fresh child):
-- no parseable fenced JSON, or `check-sanity-result` rejects the reply;
-- `success: false` with `recoverable: true`;
-- `SANITY.TIMEOUT`.
+Take the first row that matches:
 
-Propagated to the lead as "cannot run", with the code in the note:
-- the same failure on the retry;
-- `success: false` with `recoverable: false`, including
-  `SANITY.COMMIT_MISMATCH` and `SANITY.LINT_UNAVAILABLE`;
-- `SANITY.TARGET_UNREADABLE` or `SANITY.HARNESS_UNSUPPORTED` from steps 3
-  and 5.
+| Result | Action |
+| --- | --- |
+| `check-sanity-result` exit 3, `fatal` (e.g. `SANITY.COMMIT_MISMATCH`, `SANITY.LINT_UNAVAILABLE`) | cannot run, now, with that code |
+| `SANITY.TARGET_UNREADABLE` or `SANITY.HARNESS_UNSUPPORTED` from steps 3 and 5 | cannot run, now |
+| exit 3 `recoverable`, exit 1, no parseable fenced JSON, or `SANITY.TIMEOUT` | retry once in a fresh child; on a second failure, cannot run with the last code (`SANITY.RESULT_INVALID` for exit 1 or no JSON) |
+
+"Cannot run" is the Output Format row: the code goes in the bead note and
+the refusal.
 
 A bead that is not ready is never claimed: find the root cause
 (`bd blocked --json`, `bd show <blocker>`) and send it to the lead.
