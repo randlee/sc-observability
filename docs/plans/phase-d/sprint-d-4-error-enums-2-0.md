@@ -23,43 +23,10 @@ silence, or issue label is not approval.
 
 ## Deliverables
 
-1. Implement named variants carrying `Box<ErrorContext>` for `InitError`,
-   `EventError`, `FlushError`, `ShutdownError`, `ProjectionError`,
-   `SubscriberError`, `LogSinkError`, `ExportError`, and `IdentityError`.
-   Do not retain a generic catch-all that hides a known current code.
-2. Replace all nine wrappers with `#[non_exhaustive]` same-name public enums;
-   make all existing public error enums non-exhaustive where the 2.0 contract
-   requires future-safe matching. Preserve `DiagnosticInfo`, stable diagnostic
-   code/message/remediation/backtrace/source behavior by delegation.
-3. Remove `error_wrapper!`, obsolete wrapper constructors, tuple-field
+1. Remove `error_wrapper!`, obsolete wrapper constructors, tuple-field
    construction, and 1.x compatibility adapters that would retain the old
    representation. Convert workspace, examples, bindings, and fixtures to
    pattern matching/named constructors as appropriate.
-4. Perform the 2.0 release work: coordinated workspace/package version bump,
-   dependency/version literals and release manifests, changelog/release notes,
-   public API approval/semver baseline update, and a migration guide with
-   before/after examples for `?` propagation, matching, custom sinks, and
-   serialization expectations. State that exhaustive downstream matching is a
-   breaking change and show wildcard matching.
-5. Record accepted ADR-017, mark the conflicting portion of ADR-012 superseded
-   (without rewriting its historical decision), and update requirements,
-   architecture, API design, migration docs, and public inventories to agree.
-6. Remove
-   `typed::*Failure` duplicates and `impl_legacy_classification!`; migrate typed
-   methods to the canonical same-name enums. Make canonical `LogSink` return
-   the discriminated `LogSinkError`, remove `TypedLogSink`, `legacy_sink`, and
-   any then-current typed sink boundary. Migrate or retain distinct log-crate
-   error boundaries with a documented mapping.
-7. Update every version-bearing target: workspace/package `Cargo.toml` and
-   `Cargo.lock`, `crates/sc-observability-py/{Cargo.toml,pyproject.toml}`,
-   JavaScript package metadata, release manifests, changelog, and release
-   documentation. A repository scan
-   must disposition every remaining `1.4.1` literal.
-8. Add the controlled major-release mechanism to
-   `validate_public_api_semver.py`: compare against frozen 1.4.1, require every
-   break in reviewed `release/public-api-major-breaks.toml` linked to accepted
-   ADR-017, fail unlisted changes, then generate/review the 2.0 baseline.
-
 
 ## Non-closure
 

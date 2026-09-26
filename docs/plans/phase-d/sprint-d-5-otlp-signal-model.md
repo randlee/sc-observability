@@ -20,12 +20,11 @@ substitutes.
 
 ## Deliverables
 
-1. Add the public types, constructors/accessors, serde contract, validation
-   errors, rustdoc, and re-exports required by the contract above.
-2. Migrate span assembly/projectors so start/event/end processing preserves
+1. Migrate span assembly/projectors so start/event/end processing preserves
    kind, flags, links, status, timing, attributes, and diagnostics without
    creating OTLP transport dependencies in lower crates.
-3. Migrate metric projectors and fixtures to `MetricValue`; enforce histogram
+
+2. Migrate metric projectors and fixtures to `MetricValue`; enforce histogram
    invariants: `bucket_counts.len() == explicit_bounds.len() + 1`, finite
    ordered bounds, `sum(bucket_counts) == count`, finite sum, and no invalid
    negative count representation.
@@ -33,14 +32,17 @@ substitutes.
    histograms; `Delta` requires an explicit start time no later than the point
    timestamp, while `Cumulative` permits `Timestamp::UNIX_EPOCH` or an earlier
    explicit start. Reject inconsistent intervals.
-4. Record the breaking 1.x-to-2.0 source/serde migration in
+
+3. Record the breaking 1.x-to-2.0 source/serde migration in
    `docs/migration.md`, the public API approval, and the OTLP-020/OTLP-021
    requirements changes.
-5. Migrate consumers in `sc-observability-types`,
+
+4. Migrate consumers in `sc-observability-types`,
    `sc-observability-dto` (`TraceContextDto` included), `sc-observe`,
    `sc-observability`, `sc-observability-otlp`, binding runtime, generated
    Python/TypeScript models, examples, and public fixtures.
-6. Add `InvalidHistogram`, invalid temporality, and invalid interval failures
+
+5. Add `InvalidHistogram`, invalid temporality, and invalid interval failures
    to the D.5-owned `MetricModelError` rows of the central error inventory
    with stable codes and remediation. D.6 owns only transport, lifecycle, and
    configuration rows.

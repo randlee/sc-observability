@@ -21,17 +21,16 @@ is additive 1.x work checked against the published 1.4.1 API/semver baseline.
 
 ## Deliverables
 
-1. Add the public source/resolved types, typed errors, stable codes, rustdoc,
-   serde behavior, and signatures above by reusing `EnvPrefix`,
-   `LevelFilter`, and `RetainedLogPolicy`; add no parallel owners.
-2. Implement deterministic environment parsing for the complete inventory and
+1. Implement deterministic environment parsing for the complete inventory and
    field-wise resolution in the documented order including the LOG-009 root
    exception. Parsing uses a named `EnvSnapshot` so one resolution cannot mix
    process states.
-3. Convert the resolved value to `LoggerConfig` and its strong policy types,
+
+2. Convert the resolved value to `LoggerConfig` and its strong policy types,
    preserving all non-inventory defaults and introducing no post-construction
    mutation.
-4. Document the table, precedence, null/unset behavior, prefix rules, failure
+
+3. Document the table, precedence, null/unset behavior, prefix rules, failure
    codes, and startup-only lifecycle. Add a public example embedding settings
    under an application's `logging` JSON key. Document the compact stable-error
    table: `PrefixCollision`/`LOG-001`, `InvalidEnvironment`/`LOG-002`,
