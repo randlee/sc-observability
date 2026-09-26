@@ -301,6 +301,7 @@ fn telemetry_config_from_env(
             max_retries: constants::OTLP_MAX_RETRIES,
             initial_backoff_ms: constants::OTLP_INITIAL_BACKOFF_MS.into(),
             max_backoff_ms: constants::OTLP_MAX_BACKOFF_MS.into(),
+            ..OtelConfig::default()
         })
         .with_resource(sc_observability_otlp::ResourceAttributes {
             attributes: [

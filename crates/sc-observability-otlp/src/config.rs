@@ -18,9 +18,12 @@
 
 use std::fmt;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::{constants, error_codes};
+use sc_observability_types::error_codes::otlp as otlp_error_codes;
 use sc_observability_types::typed::InitFailure;
+use sc_observability_types::v2::ConfigFailure;
 #[allow(
     deprecated,
     reason = "OTLP config retains InitError in its published compatibility signatures"
@@ -37,6 +40,98 @@ pub enum OtlpProtocol {
     HttpJson,
     /// OTLP over gRPC.
     Grpc,
+}
+
+/// Backend selected for an enabled OTLP transport.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExporterBackend {
+    /// The asynchronous OpenTelemetry SDK backend.
+    OpenTelemetrySdk,
+    /// The reserved blocking HTTP/JSON backend.
+    LegacyHttpJson,
+}
+
+/// A named transport field used in deterministic validation diagnostics.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OtlpConfigField {
+    /// OTLP collector endpoint.
+    Endpoint,
+    /// Authorization or credential header.
+    Header,
+    /// Per-request timeout.
+    Timeout,
+    /// Lifecycle flush timeout.
+    LifecycleFlushTimeout,
+    /// Lifecycle shutdown timeout.
+    LifecycleShutdownTimeout,
+    /// Record admission capacity.
+    QueueCapacity,
+    /// Aggregate byte admission capacity.
+    QueueByteCapacity,
+    /// Legacy maximum retries.
+    MaxRetries,
+    /// Legacy initial retry backoff.
+    InitialBackoff,
+    /// Legacy maximum retry backoff.
+    MaxBackoff,
+    /// Legacy complete retry-sequence timeout.
+    RetrySequenceTimeout,
+    /// Legacy Retry-After cap.
+    RetryAfterCap,
+    /// Legacy jitter percentage.
+    RetryJitterPercent,
+}
+
+/// Whether a resolved transport value came from the caller or the contract default.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValueOrigin {
+    /// Contract default.
+    Default,
+    /// Caller-supplied value.
+    Explicit,
+}
+
+/// A resolved transport value with its stable field identity and source.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedField<T> {
+    /// Field represented by this value.
+    pub field: OtlpConfigField,
+    /// Resolved value.
+    pub value: T,
+    /// Whether the value was explicit or defaulted.
+    pub origin: ValueOrigin,
+}
+
+/// The target at which an inapplicable field was rejected.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OtlpConfigTarget {
+    /// Transport is disabled and no backend is constructed.
+    Disabled,
+    /// A specific enabled backend was selected.
+    Backend(ExporterBackend),
+}
+
+/// Legacy-only retry wire settings.
+#[non_exhaustive]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LegacyRetryPolicy {
+    /// Maximum retry attempts.
+    pub max_retries: Option<u32>,
+    /// Initial retry delay.
+    pub initial_backoff_ms: Option<DurationMs>,
+    /// Maximum retry delay.
+    pub max_backoff_ms: Option<DurationMs>,
+    /// Complete retry-sequence deadline.
+    pub retry_sequence_timeout_ms: Option<DurationMs>,
+    /// Upper bound for a server-supplied Retry-After delay.
+    pub retry_after_cap_ms: Option<DurationMs>,
+    /// Jitter percentage in `0..=100`.
+    pub retry_jitter_percent: Option<u8>,
 }
 
 /// Validated OTLP endpoint URL.
@@ -195,6 +290,8 @@ impl TryFrom<String> for AuthHeader {
 pub struct OtelConfig {
     /// Whether transport/export is enabled.
     pub enabled: bool,
+    /// Backend selected when transport is enabled.
+    pub backend: ExporterBackend,
     /// Optional OTLP endpoint URL.
     pub endpoint: Option<OtlpEndpoint>,
     /// Transport protocol to use.
@@ -207,30 +304,65 @@ pub struct OtelConfig {
     pub insecure_skip_verify: bool,
     /// Per-export timeout.
     pub timeout_ms: DurationMs,
+    /// Time allowed for a lifecycle flush barrier.
+    pub lifecycle_flush_timeout_ms: Option<DurationMs>,
+    /// Time allowed for an ordered lifecycle shutdown.
+    pub lifecycle_shutdown_timeout_ms: Option<DurationMs>,
+    /// Bounded record admission capacity.
+    pub queue_capacity: Option<usize>,
+    /// Bounded aggregate serialized payload-byte admission capacity.
+    pub queue_byte_capacity: Option<usize>,
     /// Whether local debug export output is enabled.
     pub debug_local_export: bool,
-    /// Maximum export retry attempts.
+    /// Legacy-only retry settings. `None` means no legacy-only field was supplied.
+    pub legacy_retry: Option<LegacyRetryPolicy>,
+    /// Retained compatibility retry count; D.18 migrates callers to `legacy_retry`.
+    #[deprecated(since = "2.0.0", note = "Use legacy_retry.max_retries")]
     pub max_retries: u32,
-    /// Initial retry backoff.
+    /// Retained compatibility initial backoff; D.18 migrates callers to `legacy_retry`.
+    #[deprecated(since = "2.0.0", note = "Use legacy_retry.initial_backoff_ms")]
     pub initial_backoff_ms: DurationMs,
-    /// Maximum retry backoff.
+    /// Retained compatibility maximum backoff; D.18 migrates callers to `legacy_retry`.
+    #[deprecated(since = "2.0.0", note = "Use legacy_retry.max_backoff_ms")]
     pub max_backoff_ms: DurationMs,
 }
 
+#[allow(
+    deprecated,
+    reason = "the retained compatibility fields must preserve their historical defaults until D.18"
+)]
 impl Default for OtelConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            backend: ExporterBackend::OpenTelemetrySdk,
             endpoint: None,
             protocol: OtlpProtocol::HttpBinary,
             auth_header: None,
             ca_file: None,
             insecure_skip_verify: false,
             timeout_ms: constants::DEFAULT_OTLP_TIMEOUT_MS.into(),
+            lifecycle_flush_timeout_ms: None,
+            lifecycle_shutdown_timeout_ms: None,
+            queue_capacity: None,
+            queue_byte_capacity: None,
             debug_local_export: false,
+            legacy_retry: None,
             max_retries: constants::DEFAULT_OTLP_MAX_RETRIES,
             initial_backoff_ms: constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS.into(),
             max_backoff_ms: constants::DEFAULT_OTLP_MAX_BACKOFF_MS.into(),
+        }
+    }
+}
+
+impl OtelConfig {
+    /// Starts an OTLP configuration for the selected backend and protocol.
+    #[must_use]
+    pub fn new(backend: ExporterBackend, protocol: OtlpProtocol) -> Self {
+        Self {
+            backend,
+            protocol,
+            ..Self::default()
         }
     }
 }
@@ -314,7 +446,7 @@ pub struct TelemetryConfig {
 }
 
 /// Builder for documented v1 telemetry defaults.
-#[expect(
+#[allow(
     missing_debug_implementations,
     reason = "the builder stores partially configured runtime values, and a public Debug surface would not add meaningful API value"
 )]
@@ -433,23 +565,7 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
             ),
         ))));
     }
-    if u64::from(config.transport.timeout_ms) == 0 {
-        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
-            "timeout_ms must be greater than zero",
-            Remediation::recoverable(
-                "set timeout_ms to a positive value",
-                ["use documented defaults"],
-            ),
-        ))));
-    }
-    if config.transport.initial_backoff_ms > config.transport.max_backoff_ms {
-        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
-            "initial_backoff_ms must not exceed max_backoff_ms",
-            Remediation::recoverable("fix the backoff configuration", ["use documented defaults"]),
-        ))));
-    }
+    validated_transport_bounds(&config.transport).map_err(config_failure_to_init_failure)?;
     if config.transport.enabled
         && config.logs.is_none()
         && config.traces.is_none()
@@ -480,6 +596,395 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
         ))));
     }
     Ok(())
+}
+
+/// Checked, backend-neutral transport bounds. Backend factories receive this
+/// value rather than raw configuration so no adapter can reinterpret a wire
+/// field or bypass the ordered validation contract.
+#[allow(
+    dead_code,
+    reason = "D.21 validates these factory-only bounds before D.6-D.8 consume them"
+)]
+#[derive(Debug)]
+pub(crate) struct ValidatedTransportBounds {
+    pub(crate) queue_capacity: usize,
+    pub(crate) queue_byte_capacity: usize,
+    pub(crate) request_timeout: Duration,
+    pub(crate) lifecycle_flush_timeout: Duration,
+    pub(crate) lifecycle_shutdown_timeout: Duration,
+    pub(crate) backend: BackendTransportBounds,
+}
+
+#[allow(
+    dead_code,
+    reason = "D.21 stages backend-neutral bounds before backend factories consume them"
+)]
+#[derive(Debug)]
+pub(crate) enum BackendTransportBounds {
+    Disabled,
+    Sdk,
+    Legacy(ValidatedRetryPolicy),
+}
+
+#[allow(
+    dead_code,
+    reason = "D.21 stages checked legacy policy values for the D.8 factory"
+)]
+#[derive(Debug)]
+pub(crate) struct ValidatedRetryPolicy {
+    pub(crate) max_retries: u32,
+    pub(crate) initial_backoff: Duration,
+    pub(crate) max_backoff: Duration,
+    pub(crate) sequence_timeout: Duration,
+    pub(crate) retry_after_cap: Duration,
+    pub(crate) jitter_percent: u8,
+}
+
+/// Resolves defaults and validates a transport in the documented first-failure
+/// order. This is crate-visible for backend factories and contract tests.
+pub(crate) fn validated_transport_bounds(
+    config: &OtelConfig,
+) -> Result<ValidatedTransportBounds, ConfigFailure> {
+    let timeout = resolve_duration(
+        OtlpConfigField::Timeout,
+        Some(config.timeout_ms),
+        constants::DEFAULT_OTLP_TIMEOUT_MS,
+    );
+    let flush = resolve_duration(
+        OtlpConfigField::LifecycleFlushTimeout,
+        config.lifecycle_flush_timeout_ms,
+        constants::DEFAULT_OTLP_LIFECYCLE_FLUSH_TIMEOUT_MS,
+    );
+    let shutdown = resolve_duration(
+        OtlpConfigField::LifecycleShutdownTimeout,
+        config.lifecycle_shutdown_timeout_ms,
+        constants::DEFAULT_OTLP_LIFECYCLE_SHUTDOWN_TIMEOUT_MS,
+    );
+    let queue_capacity = resolve_usize(
+        OtlpConfigField::QueueCapacity,
+        config.queue_capacity,
+        constants::DEFAULT_OTLP_QUEUE_CAPACITY,
+    );
+    let queue_byte_capacity = resolve_usize(
+        OtlpConfigField::QueueByteCapacity,
+        config.queue_byte_capacity,
+        constants::DEFAULT_OTLP_QUEUE_BYTE_CAPACITY,
+    );
+
+    // The ordering below is normative: do not aggregate failures or move
+    // checks without updating the D.21 contract tests.
+    let request_timeout = checked_duration(&timeout)?;
+    let lifecycle_flush_timeout = checked_duration(&flush)?;
+    let lifecycle_shutdown_timeout = checked_duration(&shutdown)?;
+    if shutdown.value < timeout.value {
+        return Err(invalid_bound(&timeout, &shutdown));
+    }
+    if flush.value < timeout.value {
+        return Err(invalid_bound(&timeout, &flush));
+    }
+    if !(1..=constants::MAX_OTLP_QUEUE_CAPACITY).contains(&queue_capacity.value) {
+        return Err(config_failure(
+            ConfigFailureKind::InvalidQueueCapacity,
+            otlp_error_codes::OTLP_CONFIG_QUEUE_CAPACITY,
+            "queue capacity must be in 1..=65_536",
+            queue_capacity.field,
+            queue_capacity.origin,
+        ));
+    }
+    if queue_byte_capacity.value == 0
+        || queue_byte_capacity.value > constants::MAX_OTLP_QUEUE_BYTE_CAPACITY
+    {
+        return Err(config_failure(
+            ConfigFailureKind::InvalidQueueByteCapacity,
+            otlp_error_codes::OTLP_CONFIG_QUEUE_BYTE_CAPACITY,
+            "queue byte capacity must be in 1..=64 MiB",
+            queue_byte_capacity.field,
+            queue_byte_capacity.origin,
+        ));
+    }
+
+    let backend = if config.enabled {
+        match config.backend {
+            ExporterBackend::OpenTelemetrySdk => {
+                if config.legacy_retry.is_some() {
+                    return Err(not_applicable(
+                        OtlpConfigField::MaxRetries,
+                        OtlpConfigTarget::Backend(ExporterBackend::OpenTelemetrySdk),
+                    ));
+                }
+                BackendTransportBounds::Sdk
+            }
+            ExporterBackend::LegacyHttpJson => {
+                let retry = resolve_retry(config.legacy_retry.as_ref(), &timeout)?;
+                BackendTransportBounds::Legacy(retry)
+            }
+        }
+    } else {
+        if config.legacy_retry.is_some() {
+            return Err(not_applicable(
+                OtlpConfigField::MaxRetries,
+                OtlpConfigTarget::Disabled,
+            ));
+        }
+        BackendTransportBounds::Disabled
+    };
+
+    if config.insecure_skip_verify && config.enabled {
+        return Err(config_failure(
+            ConfigFailureKind::InsecureTransportRejected,
+            otlp_error_codes::OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED,
+            "the selected backend does not support insecure certificate verification",
+            OtlpConfigField::Endpoint,
+            ValueOrigin::Explicit,
+        ));
+    }
+
+    Ok(ValidatedTransportBounds {
+        queue_capacity: queue_capacity.value,
+        queue_byte_capacity: queue_byte_capacity.value,
+        request_timeout,
+        lifecycle_flush_timeout,
+        lifecycle_shutdown_timeout,
+        backend,
+    })
+}
+
+fn resolve_duration(
+    field: OtlpConfigField,
+    raw: Option<DurationMs>,
+    default: u64,
+) -> ResolvedField<u64> {
+    ResolvedField {
+        field,
+        value: raw.map_or(default, u64::from),
+        origin: if raw.is_some() {
+            ValueOrigin::Explicit
+        } else {
+            ValueOrigin::Default
+        },
+    }
+}
+
+fn resolve_usize(
+    field: OtlpConfigField,
+    raw: Option<usize>,
+    default: usize,
+) -> ResolvedField<usize> {
+    ResolvedField {
+        field,
+        value: raw.unwrap_or(default),
+        origin: if raw.is_some() {
+            ValueOrigin::Explicit
+        } else {
+            ValueOrigin::Default
+        },
+    }
+}
+
+fn checked_duration(value: &ResolvedField<u64>) -> Result<Duration, ConfigFailure> {
+    if value.value == 0 {
+        return Err(config_failure(
+            ConfigFailureKind::ZeroDuration,
+            otlp_error_codes::OTLP_CONFIG_ZERO_DURATION,
+            "duration must be greater than zero",
+            value.field,
+            value.origin,
+        ));
+    }
+    // `Duration::from_millis` is total for u64 inputs, but this explicit
+    // checked conversion protects the contract if the representation changes.
+    let seconds = value.value / 1_000;
+    let nanos = (value.value % 1_000)
+        .checked_mul(1_000_000)
+        .ok_or_else(|| {
+            config_failure(
+                ConfigFailureKind::DurationOverflow,
+                otlp_error_codes::OTLP_CONFIG_DURATION_OVERFLOW,
+                "duration milliseconds overflow nanosecond conversion",
+                value.field,
+                value.origin,
+            )
+        })?;
+    let nanos = u32::try_from(nanos).map_err(|_| {
+        config_failure(
+            ConfigFailureKind::DurationOverflow,
+            otlp_error_codes::OTLP_CONFIG_DURATION_OVERFLOW,
+            "duration milliseconds overflow nanosecond conversion",
+            value.field,
+            value.origin,
+        )
+    })?;
+    Ok(Duration::new(seconds, nanos))
+}
+
+fn resolve_retry(
+    raw: Option<&LegacyRetryPolicy>,
+    timeout: &ResolvedField<u64>,
+) -> Result<ValidatedRetryPolicy, ConfigFailure> {
+    let raw = raw.cloned().unwrap_or_default();
+    let initial = resolve_duration(
+        OtlpConfigField::InitialBackoff,
+        raw.initial_backoff_ms,
+        constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS,
+    );
+    let maximum = resolve_duration(
+        OtlpConfigField::MaxBackoff,
+        raw.max_backoff_ms,
+        constants::DEFAULT_OTLP_MAX_BACKOFF_MS,
+    );
+    let sequence = resolve_duration(
+        OtlpConfigField::RetrySequenceTimeout,
+        raw.retry_sequence_timeout_ms,
+        constants::DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS,
+    );
+    let after_cap = resolve_duration(
+        OtlpConfigField::RetryAfterCap,
+        raw.retry_after_cap_ms,
+        constants::DEFAULT_OTLP_RETRY_AFTER_CAP_MS,
+    );
+    let jitter = ResolvedField {
+        field: OtlpConfigField::RetryJitterPercent,
+        value: raw
+            .retry_jitter_percent
+            .unwrap_or(constants::DEFAULT_OTLP_RETRY_JITTER_PERCENT),
+        origin: if raw.retry_jitter_percent.is_some() {
+            ValueOrigin::Explicit
+        } else {
+            ValueOrigin::Default
+        },
+    };
+    let initial_backoff = checked_duration(&initial)?;
+    let max_backoff = checked_duration(&maximum)?;
+    let sequence_timeout = checked_duration(&sequence)?;
+    let retry_after_cap = checked_duration(&after_cap)?;
+    if maximum.value < initial.value {
+        return Err(invalid_bound(&initial, &maximum));
+    }
+    if sequence.value < timeout.value {
+        return Err(invalid_bound(timeout, &sequence));
+    }
+    if after_cap.value > sequence.value {
+        return Err(invalid_bound(&after_cap, &sequence));
+    }
+    if jitter.value > 100 {
+        return Err(config_failure(
+            ConfigFailureKind::InvalidJitterPercent,
+            otlp_error_codes::OTLP_CONFIG_JITTER_PERCENT,
+            "retry jitter percent must be in 0..=100",
+            jitter.field,
+            jitter.origin,
+        ));
+    }
+    Ok(ValidatedRetryPolicy {
+        max_retries: raw
+            .max_retries
+            .unwrap_or(constants::DEFAULT_OTLP_MAX_RETRIES),
+        initial_backoff,
+        max_backoff,
+        sequence_timeout,
+        retry_after_cap,
+        jitter_percent: jitter.value,
+    })
+}
+
+#[derive(Clone, Copy)]
+enum ConfigFailureKind {
+    ZeroDuration,
+    DurationOverflow,
+    InvalidJitterPercent,
+    InvalidQueueCapacity,
+    InvalidQueueByteCapacity,
+    InsecureTransportRejected,
+}
+
+fn invalid_bound(lower: &ResolvedField<u64>, upper: &ResolvedField<u64>) -> ConfigFailure {
+    // Preserve both resolved fields in structured diagnostics without exposing
+    // credentials or raw endpoint data.
+    ConfigFailure::InvalidBoundOrdering {
+        context: Box::new(
+            ErrorContext::new(
+                otlp_error_codes::OTLP_CONFIG_BOUND_ORDER,
+                "resolved transport bounds are out of order",
+                Remediation::recoverable(
+                    "correct the named OTLP configuration fields",
+                    ["use documented defaults"],
+                ),
+            )
+            .detail(
+                "field",
+                Value::String(format!("{field:?}", field = lower.field)),
+            )
+            .detail(
+                "origin",
+                Value::String(format!("{origin:?}", origin = lower.origin)),
+            )
+            .detail("lower_value", Value::from(lower.value))
+            .detail(
+                "upper_field",
+                Value::String(format!("{field:?}", field = upper.field)),
+            )
+            .detail(
+                "upper_origin",
+                Value::String(format!("{origin:?}", origin = upper.origin)),
+            )
+            .detail("upper_value", Value::from(upper.value)),
+        ),
+    }
+}
+
+fn not_applicable(field: OtlpConfigField, target: OtlpConfigTarget) -> ConfigFailure {
+    ConfigFailure::ConfigFieldNotApplicable {
+        context: Box::new(
+            ErrorContext::new(
+                otlp_error_codes::OTLP_CONFIG_FIELD_NOT_APPLICABLE,
+                "configuration field is not applicable to the selected transport target",
+                Remediation::recoverable(
+                    "omit the field or choose an applicable backend",
+                    ["use documented defaults"],
+                ),
+            )
+            .detail("field", Value::String(format!("{field:?}")))
+            .detail("origin", Value::String("Explicit".to_owned()))
+            .detail("target", Value::String(format!("{target:?}"))),
+        ),
+    }
+}
+
+fn config_failure(
+    kind: ConfigFailureKind,
+    code: sc_observability_types::ErrorCode,
+    message: &str,
+    field: OtlpConfigField,
+    origin: ValueOrigin,
+) -> ConfigFailure {
+    let context = Box::new(
+        ErrorContext::new(
+            code,
+            message,
+            Remediation::recoverable(
+                "correct the named OTLP configuration field",
+                ["use documented defaults"],
+            ),
+        )
+        .detail("field", Value::String(format!("{field:?}")))
+        .detail("origin", Value::String(format!("{origin:?}"))),
+    );
+    match kind {
+        ConfigFailureKind::ZeroDuration => ConfigFailure::ZeroDuration { context },
+        ConfigFailureKind::DurationOverflow => ConfigFailure::DurationOverflow { context },
+        ConfigFailureKind::InvalidJitterPercent => ConfigFailure::InvalidJitterPercent { context },
+        ConfigFailureKind::InvalidQueueCapacity => ConfigFailure::InvalidQueueCapacity { context },
+        ConfigFailureKind::InvalidQueueByteCapacity => {
+            ConfigFailure::InvalidQueueByteCapacity { context }
+        }
+        ConfigFailureKind::InsecureTransportRejected => {
+            ConfigFailure::InsecureTransportRejected { context }
+        }
+    }
+}
+
+fn config_failure_to_init_failure(error: ConfigFailure) -> InitFailure {
+    InitFailure::from_context(error.into_context())
 }
 
 fn invalid_transport_value_typed(message: &str, remediation: &str) -> InitFailure {
@@ -711,8 +1216,12 @@ mod tests {
 
         let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(OtelConfig {
-                initial_backoff_ms: 2_000_u64.into(),
-                max_backoff_ms: 1_000_u64.into(),
+                backend: ExporterBackend::LegacyHttpJson,
+                legacy_retry: Some(LegacyRetryPolicy {
+                    initial_backoff_ms: Some(2_000_u64.into()),
+                    max_backoff_ms: Some(1_000_u64.into()),
+                    ..LegacyRetryPolicy::default()
+                }),
                 ..transport()
             })
             .enable_logs(LogsConfig::default())
@@ -720,8 +1229,12 @@ mod tests {
             .expect_err("legacy inverted backoff");
         let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(OtelConfig {
-                initial_backoff_ms: 2_000_u64.into(),
-                max_backoff_ms: 1_000_u64.into(),
+                backend: ExporterBackend::LegacyHttpJson,
+                legacy_retry: Some(LegacyRetryPolicy {
+                    initial_backoff_ms: Some(2_000_u64.into()),
+                    max_backoff_ms: Some(1_000_u64.into()),
+                    ..LegacyRetryPolicy::default()
+                }),
                 ..transport()
             })
             .enable_logs(LogsConfig::default())
@@ -794,8 +1307,12 @@ mod tests {
             service_name,
             resource: ResourceAttributes::default(),
             transport: OtelConfig {
-                initial_backoff_ms: 2000_u64.into(),
-                max_backoff_ms: 1000_u64.into(),
+                backend: ExporterBackend::LegacyHttpJson,
+                legacy_retry: Some(LegacyRetryPolicy {
+                    initial_backoff_ms: Some(2000_u64.into()),
+                    max_backoff_ms: Some(1000_u64.into()),
+                    ..LegacyRetryPolicy::default()
+                }),
                 ..OtelConfig::default()
             },
             logs: None,

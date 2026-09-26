@@ -11,6 +11,7 @@
 
 mod assembly;
 mod config;
+#[cfg(test)]
 mod contract_tests;
 mod contracts;
 mod lifecycle;
@@ -18,10 +19,10 @@ mod lifecycle_tests;
 mod projectors;
 mod testing;
 
-#[cfg(feature = "otlp-sdk")]
-mod sdk;
 #[cfg(feature = "legacy-http-json")]
 mod legacy_http_json;
+#[cfg(feature = "otlp-sdk")]
+mod sdk;
 
 pub mod constants;
 pub mod error_codes;
@@ -53,8 +54,9 @@ use serde_json::Value;
 pub use assembly::{CompleteSpan, SpanAssembler};
 #[doc(inline)]
 pub use config::{
-    AuthHeader, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
-    ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
+    AuthHeader, ExporterBackend, LegacyRetryPolicy, LogsConfig, MetricsConfig, OtelConfig,
+    OtlpConfigField, OtlpConfigTarget, OtlpEndpoint, OtlpProtocol, ResolvedField,
+    ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder, TracesConfig, ValueOrigin,
 };
 #[doc(inline)]
 pub use projectors::TelemetryProjectors;
