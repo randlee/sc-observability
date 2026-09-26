@@ -15,7 +15,7 @@ Generated projection of `obs-d-10`; the bead is authoritative. The former d-11 d
 - PR target (merge order only): `sprint/d-13-logging-contract`
 - Blocked by: `obs-phase-d-plan-qa`
 - Requirements: NFR-010, PHB-013, PHB-014, PHC-001, PHC-003, PHC-004, PHC-006
-- ADRs: NONE; the former d-11 ADR references were proposed and non-binding.
+- ADRs: ADR-015, ADR-016 (accepted retroactively; embedded Python/shared binding and shared publishing-pipeline constraints).
 - Owned paths (metadata projection):
   - `.github/workflows/b4a-python-distributions.yml`
   - `docs/plans/phase-d/sprint-d-10-windows-arm64-wheel.md`
@@ -59,6 +59,8 @@ D.18 still owns `release/**` policy/inventory activation and publication. This s
 D.10 owns native ARM64 build/prepare behavior, the focused PE helper, the source/wheel metadata guard, and the qualification tests in its combined fence. The helper consumes wheel bytes/tag and returns the existing typed validation shape; the validator wires it into `verify_native_architecture` once. Workflow jobs execute against one immutable sdist/source commit, never cross-built evidence disguised as native execution. The existing B.4a aggregate invocation remains the integration hook.
 
 The Python guard parses source TOML and wheel `METADATA`, rejects upper/exclusion bounds, and retains `abi3-py310`/`cp310-abi3` validation. It preserves the original missing/duplicate/architecture/feature checks and requires six builds plus 30 installed-suite cells at one source/version. D.10 sends the invariant/change-control wording to aobs for the shared plan; `docs/project-plan.md` is D.12-owned and outside this fence. D.12 owns the 2.0 Cargo workspace bump and OTLP config contract. D.18 owns all `release/**` policy activation and release baseline/inventory; no release policy file is edited here. The native artifact proof and guard tests are independently closable before that activation.
+
+ADR-015 constrains the embedded-Python/shared-binding assumptions of the Python distribution surface; ADR-016 constrains the B.4a/shared-publishing preflight boundary. D.10 performs preflight and artifact qualification only and does not publish.
 
 ### Handoff to obs-d-18
 
