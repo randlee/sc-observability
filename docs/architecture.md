@@ -950,7 +950,7 @@ ADR navigation index (status is recorded in each decision below):
 
 ### ADR-011: Companion Boundaries And Pre-Copy Contract
 
-- **Status**: Proposed for Phase B review; does not amend accepted ADRs yet.
+- **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record). It does not amend earlier accepted ADRs.
 - **Context**: The log bridge is being extracted from BTIT for public reuse,
   while TypeScript and Python need shared logging without lower-layer runtime
   dependencies. TYP-030 currently centralizes core errors and health.
@@ -977,7 +977,7 @@ ADR navigation index (status is recorded in each decision below):
 
 ### ADR-012: Additive Typed Errors And Warning-Only Migration
 
-- **Status**: Proposed for Phase B review. Superseded in part by ADR-017 (2026-09-26) for the reviewed 2.0 breaks listed in `release/public-api-major-breaks.toml`; the 1.x additive decision recorded here is unchanged.
+- **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record). Superseded in part by ADR-017 (2026-09-26) for the reviewed 2.0 breaks listed in `release/public-api-major-breaks.toml`; the 1.x additive decision recorded here is unchanged.
 - **Context**: Issue #92 requests typed failure handling without a forced
   migration of consumers of published diagnostic wrappers and extension traits.
 - **Proposed decision**: Add improved failure types, classification and operation/
@@ -1001,7 +1001,7 @@ ADR navigation index (status is recorded in each decision below):
 
 ### ADR-013: Owner-Controlled Shared Runtime Level
 
-- **Status**: Proposed for Phase B review.
+- **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record).
 - **Context**: Issue #97 requires runtime verbosity changes across core, facade
   and bindings; a bridge-only threshold cannot override core config filtering.
 - **Proposed decision**: Core owns effective state and serializes its transitions
@@ -1021,7 +1021,7 @@ ADR navigation index (status is recorded in each decision below):
 
 ### ADR-014: Result-Preserving Language Boundaries
 
-- **Status**: Proposed for Phase B review.
+- **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record).
 - **Context**: Mixed Rust/Python and Tauri frontend applications need first-class
   logging that cannot make application work fail when a log cannot be recorded.
 - **Proposed decision**: Use discriminated operational results through public
@@ -1045,7 +1045,7 @@ ADR navigation index (status is recorded in each decision below):
 
 ### ADR-015: Embedded Python And Shared Binding Runtime
 
-- **Status**: Proposed for Phase B review.
+- **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record).
 - **Context**: Attached Python must share a Rust host logger and its typed
   operations without exchanging Rust trait objects between independently linked
   libraries or building a new process transport before sc-runtime is specified.
@@ -1076,7 +1076,7 @@ ADR navigation index (status is recorded in each decision below):
 
 ### ADR-016: Shared Publishing Pipeline Adoption
 
-- **Status**: Proposed for Phase C review.
+- **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase C; this PR is the acceptance record).
 - **Context**: This repository's release implementation
   (`.github/workflows/release.yml`/`release-preflight.yml`, the `publisher`
   agent, `.github/scripts/release_gate.sh`/`.github/scripts/release_artifacts.py`, and
