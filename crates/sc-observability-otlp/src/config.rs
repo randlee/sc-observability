@@ -667,6 +667,7 @@ pub(crate) fn validated_transport_bounds(
     let direct_legacy_fields = config.max_retries != constants::DEFAULT_OTLP_MAX_RETRIES
         || u64::from(config.initial_backoff_ms) != constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS
         || u64::from(config.max_backoff_ms) != constants::DEFAULT_OTLP_MAX_BACKOFF_MS;
+    let legacy_retry_field = first_legacy_retry_field(config);
     let timeout = resolve_duration(
         OtlpConfigField::Timeout,
         Some(config.timeout_ms),
@@ -728,9 +729,9 @@ pub(crate) fn validated_transport_bounds(
     let backend = if config.enabled {
         match config.backend {
             ExporterBackend::OpenTelemetrySdk => {
-                if config.legacy_retry.is_some() || direct_legacy_fields {
+                if let Some(field) = legacy_retry_field {
                     return Err(not_applicable(
-                        OtlpConfigField::MaxRetries,
+                        field,
                         OtlpConfigTarget::Backend(ExporterBackend::OpenTelemetrySdk),
                     ));
                 }
@@ -755,11 +756,8 @@ pub(crate) fn validated_transport_bounds(
             }
         }
     } else {
-        if config.legacy_retry.is_some() || direct_legacy_fields {
-            return Err(not_applicable(
-                OtlpConfigField::MaxRetries,
-                OtlpConfigTarget::Disabled,
-            ));
+        if let Some(field) = legacy_retry_field {
+            return Err(not_applicable(field, OtlpConfigTarget::Disabled));
         }
         BackendTransportBounds::Disabled
     };
@@ -782,6 +780,50 @@ pub(crate) fn validated_transport_bounds(
         lifecycle_shutdown_timeout,
         backend,
     })
+}
+
+/// Returns the first legacy-only retry setting supplied by the caller.
+///
+/// The order is part of the deterministic validation contract. Retained
+/// direct fields and their `legacy_retry` successors share the same identity,
+/// so either representation reports the same first applicable field.
+#[allow(
+    deprecated,
+    reason = "the selector preserves diagnostics for retained direct retry fields"
+)]
+fn first_legacy_retry_field(config: &OtelConfig) -> Option<OtlpConfigField> {
+    let retry = config.legacy_retry.as_ref();
+    if config.max_retries != constants::DEFAULT_OTLP_MAX_RETRIES
+        || retry.is_some_and(|value| value.max_retries.is_some())
+    {
+        return Some(OtlpConfigField::MaxRetries);
+    }
+    if u64::from(config.initial_backoff_ms) != constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS
+        || retry.is_some_and(|value| value.initial_backoff_ms.is_some())
+    {
+        return Some(OtlpConfigField::InitialBackoff);
+    }
+    if u64::from(config.max_backoff_ms) != constants::DEFAULT_OTLP_MAX_BACKOFF_MS
+        || retry.is_some_and(|value| value.max_backoff_ms.is_some())
+    {
+        return Some(OtlpConfigField::MaxBackoff);
+    }
+    if retry.is_some_and(|value| value.retry_jitter_percent.is_some()) {
+        return Some(OtlpConfigField::RetryJitterPercent);
+    }
+    if retry.is_some_and(|value| value.retry_sequence_timeout_ms.is_some()) {
+        return Some(OtlpConfigField::RetrySequenceTimeout);
+    }
+    if retry.is_some_and(|value| value.retry_after_cap_ms.is_some()) {
+        return Some(OtlpConfigField::RetryAfterCap);
+    }
+
+    // An explicitly supplied but empty compatibility block is still
+    // inapplicable outside the legacy backend; retain the original field.
+    config
+        .legacy_retry
+        .as_ref()
+        .map(|_| OtlpConfigField::MaxRetries)
 }
 
 fn resolve_duration(

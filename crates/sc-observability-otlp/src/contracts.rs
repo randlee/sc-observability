@@ -8,7 +8,8 @@ use crate::{CompleteSpan, LogEvent, MetricRecord};
 use sc_observability_types::v2::ExportError;
 
 /// Object-safe asynchronous lifecycle result used by both backend adapters.
-pub(crate) type LifecycleFuture = Pin<Box<dyn Future<Output = Result<(), ExportError>> + Send>>;
+pub(crate) type LifecycleFuture =
+    Pin<Box<dyn Future<Output = Result<(), ExportError>> + Send + 'static>>;
 
 /// Object-safe lifecycle operations shared by exporter backends.
 #[allow(
