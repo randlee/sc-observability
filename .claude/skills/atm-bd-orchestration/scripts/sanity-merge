@@ -10,17 +10,26 @@ On success stdout is the vars object for `dev-sanity-complete.md.j2`
 (generated_at, task_id, checked_bead, sprint, branch, commit, verdict,
 findings_count, findings_md, lint_md).
 
+Before any verdict the worktree named in the manifest must still be at the
+pinned SHA, on the pinned branch, with a clean tree, so lint and the checkers
+saw the same tree.
+
 Exit codes (the message is printed on stderr):
   0  usable verdict printed
   1  malformed or mismatched result set; the message names the deliverable
-  3  a result is a well-formed failure envelope: stdout is
-     `<code> recoverable|fatal <deliverable>`
+     (or the result index when the result carries no deliverable number)
+  3  stdout is `<code> recoverable|fatal <deliverable>`; deliverable 0 is the
+     task itself: SANITY.COMMIT_MISMATCH / SANITY.TARGET_UNREADABLE (worktree
+     moved or unreadable) or SANITY.LINT_UNAVAILABLE (lint timed out,
+     was cancelled or could not run). A number >= 1 is one checker's own
+     complete failure envelope, echoed
   4  lint still running (no exit file yet)
 """
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 KINDS = {"skipped", "error"}
@@ -57,25 +66,32 @@ def read_results():
     return results
 
 
-def failure_envelope(result):
+def failure_envelope(result, index, total):
+    """A complete failure envelope, or Reject (exit 1) when `success` is false but the envelope is not."""
     error = result.get("error")
-    if (result.get("success") is False and result.get("data") is None and isinstance(error, dict)
-            and isinstance(error.get("code"), str) and error["code"]
-            and isinstance(error.get("recoverable"), bool)):
-        return error
-    return None
+    if result.get("data") is not None or not isinstance(error, dict):
+        raise Reject(f"result {index}: failure envelope must have data null and an error object")
+    number = error.get("deliverable")
+    if (not isinstance(error.get("code"), str) or not error["code"] or not isinstance(error.get("message"), str)
+            or not isinstance(error.get("recoverable"), bool) or not isinstance(error.get("suggested_action"), str)):
+        raise Reject(f"result {index}: failure envelope must have code, message, recoverable, suggested_action")
+    if not isinstance(number, int) or isinstance(number, bool) or not 1 <= number <= total:
+        raise Reject(f"result {index}: failure envelope must name its deliverable (1..{total}), got {number!r}")
+    return error
 
 
 def validate(result, index, manifest, sanity_bead, dev_bead):
     total = manifest["deliverables_total"]
     where = f"result {index}"
-    if not isinstance(result, dict) or result.get("success") is not True or not isinstance(result.get("data"), dict):
-        raise Reject(f"{where}: not a success envelope with a data object")
+    if not isinstance(result.get("data"), dict):
+        raise Reject(f"{where}: a success envelope needs a data object")
     data = result["data"]
     number = data.get("deliverable")
     if not isinstance(number, int) or isinstance(number, bool) or not 1 <= number <= total:
         raise Reject(f"{where}: deliverable must be an integer in 1..{total}, got {number!r}")
     where = f"deliverable {number}"
+    if result.get("error") is not None:
+        raise Reject(f"{where}: a success envelope must have error null")
     if data.get("sanity_bead") != sanity_bead:
         raise Reject(f"{where}: sanity_bead {data.get('sanity_bead')!r} is not {sanity_bead}")
     if data.get("dev_bead") != dev_bead:
@@ -94,15 +110,40 @@ def validate(result, index, manifest, sanity_bead, dev_bead):
     return number, findings
 
 
+class TaskFailure(Exception):
+    """A task-level failure: printed as `<code> fatal 0`, exit 3."""
+
+
+def verify_worktree(manifest):
+    worktree = manifest.get("worktree_path") or ""
+    if not Path(worktree).is_dir():
+        raise TaskFailure("SANITY.TARGET_UNREADABLE fatal 0", f"worktree {worktree!r} is not a directory")
+    def git(*argv):
+        run = subprocess.run(["git", "-C", worktree, *argv], capture_output=True, text=True)
+        if run.returncode != 0:
+            raise TaskFailure("SANITY.TARGET_UNREADABLE fatal 0", f"git {' '.join(argv)} failed in {worktree}")
+        return run.stdout.strip()
+    head, branch, status = git("rev-parse", "HEAD"), git("rev-parse", "--abbrev-ref", "HEAD"), git("status", "--porcelain")
+    if head != manifest["sha"]:
+        raise TaskFailure("SANITY.COMMIT_MISMATCH fatal 0", f"HEAD is {head}, not {manifest['sha']}")
+    if branch != manifest["branch"]:
+        raise TaskFailure("SANITY.COMMIT_MISMATCH fatal 0", f"checked-out branch is {branch}, not {manifest['branch']}")
+    if status:
+        raise TaskFailure("SANITY.COMMIT_MISMATCH fatal 0", "worktree has uncommitted or untracked changes")
+
+
 def lint_result(manifest):
     lint = manifest["lint"]
     exit_file = Path(lint["exit_file"])
     if not exit_file.exists():
         raise Reject("lint still running", code=4)
+    state = exit_file.read_text().strip()
+    if state in ("timeout", "cancelled", "error"):
+        raise TaskFailure("SANITY.LINT_UNAVAILABLE fatal 0", f"lint {state}; see {lint['log']}")
     try:
-        exit_code = int(exit_file.read_text().strip())
+        exit_code = int(state)
     except ValueError:
-        raise Reject(f"lint exit file {exit_file} is not an integer")
+        raise Reject(f"lint exit file {exit_file} is not an integer or timeout/cancelled/error")
     try:
         log = Path(lint["log"]).read_text(errors="replace")
     except OSError:
@@ -140,12 +181,12 @@ def main(argv):
         results = read_results()
         by_number = {}
         for index, result in enumerate(results):
-            envelope = failure_envelope(result) if isinstance(result, dict) else None
-            if envelope:
-                number = envelope.get("deliverable")
-                print(f"{envelope['code']} {'recoverable' if envelope['recoverable'] else 'fatal'} "
-                      f"{number if isinstance(number, int) else '?'}")
-                print(f"deliverable {number}: {envelope.get('message', '')}", file=sys.stderr)
+            if not isinstance(result, dict) or result.get("success") not in (True, False):
+                raise Reject(f"result {index}: not a success or failure envelope")
+            if result["success"] is False:
+                envelope = failure_envelope(result, index, manifest["deliverables_total"])
+                print(f"{envelope['code']} {'recoverable' if envelope['recoverable'] else 'fatal'} {envelope['deliverable']}")
+                print(f"deliverable {envelope['deliverable']}: {envelope['message']}", file=sys.stderr)
                 return 3
             number, findings = validate(result, index, manifest, sanity_bead, dev_bead)
             if number in by_number:
@@ -155,9 +196,14 @@ def main(argv):
         if missing:
             raise Reject(f"deliverable {missing[0]}: no result" + (f" (also {missing[1:]})" if missing[1:] else ""))
         lint_exit, lint_findings, _ = lint_result(manifest)
+        verify_worktree(manifest)
     except Reject as exc:
         print(str(exc), file=sys.stderr)
         return exc.code
+    except TaskFailure as exc:
+        print(exc.args[0])
+        print(exc.args[1], file=sys.stderr)
+        return 3
 
     blocks = []
     for number in sorted(by_number):

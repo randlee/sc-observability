@@ -52,8 +52,14 @@ One check is one closed bead at one pinned commit, split per deliverable:
   and result, so a repository switches checks by switching the directive in
   `.atm.toml`.
 - `scripts/sanity-merge` accepts exactly one result per deliverable at the
-  pinned SHA, folds in the lint exit code and diagnostics, and writes the
-  verdict and the report vars.
+  pinned SHA, checks that the worktree is still at that SHA and clean,
+  folds in the lint exit code and diagnostics, and writes the verdict and
+  the report vars.
+
+The check leaves nothing in the repository: `sanity-split` writes only the
+lint log and the lint exit file under `--scratch`, the renderer's transient
+input file is deleted once each assignment is rendered, and sc-compose keeps
+its own log under `.sc-compose/`, which is gitignored.
 
 There is no fallback. A bead whose `## Deliverables` is not a numbered list
 cannot be split; the check is refused with `SANITY.PLAN_INVALID` and the

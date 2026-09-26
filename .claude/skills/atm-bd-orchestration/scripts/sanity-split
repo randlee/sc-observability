@@ -6,6 +6,9 @@ Usage:
                --branch <branch> --commit <commit> --base <base>
                --lint-command '<cmd>' --scratch <dir>
                [--bead-json <file>] [--split-only] [--template <path>]
+               [--lint-timeout-seconds <n>]
+  sanity-split lint-supervisor --worktree <path> --command '<cmd>' --log <file>
+               --exit-file <file> [--timeout-seconds <n>]
 
 Reads the checked bead (`bd show <bead> --json`, or `--bead-json`), parses the
 numbered list under `## Deliverables`, pins the target commit, lists the files
@@ -15,10 +18,21 @@ worktree, and prints one JSON manifest to stdout:
 
   {sha, base_sha, sanity_bead, dev_bead, branch, worktree_path,
    deliverables_total, changed_files, files_outside_owned_paths,
-   lint: {command, log, exit_file} | null,
+   lint: {command, log, exit_file, pid, timeout_seconds} | null,
    assignments: [{number, assignment: <rendered object>}]}
 
 `--split-only` parses and renders only: no git pinning and no lint.
+
+The lint command runs under `lint-supervisor`, a detached process (its pid is
+`lint.pid`, equal to its process group) that redirects the command's stdout and
+stderr to the log itself, waits at most `timeout_seconds`, and always writes
+the exit file: the exit code, or `timeout` (the command's process group was
+killed), `cancelled` (the supervisor was terminated) or `error`.
+`kill -- -<pid>` stops the supervisor and the lint command together.
+
+`## Deliverables` must be one top-level numbered list `1.` .. `X.`; wrapped
+lines, indented sub-bullets and blank lines belong to the item above them,
+fenced blocks are text, and anything else in the section is PLAN_INVALID.
 
 Exit codes (the code and message are printed on stderr):
   0  ok
@@ -33,7 +47,7 @@ import json
 import os
 from pathlib import Path
 import re
-import shlex
+import signal
 import subprocess
 import sys
 import tempfile
@@ -75,7 +89,9 @@ def load_bead(args):
     return data
 
 
-ITEM = re.compile(r"^\s{0,3}(\d+)\.\s+(\S.*)$")
+ITEM = re.compile(r"^(\d+)\.\s+(\S.*)$")
+TOP_BULLET = re.compile(r"^[-*+]\s")
+FENCE = re.compile(r"^\s*(```|~~~)")
 
 
 def parse_deliverables(description):
@@ -86,15 +102,34 @@ def parse_deliverables(description):
     end = re.search(r"^#{1,2} ", body, re.M)
     if end:
         body = body[: end.start()]
-    items = []
+    items, fence, prev_blank = [], None, True
     for line in body.splitlines():
+        stripped = line.strip()
+        if fence:                                   # fenced text belongs to the current item
+            items[-1][1] += " " + stripped
+            if stripped.startswith(fence):
+                fence = None
+            continue
+        if not stripped:
+            prev_blank = True
+            continue
         item = ITEM.match(line)
         if item:
             items.append([int(item.group(1)), item.group(2).strip()])
-        elif items and line.strip():
-            items[-1][1] += " " + line.strip()
-        elif items and not line.strip():
-            continue
+        elif not items:
+            raise Fail(2, f"`## Deliverables` has content before the first numbered item: {stripped!r}")
+        elif TOP_BULLET.match(line):
+            raise Fail(2, f"`## Deliverables` has an unnumbered top-level bullet: {stripped!r}")
+        elif FENCE.match(line):
+            fence = FENCE.match(line).group(1)
+            items[-1][1] += " " + stripped
+        elif line[0] in " \t" or not prev_blank:    # indented sub-item, or wrapped item text
+            items[-1][1] += " " + stripped
+        else:
+            raise Fail(2, f"`## Deliverables` has an unnumbered paragraph: {stripped!r}")
+        prev_blank = False
+    if fence:
+        raise Fail(2, "`## Deliverables` has an unclosed fenced block")
     if not items:
         raise Fail(2, "`## Deliverables` has no numbered items (`1. ...`)")
     numbers = [n for n, _ in items]
@@ -137,13 +172,18 @@ def pin(args):
 
 
 def changed_files(worktree, base_sha, sha):
-    out = git(worktree, "diff", "--name-status", f"{base_sha}...{sha}")
-    files = []
-    for line in out.splitlines():
-        parts = line.split("\t")
-        if len(parts) >= 2:
-            files.append(parts[-1])
-    return files
+    out = git(worktree, "diff", "--name-status", "-z", "--find-renames", f"{base_sha}...{sha}")
+    fields = out.split("\0")
+    files, i = [], 0
+    while i < len(fields) and fields[i]:
+        status = fields[i]
+        if status[0] in "RC":                       # rename/copy: source, then destination
+            files.extend(fields[i + 1:i + 3])
+            i += 3
+        else:
+            files.append(fields[i + 1])
+            i += 2
+    return sorted(set(files))
 
 
 def glob_regex(pattern):
@@ -199,11 +239,46 @@ def start_lint(args):
     for stale in (log, exit_file):
         if stale.exists():
             stale.unlink()
-    script = (f"cd {shlex.quote(args.worktree)} && {args.lint_command} > {shlex.quote(str(log))} 2>&1; "
-              f"echo $? > {shlex.quote(str(exit_file))}")
-    subprocess.Popen(["sh", "-c", script], start_new_session=True, stdin=subprocess.DEVNULL,
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return {"command": args.lint_command, "log": str(log), "exit_file": str(exit_file)}
+    proc = subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve()), "lint-supervisor", "--worktree", args.worktree,
+         "--command", args.lint_command, "--log", str(log), "--exit-file", str(exit_file),
+         "--timeout-seconds", str(args.lint_timeout_seconds)],
+        start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"command": args.lint_command, "log": str(log), "exit_file": str(exit_file),
+            "pid": proc.pid, "timeout_seconds": args.lint_timeout_seconds}
+
+
+def supervise(argv):
+    """Run the lint command in this process group; always write the exit file."""
+    parser = argparse.ArgumentParser(prog="sanity-split lint-supervisor")
+    for flag in ("--worktree", "--command", "--log", "--exit-file"):
+        parser.add_argument(flag, required=True)
+    parser.add_argument("--timeout-seconds", type=float, default=1800)
+    args = parser.parse_args(argv)
+    exit_file = Path(args.exit_file)
+    outcome = "error"
+
+    def cancelled(signum, frame):
+        exit_file.write_text("cancelled\n")
+        os._exit(1)
+
+    signal.signal(signal.SIGTERM, cancelled)
+    signal.signal(signal.SIGINT, cancelled)
+    try:
+        with open(args.log, "w") as log:
+            child = subprocess.Popen(["sh", "-c", args.command], cwd=args.worktree, stdin=subprocess.DEVNULL,
+                                     stdout=log, stderr=subprocess.STDOUT)
+            try:
+                outcome = str(child.wait(timeout=args.timeout_seconds))
+            except subprocess.TimeoutExpired:
+                outcome = "timeout"
+    except Exception:
+        outcome = "error"
+    finally:
+        exit_file.write_text(outcome + "\n")
+    if outcome == "timeout":
+        os.killpg(os.getpgid(0), signal.SIGKILL)   # the command and its children share this group
+    return 0
 
 
 def main():
@@ -213,6 +288,7 @@ def main():
     parser.add_argument("--bead-json")
     parser.add_argument("--split-only", action="store_true")
     parser.add_argument("--template", type=Path, default=TEMPLATE)
+    parser.add_argument("--lint-timeout-seconds", type=int, default=1800)
     try:
         args = parser.parse_args()
     except SystemExit:
@@ -251,4 +327,6 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["lint-supervisor"]:
+        sys.exit(supervise(sys.argv[2:]))
     sys.exit(main())

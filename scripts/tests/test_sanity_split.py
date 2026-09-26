@@ -3,12 +3,15 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
 import unittest
 
-SCRIPT = Path(__file__).parents[2] / ".claude/skills/atm-bd-orchestration/scripts/sanity-split"
+SCRIPTS = Path(__file__).parents[2] / ".claude/skills/atm-bd-orchestration/scripts"
+SCRIPT = SCRIPTS / "sanity-split"
+MERGE = SCRIPTS / "sanity-merge"
 FAKE_LINT = "sh -c 'echo lint-ran; exit 1'"
 
 DESCRIPTION = """## Goal
@@ -36,6 +39,12 @@ def git(cwd, *argv):
     return subprocess.run(["git", "-C", str(cwd), *argv], check=True, capture_output=True, text=True).stdout.strip()
 
 
+def result(number, sha, findings=()):
+    return {"success": True, "error": None, "data": {
+        "sanity_bead": "obs-x-1-sanity", "dev_bead": "obs-x-1", "deliverable": number, "commit_checked": sha,
+        "findings": list(findings)}}
+
+
 class Repo:
     """A clone with a bare origin: develop pushed, sprint/x pushed with one change."""
 
@@ -48,6 +57,7 @@ class Repo:
         git(self.wt, "config", "user.name", "t")
         git(self.wt, "checkout", "-q", "-b", "develop")
         self.commit("crates/types/src/lib.rs", "mod query;\n", "base")
+        self.commit("docs/notes.md", "old notes\n", "notes")
         git(self.wt, "push", "-q", "-u", "origin", "develop")
         git(self.wt, "checkout", "-q", "-b", "sprint/x")
         self.commit("crates/types/src/retry.rs", "pub fn is_retryable(s: u16) -> bool { s == 429 }\n", "retry")
@@ -62,6 +72,11 @@ class Repo:
         git(self.wt, "add", "-A")
         git(self.wt, "commit", "-q", "-m", message)
 
+    def push_head(self):
+        git(self.wt, "push", "-q", "origin", "sprint/x")
+        self.sha = git(self.wt, "rev-parse", "HEAD")
+        return self.sha
+
 
 class SanitySplit(unittest.TestCase):
     def setUp(self):
@@ -70,20 +85,27 @@ class SanitySplit(unittest.TestCase):
         self.repo = Repo(self.root)
         self.scratch = self.root / "scratch"
 
-    def run_split(self, bead_json=None, worktree=None, commit=None, branch="sprint/x", base="develop", *extra):
+    def run_split(self, bead_json=None, worktree=None, commit=None, branch="sprint/x", base="develop", *extra,
+                  lint=FAKE_LINT):
         bead_file = self.root / "bead.json"
         bead_file.write_text(json.dumps(bead_json if bead_json is not None else bead()))
         argv = [str(SCRIPT), "--task", "obs-x-1-sanity", "--bead", "obs-x-1", "--worktree", str(worktree or self.repo.wt),
-                "--branch", branch, "--commit", commit or self.repo.sha, "--base", base, "--lint-command", FAKE_LINT,
+                "--branch", branch, "--commit", commit or self.repo.sha, "--base", base, "--lint-command", lint,
                 "--scratch", str(self.scratch), "--bead-json", str(bead_file), *extra]
         return subprocess.run(argv, capture_output=True, text=True)
 
-    def wait_lint(self, exit_file):
-        for _ in range(100):
+    def wait_lint(self, exit_file, seconds=10):
+        for _ in range(int(seconds / 0.05)):
             if Path(exit_file).exists():
                 return Path(exit_file).read_text().strip()
             time.sleep(0.05)
         self.fail("lint never wrote its exit file")
+
+    def merge(self, manifest, results):
+        manifest_file = self.root / "manifest.json"
+        manifest_file.write_text(json.dumps(manifest))
+        return subprocess.run([str(MERGE), str(manifest_file), "obs-x-1-sanity", "obs-x-1", "x"],
+                              input=json.dumps(results), capture_output=True, text=True)
 
     def test_happy_path_renders_one_assignment_per_deliverable(self):
         out = self.run_split(commit=self.repo.sha[:8])
@@ -105,9 +127,14 @@ class SanitySplit(unittest.TestCase):
         self.assertEqual(first["sanity_bead"], "obs-x-1-sanity")
         self.assertEqual(manifest["assignments"][1]["assignment"]["deliverable"]["text"],
                          "Unit tests for 429, 503 and 404.")
+        self.assertEqual((manifest["lint"]["timeout_seconds"], type(manifest["lint"]["pid"])), (1800, int))
         self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "1")
         self.assertIn("lint-ran", Path(manifest["lint"]["log"]).read_text())
         self.assertEqual(sorted(os.listdir(self.scratch)), ["obs-x-1-sanity-lint.exit", "obs-x-1-sanity-lint.log"])
+        # the same tree that lint saw: merge accepts two clean results
+        merged = self.merge(manifest, [result(1, self.repo.sha), result(2, self.repo.sha)])
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+        self.assertEqual(json.loads(merged.stdout)["verdict"], "FAIL")   # the fake lint exits 1
 
     def test_plan_invalid(self):
         cases = {
@@ -115,6 +142,11 @@ class SanitySplit(unittest.TestCase):
             "bulleted not numbered": DESCRIPTION.replace("1. Add", "- Add").replace("2. Unit", "- Unit"),
             "empty": "## Deliverables\n\n## Non-closure\n\nx\n",
             "numbering gap": DESCRIPTION.replace("2. Unit", "3. Unit"),
+            "bullet before the first item": "## Deliverables\n- Required auth check.\n1. Add a comment.\n",
+            "bullet between items": "## Deliverables\n1. One.\n- Required auth check.\n2. Two.\n",
+            "paragraph between items": "## Deliverables\n1. One.\n\nAlso do the auth check.\n\n2. Two.\n",
+            "fenced example only": "## Deliverables\n```text\n1. This is an example, not a deliverable.\n```\n",
+            "unclosed fence": "## Deliverables\n1. One.\n```\n2. Two.\n",
         }
         for name, description in cases.items():
             with self.subTest(name):
@@ -122,6 +154,24 @@ class SanitySplit(unittest.TestCase):
                 self.assertEqual(out.returncode, 2, out.stderr)
                 self.assertIn("SANITY.PLAN_INVALID", out.stderr)
                 self.assertFalse(self.scratch.exists(), "lint must not start for an invalid plan")
+
+    def test_plan_items_keep_wrapped_text_sub_bullets_and_fenced_examples(self):
+        description = ("## Deliverables\n\n"
+                       "1. Add the retry module\n"
+                       "with the predicate below.\n"
+                       "   - covers 429\n"
+                       "   - covers 5xx\n\n"
+                       "2. Document it:\n"
+                       "   ```rust\n"
+                       "   1. not a deliverable\n"
+                       "   ```\n"
+                       "3. Tests.\n")
+        out = self.run_split(bead(description), None, None, "sprint/x", "develop", "--split-only")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        texts = [a["assignment"]["deliverable"]["text"] for a in json.loads(out.stdout)["assignments"]]
+        self.assertEqual(texts[0], "Add the retry module with the predicate below. - covers 429 - covers 5xx")
+        self.assertEqual(texts[1], "Document it: ```rust 1. not a deliverable ```")
+        self.assertEqual(texts[2], "Tests.")
 
     def test_commit_mismatch(self):
         with self.subTest("dirty tree"):
@@ -153,14 +203,92 @@ class SanitySplit(unittest.TestCase):
 
     def test_files_outside_owned_paths(self):
         self.repo.commit("docs/other.md", "stray\n", "stray")
-        git(self.repo.wt, "push", "-q", "origin", "sprint/x")
-        out = self.run_split(commit=git(self.repo.wt, "rev-parse", "HEAD"))
+        out = self.run_split(commit=self.repo.push_head())
         self.assertEqual(out.returncode, 0, out.stderr)
         manifest = json.loads(out.stdout)
         self.assertEqual(manifest["changed_files"], ["crates/types/src/retry.rs", "docs/other.md"])
         self.assertEqual(manifest["files_outside_owned_paths"], ["docs/other.md"])
         self.assertEqual(manifest["assignments"][0]["assignment"]["files_outside_owned_paths"], ["docs/other.md"])
         self.wait_lint(manifest["lint"]["exit_file"])
+
+    def test_renames_list_source_and_destination(self):
+        with self.subTest("outside -> inside the fence"):
+            git(self.repo.wt, "mv", "docs/notes.md", "crates/types/src/notes.md")
+            git(self.repo.wt, "commit", "-q", "-m", "move in")
+            out = self.run_split(commit=self.repo.push_head())
+            self.assertEqual(out.returncode, 0, out.stderr)
+            manifest = json.loads(out.stdout)
+            self.assertEqual(manifest["changed_files"],
+                             ["crates/types/src/notes.md", "crates/types/src/retry.rs", "docs/notes.md"])
+            self.assertEqual(manifest["files_outside_owned_paths"], ["docs/notes.md"])
+            self.wait_lint(manifest["lint"]["exit_file"])
+        with self.subTest("inside -> outside the fence"):
+            (self.repo.wt / "src").mkdir()
+            git(self.repo.wt, "mv", "crates/types/src/lib.rs", "src/lib.rs")
+            git(self.repo.wt, "commit", "-q", "-m", "move out")
+            out = self.run_split(commit=self.repo.push_head())
+            self.assertEqual(out.returncode, 0, out.stderr)
+            manifest = json.loads(out.stdout)
+            self.assertIn("src/lib.rs", manifest["changed_files"])
+            self.assertIn("crates/types/src/lib.rs", manifest["changed_files"])
+            self.assertEqual(manifest["files_outside_owned_paths"], ["docs/notes.md", "src/lib.rs"])
+            self.wait_lint(manifest["lint"]["exit_file"])
+
+    def test_merge_rejects_a_worktree_that_moved_after_the_split(self):
+        out = self.run_split()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        manifest = json.loads(out.stdout)
+        self.wait_lint(manifest["lint"]["exit_file"])
+        (self.repo.wt / "crates/types/src/retry.rs").write_text("pub fn is_retryable(_: u16) -> bool { true }\n")
+        merged = self.merge(manifest, [result(1, self.repo.sha), result(2, self.repo.sha)])
+        self.assertEqual((merged.returncode, merged.stdout.strip()), (3, "SANITY.COMMIT_MISMATCH fatal 0"), merged.stderr)
+        git(self.repo.wt, "checkout", "-q", "--", ".")
+        git(self.repo.wt, "checkout", "-q", "develop")
+        merged = self.merge(manifest, [result(1, self.repo.sha), result(2, self.repo.sha)])
+        self.assertEqual((merged.returncode, merged.stdout.strip()), (3, "SANITY.COMMIT_MISMATCH fatal 0"), merged.stderr)
+
+    def test_lint_supervisor_captures_every_part_of_a_compound_command(self):
+        lint = "sh -c 'echo \"  --> src/a.rs:3:1\"; exit 1' && true"
+        out = self.run_split(lint=lint)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        manifest = json.loads(out.stdout)
+        self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "1")
+        self.assertIn("--> src/a.rs:3:1", Path(manifest["lint"]["log"]).read_text())
+        merged = self.merge(manifest, [result(1, self.repo.sha), result(2, self.repo.sha)])
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+        vars_ = json.loads(merged.stdout)
+        self.assertEqual((vars_["verdict"], vars_["findings_count"]), ("FAIL", 1))
+        self.assertIn("- `src/a.rs:3` lint:", vars_["lint_md"])
+
+    def test_lint_supervisor_always_writes_the_exit_file(self):
+        for lint, expected in (("exec false", "1"), ("exit 3", "3"), ("true", "0")):
+            with self.subTest(lint):
+                out = self.run_split(lint=lint)
+                self.assertEqual(out.returncode, 0, out.stderr)
+                self.assertEqual(self.wait_lint(json.loads(out.stdout)["lint"]["exit_file"]), expected)
+
+    def test_lint_supervisor_times_out_and_kills_the_command(self):
+        out = self.run_split(None, None, None, "sprint/x", "develop", "--lint-timeout-seconds", "1", lint="sleep 3017")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        manifest = json.loads(out.stdout)
+        self.assertEqual(manifest["lint"]["timeout_seconds"], 1)
+        self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "timeout")
+        time.sleep(0.2)
+        leftover = subprocess.run(["pgrep", "-f", "sleep 3017"], capture_output=True, text=True)
+        self.assertEqual(leftover.stdout.strip(), "", "the lint command survived its timeout")
+        merged = self.merge(manifest, [result(1, self.repo.sha), result(2, self.repo.sha)])
+        self.assertEqual((merged.returncode, merged.stdout.strip()), (3, "SANITY.LINT_UNAVAILABLE fatal 0"))
+
+    def test_lint_supervisor_is_stopped_with_its_process_group(self):
+        out = self.run_split(lint="sleep 3018")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        manifest = json.loads(out.stdout)
+        time.sleep(0.3)
+        os.killpg(manifest["lint"]["pid"], signal.SIGTERM)
+        self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "cancelled")
+        time.sleep(0.2)
+        leftover = subprocess.run(["pgrep", "-f", "sleep 3018"], capture_output=True, text=True)
+        self.assertEqual(leftover.stdout.strip(), "", "the lint command survived the cancellation")
 
     def test_split_only_skips_git_and_lint(self):
         (self.repo.wt / "dirty.txt").write_text("would fail pinning")
