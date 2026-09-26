@@ -50,28 +50,11 @@ another Python ABI baseline.
 
 ## Design
 
-## Owned Paths and Exact Targets
-
-- `.github/workflows/b4a-python-distributions.yml`
-- `scripts/ci/_python_distribution.py`
-- `scripts/ci/prepare_python_distributions.py`
-- `scripts/ci/validate_python_distribution.py`
-- `scripts/ci/tests/test_python_distribution.py`
-- `release/release-inventory.json`
-- `docs/project-plan.md`
-- `release/python-platform-policy.json`
-
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
-
-Must follow D.4 because both update release/release-inventory.json and the version-bearing distribution baseline. It remains independent of D.5–D.9; Python policy remains D.10-owned.
-
-`_python_distribution.py` owns the source/wheel inspection and architecture
-checks; reuse its existing result and the existing B.4a aggregate job.
-The Python Cargo/pyproject metadata is inspected, not changed by this sprint.
 
 
+## Implementation targets
+
+ implement or update the named contract consumer and its focused test for the corresponding numbered deliverable.\n
 
 ## Acceptance criteria
 

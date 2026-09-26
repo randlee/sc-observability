@@ -36,44 +36,11 @@ redesign. #88 remains excluded.
 
 ## Design
 
-## Owned Paths and Exact Targets
-
-- `Cargo.toml`
-- `Cargo.lock`
-- `crates/**`
-- `bindings/**`
-- `examples/**`
-- `release/public-api-major-breaks.toml`
-- `release/public-api-policy.json`
-- `release/release-inventory.json`
-- `release/bindings-artifacts.toml`
-- `release/publish-artifacts.toml`
-- `release/bp2-publish-artifacts.toml`
-- `release/RELEASE-NOTES-*.md`
-- `CHANGELOG.md`
-- `docs/migration-guide.md`
-- `docs/migration.md`
-- `docs/publishing.md`
-- `docs/public-api-checklist.md`
-- `scripts/ci/validate_public_api_semver.py`
-- `scripts/ci/validate_public_api.py`
-- `scripts/ci/validate_version_literals.py`
-- `scripts/ci/validate_error_migration.py`
-- `scripts/ci/fixtures/**`
-- `scripts/ci/validate_python_distribution.py`
-- `.github/workflows/**`
-- `docs/api-approvals/**`
-- `docs/architecture.md`
-- `docs/requirements.md`
-- `docs/api-design.md`
-
-These are edit fences for the deliverables above, including their tests and
-public API approval where listed; reading dependencies does not claim ownership.
-New modules stay inside the listed crate fences. No unrelated changes are authorized.
-
-Must follow D.1, D.2, and D.3 because migration edits core src/lib.rs, types src/errors.rs and the log bridge files they own. These are code conflicts, not documentation-only edges. Link their separate additive documents from docs/api-design.md while retaining D.4 sole ownership of the 2.0 baseline.
 
 
+## Implementation targets
+
+ implement or update the named contract consumer and its focused test for the corresponding numbered deliverable.\n
 
 ## Acceptance criteria
 
