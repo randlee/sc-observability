@@ -37,3 +37,69 @@ composition. Shared-file overlap is never a dependency rationale.
   regression guard after integration.
 - No new transport, registry publication, Python OTEL binding, or `atm-core`
   work is in scope.
+
+## Requirement mapping
+
+| Original item | Bead#item(s) |
+| --- | --- |
+| D.1.1 | D1#1 |
+| D.1.2 | D1#2 |
+| D.1.3 | D1#3 |
+| D.1.4 | D1#4 |
+| D.2.1 | D2#1 |
+| D.2.2 | D2#2 |
+| D.2.3 | D2#3 |
+| D.2.4 | D2#4 |
+| D.2.5 | D2#5 |
+| D.2.6 | D2#6 |
+| D.3.1 | D3#1 |
+| D.3.2 | D3#2 |
+| D.3.3 | D3#3 |
+| D.3.4 | D3#4 |
+| D.4.1 | D12#1 |
+| D.4.2 | D12#1 |
+| D.4.3 | D18#1 |
+| D.4.4 | D18#3 |
+| D.4.5 | D12#4, D18#4 |
+| D.4.6 | D13#4, D4#2 |
+| D.4.7 | D18#3 |
+| D.4.8 | D18#4 |
+| D.5.1 | D5#1 |
+| D.5.2 | D5#2 |
+| D.5.3 | D5#3 |
+| D.5.4 | D5#4 |
+| D.5.5 | D5#5 |
+| D.5.6 | D5#6 |
+| D.6.1 | D6#1 |
+| D.6.2 | D6#2 |
+| D.6.3 | D6#3 |
+| D.6.4 | D6#4 |
+| D.6.5 | D6#5 |
+| D.6.6 | D6#6 |
+| D.7.1 | D7#1 |
+| D.7.2 | D7#2 |
+| D.7.3 | D7#3 |
+| D.7.4 | D7#4 |
+| D.8.1 | D8#1 |
+| D.8.2 | D8#2 |
+| D.8.3 | D8#3 |
+| D.8.4 | D8#4 |
+| D.8.5 | D8#5 |
+| D.8.6 | D8#6 |
+| D.9.1 | D9#1 |
+| D.9.2 | D9#2 |
+| D.9.3 | D9#3 |
+| D.9.4 | D9#4 |
+| D.10.1 | D10#1 |
+| D.10.2 | D10#2 |
+| D.10.3 | D10#3 |
+| D.10.4 | D10#4 |
+| D.11.1 | D11#1 |
+| D.11.2 | D11#2 |
+| D.11.3 | D11#3 |
+| D.11.4 | D11#4 |
+
+| Current bead item not referenced | Reason |
+| --- | --- |
+| D12#5 | OTLP module/feature registration is a contract split from D6. |
+| D14#4–D17#3 | per-crate migration evidence and documentation. |

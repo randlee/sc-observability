@@ -12,6 +12,11 @@
   - `release/public-api-major-breaks.toml`
   - `docs/api-approvals/**`
   - `bindings/**`
+  - `docs/migration-guide.md`
+  - `docs/migration.md`
+  - `scripts/ci/validate_public_api_semver.py`
+  - `scripts/ci/validate_error_migration.py`
+  - `scripts/ci/fixtures/**`
 
 ## Deliverables
 
@@ -43,6 +48,11 @@ Dual-path hermetic conformance and OTLP documentation are closed by D.9; the Pyt
 3. Update API approvals, release inventory, and binding fixtures in the same public-surface review.
 
 
+## Implementation targets
+
+- `docs/migration-guide.md`, `docs/migration.md`: publish ADR-017 migration guidance (deliverable 4).
+- `scripts/ci/validate_public_api_semver.py`, `scripts/ci/validate_error_migration.py`, and `scripts/ci/fixtures/**` except `fixtures/otlp/**`: enforce frozen 1.4.1 listed-break validation (deliverable 4).
+
 ## Acceptance criteria
 
 - `cargo test --workspace` passes with canonical enums and exporter composition (deliverable 1).
@@ -50,3 +60,4 @@ Dual-path hermetic conformance and OTLP documentation are closed by D.9; the Pyt
 - `cargo check -p sc-observability-otlp --features otlp-sdk,legacy-http-json` passes the feature-gated builder/re-export surface (deliverable 2).
 - `test -f release/public-api-major-breaks.toml && test -f release/release-inventory.json && find docs/api-approvals -name "*.json" -print -quit | grep -q .` finds the release and approval evidence (deliverable 3).
 - `rg "ErrorContext|ExportError|InitError" bindings` reports the binding migration evidence (deliverable 4).
+- `scripts/ci/validate_public_api_semver.py --baseline 1.4.1 --fixture scripts/ci/fixtures/unlisted-break` exits non-zero for a planted unlisted break (deliverable 4).

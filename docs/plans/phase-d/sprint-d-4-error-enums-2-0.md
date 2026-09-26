@@ -38,6 +38,10 @@ Contract: obs-d-12 design, section "D.4 canonical error-enum inventory".
 - `crates/sc-observability/src/health.rs`: render typed diagnostic context without tuple-wrapper access (deliverable 1).
 - `crates/sc-observability/tests/logging_only.rs`: assert variant, code, and source identity (deliverable 1).
 
+## Implementation targets
+
+- `crates/sc-observability/src/lib.rs`: make canonical `LogSink` return `LogSinkError` and remove the D4.6 compatibility boundary (deliverable 2).
+
 ## Acceptance criteria
 
 ## Acceptance criteria

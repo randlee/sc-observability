@@ -233,8 +233,13 @@ impl LoggerBuilder {
 
 `crates/sc-observability-types/src/typed.rs` owns `LogFailure` and `TryLogFailure` and their conversions to D12 `LogSinkError::{Write, Flush}` and `ShutdownError::{Timeout, Drain}`.
 
+## Implementation targets
+
+- `crates/sc-observability-types/src/typed.rs` and `crates/sc-observability/src/typed.rs`: remove duplicate Failure classification and document the retained D3 adapter mapping (deliverable 4).
+
 ## Acceptance criteria
 
 - `cargo test -p sc-observability --test log_settings` passes source/resolution contract cases (deliverable 1).
 - `cargo test -p sc-observability-log --test bridge_*` passes typed policy and detach cases (deliverable 2).
 - `cargo test -p sc-observability --test typed_registration` passes the typed-sink signature path (deliverable 3).
+- `rg "impl_legacy_classification!" crates/sc-observability-types/src/typed.rs` returns zero after the D4.6 migration (deliverable 4).

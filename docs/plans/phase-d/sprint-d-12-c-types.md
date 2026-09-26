@@ -19,6 +19,9 @@
   - `crates/sc-observability-types/src/lib.rs`
   - `crates/sc-observability-types/src/process.rs`
   - `crates/sc-observability-types/src/projection.rs`
+  - `docs/architecture.md`
+  - `docs/requirements.md`
+  - `docs/api-design.md`
 
 ## Deliverables
 
@@ -462,8 +465,13 @@ otlp-sdk = []
 legacy-http-json = []
 ```
 
+## Implementation targets
+
+- `docs/architecture.md`, `docs/requirements.md`, and `docs/api-design.md`: record ADR-017, the scoped ADR-012 supersession, and the same accepted decision (deliverable 4).
+
 ## Acceptance criteria
 
 - `cargo test -p sc-observability-types --test neutral_contracts` passes and names all nine `#[non_exhaustive]` enums with `Box<ErrorContext>` (deliverable 1).
 - `cargo test -p sc-observability-types` passes the neutral signal serde/validation cases (deliverable 2).
 - `cargo check -p sc-observability-otlp --all-features` compiles the declared modules and feature gates (deliverables 3–4).
+- `rg "ADR-017|ADR-012" docs/architecture.md docs/requirements.md docs/api-design.md` shows the recorded decision (deliverable 4).
