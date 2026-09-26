@@ -960,7 +960,7 @@ ADR navigation index (status is recorded in each decision below):
 
 ### ADR-012: Additive Typed Errors And Warning-Only Migration
 
-- **Status**: Proposed for Phase B review.
+- **Status**: Proposed for Phase B review. Superseded in part by ADR-017 (2026-09-26) for the reviewed 2.0 breaks listed in `release/public-api-major-breaks.toml`; the 1.x additive decision recorded here is unchanged.
 - **Context**: Issue #92 requests typed failure handling without a forced
   migration of consumers of published diagnostic wrappers and extension traits.
 - **Proposed decision**: Add improved failure types, classification and operation/
@@ -1120,11 +1120,11 @@ ADR navigation index (status is recorded in each decision below):
 
 ### ADR-017: Phase D 2.0 Error Surface
 
-- **Status**: Proposed; technical-lead acceptance is a hard D.4 precondition.
+- **Status**: Accepted 2026-09-26 by the technical lead (this PR is the acceptance record); D.4 may proceed.
 - **Context**: ADR-012 protected additive 1.x compatibility, while Phase D
   explicitly targets a major release that can replace opaque wrappers and the
   temporary parallel typed surface.
-- **Proposed decision**: For 2.0 only, replace the nine inventoried wrappers
+- **Decision**: For 2.0 only, replace the nine inventoried wrappers
   with same-name non-exhaustive discriminated enums, remove duplicate typed /
   legacy adapters, and use an enumerated major-break manifest compared to the
   frozen 1.4.1 API. This supersedes ADR-012 only for those reviewed breaks;
@@ -1136,11 +1136,11 @@ ADR navigation index (status is recorded in each decision below):
 
 ### ADR-018: Dual OTLP Backends And Shared Lifecycle
 
-- **Status**: Proposed; technical-lead acceptance is a hard D.6 precondition.
+- **Status**: Accepted 2026-09-26 by the technical lead (this PR is the acceptance record); D.6 may proceed.
 - **Context**: Tokio-hosted consumers need the official SDK while synchronous
   and Python-hosted consumers need the previously tested blocking HTTP/JSON
   path without owning a Tokio runtime.
-- **Proposed decision**: Use one backend-neutral lifecycle state machine,
+- **Decision**: Use one backend-neutral lifecycle state machine,
   ordered barriers, deadlines, health/accounting, and crate-private exporter
   traits. The official SDK adapter requires a caller Tokio runtime; the legacy
   adapter owns a bounded plain-thread worker and uses the same lifecycle core.
