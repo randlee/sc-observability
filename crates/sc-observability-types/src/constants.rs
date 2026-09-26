@@ -8,3 +8,6 @@ pub const TRACE_ID_LEN: usize = 32;
 pub const SPAN_ID_LEN: usize = 16;
 /// Separator used when deriving environment prefixes.
 pub const DEFAULT_ENV_PREFIX_SEPARATOR: char = '_';
+
+/// W3C sampled bit in the trace flags byte.
+pub const TRACE_FLAG_SAMPLED: u8 = 0x01;
