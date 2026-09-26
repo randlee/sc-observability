@@ -283,7 +283,11 @@ fn ready<T>(future: impl Future<Output = T>) -> T {
     }
 }
 fn pending<T: Clone + Send + Sync + 'static>(backend: &CoreLoggerBackend) -> Operation<T> {
-    Operation::new(&backend.shared.dispatcher, &crate::timer::shared().unwrap())
+    Operation::new(
+        &backend.shared.dispatcher,
+        &crate::timer::shared().unwrap(),
+        crate::error::OperationKind::Query,
+    )
 }
 fn observer_bounds() {
     let (_root, owner, backend) = core();
@@ -682,6 +686,71 @@ fn native_diagnostic_fidelity() {
     assert_eq!(serde_json::to_value(failure).unwrap(), golden);
 }
 
+#[test]
+fn d12_error_families_preserve_typed_context_and_dto_tags() {
+    let startup = crate::error::init_runtime(
+        "helper startup failed",
+        Some(Box::new(std::io::Error::other("native startup source"))),
+    );
+    let native::v2::InitError::Runtime { context } = startup else {
+        panic!("startup must use InitError::Runtime");
+    };
+    assert_eq!(
+        context.diagnostic().code.as_str(),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_COORDINATOR_START_FAILED
+    );
+    assert_eq!(
+        std::error::Error::source(context.as_ref())
+            .unwrap()
+            .to_string(),
+        "native startup source"
+    );
+
+    let event_context = Box::new(native::ErrorContext::new(
+        native::ErrorCode::new_static("SC_BINDING_EVENT_INVALID"),
+        "invalid event",
+        native::Remediation::recoverable("correct the event", std::iter::empty::<String>()),
+    ));
+    let event = crate::error::event_validation(event_context);
+    assert!(matches!(event, native::v2::EventError::Validation { .. }));
+    let wire = crate::conversion::canonical(&event, crate::conversion::Kind::Validation);
+    assert!(matches!(wire, Failure::Validation { .. }));
+    assert_eq!(wire.diagnostic().code, "SC_BINDING_EVENT_INVALID");
+    assert_eq!(serde_json::to_value(&wire).unwrap()["kind"], "validation");
+
+    let flush_context = Box::new(native::ErrorContext::new(
+        native::ErrorCode::new_static("SC_BINDING_SINK_FLUSH"),
+        "sink flush failed",
+        native::Remediation::not_recoverable("inspect sink health"),
+    ));
+    let flush = crate::error::flush_drain(flush_context);
+    let native::v2::FlushError::Drain { context } = flush else {
+        panic!("flush must use FlushError::Drain");
+    };
+    let sink = std::error::Error::source(context.as_ref())
+        .and_then(|source| source.downcast_ref::<native::v2::LogSinkError>());
+    assert!(matches!(sink, Some(native::v2::LogSinkError::Flush { .. })));
+
+    let subscriber = crate::error::subscriber(
+        dto::error_codes::SC_OBSERVABILITY_BINDING_WAITERS_FULL,
+        "callback registration capacity is occupied",
+    );
+    assert!(matches!(
+        subscriber,
+        native::v2::SubscriberError::Subscriber { .. }
+    ));
+
+    let shutdown = crate::error::shutdown_timeout("shutdown deadline elapsed");
+    assert!(matches!(
+        shutdown,
+        native::v2::ShutdownError::Timeout { .. }
+    ));
+    assert_eq!(
+        shutdown.diagnostic().code.as_str(),
+        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT
+    );
+}
+
 fn cross_logger_cancellation() {
     let (_root_a, owner_a, backend_a) = core();
     let (_root_b, owner_b, backend_b) = core();
@@ -839,7 +908,11 @@ fn bridge_observers_callbacks() {
     let (_root, host) = bridge_host();
     let backend = bridge_backend(host.control()).unwrap();
     let timer = crate::timer::shared().unwrap();
-    let operation: Operation<u32> = Operation::new(&backend.shared.dispatcher, &timer);
+    let operation: Operation<u32> = Operation::new(
+        &backend.shared.dispatcher,
+        &timer,
+        crate::error::OperationKind::Query,
+    );
     let futures: Vec<_> = (0..64)
         .map(|_| operation.completion(Duration::from_secs(60)))
         .collect();

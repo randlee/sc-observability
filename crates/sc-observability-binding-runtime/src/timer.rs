@@ -3,7 +3,7 @@ use crate::{
     error,
     sync::{Signal, lock},
 };
-use sc_observability_dto::Failure;
+use sc_observability_types::v2::InitError;
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::BinaryHeap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -42,11 +42,15 @@ impl Ord for Entry {
     }
 }
 
-pub(crate) fn shared() -> Result<Arc<TimerService>, Failure> {
-    let mut cell = TIMER
-        .get_or_init(|| Mutex::new(None))
-        .lock()
-        .map_err(|_| error::internal("timer initialization state poisoned"))?;
+pub(crate) fn shared() -> Result<Arc<TimerService>, InitError> {
+    let mut cell = TIMER.get_or_init(|| Mutex::new(None)).lock().map_err(|_| {
+        error::init_configuration_code(
+            sc_observability_types::ErrorCode::new_static(
+                sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INTERNAL,
+            ),
+            "timer initialization state poisoned",
+        )
+    })?;
     if let Some(timer) = &*cell {
         return Ok(timer.clone());
     }
@@ -57,7 +61,7 @@ pub(crate) fn shared() -> Result<Arc<TimerService>, Failure> {
     });
     let worker = timer.clone();
     crate::spawn::spawn("binding-timer", move || worker.run())
-        .map_err(|e| error::start_failed(e.to_string()))?;
+        .map_err(|e| error::init_runtime(e.to_string(), Some(Box::new(e))))?;
     *cell = Some(timer.clone());
     Ok(timer)
 }
