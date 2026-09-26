@@ -33,11 +33,13 @@ let mut builder = LoggerBuilder::new_typed(LoggerConfig::default_for(
     sc_observability_types::ServiceName::new("example").expect("static service name"),
     "logs".into(),
 ))?;
-builder.register_typed_sink(Arc::new(CustomSink));
-# Ok::<(), sc_observability_types::typed::InitFailure>(())
+builder.register_typed_sink(Arc::new(CustomSink))?;
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-The builder only records registrations. The logger writer owns each write and
-flush, so registering a typed sink does not add a writer, a flush path, or
-level-owner authority. Existing `LogSink` registrations remain supported;
-D18 owns retirement of transitional compatibility adapters.
+The builder only records healthy, unique typed registrations. Re-registering
+the same `Arc` returns `SinkRegistrationError::Duplicate`; a degraded sink is
+`Invalid`; an unavailable sink is `Closed`. The logger writer owns each write
+and flush, so registering a typed sink does not add a writer, a flush path, or
+level-owner authority. Existing `LogSink` registrations remain supported; D18
+owns retirement of transitional compatibility adapters.

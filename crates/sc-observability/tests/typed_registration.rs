@@ -102,7 +102,9 @@ fn typed_registration_entry_points_preserve_metadata_chaining_and_single_dispatc
     );
     builder
         .register_typed_sink(builder_sink.clone())
-        .register_typed_sink(chained_sink.clone());
+        .expect("first typed registration")
+        .register_typed_sink(chained_sink.clone())
+        .expect("chained typed registration");
 
     let logger = builder.build_typed().expect("build typed logger");
     logger.log_typed(event()).expect("admit event");
@@ -115,6 +117,45 @@ fn typed_registration_entry_points_preserve_metadata_chaining_and_single_dispatc
         assert_eq!(sink.flushes.load(Ordering::SeqCst), 1);
         assert_eq!(sink.health_snapshot().state, SinkHealthState::Healthy);
     }
+}
+
+#[test]
+fn typed_registration_reports_duplicate_invalid_and_closed_sinks() {
+    let mut builder = LoggerBuilder::new_typed(config()).expect("valid builder");
+    let duplicate = Arc::new(RecordingTypedSink::default());
+    builder
+        .register_typed_sink(duplicate.clone())
+        .expect("initial registration");
+    let Err(error) = builder.register_typed_sink(duplicate) else {
+        panic!("duplicate typed sink must fail");
+    };
+    assert!(matches!(&error, SinkRegistrationError::Duplicate(_)));
+    assert_eq!(
+        error.context().diagnostic().code,
+        error_codes::SC_LOG_SINK_REGISTRATION_DUPLICATE
+    );
+
+    let invalid = Arc::new(RecordingTypedSink::default());
+    *invalid.state.write().expect("sink health poisoned") = SinkHealthState::DegradedDropping;
+    let Err(error) = builder.register_typed_sink(invalid) else {
+        panic!("degraded typed sink must fail");
+    };
+    assert!(matches!(&error, SinkRegistrationError::Invalid(_)));
+    assert_eq!(
+        error.context().diagnostic().code,
+        error_codes::SC_LOG_SINK_REGISTRATION_INVALID
+    );
+
+    let closed = Arc::new(RecordingTypedSink::default());
+    *closed.state.write().expect("sink health poisoned") = SinkHealthState::Unavailable;
+    let Err(error) = builder.register_typed_sink(closed) else {
+        panic!("unavailable typed sink must fail");
+    };
+    assert!(matches!(&error, SinkRegistrationError::Closed(_)));
+    assert_eq!(
+        error.context().diagnostic().code,
+        error_codes::SC_LOG_SINK_REGISTRATION_CLOSED
+    );
 }
 
 #[test]
