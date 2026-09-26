@@ -11,7 +11,17 @@
 
 mod assembly;
 mod config;
+mod contract_tests;
+mod contracts;
+mod lifecycle;
+mod lifecycle_tests;
 mod projectors;
+mod testing;
+
+#[cfg(feature = "otlp-sdk")]
+mod sdk;
+#[cfg(feature = "legacy-http-json")]
+mod legacy_http_json;
 
 pub mod constants;
 pub mod error_codes;
@@ -49,23 +59,7 @@ pub use config::{
 #[doc(inline)]
 pub use projectors::TelemetryProjectors;
 
-/// Exporter contract for projected log records.
-pub(crate) trait LogExporter: Send + Sync {
-    /// Exports one batch of log events.
-    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportFailure>;
-}
-
-/// Exporter contract for completed spans.
-pub(crate) trait TraceExporter: Send + Sync {
-    /// Exports one batch of completed spans.
-    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportFailure>;
-}
-
-/// Exporter contract for projected metrics.
-pub(crate) trait MetricExporter: Send + Sync {
-    /// Exports one batch of metric records.
-    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportFailure>;
-}
+use contracts::{LogExporter, MetricExporter, TraceExporter};
 
 /// OTLP-backed telemetry runtime.
 #[expect(

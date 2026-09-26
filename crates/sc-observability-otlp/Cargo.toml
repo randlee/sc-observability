@@ -9,6 +9,11 @@ repository.workspace = true
 homepage.workspace = true
 description = "Standalone OTLP export adapter for sc-observability."
 
+[features]
+default = []
+otlp-sdk = []
+legacy-http-json = []
+
 [dependencies]
 serde_json.workspace = true
 thiserror.workspace = true
