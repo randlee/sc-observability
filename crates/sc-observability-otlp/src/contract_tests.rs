@@ -428,7 +428,7 @@ fn contract_tests_v2_exporters_retain_signal_and_context() {
             MetricName::new("latency").unwrap(),
             MetricValue::Histogram {
                 point: HistogramPoint::try_new(
-                    vec![1.0],
+                    vec![FiniteF64::new(1.0).unwrap()],
                     vec![1, 2],
                     3,
                     FiniteF64::new(5.0).unwrap(),
