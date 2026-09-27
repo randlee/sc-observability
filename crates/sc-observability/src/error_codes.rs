@@ -77,13 +77,18 @@ pub const SC_LOG_SINK_REGISTRATION_INVALID: ErrorCode =
 pub const SC_LOG_SINK_REGISTRATION_CLOSED: ErrorCode =
     ErrorCode::new_static("SC_LOG_SINK_REGISTRATION_CLOSED");
 
-/// Settings diagnostic for log prefix collision.
+/// A requested log prefix collides with an existing environment prefix.
+/// Recovery: choose a unique log prefix or rename the conflicting setting.
 pub const LOG_PREFIX_COLLISION: ErrorCode = ErrorCode::new_static("LOG-001");
-/// Settings diagnostic for log invalid environment.
+/// The log environment configuration is invalid or incomplete.
+/// Recovery: provide a valid environment prefix and supported values.
 pub const LOG_INVALID_ENVIRONMENT: ErrorCode = ErrorCode::new_static("LOG-002");
-/// Settings diagnostic for log unknown key.
+/// The log settings contain an unsupported key.
+/// Recovery: remove the unknown key or use a documented setting name.
 pub const LOG_UNKNOWN_KEY: ErrorCode = ErrorCode::new_static("LOG-003");
-/// Settings diagnostic for log invalid value.
+/// A log setting contains a value outside its accepted domain.
+/// Recovery: replace it with a documented value valid for that setting.
 pub const LOG_INVALID_VALUE: ErrorCode = ErrorCode::new_static("LOG-004");
-/// Settings diagnostic for log resolution.
+/// Log settings could not be resolved from the configured inputs.
+/// Recovery: correct the reported inputs and retry settings resolution.
 pub const LOG_RESOLUTION: ErrorCode = ErrorCode::new_static("LOG-005");
