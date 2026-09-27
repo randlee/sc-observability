@@ -303,6 +303,38 @@ fn contract_tests_record_and_byte_capacity() {
     );
 }
 
+#[test]
+fn contract_tests_bound_messages_use_named_constants() {
+    let records = validated_transport_bounds(&OtelConfig {
+        queue_capacity: Some(constants::MAX_OTLP_QUEUE_CAPACITY + 1),
+        ..legacy_config()
+    })
+    .expect_err("record capacity above the named bound is invalid");
+    assert_eq!(
+        records.diagnostic().message,
+        format!(
+            "queue capacity must be in 1..={}",
+            constants::MAX_OTLP_QUEUE_CAPACITY
+        )
+    );
+
+    let jitter = validated_transport_bounds(&OtelConfig {
+        legacy_retry: Some(LegacyRetryPolicy {
+            retry_jitter_percent: Some(constants::MAX_OTLP_RETRY_JITTER_PERCENT + 1),
+            ..LegacyRetryPolicy::default()
+        }),
+        ..legacy_config()
+    })
+    .expect_err("jitter above the named bound is invalid");
+    assert_eq!(
+        jitter.diagnostic().message,
+        format!(
+            "retry jitter percent must be in 0..={}",
+            constants::MAX_OTLP_RETRY_JITTER_PERCENT
+        )
+    );
+}
+
 struct FakeLifecycle;
 impl ExporterLifecycle for FakeLifecycle {
     fn blocking_preflight(&self) -> Result<(), ExportError> {

@@ -1,5 +1,9 @@
 //! Crate-local constants for `sc-observability-otlp`.
 
+/// Number of milliseconds in one second.
+pub const MILLIS_PER_SECOND: u64 = 1_000;
+/// Number of nanoseconds in one millisecond.
+pub const NANOS_PER_MILLISECOND: u64 = 1_000_000;
 /// Default OTLP request timeout in milliseconds.
 pub const DEFAULT_OTLP_TIMEOUT_MS: u64 = 3_000;
 /// Default time allowed for a backend flush barrier.
@@ -32,6 +36,8 @@ pub const DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS: u64 = 30_000;
 pub const DEFAULT_OTLP_RETRY_AFTER_CAP_MS: u64 = 5_000;
 /// Default legacy retry jitter percentage.
 pub const DEFAULT_OTLP_RETRY_JITTER_PERCENT: u8 = 20;
+/// Maximum legacy retry jitter percentage.
+pub const MAX_OTLP_RETRY_JITTER_PERCENT: u8 = 100;
 /// Default log batch size for exporter flushes.
 pub const DEFAULT_LOG_BATCH_SIZE: usize = 256;
 /// Default trace batch size for exporter flushes.

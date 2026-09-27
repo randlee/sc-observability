@@ -130,7 +130,7 @@ pub struct LegacyRetryPolicy {
     pub retry_sequence_timeout_ms: Option<DurationMs>,
     /// Upper bound for a server-supplied Retry-After delay.
     pub retry_after_cap_ms: Option<DurationMs>,
-    /// Jitter percentage in `0..=100`.
+    /// Jitter percentage bounded by `MAX_OTLP_RETRY_JITTER_PERCENT`.
     pub retry_jitter_percent: Option<u8>,
 }
 
@@ -714,7 +714,10 @@ pub(crate) fn validated_transport_bounds(
         return Err(config_failure(
             ConfigFailureKind::InvalidQueueCapacity,
             otlp_error_codes::OTLP_CONFIG_QUEUE_CAPACITY,
-            "queue capacity must be in 1..=65_536",
+            format!(
+                "queue capacity must be in 1..={}",
+                constants::MAX_OTLP_QUEUE_CAPACITY
+            ),
             queue_capacity.field,
             queue_capacity.origin,
         ));
@@ -901,9 +904,9 @@ fn checked_duration(value: &ResolvedField<u64>) -> Result<Duration, ConfigFailur
     }
     // `Duration::from_millis` is total for u64 inputs, but this explicit
     // checked conversion protects the contract if the representation changes.
-    let seconds = value.value / 1_000;
-    let nanos = (value.value % 1_000)
-        .checked_mul(1_000_000)
+    let seconds = value.value / constants::MILLIS_PER_SECOND;
+    let nanos = (value.value % constants::MILLIS_PER_SECOND)
+        .checked_mul(constants::NANOS_PER_MILLISECOND)
         .ok_or_else(|| {
             config_failure(
                 ConfigFailureKind::DurationOverflow,
@@ -974,11 +977,14 @@ fn resolve_retry(
     if after_cap.value > sequence.value {
         return Err(invalid_bound(&after_cap, &sequence));
     }
-    if jitter.value > 100 {
+    if jitter.value > constants::MAX_OTLP_RETRY_JITTER_PERCENT {
         return Err(config_failure(
             ConfigFailureKind::InvalidJitterPercent,
             otlp_error_codes::OTLP_CONFIG_JITTER_PERCENT,
-            "retry jitter percent must be in 0..=100",
+            format!(
+                "retry jitter percent must be in 0..={}",
+                constants::MAX_OTLP_RETRY_JITTER_PERCENT
+            ),
             jitter.field,
             jitter.origin,
         ));
@@ -1061,7 +1067,7 @@ fn not_applicable(field: OtlpConfigField, target: OtlpConfigTarget) -> ConfigFai
 fn config_failure(
     kind: ConfigFailureKind,
     code: sc_observability_types::ErrorCode,
-    message: &str,
+    message: impl Into<String>,
     field: OtlpConfigField,
     origin: ValueOrigin,
 ) -> ConfigFailure {
