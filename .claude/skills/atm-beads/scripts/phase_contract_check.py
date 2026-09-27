@@ -19,8 +19,7 @@ Checks (bead obs-bo-10 deliverables 1-4):
   state        (live only) no PASS sanity reopened; blockers were closed before a dev bead started; a PASS
                has a QA bead; at most one fix round (second FAIL = ROUND_CAP); open PR base == pr_target;
                finding priority follows severity; sprint beads are P2; difficulty present where required;
-               dev-sanity base/commit types; human gates listed in policy.human_gates; a blocking finding's
-               sanity bead gates not-started downstream work (R16). policy.waivers turns an accepted past
+               dev-sanity base/commit types; human gates listed in policy.human_gates. policy.waivers turns an accepted past
                state violation into a warning
 """
 
@@ -330,24 +329,6 @@ class PhaseCheck:
             cur = parent_of(self.by.get(cur, {}))
         return ""
 
-    def downstream_devs(self, sprint: str) -> list[str]:
-        san = self.sanity_of(sprint)
-        return [d for d in self.devs() if d != sprint and d in self.by and san and san in self.blocker_closure(d)]
-
-    def downstream_targets(self, sprint: str, exclude: set[str] = frozenset()) -> list[str]:
-        """Not-started downstream dev beads plus open, unclaimed findings/fixes on those sprints, minus `exclude`
-        (the gate's own blocker closure: a gate cannot block what it waits on)."""
-        out = []
-        downstream = [d for d in self.downstream_devs(sprint) if d not in exclude]
-        for d in downstream:
-            if self.by[d].get("status") == "open":
-                out.append(d)
-        for bid, b in self.by.items():
-            if bid in self.phase_ids and stage(b) in (C.FINDING_LABEL, C.FIX_LABEL) and b.get("status") == "open" \
-                    and not b.get("assignee") and bid not in exclude and self.sprint_of(bid) in downstream:
-                out.append(bid)
-        return out
-
     # -- checks
     def check_membership(self) -> None:
         if not self.index:
@@ -371,7 +352,7 @@ class PhaseCheck:
                     self.problem(san, f"metadata.dev_bead is not {dev}")
             for prerequisite_sanity in self.planned_sanity_dependencies.get(dev, []):
                 if dev in self.by and prerequisite_sanity not in deps(self.by[dev], "blocks"):
-                    self.problem(dev, f"missing direct planned dependency on sanity bead {prerequisite_sanity} (bd dep add {dev} {prerequisite_sanity})")
+                    self.problem(dev, f"missing direct planned dependency on sanity bead {prerequisite_sanity}; report it to the user")
         for bid, b in self.by.items():
             if parent_of(b) != self.root_id or bid in listed:
                 continue
@@ -383,12 +364,7 @@ class PhaseCheck:
                                 and is_folded(self.by.get(str(meta(b).get("dev_bead") or ""), {}))):
                 continue  # absorbed sprint and its sanity bead: history, not membership
             st = stage(b) or "unlabelled"
-            hint = "parent it under its sprint dev bead"
-            es = self.edge_sprint(bid)
-            if es:  # bd keeps one edge type per pair: the validates/caused-by edge must go before the reparent
-                kind = "validates" if has_label(b, QA_LABEL) else "caused-by"
-                hint = f"bd dep remove {bid} {es} ({kind}), then bd update {bid} --parent {es}"
-            self.problem(bid, f"{st} bead is a child of {self.root_id} but not a listed sprint pair; {hint}")
+            self.problem(bid, f"{st} bead is a child of {self.root_id} but not a listed sprint pair; report it to the user")
 
     def check_hierarchy(self) -> None:
         """Top level holds epics only (user ruling 2026-09-26: several phases share one repo, so beads at the

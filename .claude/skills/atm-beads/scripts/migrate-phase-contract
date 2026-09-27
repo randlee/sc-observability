@@ -18,8 +18,6 @@ Writes, in order:
      without `difficulty` get `normal` (history only); every open finding without `difficulty` is looked up in
      the difficulty csv (columns: id,difficulty) and refused if absent: the worklist is printed
      (`id, severity, sprint, title`) and written to --worklist, and `--apply` exits 5 without writing anything
-  5. R16: every open blocking finding gets a `<finding>-sanity` gate bead (stage:dev-sanity, dev_bead) that blocks
-     each not-started downstream dev bead and each open, unclaimed finding/fix on a downstream sprint
 
 Exit 0 done or dry run, 5 refused (unclassified open findings), 2 could not run.
 """
@@ -176,33 +174,6 @@ class Migration:
                 self.w(f"{bid}: difficulty from the csv", "update", bid, "--set-metadata", f"difficulty={self.classified[bid]}")
             else:
                 self.worklist.append((bid, sev or "none", self.check.sprint_of(bid) or "?", str(b.get("title") or "")))
-
-    # 5 ------------------------------------------------------------------------------------------------
-    def r16_gates(self) -> None:
-        for fid, f in sorted(self.by.items()):
-            if fid not in self.check.phase_ids or pcc.stage(f) != C.FINDING_LABEL or f.get("status") == "closed" or pcc.severity(f) != "blocking":
-                continue
-            sprint = self.check.sprint_of(fid)
-            if not sprint:
-                self.unresolved.append(f"{fid}: open blocking finding with no sprint; cannot gate downstream work")
-                continue
-            gate = self.check.sanity_of(fid) or f"{fid}-sanity"
-            if gate not in self.by:
-                diff = str(pcc.meta(f).get("difficulty") or self.classified.get(fid) or "normal")
-                self.w(f"{fid}: R16 gate bead for the blocking finding", "create", "--id", gate, "--type", "task",
-                       "--priority", str(C.SEVERITY_PRIORITY["blocking"]), "--title", f"{fid}: sanity gate (blocking finding on {sprint})",
-                       "--description", f"Sanity check of the fix for blocking finding {fid} on {sprint}. While open it blocks every "
-                                        f"not-started downstream dev bead and every open, unclaimed finding or fix on a downstream sprint (R16). "
-                                        f"Closes PASS with the fix commit; a FAIL stays open.")
-                self.w(f"{gate}: parent (the sprint, like every dev-sanity bead), label, dev_bead", "update", gate, "--parent", sprint,
-                       "--add-label", C.SANITY_LABEL, "--set-metadata", f"dev_bead={fid}", "--set-metadata", f"difficulty={diff}",
-                       "--set-metadata", f"sprint_bead={sprint}")
-                self.w(f"{gate}: not ready until the fix of {fid} lands", "dep", "add", gate, fid)
-            elif fid not in pcc.deps(self.by[gate], "blocks"):
-                self.w(f"{gate}: not ready until the fix of {fid} lands", "dep", "add", gate, fid)
-            for target in self.check.downstream_targets(sprint, self.check.blocker_closure(fid)):
-                if gate not in pcc.deps(self.by[target], "blocks"):
-                    self.w(f"{target}: gated by blocking finding {fid}", "dep", "add", target, gate)
 
     def plan(self) -> None:
         self.sprint_beads()
