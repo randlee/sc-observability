@@ -285,8 +285,8 @@ against the merged B.1d API. The implementation activates the nine wrapper
 and 20 method warnings at `1.4.0`, migrates ordinary routing call sites,
 preserves narrow compatibility boundaries, and validates legacy/migrated/
 partial external Cargo consumers with JSON diagnostics and a Serde golden.
-B.2 qualification and later publication remain separately gated; no removal
-schedule is introduced. Publication follows Phase-C `sc-publish` migration and
+B.2 qualification and later publication were separately gated; no removal
+schedule was introduced. Publication followed Phase-C `sc-publish` migration and
 separate authorization.
 
 ### B.1 integration — Combined B.1a-B.1d reconciliation and registry parity
@@ -336,8 +336,8 @@ accepted, and the B.1 copy section above records that this validator's real
 The phase-end publication sprint is tracked in
 [`plans/phase-b/sprint-b-7-publish-bindings.md`](./plans/phase-b/sprint-b-7-publish-bindings.md),
 built from `feature/phase-b-6-python-async`. **Owner sequencing correction:
-no mid-phase publication.** B.P2/B.2 are reviewed immutable release
-candidates, B.3-B.6 and these bindings consume prepublication bundles, and
+no mid-phase publication.** B.P2/B.2 were reviewed immutable release
+candidates, B.3-B.6 and these bindings consumed prepublication bundles, and
 B.7 readiness packet covers all of Phase B (core, bridge/macros, and bindings)
 -- but Phase B records readiness only. Until the
 phase merges, no publication workflow is dispatched and no registry
