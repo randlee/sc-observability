@@ -15,15 +15,14 @@ Run from the working repository or worktree:
 
 `--root <bead-id>` and `--index <path>` select a phase when needed.
 
-Every run reads the foundational IDs in `docs/plans/phase-<p>/sprints.json`,
-queries beads/ATM for current dependencies and state, and regenerates the SVG
-inside a self-contained HTML page. Beads remain the source of truth.
+Every run reads the canonical tuples in `docs/plans/phase-<p>/sprints.jsonl`,
+uses them for the dependency graph, queries Beads/ATM only for current state,
+and regenerates the SVG inside a self-contained HTML page.
 
-It commits and pushes these two files on the root bead's `integration_branch`:
-- `docs/plans/phase-<p>/sprints.json`
-- `docs/plans/phase-<p>/phase-<p>-dag.html`
+It commits and pushes the rendered `docs/plans/phase-<p>/phase-<p>-dag.html`
+on the root bead's `integration_branch`; it never rewrites `sprints.jsonl`.
 
-The initial HTML artifact and bead index are required before plan review.
+The initial HTML artifact and canonical phase plan are required before plan review.
 Later runs update the page at the same path, leaving each version in Git history.
 A temporary detached worktree isolates artifact commits from existing worktrees;
 only these two files are committed. The integration branch must exist on origin.
