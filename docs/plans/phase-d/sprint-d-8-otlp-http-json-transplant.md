@@ -13,7 +13,7 @@ Generated projection of `obs-d-8`; the bead is authoritative.
 - Branch: `sprint/d-8-otlp-http-json-transplant`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-8-otlp-http-json-transplant`
 - PR target (merge order only): `sprint/d-7-otlp-sdk-tokio`
-- Blocked by: `obs-d-21-sanity`, `obs-d-22-sanity`
+- Blocked by: `obs-d-21-sanity`
 - Requirements: LAY-005, NFR-004, NFR-007, OTLP-012, OTLP-013, OTLP-021, OTLP-023, PHD-003, PHD-004
 - ADRs: ADR-004, ADR-005, ADR-014, ADR-017, ADR-018, ADR-019
 - Owned paths (metadata projection):
@@ -42,7 +42,7 @@ Transplant the immutable 7b39f4e7f72b6845edec4eab4cd671611661445f HTTP/JSON expo
 
 ## This Sprint Does Not Close
 
-No SDK implementation, OTLP data model or neutral→proto projection (D.22), normative/manifest/registry edit, additional validator framework, Python binding implementation or publication. D.18 composes real backends; D.9 owns collector/dashboard qualification.
+No SDK implementation, OTLP data model or neutral→proto projection (D.21), normative/manifest/registry edit, additional validator framework, Python binding implementation or publication. D.18 composes real backends; D.9 owns collector/dashboard qualification.
 
 ## Design
 
@@ -193,7 +193,9 @@ The only file fence is metadata.owned_paths; paths mentioned as dependencies are
 
 ## Handoff from obs-d-22 (wave 2)
 
-Consume `sc-observability-otlp-types` read-only after obs-d-22-sanity; D.8 adds no second projection.
+Consume the shared `sc_observability_types::otlp` contract through `crate::contracts`; D.8 has no obs-d-22-sanity blocker and adds no second projection.
+
+Interim placement: see D.22's **Interim placement (user ruling 2026-09-27)**; import the shared contract only through `crate::contracts`.
 
 ## Handoff from obs-d-21 (wave 1)
 

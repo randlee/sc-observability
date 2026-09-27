@@ -4,7 +4,7 @@ Generated projection of `obs-phase-d`; beads are authoritative.
 
 ## Phase D — logging, OTLP, and Python distribution
 
-The plan has twenty-one dev sprints. obs-d-12 is the types root; obs-d-21 consumes it as the OTLP contract stage. Wave 1 contains obs-d-12, obs-d-13, obs-d-10, and obs-d-21; obs-d-22 is wave 1.5, after that wave and before wave 2. Types-only consumers release after obs-d-12-sanity, while obs-d-5–8 and obs-d-22 release after obs-d-21-sanity; obs-d-7/8 also wait on obs-d-22-sanity. obs-d-11 remains folded into obs-d-10. Beads are authoritative; documents project them. Concrete artifact gates determine execution; layer/pr_target records merge order only. One append-only phase stack targets integrate/phase-d.
+The plan has twenty-one dev sprints. obs-d-12 is the types root; obs-d-21 consumes it as the OTLP contract stage. Wave 1 contains obs-d-12, obs-d-13, obs-d-10, and obs-d-21; obs-d-22 is wave 1.5, after that wave and before wave 2. Types-only consumers release after obs-d-12-sanity, while obs-d-5–8 and obs-d-22 release after obs-d-21-sanity. obs-d-11 remains folded into obs-d-10. Beads are authoritative; documents project them. Concrete artifact gates determine execution; layer/pr_target records merge order only. One append-only phase stack targets integrate/phase-d.
 
 ## Sprint and wave table
 
@@ -20,7 +20,7 @@ The plan has twenty-one dev sprints. obs-d-12 is the types root; obs-d-21 consum
 | 2 | obs-d-4 | lobs/luna | parallel_safe | 8 | sc-observability error migration |
 | 2 | obs-d-5 | cobs/terra | must_follow | 9 | OTLP signal projectors |
 | 2 | obs-d-6 | lobs/luna | must_follow | 10 | OTLP lifecycle module |
-| 1.5 | obs-d-22 | cobs/terra | must_follow | 11 | sc-observability-otlp-types shared OTLP wire model |
+| 1.5 | obs-d-22 | cobs/terra | must_follow | 11 | sc-observability-types OTLP contract module |
 | 2 | obs-d-7 | cobs/terra | must_follow | 12 | OTLP SDK adapter module |
 | 2 | obs-d-8 | lobs/luna | must_follow | 13 | OTLP HTTP JSON module |
 | 2 | obs-d-14 | cobs/terra | parallel_safe | 14 | sc-observe |
@@ -49,7 +49,9 @@ obs-d-12 freezes canonical errors/signals and wire projection specifications; ob
 
 8. Scoped split authorized by the user; no plan-review round is restarted. Lead ruling 01M3E7Z46AA9DNNMC73BDE37JG assigns obs-d-12 to aobs and obs-d-21 to lobs. Wave 1 contains independent roots obs-d-12/13/10 plus obs-d-21 as a second contract stage following obs-d-12-sanity; obs-d-22 is wave 1.5 after those four and before wave 2. Only the four OTLP implementation consumers (obs-d-5–8) move from types sanity to OTLP sanity; obs-d-18 explicitly waits on obs-d-21-sanity too. Layers 1..20 are unique; layer2 targets the types branch, layer3 targets the OTLP-contract branch.
 9. Version-line exception: the types manifest fence stays with obs-d-12, which stages the v2 API at the current Cargo version. A handoff in both designs permits obs-d-21 to edit only the types manifest version literal during the atomic workspace bump. This explicit exception is serialized by obs-d-12-sanity and does not duplicate path fences. Shared normative documents remain read-only to obs-d-21.
-10. **Shared OTLP wire model: maintainer ruling 2026-09-27**. Both OTLP backends use one wire data model in the new workspace crate `sc-observability-otlp-types` (obs-d-22), so moving a consumer from the legacy backend to the Tokio backend changes only the transport. The pinned `opentelemetry_sdk` 0.33 cannot carry pre-built records: `ResourceMetrics` construction is crate-private, `PushMetricExporter` accepts only `&ResourceMetrics`, and `SpanEvents`/`SpanLinks` have no public constructors, so the D.21 neutral `MetricRecord` and `CompleteSpan` cannot be exported losslessly through the SDK exporters. The crate uses `opentelemetry-proto` 0.33 messages directly, or `#[repr(transparent)]` newtypes that map 1:1 to them, aligned with upstream rather than with the sc crates, so an upstream bump or a switch to upstream types is mechanical. Callers build logs, spans and metrics in that representation; the neutral→proto projection from obs-d-12 types is the only conversion and moves data, never clones it; resource grouping moves each record into its `ResourceLogs`/`ResourceSpans`/`ResourceMetrics`. obs-d-7 (tonic gRPC, reqwest HTTP/protobuf on the caller runtime through obs-d-6) and obs-d-8 (blocking OTLP/JSON) are transports that encode that representation straight to the wire with no intermediate model and no clone; a clone is allowed only where a signature forces it and is named and justified. `sc-observability-types` stays OpenTelemetry-free (ADR-019). The dependency amendment is recorded in the obs-d-21 sprint document. obs-d-22 is wave 1.5 and takes layer 11; later layers shift by one (1..21 unique).
+10. **Shared OTLP contract module: user ruling 2026-09-27**. For waves 1 and 2, the shared OTLP contract is `crates/sc-observability-types/src/otlp/` (obs-d-22), not a new crate. It is plain Rust and has no `opentelemetry-proto`, `prost`, or `opentelemetry` dependency, preserving ADR-019. Its proto-backed structs are field-for-field identical to their OTLP proto messages (names, order, and Rust field types); `sc-observability-otlp` converts by field move with `From`/`Into`, no re-encoding/allocation and no `transmute`, then tests every struct's proto round trip. The module owns the shared D.21 structs, `ExporterSet`, lifecycle alias, and public exporter traits, while every implementation stays with the crate that owns its behavior. obs-d-7 and obs-d-8 are not blocked on a new crate and retain their existing d-21 gates. Extracting `otlp/` to a future `sc-observability-otlp-types` crate is a later mechanical refactor that blocks nothing. obs-d-22 remains wave 1.5 at layer 11; later layers shift by one (1..21 unique).
+
+**Interim placement (user ruling 2026-09-27):** D.22 writes the copied contract once in `sc_observability_types::otlp`; `crate::contracts` is the one re-export seam, and later extraction changes only that seam and Cargo metadata.
 
 ## Workspace invariant and replace-versus-coexist sequence
 
@@ -57,7 +59,7 @@ Every sprint closes with `cargo check --workspace --all-features --locked` and `
 
 ## Parallelism after correction
 
-21 dev sprints and waves 1, 1.5, 2, 3, and 4; wave 1 has two dependency stages, followed by the wave-1.5 OTLP-types bridge. Measured critical path is six dev sprints: obs-d-12 → obs-d-21 → obs-d-22 → obs-d-7 → obs-d-18 → obs-d-9 (sanity/plan-QA gates excluded). The scoped split releases seven direct types-contract consumers independently of OTLP work: obs-d-4/14/15/16/17/19/20; obs-d-17 also retains its logging-contract gate. obs-d-1/2/3 keep their existing logging-contract gates. Wave 2 has fourteen beads; maximum dependency-independent width remains fourteen with root obs-d-10 alongside released implementations. The useful gain is earlier release of types-only work, not a claimed shorter OTLP critical path.
+21 dev sprints and waves 1, 1.5, 2, 3, and 4; wave 1 has two dependency stages, followed by the wave-1.5 OTLP contract module. Measured critical path is five dev sprints: obs-d-12 → obs-d-21 → {obs-d-22, obs-d-7} → obs-d-18 → obs-d-9 (sanity/plan-QA gates excluded); obs-d-22 and obs-d-7 run in parallel after D.21 and both feed D.18. The scoped split releases seven direct types-contract consumers independently of OTLP work: obs-d-4/14/15/16/17/19/20; obs-d-17 also retains its logging-contract gate. obs-d-1/2/3 keep their existing logging-contract gates. Wave 2 has fourteen beads; maximum dependency-independent width remains fourteen with root obs-d-10 alongside released implementations. The useful gain is earlier release of types-only work, not a claimed shorter OTLP critical path.
 
 ## Wave table
 
@@ -73,7 +75,7 @@ Every sprint closes with `cargo check --workspace --all-features --locked` and `
 | 2 | obs-d-4 | lobs/luna | parallel_safe | 8 | sc-observability error migration |
 | 2 | obs-d-5 | cobs/terra | must_follow | 9 | OTLP signal projectors |
 | 2 | obs-d-6 | lobs/luna | must_follow | 10 | OTLP lifecycle module |
-| 1.5 | obs-d-22 | cobs/terra | must_follow | 11 | sc-observability-otlp-types shared OTLP wire model |
+| 1.5 | obs-d-22 | cobs/terra | must_follow | 11 | sc-observability-types OTLP contract module |
 | 2 | obs-d-7 | cobs/terra | must_follow | 12 | OTLP SDK adapter module |
 | 2 | obs-d-8 | lobs/luna | must_follow | 13 | OTLP HTTP JSON module |
 | 2 | obs-d-14 | cobs/terra | parallel_safe | 14 | sc-observe |
