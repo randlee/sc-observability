@@ -66,8 +66,7 @@ Every phase plan must include a committed `docs/plans/phase-<x>/sprints.jsonl`.
 Each line is `[sprint_name, sanity_bead_id, depends_on_sprint_names]`; the dev
 bead ID is derived as `obs-<sprint_name>`. The planner writes this compact
 graph authority in the plan PR; it is never exported from mutable Beads state.
-`validate-plan` requires the root's sprint pairs and direct declared
-sprint-to-sanity edges to match it. Bead hierarchy: `resources/planning.md`.
+Bead hierarchy: `resources/planning.md`.
 The initial `docs/plans/phase-<x>/phase-<x>-dag.html` (embedded SVG) must also be
 committed and pushed with the plan on the phase integration branch before
 plan review. `sprint-review --root <root>` refreshes the HTML without a viewer;
@@ -79,11 +78,24 @@ Validation is mandatory before a plan is imported, before plan review and
 before the first dispatch. Run it from the repository root:
 
 ```bash
-.claude/skills/atm-beads/scripts/validate-plan --file <plan.jsonl>   # rendered, before import
-.claude/skills/atm-beads/scripts/validate-plan --root <root id>      # live beads
+.claude/skills/atm-beads/scripts/validate-plan --file <plan.jsonl> --root <root id> --index <sprints.jsonl>   # before import
+.claude/skills/atm-beads/scripts/validate-plan --root <root id>   # live beads, plan from origin/develop
 ```
 
-It runs `bd doctor` first. It fails on any doctor error, a missing field,
-a broken graph, a missing, empty or unknown REQ/ADR id (`["NONE"]` is the
-only way to say there is none), or an assignee who is not an ATM member.
+It checks four things:
+
+1. every sprint that `sprints.jsonl` says depends on sprint X has a `blocks`
+   edge to X's sanity bead;
+2. every sprint bead validates against the `SprintBead` model: `requirements`
+   and `adrs` (ids, or exactly `["NONE"]`), `worktree`, `branch`,
+   `pr_target`, an assignee, a numbered `## Deliverables` list, acceptance
+   criteria and a valid difficulty;
+3. every sanity bead validates against the `SanityBead` model (an assignee,
+   `metadata.dev_bead`, a `blocks` edge to it), and `dev_bead` is its sprint;
+4. `bd doctor` reports no error.
+
+The models are pydantic, in `scripts/bead_schema.py`; `schemas/*.schema.json`
+are exported from them (`bead_schema.py export schemas`) and published.
 Exit 0 means valid, 5 lists the problems, and 2 means it could not run.
+Report problems to the lead; never edit the script, the plan or the graph to
+make it pass.

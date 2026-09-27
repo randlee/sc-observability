@@ -90,11 +90,9 @@ this file.
 
 The file is never generated from beads and beads are never generated from the
 file. A plan change is one planner transaction: change the beads, edit the
-file, commit both. `validate-plan --root <root>` passes only when the
-hierarchy below holds, each sanity bead blocks on its dev bead, and every
-listed dev bead carries `stage:sprint` with the sprint schema
-(`phase_contract_check.py`). It must stay green from plan approval to phase
-end; every template runs it before a claim.
+file, commit both. `validate-plan --root <root>` checks the sprint and
+sanity beads against it (see `SKILL.md`, Validation). It must stay green from
+plan approval to phase end; every template runs it before a claim.
 
 Hierarchy:
 
