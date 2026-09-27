@@ -264,6 +264,24 @@ Detach takes &mut self: Timeout retains the attachment for retry/inspection afte
 
 The full schemas above are authoritative here; implementation beads reference them rather than restating signatures. Contract fixture tests in log_contracts.rs/attachment_contracts.rs exercise the contract state/test doubles, never an unfinished production bridge or settings resolver.
 
+### Fixture retirement and rebind handoff
+
+Every type defined only by the D.13 test fixtures is intentionally prefixed
+`Fixture` so it cannot silently shadow a production export. When its production
+surface lands, the owning implementation bead must delete the fixture or rebind
+the test to that production symbol; it must not leave a parallel verifier.
+`obs-d-1` owns the settings handoff and therefore deletes or rebinds
+`FixtureLogSettings`, `FixtureLogRoot`, `FixtureResolvedLogSettings`,
+`FixtureEnvSnapshot`, `FixtureLogSettingsInputs`, `FixtureLogSettingsError`,
+and `FixtureResolutionCase`. `obs-d-2` owns the attachment handoff and therefore
+deletes or rebinds `FixtureBridgeEventPolicy`, `FixtureBridgeEventDecision`,
+`FixturePolicyRejection`, `FixtureAttachmentOptions`, `FixtureSlotState`,
+`FixtureDetachError`, `FixtureLogAttachment`, `FixtureAttachmentState`,
+`FixtureLogControl`, and `FixtureDenyPolicy`. `obs-d-3` owns the registration
+handoff and therefore deletes or rebinds `FixtureSinkContract`,
+`FixtureHarnessError`, and `FixtureSinkRegistrationError`. Its local
+`FixtureContractSink` is removed with that test rebind.
+
 ## Handoff to obs-d-2 (wave 2)
 
 The obs-d-13 fixture and this specification are read-only handoff input. obs-d-2 creates and owns `crates/sc-observability-log/src/bridge.rs` in wave 2.

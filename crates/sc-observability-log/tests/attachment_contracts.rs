@@ -13,36 +13,36 @@ use sc_observability_types::{
 };
 use serde_json::Map;
 
-trait BridgeEventPolicy: Send + Sync {
-    fn decide(&self, event: &LogEvent) -> BridgeEventDecision;
+trait FixtureBridgeEventPolicy: Send + Sync {
+    fn decide(&self, event: &LogEvent) -> FixtureBridgeEventDecision;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum BridgeEventDecision {
+enum FixtureBridgeEventDecision {
     Admit,
-    Reject(PolicyRejection),
+    Reject(FixturePolicyRejection),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PolicyRejection {
+enum FixturePolicyRejection {
     Denied,
     PayloadTooLarge,
     Invalid,
 }
 
-struct AttachmentOptions {
+struct FixtureAttachmentOptions {
     bridge: BridgeOptions,
-    policy: Arc<dyn BridgeEventPolicy>,
+    policy: Arc<dyn FixtureBridgeEventPolicy>,
 }
 
-impl AttachmentOptions {
-    fn new(bridge: BridgeOptions, policy: Arc<dyn BridgeEventPolicy>) -> Self {
+impl FixtureAttachmentOptions {
+    fn new(bridge: BridgeOptions, policy: Arc<dyn FixtureBridgeEventPolicy>) -> Self {
         Self { bridge, policy }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SlotState {
+enum FixtureSlotState {
     Empty,
     Owned,
     Attached,
@@ -50,13 +50,13 @@ enum SlotState {
 }
 
 #[derive(Debug)]
-enum DetachError {
+enum FixtureDetachError {
     Timeout(Box<ErrorContext>),
     NotInstalled(Box<ErrorContext>),
     ForeignLoggerInstalled(Box<ErrorContext>),
 }
 
-impl DetachError {
+impl FixtureDetachError {
     fn context(&self) -> &ErrorContext {
         match self {
             Self::Timeout(context)
@@ -78,24 +78,24 @@ fn detach_error(
     ))
 }
 
-fn detach_timeout() -> DetachError {
-    DetachError::Timeout(detach_error(
+fn detach_timeout() -> FixtureDetachError {
+    FixtureDetachError::Timeout(detach_error(
         "SC_LOG_DETACH_TIMEOUT",
         "detach timed out",
         Remediation::recoverable("retry detach", ["wait for drain"]),
     ))
 }
 
-fn not_installed() -> DetachError {
-    DetachError::NotInstalled(detach_error(
+fn not_installed() -> FixtureDetachError {
+    FixtureDetachError::NotInstalled(detach_error(
         "SC_LOG_DETACH_NOT_INSTALLED",
         "attachment is not installed",
         Remediation::not_recoverable("attach before using control"),
     ))
 }
 
-fn foreign_logger() -> DetachError {
-    DetachError::ForeignLoggerInstalled(detach_error(
+fn foreign_logger() -> FixtureDetachError {
+    FixtureDetachError::ForeignLoggerInstalled(detach_error(
         "SC_LOG_FOREIGN_LOGGER_INSTALLED",
         "foreign logger is installed",
         Remediation::not_recoverable("detach the existing logger"),
@@ -103,41 +103,43 @@ fn foreign_logger() -> DetachError {
 }
 
 #[derive(Debug)]
-struct LogAttachment {
-    state: Arc<Mutex<AttachmentState>>,
+struct FixtureLogAttachment {
+    state: Arc<Mutex<FixtureAttachmentState>>,
 }
 
 #[derive(Debug)]
-struct AttachmentState {
-    slot: SlotState,
+struct FixtureAttachmentState {
+    slot: FixtureSlotState,
     entered_calls: usize,
 }
 
 #[derive(Debug, Clone)]
-struct LogControl {
-    state: Weak<Mutex<AttachmentState>>,
+struct FixtureLogControl {
+    state: Weak<Mutex<FixtureAttachmentState>>,
 }
 
-impl LogAttachment {
-    fn attach(state: SlotState) -> Result<Self, DetachError> {
+impl FixtureLogAttachment {
+    fn attach(state: FixtureSlotState) -> Result<Self, FixtureDetachError> {
         match state {
-            SlotState::Empty => Ok(Self {
-                state: Arc::new(Mutex::new(AttachmentState {
-                    slot: SlotState::Attached,
+            FixtureSlotState::Empty => Ok(Self {
+                state: Arc::new(Mutex::new(FixtureAttachmentState {
+                    slot: FixtureSlotState::Attached,
                     entered_calls: 0,
                 })),
             }),
-            SlotState::Owned | SlotState::Attached | SlotState::Closing => Err(foreign_logger()),
+            FixtureSlotState::Owned | FixtureSlotState::Attached | FixtureSlotState::Closing => {
+                Err(foreign_logger())
+            }
         }
     }
 
-    fn control(&self) -> LogControl {
-        LogControl {
+    fn control(&self) -> FixtureLogControl {
+        FixtureLogControl {
             state: Arc::downgrade(&self.state),
         }
     }
 
-    fn slot(&self) -> SlotState {
+    fn slot(&self) -> FixtureSlotState {
         self.state.lock().expect("fixture state lock").slot
     }
 
@@ -145,42 +147,42 @@ impl LogAttachment {
         self.state.lock().expect("fixture state lock").entered_calls = entered_calls;
     }
 
-    fn detach(&mut self, timeout: Duration) -> Result<(), DetachError> {
+    fn detach(&mut self, timeout: Duration) -> Result<(), FixtureDetachError> {
         let mut state = self.state.lock().expect("fixture state lock");
         match state.slot {
-            SlotState::Attached => state.slot = SlotState::Closing,
+            FixtureSlotState::Attached => state.slot = FixtureSlotState::Closing,
             // A timed-out detach retains the attachment with admission closed,
             // so the caller can retry its bounded drain from this state.
-            SlotState::Closing => {}
-            SlotState::Empty | SlotState::Owned => return Err(not_installed()),
+            FixtureSlotState::Closing => {}
+            FixtureSlotState::Empty | FixtureSlotState::Owned => return Err(not_installed()),
         }
         if state.entered_calls != 0 && timeout.is_zero() {
             return Err(detach_timeout());
         }
         state.entered_calls = 0;
-        state.slot = SlotState::Empty;
+        state.slot = FixtureSlotState::Empty;
         Ok(())
     }
 }
 
-impl LogControl {
-    fn submit(&self) -> Result<(), DetachError> {
+impl FixtureLogControl {
+    fn submit(&self) -> Result<(), FixtureDetachError> {
         let state = self.state.upgrade().ok_or_else(not_installed)?;
-        (state.lock().expect("fixture state lock").slot == SlotState::Attached)
+        (state.lock().expect("fixture state lock").slot == FixtureSlotState::Attached)
             .then_some(())
             .ok_or_else(not_installed)
     }
 }
 
-struct DenyPolicy;
+struct FixtureDenyPolicy;
 
-impl BridgeEventPolicy for DenyPolicy {
-    fn decide(&self, _: &LogEvent) -> BridgeEventDecision {
-        BridgeEventDecision::Reject(PolicyRejection::Denied)
+impl FixtureBridgeEventPolicy for FixtureDenyPolicy {
+    fn decide(&self, _: &LogEvent) -> FixtureBridgeEventDecision {
+        FixtureBridgeEventDecision::Reject(FixturePolicyRejection::Denied)
     }
 }
 
-fn assert_open_policy(_: Arc<dyn BridgeEventPolicy>) {}
+fn assert_open_policy(_: Arc<dyn FixtureBridgeEventPolicy>) {}
 
 fn contract_event() -> LogEvent {
     LogEvent {
@@ -202,7 +204,7 @@ fn contract_event() -> LogEvent {
     }
 }
 
-fn assert_detach_error(error: &DetachError, code: &str) {
+fn assert_detach_error(error: &FixtureDetachError, code: &str) {
     assert_eq!(error.context().diagnostic().code.as_str(), code);
     assert!(matches!(
         error.context().diagnostic().remediation,
@@ -212,7 +214,8 @@ fn assert_detach_error(error: &DetachError, code: &str) {
 
 #[test]
 fn detach_retry_after_timeout() {
-    let mut attachment = LogAttachment::attach(SlotState::Empty).expect("empty slot attaches");
+    let mut attachment =
+        FixtureLogAttachment::attach(FixtureSlotState::Empty).expect("empty slot attaches");
     let control = attachment.control();
     attachment.set_entered_calls(1);
     assert_detach_error(
@@ -221,7 +224,7 @@ fn detach_retry_after_timeout() {
     );
     assert_eq!(
         attachment.slot(),
-        SlotState::Closing,
+        FixtureSlotState::Closing,
         "timeout retains the attachment with admission closed"
     );
     assert_detach_error(
@@ -231,7 +234,7 @@ fn detach_retry_after_timeout() {
     attachment
         .detach(Duration::from_millis(1))
         .expect("retry detaches");
-    assert_eq!(attachment.slot(), SlotState::Empty);
+    assert_eq!(attachment.slot(), FixtureSlotState::Empty);
     assert_detach_error(
         &attachment.detach(Duration::from_millis(1)).unwrap_err(),
         "SC_LOG_DETACH_NOT_INSTALLED",
@@ -240,7 +243,8 @@ fn detach_retry_after_timeout() {
 
 #[test]
 fn stale_control_not_installed() {
-    let mut attachment = LogAttachment::attach(SlotState::Empty).expect("empty slot attaches");
+    let mut attachment =
+        FixtureLogAttachment::attach(FixtureSlotState::Empty).expect("empty slot attaches");
     let control = attachment.control();
     control
         .submit()
@@ -254,9 +258,13 @@ fn stale_control_not_installed() {
 
 #[test]
 fn foreign_logger_rejected() {
-    for state in [SlotState::Owned, SlotState::Attached, SlotState::Closing] {
+    for state in [
+        FixtureSlotState::Owned,
+        FixtureSlotState::Attached,
+        FixtureSlotState::Closing,
+    ] {
         assert_detach_error(
-            &LogAttachment::attach(state).unwrap_err(),
+            &FixtureLogAttachment::attach(state).unwrap_err(),
             "SC_LOG_FOREIGN_LOGGER_INSTALLED",
         );
     }
@@ -270,20 +278,20 @@ fn attachment_has_no_owner_authority() {
 
 #[test]
 fn attachment_options_accept_open_policy() {
-    let options = AttachmentOptions::new(
+    let options = FixtureAttachmentOptions::new(
         BridgeOptions {
             default_action: ActionName::new("contract").expect("static action name"),
             parse_bracket_action: true,
         },
-        Arc::new(DenyPolicy),
+        Arc::new(FixtureDenyPolicy),
     );
     assert_open_policy(Arc::clone(&options.policy));
     assert!(options.bridge.parse_bracket_action);
     assert_eq!(
         options.policy.decide(&contract_event()),
-        BridgeEventDecision::Reject(PolicyRejection::Denied)
+        FixtureBridgeEventDecision::Reject(FixturePolicyRejection::Denied)
     );
-    let _ = BridgeEventDecision::Admit;
-    let _ = PolicyRejection::PayloadTooLarge;
-    let _ = PolicyRejection::Invalid;
+    let _ = FixtureBridgeEventDecision::Admit;
+    let _ = FixturePolicyRejection::PayloadTooLarge;
+    let _ = FixturePolicyRejection::Invalid;
 }

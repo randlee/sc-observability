@@ -19,7 +19,7 @@ use serde_json::Map;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
-struct LogSettings {
+struct FixtureLogSettings {
     level: Option<LevelFilter>,
     log_root: Option<PathBuf>,
     enable_file_sink: Option<bool>,
@@ -28,12 +28,12 @@ struct LogSettings {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct LogRoot(PathBuf);
+struct FixtureLogRoot(PathBuf);
 
-impl LogRoot {
-    fn new(path: PathBuf) -> Result<Self, LogSettingsError> {
+impl FixtureLogRoot {
+    fn new(path: PathBuf) -> Result<Self, FixtureLogSettingsError> {
         if path.as_os_str().is_empty() {
-            return Err(LogSettingsError::InvalidValue);
+            return Err(FixtureLogSettingsError::InvalidValue);
         }
         Ok(Self(path))
     }
@@ -44,27 +44,27 @@ impl LogRoot {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct ResolvedLogSettings {
+struct FixtureResolvedLogSettings {
     level: LevelFilter,
-    log_root: LogRoot,
+    log_root: FixtureLogRoot,
     enable_file_sink: bool,
     enable_console_sink: bool,
     retained_log_policy: RetainedLogPolicy,
 }
 
 #[derive(Debug, Clone, Default)]
-struct EnvSnapshot(BTreeMap<String, String>);
+struct FixtureEnvSnapshot(BTreeMap<String, String>);
 
 #[derive(Debug, Clone)]
-struct LogSettingsInputs {
-    file: Option<LogSettings>,
-    shared_env: LogSettings,
-    application_env: Option<LogSettings>,
+struct FixtureLogSettingsInputs {
+    file: Option<FixtureLogSettings>,
+    shared_env: FixtureLogSettings,
+    application_env: Option<FixtureLogSettings>,
     default_root: PathBuf,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum LogSettingsError {
+enum FixtureLogSettingsError {
     PrefixCollision,
     InvalidEnvironment,
     UnknownKey,
@@ -72,7 +72,7 @@ enum LogSettingsError {
     Resolution,
 }
 
-impl LogSettingsError {
+impl FixtureLogSettingsError {
     const fn code(self) -> &'static str {
         match self {
             Self::PrefixCollision => "LOG-001",
@@ -84,9 +84,11 @@ impl LogSettingsError {
     }
 }
 
-impl LogSettings {
-    fn resolve(inputs: LogSettingsInputs) -> Result<ResolvedLogSettings, LogSettingsError> {
-        let LogSettingsInputs {
+impl FixtureLogSettings {
+    fn resolve(
+        inputs: FixtureLogSettingsInputs,
+    ) -> Result<FixtureResolvedLogSettings, FixtureLogSettingsError> {
+        let FixtureLogSettingsInputs {
             file,
             shared_env,
             application_env,
@@ -102,7 +104,7 @@ impl LogSettings {
             application_env.log_root.as_ref(),
         ] {
             if root.is_some_and(|root| root.as_os_str().is_empty()) {
-                return Err(LogSettingsError::InvalidValue);
+                return Err(FixtureLogSettingsError::InvalidValue);
             }
         }
         let level = application_env
@@ -133,9 +135,9 @@ impl LogSettings {
             .or(file.retained_log_policy)
             .unwrap_or_default();
 
-        Ok(ResolvedLogSettings {
+        Ok(FixtureResolvedLogSettings {
             level,
-            log_root: LogRoot::new(root)?,
+            log_root: FixtureLogRoot::new(root)?,
             enable_file_sink,
             enable_console_sink,
             retained_log_policy,
@@ -145,42 +147,43 @@ impl LogSettings {
 
 /// Private only: wave one checks object safety without defining a new public
 /// typed-sink error or a duplicate classification surface.
-trait PrivateSinkContract<E>: Send + Sync {
+trait FixtureSinkContract<E>: Send + Sync {
     fn write(&self, event: &LogEvent) -> Result<(), E>;
     fn flush(&self) -> Result<(), E>;
     fn health(&self) -> SinkHealth;
 }
 
 #[derive(Debug)]
-struct HarnessError(Box<ErrorContext>);
+struct FixtureHarnessError(Box<ErrorContext>);
 
-impl HarnessError {
+impl FixtureHarnessError {
     fn context(&self) -> &ErrorContext {
         &self.0
     }
 }
 
 #[derive(Debug)]
-enum SinkRegistrationError {
-    Duplicate(HarnessError),
-    Invalid(HarnessError),
-    Closed(HarnessError),
+enum FixtureSinkRegistrationError {
+    Duplicate(FixtureHarnessError),
+    Invalid(FixtureHarnessError),
+    Closed(FixtureHarnessError),
 }
 
-impl SinkRegistrationError {
-    fn payload(&self) -> &HarnessError {
+impl FixtureSinkRegistrationError {
+    fn payload(&self) -> &FixtureHarnessError {
         match self {
             Self::Duplicate(payload) | Self::Invalid(payload) | Self::Closed(payload) => payload,
         }
     }
 }
 
-fn assert_private_sink_object_safe(_: Arc<dyn PrivateSinkContract<HarnessError>>) {}
+fn assert_private_sink_object_safe(_: Arc<dyn FixtureSinkContract<FixtureHarnessError>>) {}
 
 #[test]
 fn settings_serde_defaults() {
-    let settings: LogSettings = serde_json::from_str("{}").expect("empty settings deserialize");
-    assert_eq!(settings, LogSettings::default());
+    let settings: FixtureLogSettings =
+        serde_json::from_str("{}").expect("empty settings deserialize");
+    assert_eq!(settings, FixtureLogSettings::default());
     let encoded = serde_json::to_value(&settings).expect("settings serialize");
     assert_eq!(
         encoded,
@@ -192,50 +195,50 @@ fn settings_serde_defaults() {
             "retainedLogPolicy": null,
         })
     );
-    assert!(serde_json::from_str::<LogSettings>(r#"{"unknown":true}"#).is_err());
+    assert!(serde_json::from_str::<FixtureLogSettings>(r#"{"unknown":true}"#).is_err());
 }
 
 #[test]
 fn log_root_validation() {
-    let resolved = LogSettings::resolve(LogSettingsInputs {
-        file: Some(LogSettings {
+    let resolved = FixtureLogSettings::resolve(FixtureLogSettingsInputs {
+        file: Some(FixtureLogSettings {
             log_root: Some(PathBuf::from("configured")),
-            ..LogSettings::default()
+            ..FixtureLogSettings::default()
         }),
-        shared_env: LogSettings {
+        shared_env: FixtureLogSettings {
             log_root: Some(PathBuf::from("shared")),
-            ..LogSettings::default()
+            ..FixtureLogSettings::default()
         },
-        application_env: Some(LogSettings {
+        application_env: Some(FixtureLogSettings {
             log_root: Some(PathBuf::from("application")),
-            ..LogSettings::default()
+            ..FixtureLogSettings::default()
         }),
         default_root: PathBuf::from("default"),
     })
     .expect("configured root resolves");
     assert_eq!(resolved.log_root.as_path(), Path::new("configured"));
 
-    let error = LogRoot::new(PathBuf::new()).expect_err("empty root is rejected");
-    assert_eq!(error, LogSettingsError::InvalidValue);
+    let error = FixtureLogRoot::new(PathBuf::new()).expect_err("empty root is rejected");
+    assert_eq!(error, FixtureLogSettingsError::InvalidValue);
     assert_eq!(error.code(), "LOG-004");
 
-    let error = LogSettings::resolve(LogSettingsInputs {
-        file: Some(LogSettings {
+    let error = FixtureLogSettings::resolve(FixtureLogSettingsInputs {
+        file: Some(FixtureLogSettings {
             log_root: Some(PathBuf::new()),
-            ..LogSettings::default()
+            ..FixtureLogSettings::default()
         }),
-        shared_env: LogSettings {
+        shared_env: FixtureLogSettings {
             log_root: Some(PathBuf::from("shared")),
-            ..LogSettings::default()
+            ..FixtureLogSettings::default()
         },
-        application_env: Some(LogSettings {
+        application_env: Some(FixtureLogSettings {
             log_root: Some(PathBuf::from("application")),
-            ..LogSettings::default()
+            ..FixtureLogSettings::default()
         }),
         default_root: PathBuf::from("default"),
     })
     .expect_err("an explicitly empty JSON root is invalid, never overridden");
-    assert_eq!(error, LogSettingsError::InvalidValue);
+    assert_eq!(error, FixtureLogSettingsError::InvalidValue);
 }
 
 fn policy(
@@ -255,8 +258,8 @@ fn settings(
     enable_file_sink: Option<bool>,
     enable_console_sink: Option<bool>,
     retained_log_policy: Option<RetainedLogPolicy>,
-) -> LogSettings {
-    LogSettings {
+) -> FixtureLogSettings {
+    FixtureLogSettings {
         level,
         log_root: log_root.map(PathBuf::from),
         enable_file_sink,
@@ -265,11 +268,11 @@ fn settings(
     }
 }
 
-struct ResolutionCase {
+struct FixtureResolutionCase {
     name: &'static str,
-    file: Option<LogSettings>,
-    shared_env: LogSettings,
-    application_env: Option<LogSettings>,
+    file: Option<FixtureLogSettings>,
+    shared_env: FixtureLogSettings,
+    application_env: Option<FixtureLogSettings>,
     expected_level: LevelFilter,
     expected_root: &'static str,
     expected_file_sink: bool,
@@ -277,16 +280,16 @@ struct ResolutionCase {
     expected_policy: RetainedLogPolicy,
 }
 
-fn settings_resolution_cases() -> [ResolutionCase; 5] {
+fn settings_resolution_cases() -> [FixtureResolutionCase; 5] {
     let default_policy = RetainedLogPolicy::default();
     let json_policy = policy(1_024, Some(1));
     let shared_policy = policy(2_048, Some(2));
     let application_policy = policy(4_096, Some(3));
     [
-        ResolutionCase {
+        FixtureResolutionCase {
             name: "defaults apply when every source is absent",
             file: None,
-            shared_env: LogSettings::default(),
+            shared_env: FixtureLogSettings::default(),
             application_env: None,
             expected_level: LevelFilter::Info,
             expected_root: "default",
@@ -294,7 +297,7 @@ fn settings_resolution_cases() -> [ResolutionCase; 5] {
             expected_console_sink: false,
             expected_policy: default_policy,
         },
-        ResolutionCase {
+        FixtureResolutionCase {
             name: "JSON supplies values when environments are absent",
             file: Some(settings(
                 Some(LevelFilter::Debug),
@@ -303,7 +306,7 @@ fn settings_resolution_cases() -> [ResolutionCase; 5] {
                 Some(true),
                 Some(json_policy),
             )),
-            shared_env: LogSettings::default(),
+            shared_env: FixtureLogSettings::default(),
             application_env: None,
             expected_level: LevelFilter::Debug,
             expected_root: "json",
@@ -311,7 +314,7 @@ fn settings_resolution_cases() -> [ResolutionCase; 5] {
             expected_console_sink: true,
             expected_policy: json_policy,
         },
-        ResolutionCase {
+        FixtureResolutionCase {
             name: "SC environment overrides JSON for ordinary fields",
             file: Some(settings(
                 Some(LevelFilter::Debug),
@@ -334,7 +337,7 @@ fn settings_resolution_cases() -> [ResolutionCase; 5] {
             expected_console_sink: false,
             expected_policy: shared_policy,
         },
-        ResolutionCase {
+        FixtureResolutionCase {
             name: "application environment overrides every ordinary field",
             file: Some(settings(
                 Some(LevelFilter::Debug),
@@ -363,7 +366,7 @@ fn settings_resolution_cases() -> [ResolutionCase; 5] {
             expected_console_sink: true,
             expected_policy: application_policy,
         },
-        ResolutionCase {
+        FixtureResolutionCase {
             name: "a non-empty JSON root wins over both environments",
             file: Some(settings(None, Some("json"), None, None, None)),
             shared_env: settings(None, Some("shared"), None, None, None),
@@ -380,7 +383,7 @@ fn settings_resolution_cases() -> [ResolutionCase; 5] {
 #[test]
 fn settings_resolution_contract_table() {
     for case in settings_resolution_cases() {
-        let resolved = LogSettings::resolve(LogSettingsInputs {
+        let resolved = FixtureLogSettings::resolve(FixtureLogSettingsInputs {
             file: case.file,
             shared_env: case.shared_env,
             application_env: case.application_env,
@@ -414,7 +417,7 @@ fn settings_resolution_contract_table() {
 
 #[test]
 fn settings_null_empty_environment_and_atomic_policy_contracts() {
-    let null_json: LogSettings = serde_json::from_str(
+    let null_json: FixtureLogSettings = serde_json::from_str(
         r#"{
             "level": null,
             "logRoot": null,
@@ -424,11 +427,11 @@ fn settings_null_empty_environment_and_atomic_policy_contracts() {
         }"#,
     )
     .expect("null JSON fields deserialize as absent overrides");
-    assert_eq!(null_json, LogSettings::default());
+    assert_eq!(null_json, FixtureLogSettings::default());
 
     let shared_policy = policy(2_048, Some(2));
     let application_policy = policy(4_096, Some(3));
-    let resolved = LogSettings::resolve(LogSettingsInputs {
+    let resolved = FixtureLogSettings::resolve(FixtureLogSettingsInputs {
         file: Some(settings(
             None,
             None,
@@ -453,7 +456,7 @@ fn settings_null_empty_environment_and_atomic_policy_contracts() {
     assert!(resolved.enable_console_sink);
     assert_eq!(resolved.retained_log_policy, shared_policy);
 
-    let resolved = LogSettings::resolve(LogSettingsInputs {
+    let resolved = FixtureLogSettings::resolve(FixtureLogSettingsInputs {
         file: Some(settings(
             None,
             None,
@@ -471,14 +474,14 @@ fn settings_null_empty_environment_and_atomic_policy_contracts() {
         "the winning retainedLogPolicy replaces the complete policy instead of merging fields"
     );
 
-    let error = LogSettings::resolve(LogSettingsInputs {
+    let error = FixtureLogSettings::resolve(FixtureLogSettingsInputs {
         file: None,
         shared_env: settings(None, Some(""), None, None, None),
         application_env: None,
         default_root: PathBuf::from("default"),
     })
     .expect_err("an explicitly empty SC_LOG_ROOT is invalid");
-    assert_eq!(error, LogSettingsError::InvalidValue);
+    assert_eq!(error, FixtureLogSettingsError::InvalidValue);
 }
 
 fn contract_event() -> LogEvent {
@@ -503,14 +506,14 @@ fn contract_event() -> LogEvent {
 
 #[test]
 fn private_sink_contract_object_safety() {
-    struct ContractSink;
+    struct FixtureContractSink;
 
-    impl PrivateSinkContract<HarnessError> for ContractSink {
-        fn write(&self, _: &LogEvent) -> Result<(), HarnessError> {
+    impl FixtureSinkContract<FixtureHarnessError> for FixtureContractSink {
+        fn write(&self, _: &LogEvent) -> Result<(), FixtureHarnessError> {
             Ok(())
         }
 
-        fn flush(&self) -> Result<(), HarnessError> {
+        fn flush(&self) -> Result<(), FixtureHarnessError> {
             Ok(())
         }
 
@@ -523,7 +526,7 @@ fn private_sink_contract_object_safety() {
         }
     }
 
-    let sink: Arc<dyn PrivateSinkContract<HarnessError>> = Arc::new(ContractSink);
+    let sink: Arc<dyn FixtureSinkContract<FixtureHarnessError>> = Arc::new(FixtureContractSink);
     assert_private_sink_object_safe(Arc::clone(&sink));
     sink.write(&contract_event()).expect("write contract");
     sink.flush().expect("flush contract");
@@ -540,7 +543,7 @@ fn registration_error_payloads() {
         )
         .source(Box::new(std::io::Error::other("already registered"))),
     );
-    let error = SinkRegistrationError::Duplicate(HarnessError(context));
+    let error = FixtureSinkRegistrationError::Duplicate(FixtureHarnessError(context));
     let payload = error.payload();
     assert_eq!(
         payload.context().diagnostic().code.as_str(),
@@ -554,12 +557,12 @@ fn registration_error_payloads() {
     );
 
     for error in [
-        SinkRegistrationError::Invalid(HarnessError(Box::new(ErrorContext::new(
+        FixtureSinkRegistrationError::Invalid(FixtureHarnessError(Box::new(ErrorContext::new(
             ErrorCode::new_static("SC_LOG_SINK_REGISTRATION_INVALID"),
             "invalid sink",
             Remediation::not_recoverable("repair the sink contract"),
         )))),
-        SinkRegistrationError::Closed(HarnessError(Box::new(ErrorContext::new(
+        FixtureSinkRegistrationError::Closed(FixtureHarnessError(Box::new(ErrorContext::new(
             ErrorCode::new_static("SC_LOG_SINK_REGISTRATION_CLOSED"),
             "closed logger",
             Remediation::not_recoverable("register before shutdown"),
@@ -579,19 +582,19 @@ fn registration_error_payloads() {
 
 #[test]
 fn contract_harness_preserves_context() {
-    let snapshot = EnvSnapshot::default();
+    let snapshot = FixtureEnvSnapshot::default();
     assert!(snapshot.0.is_empty());
     for error in [
-        LogSettingsError::PrefixCollision,
-        LogSettingsError::InvalidEnvironment,
-        LogSettingsError::UnknownKey,
-        LogSettingsError::InvalidValue,
-        LogSettingsError::Resolution,
+        FixtureLogSettingsError::PrefixCollision,
+        FixtureLogSettingsError::InvalidEnvironment,
+        FixtureLogSettingsError::UnknownKey,
+        FixtureLogSettingsError::InvalidValue,
+        FixtureLogSettingsError::Resolution,
     ] {
         assert!(error.code().starts_with("LOG-"));
     }
 
-    let payload = HarnessError(Box::new(
+    let payload = FixtureHarnessError(Box::new(
         ErrorContext::new(
             ErrorCode::new_static("SC_LOG_SINK_CONTRACT"),
             "contract sink rejected the event",
