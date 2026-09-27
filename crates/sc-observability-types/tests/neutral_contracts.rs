@@ -566,7 +566,10 @@ fn metric_model_failures() {
     )]));
     let decorated_value = serde_json::to_value(decorated_record).unwrap();
     assert_eq!(decorated_value["unit"], json!("ms"));
-    assert_eq!(decorated_value["attributes"], json!({"region": "us-west"}));
+    assert_eq!(
+        decorated_value["attributes"],
+        json!({"region": {"kind": "string", "data": "us-west"}})
+    );
     assert_eq!(
         serde_json::from_value::<MetricRecord>(value.clone()).unwrap(),
         record
