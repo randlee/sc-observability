@@ -107,9 +107,13 @@ def verify_stage(
             or evidence.get("publication") != "pending_B.7"):
         raise ValueError("stage schema/version/publication mismatch")
     actual_source = evidence.get("source_commit", "")
-    if not re.fullmatch(r"[0-9a-f]{40}", actual_source) or (source_commit and actual_source != source_commit):
+    if not isinstance(actual_source, str) or not re.fullmatch(r"[0-9a-f]{40}", actual_source) or (
+        source_commit and actual_source != source_commit
+    ):
         raise ValueError("stage source commit mismatch")
     packages = evidence.get("packages", [])
+    if not isinstance(packages, list) or not all(isinstance(item, dict) for item in packages):
+        raise ValueError("stage packages must be a list of objects")
     if tuple(item.get("name") for item in packages) != PACKAGES:
         raise ValueError("stage must contain exactly the six public packages in release order")
     for item in packages:

@@ -104,6 +104,24 @@ class StageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'source commit'):
             verify_stage(self.root, VERSION, 'b' * 40)
 
+    def test_rejects_non_string_source_commit(self):
+        self.manifest['source_commit'] = 5
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'source commit'):
+            verify_stage(self.root, VERSION)
+
+    def test_rejects_non_list_packages(self):
+        self.manifest['packages'] = {}
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'packages must be a list of objects'):
+            verify_stage(self.root, VERSION)
+
+    def test_rejects_non_object_package(self):
+        self.manifest['packages'][0] = 5
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'packages must be a list of objects'):
+            verify_stage(self.root, VERSION)
+
     def test_rejects_private_package_leak(self):
         self.manifest['packages'].append({'name': 'sc-observability-log-consumer-check'})
         self.save()
