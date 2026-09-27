@@ -140,6 +140,11 @@ environment scan, any key beginning with the exact selected `${prefix}_LOG_`
 namespace but not listed above is an unknown-key error; unrelated environment
 keys are ignored. Duplicate/case-variant environment keys are rejected.
 
+D.13's private fixture tests only `resolve`'s documented precedence and
+defaults. Parsing the `SC_LOG_*` inventory through `from_env` and converting a
+resolved value through `into_logger_config` are exclusively D.1 deliverables;
+the fixture deliberately does not duplicate either implementation surface.
+
 
 
 

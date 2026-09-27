@@ -238,6 +238,249 @@ fn log_root_validation() {
     assert_eq!(error, LogSettingsError::InvalidValue);
 }
 
+fn policy(
+    rotation_max_bytes: u64,
+    maintenance_max_work_per_pass: Option<usize>,
+) -> RetainedLogPolicy {
+    RetainedLogPolicy {
+        rotation_max_bytes: sc_observability::ByteCount::from_bytes(rotation_max_bytes),
+        maintenance_max_work_per_pass,
+        ..RetainedLogPolicy::default()
+    }
+}
+
+fn settings(
+    level: Option<LevelFilter>,
+    log_root: Option<&str>,
+    enable_file_sink: Option<bool>,
+    enable_console_sink: Option<bool>,
+    retained_log_policy: Option<RetainedLogPolicy>,
+) -> LogSettings {
+    LogSettings {
+        level,
+        log_root: log_root.map(PathBuf::from),
+        enable_file_sink,
+        enable_console_sink,
+        retained_log_policy,
+    }
+}
+
+struct ResolutionCase {
+    name: &'static str,
+    file: Option<LogSettings>,
+    shared_env: LogSettings,
+    application_env: Option<LogSettings>,
+    expected_level: LevelFilter,
+    expected_root: &'static str,
+    expected_file_sink: bool,
+    expected_console_sink: bool,
+    expected_policy: RetainedLogPolicy,
+}
+
+fn settings_resolution_cases() -> [ResolutionCase; 5] {
+    let default_policy = RetainedLogPolicy::default();
+    let json_policy = policy(1_024, Some(1));
+    let shared_policy = policy(2_048, Some(2));
+    let application_policy = policy(4_096, Some(3));
+    [
+        ResolutionCase {
+            name: "defaults apply when every source is absent",
+            file: None,
+            shared_env: LogSettings::default(),
+            application_env: None,
+            expected_level: LevelFilter::Info,
+            expected_root: "default",
+            expected_file_sink: true,
+            expected_console_sink: false,
+            expected_policy: default_policy,
+        },
+        ResolutionCase {
+            name: "JSON supplies values when environments are absent",
+            file: Some(settings(
+                Some(LevelFilter::Debug),
+                Some("json"),
+                Some(false),
+                Some(true),
+                Some(json_policy),
+            )),
+            shared_env: LogSettings::default(),
+            application_env: None,
+            expected_level: LevelFilter::Debug,
+            expected_root: "json",
+            expected_file_sink: false,
+            expected_console_sink: true,
+            expected_policy: json_policy,
+        },
+        ResolutionCase {
+            name: "SC environment overrides JSON for ordinary fields",
+            file: Some(settings(
+                Some(LevelFilter::Debug),
+                None,
+                Some(false),
+                Some(true),
+                Some(json_policy),
+            )),
+            shared_env: settings(
+                Some(LevelFilter::Warn),
+                Some("shared"),
+                Some(true),
+                Some(false),
+                Some(shared_policy),
+            ),
+            application_env: None,
+            expected_level: LevelFilter::Warn,
+            expected_root: "shared",
+            expected_file_sink: true,
+            expected_console_sink: false,
+            expected_policy: shared_policy,
+        },
+        ResolutionCase {
+            name: "application environment overrides every ordinary field",
+            file: Some(settings(
+                Some(LevelFilter::Debug),
+                None,
+                Some(false),
+                Some(true),
+                Some(json_policy),
+            )),
+            shared_env: settings(
+                Some(LevelFilter::Warn),
+                Some("shared"),
+                Some(true),
+                Some(false),
+                Some(shared_policy),
+            ),
+            application_env: Some(settings(
+                Some(LevelFilter::Error),
+                Some("application"),
+                Some(false),
+                Some(true),
+                Some(application_policy),
+            )),
+            expected_level: LevelFilter::Error,
+            expected_root: "application",
+            expected_file_sink: false,
+            expected_console_sink: true,
+            expected_policy: application_policy,
+        },
+        ResolutionCase {
+            name: "a non-empty JSON root wins over both environments",
+            file: Some(settings(None, Some("json"), None, None, None)),
+            shared_env: settings(None, Some("shared"), None, None, None),
+            application_env: Some(settings(None, Some("application"), None, None, None)),
+            expected_level: LevelFilter::Info,
+            expected_root: "json",
+            expected_file_sink: true,
+            expected_console_sink: false,
+            expected_policy: default_policy,
+        },
+    ]
+}
+
+#[test]
+fn settings_resolution_contract_table() {
+    for case in settings_resolution_cases() {
+        let resolved = LogSettings::resolve(LogSettingsInputs {
+            file: case.file,
+            shared_env: case.shared_env,
+            application_env: case.application_env,
+            default_root: PathBuf::from("default"),
+        })
+        .unwrap_or_else(|error| panic!("{}: {error:?}", case.name));
+        assert_eq!(resolved.level, case.expected_level, "{}", case.name);
+        assert_eq!(
+            resolved.log_root.as_path(),
+            Path::new(case.expected_root),
+            "{}",
+            case.name
+        );
+        assert_eq!(
+            resolved.enable_file_sink, case.expected_file_sink,
+            "{}",
+            case.name
+        );
+        assert_eq!(
+            resolved.enable_console_sink, case.expected_console_sink,
+            "{}",
+            case.name
+        );
+        assert_eq!(
+            resolved.retained_log_policy, case.expected_policy,
+            "{}",
+            case.name
+        );
+    }
+}
+
+#[test]
+fn settings_null_empty_environment_and_atomic_policy_contracts() {
+    let null_json: LogSettings = serde_json::from_str(
+        r#"{
+            "level": null,
+            "logRoot": null,
+            "enableFileSink": null,
+            "enableConsoleSink": null,
+            "retainedLogPolicy": null
+        }"#,
+    )
+    .expect("null JSON fields deserialize as absent overrides");
+    assert_eq!(null_json, LogSettings::default());
+
+    let shared_policy = policy(2_048, Some(2));
+    let application_policy = policy(4_096, Some(3));
+    let resolved = LogSettings::resolve(LogSettingsInputs {
+        file: Some(settings(
+            None,
+            None,
+            None,
+            None,
+            Some(policy(1_024, Some(1))),
+        )),
+        shared_env: settings(
+            Some(LevelFilter::Warn),
+            Some("shared"),
+            Some(false),
+            Some(true),
+            Some(shared_policy),
+        ),
+        application_env: Some(null_json),
+        default_root: PathBuf::from("default"),
+    })
+    .expect("null JSON fields do not override SC environment values");
+    assert_eq!(resolved.level, LevelFilter::Warn);
+    assert_eq!(resolved.log_root.as_path(), Path::new("shared"));
+    assert!(!resolved.enable_file_sink);
+    assert!(resolved.enable_console_sink);
+    assert_eq!(resolved.retained_log_policy, shared_policy);
+
+    let resolved = LogSettings::resolve(LogSettingsInputs {
+        file: Some(settings(
+            None,
+            None,
+            None,
+            None,
+            Some(policy(1_024, Some(1))),
+        )),
+        shared_env: settings(None, None, None, None, Some(shared_policy)),
+        application_env: Some(settings(None, None, None, None, Some(application_policy))),
+        default_root: PathBuf::from("default"),
+    })
+    .expect("policy resolution succeeds");
+    assert_eq!(
+        resolved.retained_log_policy, application_policy,
+        "the winning retainedLogPolicy replaces the complete policy instead of merging fields"
+    );
+
+    let error = LogSettings::resolve(LogSettingsInputs {
+        file: None,
+        shared_env: settings(None, Some(""), None, None, None),
+        application_env: None,
+        default_root: PathBuf::from("default"),
+    })
+    .expect_err("an explicitly empty SC_LOG_ROOT is invalid");
+    assert_eq!(error, LogSettingsError::InvalidValue);
+}
+
 fn contract_event() -> LogEvent {
     LogEvent {
         version: SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("static schema version"),
