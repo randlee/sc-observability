@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Migrate an existing phase's beads to the phase contract (bead obs-bo-10 D6).
 
-  migrate-phase-contract --root <id> [--index <sprints.json>] [--difficulty-csv <path>] [--worklist <path>] [--apply]
+  migrate-phase-contract --root <id> [--index <sprints.jsonl>] [--difficulty-csv <path>] [--worklist <path>] [--apply]
 
 Dry run (default) prints every write it would make as a `bd` command, one per line, and exits 0.
 `--apply` runs them in order and prints each as it is made. The script is idempotent: a second
@@ -38,6 +38,7 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import plan_contract as C  # noqa: E402
+from sprint_index_common import load_phase_plan  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location("phase_contract_check", HERE / "phase_contract_check.py")
 pcc = importlib.util.module_from_spec(_spec)
@@ -87,7 +88,7 @@ class Migration:
         for dev, san in self.pairs.items():
             d, s = self.by.get(dev), self.by.get(san)
             if not d:
-                self.unresolved.append(f"{dev}: listed in sprints.json but not in beads")
+                self.unresolved.append(f"{dev}: listed in the canonical phase plan but not in beads")
                 continue
             md = pcc.meta(d)
             if not pcc.has_label(d, C.SPRINT_LABEL):
@@ -109,19 +110,18 @@ class Migration:
                     self.w(f"{san}: sprint beads are P{C.PRIORITY_SPRINT}", "update", san, "--priority", str(C.PRIORITY_SPRINT))
 
     # 2 ------------------------------------------------------------------------------------------------
-    def pr_target_edges(self) -> None:
-        br2dev = self.check.branch_to_dev()
-        for dev in self.pairs:
+    def planned_dependency_edges(self) -> None:
+        """Add only prerequisite edges declared in the canonical plan."""
+        for row in (self.check.index or {}).get("sprints") or []:
+            if not isinstance(row, dict):
+                continue
+            dev = str(row.get("dev_bead_id") or "")
             d = self.by.get(dev)
             if not d:
                 continue
-            pt = str(pcc.meta(d).get("pr_target") or "")
-            below = br2dev.get(pt)
-            if not below or below == dev:
-                continue
-            san = self.check.sanity_of(below)
-            if san and san not in self.check.blocker_closure(dev):
-                self.w(f"{dev}: pr_target sprint {below}'s sanity gates it", "dep", "add", dev, san)
+            for sanity in row.get("depends_on_sanity_bead_ids") or []:
+                if sanity not in pcc.deps(d, "blocks"):
+                    self.w(f"{dev}: declared sprint prerequisite waits for sanity", "dep", "add", dev, str(sanity))
 
     # 3 ------------------------------------------------------------------------------------------------
     def reparent(self) -> None:
@@ -206,16 +206,15 @@ class Migration:
 
     def plan(self) -> None:
         self.sprint_beads()
-        self.pr_target_edges()
+        self.planned_dependency_edges()
         self.reparent()
         self.findings()
-        self.r16_gates()
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", required=True)
-    ap.add_argument("--index", type=Path, help="authored sprints.json (default from phase-index-path)")
+    ap.add_argument("--index", type=Path, help="authored sprints.jsonl (default from phase-index-path)")
     ap.add_argument("--difficulty-csv", type=Path, help="id,difficulty rows for open findings (default docs/plans/phase-<p>/difficulty.csv)")
     ap.add_argument("--worklist", type=Path, help="where to write the unclassified worklist csv (default: next to the difficulty csv)")
     ap.add_argument("--apply", action="store_true")
@@ -224,7 +223,7 @@ def main() -> int:
         index_path = a.index
         if index_path is None:
             index_path = Path(sh(str(HERE / "phase-index-path"), "--root", a.root).strip())
-        index = json.loads(index_path.read_text(encoding="utf-8"))
+        index = load_phase_plan(index_path, a.root)
         csv_path = a.difficulty_csv or index_path.parent / "difficulty.csv"
         classified = load_csv(csv_path)
         beads = json.loads(sh("bd", "list", "--json", "--all", "--limit", "5000") or "[]")

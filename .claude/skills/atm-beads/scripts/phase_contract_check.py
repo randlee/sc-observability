@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Phase contract check: the authored sprints.json against the live (or to-be-imported) beads.
+"""Phase contract check: the authored JSONL phase plan against the live (or to-be-imported) beads.
 
 Run by validate-plan after check-plan.jq. Prints one problem per line as `<bead-id>: <message>`
 (warnings as `warning: <message>`) and exits 0 (valid), 5 (problems) or 2 (could not run).
 
-  phase_contract_check.py --root <id> [--index <sprints.json>] [--scope <bead-id>]   live beads
-  phase_contract_check.py --plan <plan.jsonl> [--index <sprints.json>]                 import shape, before beads exist
+  phase_contract_check.py --root <id> [--index <sprints.jsonl>] [--scope <bead-id>]   live beads
+  phase_contract_check.py --plan <plan.jsonl> [--index <sprints.jsonl>]                 import shape, before beads exist
   phase_contract_check.py --fixture <fixture.json>                                      committed test fixture
 
 Checks (bead obs-bo-10 deliverables 1-4):
-  membership   the children of the phase root are exactly the pairs listed in sprints.json
+  membership   the children of the phase root are exactly the pairs listed in sprints.jsonl
                (plus plan-gate beads stage:plan*, gate beads, QA beads that `validates` a phase bead and findings
                `caused-by` one: bd keeps one edge type per pair, so the edge is the membership); each pair is linked
   schema       every listed dev bead is a stage:sprint with N >= 1 numbered deliverables, acceptance
@@ -38,7 +38,7 @@ from typing import Any, Callable, Iterable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import plan_contract as C  # noqa: E402
-from sprint_index_common import index_bead_pairs, validate_index  # noqa: E402
+from sprint_index_common import index_bead_pairs, load_phase_plan, validate_index  # noqa: E402
 
 PLAN_GATE_LABELS = ("stage:plan", "stage:plan-review", "stage:plan-fix")
 QA_LABEL = "stage:qa"
@@ -229,6 +229,10 @@ class PhaseCheck:
         self.problems: Problems = []
         self.warnings: list[str] = []
         self.pairs: dict[str, str] = index_bead_pairs(index) if index else {}
+        self.planned_sanity_dependencies: dict[str, list[str]] = {
+            str(row["dev_bead_id"]): list(row.get("depends_on_sanity_bead_ids") or [])
+            for row in (index or {}).get("sprints", []) if isinstance(row, dict)
+        }
         pol = (index or {}).get("policy") or {}
         self.waivers: list[dict[str, Any]] = [w for w in (pol.get("waivers") or []) if isinstance(w, dict)] if isinstance(pol, dict) else []
         self.trunk = ""
@@ -347,10 +351,10 @@ class PhaseCheck:
     # -- checks
     def check_membership(self) -> None:
         if not self.index:
-            self.warn("no sprints.json given; membership not checked")
+            self.warn("no phase plan JSONL given; membership not checked")
             return
         if str(self.index.get("root_bead_id")) != self.root_id:
-            self.problem(self.root_id, f"sprints.json root_bead_id {self.index.get('root_bead_id')!r} is not {self.root_id}")
+            self.problem(self.root_id, f"phase plan root_bead_id {self.index.get('root_bead_id')!r} is not {self.root_id}")
         listed: set[str] = set(self.pairs) | set(self.pairs.values())
         for dev, san in self.pairs.items():
             for bid in (dev, san):
@@ -365,6 +369,9 @@ class PhaseCheck:
                     self.problem(san, f"paired sanity bead does not block on its dev bead {dev}")
                 if str(meta(self.by[san]).get("dev_bead") or "") != dev:
                     self.problem(san, f"metadata.dev_bead is not {dev}")
+            for prerequisite_sanity in self.planned_sanity_dependencies.get(dev, []):
+                if dev in self.by and prerequisite_sanity not in deps(self.by[dev], "blocks"):
+                    self.problem(dev, f"missing direct planned dependency on sanity bead {prerequisite_sanity} (bd dep add {dev} {prerequisite_sanity})")
         for bid, b in self.by.items():
             if parent_of(b) != self.root_id or bid in listed:
                 continue
@@ -577,27 +584,9 @@ class PhaseCheck:
                 self.check_difficulty(bid, x, required=x.get("status") != "closed")
             elif st == C.FIX_LABEL:
                 self.check_difficulty(bid, x, required=x.get("status") != "closed")
-        # R16: a blocking finding's sanity bead gates every not-started downstream dev bead and every open,
-        # unclaimed finding on a downstream sprint; started work is left alone (warned once)
-        for fid, f in sorted(self.by.items()):
-            if fid not in self.phase_ids or stage(f) != C.FINDING_LABEL or f.get("status") == "closed" or severity(f) != "blocking":
-                continue
-            sprint = self.sprint_of(fid)
-            if not sprint:
-                self.problem(fid, "blocking finding has no sprint (metadata.sprint_bead or a sprint dev bead as ancestor)")
-                continue
-            fsan = self.sanity_of(fid)
-            if not fsan:
-                self.problem(fid, "blocking finding has no stage:dev-sanity bead; its fix cannot gate downstream work")
-                continue
-            if fid not in deps(self.by.get(fsan, {}), "blocks"):
-                self.problem(fsan, f"sanity gate of blocking finding {fid} does not block on it, so it is ready before the fix lands (bd dep add {fsan} {fid})")
-            for target in self.downstream_targets(sprint, self.blocker_closure(fid) | self.blocker_closure(fsan)):
-                if fsan not in deps(self.by[target], "blocks"):
-                    self.problem(target, f"not blocked by blocking finding {fid}'s sanity bead {fsan} (bd dep add {target} {fsan})")
-            for d in self.downstream_devs(sprint):
-                if self.by[d].get("status") == "in_progress":
-                    self.warn(f"{d} is in progress while blocking finding {fid} on {sprint} is open; rebase on the fix when it lands")
+        # Blocking findings are execution state, not plan authority.  They must
+        # never manufacture new edges onto unrelated planned sprints; the
+        # canonical JSONL rows above are the only source of those edges.
         # dev-sanity template variable types recorded on sanity beads
         for san in sanities:
             m = meta(self.by.get(san, {}))
@@ -625,7 +614,7 @@ class PhaseCheck:
             if self.index:
                 validate_index(self.index)
         except RuntimeError as exc:
-            self.problem(self.root_id, f"sprints.json: {exc}")
+            self.problem(self.root_id, f"phase plan: {exc}")
             return self.problems, self.warnings
         if not self.root:
             self.problem(self.root_id, "phase root bead not found")
@@ -701,7 +690,7 @@ def run_fixture(path: Path) -> tuple[Problems, list[str]]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", help="phase root bead id (live mode)")
-    ap.add_argument("--index", type=Path, help="authored sprints.json (default: docs/plans/phase-<p>/sprints.json)")
+    ap.add_argument("--index", type=Path, help="authored sprints.jsonl (default: docs/plans/phase-<p>/sprints.jsonl)")
     ap.add_argument("--plan", type=Path, help="import-shaped plan.jsonl to check before beads exist")
     ap.add_argument("--fixture", type=Path, help="committed fixture JSON (tests)")
     ap.add_argument("--scope", help="accepted for interface parity; doc checks are scoped by validate-plan")
@@ -716,7 +705,7 @@ def main() -> int:
             if not root:
                 print("phase_contract_check: pass --root when the plan file has no root bead", file=sys.stderr)
                 return C.EXIT_CANNOT_RUN
-            index = json.loads(a.index.read_text(encoding="utf-8")) if a.index and a.index.exists() else None
+            index = load_phase_plan(a.index, root) if a.index and a.index.exists() else None
             problems, warnings = PhaseCheck(root, index, beads, live=False).run()
         elif a.root:
             beads = live_beads(a.root)
@@ -731,7 +720,7 @@ def main() -> int:
             if not index_path.exists():
                 print(C.PROBLEM_LINE.format(bead=a.root, message=f"authored phase file {index_path} is missing; the planner commits it with the plan PR"))
                 return C.EXIT_PROBLEMS
-            index = json.loads(index_path.read_text(encoding="utf-8"))
+            index = load_phase_plan(index_path, a.root)
             problems, warnings = PhaseCheck(a.root, index, beads, live=True, history=live_history, prs=live_prs()).run()
         else:
             ap.error("pass --root, --plan or --fixture")

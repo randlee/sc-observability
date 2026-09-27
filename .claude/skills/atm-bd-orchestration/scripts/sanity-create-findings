@@ -195,13 +195,6 @@ def main() -> int:
                 prerequisite_id = children[prerequisite["finding_ref"]]
                 if prerequisite_id != child:
                     command(["bd", "dep", "add", child, prerequisite_id, "--type", BLOCKS_RELATION], args.actor)
-        gate_script = Path(__file__).with_name("blocking-finding-gates.py")
-        for finding in findings:
-            if str(finding.get("severity") or "blocking").lower() == "blocking":  # same default as the child's priority
-                gate_argv = [str(gate_script), "--finding", children[finding["finding_ref"]]]
-                if args.actor:
-                    gate_argv.extend(["--actor", args.actor])
-                command(gate_argv)
         child_rows = [{"finding_ref": finding["finding_ref"], "id": children[finding["finding_ref"]]} for finding in findings]
         finding_bead_ids = [row["id"] for row in child_rows]
         report["finding_bead_ids"] = finding_bead_ids

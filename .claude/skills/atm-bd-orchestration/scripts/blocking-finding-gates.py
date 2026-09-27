@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Create R16 downstream gates for a newly filed blocking finding."""
+"""Compatibility shim for the retired finding-to-sprint edge fan-out.
+
+Planned sprint edges are authored only in ``sprints.jsonl``. A finding may
+block its own remediation, but it must not mutate the plan graph.
+"""
 from __future__ import annotations
 
 import argparse
@@ -61,6 +65,11 @@ def main() -> int:
     parser.add_argument("--finding", required=True)
     parser.add_argument("--actor", default=os.environ.get("ATM_IDENTITY", ""))
     args = parser.parse_args()
+    print(json.dumps({"finding": args.finding, "edges": [],
+                      "note": "no-op: canonical phase plans own sprint dependencies"}))
+    return 0
+    # The old implementation remains below temporarily as migration context;
+    # it is unreachable and cannot issue Beads writes.
     try:
         finding = json.loads(command(["bd", "show", args.finding, "--json"], args.actor, capture=True))[0]
         all_beads = json.loads(command(["bd", "list", "--all", "-n", "0", "--json"], args.actor, capture=True))

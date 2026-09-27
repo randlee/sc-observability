@@ -16,7 +16,7 @@ Run the repository-local report command from the checkout or worktree being used
 ```
 
 Use `--detailed` for one block per sprint. The command reads the committed
-`docs/plans/phase-<p>/sprints.json`, then refreshes bead state and PR/CI state.
+`docs/plans/phase-<p>/sprints.jsonl`, then refreshes bead state and PR/CI state.
 Rows are never hand-typed.
 
 ## Dependency diagram
@@ -36,12 +36,13 @@ opened by default. Wyvern runs detached in the background, with output sent to
 a log, so the agent remains available. Missing or failing Wyvern does not
 prevent publication; no alternative viewer is launched automatically.
 
-By default, DAG generation commits and pushes
-`docs/plans/phase-<p>/phase-<p>-dag.html` and the bead-ID `sprints.json` to the
-root bead's `integration_branch`. The HTML embeds the SVG directly, including
+By default, DAG generation commits and pushes only
+`docs/plans/phase-<p>/phase-<p>-dag.html` to the root bead's
+`integration_branch`. It reads the committed canonical `sprints.jsonl` and
+never rewrites it from Beads state. The HTML embeds the SVG directly, including
 state tooltips and zoom controls, without external dependencies. Each refresh
 leaves a permanent Git record. Both artifacts are required before plan review.
-A temporary detached worktree stages only these two files; publication never
+A temporary detached worktree stages only the HTML artifact; publication never
 changes an existing checkout or force-pushes over concurrent work.
 
 Local render intermediates live under
@@ -85,15 +86,14 @@ validates that gate. QA badges are overlays and do not change the DAG layout.
 
 ## Data sources
 
-The beads are the source of truth. The phase index contains only the phase
-`root_bead_id` and a `sprints` array of `{dev_bead_id, sanity_bead_id}` pairs.
-It defines which foundational beads to query. Its schema is
-`docs/plans/sprints.schema.json`; it is separate from the import JSONL used
-to create and validate the beads. Bead content is never copied into this index.
+The canonical phase plan is the source of graph truth. Each `sprints.jsonl`
+line is `[sprint_name, sanity_bead_id, depends_on_sprint_names]`; the dev ID
+is derived as `obs-<sprint_name>`. Beads supply only live state and content.
+The report never derives or persists plan edges from a Beads snapshot.
 
 The report reads phase identity and integration branch from the root bead,
-and sprint names, titles, stack layers, branches and dependencies from the
-live sprint beads. Table ordering follows current bead layer then sprint
+and sprint names, titles, stack layers, and branches from live sprint beads.
+Dependency order comes from the canonical plan. Table ordering follows current bead layer then sprint
 number. It verifies the indexed sanity pairing, derives QA beads from live
 graph edges, and counts open findings across QA rounds. Paginated `gh api`
 pull-request results match each dev bead's branch, then `gh pr view` fetches

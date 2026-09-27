@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Validate a plan written to beads. Mandatory before import and before dispatch.
 #
-#   validate-plan --file <plan.jsonl> [--root <id> --phase <p>] [--index <sprints.json>]   rendered plan, before `bd import`
-#   validate-plan --root <id> [--index <sprints.json>] [--scope <bead-id>]                  live beads under a phase root
+#   validate-plan --file <plan.jsonl> [--root <id> --phase <p>] [--index <sprints.jsonl>]   rendered plan, before `bd import`
+#   validate-plan --root <id> [--index <sprints.jsonl>] [--scope <bead-id>]                  live beads under a phase root
 #
-# The authored phase definition is docs/plans/phase-<p>/sprints.json (the planner commits it in the
+# The authored phase definition is docs/plans/phase-<p>/sprints.jsonl (the planner commits it in the
 # plan PR; it is never generated from beads). --index points at another copy; --scope limits the
 # REQ/ADR doc checks to one bead's own ids (an assignee validating its own branch).
 #
@@ -19,7 +19,7 @@
 #   4. every assignee is an ATM member of this team, and every sanity check
 #      bead is assigned to the dev-sanity role's member (scripts/resolve-role);
 #   5. scripts/phase_contract_check.py: the children of the root are exactly the pairs in
-#      sprints.json, the stage:sprint schema (deliverables, acceptance keys, difficulty),
+#      sprints.jsonl, the stage:sprint schema (deliverables, acceptance keys, difficulty),
 #      graph invariants (pr_target sanity closure, owned paths, handoffs) and, in root mode,
 #      the run-time state invariants (no reopen after PASS, blockers closed before start,
 #      PASS has QA, one fix round, PR base == pr_target, severity priority, human gates);
@@ -37,7 +37,7 @@ while [ $# -gt 0 ]; do
     --phase) phase=$2; shift 2 ;;
     --index) index=$2; shift 2 ;;
     --scope) scope=$2; shift 2 ;;
-    --write) echo "validate-plan: --write was removed; sprints.json is authored by the planner and committed in the plan PR (atm-beads resources/planning.md)" >&2; exit 2 ;;
+    --write) echo "validate-plan: --write was removed; sprints.jsonl is authored by the planner and committed in the plan PR (atm-beads resources/planning.md)" >&2; exit 2 ;;
     *) echo "validate-plan: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -103,7 +103,7 @@ while IFS= read -r dep; do
 done < <(jq -rs '(map(.id)) as $ids | [.[] | (.dependencies // [])[] | select(.type == "blocks") | .depends_on_id]
   | unique | map(select(. as $d | $ids | index($d) | not)) | .[]' "$plan")
 
-# 2c. the phase contract: authored sprints.json against the beads (membership, schema, graph, state)
+# 2c. the phase contract: authored sprints.jsonl against the beads (membership, schema, graph, state)
 if [ -n "$root" ] && [ -z "$file" ]; then
   if [ -z "$index" ]; then
     index=$("$here/phase-index-path" --root "$root") || { echo "validate-plan: could not determine the phase index path for $root" >&2; exit 2; }
