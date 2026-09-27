@@ -42,6 +42,31 @@ EXIT_PROBLEMS: int = 5
 PROBLEM_LINE: str = "{bead}: {message}"  # one per stdout line
 WARNING_PREFIX: str = "warning: "
 
+# Every validator failure is rendered from this small, stable action registry.
+# The message remains evidence; the code and action tell the receiver who may
+# change it.  Graph changes are deliberately user-only.
+VALIDATOR_ACTIONS: dict[str, tuple[tuple[str, str], ...]] = {
+    "PLAN.INVALID": (("planner", "correct the declared plan metadata or content, then rerun validate-plan"),),
+    "PLAN.MISSING": (("assignee", "rebase onto origin/<pr_target> so the committed plan is present"),
+                     ("lead", "merge the plan PR into that pr_target base")),
+    "PLAN.DIVERGED": (("user", "review the sprints.jsonl change before execution continues"),),
+    "GRAPH.UNPLANNED_EDGE": (("user", "approve bd dep remove <a> <b>"),
+                               ("user", "or add the dependency to sprints.jsonl in a plan PR")),
+    "GRAPH.MISSING_EDGE": (("user", "approve the matching bd dep add command or amend sprints.jsonl in a plan PR"),),
+    "STATE.WAIVER": (("user", "record a policy.waivers entry after ruling"),),
+    "ENV.CANNOT_RUN": (("lead", "repair the validator environment and rerun validate-plan"),),
+}
+
+
+def validator_problem(bead: str, code: str, message: str) -> str:
+    """Stable multi-line validator report with at least one actor-tagged action."""
+    actions = VALIDATOR_ACTIONS.get(code)
+    if not actions:
+        raise RuntimeError(f"validator code {code} has no registered action")
+    lines = [f"{bead}: {code}: {message}"]
+    lines.extend(f"  action[{who}]: {what}" for who, what in actions)
+    return "\n".join(lines)
+
 # Legacy in-memory fixture keys. Persisted phase plans use sprints.jsonl tuples.
 INDEX_OPTIONAL_KEYS: tuple[str, ...] = ("integration_branch", "review_artifacts", "policy")
 POLICY_KEYS: tuple[str, ...] = ("human_gates", "waivers")

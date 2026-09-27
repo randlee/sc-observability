@@ -233,6 +233,8 @@ class PhaseCheck:
             str(row["dev_bead_id"]): list(row.get("depends_on_sanity_bead_ids") or [])
             for row in (index or {}).get("sprints", []) if isinstance(row, dict)
         }
+        self.declared_edge_rows = {str(row["dev_bead_id"]) for row in (index or {}).get("sprints", [])
+                                   if isinstance(row, dict) and "depends_on_sanity_bead_ids" in row}
         pol = (index or {}).get("policy") or {}
         self.waivers: list[dict[str, Any]] = [w for w in (pol.get("waivers") or []) if isinstance(w, dict)] if isinstance(pol, dict) else []
         self.trunk = ""
@@ -251,14 +253,16 @@ class PhaseCheck:
                     changed = True
 
     # -- reporting
-    def problem(self, bead: str, msg: str, check: str = "") -> None:
+    def problem(self, bead: str, msg: str, check: str = "", code: str = "PLAN.INVALID") -> None:
         """Record a problem; a state check named in policy.waivers for this bead becomes a warning."""
         if check:
             for w in self.waivers:
                 if w.get("bead") == bead and w.get("check") == check:
                     self.warn(f"waived {check} on {bead}: {msg} [{w.get('reason')}]")
                     return
-        self.problems.append(C.PROBLEM_LINE.format(bead=bead, message=msg))
+        if check in C.WAIVABLE_CHECKS:
+            code = "STATE.WAIVER"
+        self.problems.append(C.validator_problem(bead, code, msg))
 
     def warn(self, msg: str) -> None:
         self.warnings.append(C.WARNING_PREFIX + msg)
@@ -353,7 +357,16 @@ class PhaseCheck:
                     self.problem(san, f"metadata.dev_bead is not {dev}")
             for prerequisite_sanity in self.planned_sanity_dependencies.get(dev, []):
                 if dev in self.by and prerequisite_sanity not in deps(self.by[dev], "blocks"):
-                    self.problem(dev, f"missing direct planned dependency on sanity bead {prerequisite_sanity}; report it to the user")
+                    self.problem(dev, f"missing direct planned dependency on sanity bead {prerequisite_sanity}", code="GRAPH.MISSING_EDGE")
+            if dev in self.by and dev in self.declared_edge_rows:
+                allowed = set(self.planned_sanity_dependencies.get(dev, []))
+                for blocker in deps(self.by[dev], "blocks"):
+                    if blocker not in allowed:
+                        self.problem(dev, f"blocks edge {dev} -> {blocker} is not declared by sprints.jsonl; approve `bd dep remove {dev} {blocker}` or add it to the plan", code="GRAPH.UNPLANNED_EDGE")
+            if san in self.by and dev in self.declared_edge_rows:
+                for blocker in deps(self.by[san], "blocks"):
+                    if blocker != dev:
+                        self.problem(san, f"blocks edge {san} -> {blocker} is not declared by sprints.jsonl; approve `bd dep remove {san} {blocker}` or add it to the plan", code="GRAPH.UNPLANNED_EDGE")
         for bid, b in self.by.items():
             if parent_of(b) != self.root_id or bid in listed:
                 continue
@@ -688,7 +701,7 @@ def main() -> int:
                     return C.EXIT_CANNOT_RUN
                 index_path = Path(out.stdout.strip())
             if not index_path.exists():
-                print(C.PROBLEM_LINE.format(bead=a.root, message=f"authored phase file {index_path} is missing; the planner commits it with the plan PR"))
+                print(C.validator_problem(a.root, "PLAN.MISSING", f"authored phase file {index_path} is missing"))
                 return C.EXIT_PROBLEMS
             index = load_phase_plan(index_path, a.root)
             problems, warnings = PhaseCheck(a.root, index, beads, live=True, history=live_history, prs=live_prs()).run()

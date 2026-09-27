@@ -115,6 +115,14 @@ else
   [ -n "$root" ] && contract_args+=(--root "$root")
   [ -n "$index" ] && contract_args+=(--index "$index")
 fi
+if [ -n "$root" ] && [ -z "$file" ] && [ ! -f "$index" ]; then
+  problems+=("$root: PLAN.MISSING: authored phase file $index is missing
+  action[assignee]: rebase onto origin/<pr_target> so the committed plan is present
+  action[lead]: merge the plan PR into that pr_target base")
+elif [ -n "$root" ] && [ -z "$file" ] && ! git diff --quiet origin/develop -- "$index"; then
+  problems+=("$root: PLAN.DIVERGED: $index differs from origin/develop
+  action[user]: review the sprints.jsonl change before execution continues")
+fi
 out=$(python3 "$here/phase_contract_check.py" "${contract_args[@]}" 2>"$scratch/contract.err"); rc=$?
 case $rc in
   0) [ -n "$out" ] && printf '%s\n' "$out" ;;
@@ -178,6 +186,14 @@ if [ ${#problems[@]} -eq 0 ]; then
   echo "plan valid: $(jq -s '[.[] | select((.labels // []) | index("stage:dev"))] | length' "$plan") dev beads checked"
   exit 0
 fi
-printf '%s\n' "${problems[@]}"
+for problem in "${problems[@]}"; do
+  while IFS= read -r line; do
+    case "$line" in
+      '  action['*|warning:*) printf '%s\n' "$line" ;;
+      *': '[A-Z]*.*': '*) printf '%s\n' "$line" ;;
+      *) printf '%s: PLAN.INVALID: %s\n  action[planner]: correct the declared plan metadata or content, then rerun validate-plan\n' "${root:-plan}" "$line" ;;
+    esac
+  done <<< "$problem"
+done
 echo "${#problems[@]} problem(s)" >&2
 exit 5

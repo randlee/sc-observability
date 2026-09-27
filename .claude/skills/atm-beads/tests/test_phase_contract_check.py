@@ -108,7 +108,7 @@ class FixtureTable(unittest.TestCase):
         bad = subprocess.run([sys.executable, str(script), "--fixture", str(FIXTURES / "important_finding_p3.json")], capture_output=True, text=True)
         self.assertEqual(bad.returncode, C.EXIT_PROBLEMS)
         for line in bad.stdout.splitlines():
-            self.assertRegex(line, r"^(warning: |[A-Za-z0-9._-]+: )")
+            self.assertRegex(line, r"^(warning: |  action\[[a-z]+\]: |[A-Za-z0-9._-]+: [A-Z.]+: )")
 
 
 class IndexSchema(unittest.TestCase):
@@ -128,6 +128,12 @@ class IndexSchema(unittest.TestCase):
             validate_index(idx)
 
 class Constants(unittest.TestCase):
+    def test_every_emitted_validator_code_has_a_documented_action(self):
+        table = (HERE.parent / "resources" / "validator-actions.md").read_text()
+        for code, actions in C.VALIDATOR_ACTIONS.items():
+            self.assertIn(f"`{code}`", table)
+            self.assertTrue(actions)
+
     def test_frozen_interface(self):
         self.assertEqual(C.SEVERITY_PRIORITY, {"blocking": 1, "important": 2, "minor": 4})
         self.assertEqual(C.PRIORITY_SPRINT, 2)
