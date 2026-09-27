@@ -95,8 +95,7 @@ def main():
     }.items():
         boundary_match = load_boundary_manifest(package)
         if boundary_match is None:
-            deferred_consumers.append(package)
-            continue
+            raise ValueError(f'{package} boundary manifest is missing')
         _, boundary = boundary_match
         validate_consumer_manifest(tomllib.loads(path.read_text(encoding='utf-8')), package, workspace, boundary)
         validated_consumers.append(package)
