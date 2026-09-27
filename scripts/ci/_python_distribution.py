@@ -9,6 +9,7 @@ import tarfile
 import zipfile
 from pathlib import Path, PurePosixPath
 from _hashing import digest
+from python_arm64 import pe_machine
 
 try:
     import tomllib
@@ -167,13 +168,8 @@ def verify_native_architecture(data: bytes, tag: str) -> None:
         expected = 0x100000c if tag.endswith('arm64') else 0x1000007
         valid = (len(data) >= 8 and data[:4] == b'\xcf\xfa\xed\xfe'
                  and int.from_bytes(data[4:8], 'little') == expected)
-    elif tag == 'win_amd64':
-        offset = int.from_bytes(data[60:64], 'little') if len(data) >= 64 else len(data)
-        valid = (data[:2] == b'MZ' and data[offset:offset + 4] == b'PE\0\0'
-                 and int.from_bytes(data[offset + 4:offset + 6], 'little') == 0x8664)
-    elif tag == 'win_arm64':
-        from python_arm64 import is_pe_arm64
-        valid = is_pe_arm64(data)
+    elif tag in ('win_amd64', 'win_arm64'):
+        valid = pe_machine(data) == {'win_amd64': 0x8664, 'win_arm64': 0xAA64}[tag]
     else:
         valid = False
     if not valid:
