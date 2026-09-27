@@ -13,7 +13,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 from sprint_index_common import run_json, index_bead_pairs, validate_index
-from sprint_qa import choose_round, qa_icon, qa_verdict, findings_summary
+from sprint_qa import choose_round, qa_icon, qa_verdict, findings_summary, qa_for_bead
 
 RENDERER = Path(__file__).resolve().parents[1] / 'renderer'
 NS = 'http://www.w3.org/2000/svg'
@@ -164,9 +164,7 @@ def qa_states(graph, beads, index):
     """Share table QA semantics, counting open findings across every round."""
     result = {}
     for key in graph['nodes']:
-        rounds = [bead for bead in beads.values() if any(
-            edge.get('type') == 'validates' and edge.get('depends_on_id') == key
-            for edge in bead.get('dependencies') or [])]
+        rounds = [bead for bead in beads.values() if qa_for_bead(bead, key)]
         selected = choose_round(rounds)
         round_ids = {bead['id'] for bead in rounds}
         findings = [bead for bead in beads.values() if any(

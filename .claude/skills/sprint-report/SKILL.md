@@ -95,7 +95,9 @@ The report reads phase identity and integration branch from the root bead,
 and sprint names, titles, stack layers, branches and dependencies from the
 live sprint beads. Table ordering follows current bead layer then sprint
 number. It verifies the indexed sanity pairing, derives QA beads from live
-graph edges, and counts open findings across QA rounds. Paginated `gh api`
+graph edges, and counts open findings across QA rounds. QA lookup recognizes
+`stage:qa` beads through `metadata.checked_bead` or their sprint parent, plus
+legacy `validates` edges. Sanity and finding beads are excluded from QA lookup. Paginated `gh api`
 pull-request results match each dev bead's branch, then `gh pr view` fetches
 selected PR checks. The integration row matches the root bead's integration
 branch into `develop`.

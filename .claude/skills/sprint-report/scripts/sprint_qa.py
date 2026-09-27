@@ -8,6 +8,29 @@ def metadata(bead: dict[str, Any]) -> dict[str, Any]:
     value = bead.get("metadata")
     return value if isinstance(value, dict) else {}
 
+
+def qa_for_bead(bead: dict[str, Any], target: str) -> bool:
+    """Resolve current QA children/checked_bead metadata and legacy validates links."""
+    labels = set(bead.get("labels") or [])
+    if labels & {"stage:dev-sanity", "stage:finding", "qa-finding"}:
+        return False
+    edges = bead.get("dependencies") or []
+    if "stage:qa" in labels:
+        checked = metadata(bead).get("checked_bead")
+        if checked:
+            return checked == target
+        if bead.get("parent") == target or any(
+            (edge.get("type") or edge.get("dependency_type")) == "parent-child"
+            and (edge.get("depends_on_id") or edge.get("id")) == target
+            for edge in edges
+        ):
+            return True
+    return any(
+        (edge.get("type") or edge.get("dependency_type")) == "validates"
+        and (edge.get("depends_on_id") or edge.get("id")) == target
+        for edge in edges
+    )
+
 def choose_round(candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not candidates:
         return None
