@@ -43,7 +43,7 @@ def _decode(node, value, name=None):
         if cls:
             for k,s in props.items():
                 if k not in result:result[k]=_decode(s,s.get('default')) if 'default' in s else None
-            return cls(**{k:v for k,v in result.items() if k!='kind'})
+            return cls(**{k:v for k,v in result.items() if k!='kind' or 'const' not in props[k]})
         return MappingProxyType(result)
     return value
 

@@ -2,6 +2,7 @@
 //! The application owns the logger and composes the supplied plugin with its
 //! own `app_observability_level_change` command.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![deny(deprecated)]
 
 use sc_observability_dto::{
     Failure, LevelChangeDto, LevelChangeRequest, LevelRequestDto, WireEnvelope,
