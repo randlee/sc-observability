@@ -1288,7 +1288,7 @@ They are intentionally narrower than a full ATM migration proof:
 
 ### Phase D types staging
 
-D.12 implements the accepted ADR-017/019 types contract under
+D.12 implements the accepted ADR-017/018/019 types contract under
 `sc_observability_types::v2`, leaving current root exports available during
 migration. It retains `version.workspace = true`; D.21 performs the atomic
 workspace 2.0 activation. The producer contract, constructors, serde shape,
