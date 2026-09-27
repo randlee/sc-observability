@@ -6,12 +6,12 @@ from pathlib import Path
 
 
 def validate(root: Path) -> None:
-    workspace = tomllib.loads((root / "Cargo.toml").read_text())["workspace"]
+    workspace = tomllib.loads((root / "Cargo.toml").read_text(encoding="utf-8"))["workspace"]
     version = workspace["package"]["version"]
     manifests = [(root / member / "Cargo.toml") for member in workspace["members"]]
-    packages = {tomllib.loads(path.read_text())["package"]["name"] for path in manifests}
+    packages = {tomllib.loads(path.read_text(encoding="utf-8"))["package"]["name"] for path in manifests}
     for path in [root / "Cargo.toml", *manifests]:
-        manifest = tomllib.loads(path.read_text())
+        manifest = tomllib.loads(path.read_text(encoding="utf-8"))
         package = manifest.get("package")
         if package and package.get("version") not in (version, {"workspace": True}):
             raise ValueError(f"{path}: package version differs from workspace {version}")
@@ -31,7 +31,7 @@ def validate(root: Path) -> None:
                         raise ValueError(f"{path}: macros must use exact ={version} pin")
     for path in (root / "release").glob("RELEASE-NOTES-*.md"):
         match = re.fullmatch(r"RELEASE-NOTES-(\d+\.\d+\.\d+)\.md", path.name)
-        if match and match[1] == version and f"{version}" not in path.read_text():
+        if match and match[1] == version and f"{version}" not in path.read_text(encoding="utf-8"):
             raise ValueError(f"{path}: release notes omit their release version")
     print(f"version literal validation passed (workspace.package.version={version}; exact macro pin verified)")
 

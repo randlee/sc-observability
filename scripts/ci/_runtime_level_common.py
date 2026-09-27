@@ -42,7 +42,7 @@ VERSION_RE = re.compile(r"\d+\.\d+\.\d+")
 
 
 def qualification() -> dict[str, str]:
-    values = tomllib.loads(QUALIFICATION.read_text())
+    values = tomllib.loads(QUALIFICATION.read_text(encoding="utf-8"))
     required = ("candidate_version", "baseline_version", "baseline_source_commit")
     if set(values) != set(required) or any(not isinstance(values[key], str) for key in required):
         raise SystemExit(f"invalid qualification metadata: {QUALIFICATION}")
@@ -52,7 +52,7 @@ def qualification() -> dict[str, str]:
 
 
 def release_packages() -> tuple[str, ...]:
-    values = tomllib.loads(PUBLISH_ARTIFACTS.read_text())
+    values = tomllib.loads(PUBLISH_ARTIFACTS.read_text(encoding="utf-8"))
     crates = values.get("crates")
     if not isinstance(crates, list):
         raise SystemExit(f"missing crates in {PUBLISH_ARTIFACTS}")

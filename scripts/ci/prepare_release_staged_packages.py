@@ -61,7 +61,7 @@ def metadata(source: Path) -> dict:
 
 
 def release_roster(source: Path) -> list[dict]:
-    manifest = tomllib.loads((source / "release/publish-artifacts.toml").read_text())
+    manifest = tomllib.loads((source / "release/publish-artifacts.toml").read_text(encoding="utf-8"))
     return sorted(manifest["crates"], key=lambda item: item["publish_order"])
 
 
@@ -144,7 +144,7 @@ def package_command(packages: list[str], target_dir: Path) -> list[str]:
 
 
 def inspect_stage(stage: Path, version: str) -> dict:
-    evidence = json.loads((stage / "stage-manifest.json").read_text())
+    evidence = json.loads((stage / "stage-manifest.json").read_text(encoding="utf-8"))
     if evidence.get("schema_version") != 1 or evidence.get("candidate_version") != version:
         raise ValueError("stage schema/version mismatch")
     source_commit = evidence.get("source_commit", "")
@@ -188,7 +188,7 @@ def main() -> int:
     if git(source, "status", "--porcelain"):
         raise SystemExit("candidate source must be committed and clean before staging")
     source_commit = git(source, "rev-parse", "HEAD")
-    workspace = tomllib.loads((source / "Cargo.toml").read_text())
+    workspace = tomllib.loads((source / "Cargo.toml").read_text(encoding="utf-8"))
     if workspace["workspace"]["package"]["version"] != args.version:
         raise SystemExit("requested version differs from the committed workspace train")
     roster = release_roster(source)
