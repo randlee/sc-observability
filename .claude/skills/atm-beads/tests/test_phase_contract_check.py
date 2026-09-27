@@ -60,6 +60,8 @@ EXPECT: dict[str, tuple[str, str] | None] = {
     "sprint_bead_p3": ("x-t-1", "P3 but planned sprint beads are P2"),
     "unlisted_human_gate": ("x-gate-1", "not listed in sprints.json policy.human_gates"),
     "sanity_base_sha_commit_short": ("x-t-1-sanity", "base is a SHA"),
+    "sanity_finding_under_closed_bead": ("x-t-1", "closed with open sanity finding x-t-1.1"),
+    "valid_sanity_finding_under_reopened_bead": None,
     "r16_downstream_not_gated": None,
     "r16_in_progress_exempt_warns": None,
     "r16_deferred_finding_exempts_upstream": None,

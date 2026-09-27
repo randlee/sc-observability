@@ -19,7 +19,8 @@ Checks (bead obs-bo-10 deliverables 1-4):
   state        (live only) no PASS sanity reopened; blockers were closed before a dev bead started; a PASS
                has a QA bead; at most one fix round (second FAIL = ROUND_CAP); open PR base == pr_target;
                finding priority follows severity; sprint beads are P2; difficulty present where required;
-               dev-sanity base/commit types; human gates listed in policy.human_gates. policy.waivers turns an accepted past
+               dev-sanity base/commit types; human gates listed in policy.human_gates; no closed bead with an
+               open sanity finding (a sanity FAIL the lead has not reopened). policy.waivers turns an accepted past
                state violation into a warning
 """
 
@@ -473,6 +474,12 @@ class PhaseCheck:
         need_history = [x for x in sanities if x in self.by]
         with ThreadPoolExecutor(max_workers=16) as pool:
             hist = dict(zip(need_history, pool.map(lambda i: history_transitions(self.history(i)), need_history)))
+        # a sanity FAIL files its findings under the closed checked bead; the lead reopens it before any dispatch
+        for cid, c in sorted(self.by.items()):
+            par = parent_of(c)
+            if c.get("status") != "closed" and isinstance(meta(c).get("sanity_finding"), dict) \
+                    and self.by.get(par, {}).get("status") == "closed":
+                self.problem(par, f"closed with open sanity finding {cid}; the lead reopens it and assigns dev-fix")
         # sanity: never reopened after PASS
         for san in sanities:
             prev = None
