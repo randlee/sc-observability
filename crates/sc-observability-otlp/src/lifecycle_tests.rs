@@ -11,30 +11,30 @@ use std::time::Duration;
 
 use crate::config::{OtelConfig, validated_transport_bounds};
 use crate::contracts::{
-    ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, MetricExporter, TraceExporter,
+    CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter,
+    LogRecord, MetricExporter, TraceExporter,
 };
 use crate::lifecycle::{LifecycleCore, LifecycleState, SignalKind};
-use crate::{CompleteSpan, LogEvent, MetricRecord};
-use sc_observability_types::v2::ExportError;
+use sc_observability_types::v2::{ExportError, MetricRecord};
 
 struct NoopLogs;
 struct NoopTraces;
 struct NoopMetrics;
 
 impl LogExporter for NoopLogs {
-    fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
+    fn export_logs(&self, _batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
 impl TraceExporter for NoopTraces {
-    fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportError> {
+    fn export_spans(&self, _batch: &[ExportRecord<CompleteSpan>]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
 impl MetricExporter for NoopMetrics {
-    fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportError> {
+    fn export_metrics(&self, _batch: &[ExportRecord<MetricRecord>]) -> Result<(), ExportError> {
         Ok(())
     }
 }
