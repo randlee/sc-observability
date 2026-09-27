@@ -8,11 +8,12 @@ use super::config::{
     validated_transport_bounds,
 };
 use super::constants;
+use super::contracts::{CompleteSpan, ExportRecord, LogRecord};
 use super::contracts::{
     ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, MetricExporter, TraceExporter,
 };
-use super::{CompleteSpan, LogEvent, MetricRecord};
 use sc_observability_types::error_codes::otlp;
+use sc_observability_types::v2::MetricRecord;
 use sc_observability_types::v2::{ConfigFailure, ExportError};
 
 fn legacy_config() -> OtelConfig {
@@ -323,19 +324,19 @@ impl ExporterLifecycle for FakeLifecycle {
 
 struct FakeLog;
 impl LogExporter for FakeLog {
-    fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
+    fn export_logs(&self, _batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 struct FakeTrace;
 impl TraceExporter for FakeTrace {
-    fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportError> {
+    fn export_spans(&self, _batch: &[ExportRecord<CompleteSpan>]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 struct FakeMetric;
 impl MetricExporter for FakeMetric {
-    fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportError> {
+    fn export_metrics(&self, _batch: &[ExportRecord<MetricRecord>]) -> Result<(), ExportError> {
         Ok(())
     }
 }
@@ -356,4 +357,177 @@ fn contract_tests_fake_exporter_contract() {
         .blocking_preflight()
         .expect("fake preflight");
     exporters.lifecycle.flush_blocking().expect("fake flush");
+}
+
+#[cfg(feature = "otlp-sdk")]
+#[test]
+fn contract_tests_sdk_transports_and_caller_runtime_are_available() {
+    // Builder methods are feature-gated upstream. This fails to compile if
+    // either transport or any of the three signal exporters loses its feature.
+    let _ = opentelemetry_otlp::SpanExporter::builder().with_tonic();
+    let _ = opentelemetry_otlp::SpanExporter::builder().with_http();
+    let _ = opentelemetry_otlp::LogExporter::builder().with_tonic();
+    let _ = opentelemetry_otlp::LogExporter::builder().with_http();
+    let _ = opentelemetry_otlp::MetricExporter::builder().with_tonic();
+    let _ = opentelemetry_otlp::MetricExporter::builder().with_http();
+    let caller = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("caller runtime");
+    caller.block_on(async {
+        assert!(tokio::runtime::Handle::try_current().is_ok());
+        opentelemetry_sdk::runtime::Runtime::delay(
+            &opentelemetry_sdk::runtime::Tokio,
+            std::time::Duration::ZERO,
+        )
+        .await;
+    });
+}
+
+#[test]
+fn contract_tests_v2_exporters_retain_signal_and_context() {
+    use super::contracts::{InstrumentationScope, Resource};
+    use sc_observability_types::v2::{
+        AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint, MetricValue,
+        SpanEvent, SpanKind, SpanRecord, TraceContext, TraceFlags,
+    };
+    use sc_observability_types::{
+        ActionName, DurationMs, MetricName, ServiceName, SpanId, SpanStatus, Timestamp, TraceId,
+    };
+
+    struct CheckMetric(ExportRecord<MetricRecord>);
+    impl MetricExporter for CheckMetric {
+        fn export_metrics(&self, batch: &[ExportRecord<MetricRecord>]) -> Result<(), ExportError> {
+            assert_eq!(batch, std::slice::from_ref(&self.0));
+            Ok(())
+        }
+    }
+    struct CheckTrace(ExportRecord<CompleteSpan>);
+    impl TraceExporter for CheckTrace {
+        fn export_spans(&self, batch: &[ExportRecord<CompleteSpan>]) -> Result<(), ExportError> {
+            assert_eq!(batch, std::slice::from_ref(&self.0));
+            Ok(())
+        }
+    }
+    let resource = Resource {
+        attributes: Attributes::from([("host.id".into(), AttributeValue::UInt(u64::MAX))]),
+        schema_url: Some("https://example.test/resource".into()),
+    };
+    let scope = InstrumentationScope {
+        name: "contract-consumer".into(),
+        version: Some("2.0".into()),
+        schema_url: Some("https://example.test/scope".into()),
+        attributes: Attributes::from([("scope.enabled".into(), AttributeValue::Bool(true))]),
+    };
+    let metric = ExportRecord {
+        resource: resource.clone(),
+        scope: scope.clone(),
+        record: MetricRecord::try_new(
+            Timestamp::UNIX_EPOCH,
+            ServiceName::new("test").unwrap(),
+            MetricName::new("latency").unwrap(),
+            MetricValue::Histogram {
+                point: HistogramPoint::try_new(
+                    vec![1.0],
+                    vec![1, 2],
+                    3,
+                    FiniteF64::new(5.0).unwrap(),
+                )
+                .unwrap(),
+                temporality: AggregationTemporality::Cumulative,
+                start_time: Timestamp::UNIX_EPOCH,
+            },
+        )
+        .unwrap(),
+    };
+    let trace = TraceContext::new(
+        TraceId::new("1234567890abcdef1234567890abcdef").unwrap(),
+        SpanId::new("1234567890abcdef").unwrap(),
+        TraceFlags::new(0x81),
+    );
+    let span = ExportRecord {
+        resource,
+        scope,
+        record: CompleteSpan {
+            record: SpanRecord::new(
+                Timestamp::UNIX_EPOCH,
+                ServiceName::new("test").unwrap(),
+                ActionName::new("request").unwrap(),
+                trace.clone(),
+                Attributes::new(),
+            )
+            .with_kind(SpanKind::Server)
+            .end(SpanStatus::Ok, DurationMs::from(7)),
+            events: vec![SpanEvent {
+                timestamp: Timestamp::UNIX_EPOCH,
+                trace,
+                name: ActionName::new("event").unwrap(),
+                attributes: Attributes::new(),
+                diagnostic: None,
+            }],
+        },
+    };
+    let exporters: ExporterSet = ExporterSet {
+        logs: Arc::new(FakeLog),
+        traces: Arc::new(CheckTrace(span.clone())),
+        metrics: Arc::new(CheckMetric(metric.clone())),
+        lifecycle: Arc::new(FakeLifecycle),
+    };
+    exporters.traces.export_spans(&[span]).unwrap();
+    exporters.metrics.export_metrics(&[metric]).unwrap();
+}
+
+#[test]
+fn contract_tests_v2_log_retains_flags_and_integer_attributes() {
+    use super::contracts::{InstrumentationScope, Resource};
+    use sc_observability_types::v2::{AttributeValue, Attributes, TraceFlags};
+    use sc_observability_types::{
+        ActionName, Level, LogEvent, SchemaVersion, ServiceName, SpanId, TargetCategory, Timestamp,
+        TraceContext, TraceId,
+    };
+
+    struct CheckLog(ExportRecord<LogRecord>);
+    impl LogExporter for CheckLog {
+        fn export_logs(&self, batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
+            assert_eq!(batch, std::slice::from_ref(&self.0));
+            Ok(())
+        }
+    }
+    let log = ExportRecord {
+        resource: Resource {
+            attributes: Attributes::from([("resource".into(), AttributeValue::Bool(true))]),
+            schema_url: Some("https://example.test/resource".into()),
+        },
+        scope: InstrumentationScope {
+            name: "log-consumer".into(),
+            ..InstrumentationScope::default()
+        },
+        record: LogRecord {
+            event: LogEvent {
+                version: SchemaVersion::new("v1").unwrap(),
+                timestamp: Timestamp::UNIX_EPOCH,
+                level: Level::Info,
+                service: ServiceName::new("test").unwrap(),
+                target: TargetCategory::new("test").unwrap(),
+                action: ActionName::new("request").unwrap(),
+                message: Some("preserved".into()),
+                identity: sc_observability_types::ProcessIdentity::default(),
+                trace: Some(TraceContext {
+                    trace_id: TraceId::new("1234567890abcdef1234567890abcdef").unwrap(),
+                    span_id: SpanId::new("1234567890abcdef").unwrap(),
+                    parent_span_id: None,
+                }),
+                request_id: None,
+                correlation_id: None,
+                outcome: None,
+                diagnostic: None,
+                state_transition: None,
+                fields: serde_json::Map::new(),
+            },
+            trace_flags: TraceFlags::new(0x81),
+            attributes: Attributes::from([("unsigned".into(), AttributeValue::UInt(u64::MAX))]),
+        },
+    };
+    let exporter: Arc<dyn LogExporter> = Arc::new(CheckLog(log.clone()));
+    exporter.export_logs(&[log]).unwrap();
 }

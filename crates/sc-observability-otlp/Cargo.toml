@@ -11,7 +11,7 @@ description = "Standalone OTLP export adapter for sc-observability."
 
 [features]
 default = []
-otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp"]
+otlp-sdk = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp", "dep:tokio"]
 legacy-http-json = ["dep:reqwest", "dep:httpdate", "dep:getrandom", "dep:tokio"]
 
 [dependencies]
