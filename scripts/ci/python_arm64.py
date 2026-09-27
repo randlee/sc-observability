@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import platform
+import subprocess
 import sys
 
 PE_SIGNATURE = b"PE\0\0"
 PE_ARM64_MACHINE = 0xAA64
+WINDOWS_ARM64_RUST_HOST = "aarch64-pc-windows-msvc"
 WINDOWS_ARM64_POLICY = {"id": "windows-arm64", "runner": "windows-11-arm", "machine": "ARM64", "wheel_platform": "win_arm64", "rust_target": "aarch64-pc-windows-msvc"}
 
 
@@ -38,11 +40,24 @@ def is_pe_arm64(data: bytes) -> bool:
     return pe_machine(data) == PE_ARM64_MACHINE
 
 
+def rustc_host(verbose_version: str) -> str | None:
+    """Extract the Rust compiler host triple from ``rustc -vV`` output."""
+    for line in verbose_version.splitlines():
+        if line.startswith("host: "):
+            return line.removeprefix("host: ")
+    return None
+
+
 def require_native_windows_arm64() -> None:
     """Reject Windows emulation/cross-build runners before native evidence runs."""
     if (platform.system() != "Windows" or platform.machine().upper() != "ARM64"
             or sys.implementation.name != "cpython"):
         raise RuntimeError("native Windows ARM64 runner and CPython are required")
+    host = rustc_host(subprocess.check_output(["rustc", "-vV"], text=True))
+    if host != WINDOWS_ARM64_RUST_HOST:
+        raise RuntimeError(
+            f"native Windows ARM64 rustc host is required; found {host or 'missing host'}"
+        )
 
 
 def main() -> None:

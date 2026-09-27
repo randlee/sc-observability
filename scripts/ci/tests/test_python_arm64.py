@@ -8,11 +8,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from python_arm64 import (
     PE_ARM64_MACHINE,
     WINDOWS_ARM64_POLICY,
+    WINDOWS_ARM64_RUST_HOST,
     apply_windows_arm64_overlay,
     is_pe_arm64,
+    main,
     pe_machine,
     require_native_windows_arm64,
-    main,
+    rustc_host,
 )
 
 
@@ -45,11 +47,26 @@ class WindowsArm64Tests(unittest.TestCase):
                 self.assertIsNone(pe_machine(image))
                 self.assertFalse(is_pe_arm64(image))
 
+    def test_extracts_rustc_host(self):
+        self.assertEqual(
+            rustc_host(f"rustc 1.94.1\nhost: {WINDOWS_ARM64_RUST_HOST}\nrelease: 1.94.1"),
+            WINDOWS_ARM64_RUST_HOST,
+        )
+        self.assertIsNone(rustc_host("rustc 1.94.1\nrelease: 1.94.1"))
+
+    def test_rejects_cross_compiler_host(self):
+        with (patch("platform.system", return_value="Windows"),
+              patch("platform.machine", return_value="ARM64"),
+              patch("subprocess.check_output", return_value="host: x86_64-pc-windows-msvc\n")):
+            with self.assertRaisesRegex(RuntimeError, "rustc host"):
+                require_native_windows_arm64()
+
     @patch('python_arm64.sys.implementation.name', 'cpython')
     @patch('python_arm64.platform.machine', return_value='ARM64')
     @patch('python_arm64.platform.system', return_value='Windows')
     def test_workflow_preflight_cli_accepts_native_runner(self, system, machine):
-        self.assertIsNone(main())
+        with patch('python_arm64.subprocess.check_output', return_value=f'host: {WINDOWS_ARM64_RUST_HOST}\n'):
+            self.assertIsNone(main())
         system.assert_called_once_with()
         machine.assert_called_once_with()
 
@@ -85,7 +102,8 @@ class WindowsArm64Tests(unittest.TestCase):
 
         with (patch('platform.system', return_value='Windows'),
               patch('platform.machine', return_value='ARM64'),
-              patch('sys.implementation', SimpleNamespace(name='cpython'))):
+              patch('sys.implementation', SimpleNamespace(name='cpython')),
+              patch('subprocess.check_output', return_value=f'host: {WINDOWS_ARM64_RUST_HOST}\n')):
             require_native_windows_arm64()
 
 
