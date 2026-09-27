@@ -92,6 +92,16 @@ class SanityMerge(unittest.TestCase):
         self.assertEqual(vars_["findings_md"], "D1: done\nD2:\n- `crates/x/src/lib.rs:3` skipped: no 503 test")
         self.render_complete(vars_, "# Dev Sanity Check FAIL")
 
+    def test_rejects_multiple_or_non_skipped_findings(self):
+        self.lint(0)
+        multiple = [FINDING, dict(FINDING, file="crates/x/src/other.rs", line=4)]
+        for findings, expected in ((multiple, "at most one finding"),
+                                   ([dict(FINDING, kind="error")], "kind: skipped")):
+            with self.subTest(findings=findings):
+                out = self.merge([self.result(1), self.result(2, findings)])
+                self.assertEqual(out.returncode, 1, out.stderr)
+                self.assertIn(expected, out.stderr)
+
     def test_lint_failure_parsed_to_file_and_line(self):
         self.lint(101, f"warning: unused variable\n  --> {self.wt}/crates/x/src/lib.rs:9:5\n"
                        f"Diff in {self.wt}/crates/x/src/fmt.rs:12:\nerror: could not compile\n")

@@ -13,26 +13,24 @@ loader.exec_module(report)
 
 
 class SprintReportTests(unittest.TestCase):
-    def test_loads_only_bead_id_schema_and_rejects_legacy_copied_fields(self):
-        index = {'root_bead_id': 'phase-root', 'sprints': [
-            {'dev_bead_id': 'dev-1', 'sanity_bead_id': 'gate-1'}]}
+    def test_loads_compact_canonical_tuples_and_rejects_invalid_rows(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'sprints.json'
-            path.write_text(json.dumps(index))
-            self.assertEqual(report.load_index(Path(directory), path, None)[1], index)
-            for field in ('phase_id', 'integration_branch'):
-                path.write_text(json.dumps({**index, field: 'copied'}))
-                with self.assertRaisesRegex(RuntimeError, 'only root_bead_id and sprints'):
-                    report.load_index(Path(directory), path, None)
-            index['sprints'][0]['title'] = 'copied'
-            path.write_text(json.dumps(index))
-            with self.assertRaisesRegex(RuntimeError, 'only dev_bead_id and sanity_bead_id'):
-                report.load_index(Path(directory), path, None)
-            del index['sprints'][0]['title']
-            index['root_bead_id'] = ''
-            path.write_text(json.dumps(index))
-            with self.assertRaisesRegex(RuntimeError, 'root_bead_id must be a nonempty bead ID'):
-                report.load_index(Path(directory), path, None)
+            repo = Path(directory)
+            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path.parent.mkdir(parents=True)
+            path.write_text('["x-1", "gate-1", []]\n["x-2", "gate-2", ["x-1"]]\n')
+            index = report.load_index(repo, path, 'obs-phase-x')[1]
+            self.assertEqual(index['root_bead_id'], 'obs-phase-x')
+            self.assertEqual(index['sprints'][1], {
+                'dev_bead_id': 'obs-x-2', 'sanity_bead_id': 'gate-2',
+                'depends_on_sanity_bead_ids': ['gate-1'],
+            })
+            path.write_text('["x-1", "gate-1"]\n')
+            with self.assertRaisesRegex(RuntimeError, 'each line must be'):
+                report.load_index(repo, path, 'obs-phase-x')
+            path.write_text('["x-1", "gate-1", ["unknown"]]\n')
+            with self.assertRaisesRegex(RuntimeError, 'unknown sprint'):
+                report.load_index(repo, path, 'obs-phase-x')
 
     def test_membership_index_reads_names_and_order_from_live_beads(self):
         index = {'sprints': [
@@ -173,6 +171,34 @@ class SprintReportTests(unittest.TestCase):
         finding = {'id': 'unrelated-name', 'dependencies': [{'depends_on_id': 'qa-2', 'type': 'discovered-from'}]}
         self.assertTrue(report.related_bead(finding, 'qa-2', 'discovered-from'))
         self.assertFalse(report.related_bead({'id': 'qa-2-f1'}, 'qa-2', 'discovered-from'))
+
+    def test_dispatch_prioritizes_and_never_assigns_unclassified(self):
+        rows = report.dispatch_rows([
+            {'id': 'minor', 'priority': 4, 'metadata': {'layer': 3, 'difficulty': 'fast'}},
+            {'id': 'blocking', 'priority': 1, 'metadata': {'layer': 2, 'severity': 'blocking', 'difficulty': 'hard'}},
+            {'id': 'unknown', 'priority': 2, 'metadata': {'layer': 1}},
+        ], [{'identity': 'luna', 'model': 'gpt-6-luna'}, {'identity': 'astra', 'model': 'gpt-6-astra'}], set())
+        self.assertEqual([row['id'] for row in rows], ['blocking', 'unknown', 'minor'])
+        self.assertEqual(rows[0]['agents'], 'astra')
+        self.assertEqual(rows[1]['agents'], 'UNCLASSIFIED')
+        self.assertIn('UNCLASSIFIED', report.render_dispatch(rows))
+
+    def test_dispatch_fixture_matches_three_model_classes_and_waits(self):
+        members = [
+            {'identity': 'luna', 'model': 'gpt-6-luna'},
+            {'identity': 'terra', 'model': 'gpt-6-terra'},
+            {'identity': 'astra', 'model': 'gpt-6-astra'},
+        ]
+        ready = [
+            {'id': 'normal', 'priority': 2, 'metadata': {'layer': 2, 'difficulty': 'normal'}},
+            {'id': 'fast', 'priority': 2, 'metadata': {'layer': 3, 'difficulty': 'fast'}},
+            {'id': 'hard', 'priority': 1, 'metadata': {'layer': 4, 'difficulty': 'hard'}},
+        ]
+        rows = report.dispatch_rows(ready, members, set())
+        self.assertEqual([row['id'] for row in rows], ['hard', 'normal', 'fast'])
+        self.assertEqual([row['agents'] for row in rows], ['astra', 'terra', 'luna'])
+        hard_wait = report.dispatch_rows([ready[2]], members[:1], set())
+        self.assertEqual(hard_wait[0]['agents'], 'WAIT')
 
 
 if __name__ == '__main__':
