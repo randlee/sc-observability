@@ -132,6 +132,8 @@ jobs:
         shell: pwsh
         run: |
           python -c "import platform,sys; assert platform.system() == 'Windows' and platform.machine().upper() == 'ARM64', (platform.system(), platform.machine()); assert sys.implementation.name == 'cpython'"
+          $rustcHost = ((rustc -vV | Select-String '^host: ').Line -replace '^host: ', '')
+          if ($rustcHost -ne 'aarch64-pc-windows-msvc') { throw "native Windows ARM64 rustc host required; found $rustcHost" }
           rustup target add aarch64-pc-windows-msvc
       - uses: actions/download-artifact@v7
         with:
