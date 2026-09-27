@@ -4,7 +4,6 @@
 //! ownership without creating a second public error family before D12 installs
 //! the canonical registry-backed 2.0 types.
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -52,9 +51,6 @@ struct FixtureResolvedLogSettings {
     retained_log_policy: RetainedLogPolicy,
 }
 
-#[derive(Debug, Clone, Default)]
-struct FixtureEnvSnapshot(BTreeMap<String, String>);
-
 #[derive(Debug, Clone)]
 struct FixtureLogSettingsInputs {
     file: Option<FixtureLogSettings>,
@@ -65,21 +61,13 @@ struct FixtureLogSettingsInputs {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FixtureLogSettingsError {
-    PrefixCollision,
-    InvalidEnvironment,
-    UnknownKey,
     InvalidValue,
-    Resolution,
 }
 
 impl FixtureLogSettingsError {
     const fn code(self) -> &'static str {
         match self {
-            Self::PrefixCollision => "LOG-001",
-            Self::InvalidEnvironment => "LOG-002",
-            Self::UnknownKey => "LOG-003",
             Self::InvalidValue => "LOG-004",
-            Self::Resolution => "LOG-005",
         }
     }
 }
@@ -556,52 +544,70 @@ fn registration_error_payloads() {
         Some("already registered")
     );
 
-    for error in [
-        FixtureSinkRegistrationError::Invalid(FixtureHarnessError(Box::new(ErrorContext::new(
-            ErrorCode::new_static("SC_LOG_SINK_REGISTRATION_INVALID"),
-            "invalid sink",
-            Remediation::not_recoverable("repair the sink contract"),
-        )))),
-        FixtureSinkRegistrationError::Closed(FixtureHarnessError(Box::new(ErrorContext::new(
-            ErrorCode::new_static("SC_LOG_SINK_REGISTRATION_CLOSED"),
-            "closed logger",
-            Remediation::not_recoverable("register before shutdown"),
-        )))),
+    for (error, expected_code) in [
+        (
+            FixtureSinkRegistrationError::Invalid(FixtureHarnessError(Box::new(
+                ErrorContext::new(
+                    ErrorCode::new_static("SC_LOG_SINK_REGISTRATION_INVALID"),
+                    "invalid sink",
+                    Remediation::not_recoverable("repair the sink contract"),
+                ),
+            ))),
+            "SC_LOG_SINK_REGISTRATION_INVALID",
+        ),
+        (
+            FixtureSinkRegistrationError::Closed(FixtureHarnessError(Box::new(ErrorContext::new(
+                ErrorCode::new_static("SC_LOG_SINK_REGISTRATION_CLOSED"),
+                "closed logger",
+                Remediation::not_recoverable("register before shutdown"),
+            )))),
+            "SC_LOG_SINK_REGISTRATION_CLOSED",
+        ),
     ] {
-        assert!(
-            error
-                .payload()
-                .context()
-                .diagnostic()
-                .code
-                .as_str()
-                .starts_with("SC_LOG_")
+        assert_eq!(
+            error.payload().context().diagnostic().code.as_str(),
+            expected_code
         );
     }
 }
 
 #[test]
 fn contract_harness_preserves_context() {
-    let snapshot = FixtureEnvSnapshot::default();
-    assert!(snapshot.0.is_empty());
-    for error in [
-        FixtureLogSettingsError::PrefixCollision,
-        FixtureLogSettingsError::InvalidEnvironment,
-        FixtureLogSettingsError::UnknownKey,
-        FixtureLogSettingsError::InvalidValue,
-        FixtureLogSettingsError::Resolution,
-    ] {
-        assert!(error.code().starts_with("LOG-"));
+    struct FixtureRejectingSink;
+
+    impl FixtureSinkContract<FixtureHarnessError> for FixtureRejectingSink {
+        fn write(&self, _: &LogEvent) -> Result<(), FixtureHarnessError> {
+            Err(FixtureHarnessError(Box::new(
+                ErrorContext::new(
+                    ErrorCode::new_static("SC_LOG_SINK_CONTRACT"),
+                    "contract sink rejected the event",
+                    Remediation::recoverable("repair the sink", ["retry registration"]),
+                )
+                .source(Box::new(std::io::Error::other("fixture source"))),
+            )))
+        }
+
+        fn flush(&self) -> Result<(), FixtureHarnessError> {
+            Ok(())
+        }
+
+        fn health(&self) -> SinkHealth {
+            SinkHealth {
+                name: SinkName::new("rejecting-contract").expect("static sink name"),
+                state: SinkHealthState::Healthy,
+                last_error: None,
+            }
+        }
     }
 
-    let payload = FixtureHarnessError(Box::new(
-        ErrorContext::new(
-            ErrorCode::new_static("SC_LOG_SINK_CONTRACT"),
-            "contract sink rejected the event",
-            Remediation::recoverable("repair the sink", ["retry registration"]),
-        )
-        .source(Box::new(std::io::Error::other("fixture source"))),
-    ));
+    let sink: Arc<dyn FixtureSinkContract<FixtureHarnessError>> = Arc::new(FixtureRejectingSink);
+    let payload = sink
+        .write(&contract_event())
+        .expect_err("rejecting fixture sink returns its context");
+    assert_eq!(
+        payload.context().diagnostic().code.as_str(),
+        "SC_LOG_SINK_CONTRACT"
+    );
     assert_eq!(
         payload.context().diagnostic().remediation,
         Remediation::recoverable("repair the sink", ["retry registration"])

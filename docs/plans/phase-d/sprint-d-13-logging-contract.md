@@ -272,8 +272,10 @@ surface lands, the owning implementation bead must delete the fixture or rebind
 the test to that production symbol; it must not leave a parallel verifier.
 `obs-d-1` owns the settings handoff and therefore deletes or rebinds
 `FixtureLogSettings`, `FixtureLogRoot`, `FixtureResolvedLogSettings`,
-`FixtureEnvSnapshot`, `FixtureLogSettingsInputs`, `FixtureLogSettingsError`,
-and `FixtureResolutionCase`. `obs-d-2` owns the attachment handoff and therefore
+`FixtureLogSettingsInputs`, `FixtureLogSettingsError`, and
+`FixtureResolutionCase`. The D.13 resolver fixture produces only
+`FixtureLogSettingsError::InvalidValue`; D.1 owns the final environment parser
+and its other documented error variants. `obs-d-2` owns the attachment handoff and therefore
 deletes or rebinds `FixtureBridgeEventPolicy`, `FixtureBridgeEventDecision`,
 `FixturePolicyRejection`, `FixtureAttachmentOptions`, `FixtureSlotState`,
 `FixtureDetachError`, `FixtureLogAttachment`, `FixtureAttachmentState`,
