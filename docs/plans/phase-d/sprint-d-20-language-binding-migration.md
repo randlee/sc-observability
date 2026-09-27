@@ -15,7 +15,7 @@ Generated projection of `obs-d-20`; the bead is authoritative.
 - PR target (merge order only): `sprint/d-19-dto-and-schema-migration`
 - Blocked by: `obs-phase-d-plan-qa, obs-d-12-sanity`
 - Requirements: PHB-002, PHB-010, PHB-011, PHB-012, PHB-013, PHD-001, PHD-002, TYP-003, TYP-004, TYP-005
-- ADRs: ADR-002, ADR-011, ADR-014, ADR-015, ADR-017, ADR-019
+- ADRs: ADR-002, ADR-011, ADR-013, ADR-014, ADR-015, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `bindings/API-COVERAGE.md`
   - `bindings/python/sc-observability-py/LICENSE`
