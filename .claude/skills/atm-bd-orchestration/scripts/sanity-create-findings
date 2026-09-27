@@ -142,8 +142,10 @@ def main() -> int:
                 "difficulty": difficulty,
             }
             metadata = {**provenance, "sanity_finding": payload}
-            description = "Sanity finding; the JSON below is the source report data.\n\n```json\n" + json.dumps(payload, indent=2, sort_keys=True) + "\n```"
-            acceptance = "- [ ] this finding is fixed at every occurrence in scope\n- [ ] a targeted reproducer or check passes\n- [ ] repository validation passes"
+            description = ("Sanity finding; the JSON below is the source report data.\n\n## Deliverables\n1. "
+                           f"{finding['issue']} ({finding['file']}:{finding['line']}, deliverable {finding['deliverable']} of {args.bead})"
+                           "\n\n```json\n" + json.dumps(payload, indent=2, sort_keys=True) + "\n```")
+            acceptance = "- [ ] #1: this finding is fixed at every occurrence in scope\n- [ ] #1: a targeted reproducer or check passes\n- [ ] #1: repository validation passes"
             title = f"{args.bead} {ref}: {finding['file']}:{finding['line']}"
             child = command([
                 "bd", "create", title, "--type", "bug", "--status", "open",

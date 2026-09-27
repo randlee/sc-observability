@@ -59,7 +59,7 @@ def is_clean(status: str) -> bool:
 
 
 def dev_gate(args: argparse.Namespace, runner: Runner, identity: str) -> str:
-    if runner([".claude/skills/atm-beads/scripts/validate-plan", "--root", args.root], capture_output=True, text=True).returncode:
+    if runner([".claude/skills/atm-beads/scripts/validate-plan", "--root", args.root, "--scope", args.bead], capture_output=True, text=True).returncode:
         return "PLAN_INVALID"
     ready = run_json(runner, "bd", "ready", "-n", "0", "--json")
     if not any(row.get("id") == args.bead for row in ready):
