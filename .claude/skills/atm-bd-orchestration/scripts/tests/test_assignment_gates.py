@@ -42,6 +42,10 @@ def ns(kind, **overrides):
 def dumped(value): return json.dumps(value)
 
 
+def history_fixture(name):
+    return json.loads((FIXTURES / name).read_text())
+
+
 def dev_runner(overrides=None):
     data = {
         (gates.VALIDATE_PLAN, "--root", "obs-phase-d", "--scope", "bead"): (0, ""),
@@ -76,7 +80,7 @@ def sanity_runner(overrides=None, target="target"):
         ("git", "rev-parse", "origin/fix/finding"): (0, "head"),
         ("git", "log", "--format=%H", f"origin/{target}..head"): (0, "delta"),
         ("git", "status", "--porcelain", "--untracked-files=all"): (0, "?? .beads.gate.lock"),
-        ("bd", "history", "bead", "--json"): (0, dumped({"events": []})),
+        ("bd", "history", "bead", "--json"): (0, dumped(history_fixture("sanity-history-retry.json"))),
     }; data.update(overrides or {}); return FakeRunner(data)
 
 
@@ -129,7 +133,7 @@ class AssignmentGateTests(unittest.TestCase):
             ("stale-base.json", ns("sanity"), sanity_runner({PR_COMMAND: (0, dumped({"baseRefName": "wrong", "headRefOid": "head"}))})),
             ("zero-delta.json", ns("sanity"), sanity_runner({("git", "log", "--format=%H", "origin/target..head"): (0, "")})),
             ("dirty-tree.json", ns("sanity"), sanity_runner({("git", "status", "--porcelain", "--untracked-files=all"): (0, " M tracked.py")})),
-            ("sanity-frozen.json", ns("sanity"), sanity_runner({("bd", "history", "bead", "--json"): (0, dumped({"verdict": "PASS"}))})),
+            ("sanity-frozen.json", ns("sanity"), sanity_runner({("bd", "history", "bead", "--json"): (0, dumped(history_fixture("sanity-history-pass.json")))})),
             ("sanity-ready.json", ns("sanity"), sanity_runner()),
         ]
         for fixture, gate_args, runner in cases:
@@ -187,7 +191,7 @@ class AssignmentGateTests(unittest.TestCase):
                 (("git", "rev-parse", "origin/fix/finding"), (0, "old"), "HEAD_MISMATCH"),
                 (("git", "branch", "--show-current"), (0, "other"), "HEAD_MISMATCH"),
                 (("git", "status", "--porcelain", "--untracked-files=all"), (0, "?? unknown.py"), "DIRTY_TREE"),
-                (("bd", "history", "bead", "--json"), (0, dumped({"verdict": "PASS"})), "SANITY_FROZEN"),
+                (("bd", "history", "bead", "--json"), (0, dumped(history_fixture("sanity-history-pass.json"))), "SANITY_FROZEN"),
                 (("bd", "show", "checked", "--json"), (0, dumped([{"metadata": {"pr_target": "other"}}])), "PR_TARGET_MISMATCH"),
                 (PR_COMMAND, (0, dumped({"baseRefName": target, "headRefName": "fix/finding", "headRefOid": "old", "state": "OPEN"})), "STALE_BASE"),
             ]:
@@ -195,6 +199,35 @@ class AssignmentGateTests(unittest.TestCase):
                     self.assertEqual(gates.evaluate(args, sanity_runner({VIEW_COMMAND: empty, command: response}, target)), expected)
         for target in ("main", "integrate/phase-", "feature/develop"):
             self.assertEqual(gates.evaluate(ns("sanity", pr_target=target), sanity_runner({VIEW_COMMAND: empty}, target)), "STACK_REQUIRED")
+
+    def test_dolt_history_freezes_only_closed_pass_even_after_reopening(self):
+        history_command = ("bd", "history", "bead", "--json")
+        for fixture, expected in [
+            ("sanity-history-retry.json", "READY"),
+            ("sanity-history-pass.json", "SANITY_FROZEN"),
+            ("sanity-history-reopened.json", "SANITY_FROZEN"),
+        ]:
+            with self.subTest(fixture=fixture):
+                history = history_fixture(fixture)
+                self.assertEqual(gates.evaluate(ns("sanity"), sanity_runner({history_command: (0, dumped(history))})), expected)
+        retry = history_fixture("sanity-history-retry.json")
+        self.assertIn("lint passes", retry[0]["Issue"]["description"])
+        self.assertIn("no PASS claimed", retry[0]["Issue"]["notes"])
+        self.assertFalse(gates.has_prior_pass(retry))
+        for status, reason, expected in [
+            ("closed", "PASS", True),
+            ("closed", "PASS at 1234567: lint clean", True),
+            ("closed", "FAIL at 1234567; PASS required", False),
+            ("closed", "no PASS claimed", False),
+            ("closed", "lint passes", False),
+            ("closed", "PASS pending", False),
+            ("open", "PASS at 1234567", False),
+            ("in_progress", "PASS", False),
+        ]:
+            with self.subTest(status=status, reason=reason):
+                self.assertEqual(gates.has_prior_pass([{"Issue": {"status": status, "close_reason": reason}}]), expected)
+        for malformed in ({"verdict": "PASS"}, [{"description": "lint passes"}]):
+            self.assertEqual(gates.evaluate(ns("sanity"), sanity_runner({history_command: (0, dumped(malformed))})), "GATE_CANNOT_RUN")
 
     def test_cleanliness_exemptions_match_only_untracked_root_scratch(self):
         for status in ("", "?? .beads.gate.lock", "?? .sc-compose/", "?? .sc-compose/log.json"):

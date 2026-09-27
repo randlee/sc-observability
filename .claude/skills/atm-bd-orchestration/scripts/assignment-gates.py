@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -55,7 +56,22 @@ def claimable(bead: dict[str, Any], identity: str) -> bool:
 
 
 def has_prior_pass(history: Any) -> bool:
-    return "PASS" in json.dumps(history).upper()
+    """Dolt snapshots freeze only an actual closed PASS, even after reopening.
+
+    The close protocol writes `PASS at <commit>` (legacy `PASS` also counts).
+    Description/notes and speculative verdict metadata are never evidence.
+    """
+    if not isinstance(history, list):
+        raise ValueError("bd history must return Dolt snapshots")
+    for row in history:
+        if not isinstance(row, dict) or not isinstance(row.get("Issue"), dict):
+            raise ValueError("bd history snapshot has no Issue")
+        issue = row["Issue"]
+        reason = issue.get("close_reason")
+        if (issue.get("status") == "closed" and isinstance(reason, str)
+                and re.match(r"^PASS(?:$|\s+at\s+[0-9a-fA-F]{7,40}(?=$|[\s;:,]))", reason.strip())):
+            return True
+    return False
 
 
 def git_dir(args: argparse.Namespace) -> list[str]:
