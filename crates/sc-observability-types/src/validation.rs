@@ -202,6 +202,11 @@ validated_name_type!(
     validate_identifier
 );
 validated_name_type!(
+    EntityId,
+    "Validated caller-owned identifier for a state-transition entity.",
+    validate_identifier
+);
+validated_name_type!(
     OutcomeLabel,
     "Validated stable outcome label for event results.",
     validate_identifier
@@ -282,6 +287,10 @@ mod tests {
             "req-1"
         );
         assert_eq!(
+            EntityId::new("agent-1").expect("valid entity id").as_str(),
+            "agent-1"
+        );
+        assert_eq!(
             OutcomeLabel::new("success")
                 .expect("valid outcome label")
                 .as_str(),
@@ -311,6 +320,7 @@ mod tests {
         assert!(MetricUnit::new("metric unit").is_err());
         assert!(StateName::new("state invalid").is_err());
         assert!(CorrelationId::new("corr invalid").is_err());
+        assert!(EntityId::new("entity invalid").is_err());
         assert!(OutcomeLabel::new("outcome invalid").is_err());
         assert!(SinkName::new("sink invalid").is_err());
         assert!(SchemaVersion::new("schema invalid").is_err());

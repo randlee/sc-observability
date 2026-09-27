@@ -97,8 +97,9 @@ pub use span::{SpanEnded, SpanEvent, SpanRecord, SpanSignal, SpanStarted, SpanSt
 pub use tracing::{SpanId, StateTransition, TraceContext, TraceId};
 #[doc(inline)]
 pub use validation::{
-    ActionName, CorrelationId, EnvPrefix, MetricName, MetricUnit, OutcomeLabel, SchemaVersion,
-    ServiceName, SinkName, StateName, TargetCategory, ToolName, ValueValidationError,
+    ActionName, CorrelationId, EntityId, EnvPrefix, MetricName, MetricUnit, OutcomeLabel,
+    SchemaVersion, ServiceName, SinkName, StateName, TargetCategory, ToolName,
+    ValueValidationError,
 };
 
 /// Staged 2.0 contracts; integration activates these names at the crate root.
