@@ -16,7 +16,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "atm-beads/scripts"))
 from sprint_index_common import run_json, index_bead_pairs, phase_id, validate_index
-from sprint_qa import metadata, choose_round, qa_verdict, qa_icon, findings_summary, qa_for_bead
+from sprint_qa import metadata, choose_round, qa_verdict, qa_icon, findings_summary, qa_for_bead, qa_findings
 
 
 def edge_id(edge: dict[str, Any]) -> str:
@@ -297,14 +297,7 @@ def main() -> int:
         sanity_cell = "?" if sanity_count is None else str(sanity_count) if sanity_count else ""
         qa = live_by_id.get(str(selected_qa.get(dev_id, {}).get("id"))) if selected_qa.get(dev_id) else None
         qa_ids = {str(candidate["id"]) for candidate in qa_by_dev.get(dev_id, [])}
-        findings = [
-            bead for bead in all_beads
-            if any(
-                related_bead(bead, qa_id, "discovered-from")
-                or related_bead(bead, qa_id, "parent-child")
-                for qa_id in qa_ids
-            )
-        ]
+        findings = qa_findings(all_beads, qa_ids)
         sanity_findings = [
             bead for bead in all_beads
             if sanity and (

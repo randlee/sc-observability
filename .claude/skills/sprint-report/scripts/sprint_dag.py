@@ -13,7 +13,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 from sprint_index_common import run_json, index_bead_pairs, validate_index
-from sprint_qa import choose_round, qa_icon, qa_verdict, findings_summary, qa_for_bead
+from sprint_qa import choose_round, qa_icon, qa_verdict, findings_summary, qa_for_bead, qa_findings
 
 RENDERER = Path(__file__).resolve().parents[1] / 'renderer'
 NS = 'http://www.w3.org/2000/svg'
@@ -167,10 +167,7 @@ def qa_states(graph, beads, index):
         rounds = [bead for bead in beads.values() if qa_for_bead(bead, key)]
         selected = choose_round(rounds)
         round_ids = {bead['id'] for bead in rounds}
-        findings = [bead for bead in beads.values() if any(
-            edge.get('type') in ('discovered-from', 'parent-child')
-            and edge.get('depends_on_id') in round_ids
-            for edge in bead.get('dependencies') or [])]
+        findings = qa_findings(beads.values(), round_ids)
         icon = qa_icon(selected, findings)
         counts = findings_summary(findings) if icon == '🚩' else None
         result[key] = {'icon': icon, 'findings': counts,

@@ -132,6 +132,9 @@ class DagTests(unittest.TestCase):
             {'type': 'discovered-from', 'depends_on_id': 'qa'},
             {'type': 'parent-child', 'depends_on_id': 'work-1'}]
         self.beads.update({'qa': review, 'qa-finding': finding})
+        sanity_child = bead('finding-sanity', labels=['stage:dev-sanity'], status='open')
+        sanity_child['dependencies'] = [{'type': 'parent-child', 'depends_on_id': 'qa'}]
+        self.beads['finding-sanity'] = sanity_child
         before = dag.qa_states(self.graph, self.beads, self.index)
         self.assertEqual(before['work-1']['findings'], '0:1:0')
         review['dependencies'][0]['type'] = 'parent-child'

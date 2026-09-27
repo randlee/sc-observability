@@ -31,6 +31,15 @@ def qa_for_bead(bead: dict[str, Any], target: str) -> bool:
         for edge in edges
     )
 
+
+def qa_findings(beads, qa_ids):
+    """QA children may also include reviews and sanity/fix tasks, not just findings."""
+    return [bead for bead in beads
+            if not set(bead.get("labels") or []) & {"stage:qa", "stage:dev-sanity", "stage:dev"}
+            and any((edge.get("type") or edge.get("dependency_type")) in {"discovered-from", "parent-child"}
+                    and (edge.get("depends_on_id") or edge.get("id")) in qa_ids
+                    for edge in bead.get("dependencies") or [])]
+
 def choose_round(candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not candidates:
         return None
