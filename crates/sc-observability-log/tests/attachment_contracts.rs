@@ -6,7 +6,7 @@
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
-use sc_observability_log::BridgeOptions;
+use sc_observability_log::{BridgeOptions, InitError};
 use sc_observability_types::{
     ActionName, ErrorCode, ErrorContext, Level, LogEvent, OBSERVATION_ENVELOPE_VERSION,
     ProcessIdentity, Remediation, SchemaVersion, ServiceName, TargetCategory, Timestamp,
@@ -56,15 +56,12 @@ enum FixtureSlotState {
 enum FixtureDetachError {
     Timeout(Box<ErrorContext>),
     NotInstalled(Box<ErrorContext>),
-    ForeignLoggerInstalled(Box<ErrorContext>),
 }
 
 impl FixtureDetachError {
     fn context(&self) -> &ErrorContext {
         match self {
-            Self::Timeout(context)
-            | Self::NotInstalled(context)
-            | Self::ForeignLoggerInstalled(context) => context,
+            Self::Timeout(context) | Self::NotInstalled(context) => context,
         }
     }
 }
@@ -97,18 +94,10 @@ fn not_installed() -> FixtureDetachError {
     ))
 }
 
-fn foreign_logger() -> FixtureDetachError {
-    FixtureDetachError::ForeignLoggerInstalled(detach_error(
-        "SC_LOG_FOREIGN_LOGGER_INSTALLED",
-        "foreign logger is installed",
-        Remediation::not_recoverable("detach the existing logger"),
-    ))
-}
-
 #[derive(Debug)]
 pub struct FixtureLogAttachment {
-    // Models the production bridge slot shared by an attachment and its saved
-    // controls: controls retain a Weak handle so they can observe detach.
+    // Models the production bridge slot shared by the attachment, the slot,
+    // and saved controls: controls retain a Weak handle to observe detach.
     state: Arc<Mutex<FixtureAttachmentState>>,
 }
 
@@ -116,6 +105,36 @@ pub struct FixtureLogAttachment {
 struct FixtureAttachmentState {
     slot: FixtureSlotState,
     entered_calls: usize,
+    foreign_logger_installed: bool,
+}
+
+#[derive(Debug, Clone)]
+struct FixtureBridgeSlot {
+    state: Arc<Mutex<FixtureAttachmentState>>,
+}
+
+impl FixtureBridgeSlot {
+    fn empty() -> Self {
+        Self::new(FixtureSlotState::Empty, false)
+    }
+
+    fn with_state(slot: FixtureSlotState) -> Self {
+        Self::new(slot, false)
+    }
+
+    fn with_foreign_logger() -> Self {
+        Self::new(FixtureSlotState::Empty, true)
+    }
+
+    fn new(slot: FixtureSlotState, foreign_logger_installed: bool) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(FixtureAttachmentState {
+                slot,
+                entered_calls: 0,
+                foreign_logger_installed,
+            })),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -124,18 +143,20 @@ pub struct FixtureLogControl {
 }
 
 impl FixtureLogAttachment {
-    fn attach(state: FixtureSlotState) -> Result<Self, FixtureDetachError> {
-        match state {
-            FixtureSlotState::Empty => Ok(Self {
-                state: Arc::new(Mutex::new(FixtureAttachmentState {
-                    slot: FixtureSlotState::Attached,
-                    entered_calls: 0,
-                })),
-            }),
+    fn attach(slot: &FixtureBridgeSlot) -> Result<Self, InitError> {
+        let state = Arc::clone(&slot.state);
+        let mut slot_state = state.lock().expect("fixture state lock");
+        if slot_state.foreign_logger_installed {
+            return Err(InitError::ForeignLoggerInstalled);
+        }
+        match slot_state.slot {
+            FixtureSlotState::Empty => slot_state.slot = FixtureSlotState::Attached,
             FixtureSlotState::Owned | FixtureSlotState::Attached | FixtureSlotState::Closing => {
-                Err(foreign_logger())
+                return Err(InitError::AlreadyInitialized);
             }
         }
+        drop(slot_state);
+        Ok(Self { state })
     }
 
     fn control(&self) -> FixtureLogControl {
@@ -246,8 +267,8 @@ fn assert_detach_error(error: &FixtureDetachError, code: &str) {
 
 #[test]
 fn detach_retry_after_timeout() {
-    let mut attachment =
-        FixtureLogAttachment::attach(FixtureSlotState::Empty).expect("empty slot attaches");
+    let slot = FixtureBridgeSlot::empty();
+    let mut attachment = FixtureLogAttachment::attach(&slot).expect("empty slot attaches");
     let control = attachment.control();
     attachment.set_entered_calls(1);
     assert_detach_error(
@@ -275,8 +296,8 @@ fn detach_retry_after_timeout() {
 
 #[test]
 fn stale_control_not_installed() {
-    let mut attachment =
-        FixtureLogAttachment::attach(FixtureSlotState::Empty).expect("empty slot attaches");
+    let slot = FixtureBridgeSlot::empty();
+    let mut attachment = FixtureLogAttachment::attach(&slot).expect("empty slot attaches");
     let control = attachment.control();
     control
         .submit()
@@ -295,11 +316,26 @@ fn foreign_logger_rejected() {
         FixtureSlotState::Attached,
         FixtureSlotState::Closing,
     ] {
-        assert_detach_error(
-            &FixtureLogAttachment::attach(state).unwrap_err(),
-            "SC_LOG_FOREIGN_LOGGER_INSTALLED",
-        );
+        let slot = FixtureBridgeSlot::with_state(state);
+        assert!(matches!(
+            FixtureLogAttachment::attach(&slot),
+            Err(InitError::AlreadyInitialized)
+        ));
     }
+
+    let foreign_logger_slot = FixtureBridgeSlot::with_foreign_logger();
+    assert!(matches!(
+        FixtureLogAttachment::attach(&foreign_logger_slot),
+        Err(InitError::ForeignLoggerInstalled)
+    ));
+}
+
+#[test]
+fn detached_slot_reattaches() {
+    let slot = FixtureBridgeSlot::empty();
+    let mut attachment = FixtureLogAttachment::attach(&slot).expect("empty slot attaches");
+    attachment.detach(Duration::from_millis(1)).expect("detach");
+    FixtureLogAttachment::attach(&slot).expect("detached slot reattaches");
 }
 
 #[test]
