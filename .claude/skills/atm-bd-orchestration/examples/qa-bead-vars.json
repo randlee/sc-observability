@@ -1,6 +1,5 @@
 {
   "id": "obs-d-4-qa1",
-  "parent": "obs-phase-d",
   "checked_bead": "obs-d-4",
   "phase": "d",
   "sprint": "d-4",
