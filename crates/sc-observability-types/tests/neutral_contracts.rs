@@ -483,6 +483,7 @@ mod legacy_compatibility {
 
     struct TypedIdentityError {
         calls: Arc<AtomicUsize>,
+        // The mutex lets this `&self` fixture transfer its owned failure exactly once.
         failure: Mutex<Option<IdentityFailure>>,
         expected_pointer: usize,
     }
@@ -501,6 +502,7 @@ mod legacy_compatibility {
 
     struct LegacyIdentityError {
         calls: Arc<AtomicUsize>,
+        // The mutex lets this `&self` fixture transfer its owned failure exactly once.
         failure: Mutex<Option<IdentityError>>,
         expected_pointer: usize,
     }
@@ -519,6 +521,7 @@ mod legacy_compatibility {
 
     struct TypedSubscriberError {
         calls: Arc<AtomicUsize>,
+        // The mutex lets this `&self` fixture transfer its owned failure exactly once.
         failure: Mutex<Option<SubscriberFailure>>,
         expected_pointer: usize,
     }
@@ -537,6 +540,7 @@ mod legacy_compatibility {
 
     struct LegacySubscriberError {
         calls: Arc<AtomicUsize>,
+        // The mutex lets this `&self` fixture transfer its owned failure exactly once.
         failure: Mutex<Option<SubscriberError>>,
         expected_pointer: usize,
     }
@@ -557,6 +561,7 @@ mod legacy_compatibility {
         log_calls: Arc<AtomicUsize>,
         span_calls: Arc<AtomicUsize>,
         metric_calls: Arc<AtomicUsize>,
+        // These mutexes let `&self` fixtures transfer each owned failure exactly once.
         log: Mutex<Option<ProjectionFailure>>,
         span: Mutex<Option<ProjectionFailure>>,
         metric: Mutex<Option<ProjectionFailure>>,
@@ -614,6 +619,7 @@ mod legacy_compatibility {
         log_calls: Arc<AtomicUsize>,
         span_calls: Arc<AtomicUsize>,
         metric_calls: Arc<AtomicUsize>,
+        // These mutexes let `&self` fixtures transfer each owned failure exactly once.
         log: Mutex<Option<ProjectionError>>,
         span: Mutex<Option<ProjectionError>>,
         metric: Mutex<Option<ProjectionError>>,
