@@ -3,6 +3,7 @@ export {
   CANONICAL_ERROR_CODES,
   canonicalErrorCode,
   canonicalErrorNameForCode,
+  canonicalErrorNamesForCode,
   err,
   internal,
   isFailure,

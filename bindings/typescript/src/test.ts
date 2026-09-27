@@ -3,6 +3,7 @@ import {
   createTauriTransport,
   canonicalErrorCode,
   canonicalErrorNameForCode,
+  canonicalErrorNamesForCode,
   encodeEvent,
   encodeValue,
   parseWireEnvelope,
@@ -34,8 +35,14 @@ async function main(): Promise<void> {
     "canonical v2 event name did not retain its stable code");
   assert(canonicalErrorNameForCode("SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED") === "EventError::Validation",
     "canonical v2 code did not resolve to its variant name");
-  assert(canonicalErrorNameForCode("SC_OBSERVABILITY_TYPES_VALUE_VALIDATION_FAILED")?.startsWith("EventError::") === true,
-    "retained 1.x wrapper name was accepted as canonical");
+  assert(canonicalErrorNameForCode("SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID") === undefined,
+    "ambiguous canonical code was falsely resolved to one variant");
+  const ambiguousNames = canonicalErrorNamesForCode("SC_OBSERVABILITY_TYPES_DIAGNOSTIC_INVALID");
+  assert(ambiguousNames.length === 7 && ambiguousNames.includes("InitError::Configuration") &&
+    ambiguousNames.includes("InitError::Runtime") && ambiguousNames.includes("EventError::Routing") &&
+    ambiguousNames.includes("ProjectionError::Projection") && ambiguousNames.includes("SubscriberError::Subscriber") &&
+    ambiguousNames.includes("LogSinkError::Write") && ambiguousNames.includes("LogSinkError::Flush"),
+  "ambiguous canonical code did not retain all candidate variants");
   const maximum = encodeValue(18446744073709551615n);
   assert(maximum.kind === "ok" && maximum.value.kind === "integer" && maximum.value.value === "18446744073709551615", "maximum u64 was not encoded losslessly");
   const negative = encodeValue(-9223372036854775808n);
@@ -72,6 +79,81 @@ async function main(): Promise<void> {
     }
   }
 
+  const wireFailure = (kind: string, code: string, extra: Record<string, unknown> = {}) => ({
+    schema_version: 1,
+    kind: "error",
+    error: {
+      kind,
+      at: new Date().toISOString(),
+      code,
+      message: `${kind} fixture`,
+      remediation: { kind: "recoverable", steps: ["retry the operation"] },
+      ...extra,
+    },
+  });
+  const failedAdmission = createClient({
+    request: async (operation) => {
+      assert(operation === "try_log", "admission fixture received the wrong operation");
+      return { kind: "ok", value: wireFailure("queue_full", "SC_OBSERVABILITY_LOGGER_QUEUE_FULL") };
+    },
+  });
+  let admissionFailureKind: string | undefined;
+  assert(failedAdmission.kind === "ok" && event.kind === "ok", "admission failure fixture setup failed");
+  if (failedAdmission.kind === "ok" && event.kind === "ok") {
+    const result = await failedAdmission.value.tryLog(event.value);
+    if (result.kind === "error") admissionFailureKind = result.error.kind;
+    assert(result.kind === "error" && result.error.kind === "queue_full",
+      "failed admission was not retained as queue_full");
+  }
+  const failedFlush = createClient({
+    request: async (operation) => {
+      assert(operation === "flush", "flush fixture received the wrong operation");
+      return { kind: "ok", value: wireFailure("io", "SC_LOG_QUERY_IO") };
+    },
+  });
+  assert(failedFlush.kind === "ok", "flush failure fixture setup failed");
+  if (failedFlush.kind === "ok") {
+    const result = await failedFlush.value.flush(100);
+    assert(result.kind === "error" && result.error.kind === "io" && admissionFailureKind === "queue_full",
+    "flush/persistence failure was conflated with admission failure");
+  }
+
+  const cancelled = createClient({
+    request: async (operation) => {
+      assert(operation === "flush", "cancellation fixture received the wrong operation");
+      return { kind: "ok", value: wireFailure("cancelled", "SC_OBSERVABILITY_LEVEL_STOPPING", { operation: "flush" }) };
+    },
+  });
+  assert(cancelled.kind === "ok", "cancellation fixture setup failed");
+  if (cancelled.kind === "ok") {
+    const result = await cancelled.value.flush(100);
+    assert(result.kind === "error" && result.error.kind === "cancelled" && result.error.operation === "flush",
+      "cancellation was not retained as a distinct typed outcome");
+  }
+  let releaseCompletion!: () => void;
+  const nativeCompletion = createClient({
+    request: async (operation) => {
+      assert(operation === "flush", "completion fixture received the wrong operation");
+      return new Promise<Result<unknown>>((resolve) => {
+        releaseCompletion = () => resolve({ kind: "ok", value: { schema_version: 1, kind: "ok", value: { kind: "completed" } } });
+      });
+    },
+  });
+  assert(nativeCompletion.kind === "ok", "native completion fixture setup failed");
+  if (nativeCompletion.kind === "ok") {
+    const completion = nativeCompletion.value.flush(100);
+    const pending = nativeCompletion.value.client_status();
+    assert(pending.kind === "ok" && pending.value.in_flight === 1,
+      "native completion did not retain the bounded observation state");
+    releaseCompletion();
+    const result = await completion;
+    assert(result.kind === "ok" && result.value.kind === "completed",
+      "native completion was not returned after observation");
+    const recovered = nativeCompletion.value.client_status();
+    assert(recovered.kind === "ok" && recovered.value.in_flight === 0,
+      "native completion did not release the observation reservation");
+  }
+
   const invoked: string[] = [];
   const tauriTransport = createTauriTransport(async (command, args) => {
     invoked.push(command);
@@ -83,6 +165,8 @@ async function main(): Promise<void> {
     const result = await tauriTransport.value.request("try_log", { schema_version: 1, event: event.value });
     assert(result.kind === "ok" && invoked[0] === "plugin:sc-observability|sc_observability_try_log", "Tauri command mapping failed");
   }
+  assert(invoked.every((command) => !/shutdown|level|reset|elevate/i.test(command)),
+    "binding transport exposed a host shutdown or level mutation command");
 
   let queryCalls = 0;
   const queryClient = createClient({

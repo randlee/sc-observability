@@ -47,10 +47,23 @@ export function canonicalErrorCode(name: CanonicalErrorName): string {
   return CANONICAL_ERROR_CODES[name];
 }
 
-export function canonicalErrorNameForCode(code: string): CanonicalErrorName | undefined {
-  return (Object.keys(CANONICAL_ERROR_CODES) as CanonicalErrorName[]).find(
+export function canonicalErrorNamesForCode(code: string): readonly CanonicalErrorName[] {
+  return (Object.keys(CANONICAL_ERROR_CODES) as CanonicalErrorName[]).filter(
     (name) => CANONICAL_ERROR_CODES[name] === code,
   );
+}
+
+/**
+ * Resolves a code only when it identifies one canonical variant.
+ *
+ * Several canonical variants intentionally share a diagnostic code. Returning
+ * `undefined` for those ambiguous codes prevents a language binding from
+ * inventing a singular variant identity; callers that need the candidates can
+ * use `canonicalErrorNamesForCode`.
+ */
+export function canonicalErrorNameForCode(code: string): CanonicalErrorName | undefined {
+  const names = canonicalErrorNamesForCode(code);
+  return names.length === 1 ? names[0] : undefined;
 }
 
 export type Result<T> = { kind: "ok"; value: T } | { kind: "error"; error: Failure };
