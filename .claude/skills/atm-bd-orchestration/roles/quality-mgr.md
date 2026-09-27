@@ -132,8 +132,8 @@ screen said. What happens next depends on the verdict:
 - A blocking finding never adds a dependency to another planned sprint. The
   canonical `sprints.jsonl` plan is the sole source of those edges; file and
   dispatch the finding's own remediation through its normal finding/fix flow.
-- Findings are `parallel_safe` by default. Set `blocked_by` only when one fix
-  needs another finding's fix first.
+- Findings are `parallel_safe` by default. Set `blocked_by` only to another finding
+  of this round, when its fix needs that one's fix first.
 - Ids are `<qa bead>-f<n>`, numbered in report order.
 - Every finding closes with a close reason. You close ceremony findings. The
   fixer closes the rest, as fixed or not reproducible. In a fix round you
