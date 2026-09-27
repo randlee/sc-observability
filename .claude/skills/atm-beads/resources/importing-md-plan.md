@@ -51,15 +51,11 @@ goes back to the plan's author to supply, with the exact list of gaps.
 5. **Gate** the rendered plan. Run from the repository root:
 
    ```bash
-   .claude/skills/atm-beads/scripts/validate-plan --file <scratch>/plan.jsonl
+   .claude/skills/atm-beads/scripts/validate-plan --file <scratch>/plan.jsonl --root <id> --index docs/plans/phase-<x>/sprints.jsonl
    ```
 
-   Add `--root <id> --phase <x>` when the root is not in the file. The script
-   runs `bd doctor`, `check-plan.jq` (fields, labels, graph, stack, and
-   `requirements`/`adrs` present as ids or `["NONE"]`), the check that every
-   REQ/ADR id exists in its governing document, and the check that every
-   assignee is an ATM member. Exit 5 lists the problems, and every one of
-   them stops the import. A missing integration branch is only a warning.
+   Exit 5 lists the problems (`SKILL.md`, Validation), and every one of
+   them stops the import.
 6. **Check that no id exists yet.** `bd import` upserts: an existing id is
    overwritten, not refused.
 

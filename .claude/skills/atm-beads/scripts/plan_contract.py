@@ -40,7 +40,6 @@ EXIT_VALID: int = 0
 EXIT_CANNOT_RUN: int = 2
 EXIT_PROBLEMS: int = 5
 PROBLEM_LINE: str = "{bead}: {message}"  # one per stdout line
-WARNING_PREFIX: str = "warning: "
 
 # Legacy in-memory fixture keys. Persisted phase plans use sprints.jsonl tuples.
 INDEX_OPTIONAL_KEYS: tuple[str, ...] = ("integration_branch", "review_artifacts", "policy")

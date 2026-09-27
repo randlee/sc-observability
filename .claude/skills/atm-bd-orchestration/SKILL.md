@@ -105,12 +105,8 @@ important P2, minor P4).
 `bd gate` is the strategic way to hold work. A gate holds work to prioritize
 other work, waits for critical CI or integration testing (`gh:run` or
 `gh:pr`), a timer, or a human decision.
-Create the gate and wire the work explicitly, for example:
-
-```bash
-bd gate create --id phase-d-integration --title 'phase d integration CI'
-bd dep add obs-d-7 phase-d-integration --type blocks
-```
+A gate and its edges are created only on the user's explicit instruction for
+that gate.
 
 Human gates require explicit user agreement recorded on the gate bead or phase
 root; the canonical `sprints.jsonl` contains only planned sprint dependencies.
@@ -221,9 +217,9 @@ Then, on each task close:
 | plan-review FAIL | have the author fix the listed beads, run `validate-plan` again, then dispatch the next round |
 | dev-complete | nothing: the sanity check is now ready |
 | sanity check PASS | verify the branch base is its declared `pr_target`, then create and dispatch the QA bead from [`qa-bead.json.j2`](templates/qa-bead.json.j2) (a child of the checked bead). For a finding, the QA dispatch sets `checked_bead` = the finding (it carries its own requirements and ADRs), `sprint_bead` = its `metadata.sprint_bead`, `carry_forward` = the finding id, and `round` = the `metadata.round` of the QA bead it was `discovered-from`, + 1, or 1 when it came from the phase-end review |
-| sanity check FAIL | sanity answers only whether a numbered deliverable is written; requirements and quality are QA. The sanity member creates one child finding bead for every undone deliverable under `<checked bead>` at `min(parent priority + 1, P4)`, never one for lint; it does not edit the parent. It copies phase/sprint/stack/layer provenance and uses only `phase-<phase>`, `stage:finding`, and `stack:<stack>` labels. The hierarchy is the parent closure gate (`bd` rejects parent-to-child `blocks` edges); only reported prerequisite relationships become sibling `blocks` edges. Each child stores the exact structured report data. `sanity-create-findings` invokes `blocking-finding-gates.py` for every blocking child. Its `<finding>-sanity` gate is the finding's single sanity identity, not a second bead: it is parented under the finding's sprint dev bead, and its `blocks` edge to the finding makes it wait for that fix before blocking eligible downstream work. The lead reviews them and retains the existing process: reopen the dev bead, then assign it with [`dev-fix.xml.j2`](templates/dev-fix.xml.j2). The lead may overrule, amend, split, or reassign children, but does not recreate them. After the second FAIL for the same checked bead, before dispatching a fix the lead diffs flagged files versus the last PASS, checks the branch base for foreign commits, then rules; report `SANITY.ROUND_CAP` with undone deliverable numbers and do not run a third round without that ruling. The parent cannot close until every child closes. This applies to a finding bead too: its task id is the finding, and it closes with `dev-complete.md.j2` |
+| sanity check FAIL | sanity answers only whether a numbered deliverable is written; requirements and quality are QA. The sanity member creates one child finding bead for every undone deliverable under `<checked bead>` at `clamp(parent priority - 1, P1, P4)`, so it ranks ahead of the parent's peers, never one for lint; it does not edit the parent. It copies phase/sprint/stack/layer provenance and uses only `phase-<phase>`, `stage:finding`, and `stack:<stack>` labels. The hierarchy is the parent closure gate (`bd` rejects parent-to-child `blocks` edges); it adds `blocks` edges only between those new beads, where one fix depends on another. Each child stores the exact structured report data. On a first FAIL the lead reopens the checked bead and assigns it with [`dev-fix.xml.j2`](templates/dev-fix.xml.j2). When the children are excessive, the lead first verifies against the branch that each one's work is really not done and closes, with a reason, any that judges correctness or quality (that is QA). The lead may overrule, amend, split, or reassign children, but does not recreate them. After the second FAIL for the same checked bead, before dispatching a fix the lead diffs flagged files versus the last PASS, checks the branch base for foreign commits, then rules; report `SANITY.ROUND_CAP` with undone deliverable numbers and do not run a third round without that ruling. The parent cannot close until every child closes. This applies to a finding bead too: its task id is the finding, and it closes with `dev-complete.md.j2` |
 | qa-complete | quality-mgr files finding beads, applies the ceremony screen, and reports the verdict. |
-| fix-complete (`fixed`) | create the fix's sanity check bead (`atm-beads` [`dev-sanity-bead.json.j2`](../atm-beads/templates/dev-sanity-bead.json.j2), `dev_bead` = the finding) |
+| fix-complete (`fixed`) | create the fix's sanity check bead (`atm-beads` [`dev-sanity-bead.json.j2`](../atm-beads/templates/dev-sanity-bead.json.j2), `dev_bead` and `parent` = the finding) |
 | review-complete | file each finding with `finding-bead.json.j2` (`qa_bead` = the review bead) |
 | task-refused | read the reason and the bead state (`open`, or `blocked-failed` for a dev bead that declared failure). Reassign it, split it, or close the bead yourself with `bd close <bead> --force --reason "<why>"`. A `blocked` bead is never in `bd ready`: run `bd update <bead> --status open --assignee <new agent>` before you re-dispatch it |
 | fix-complete (`not_reproducible`) | nothing: no commit, no sanity check; the finding is closed |
@@ -232,8 +228,13 @@ Then, on each task close:
 Re-run `bd ready` after every close. Never cache the ready list. The open
 phase root also appears in it; it is never dispatched.
 
-After every bead write, run `validate-plan --root <root>`; fix any problem
-before the next dispatch. Verify branches read-only (`git -C <worktree> log`,
+After every bead write, run `validate-plan --root <root>`. On any problem,
+stop dispatching and report it to the user; never repair the graph
+(`bd dep`, `--parent`). A DAG problem is fixed by replanning: edit
+`sprints.jsonl` in a `/sc-git-worktree` branch off `develop` and merge the
+plan PR. While a phase is in motion its sprint DAG is frozen; only
+dependencies to fix beads created during the phase are added or changed.
+Verify branches read-only (`git -C <worktree> log`,
 `git diff`, `gh pr view`); never run a state-changing command in an
 assignee's worktree.
 
@@ -389,6 +390,6 @@ template's vars are in [`examples/`](examples/).
 ## Priority
 
 `bd ready` sorts by priority, so priority is the queue order. The finding
-template derives it from severity: blocking P1, planned dev P2, important P3,
+template derives it from severity: blocking P1, planned dev P2, important P2,
 minor P4. The lead still picks the assignee; the usual case is a frontier dev
 for blocking and dev work and a fast agent for important and minor.
