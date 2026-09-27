@@ -1,5 +1,18 @@
-error[E0451]: field `_private` of struct `LogControl` is private
- --> tests/ui/log_control_not_constructible.rs:3:40
+error: cannot construct `LogControl` with struct literal syntax due to private fields
+ --> tests/ui/log_control_not_constructible.rs:3:5
   |
 3 |     sc_observability_log::LogControl { _private: () }
-  |                                        ^^^^^^^^ private field
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^   ------------ private field
+  |
+  = note: ...and other private field `attachment` that was not provided
+help: you might have meant to use an associated function to build this type
+  |
+3 -     sc_observability_log::LogControl { _private: () }
+3 +     sc_observability_log::LogControl::new()
+  |
+3 -     sc_observability_log::LogControl { _private: () }
+3 +     sc_observability_log::LogControl::for_attachment(_)
+  |
+3 -     sc_observability_log::LogControl { _private: () }
+3 +     sc_observability_log::LogControl::stale_attachment()
+  |

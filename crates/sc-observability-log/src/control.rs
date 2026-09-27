@@ -1,6 +1,7 @@
 //! [`LogControl`]: the cloneable, non-owning direct bridge control surface.
 
 use std::path::PathBuf;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use crate::health::BridgeLifecycle;
@@ -41,11 +42,29 @@ pub type EmitOutcome = sc_observability_types::AdmissionOutcome;
 #[derive(Debug, Clone)]
 pub struct LogControl {
     _private: (),
+    attachment: Option<Weak<crate::bridge::AttachmentState>>,
 }
 
 impl LogControl {
     pub(crate) const fn new() -> Self {
-        Self { _private: () }
+        Self {
+            _private: (),
+            attachment: None,
+        }
+    }
+
+    pub(crate) fn for_attachment(state: &Arc<crate::bridge::AttachmentState>) -> Self {
+        Self {
+            _private: (),
+            attachment: Some(Arc::downgrade(state)),
+        }
+    }
+
+    pub(crate) const fn stale_attachment() -> Self {
+        Self {
+            _private: (),
+            attachment: Some(Weak::new()),
+        }
     }
 
     /// Flushes on a helper thread, bounded by `timeout`.
@@ -54,6 +73,12 @@ impl LogControl {
     ///
     /// Returns [`FlushError`] when the lifecycle or bounded flush rejects the request.
     pub fn flush(&self, timeout: Duration) -> Result<(), FlushError> {
+        if let Some(saved) = &self.attachment {
+            return crate::bridge::flush_attached(saved, timeout);
+        }
+        if crate::bridge::is_attached() {
+            return crate::bridge::flush_current_attachment(timeout);
+        }
         handle::flush_installed(timeout)
     }
 
@@ -104,6 +129,12 @@ impl LogControl {
         reason = "the copied bridge retains its legacy logger admission boundary"
     )]
     pub fn try_log(&self, event: BridgeEvent) -> Result<EmitOutcome, EmitError> {
+        if let Some(saved) = &self.attachment {
+            return handle::submit_guarded(|| crate::bridge::submit_control(saved, event));
+        }
+        if crate::bridge::is_attached() {
+            return handle::submit_guarded(|| crate::bridge::submit_current_control(event));
+        }
         handle::submit_guarded(|| {
             if handle::lifecycle() != BridgeLifecycle::Running {
                 return Err(not_running());
@@ -225,7 +256,7 @@ fn diagnostic_from_context(
     }
 }
 
-fn core_emit_error(error: &sc_observability::TryLogError) -> EmitError {
+pub(crate) fn core_emit_error(error: &sc_observability::TryLogError) -> EmitError {
     match error {
         sc_observability::TryLogError::InvalidEvent(source) => EmitError::InvalidEvent {
             diagnostic: crate::error::diagnostic_from_info(source),
