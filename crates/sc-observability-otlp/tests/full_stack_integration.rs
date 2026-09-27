@@ -6,16 +6,16 @@
 use std::sync::Arc;
 
 use sc_observability_otlp::{
-    LogsConfig, MetricsConfig, OtelConfig, Telemetry, TelemetryConfigBuilder, TelemetryProjectors,
-    TracesConfig,
+    LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, Telemetry, TelemetryConfigBuilder,
+    TelemetryProjectors, TracesConfig,
 };
 use sc_observability_types::typed::{
     TypedLogProjector, TypedMetricProjector, TypedSpanProjector, legacy_log_projector,
     legacy_metric_projector, legacy_span_projector,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, DurationMs, EntityId, ErrorCode, Level, LogEvent, LogProjector,
-    MetricKind, MetricName, MetricProjector, MetricRecord, MetricUnit, Observation,
+    ActionName, Diagnostic, DiagnosticInfo, DurationMs, EntityId, ErrorCode, Level, LogEvent,
+    LogProjector, MetricKind, MetricName, MetricProjector, MetricRecord, MetricUnit, Observation,
     ObservationFilter, OutcomeLabel, ProcessIdentity, ProjectionError, Remediation, SchemaVersion,
     ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
     StateTransition, TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext,
@@ -137,19 +137,36 @@ impl TypedMetricProjector<AgentPayload> for TypedStaticMetricProjector {
     }
 }
 
-fn telemetry_config() -> sc_observability_otlp::TelemetryConfig {
+fn disabled_telemetry_config() -> sc_observability_otlp::TelemetryConfig {
     TelemetryConfigBuilder::new(service_name())
         .enable_logs(LogsConfig::default())
         .enable_traces(TracesConfig::default())
         .enable_metrics(MetricsConfig::default())
         .with_transport(OtelConfig {
-            // These integration fixtures validate routing fan-out, not a real
-            // OTLP backend. Disabled is the only no-network construction path.
+            // These integration fixtures validate local projection and
+            // registration only. Exporter routing is asserted separately
+            // through the crate-private ExporterSet injection seam.
             enabled: false,
             ..OtelConfig::default()
         })
         .build()
         .expect("valid telemetry config")
+}
+
+fn enabled_telemetry_config() -> sc_observability_otlp::TelemetryConfig {
+    TelemetryConfigBuilder::new(service_name())
+        .enable_logs(LogsConfig::default())
+        .enable_traces(TracesConfig::default())
+        .enable_metrics(MetricsConfig::default())
+        .with_transport(OtelConfig {
+            enabled: true,
+            endpoint: Some(
+                OtlpEndpoint::new("https://otel.example.internal").expect("valid OTLP endpoint"),
+            ),
+            ..OtelConfig::default()
+        })
+        .build()
+        .expect("valid enabled telemetry config")
 }
 
 fn service_name() -> ServiceName {
@@ -225,7 +242,7 @@ fn temp_root(name: &str) -> std::path::PathBuf {
 
 #[test]
 fn builder_registration_attaches_logs_spans_and_metrics() {
-    let telemetry = Arc::new(Telemetry::new(telemetry_config()).expect("telemetry"));
+    let telemetry = Arc::new(Telemetry::new(disabled_telemetry_config()).expect("telemetry"));
     let root = temp_root("integration");
     let config = ObservabilityConfig::default_for(
         ToolName::new("test-service").expect("valid tool"),
@@ -268,17 +285,12 @@ fn builder_registration_attaches_logs_spans_and_metrics() {
             .state,
         TelemetryHealthState::Disabled
     );
-    assert!(
-        health
-            .exporter_statuses
-            .iter()
-            .all(|status| status.state == sc_observability_types::ExporterHealthState::Healthy)
-    );
 }
 
 #[test]
 fn typed_projector_inputs_forward_through_retained_registration() {
-    let telemetry = Arc::new(Telemetry::new_typed(telemetry_config()).expect("typed telemetry"));
+    let telemetry =
+        Arc::new(Telemetry::new_typed(disabled_telemetry_config()).expect("typed telemetry"));
     let root = temp_root("typed-integration");
     let config = ObservabilityConfig::default_for(
         ToolName::new("test-service").expect("valid tool"),
@@ -315,4 +327,22 @@ fn typed_projector_inputs_forward_through_retained_registration() {
             .contains("\"action\":\"agent.observe\"")
     );
     assert_eq!(telemetry.health().state, TelemetryHealthState::Disabled);
+}
+
+#[test]
+fn enabled_configuration_rejects_unavailable_backend() {
+    let Err(error) = Telemetry::new_typed(enabled_telemetry_config()) else {
+        panic!("enabled configuration must not receive a fallback exporter");
+    };
+
+    #[cfg(not(feature = "otlp-sdk"))]
+    assert_eq!(
+        error.diagnostic().code,
+        sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
+    );
+    #[cfg(feature = "otlp-sdk")]
+    assert_eq!(
+        error.diagnostic().code,
+        sc_observability_types::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED
+    );
 }

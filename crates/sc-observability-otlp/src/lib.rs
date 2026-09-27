@@ -274,11 +274,11 @@ fn sdk_exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet
                 ),
             });
         }
-        return Err(unsupported_backend(
+        Err(unsupported_backend(
             config::ExporterBackend::OpenTelemetrySdk,
             "otlp-sdk",
             "SDK adapter implementation is not installed yet",
-        ));
+        ))
     }
 
     #[cfg(not(feature = "otlp-sdk"))]
@@ -302,11 +302,11 @@ fn legacy_exporter_factory(
 
     #[cfg(feature = "legacy-http-json")]
     {
-        return Err(unsupported_backend(
+        Err(unsupported_backend(
             config::ExporterBackend::LegacyHttpJson,
             "legacy-http-json",
             "legacy HTTP/JSON adapter implementation is not installed yet",
-        ));
+        ))
     }
 
     #[cfg(not(feature = "legacy-http-json"))]
@@ -1218,6 +1218,49 @@ mod tests {
         assert_eq!(
             constructor_error.diagnostic().code,
             sc_observability_types::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED
+        );
+    }
+
+    #[test]
+    fn injected_exporter_set_routes_enabled_signals_and_reports_health() {
+        let log_exporter = Arc::new(RecordingLogExporter::default());
+        let trace_exporter = Arc::new(RecordingTraceExporter::default());
+        let metric_exporter = Arc::new(RecordingMetricExporter::default());
+        let telemetry = Telemetry::new_with_exporters(
+            telemetry_config(),
+            log_exporter.clone(),
+            trace_exporter.clone(),
+            metric_exporter.clone(),
+        )
+        .expect("enabled telemetry with injected exporters");
+
+        telemetry
+            .emit_log(&log_event(service_name(), "injected routing"))
+            .expect("route log");
+        let (started, ended) = complete_span_signals();
+        telemetry.emit_span(&started).expect("route span start");
+        telemetry.emit_span(&ended).expect("route span end");
+        telemetry
+            .emit_metric(&metric_record())
+            .expect("route metric");
+        telemetry.flush().expect("flush injected exporters");
+
+        assert_eq!(*log_exporter.calls.lock().expect("calls poisoned"), vec![1]);
+        assert_eq!(
+            *trace_exporter.calls.lock().expect("calls poisoned"),
+            vec![1]
+        );
+        assert_eq!(
+            *metric_exporter.calls.lock().expect("calls poisoned"),
+            vec![1]
+        );
+        let health = telemetry.health();
+        assert_eq!(health.state, TelemetryHealthState::Healthy);
+        assert!(
+            health
+                .exporter_statuses
+                .iter()
+                .all(|status| status.state == ExporterHealthState::Healthy)
         );
     }
 
