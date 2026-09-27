@@ -93,6 +93,14 @@ def existing_children(bead: str, actor: str, task: str, commit: str) -> dict[str
     return found
 
 
+def parent_layer(metadata: dict):
+    """A dev bead records `layer`; a finding bead records only `found_on_layer` (finding-bead.json.j2)."""
+    for key in ("layer", "found_on_layer"):
+        if metadata.get(key) not in (None, ""):
+            return metadata[key]
+    raise HandoffError("checked bead metadata lacks layer")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--task", required=True)
@@ -111,10 +119,11 @@ def main() -> int:
         parent_metadata = parent.get("metadata")
         if not isinstance(parent_metadata, dict):
             raise HandoffError("checked bead has no metadata")
-        required_parent_fields = ("phase", "sprint", "stack", "layer")
+        required_parent_fields = ("phase", "sprint", "stack")
         missing_parent_fields = [key for key in required_parent_fields if key not in parent_metadata]
         if missing_parent_fields:
             raise HandoffError("checked bead metadata lacks " + ", ".join(missing_parent_fields))
+        layer = parent_layer(parent_metadata)
         phase, sprint, stack = (parent_metadata["phase"], parent_metadata["sprint"], parent_metadata["stack"])
         if not all(isinstance(value, str) and value for value in (phase, sprint, stack)):
             raise HandoffError("checked bead phase, sprint, and stack metadata must be non-empty strings")
@@ -146,7 +155,7 @@ def main() -> int:
                 raise HandoffError(f"invalid finding severity: {severity}") from exc
             provenance = {
                 "phase": phase, "sprint": sprint, "stack": stack,
-                "found_on_layer": parent_metadata["layer"],
+                "found_on_layer": layer,
                 "found_at_commit": report["commit"], "reviewer": args.reviewer,
                 "finding_ref": ref, "sprint_bead": args.bead, "severity": severity,
                 "difficulty": difficulty,
@@ -188,7 +197,7 @@ def main() -> int:
                     command(["bd", "dep", "add", child, prerequisite_id, "--type", BLOCKS_RELATION], args.actor)
         gate_script = Path(__file__).with_name("blocking-finding-gates.py")
         for finding in findings:
-            if str(finding.get("severity") or "").lower() == "blocking":
+            if str(finding.get("severity") or "blocking").lower() == "blocking":  # same default as the child's priority
                 gate_argv = [str(gate_script), "--finding", children[finding["finding_ref"]]]
                 if args.actor:
                     gate_argv.extend(["--actor", args.actor])
