@@ -8,7 +8,7 @@ import sys
 PE_SIGNATURE = b"PE\0\0"
 PE_ARM64_MACHINE = 0xAA64
 WINDOWS_ARM64_RUST_HOST = "aarch64-pc-windows-msvc"
-WINDOWS_ARM64_POLICY = {"id": "windows-arm64", "runner": "windows-11-arm", "machine": "ARM64", "wheel_platform": "win_arm64", "rust_target": "aarch64-pc-windows-msvc"}
+WINDOWS_ARM64_POLICY = {"id": "windows-arm64", "runner": "windows-11-arm", "machine": "ARM64", "wheel_platform": "win_arm64", "rust_target": "aarch64-pc-windows-msvc", "build_python": "3.11", "interpreters": ["3.11", "3.12", "3.13", "3.14"]}
 
 
 def apply_windows_arm64_overlay(policy: dict) -> dict:

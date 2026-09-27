@@ -212,14 +212,18 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(len(policy['interpreters']) * len(policy['platforms']), 25)
         policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
                                     'wheel_platform': 'win_arm64',
-                                    'rust_target': 'aarch64-pc-windows-msvc'})
-        self.assertEqual(len(policy['interpreters']) * len(policy['platforms']), 30)
+                                    'rust_target': 'aarch64-pc-windows-msvc',
+                                    'build_python': '3.11',
+                                    'interpreters': ['3.11', '3.12', '3.13', '3.14']})
+        self.assertEqual(sum(len(p.get('interpreters', policy['interpreters'])) for p in policy['platforms']), 29)
 
     def _six_platform_aggregate_fixture(self, root: Path):
         policy = json.loads((Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json').read_text())
         policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
                                     'wheel_platform': 'win_arm64',
-                                    'rust_target': 'aarch64-pc-windows-msvc'})
+                                    'rust_target': 'aarch64-pc-windows-msvc',
+                                    'build_python': '3.11',
+                                    'interpreters': ['3.11', '3.12', '3.13', '3.14']})
         policy_path = root / 'policy.json'
         policy_path.write_text(json.dumps(policy))
         sdist = root / 'fixture.tar.gz'
@@ -243,7 +247,7 @@ class DistributionTests(unittest.TestCase):
                      'embedding': 'passed', 'native_runtime_tests': 'passed',
                      'negative_results': {str(number): 'passed' for number in range(9)}}
             (build_dir / 'build-result.json').write_text(json.dumps(build))
-            for count, version in enumerate(policy['interpreters']):
+            for count, version in enumerate(platform.get('interpreters', policy['interpreters'])):
                 cell_dir = root / f'cell-{index}-{count}'
                 cell_dir.mkdir()
                 cell = {**common, 'platform': platform['id'], 'python': version,
@@ -274,7 +278,7 @@ class DistributionTests(unittest.TestCase):
             policy, sdist, source = self._six_platform_aggregate_fixture(root)
             self.assertEqual(len(json.loads(policy.read_text())['platforms']), 6)
             self.assertEqual(len(list(root.rglob('build-result.json'))), 6)
-            self.assertEqual(len(list(root.rglob('cell-result.json'))), 30)
+            self.assertEqual(len(list(root.rglob('cell-result.json'))), 29)
             patches = self._aggregate_source_patches(source)
             with patches[0], patches[1], patches[2], patches[3]:
                 aggregate(Namespace(policy=policy, evidence=root, sdist=sdist, source_commit='a' * 40))
@@ -328,7 +332,7 @@ class DistributionTests(unittest.TestCase):
             root = Path(temporary)
             sdist = root / 'fixture.tar.gz'
             sdist.write_bytes(b'fixture')
-            with self.assertRaisesRegex(DistributionError, 'exactly six platforms, six builds and 30'):
+            with self.assertRaisesRegex(DistributionError, 'exactly six platforms, six builds and 29'):
                 aggregate(Namespace(policy=policy_path, evidence=root, sdist=sdist, source_commit='a' * 40))
 
     def test_aggregate_requires_opted_in_host_execution_on_the_cell_interpreter(self):
@@ -362,7 +366,7 @@ class DistributionTests(unittest.TestCase):
                 for index, platform in enumerate(policy['platforms']):
                     directory = root / f'build-{index}'; directory.mkdir()
                     (directory / 'build-result.json').write_text(json.dumps({**common, 'platform': platform['id']}))
-                    for count, version in enumerate(policy['interpreters']):
+                    for count, version in enumerate(platform.get('interpreters', policy['interpreters'])):
                         directory = root / f'cell-{index}-{count}'; directory.mkdir()
                         record = {**common, 'platform': platform['id'], 'python': version, 'python_full': version,
                                   'runtime_suite': contract, 'typecheck': 'passed', 'commands': []}
@@ -372,7 +376,7 @@ class DistributionTests(unittest.TestCase):
                         (directory / 'cell-result.json').write_text(json.dumps(record))
                 with self.assertRaisesRegex(
                         DistributionError,
-                        'aggregate requires exactly six platforms, six builds and 30|'
+                        'aggregate requires exactly six platforms, six builds and 29|'
                         'missing interpreter-matched embedded-host execution'):
                     aggregate(Namespace(policy=policy_path, evidence=root, sdist=sdist, source_commit='a' * 40))
 
@@ -382,9 +386,11 @@ class DistributionTests(unittest.TestCase):
         policy = json.loads(policy_path.read_text())
         policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
                                     'wheel_platform': 'win_arm64',
-                                    'rust_target': 'aarch64-pc-windows-msvc'})
+                                    'rust_target': 'aarch64-pc-windows-msvc',
+                                    'build_python': '3.11',
+                                    'interpreters': ['3.11', '3.12', '3.13', '3.14']})
         expected_messages = {
-            'missing': 'exactly six builds and 30 installed-suite cells are required',
+            'missing': 'exactly six builds and 29 installed-suite cells are required',
             'duplicate': 'matrix contains missing, duplicate or unsupported cells',
             'wrong-target': 'build records contain missing, duplicate or unsupported platforms',
             'mixed-source': 'mixed source/artifacts or incomplete isolation evidence',
@@ -408,7 +414,7 @@ class DistributionTests(unittest.TestCase):
                     if mutation == 'wrong-target' and index == 0:
                         record['platform'] = 'unsupported-platform'
                     (directory / 'build-result.json').write_text(json.dumps(record))
-                    for count, version in enumerate(policy['interpreters']):
+                    for count, version in enumerate(platform.get('interpreters', policy['interpreters'])):
                         if mutation == 'missing' and index == 0 and count == 0:
                             continue
                         directory = root / f'cell-{index}-{count}'; directory.mkdir()

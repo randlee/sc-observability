@@ -32,19 +32,19 @@ Own the native Windows ARM64 build adapter and the open-ended Python distributio
 
 ## Deliverables
 
-1. Preflight a native ARM64 Windows runner and native CPython 3.10–3.14; reject x64 emulation/cross-build as native evidence. Add Windows ARM64 runner/target handling to the existing B.4a workflow using source-SHA-pinned jobs.
+1. Preflight a native ARM64 Windows runner and native CPython 3.11–3.14; reject x64 emulation/cross-build as native evidence. Windows ARM64 omits 3.10 because no native asset exists; the published floor remains 3.10. Add Windows ARM64 runner/target handling to the existing B.4a workflow using source-SHA-pinned jobs.
 
 2. Update `prepare_python_distributions.py` for `aarch64-pc-windows-msvc`/`win_arm64` and six-platform artifact preparation without editing release policy files.
 
 3. Implement native PE `0xAA64` inspection in `python_arm64.py` with positive/x86/x64/malformed fixtures in `test_python_arm64.py`; expose the helper through the shared native-architecture inspector contract.
 
-4. Provide the exact D.18 policy handoff row: `platform=windows-arm64; machine=ARM64; wheel_tag=win_arm64; rust_target=aarch64-pc-windows-msvc; interpreters=3.10,3.11,3.12,3.13,3.14; native_cells=5`. Existing five platforms remain unchanged; D.18 writes the row in `release/python-platform-policy.json`.
+4. Provide the exact D.18 policy handoff row: `platform=windows-arm64; machine=ARM64; wheel_tag=win_arm64; rust_target=aarch64-pc-windows-msvc; build_python=3.11; interpreters=3.11,3.12,3.13,3.14; native_cells=4`. Existing five platforms remain unchanged; D.18 writes the row in `release/python-platform-policy.json`.
 
 5. Extend `_python_distribution.py` source inspection and `inspect_wheel` with `expected_requires_python`. Parse—not grep—the Python `pyproject.toml`, `Cargo.toml`, and built-wheel `METADATA`; require a lower bound of 3.10 with no upper or exclusion cap. Retain the existing PyO3/maturin and `cp310-abi3` tag validators; do not create a second wheel-tag validator.
 
 6. Expose the guard through the validator already invoked by the existing B.4a aggregate job before publishing eligibility. Add unit fixtures that fail for `>=3.10,<3.13`, non-abi3/cp311 ABI tags, a missing abi3 feature, a wrong platform tag, and source/artifact metadata disagreement.
 
-7. Wire the D.10 PE ARM64 helper into `verify_native_architecture`, require six wheels and 30 native installed-suite cells from one immutable source, and reject missing/duplicate/wrong-target records alongside source/artifact metadata comparison. This evidence closes independently of D.18 release-policy activation.
+7. Wire the D.10 PE ARM64 helper into `verify_native_architecture`, require six wheels and 29 native installed-suite cells from one immutable source, and reject missing/duplicate/wrong-target records alongside source/artifact metadata comparison. This evidence closes independently of D.18 release-policy activation.
 
 8. Provide a handoff/specification for obs-d-18 to record the invariant and explicit change-control rule in `docs/project-plan.md` under PLAN-SCOPE-022: raising the floor or adding an upper bound requires a separately approved compatibility decision, an updated supported-interpreter matrix, and updated guard expected values, not an incidental packaging edit.
 
@@ -58,13 +58,13 @@ D.18 still owns `release/**` policy/inventory activation and publication. This s
 
 D.10 owns native ARM64 build/prepare behavior, the focused PE helper, the source/wheel metadata guard, and the qualification tests in its combined fence. The helper consumes wheel bytes/tag and returns the existing typed validation shape; the validator wires it into `verify_native_architecture` once. Workflow jobs execute against one immutable sdist/source commit, never cross-built evidence disguised as native execution. The existing B.4a aggregate invocation remains the integration hook.
 
-The Python guard parses source TOML and wheel `METADATA`, rejects upper/exclusion bounds, and retains `abi3-py310`/`cp310-abi3` validation. It preserves the original missing/duplicate/architecture/feature checks and requires six builds plus 30 installed-suite cells at one source/version. D.10 hands the invariant/change-control wording to obs-d-18 for recording in `docs/project-plan.md` under PLAN-SCOPE-022; that record is outside this fence. D.12 owns the 2.0 Cargo workspace bump and OTLP config contract. D.18 owns all `release/**` policy activation and release baseline/inventory; no release policy file is edited here. The native artifact proof and guard tests are independently closable before that activation.
+The Python guard parses source TOML and wheel `METADATA`, rejects upper/exclusion bounds, and retains `abi3-py310`/`cp310-abi3` validation. It preserves the original missing/duplicate/architecture/feature checks and requires six builds plus 29 installed-suite cells at one source/version: Windows ARM64 runs 3.11–3.14 because native 3.10 is unavailable, while every other platform retains 3.10–3.14. D.10 hands the invariant/change-control wording to obs-d-18 for recording in `docs/project-plan.md` under PLAN-SCOPE-022; that record is outside this fence. D.12 owns the 2.0 Cargo workspace bump and OTLP config contract. D.18 owns all `release/**` policy activation and release baseline/inventory; no release policy file is edited here. The native artifact proof and guard tests are independently closable before that activation.
 
 ADR-015 constrains the embedded-Python/shared-binding assumptions of the Python distribution surface; ADR-016 constrains the B.4a/shared-publishing preflight boundary. D.10 performs preflight and artifact qualification only and does not publish.
 
 ### Handoff to obs-d-18
 
-D.10 provides this exact policy row for D.18 to write in `release/python-platform-policy.json`: `platform=windows-arm64; machine=ARM64; wheel_tag=win_arm64; rust_target=aarch64-pc-windows-msvc; interpreters=3.10,3.11,3.12,3.13,3.14; native_cells=5`.
+D.10 provides this exact policy row for D.18 to write in `release/python-platform-policy.json`: `platform=windows-arm64; machine=ARM64; wheel_tag=win_arm64; rust_target=aarch64-pc-windows-msvc; build_python=3.11; interpreters=3.11,3.12,3.13,3.14; native_cells=4`.
 
 The only file fence is `metadata.owned_paths`; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
@@ -132,12 +132,22 @@ After the decision and implementation, rerun qualification at one immutable
 source and retain the run URL and artifacts. Until then, the existing floor,
 release policy and native-evidence rejection checks remain in force.
 
+### Resolution (2026-09-27)
+
+The user and technical lead ruled that the public `Requires-Python >=3.10`
+floor and `abi3-py310` contract remain unchanged. The temporary D.10 Windows
+ARM64 overlay instead provisions its wheel build with CPython 3.11 and schedules
+only 3.11–3.14 on that platform, producing 29 native cells across six wheels.
+All other platforms retain their 3.10–3.14 cells. A six-platform dispatch at
+the fix source SHA must pass all 29 cells and have its run URL recorded in the
+PR before qualification is claimed.
+
 ## Acceptance criteria
 
 - [ ] Deliverables 1–3: `python3 -m unittest discover -s scripts/ci/tests -p test_python_arm64.py` passes actual PE ARM64 and wrong-architecture/malformed cases, and the D.10 workflow/prepare path demonstrates a native Windows ARM64 wheel at an immutable source SHA.
 - [ ] Deliverable 4: the sprint projection specifies `windows-arm64`, machine `ARM64`, `win_arm64`, and `aarch64-pc-windows-msvc` consistently and states that no `release/**` file is edited.
 - [ ] Deliverables 5–6: `python3 -m unittest discover -s scripts/ci/tests -p test_python_distribution.py` passes the open-ended `>=3.10`/`abi3-py310`/`cp310-abi3` contract and fails deterministically for every negative fixture, including source/artifact metadata disagreement.
-- [ ] Deliverable 7: validator tests prove the PE helper is used once by `verify_native_architecture` and reject missing, duplicate, wrong-target, or mixed-source records; qualification evidence covers six wheels and 30 native installed-suite cells and is independently closable before D.18 release-policy activation.
+- [ ] Deliverable 7: validator tests prove the PE helper is used once by `verify_native_architecture` and reject missing, duplicate, wrong-target, or mixed-source records; qualification evidence covers six wheels and 29 native installed-suite cells and is independently closable before D.18 release-policy activation.
 - [ ] Deliverable 8: the obs-d-18 handoff/specification records the invariant and change-control rule in `docs/project-plan.md` under PLAN-SCOPE-022 and agrees with the guard's expected values.
 - [ ] The combined boundary does not add future Python versions, raise the minimum version, implement #88/OTEL functionality, activate `release/**`, or publish artifacts; D.18 owns policy activation/publication.
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass as the lead's intermediate-workspace invariant.

@@ -64,9 +64,9 @@ jobs:
           ids = {platform['id'] for platform in policy['platforms']}
           assert len(ids) == len(policy['platforms'])
           apply_windows_arm64_overlay(policy)
-          cells = [{**platform, 'python': version} for platform in policy['platforms'] for version in policy['interpreters']]
+          cells = [{**platform, 'python': version} for platform in policy['platforms'] for version in platform.get('interpreters', policy['interpreters'])]
           assert len(policy['platforms']) == 6
-          assert len(cells) == len(policy['platforms']) * len(policy['interpreters'])
+          assert len(cells) == 29
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write('platforms=' + json.dumps(policy['platforms']) + '\n')
               out.write('cells=' + json.dumps(cells) + '\n')
@@ -119,7 +119,7 @@ jobs:
           ref: ${{ inputs.source_commit }}
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.10'
+          python-version: ${{ matrix.build_python || '3.10' }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.94.1'

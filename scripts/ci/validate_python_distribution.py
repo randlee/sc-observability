@@ -374,7 +374,8 @@ def cell(args) -> None:
 
 def aggregate(args) -> None:
     policy = json.loads(args.policy.read_text())
-    expected = {(p['id'], python) for p in policy['platforms'] for python in policy['interpreters']}
+    expected = {(p['id'], python) for p in policy['platforms']
+                for python in p.get('interpreters', policy['interpreters'])}
     build_paths = list(args.evidence.rglob('build-result.json'))
     cell_paths = list(args.evidence.rglob('cell-result.json'))
     builds = [json.loads(path.read_text()) for path in build_paths]
@@ -388,15 +389,16 @@ def aggregate(args) -> None:
         except RuntimeError as error:
             raise DistributionError(str(error)) from error
     if platform_count != 6:
-        raise DistributionError('aggregate requires exactly six platforms, six builds and 30 installed-suite cells')
+        raise DistributionError('aggregate requires exactly six platforms, six builds and 29 installed-suite cells')
     arm64 = next((platform for platform in policy['platforms'] if platform['id'] == 'windows-arm64'), None)
-    if arm64 is None or (arm64.get('machine'), arm64.get('wheel_platform'), arm64.get('rust_target')) != (
-            'ARM64', 'win_arm64', 'aarch64-pc-windows-msvc'):
+    if arm64 is None or (arm64.get('machine'), arm64.get('wheel_platform'), arm64.get('rust_target'),
+                         arm64.get('build_python'), arm64.get('interpreters')) != (
+            'ARM64', 'win_arm64', 'aarch64-pc-windows-msvc', '3.11', ['3.11', '3.12', '3.13', '3.14']):
         raise DistributionError('Windows ARM64 policy handoff is incomplete')
     if len(platform_ids) != platform_count:
         raise DistributionError('platform policy contains duplicate identifiers')
-    if len(builds) != 6 or len(cells) != 30:
-        raise DistributionError('exactly six builds and 30 installed-suite cells are required')
+    if len(builds) != 6 or len(cells) != 29:
+        raise DistributionError('exactly six builds and 29 installed-suite cells are required')
     build_platforms = [build.get('platform') for build in builds]
     if set(build_platforms) != platform_ids or len(build_platforms) != len(set(build_platforms)):
         raise DistributionError('build records contain missing, duplicate or unsupported platforms')
@@ -505,7 +507,7 @@ def aggregate(args) -> None:
             shutil.copyfile(artifact, dist / artifact.name)
     if getattr(args, 'output', None):
         args.output.write_text(json.dumps(publication, indent=2) + '\n')
-    print(f'B4A_QUALIFIED: {platform_count} ABI wheels, {platform_count * len(policy["interpreters"])} installed full-suite cells, offline sdist and embedding')
+    print(f'B4A_QUALIFIED: {platform_count} ABI wheels, {len(expected)} installed full-suite cells, offline sdist and embedding')
 
 
 def main() -> None:
