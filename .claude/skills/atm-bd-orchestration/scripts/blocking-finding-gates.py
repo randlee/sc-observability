@@ -42,12 +42,13 @@ def targets(finding: dict[str, Any], all_beads: list[dict[str, Any]]) -> tuple[s
                         if SANITY_LABEL in (bead.get("labels") or [])
                         and str((bead.get("metadata") or {}).get("dev_bead")) == source), None)
     if not source_gate: raise RuntimeError("source sprint has no sanity bead")
+    exempt = closure(str(finding.get("id")), by_id)  # a gate cannot block what its finding waits on
     downstream = {str(bead.get("id")) for bead in all_beads if DEV_LABEL in (bead.get("labels") or [])
-                  and bead.get("status") == "open" and source_gate in closure(str(bead.get("id")), by_id)}
+                  and bead.get("status") == "open" and source_gate in closure(str(bead.get("id")), by_id)} - exempt
     result = set(downstream)
     for bead in all_beads:
         meta = bead.get("metadata") or {}
-        if (bead.get("status") == "open" and not bead.get("assignee")
+        if (bead.get("status") == "open" and not bead.get("assignee") and str(bead.get("id")) not in exempt
                 and ({FINDING_LABEL, FIX_LABEL} & set(bead.get("labels") or []))
                 and meta.get("sprint_bead") in downstream):
             result.add(str(bead.get("id")))

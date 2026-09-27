@@ -88,6 +88,17 @@ class BlockingGateTests(unittest.TestCase):
         finding["metadata"]["severity"] = "important"
         self.assertEqual(gates.targets(finding, rows), (None, []))
 
+    def test_deferred_finding_does_not_gate_what_it_waits_on(self):
+        rows = [
+            bead("s", [gates.DEV_LABEL]),
+            bead("s-sanity", [gates.SANITY_LABEL], metadata={"dev_bead": "s"}, dependencies=["s"]),
+            bead("open", [gates.DEV_LABEL], dependencies=["s-sanity"]),
+            bead("open-sanity", [gates.SANITY_LABEL], metadata={"dev_bead": "open"}, dependencies=["open"]),
+            bead("child", [gates.FIX_LABEL], metadata={"sprint_bead": "open"}),
+        ]
+        finding = bead("f", [gates.FINDING_LABEL], metadata={"severity": "blocking", "sprint_bead": "s"}, dependencies=["open-sanity"])
+        self.assertEqual(gates.targets(finding, rows), ("s-sanity", []))
+
     def test_real_bd_argv_and_retry_are_idempotent(self):
         rows = [
             bead("s", [gates.DEV_LABEL]),
