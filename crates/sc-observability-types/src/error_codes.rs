@@ -77,6 +77,7 @@ pub const ALL: &[ErrorCode] = &[
     otlp::OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED,
     otlp::OTLP_CONFIG_INVALID_ENDPOINT,
     otlp::OTLP_CONFIG_INVALID_HEADER,
+    otlp::OTLP_CONFIG_INVALID,
     otlp::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
     otlp::OTLP_UNSUPPORTED_BACKEND,
     otlp::OTLP_UNSUPPORTED_PROTOCOL,
@@ -92,6 +93,9 @@ pub const ALL: &[ErrorCode] = &[
     otlp::OTLP_HTTP_STATUS_TERMINAL,
     otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED,
     otlp::OTLP_EXPORT_TERMINAL,
+    otlp::OTLP_SPAN_ASSEMBLY_FAILED,
+    otlp::OTLP_FLUSH_FAILED,
+    otlp::OTLP_INCOMPLETE_SPAN_DROPPED,
     otlp::OTLP_TELEMETRY_SHUTDOWN,
     VALUE_VALIDATION_FAILED,
     TRACE_ID_INVALID,
@@ -159,6 +163,8 @@ pub mod otlp {
     /// Header/auth syntax or credential placement is invalid. Recovery: correct the header/auth configuration.
     pub const OTLP_CONFIG_INVALID_HEADER: ErrorCode =
         ErrorCode::new_static("OTLP_CONFIG_INVALID_HEADER");
+    /// Generic legacy configuration construction failed. Recovery: inspect the typed configuration diagnostic.
+    pub const OTLP_CONFIG_INVALID: ErrorCode = ErrorCode::new_static("OTLP_CONFIG_INVALID");
     /// CA/auth/client/provider/legacy-worker initialization failed. Recovery: correct the bounded typed source and reconstruct.
     pub const OTLP_TRANSPORT_CONSTRUCTION_FAILED: ErrorCode =
         ErrorCode::new_static("OTLP_TRANSPORT_CONSTRUCTION_FAILED");
@@ -199,6 +205,14 @@ pub mod otlp {
         ErrorCode::new_static("OTLP_RETRY_ATTEMPTS_EXHAUSTED");
     /// SDK or legacy provider returned a terminal export failure. Recovery: inspect the preserved source and collector state.
     pub const OTLP_EXPORT_TERMINAL: ErrorCode = ErrorCode::new_static("OTLP_EXPORT_TERMINAL");
+    /// Span lifecycle signals could not be assembled into a complete span. Recovery: emit matching signals in order.
+    pub const OTLP_SPAN_ASSEMBLY_FAILED: ErrorCode =
+        ErrorCode::new_static("OTLP_SPAN_ASSEMBLY_FAILED");
+    /// A telemetry flush failed. Recovery: inspect exporter health and retry after recovery.
+    pub const OTLP_FLUSH_FAILED: ErrorCode = ErrorCode::new_static("OTLP_FLUSH_FAILED");
+    /// Shutdown dropped unmatched span state. Recovery: emit matching ended signals before shutdown.
+    pub const OTLP_INCOMPLETE_SPAN_DROPPED: ErrorCode =
+        ErrorCode::new_static("OTLP_INCOMPLETE_SPAN_DROPPED");
     /// Emit was attempted after shutdown began. Recovery: construct a new telemetry instance.
     pub const OTLP_TELEMETRY_SHUTDOWN: ErrorCode = ErrorCode::new_static("OTLP_TELEMETRY_SHUTDOWN");
     /// Complete types-owned transport code inventory.
@@ -213,6 +227,7 @@ pub mod otlp {
         OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED,
         OTLP_CONFIG_INVALID_ENDPOINT,
         OTLP_CONFIG_INVALID_HEADER,
+        OTLP_CONFIG_INVALID,
         OTLP_TRANSPORT_CONSTRUCTION_FAILED,
         OTLP_UNSUPPORTED_BACKEND,
         OTLP_UNSUPPORTED_PROTOCOL,
@@ -228,6 +243,9 @@ pub mod otlp {
         OTLP_HTTP_STATUS_TERMINAL,
         OTLP_RETRY_ATTEMPTS_EXHAUSTED,
         OTLP_EXPORT_TERMINAL,
+        OTLP_SPAN_ASSEMBLY_FAILED,
+        OTLP_FLUSH_FAILED,
+        OTLP_INCOMPLETE_SPAN_DROPPED,
         OTLP_TELEMETRY_SHUTDOWN,
     ];
 }

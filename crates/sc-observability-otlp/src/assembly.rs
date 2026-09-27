@@ -86,7 +86,7 @@ impl SpanAssembler {
                 let key = span_key(event.trace.trace_id.as_str(), event.trace.span_id.as_str());
                 if !self.started.contains_key(&key) {
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
-                        error_codes::OTLP_EXPORT_TERMINAL,
+                        error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                         "received span event without a matching started span",
                         Remediation::not_recoverable(
                             "emit started, event, and ended span signals in order",
@@ -103,7 +103,7 @@ impl SpanAssembler {
                 );
                 if self.started.remove(&key).is_none() {
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
-                        error_codes::OTLP_EXPORT_TERMINAL,
+                        error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                         "received ended span without a matching started span",
                         Remediation::not_recoverable(
                             "emit started and ended span signals with the same trace context",
@@ -112,7 +112,7 @@ impl SpanAssembler {
                 }
                 let Some(events) = self.events.remove(&key) else {
                     return Err(EventFailure::from_context(Box::new(ErrorContext::new(
-                        error_codes::OTLP_EXPORT_TERMINAL,
+                        error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                         "missing span event buffer for a started span",
                         Remediation::not_recoverable(
                             "restart telemetry to restore span assembly state",

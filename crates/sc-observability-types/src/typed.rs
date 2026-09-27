@@ -246,9 +246,9 @@ define_failure! {
     InitError => InitFailure, InitFailureKind {
         logger_initialization => LoggerInitialization => ["SC_OBSERVABILITY_LOGGER_INIT_FAILED"],
         observation_initialization => ObservationInitialization => ["SC_OBSERVE_INIT_FAILED"],
-        invalid_telemetry_config => InvalidTelemetryConfig => ["SC_OBSERVABILITY_OTLP_INVALID_CONFIG"],
-        invalid_protocol => InvalidProtocol => ["SC_OBSERVABILITY_OTLP_INVALID_PROTOCOL"],
-        exporter_initialization => ExporterInitialization => ["SC_OBSERVABILITY_OTLP_EXPORTER_INIT_FAILED"],
+        invalid_telemetry_config => InvalidTelemetryConfig => ["OTLP_CONFIG_INVALID", "SC_OBSERVABILITY_OTLP_INVALID_CONFIG"],
+        invalid_protocol => InvalidProtocol => ["OTLP_UNSUPPORTED_PROTOCOL", "SC_OBSERVABILITY_OTLP_INVALID_PROTOCOL"],
+        exporter_initialization => ExporterInitialization => ["OTLP_TRANSPORT_CONSTRUCTION_FAILED", "SC_OBSERVABILITY_OTLP_EXPORTER_INIT_FAILED"],
         identity_resolution => IdentityResolution => ["SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"]
     }
 }
@@ -261,7 +261,7 @@ define_failure! {
         queue_full => QueueFull => ["SC_OBSERVABILITY_LOGGER_QUEUE_FULL"],
         writer_degraded => WriterDegraded => ["SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"],
         shutdown_timed_out => ShutdownTimedOut => ["SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT"],
-        span_assembly => SpanAssembly => ["SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED"]
+        span_assembly => SpanAssembly => ["OTLP_SPAN_ASSEMBLY_FAILED", "SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED"]
     }
 }
 
@@ -271,16 +271,16 @@ define_failure! {
         logger_flush => LoggerFlush => ["SC_OBSERVABILITY_LOGGER_FLUSH_FAILED"],
         writer_degraded => WriterDegraded => ["SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"],
         observation_flush => ObservationFlush => ["SC_OBSERVE_FLUSH_FAILED"],
-        telemetry_flush => TelemetryFlush => ["SC_OBSERVABILITY_OTLP_FLUSH_FAILED"],
-        closed => Closed => ["SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN"]
+        telemetry_flush => TelemetryFlush => ["OTLP_FLUSH_FAILED", "SC_OBSERVABILITY_OTLP_FLUSH_FAILED"],
+        closed => Closed => ["OTLP_TELEMETRY_SHUTDOWN", "SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN"]
     }
 }
 
 define_failure! {
     /// Typed graceful-shutdown failure.
     ShutdownError => ShutdownFailure, ShutdownFailureKind {
-        telemetry_flush => TelemetryFlush => ["SC_OBSERVABILITY_OTLP_FLUSH_FAILED"],
-        incomplete_spans => IncompleteSpans => ["SC_OBSERVABILITY_OTLP_INCOMPLETE_SPAN_DROPPED"],
+        telemetry_flush => TelemetryFlush => ["OTLP_FLUSH_FAILED", "SC_OBSERVABILITY_OTLP_FLUSH_FAILED"],
+        incomplete_spans => IncompleteSpans => ["OTLP_INCOMPLETE_SPAN_DROPPED", "SC_OBSERVABILITY_OTLP_INCOMPLETE_SPAN_DROPPED"],
         writer_degraded => WriterDegraded => ["SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"],
         timed_out => TimedOut => ["SC_OBSERVABILITY_LOGGER_SHUTDOWN_TIMED_OUT"]
     }
@@ -289,9 +289,9 @@ define_failure! {
 define_failure! {
     /// Typed log, span, or metric projection failure.
     ProjectionError => ProjectionFailure, ProjectionFailureKind {
-        telemetry_closed => TelemetryClosed => ["SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN"],
-        telemetry_export => TelemetryExport => ["SC_OBSERVABILITY_OTLP_EXPORT_FAILED"],
-        span_assembly => SpanAssembly => ["SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED"],
+        telemetry_closed => TelemetryClosed => ["OTLP_TELEMETRY_SHUTDOWN", "SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN"],
+        telemetry_export => TelemetryExport => ["OTLP_EXPORT_TERMINAL", "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"],
+        span_assembly => SpanAssembly => ["OTLP_SPAN_ASSEMBLY_FAILED", "SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED"],
         routing => Routing => ["SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"]
     }
 }
@@ -315,7 +315,7 @@ define_failure! {
 define_failure! {
     /// Typed telemetry exporter failure.
     ExportError => ExportFailure, ExportFailureKind {
-        export => Export => ["SC_OBSERVABILITY_OTLP_EXPORT_FAILED"]
+        export => Export => ["OTLP_EXPORT_TERMINAL", "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"]
     }
 }
 
@@ -696,17 +696,17 @@ mod tests {
         assert_constructor!(
             InitFailure::invalid_telemetry_config,
             InitFailureKind::InvalidTelemetryConfig,
-            "SC_OBSERVABILITY_OTLP_INVALID_CONFIG"
+            "OTLP_CONFIG_INVALID"
         );
         assert_constructor!(
             InitFailure::invalid_protocol,
             InitFailureKind::InvalidProtocol,
-            "SC_OBSERVABILITY_OTLP_INVALID_PROTOCOL"
+            "OTLP_UNSUPPORTED_PROTOCOL"
         );
         assert_constructor!(
             InitFailure::exporter_initialization,
             InitFailureKind::ExporterInitialization,
-            "SC_OBSERVABILITY_OTLP_EXPORTER_INIT_FAILED"
+            "OTLP_TRANSPORT_CONSTRUCTION_FAILED"
         );
         assert_constructor!(
             InitFailure::identity_resolution,
@@ -741,7 +741,7 @@ mod tests {
         assert_constructor!(
             EventFailure::span_assembly,
             EventFailureKind::SpanAssembly,
-            "SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED"
+            "OTLP_SPAN_ASSEMBLY_FAILED"
         );
         assert_constructor!(
             FlushFailure::logger_flush,
@@ -761,22 +761,22 @@ mod tests {
         assert_constructor!(
             FlushFailure::telemetry_flush,
             FlushFailureKind::TelemetryFlush,
-            "SC_OBSERVABILITY_OTLP_FLUSH_FAILED"
+            "OTLP_FLUSH_FAILED"
         );
         assert_constructor!(
             FlushFailure::closed,
             FlushFailureKind::Closed,
-            "SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN"
+            "OTLP_TELEMETRY_SHUTDOWN"
         );
         assert_constructor!(
             ShutdownFailure::telemetry_flush,
             ShutdownFailureKind::TelemetryFlush,
-            "SC_OBSERVABILITY_OTLP_FLUSH_FAILED"
+            "OTLP_FLUSH_FAILED"
         );
         assert_constructor!(
             ShutdownFailure::incomplete_spans,
             ShutdownFailureKind::IncompleteSpans,
-            "SC_OBSERVABILITY_OTLP_INCOMPLETE_SPAN_DROPPED"
+            "OTLP_INCOMPLETE_SPAN_DROPPED"
         );
         assert_constructor!(
             ShutdownFailure::writer_degraded,
@@ -791,17 +791,17 @@ mod tests {
         assert_constructor!(
             ProjectionFailure::telemetry_closed,
             ProjectionFailureKind::TelemetryClosed,
-            "SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN"
+            "OTLP_TELEMETRY_SHUTDOWN"
         );
         assert_constructor!(
             ProjectionFailure::telemetry_export,
             ProjectionFailureKind::TelemetryExport,
-            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+            "OTLP_EXPORT_TERMINAL"
         );
         assert_constructor!(
             ProjectionFailure::span_assembly,
             ProjectionFailureKind::SpanAssembly,
-            "SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED"
+            "OTLP_SPAN_ASSEMBLY_FAILED"
         );
         assert_constructor!(
             ProjectionFailure::routing,
@@ -831,7 +831,7 @@ mod tests {
         assert_constructor!(
             ExportFailure::export,
             ExportFailureKind::Export,
-            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+            "OTLP_EXPORT_TERMINAL"
         );
     }
 
@@ -864,17 +864,17 @@ mod tests {
         );
         assert_context_kind!(
             InitFailure,
-            "SC_OBSERVABILITY_OTLP_INVALID_CONFIG",
+            "OTLP_CONFIG_INVALID",
             InitFailureKind::InvalidTelemetryConfig
         );
         assert_context_kind!(
             InitFailure,
-            "SC_OBSERVABILITY_OTLP_INVALID_PROTOCOL",
+            "OTLP_UNSUPPORTED_PROTOCOL",
             InitFailureKind::InvalidProtocol
         );
         assert_context_kind!(
             InitFailure,
-            "SC_OBSERVABILITY_OTLP_EXPORTER_INIT_FAILED",
+            "OTLP_TRANSPORT_CONSTRUCTION_FAILED",
             InitFailureKind::ExporterInitialization
         );
         assert_context_kind!(
@@ -909,7 +909,7 @@ mod tests {
         );
         assert_context_kind!(
             EventFailure,
-            "SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED",
+            "OTLP_SPAN_ASSEMBLY_FAILED",
             EventFailureKind::SpanAssembly
         );
         assert_context_kind!(
@@ -929,22 +929,22 @@ mod tests {
         );
         assert_context_kind!(
             FlushFailure,
-            "SC_OBSERVABILITY_OTLP_FLUSH_FAILED",
+            "OTLP_FLUSH_FAILED",
             FlushFailureKind::TelemetryFlush
         );
         assert_context_kind!(
             FlushFailure,
-            "SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN",
+            "OTLP_TELEMETRY_SHUTDOWN",
             FlushFailureKind::Closed
         );
         assert_context_kind!(
             ShutdownFailure,
-            "SC_OBSERVABILITY_OTLP_FLUSH_FAILED",
+            "OTLP_FLUSH_FAILED",
             ShutdownFailureKind::TelemetryFlush
         );
         assert_context_kind!(
             ShutdownFailure,
-            "SC_OBSERVABILITY_OTLP_INCOMPLETE_SPAN_DROPPED",
+            "OTLP_INCOMPLETE_SPAN_DROPPED",
             ShutdownFailureKind::IncompleteSpans
         );
         assert_context_kind!(
@@ -959,17 +959,17 @@ mod tests {
         );
         assert_context_kind!(
             ProjectionFailure,
-            "SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN",
+            "OTLP_TELEMETRY_SHUTDOWN",
             ProjectionFailureKind::TelemetryClosed
         );
         assert_context_kind!(
             ProjectionFailure,
-            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED",
+            "OTLP_EXPORT_TERMINAL",
             ProjectionFailureKind::TelemetryExport
         );
         assert_context_kind!(
             ProjectionFailure,
-            "SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED",
+            "OTLP_SPAN_ASSEMBLY_FAILED",
             ProjectionFailureKind::SpanAssembly
         );
         assert_context_kind!(
@@ -999,7 +999,7 @@ mod tests {
         );
         assert_context_kind!(
             ExportFailure,
-            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED",
+            "OTLP_EXPORT_TERMINAL",
             ExportFailureKind::Export
         );
     }
@@ -1059,12 +1059,12 @@ mod tests {
         assert_builders!(
             ShutdownFailure::telemetry_flush,
             ShutdownFailureKind::TelemetryFlush,
-            "SC_OBSERVABILITY_OTLP_FLUSH_FAILED"
+            "OTLP_FLUSH_FAILED"
         );
         assert_builders!(
             ProjectionFailure::telemetry_export,
             ProjectionFailureKind::TelemetryExport,
-            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+            "OTLP_EXPORT_TERMINAL"
         );
         assert_builders!(
             SubscriberFailure::routing,
@@ -1079,7 +1079,7 @@ mod tests {
         assert_builders!(
             ExportFailure::export,
             ExportFailureKind::Export,
-            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+            "OTLP_EXPORT_TERMINAL"
         );
     }
 
@@ -1150,13 +1150,13 @@ mod tests {
             ShutdownError,
             ShutdownFailure,
             ShutdownFailureKind::TelemetryFlush,
-            "SC_OBSERVABILITY_OTLP_FLUSH_FAILED"
+            "OTLP_FLUSH_FAILED"
         );
         assert_round_trip!(
             ProjectionError,
             ProjectionFailure,
             ProjectionFailureKind::TelemetryExport,
-            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+            "OTLP_EXPORT_TERMINAL"
         );
         assert_round_trip!(
             SubscriberError,
@@ -1174,7 +1174,7 @@ mod tests {
             ExportError,
             ExportFailure,
             ExportFailureKind::Export,
-            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+            "OTLP_EXPORT_TERMINAL"
         );
     }
 
@@ -1207,7 +1207,7 @@ mod tests {
         assert_unclassified!(
             FlushFailure,
             FlushFailureKind::Unclassified,
-            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+            "OTLP_EXPORT_TERMINAL"
         );
         assert_unclassified!(
             ShutdownFailure,
@@ -1227,7 +1227,7 @@ mod tests {
         assert_unclassified!(
             LogSinkFailure,
             LogSinkFailureKind::Unclassified,
-            "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"
+            "OTLP_EXPORT_TERMINAL"
         );
         assert_unclassified!(
             ExportFailure,

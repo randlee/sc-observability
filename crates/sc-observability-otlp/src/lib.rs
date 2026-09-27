@@ -480,7 +480,7 @@ impl Telemetry {
         {
             self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
             let context = ErrorContext::new(
-                error_codes::OTLP_EXPORT_TERMINAL,
+                error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                 "received ended span without a matching started span",
                 Remediation::not_recoverable(
                     "emit the started span before the matching ended span",
@@ -653,7 +653,7 @@ impl Telemetry {
             self.dropped_exports_total
                 .fetch_add(dropped, Ordering::SeqCst);
             let context = ErrorContext::new(
-                error_codes::OTLP_EXPORT_TERMINAL,
+                error_codes::OTLP_INCOMPLETE_SPAN_DROPPED,
                 "dropped incomplete spans during shutdown",
                 Remediation::recoverable(
                     "ensure all started spans receive matching ended signals before shutdown",
@@ -837,7 +837,7 @@ fn export_failure_from_event(err: EventFailure) -> TelemetryError {
 fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
     ShutdownFailure::from_context(Box::new(
         ErrorContext::new(
-            error_codes::OTLP_EXPORT_TERMINAL,
+            error_codes::OTLP_FLUSH_FAILED,
             "failed to flush telemetry during shutdown",
             Remediation::recoverable(
                 "inspect telemetry health and retry shutdown after the exporter recovers",
@@ -857,7 +857,7 @@ fn shutdown_export_failure_typed(
     // typed source chain keeps the actual exporter failure available to callers.
     let summary = diagnostic_summary.unwrap_or_else(|| DiagnosticSummary::from(error.diagnostic()));
     let mut context = ErrorContext::new(
-        error_codes::OTLP_EXPORT_TERMINAL,
+        error_codes::OTLP_FLUSH_FAILED,
         "failed to flush telemetry during shutdown",
         Remediation::recoverable(
             "inspect telemetry health and retry shutdown after the exporter recovers",
@@ -1636,7 +1636,7 @@ mod tests {
         assert_eq!(health.malformed_spans_total, 1);
         assert_eq!(
             health.last_error.and_then(|summary| summary.code),
-            Some(error_codes::OTLP_EXPORT_TERMINAL)
+            Some(error_codes::OTLP_SPAN_ASSEMBLY_FAILED)
         );
     }
 
@@ -1658,7 +1658,10 @@ mod tests {
         let TelemetryError::ExportFailure(context) = error else {
             panic!("expected an export failure");
         };
-        assert_eq!(context.diagnostic().code, error_codes::OTLP_EXPORT_TERMINAL);
+        assert_eq!(
+            context.diagnostic().code,
+            error_codes::OTLP_SPAN_ASSEMBLY_FAILED
+        );
         assert_eq!(
             context.diagnostic().message,
             "received span event without a matching started span"
@@ -1712,7 +1715,7 @@ mod tests {
 
         assert_eq!(
             shutdown_failure.diagnostic().code,
-            error_codes::OTLP_EXPORT_TERMINAL
+            error_codes::OTLP_FLUSH_FAILED
         );
         assert_eq!(
             shutdown_failure.diagnostic().message,
@@ -2186,7 +2189,7 @@ mod tests {
         where
             E: DiagnosticInfo,
         {
-            assert_eq!(error.diagnostic().code, error_codes::OTLP_EXPORT_TERMINAL);
+            assert_eq!(error.diagnostic().code, error_codes::OTLP_FLUSH_FAILED);
             assert_eq!(
                 error.diagnostic().cause.as_deref(),
                 Some("dropped incomplete spans during shutdown")
@@ -2194,7 +2197,9 @@ mod tests {
             assert_eq!(
                 error.diagnostic().details.get("exporter_error_code"),
                 Some(&Value::String(
-                    error_codes::OTLP_EXPORT_TERMINAL.as_str().to_owned(),
+                    error_codes::OTLP_INCOMPLETE_SPAN_DROPPED
+                        .as_str()
+                        .to_owned(),
                 ))
             );
             let health = telemetry.health();
@@ -2202,7 +2207,7 @@ mod tests {
             assert_eq!(health.dropped_exports_total, 2);
             assert_eq!(
                 health.last_error.and_then(|summary| summary.code),
-                Some(error_codes::OTLP_EXPORT_TERMINAL)
+                Some(error_codes::OTLP_INCOMPLETE_SPAN_DROPPED)
             );
             assert_eq!(
                 health.exporter_statuses[0].state,
