@@ -87,6 +87,21 @@ class SprintReportTests(unittest.TestCase):
         self.assertEqual(report.select_pr(prs, 'sprint/d-1')['number'], 4)
         self.assertIsNone(report.select_pr(prs, None))
 
+    def test_pr_lookup_uses_head_branch_not_planned_base(self):
+        # d-13's PR is based on d-12 even though its plan targeted d-21.
+        # A lookup by base would miss it (or choose an unrelated PR sharing
+        # the plan target); the report must use the source branch alone.
+        prs = [
+            {'number': 234, 'headRefName': 'sprint/d-13-logging-contract',
+             'baseRefName': 'sprint/d-12-types-and-otlp-contract', 'state': 'OPEN'},
+            {'number': 999, 'headRefName': 'unrelated',
+             'baseRefName': 'sprint/d-21-otlp-contract', 'state': 'OPEN'},
+        ]
+        self.assertEqual(
+            report.select_pr(prs, 'sprint/d-13-logging-contract')['number'], 234
+        )
+        self.assertIsNone(report.select_pr(prs, None))
+
     def test_running_check_is_not_green(self):
         self.assertEqual(report.check_icon({'statusCheckRollup': [{'status': 'IN_PROGRESS', 'conclusion': ''}]}), '🌀')
 
