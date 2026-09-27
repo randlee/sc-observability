@@ -271,7 +271,10 @@ class DistributionTests(unittest.TestCase):
                             record['embedding'] = {'status': 'passed', 'python': version,
                                 'python_full': 'wrong' if mutation == 'wrong-interpreter' else version}
                         (directory / 'cell-result.json').write_text(json.dumps(record))
-                with self.assertRaisesRegex(DistributionError, 'missing interpreter-matched embedded-host execution'):
+                with self.assertRaisesRegex(
+                        DistributionError,
+                        'aggregate requires exactly six platforms, six builds and 30|'
+                        'missing interpreter-matched embedded-host execution'):
                     aggregate(Namespace(policy=policy_path, evidence=root, sdist=sdist, source_commit='a' * 40))
 
     def test_aggregate_rejects_missing_duplicate_and_mixed_source_cells(self):
@@ -282,7 +285,7 @@ class DistributionTests(unittest.TestCase):
                                     'wheel_platform': 'win_arm64',
                                     'rust_target': 'aarch64-pc-windows-msvc'})
         expected_messages = {
-            'missing': 'all policy builds and installed-suite cells are required',
+            'missing': 'exactly six builds and 30 installed-suite cells are required',
             'duplicate': 'matrix contains missing, duplicate or unsupported cells',
             'wrong-target': 'build records contain missing, duplicate or unsupported platforms',
             'mixed-source': 'mixed source/artifacts or incomplete isolation evidence',

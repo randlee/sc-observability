@@ -7,6 +7,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from python_arm64 import (
     PE_ARM64_MACHINE,
+    WINDOWS_ARM64_POLICY,
+    apply_windows_arm64_overlay,
     is_pe_arm64,
     pe_machine,
     require_native_windows_arm64,
@@ -41,6 +43,14 @@ class WindowsArm64Tests(unittest.TestCase):
             with self.subTest(image=image):
                 self.assertIsNone(pe_machine(image))
                 self.assertFalse(is_pe_arm64(image))
+
+    def test_policy_overlay_adds_and_rejects_drift(self):
+        policy = {"platforms": []}
+        self.assertEqual(
+            apply_windows_arm64_overlay(policy)["platforms"], [WINDOWS_ARM64_POLICY]
+        )
+        with self.assertRaisesRegex(RuntimeError, "differs"):
+            apply_windows_arm64_overlay({"platforms": [{**WINDOWS_ARM64_POLICY, "runner": "x64"}]})
 
     def test_requires_native_windows_arm64_cpython(self):
         rejected = (

@@ -381,6 +381,12 @@ def aggregate(args) -> None:
     cells = [json.loads(path.read_text()) for path in cell_paths]
     platform_count = len(policy['platforms'])
     platform_ids = {platform['id'] for platform in policy['platforms']}
+    if platform_count == 6:
+        from python_arm64 import apply_windows_arm64_overlay
+        try:
+            apply_windows_arm64_overlay(policy)
+        except RuntimeError as error:
+            raise DistributionError(str(error)) from error
     if platform_count != 6:
         raise DistributionError('aggregate requires exactly six platforms, six builds and 30 installed-suite cells')
     arm64 = next((platform for platform in policy['platforms'] if platform['id'] == 'windows-arm64'), None)

@@ -12,6 +12,7 @@ from pathlib import Path
 
 import tomli_w
 from _python_distribution import DistributionError, confined, digest, extract_sdist, tomllib, verify_source, runtime_options, fault_paths
+from python_arm64 import apply_windows_arm64_overlay
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = Path('bindings/python/sc-observability-py')
@@ -170,15 +171,10 @@ def prepare(source: Path, output: Path, allow_incomplete_runtime: bool = False) 
     for filename in QUALIFICATION_HELPERS:
         shutil.copyfile(source / 'scripts/ci' / filename, qualification / filename)
     policy = json.loads((source / 'release/python-platform-policy.json').read_text())
-    arm64 = next((item for item in policy['platforms'] if item['id'] == 'windows-arm64'), None)
-    required_arm64 = {'id': 'windows-arm64', 'machine': 'ARM64',
-                      'wheel_platform': 'win_arm64', 'rust_target': 'aarch64-pc-windows-msvc'}
-    if arm64 is None:
-        arm64 = {**required_arm64, 'runner': 'windows-11-arm'}
-        policy['platforms'].append(arm64)
-    elif any(arm64.get(key) != value for key, value in required_arm64.items()):
-        raise DistributionError('Windows ARM64 policy row differs from the D.10 handoff')
-    arm64.setdefault('runner', 'windows-11-arm')
+    try:
+        apply_windows_arm64_overlay(policy)
+    except RuntimeError as error:
+        raise DistributionError(str(error)) from error
     (qualification / 'platform-policy.json').write_text(json.dumps(policy, indent=2) + '\n')
     shutil.copyfile(bundle / 'Cargo.lock', staging / 'Cargo.lock')
     run(['cargo', 'metadata', '--offline', '--format-version', '1'], staging, log)
