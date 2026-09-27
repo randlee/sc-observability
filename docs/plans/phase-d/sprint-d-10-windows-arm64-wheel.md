@@ -51,6 +51,7 @@ Own the native Windows ARM64 build adapter and the open-ended Python distributio
 ## This Sprint Does Not Close
 
 D.18 still owns `release/**` policy/inventory activation and publication. This sprint does not add future Python versions, alter the minimum version, implement #88/OTEL functionality, or claim release publication without the immutable six-platform evidence.
+
 ## Design
 
 ## Python distribution boundary
