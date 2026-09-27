@@ -56,12 +56,15 @@ enum FixtureSlotState {
 enum FixtureDetachError {
     Timeout(Box<ErrorContext>),
     NotInstalled(Box<ErrorContext>),
+    ForeignLoggerInstalled(Box<ErrorContext>),
 }
 
 impl FixtureDetachError {
     fn context(&self) -> &ErrorContext {
         match self {
-            Self::Timeout(context) | Self::NotInstalled(context) => context,
+            Self::Timeout(context)
+            | Self::NotInstalled(context)
+            | Self::ForeignLoggerInstalled(context) => context,
         }
     }
 }
@@ -91,6 +94,14 @@ fn not_installed() -> FixtureDetachError {
         "SC_LOG_DETACH_NOT_INSTALLED",
         "attachment is not installed",
         Remediation::not_recoverable("attach before using control"),
+    ))
+}
+
+fn foreign_logger_installed() -> FixtureDetachError {
+    FixtureDetachError::ForeignLoggerInstalled(detach_error(
+        "SC_LOG_FOREIGN_LOGGER_INSTALLED",
+        "another logger owns the logging facade",
+        Remediation::recoverable("remove the competing logger", ["use the logger owner"]),
     ))
 }
 
@@ -257,12 +268,10 @@ fn contract_event() -> LogEvent {
     }
 }
 
-fn assert_detach_error(error: &FixtureDetachError, code: &str) {
-    assert_eq!(error.context().diagnostic().code.as_str(), code);
-    assert!(matches!(
-        error.context().diagnostic().remediation,
-        Remediation::Recoverable { .. } | Remediation::NotRecoverable { .. }
-    ));
+fn assert_detach_error(error: &FixtureDetachError, code: &str, remediation: &Remediation) {
+    let diagnostic = error.context().diagnostic();
+    assert_eq!(diagnostic.code.as_str(), code);
+    assert_eq!(&diagnostic.remediation, remediation);
 }
 
 #[test]
@@ -274,6 +283,7 @@ fn detach_retry_after_timeout() {
     assert_detach_error(
         &attachment.detach(Duration::ZERO).unwrap_err(),
         "SC_LOG_DETACH_TIMEOUT",
+        &Remediation::recoverable("retry detach", ["wait for drain"]),
     );
     assert_eq!(
         attachment.slot(),
@@ -283,6 +293,7 @@ fn detach_retry_after_timeout() {
     assert_detach_error(
         &control.submit().unwrap_err(),
         "SC_LOG_DETACH_NOT_INSTALLED",
+        &Remediation::not_recoverable("attach before using control"),
     );
     attachment
         .detach(Duration::from_millis(1))
@@ -291,6 +302,7 @@ fn detach_retry_after_timeout() {
     assert_detach_error(
         &attachment.detach(Duration::from_millis(1)).unwrap_err(),
         "SC_LOG_DETACH_NOT_INSTALLED",
+        &Remediation::not_recoverable("attach before using control"),
     );
 }
 
@@ -306,6 +318,7 @@ fn stale_control_not_installed() {
     assert_detach_error(
         &control.submit().unwrap_err(),
         "SC_LOG_DETACH_NOT_INSTALLED",
+        &Remediation::not_recoverable("attach before using control"),
     );
 }
 
@@ -324,6 +337,11 @@ fn foreign_logger_rejected() {
     }
 
     let foreign_logger_slot = FixtureBridgeSlot::with_foreign_logger();
+    assert_detach_error(
+        &foreign_logger_installed(),
+        "SC_LOG_FOREIGN_LOGGER_INSTALLED",
+        &Remediation::recoverable("remove the competing logger", ["use the logger owner"]),
+    );
     assert!(matches!(
         FixtureLogAttachment::attach(&foreign_logger_slot),
         Err(InitError::ForeignLoggerInstalled)
