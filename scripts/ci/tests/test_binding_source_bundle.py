@@ -15,9 +15,24 @@ sys.path.insert(0,str(HELPER_DIR))
 HELPER=ROOT/'scripts/ci/build_binding_source_bundle.py'
 SPEC=importlib.util.spec_from_file_location('binding_source_bundle', HELPER)
 BUNDLE=importlib.util.module_from_spec(SPEC); SPEC.loader.exec_module(BUNDLE)
-from _log_staging import PACKAGES, inspect_archive, sha256
+from _log_staging import PACKAGES, inspect_archive, read_stage_manifest, sha256
 
 class SourceBoundaryTests(unittest.TestCase):
+    def test_read_stage_manifest_decodes_utf8_explicitly(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            stage = Path(temporary)
+            manifest = stage / 'stage-manifest.json'
+            manifest.write_bytes(json.dumps({'label': 'café'}, ensure_ascii=False).encode('utf-8'))
+            original_read_text = Path.read_text
+
+            def reject_locale_default(path, *args, **kwargs):
+                if not args and kwargs.get('encoding') is None:
+                    raise UnicodeDecodeError('locale', b'\x80', 0, 1, 'non-UTF-8 locale')
+                return original_read_text(path, *args, **kwargs)
+
+            with mock.patch.object(Path, 'read_text', reject_locale_default):
+                self.assertEqual(read_stage_manifest(stage)['label'], 'café')
+
     def command(self,root,*args):
         return subprocess.run(args,cwd=root,check=True,capture_output=True,text=True)
 
