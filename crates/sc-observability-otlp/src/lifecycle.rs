@@ -196,7 +196,7 @@ impl LifecycleCore {
     ) -> Result<Admitted<T>, TelemetryError> {
         let mut state = self.inner.state.lock().expect("lifecycle state lock");
         if state.phase != LifecycleState::Open {
-            self.inner.record_drop(&mut state, signal, None);
+            LifecycleInner::record_drop(&mut state, signal, None);
             return Err(TelemetryError::Shutdown);
         }
         if state.admitted_records >= self.inner.queue_capacity
@@ -206,7 +206,7 @@ impl LifecycleCore {
                 .is_none_or(|total| total > self.inner.queue_byte_capacity)
         {
             let error = queue_full_error();
-            self.inner.record_drop(&mut state, signal, Some(&error));
+            LifecycleInner::record_drop(&mut state, signal, Some(&error));
             return Err(TelemetryError::ExportFailure(error));
         }
 
@@ -256,13 +256,13 @@ impl LifecycleCore {
     /// Atomically closes admission and starts or joins the one shutdown.
     pub(crate) fn shutdown_async(&self) -> LifecycleWaiter {
         let mut state = self.inner.state.lock().expect("lifecycle state lock");
-        if let Some(operation) = state.shutdown.as_ref() {
-            return LifecycleWaiter::new(Arc::clone(operation));
-        }
         if state.phase == LifecycleState::Shutdown {
             let operation = Arc::new(Operation::completed(Arc::clone(&self.inner), Ok(())));
             state.shutdown = Some(Arc::clone(&operation));
             return LifecycleWaiter::new(operation);
+        }
+        if let Some(operation) = state.shutdown.as_ref() {
+            return LifecycleWaiter::new(Arc::clone(operation));
         }
         state.phase = LifecycleState::Closing;
         let cutoff = state.next_sequence.saturating_sub(1);
@@ -293,7 +293,7 @@ impl LifecycleCore {
 }
 
 impl LifecycleInner {
-    fn record_drop(&self, state: &mut CoreState, signal: SignalKind, error: Option<&ExportError>) {
+    fn record_drop(state: &mut CoreState, signal: SignalKind, error: Option<&ExportError>) {
         state.dropped_by_signal[signal.index()] += 1;
         state.degraded = true;
         if let Some(error) = error {
@@ -315,7 +315,7 @@ impl LifecycleInner {
         state.admitted_records = state.admitted_records.saturating_sub(1);
         state.admitted_bytes = state.admitted_bytes.saturating_sub(bytes);
         if let Err(error) = result {
-            self.record_drop(&mut state, signal, Some(&error));
+            Self::record_drop(&mut state, signal, Some(&error));
         }
         let waiters = std::mem::take(&mut state.barrier_wakers);
         drop(state);
@@ -340,6 +340,7 @@ struct Operation {
     state: Mutex<OperationState>,
     waiters: Mutex<Vec<Waker>>,
     timer_started: AtomicBool,
+    polling: AtomicBool,
 }
 
 enum OperationState {
@@ -389,6 +390,7 @@ impl Operation {
             state: Mutex::new(OperationState::Pending),
             waiters: Mutex::new(Vec::new()),
             timer_started: AtomicBool::new(false),
+            polling: AtomicBool::new(false),
         }
     }
 
@@ -403,6 +405,7 @@ impl Operation {
             state: Mutex::new(OperationState::Complete(Arc::new(completion))),
             waiters: Mutex::new(Vec::new()),
             timer_started: AtomicBool::new(true),
+            polling: AtomicBool::new(false),
         }
     }
 
@@ -414,6 +417,19 @@ impl Operation {
     }
 
     fn poll(self: &Arc<Self>, context: &mut Context<'_>) -> Poll<Result<(), ExportError>> {
+        if self.polling.swap(true, Ordering::Acquire) {
+            self.register_waiter(context.waker());
+            if self.is_complete() {
+                context.waker().wake_by_ref();
+            }
+            return Poll::Pending;
+        }
+        let result = self.poll_inner(context);
+        self.polling.store(false, Ordering::Release);
+        result
+    }
+
+    fn poll_inner(self: &Arc<Self>, context: &mut Context<'_>) -> Poll<Result<(), ExportError>> {
         self.start_timer(context.waker());
 
         if let Some(result) = self.completed_result() {
@@ -424,11 +440,11 @@ impl Operation {
             return Poll::Ready(self.completed_result().expect("operation completed"));
         }
 
-        if let Some(precondition) = &self.precondition {
-            if precondition.poll(context).is_pending() {
-                self.register_waiter(context.waker());
-                return Poll::Pending;
-            }
+        if let Some(precondition) = &self.precondition
+            && precondition.poll(context).is_pending()
+        {
+            self.register_waiter(context.waker());
+            return Poll::Pending;
         }
 
         {
@@ -616,7 +632,6 @@ impl ErrorSnapshot {
             ExportError::RetryDeadlineExhausted { .. } => ErrorKind::RetryDeadlineExhausted,
             ExportError::NonRetryableHttpStatus { .. } => ErrorKind::NonRetryableHttpStatus,
             ExportError::RetryAttemptsExhausted { .. } => ErrorKind::RetryAttemptsExhausted,
-            ExportError::TerminalExportFailure { .. } => ErrorKind::TerminalExportFailure,
             _ => ErrorKind::TerminalExportFailure,
         };
         Self {

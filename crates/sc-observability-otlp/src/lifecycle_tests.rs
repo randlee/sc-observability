@@ -41,12 +41,22 @@ impl MetricExporter for NoopMetrics {
 
 struct PendingUntilReleased {
     released: Arc<AtomicBool>,
+    entered: Option<Arc<AtomicBool>>,
+    block_until_released: bool,
 }
 
 impl Future for PendingUntilReleased {
     type Output = Result<(), ExportError>;
 
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.block_until_released {
+            if let Some(entered) = &self.entered {
+                entered.store(true, Ordering::Release);
+            }
+            while !self.released.load(Ordering::Acquire) {
+                thread::yield_now();
+            }
+        }
         if self.released.load(Ordering::Acquire) {
             Poll::Ready(Ok(()))
         } else {
@@ -60,6 +70,8 @@ struct RecordingLifecycle {
     shutdowns: Arc<AtomicUsize>,
     released: Arc<AtomicBool>,
     terminal: Option<fn() -> ExportError>,
+    block_next_flush: AtomicBool,
+    flush_entered: Option<Arc<AtomicBool>>,
 }
 
 impl ExporterLifecycle for RecordingLifecycle {
@@ -74,6 +86,8 @@ impl ExporterLifecycle for RecordingLifecycle {
         }
         Box::pin(PendingUntilReleased {
             released: Arc::clone(&self.released),
+            entered: self.flush_entered.clone(),
+            block_until_released: self.block_next_flush.swap(false, Ordering::AcqRel),
         })
     }
 
@@ -84,6 +98,8 @@ impl ExporterLifecycle for RecordingLifecycle {
         }
         Box::pin(PendingUntilReleased {
             released: Arc::clone(&self.released),
+            entered: None,
+            block_until_released: false,
         })
     }
 
@@ -98,7 +114,7 @@ impl ExporterLifecycle for RecordingLifecycle {
 
 fn fixture(
     terminal: Option<fn() -> ExportError>,
-    transport: OtelConfig,
+    transport: &OtelConfig,
 ) -> (
     LifecycleCore,
     Arc<AtomicUsize>,
@@ -113,6 +129,8 @@ fn fixture(
         shutdowns: Arc::clone(&shutdowns),
         released: Arc::clone(&released),
         terminal,
+        block_next_flush: AtomicBool::new(false),
+        flush_entered: None,
     });
     let exporters = ExporterSet {
         logs: Arc::new(NoopLogs),
@@ -120,7 +138,7 @@ fn fixture(
         metrics: Arc::new(NoopMetrics),
         lifecycle,
     };
-    let bounds = validated_transport_bounds(&transport).expect("test transport bounds");
+    let bounds = validated_transport_bounds(transport).expect("test transport bounds");
     let core = LifecycleCore::new(exporters, &bounds).expect("test lifecycle core");
     (core, flushes, shutdowns, released)
 }
@@ -131,7 +149,7 @@ fn default_fixture() -> (
     Arc<AtomicUsize>,
     Arc<AtomicBool>,
 ) {
-    fixture(None, OtelConfig::default())
+    fixture(None, &OtelConfig::default())
 }
 
 struct NoopWake;
@@ -144,6 +162,63 @@ fn poll_once<F: Future + Unpin>(future: &mut F) -> Poll<F::Output> {
     let waker = Waker::from(Arc::new(NoopWake));
     let mut context = Context::from_waker(&waker);
     Pin::new(future).poll(&mut context)
+}
+
+#[test]
+fn concurrent_waiters_do_not_start_duplicate_backend_operation() {
+    let flushes = Arc::new(AtomicUsize::new(0));
+    let released = Arc::new(AtomicBool::new(false));
+    let entered = Arc::new(AtomicBool::new(false));
+    let second_polled = Arc::new(AtomicBool::new(false));
+    let lifecycle = Arc::new(RecordingLifecycle {
+        flushes: Arc::clone(&flushes),
+        shutdowns: Arc::new(AtomicUsize::new(0)),
+        released: Arc::clone(&released),
+        terminal: None,
+        block_next_flush: AtomicBool::new(true),
+        flush_entered: Some(Arc::clone(&entered)),
+    });
+    let exporters = ExporterSet {
+        logs: Arc::new(NoopLogs),
+        traces: Arc::new(NoopTraces),
+        metrics: Arc::new(NoopMetrics),
+        lifecycle,
+    };
+    let bounds = validated_transport_bounds(&OtelConfig::default()).expect("test bounds");
+    let core = LifecycleCore::new(exporters, &bounds).expect("test lifecycle core");
+    let mut first = core.flush_async();
+    let mut second = core.flush_async();
+
+    let first_thread = thread::spawn(move || poll_once(&mut first));
+    let deadline = std::time::Instant::now() + Duration::from_secs(1);
+    while !entered.load(Ordering::Acquire) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "first backend poll did not start"
+        );
+        thread::yield_now();
+    }
+    let second_polled_for_thread = Arc::clone(&second_polled);
+    let second_thread = thread::spawn(move || {
+        let result = poll_once(&mut second);
+        second_polled_for_thread.store(true, Ordering::Release);
+        (second, result)
+    });
+    let deadline = std::time::Instant::now() + Duration::from_secs(1);
+    while !second_polled.load(Ordering::Acquire) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "second waiter did not poll"
+        );
+        thread::yield_now();
+    }
+    let flushes_before_release = flushes.load(Ordering::Acquire);
+    released.store(true, Ordering::Release);
+    assert!(first_thread.join().expect("first waiter thread").is_ready());
+    let (mut second, second_result) = second_thread.join().expect("second waiter thread");
+    assert!(second_result.is_pending());
+    assert_eq!(flushes_before_release, 1);
+    assert!(poll_once(&mut second).is_ready());
 }
 
 #[test]
@@ -170,7 +245,7 @@ fn admission_is_fail_open_and_drop_accounting_is_exact_once() {
         queue_byte_capacity: Some(4),
         ..OtelConfig::default()
     };
-    let (core, _, _, released) = fixture(None, transport);
+    let (core, _, _, released) = fixture(None, &transport);
     let admitted = core
         .admit(SignalKind::Logs, (), 4)
         .expect("first admission");
@@ -209,6 +284,23 @@ fn repeated_shutdown_uses_one_backend_operation() {
 }
 
 #[test]
+fn failed_shutdown_is_idempotent_after_terminal_completion() {
+    let (core, _, shutdowns, _) = fixture(Some(runtime_terminated), &OtelConfig::default());
+    let mut first = core.shutdown_async();
+    let Poll::Ready(result) = poll_once(&mut first) else {
+        panic!("shutdown failure remained pending")
+    };
+    assert_eq!(
+        result.expect_err("shutdown must fail").diagnostic().code,
+        crate::error_codes::OTLP_RUNTIME_TERMINATED
+    );
+
+    let mut second = core.shutdown_async();
+    assert!(matches!(poll_once(&mut second), Poll::Ready(Ok(()))));
+    assert_eq!(shutdowns.load(Ordering::Acquire), 1);
+}
+
+#[test]
 fn cancelled_waiter_can_be_replaced_without_duplicate_shutdown() {
     let (core, _, shutdowns, released) = default_fixture();
     let mut first = core.shutdown_async();
@@ -228,7 +320,7 @@ fn lifecycle_deadline_and_runtime_termination_are_typed() {
         lifecycle_shutdown_timeout_ms: Some(2.into()),
         ..OtelConfig::default()
     };
-    let (core, _, _, _) = fixture(None, transport);
+    let (core, _, _, _) = fixture(None, &transport);
     let mut flush = core.flush_async();
     assert!(poll_once(&mut flush).is_pending());
     thread::sleep(Duration::from_millis(5));
@@ -241,7 +333,7 @@ fn lifecycle_deadline_and_runtime_termination_are_typed() {
     );
     assert!(core.health().degraded);
 
-    let (core, _, _, _) = fixture(Some(runtime_terminated), OtelConfig::default());
+    let (core, _, _, _) = fixture(Some(runtime_terminated), &OtelConfig::default());
     let mut flush = core.flush_async();
     let Poll::Ready(result) = poll_once(&mut flush) else {
         panic!("runtime result remained pending")
