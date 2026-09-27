@@ -446,9 +446,23 @@ impl MetricRecord {
     }
 }
 
+/// Typestate-specific storage carried by a producer-facing span record.
+pub trait SpanState {
+    /// Duration representation valid for this lifecycle state.
+    type Duration;
+}
+
+impl SpanState for SpanStarted {
+    type Duration = ();
+}
+
+impl SpanState for SpanEnded {
+    type Duration = DurationMs;
+}
+
 /// Producer-facing span record whose lifecycle is encoded via typestate.
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct SpanRecord<S> {
+pub struct SpanRecord<S: SpanState> {
     timestamp: Timestamp,
     service: ServiceName,
     name: ActionName,
@@ -456,7 +470,7 @@ pub struct SpanRecord<S> {
     status: SpanStatus,
     diagnostic: Option<Diagnostic>,
     attributes: Attributes,
-    duration_ms: Option<DurationMs>,
+    duration_ms: S::Duration,
     kind: SpanKind,
     links: Vec<SpanLink>,
     #[serde(skip)]
@@ -481,7 +495,7 @@ impl SpanRecord<SpanStarted> {
             status: SpanStatus::Unset,
             diagnostic: None,
             attributes,
-            duration_ms: None,
+            duration_ms: (),
             kind: SpanKind::Internal,
             links: Vec::new(),
             marker: PhantomData,
@@ -518,7 +532,7 @@ impl SpanRecord<SpanStarted> {
             status,
             diagnostic: self.diagnostic,
             attributes: self.attributes,
-            duration_ms: Some(duration),
+            duration_ms: duration,
             kind: self.kind,
             links: self.links,
             marker: PhantomData,
@@ -526,7 +540,7 @@ impl SpanRecord<SpanStarted> {
     }
 }
 
-impl<S> SpanRecord<S> {
+impl<S: SpanState> SpanRecord<S> {
     /// Returns the span role.
     #[must_use]
     pub fn kind(&self) -> SpanKind {
@@ -586,7 +600,7 @@ impl SpanRecord<SpanEnded> {
     ///
     /// Only `end` constructs this typestate, so a duration is always present.
     #[must_use]
-    pub fn duration_ms(&self) -> Option<DurationMs> {
+    pub fn duration_ms(&self) -> DurationMs {
         self.duration_ms
     }
 }
