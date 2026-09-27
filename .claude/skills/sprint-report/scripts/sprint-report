@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "atm-beads/scripts"))
 from sprint_index_common import run_json, index_bead_pairs, phase_id, validate_index
 from sprint_qa import metadata, choose_round, qa_verdict, qa_icon, findings_summary
+from plan_contract import DIFFICULTY_MODELS
 
 
 def edge_id(edge: dict[str, Any]) -> str:
@@ -208,6 +209,42 @@ def live_sprint_rows(index: dict[str, Any], beads: dict[str, dict[str, Any]]) ->
     return sorted(rows, key=order)
 
 
+def dispatch_rows(ready: list[dict[str, Any]], members: list[dict[str, Any]], active: set[str]) -> list[dict[str, str]]:
+    """Make the read-only dispatch rows; unclassified work is visible, never assigned."""
+    rows = []
+    for bead in ready:
+        meta = metadata(bead)
+        labels = set(bead.get("labels") or [])
+        stage = next((label.removeprefix("stage:") for label in labels if label.startswith("stage:")), "unknown")
+        difficulty = meta.get("difficulty")
+        if difficulty not in DIFFICULTY_MODELS:
+            fitting = "UNCLASSIFIED"
+        else:
+            names = [str(member.get("name") or member.get("identity") or member.get("id") or "") for member in members
+                     if str(member.get("name") or member.get("identity") or member.get("id") or "") not in active
+                     and any(model in str(member.get("model") or "").lower() for model in DIFFICULTY_MODELS[difficulty])]
+            fitting = ",".join(filter(None, names)) or "WAIT"
+        try:
+            layer = int(meta.get("layer", 2**31 - 1))
+        except (TypeError, ValueError):
+            layer = 2**31 - 1
+        rows.append({"id": str(bead.get("id", "")), "stage": stage,
+                     "severity": str(meta.get("severity", "-")),
+                     "sprint": str(meta.get("sprint", bead.get("id", ""))),
+                     "difficulty": str(difficulty or "UNCLASSIFIED"), "agents": fitting,
+                     "priority": str(bead.get("priority", 99)), "layer": str(layer)})
+    return sorted(rows, key=lambda row: (int(row["priority"]), int(row["layer"]), row["id"]))
+
+
+def render_dispatch(rows: list[dict[str, str]], members: list[dict[str, Any]] = ()) -> str:
+    unknown = sorted(str(m.get("name") or m.get("identity") or m.get("id") or "") for m in members
+                     if str(m.get("model") or "").lower() in ("", "unknown", "none"))
+    head = ["prerequisite: every roster member has `model` set"
+            + (f"; unknown: {', '.join(unknown)}" if unknown else "")]
+    return "\n".join(head + ["{priority} {layer} {id} {stage} {severity} {sprint} {difficulty} {agents}".format(**row)
+                             for row in rows])
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
@@ -215,6 +252,7 @@ def main() -> int:
     mode.add_argument("--detailed", action="store_true", help="render detailed sprint blocks")
     mode.add_argument("--dag", action="store_true", help="render the plan dependency DAG as SVG and PNG")
     mode.add_argument("--view", action="store_true", help="render the SVG DAG in an HTML artifact and open it in Wyvern")
+    mode.add_argument("--dispatch", action="store_true", help="print phase-scoped ready work and fitting free agents")
     parser.add_argument("--output", type=Path, help="local DAG export prefix; skips default integration-branch publication")
     parser.add_argument("--open", action="store_true", help="open DAG PNG in Preview on macOS, default viewer elsewhere")
     parser.add_argument("--root", help="phase root bead id")
@@ -248,6 +286,26 @@ def main() -> int:
                             publish_branch=branch)
         row_ids = list(index_bead_pairs(index))
         all_beads = run_json(repo, "bd", "list", "--all", "-n", "0", "--json")
+        if args.dispatch:
+            ready = run_json(repo, "bd", "ready", "-n", "0", "--json")
+            members = run_json(repo, "atm", "members", "--json")
+            if not isinstance(members, list):
+                members = members.get("members", [])
+            tasks = run_json(repo, "atm", "task", "list", "--all", "--json")
+            if not isinstance(tasks, list):
+                tasks = tasks.get("tasks", [])
+            active = {str(task.get("assignee") or task.get("owner") or "") for task in tasks
+                      if str(task.get("state") or task.get("status") or "") not in {"completed", "cancelled", "refused", "closed", "failed"}}
+            descendants = {index["root_bead_id"]}
+            changed = True
+            while changed:
+                changed = False
+                for bead in all_beads:
+                    if any(edge_type(edge) == "parent-child" and edge_id(edge) in descendants
+                           for edge in bead.get("dependencies") or []) and bead.get("id") not in descendants:
+                        descendants.add(str(bead["id"])); changed = True
+            print(render_dispatch(dispatch_rows([bead for bead in ready if str(bead.get("id")) in descendants], members, active), members))
+            return 0
         blocked_ids = {bead["id"] for bead in run_json(repo, "bd", "blocked", "--json")}
         dev_ids = set(row_ids)
         sanity_by_dev: dict[str, dict[str, Any]] = {}
