@@ -102,7 +102,7 @@ This boundary releases only its named artifact to obs-d-18 after its paired sani
 
 ## Acceptance criteria
 
-- [ ] #1: cargo test --locked -p sc-observability-py and Python owned/attached-mode tests pass with pinned interpreters; tagged_failures_preserve_diagnostics and attached_cannot_shutdown_host exercise public wrappers using local backend fixtures.
+- [ ] #1: cargo test --locked -p sc-observability-py and Python owned/attached-mode tests pass with pinned interpreters; `test_native_diagnostic_and_both_remediation_variants_round_trip` and `test_logging_shutdown_atexit_does_not_close_borrowed_logger` exercise public wrappers using local backend fixtures.
 - [ ] #2: npm --prefix bindings/typescript test and cargo test --locked --manifest-path bindings/tauri/Cargo.toml --features test pass with typed failure/unknown-variant/integer-bound tests; python3 scripts/ci/validate_typescript_control_flow.py finds no deliberate expected-failure throwing.
 - [ ] #1–3: owned Python transport and typing tests exercise observer timeout/cancellation without cancelling native work, and assert failed admission never becomes success. The fixtures require neither unfinished DTO generation nor sibling native-runtime edits.
 - [ ] #1–3: root workspace invariant passes; combined real native binding/schema qualification is explicitly obs-d-18's integration criterion.
