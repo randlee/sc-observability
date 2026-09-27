@@ -189,7 +189,7 @@ pub enum AggregationTemporality {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "HistogramInput")]
 pub struct HistogramPoint {
-    explicit_bounds: Vec<f64>,
+    explicit_bounds: Vec<FiniteF64>,
     bucket_counts: Vec<u64>,
     count: u64,
     sum: FiniteF64,
@@ -204,7 +204,13 @@ struct HistogramInput {
 impl TryFrom<HistogramInput> for HistogramPoint {
     type Error = MetricModelError;
     fn try_from(v: HistogramInput) -> Result<Self, Self::Error> {
-        Self::try_new(v.explicit_bounds, v.bucket_counts, v.count, v.sum)
+        let bounds = v.explicit_bounds.into_iter().map(FiniteF64::new)
+            .collect::<Result<Vec<_>, _>>().map_err(|_| MetricModelError::InvalidHistogram {
+                context: Box::new(ErrorContext::new(error_codes::SC_METRIC_INVALID_HISTOGRAM,
+                    "invalid histogram distribution", Remediation::recoverable(
+                        "Provide finite increasing bounds, one more bucket than bounds, and matching count/sum", [] as [&str; 0]))),
+            })?;
+        Self::try_new(bounds, v.bucket_counts, v.count, v.sum)
     }
 }
 impl HistogramPoint {
@@ -214,13 +220,12 @@ impl HistogramPoint {
     /// Returns `InvalidHistogram` for non-finite or unordered bounds, mismatched
     /// bucket lengths, overflowing/mismatched counts, or nonzero sum with zero count.
     pub fn try_new(
-        explicit_bounds: Vec<f64>,
+        explicit_bounds: Vec<FiniteF64>,
         bucket_counts: Vec<u64>,
         count: u64,
         sum: FiniteF64,
     ) -> Result<Self, MetricModelError> {
-        if explicit_bounds.iter().any(|b| !b.is_finite())
-            || explicit_bounds.windows(2).any(|b| b[0] >= b[1])
+        if explicit_bounds.windows(2).any(|b| b[0] >= b[1])
             || explicit_bounds.len().checked_add(1) != Some(bucket_counts.len())
             || bucket_counts
                 .iter()
@@ -248,7 +253,7 @@ impl HistogramPoint {
     }
     /// Returns strictly increasing finite bounds.
     #[must_use]
-    pub fn explicit_bounds(&self) -> &[f64] {
+    pub fn explicit_bounds(&self) -> &[FiniteF64] {
         &self.explicit_bounds
     }
     /// Returns counts, including the final unbounded bucket.
