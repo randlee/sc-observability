@@ -259,11 +259,22 @@ fn histogram_point_serde_rejects_invalid() {
             "accepted {field}"
         );
     }
-    assert!(HistogramPoint::try_new(vec![f64::INFINITY], vec![0, 0], 0, finite(0.0)).is_err());
-    assert!(HistogramPoint::try_new(vec![], vec![0], 0, finite(1.0)).is_err());
+    let error = HistogramPoint::try_new(vec![f64::INFINITY], vec![0, 0], 0, finite(0.0))
+        .expect_err("non-finite histogram bounds must be rejected");
+    assert_eq!(
+        error.diagnostic().code,
+        error_codes::SC_METRIC_INVALID_HISTOGRAM
+    );
+    let error = HistogramPoint::try_new(vec![], vec![0], 0, finite(1.0))
+        .expect_err("a nonzero sum cannot have zero samples");
+    assert_eq!(
+        error.diagnostic().code,
+        error_codes::SC_METRIC_INVALID_HISTOGRAM
+    );
     assert!(HistogramPoint::try_new(vec![], vec![0], 0, finite(0.0)).is_ok());
     for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        assert!(FiniteF64::new(value).is_err());
+        let error = FiniteF64::new(value).expect_err("non-finite values must be rejected");
+        assert_eq!(error.code(), &error_codes::SC_METRIC_NON_FINITE);
     }
 }
 #[test]
