@@ -1,15 +1,6 @@
 name: Windows proof identity preflight
 on:
   workflow_dispatch:
-  push:
-    branches: [fix/phase-b-wheel-test-hooks]
-    paths:
-      - scripts/ci/_windows_identity.py
-      - scripts/ci/_python_sandbox.py
-      - scripts/ci/_tauri_webview.py
-      - scripts/ci/supervise_windows_proof.py
-      - scripts/ci/windows_identity_preflight.py
-      - .github/workflows/windows-identity-preflight.yml
 permissions:
   contents: read
 jobs:

@@ -14,8 +14,8 @@ Generated projection of `obs-d-4`; the bead is authoritative.
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-4-error-enums-2-0`
 - PR target (merge order only): `sprint/d-3-typed-sink-registration`
 - Blocked by: `obs-d-12-sanity`
-- Requirements: LOG-044, LOG-045, LOG-046, NFR-012, PHD-001
-- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-013, ADR-014, ADR-017
+- Requirements: LOG-044, LOG-045, LOG-046, NFR-012, PHD-001, PHD-002
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-013, ADR-014, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability/src/health.rs`
   - `crates/sc-observability/src/lib.rs`
@@ -64,7 +64,10 @@ transitional wrappers/classification/adapters nor edits a manifest, registry,
 requirement, or release document. metadata.owned_paths is the sole fence.
 
 The only file fence is metadata.owned_paths; paths mentioned as dependencies
-are read-only unless that metadata grants ownership.
+are read-only unless that metadata grants ownership. D.4 consumes the
+non-exhaustive canonical error enums from obs-d-12’s v2 module path,
+`crates/sc-observability-types/src/errors_v2.rs`, and only retypes the owned
+core construction/handling sites to that artifact.
 
 ## Handoff to obs-d-18 (wave 3)
 

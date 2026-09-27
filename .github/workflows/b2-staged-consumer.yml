@@ -1,13 +1,6 @@
 name: B.2 staged package qualification
 
 on:
-  pull_request:
-    paths:
-      - 'Cargo.*'
-      - 'crates/**'
-      - 'scripts/ci/**'
-      - 'release/**'
-      - '.github/workflows/b2-staged-consumer.yml'
   workflow_dispatch:
 
 permissions:

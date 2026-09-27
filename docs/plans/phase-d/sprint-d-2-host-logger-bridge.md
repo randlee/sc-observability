@@ -14,8 +14,8 @@ Generated projection of `obs-d-2`; the bead is authoritative.
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-2-host-logger-bridge`
 - PR target (merge order only): `sprint/d-1-log-settings`
 - Blocked by: `obs-d-13-sanity`
-- Requirements: PHB-013, LOG-011, LOG-012, NFR-004, NFR-008, NFR-010, NFR-012
-- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-013, ADR-014, ADR-017
+- Requirements: PHB-013, LOG-011, LOG-012, NFR-004, NFR-008, NFR-010, NFR-012, PHD-001, PHD-002
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-009, ADR-010, ADR-011, ADR-013, ADR-014, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability-log/src/bridge.rs`
   - `crates/sc-observability-log/tests/bridge_*.rs`
@@ -76,6 +76,10 @@ Created by obs-d-13, owned here from wave 2. Consume its completed sanity-gated 
 Created/staged by obs-d-2, owned by obs-d-18 from wave 3; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion or final compatibility retirement.
 
 - `crates/sc-observability-log/tests/bridge_jsonl.rs`
+
+## ADR-019 applicability
+
+ADR-019 governs this consumer because it binds obs-d-13’s open host-attachment policy and canonical 2.0 error surface in `bridge.rs`; PHD-001/PHD-002 therefore govern the numbered implementation deliverables.
 
 ## Handoff from obs-d-12 and obs-d-13 (wave 1)
 
