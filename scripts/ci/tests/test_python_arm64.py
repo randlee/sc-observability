@@ -1,11 +1,19 @@
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from python_arm64 import (PE_ARM64_MACHINE, is_pe_arm64, main, pe_machine,
-                          require_native_windows_arm64)
+from python_arm64 import (
+    PE_ARM64_MACHINE,
+    WINDOWS_ARM64_POLICY,
+    apply_windows_arm64_overlay,
+    is_pe_arm64,
+    pe_machine,
+    require_native_windows_arm64,
+    main,
+)
 
 
 def pe(machine: int, offset: int = 0x80) -> bytes:
@@ -50,6 +58,34 @@ class WindowsArm64Tests(unittest.TestCase):
     @patch('python_arm64.platform.system', return_value='Windows')
     def test_workflow_preflight_rejects_emulated_runner(self, _system, _machine):
         with self.assertRaisesRegex(RuntimeError, 'native Windows ARM64'):
+            require_native_windows_arm64()
+
+    def test_policy_overlay_adds_and_rejects_drift(self):
+        policy = {"platforms": []}
+        self.assertEqual(
+            apply_windows_arm64_overlay(policy)["platforms"], [WINDOWS_ARM64_POLICY]
+        )
+        with self.assertRaisesRegex(RuntimeError, "differs"):
+            apply_windows_arm64_overlay({"platforms": [{**WINDOWS_ARM64_POLICY, "runner": "x64"}]})
+
+    def test_requires_native_windows_arm64_cpython(self):
+        rejected = (
+            ('Windows', 'AMD64', 'cpython'),
+            ('Linux', 'aarch64', 'cpython'),
+            ('Windows', 'ARM64', 'pypy'),
+        )
+        for system, machine, implementation in rejected:
+            with self.subTest(system=system, machine=machine, implementation=implementation):
+                with (patch('platform.system', return_value=system),
+                      patch('platform.machine', return_value=machine),
+                      patch('sys.implementation', SimpleNamespace(name=implementation))):
+                    with self.assertRaisesRegex(
+                            RuntimeError, 'native Windows ARM64 runner and CPython are required'):
+                        require_native_windows_arm64()
+
+        with (patch('platform.system', return_value='Windows'),
+              patch('platform.machine', return_value='ARM64'),
+              patch('sys.implementation', SimpleNamespace(name='cpython'))):
             require_native_windows_arm64()
 
 

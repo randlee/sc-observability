@@ -9,6 +9,7 @@ import tarfile
 import zipfile
 from pathlib import Path, PurePosixPath
 from _hashing import digest
+from python_arm64 import pe_machine
 
 try:
     import tomllib
@@ -20,7 +21,10 @@ class DistributionError(ValueError):
     """A distribution failed an explicit qualification boundary."""
 
 
-def validate_requires_python(value: str, minimum: str = '3.10') -> str:
+PYTHON_FLOOR = '3.10'
+
+
+def validate_requires_python(value: str, minimum: str = PYTHON_FLOOR) -> str:
     """Parse an open-ended lower-bound requirement, rejecting caps/exclusions."""
     from packaging.specifiers import InvalidSpecifier, SpecifierSet
     from packaging.version import Version
@@ -167,21 +171,15 @@ def verify_native_architecture(data: bytes, tag: str) -> None:
         expected = 0x100000c if tag.endswith('arm64') else 0x1000007
         valid = (len(data) >= 8 and data[:4] == b'\xcf\xfa\xed\xfe'
                  and int.from_bytes(data[4:8], 'little') == expected)
-    elif tag == 'win_amd64':
-        offset = int.from_bytes(data[60:64], 'little') if len(data) >= 64 else len(data)
-        valid = (data[:2] == b'MZ' and data[offset:offset + 4] == b'PE\0\0'
-                 and int.from_bytes(data[offset + 4:offset + 6], 'little') == 0x8664)
-    elif tag == 'win_arm64':
-        from python_arm64 import is_pe_arm64
-        valid = is_pe_arm64(data)
+    elif tag in ('win_amd64', 'win_arm64'):
+        valid = pe_machine(data) == {'win_amd64': 0x8664, 'win_arm64': 0xAA64}[tag]
     else:
         valid = False
     if not valid:
         raise DistributionError('native executable architecture differs from wheel platform')
 
 
-def inspect_wheel(wheel: Path, policy: dict, version: str,
-                  expected_requires_python: str | None = None) -> dict:
+def inspect_wheel(wheel: Path, policy: dict, version: str, expected_requires_python: str) -> dict:
     from packaging.utils import parse_wheel_filename
     name, actual_version, _, tags = parse_wheel_filename(wheel.name)
     if name != 'sc-observability' or str(actual_version) != version:
@@ -223,11 +221,10 @@ def inspect_wheel(wheel: Path, policy: dict, version: str,
         if len(values) > 1:
             raise DistributionError('duplicate Requires-Python metadata')
         requires_python = values[0].strip() if values else None
-        expected = expected_requires_python or policy.get('expected_requires_python', '>=3.10')
-        if requires_python is None or validate_requires_python(requires_python) != validate_requires_python(expected):
+        if requires_python is None or validate_requires_python(requires_python) != validate_requires_python(expected_requires_python):
             raise DistributionError('source and wheel Requires-Python metadata disagree')
     return {'wheel': wheel.name, 'sha256': digest(wheel), 'tags': sorted(map(str, tags)),
-            'native_member': native[0], 'expected_requires_python': requires_python}
+            'native_member': native[0], 'wheel_requires_python': requires_python}
 
 
 def actual_cell(policy: dict) -> dict:

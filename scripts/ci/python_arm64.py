@@ -6,6 +6,21 @@ import sys
 
 PE_SIGNATURE = b"PE\0\0"
 PE_ARM64_MACHINE = 0xAA64
+WINDOWS_ARM64_POLICY = {"id": "windows-arm64", "runner": "windows-11-arm", "machine": "ARM64", "wheel_platform": "win_arm64", "rust_target": "aarch64-pc-windows-msvc"}
+
+
+def apply_windows_arm64_overlay(policy: dict) -> dict:
+    """Add or validate the temporary D.10 policy row; D.18 removes it on activation."""
+    row = next((item for item in policy["platforms"] if item["id"] == "windows-arm64"), None)
+    if row is None:
+        policy["platforms"].append(WINDOWS_ARM64_POLICY.copy())
+    elif any(
+        key != "runner" and row.get(key) != value
+        or key == "runner" and key in row and row[key] != value
+        for key, value in WINDOWS_ARM64_POLICY.items()
+    ):
+        raise RuntimeError("Windows ARM64 policy row differs from the D.10 handoff")
+    return policy
 
 
 def pe_machine(data: bytes) -> int | None:
