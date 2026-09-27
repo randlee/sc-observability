@@ -13,7 +13,7 @@ Generated projection of `obs-d-19`; the bead is authoritative.
 - Branch: `sprint/d-19-dto-and-schema-migration`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-19-dto-and-schema-migration`
 - PR target (merge order only): `sprint/d-17-log-consumer-error-migration`
-- Blocked by: `obs-phase-d-plan-qa`, `obs-d-12-sanity`
+- Blocked by: `obs-phase-d-plan-qa, obs-d-12-sanity`
 - Requirements: LAY-001, PHB-002, PHB-010, PHB-012, PHB-013, PHD-001, PHD-002, TYP-002, TYP-003, TYP-004, TYP-005, TYP-007
 - ADRs: ADR-002, ADR-005, ADR-011, ADR-014, ADR-017, ADR-019
 - Owned paths (metadata projection):
