@@ -31,10 +31,9 @@ pub mod error_codes;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
-use config::{
-    BackendTransportBounds, ValidatedTransportBounds, validate_config_typed,
-    validated_transport_bounds,
-};
+use config::{BackendTransportBounds, ValidatedTransportBounds, validated_telemetry_bounds};
+#[cfg(test)]
+use config::{validate_config_typed, validated_transport_bounds};
 use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::{ConfigFailure, ExportError};
 #[allow(
@@ -262,11 +261,10 @@ impl Telemetry {
 
     /// Creates a telemetry runtime with neutral initialization failures.
     pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure> {
-        let bounds = validated_transport_bounds(&config.transport)
-            .map_err(|error| InitFailure::from_context(error.into_context()))?;
+        let bounds = validated_telemetry_bounds(&config)?;
         let exporters = exporter_factory(&bounds)
             .map_err(|error| InitFailure::from_context(error.into_context()))?;
-        Self::new_with_exporter_set_typed(config, exporters)
+        Ok(Self::new_with_validated_exporter_set(config, exporters))
     }
 
     #[cfg(test)]
@@ -302,19 +300,24 @@ impl Telemetry {
         )
     }
 
+    #[cfg(test)]
     fn new_with_exporter_set_typed(
         config: TelemetryConfig,
         exporters: ExporterSet,
     ) -> Result<Self, InitFailure> {
         validate_config_typed(&config)?;
-        Ok(Self {
+        Ok(Self::new_with_validated_exporter_set(config, exporters))
+    }
+
+    fn new_with_validated_exporter_set(config: TelemetryConfig, exporters: ExporterSet) -> Self {
+        Self {
             config,
             shutdown: AtomicBool::new(false),
             exporters,
             runtime: Mutex::new(TelemetryRuntime::default()),
             dropped_exports_total: AtomicU64::new(0),
             malformed_spans_total: AtomicU64::new(0),
-        })
+        }
     }
 
     /// Buffers one projected log event for later export.

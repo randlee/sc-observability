@@ -569,7 +569,18 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
 }
 
 pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), InitFailure> {
-    validated_transport_bounds(&config.transport).map_err(config_failure_to_init_failure)?;
+    validated_telemetry_bounds(config).map(|_| ())
+}
+
+/// Validates the complete telemetry configuration once and returns the checked
+/// transport bounds for factory construction. Keeping this as the sole
+/// configuration-validation entry point prevents `Telemetry::new_typed` from
+/// validating the same raw transport twice on its factory path.
+pub(crate) fn validated_telemetry_bounds(
+    config: &TelemetryConfig,
+) -> Result<ValidatedTransportBounds, InitFailure> {
+    let bounds =
+        validated_transport_bounds(&config.transport).map_err(config_failure_to_init_failure)?;
     if config.transport.enabled && config.transport.endpoint.is_none() {
         return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
@@ -609,7 +620,7 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
             ),
         ))));
     }
-    Ok(())
+    Ok(bounds)
 }
 
 /// Checked, backend-neutral transport bounds. Backend factories receive this
@@ -654,6 +665,19 @@ pub(crate) struct ValidatedRetryPolicy {
     pub(crate) jitter_percent: u8,
 }
 
+/// Retry values after defaults have been resolved, but before their ordered
+/// validation. Keeping this separate from `ValidatedRetryPolicy` lets the
+/// transport validator check every wire duration before it considers later
+/// capacity, applicability, or availability failures.
+struct ResolvedRetryPolicy {
+    max_retries: ResolvedField<u32>,
+    initial_backoff: ResolvedField<u64>,
+    max_backoff: ResolvedField<u64>,
+    sequence_timeout: ResolvedField<u64>,
+    retry_after_cap: ResolvedField<u64>,
+    jitter_percent: ResolvedField<u8>,
+}
+
 /// Resolves defaults and validates a transport in the documented first-failure
 /// order. This is crate-visible for backend factories and contract tests.
 #[expect(
@@ -668,6 +692,13 @@ pub(crate) fn validated_transport_bounds(
         || u64::from(config.initial_backoff_ms) != constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS
         || u64::from(config.max_backoff_ms) != constants::DEFAULT_OTLP_MAX_BACKOFF_MS;
     let legacy_retry_field = first_legacy_retry_field(config);
+    #[allow(deprecated)]
+    let direct_retry = LegacyRetryPolicy {
+        max_retries: Some(config.max_retries),
+        initial_backoff_ms: Some(config.initial_backoff_ms),
+        max_backoff_ms: Some(config.max_backoff_ms),
+        ..LegacyRetryPolicy::default()
+    };
     let timeout = resolve_duration(
         OtlpConfigField::Timeout,
         // `timeout_ms` predates the optional transport fields, so its default
@@ -698,12 +729,22 @@ pub(crate) fn validated_transport_bounds(
         config.queue_byte_capacity,
         constants::DEFAULT_OTLP_QUEUE_BYTE_CAPACITY,
     );
+    let retry = resolve_retry_fields(
+        config
+            .legacy_retry
+            .as_ref()
+            .or(direct_legacy_fields.then_some(&direct_retry)),
+    );
 
     // The ordering below is normative: do not aggregate failures or move
     // checks without updating the D.21 contract tests.
     let request_timeout = checked_duration(&timeout)?;
     let lifecycle_flush_timeout = checked_duration(&flush)?;
     let lifecycle_shutdown_timeout = checked_duration(&shutdown)?;
+    let initial_backoff = checked_duration(&retry.initial_backoff)?;
+    let max_backoff = checked_duration(&retry.max_backoff)?;
+    let sequence_timeout = checked_duration(&retry.sequence_timeout)?;
+    let retry_after_cap = checked_duration(&retry.retry_after_cap)?;
     if shutdown.value < timeout.value {
         return Err(invalid_bound(&timeout, &shutdown));
     }
@@ -743,19 +784,13 @@ pub(crate) fn validated_transport_bounds(
                 BackendTransportBounds::Sdk
             }
             ExporterBackend::LegacyHttpJson => {
-                #[allow(deprecated)]
-                let direct_retry = LegacyRetryPolicy {
-                    max_retries: Some(config.max_retries),
-                    initial_backoff_ms: Some(config.initial_backoff_ms),
-                    max_backoff_ms: Some(config.max_backoff_ms),
-                    ..LegacyRetryPolicy::default()
-                };
-                let retry = resolve_retry(
-                    config
-                        .legacy_retry
-                        .as_ref()
-                        .or(direct_legacy_fields.then_some(&direct_retry)),
+                let retry = validate_retry(
+                    &retry,
                     &timeout,
+                    initial_backoff,
+                    max_backoff,
+                    sequence_timeout,
+                    retry_after_cap,
                 )?;
                 BackendTransportBounds::Legacy(retry)
             }
@@ -925,73 +960,90 @@ fn checked_duration(value: &ResolvedField<u64>) -> Result<Duration, ConfigFailur
     Ok(Duration::new(seconds, nanos))
 }
 
-fn resolve_retry(
-    raw: Option<&LegacyRetryPolicy>,
-    timeout: &ResolvedField<u64>,
-) -> Result<ValidatedRetryPolicy, ConfigFailure> {
+fn resolve_retry_fields(raw: Option<&LegacyRetryPolicy>) -> ResolvedRetryPolicy {
     let raw = raw.cloned().unwrap_or_default();
-    let initial = resolve_duration(
-        OtlpConfigField::InitialBackoff,
-        raw.initial_backoff_ms,
-        constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS,
-    );
-    let maximum = resolve_duration(
-        OtlpConfigField::MaxBackoff,
-        raw.max_backoff_ms,
-        constants::DEFAULT_OTLP_MAX_BACKOFF_MS,
-    );
-    let sequence = resolve_duration(
-        OtlpConfigField::RetrySequenceTimeout,
-        raw.retry_sequence_timeout_ms,
-        constants::DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS,
-    );
-    let after_cap = resolve_duration(
-        OtlpConfigField::RetryAfterCap,
-        raw.retry_after_cap_ms,
-        constants::DEFAULT_OTLP_RETRY_AFTER_CAP_MS,
-    );
-    let jitter = ResolvedField {
-        field: OtlpConfigField::RetryJitterPercent,
-        value: raw
-            .retry_jitter_percent
-            .unwrap_or(constants::DEFAULT_OTLP_RETRY_JITTER_PERCENT),
-        origin: if raw.retry_jitter_percent.is_some() {
-            ValueOrigin::Explicit
-        } else {
-            ValueOrigin::Default
+    ResolvedRetryPolicy {
+        max_retries: ResolvedField {
+            field: OtlpConfigField::MaxRetries,
+            value: raw
+                .max_retries
+                .unwrap_or(constants::DEFAULT_OTLP_MAX_RETRIES),
+            origin: if raw.max_retries.is_some() {
+                ValueOrigin::Explicit
+            } else {
+                ValueOrigin::Default
+            },
         },
-    };
-    let initial_backoff = checked_duration(&initial)?;
-    let max_backoff = checked_duration(&maximum)?;
-    let sequence_timeout = checked_duration(&sequence)?;
-    let retry_after_cap = checked_duration(&after_cap)?;
-    if maximum.value < initial.value {
-        return Err(invalid_bound(&initial, &maximum));
+        initial_backoff: resolve_duration(
+            OtlpConfigField::InitialBackoff,
+            raw.initial_backoff_ms,
+            constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS,
+        ),
+        max_backoff: resolve_duration(
+            OtlpConfigField::MaxBackoff,
+            raw.max_backoff_ms,
+            constants::DEFAULT_OTLP_MAX_BACKOFF_MS,
+        ),
+        sequence_timeout: resolve_duration(
+            OtlpConfigField::RetrySequenceTimeout,
+            raw.retry_sequence_timeout_ms,
+            constants::DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS,
+        ),
+        retry_after_cap: resolve_duration(
+            OtlpConfigField::RetryAfterCap,
+            raw.retry_after_cap_ms,
+            constants::DEFAULT_OTLP_RETRY_AFTER_CAP_MS,
+        ),
+        jitter_percent: ResolvedField {
+            field: OtlpConfigField::RetryJitterPercent,
+            value: raw
+                .retry_jitter_percent
+                .unwrap_or(constants::DEFAULT_OTLP_RETRY_JITTER_PERCENT),
+            origin: if raw.retry_jitter_percent.is_some() {
+                ValueOrigin::Explicit
+            } else {
+                ValueOrigin::Default
+            },
+        },
     }
-    if sequence.value < timeout.value {
-        return Err(invalid_bound(timeout, &sequence));
+}
+
+fn validate_retry(
+    retry: &ResolvedRetryPolicy,
+    timeout: &ResolvedField<u64>,
+    initial_backoff: Duration,
+    max_backoff: Duration,
+    sequence_timeout: Duration,
+    retry_after_cap: Duration,
+) -> Result<ValidatedRetryPolicy, ConfigFailure> {
+    if retry.max_backoff.value < retry.initial_backoff.value {
+        return Err(invalid_bound(&retry.initial_backoff, &retry.max_backoff));
     }
-    if after_cap.value > sequence.value {
-        return Err(invalid_bound(&after_cap, &sequence));
+    if retry.sequence_timeout.value < timeout.value {
+        return Err(invalid_bound(timeout, &retry.sequence_timeout));
     }
-    if jitter.value > 100 {
+    if retry.retry_after_cap.value > retry.sequence_timeout.value {
+        return Err(invalid_bound(
+            &retry.retry_after_cap,
+            &retry.sequence_timeout,
+        ));
+    }
+    if retry.jitter_percent.value > 100 {
         return Err(config_failure(
             ConfigFailureKind::InvalidJitterPercent,
             otlp_error_codes::OTLP_CONFIG_JITTER_PERCENT,
             "retry jitter percent must be in 0..=100",
-            jitter.field,
-            jitter.origin,
+            retry.jitter_percent.field,
+            retry.jitter_percent.origin,
         ));
     }
     Ok(ValidatedRetryPolicy {
-        max_retries: raw
-            .max_retries
-            .unwrap_or(constants::DEFAULT_OTLP_MAX_RETRIES),
+        max_retries: retry.max_retries.value,
         initial_backoff,
         max_backoff,
         sequence_timeout,
         retry_after_cap,
-        jitter_percent: jitter.value,
+        jitter_percent: retry.jitter_percent.value,
     })
 }
 
