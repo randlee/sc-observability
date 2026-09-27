@@ -31,6 +31,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -674,6 +675,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", help="phase root bead id (live mode)")
     ap.add_argument("--index", type=Path, help="authored sprints.jsonl (default: docs/plans/phase-<p>/sprints.jsonl)")
+    ap.add_argument("--index-ref", help="git ref:path for the authored sprints.jsonl")
     ap.add_argument("--plan", type=Path, help="import-shaped plan.jsonl to check before beads exist")
     ap.add_argument("--fixture", type=Path, help="committed fixture JSON (tests)")
     ap.add_argument("--scope", help="accepted for interface parity; doc checks are scoped by validate-plan")
@@ -693,17 +695,28 @@ def main() -> int:
         elif a.root:
             beads = live_beads(a.root)
             index_path = a.index
-            if index_path is None:
+            if a.index_ref:
+                ref, sep, relative = a.index_ref.partition(":")
+                if not sep or not relative:
+                    raise RuntimeError("--index-ref must be <ref>:<repository-path>")
+                text = subprocess.check_output(["git", "show", a.index_ref], text=True)
+                with tempfile.TemporaryDirectory(prefix="phase-plan-ref-") as directory:
+                    index_path = Path(directory) / relative
+                    index_path.parent.mkdir(parents=True)
+                    index_path.write_text(text, encoding="utf-8")
+                    index = load_phase_plan(index_path, a.root)
+            elif index_path is None:
                 here = Path(__file__).resolve().parent
                 out = subprocess.run([str(here / "phase-index-path"), "--root", a.root], capture_output=True, text=True)
                 if out.returncode:
                     print(f"phase_contract_check: {out.stderr.strip()}", file=sys.stderr)
                     return C.EXIT_CANNOT_RUN
                 index_path = Path(out.stdout.strip())
-            if not index_path.exists():
+            if not a.index_ref and not index_path.exists():
                 print(C.validator_problem(a.root, "PLAN.MISSING", f"authored phase file {index_path} is missing"))
                 return C.EXIT_PROBLEMS
-            index = load_phase_plan(index_path, a.root)
+            if not a.index_ref:
+                index = load_phase_plan(index_path, a.root)
             problems, warnings = PhaseCheck(a.root, index, beads, live=True, history=live_history, prs=live_prs()).run()
         else:
             ap.error("pass --root, --plan or --fixture")

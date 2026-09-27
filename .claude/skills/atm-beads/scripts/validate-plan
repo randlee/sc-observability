@@ -107,28 +107,40 @@ done < <(jq -rs '(map(.id)) as $ids | [.[] | (.dependencies // [])[] | select(.t
 if [ -n "$root" ] && [ -z "$file" ]; then
   if [ -z "$index" ]; then
     index=$("$here/phase-index-path" --root "$root") || { echo "validate-plan: could not determine the phase index path for $root" >&2; exit 2; }
+    explicit_index=0
+  else
+    explicit_index=1
   fi
-  contract_args=(--root "$root" --index "$index")
+  if [ "$explicit_index" -eq 0 ]; then
+    repo=$(git rev-parse --show-toplevel) || { echo "validate-plan: not in a git worktree" >&2; exit 2; }
+    relative=${index#"$repo"/}
+    git fetch --no-tags origin develop >/dev/null 2>&1 || { echo "validate-plan: could not fetch origin/develop" >&2; exit 2; }
+    if ! git cat-file -e "origin/develop:$relative" 2>/dev/null; then
+      problems+=("$root: PLAN.MISSING: origin/develop:$relative is missing
+  action[lead]: merge the plan PR into develop")
+      contract_args=()
+    else
+      [ -f "$index" ] && ! git diff --quiet origin/develop -- "$relative" && problems+=("$root: PLAN.DIVERGED: $relative differs from origin/develop
+  action[user]: review the sprints.jsonl change before execution continues")
+      contract_args=(--root "$root" --index-ref "origin/develop:$relative")
+    fi
+  else
+    contract_args=(--root "$root" --index "$index")
+  fi
   [ -n "$scope" ] && contract_args+=(--scope "$scope")
 else
   contract_args=(--plan "$plan")
   [ -n "$root" ] && contract_args+=(--root "$root")
   [ -n "$index" ] && contract_args+=(--index "$index")
 fi
-if [ -n "$root" ] && [ -z "$file" ] && [ ! -f "$index" ]; then
-  problems+=("$root: PLAN.MISSING: authored phase file $index is missing
-  action[assignee]: rebase onto origin/<pr_target> so the committed plan is present
-  action[lead]: merge the plan PR into that pr_target base")
-elif [ -n "$root" ] && [ -z "$file" ] && ! git diff --quiet origin/develop -- "$index"; then
-  problems+=("$root: PLAN.DIVERGED: $index differs from origin/develop
-  action[user]: review the sprints.jsonl change before execution continues")
+if [ ${#contract_args[@]} -gt 0 ]; then
+  out=$(python3 "$here/phase_contract_check.py" "${contract_args[@]}" 2>"$scratch/contract.err"); rc=$?
+  case $rc in
+    0) [ -n "$out" ] && printf '%s\n' "$out" ;;
+    5) while IFS= read -r l; do [ -z "$l" ] && continue; case "$l" in warning:*) echo "$l" ;; *) problems+=("$l") ;; esac; done <<< "$out" ;;
+    *) echo "validate-plan: phase_contract_check failed: $(cat "$scratch/contract.err")" >&2; exit 2 ;;
+  esac
 fi
-out=$(python3 "$here/phase_contract_check.py" "${contract_args[@]}" 2>"$scratch/contract.err"); rc=$?
-case $rc in
-  0) [ -n "$out" ] && printf '%s\n' "$out" ;;
-  5) while IFS= read -r l; do [ -z "$l" ] && continue; case "$l" in warning:*) echo "$l" ;; *) problems+=("$l") ;; esac; done <<< "$out" ;;
-  *) echo "validate-plan: phase_contract_check failed: $(cat "$scratch/contract.err")" >&2; exit 2 ;;
-esac
 
 # 2d. A permanent phase diagram and the committed index are required on integration before plan review/dispatch.
 # Import JSONL is validated before bead creation; only live-root mode can check the published artifact.
