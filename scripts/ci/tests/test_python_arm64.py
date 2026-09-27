@@ -12,6 +12,7 @@ from python_arm64 import (
     is_pe_arm64,
     pe_machine,
     require_native_windows_arm64,
+    main,
 )
 
 
@@ -43,6 +44,21 @@ class WindowsArm64Tests(unittest.TestCase):
             with self.subTest(image=image):
                 self.assertIsNone(pe_machine(image))
                 self.assertFalse(is_pe_arm64(image))
+
+    @patch('python_arm64.sys.implementation.name', 'cpython')
+    @patch('python_arm64.platform.machine', return_value='ARM64')
+    @patch('python_arm64.platform.system', return_value='Windows')
+    def test_workflow_preflight_cli_accepts_native_runner(self, system, machine):
+        self.assertIsNone(main())
+        system.assert_called_once_with()
+        machine.assert_called_once_with()
+
+    @patch('python_arm64.sys.implementation.name', 'cpython')
+    @patch('python_arm64.platform.machine', return_value='AMD64')
+    @patch('python_arm64.platform.system', return_value='Windows')
+    def test_workflow_preflight_rejects_emulated_runner(self, _system, _machine):
+        with self.assertRaisesRegex(RuntimeError, 'native Windows ARM64'):
+            require_native_windows_arm64()
 
     def test_policy_overlay_adds_and_rejects_drift(self):
         policy = {"platforms": []}

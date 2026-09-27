@@ -126,9 +126,11 @@ jobs:
       - if: matrix.id == 'windows-arm64'
         name: Reject emulated Windows ARM64 build evidence
         shell: pwsh
-        run: |
-          python -c "import platform,sys; assert platform.system() == 'Windows' and platform.machine().upper() == 'ARM64', (platform.system(), platform.machine()); assert sys.implementation.name == 'cpython'"
-          rustup target add aarch64-pc-windows-msvc
+        run: python scripts/ci/python_arm64.py
+      - if: matrix.id == 'windows-arm64'
+        name: Provision Windows ARM64 Rust target
+        shell: pwsh
+        run: rustup target add aarch64-pc-windows-msvc
       - uses: actions/download-artifact@v7
         with:
           name: b4a-sdist
@@ -187,8 +189,7 @@ jobs:
       - if: matrix.id == 'windows-arm64'
         name: Reject emulated Windows ARM64 installed cell
         shell: pwsh
-        run: |
-          python -c "import platform,sys; assert platform.system() == 'Windows' and platform.machine().upper() == 'ARM64', (platform.system(), platform.machine()); assert sys.implementation.name == 'cpython'"
+        run: python scripts/ci/python_arm64.py
       - uses: actions/download-artifact@v7
         with:
           name: b4a-sdist

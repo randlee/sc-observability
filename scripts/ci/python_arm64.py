@@ -1,6 +1,9 @@
 """Small, dependency-free native PE/ARM64 qualification helper."""
 from __future__ import annotations
 
+import platform
+import sys
+
 PE_SIGNATURE = b"PE\0\0"
 PE_ARM64_MACHINE = 0xAA64
 WINDOWS_ARM64_POLICY = {"id": "windows-arm64", "runner": "windows-11-arm", "machine": "ARM64", "wheel_platform": "win_arm64", "rust_target": "aarch64-pc-windows-msvc"}
@@ -37,9 +40,15 @@ def is_pe_arm64(data: bytes) -> bool:
 
 def require_native_windows_arm64() -> None:
     """Reject Windows emulation/cross-build runners before native evidence runs."""
-    import platform
-    import sys
-
     if (platform.system() != "Windows" or platform.machine().upper() != "ARM64"
             or sys.implementation.name != "cpython"):
         raise RuntimeError("native Windows ARM64 runner and CPython are required")
+
+
+def main() -> None:
+    """Run the native Windows ARM64 preflight used by workflow jobs."""
+    require_native_windows_arm64()
+
+
+if __name__ == "__main__":
+    main()
