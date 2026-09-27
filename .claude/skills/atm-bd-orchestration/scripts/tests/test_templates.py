@@ -48,6 +48,7 @@ class TemplateContractTests(unittest.TestCase):
     def test_sanity_template_has_no_stale_base_check(self):
         text = (ROOT / "templates/dev-sanity-template.xml.j2").read_text()
         self.assertNotIn("STALE_BASE", text)  # sanity-split pins origin/<base> itself (three-dot diff)
+        self.assertIn("git fetch origin && git log --format=%H origin/", text)  # but the tracking ref must be fresh
 
     def test_finding_bead_deliverables_are_splittable(self):
         import importlib.machinery, importlib.util, json, subprocess

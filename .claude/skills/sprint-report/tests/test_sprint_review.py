@@ -28,6 +28,26 @@ artifact_check = load_script('artifact_check', SKILLS / 'atm-beads/scripts/check
 
 
 class ViewTests(unittest.TestCase):
+    def test_dag_edges_come_from_canonical_plan_not_live_extra_blockers(self):
+        index = {'root_bead_id': 'root', 'sprints': [
+            {'dev_bead_id': 'dev-a', 'sanity_bead_id': 'gate-a'},
+            {'dev_bead_id': 'dev-b', 'sanity_bead_id': 'gate-b',
+             'depends_on_sanity_bead_ids': ['gate-a']},
+        ]}
+        beads = {
+            'dev-a': {'id': 'dev-a', 'dependencies': []},
+            'gate-a': {'id': 'gate-a', 'labels': ['stage:dev-sanity'],
+                       'dependencies': [{'type': 'blocks', 'depends_on_id': 'dev-a'}]},
+            # This execution-only blocker must not become a plan/DAG edge.
+            'dev-b': {'id': 'dev-b', 'dependencies': [{'type': 'blocks', 'depends_on_id': 'runtime-gate'}]},
+            'gate-b': {'id': 'gate-b', 'labels': ['stage:dev-sanity'],
+                       'dependencies': [{'type': 'blocks', 'depends_on_id': 'dev-b'}]},
+        }
+        graph = dag.build_graph(index, beads)
+        self.assertEqual(graph['edges'], [
+            ['dev-b', 'gate-a'], ['gate-a', 'dev-a'], ['gate-b', 'dev-b'],
+        ])
+
     def test_generation_publishes_before_optional_view_and_never_views_by_default(self):
         index = {'root_bead_id': 'root', 'sprints': [{'dev_bead_id': 'dev', 'sanity_bead_id': 'gate'}]}
         beads = [
@@ -132,7 +152,10 @@ class PublicationTests(unittest.TestCase):
             run('config', 'user.email', 'test@example.invalid', cwd=repo)
             run('config', 'user.name', 'Artifact test', cwd=repo)
             (repo / 'README').write_text('base')
-            run('add', 'README', cwd=repo)
+            plan = repo / 'docs/plans/phase-test/sprints.jsonl'
+            plan.parent.mkdir(parents=True)
+            plan.write_text('["test-1", "gate", []]\n')
+            run('add', 'README', str(plan.relative_to(repo)), cwd=repo)
             run('commit', '-m', 'base', cwd=repo)
             run('remote', 'add', 'origin', str(remote), cwd=repo)
             run('push', '-u', 'origin', 'integrate/phase-test', cwd=repo)
@@ -140,27 +163,27 @@ class PublicationTests(unittest.TestCase):
             (repo / 'unrelated.txt').write_text('preserve staged work')
             run('add', 'unrelated.txt', cwd=repo)
             initial = run('rev-parse', 'HEAD', cwd=repo)
-            index = {'root_bead_id': 'root', 'sprints': [{'dev_bead_id': 'dev', 'sanity_bead_id': 'gate'}]}
             root = [{'id': 'root', 'metadata': {'phase': 'test', 'integration_branch': 'integrate/phase-test'}}]
             with patch.object(artifact_check, 'run_json', return_value=root):
                 with self.assertRaisesRegex(RuntimeError, 'required phase index/HTML artifact missing'):
-                    artifact_check.check_artifact(repo, 'root', index)
+                    artifact_check.check_artifact(repo, 'root', plan)
             html = dag.html_view('<svg xmlns="http://www.w3.org/2000/svg"/>', 'test', 'root')
-            result = publication.publish_artifact(repo, 'integrate/phase-test', 'test', html, json.dumps(index))
+            result = publication.publish_artifact(repo, 'integrate/phase-test', 'test', html)
             self.assertEqual(run('rev-parse', 'HEAD', cwd=repo), initial)
             self.assertEqual(run('diff', '--cached', '--name-only', cwd=repo), 'unrelated.txt')
             self.assertEqual(run('show', f"{result['commit']}:{result['html_path']}", cwd=repo), html.strip())
             remote_head = run('--git-dir', str(remote), 'rev-parse', 'refs/heads/integrate/phase-test')
             self.assertEqual(remote_head, result['commit'])
             changed = set(run('diff-tree', '--no-commit-id', '--name-only', '-r', result['commit'], cwd=repo).splitlines())
-            self.assertEqual(changed, {result['html_path'], result['index_path']})
+            self.assertEqual(changed, {result['html_path']})
             self.assertEqual(run('worktree', 'list', '--porcelain', cwd=repo).count('worktree '), 1)
             with patch.object(artifact_check, 'run_json', return_value=root):
-                artifact_check.check_artifact(repo, 'root', index)
-                with self.assertRaisesRegex(RuntimeError, 'membership differs'):
-                    artifact_check.check_artifact(repo, 'root', {**index, 'sprints': []})
+                artifact_check.check_artifact(repo, 'root', plan)
+                plan.write_text('["test-2", "other-gate", []]\n')
+                with self.assertRaisesRegex(RuntimeError, 'phase plan differs'):
+                    artifact_check.check_artifact(repo, 'root', plan)
             # Publishing identical bytes must not create an extra commit.
-            again = publication.publish_artifact(repo, 'integrate/phase-test', 'test', html, json.dumps(index))
+            again = publication.publish_artifact(repo, 'integrate/phase-test', 'test', html)
             self.assertEqual(again['commit'], result['commit'])
 
 

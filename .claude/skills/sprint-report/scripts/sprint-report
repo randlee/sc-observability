@@ -15,7 +15,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "atm-beads/scripts"))
-from sprint_index_common import run_json, index_bead_pairs, phase_id, validate_index
+from sprint_index_common import load_phase_plan, run_json, index_bead_pairs, phase_id
 from sprint_qa import metadata, choose_round, qa_verdict, qa_icon, findings_summary
 from plan_contract import DIFFICULTY_MODELS
 
@@ -175,18 +175,16 @@ def load_index(repo: Path, explicit: Path | None, root: str | None) -> tuple[Pat
     elif root:
         path = index_path(repo, root)
     else:
-        candidates = sorted((repo / "docs" / "plans").glob("phase-*/sprints.json"))
+        candidates = sorted((repo / "docs" / "plans").glob("phase-*/sprints.jsonl"))
         if len(candidates) != 1:
-            raise RuntimeError("pass --root or --index; no unique phase sprint index found")
+            raise RuntimeError("pass --root or --index; no unique canonical phase plan found")
         path = candidates[0]
     if not path.exists():
-        raise RuntimeError(f"sprint index not found: {path}")
+        raise RuntimeError(f"canonical phase plan not found: {path}")
     try:
-        index = json.loads(path.read_text(encoding="utf-8"))
-        validate_index(index)
-        return path, index
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(f"invalid sprint index {path}: {exc}") from exc
+        return path, load_phase_plan(path, root)
+    except (OSError, RuntimeError) as exc:
+        raise RuntimeError(f"invalid canonical phase plan {path}: {exc}") from exc
 
 
 def live_sprint_rows(index: dict[str, Any], beads: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
@@ -256,7 +254,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, help="local DAG export prefix; skips default integration-branch publication")
     parser.add_argument("--open", action="store_true", help="open DAG PNG in Preview on macOS, default viewer elsewhere")
     parser.add_argument("--root", help="phase root bead id")
-    parser.add_argument("--index", type=Path, help="committed sprints.json path")
+    parser.add_argument("--index", type=Path, help="committed sprints.jsonl path")
     args = parser.parse_args()
     if args.output and not (args.dag or args.view):
         parser.error("--output requires --dag or --view")
