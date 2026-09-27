@@ -2478,10 +2478,13 @@ shared `error_codes.rs`. Operational/context error serde uses a snake-case
 `kind` and a `context` object containing `diagnostic`; source objects and
 backtraces are deliberately not serialized. Native chaining preserves them.
 
-`v2::TelemetryError::Shutdown` remains a unit runtime guard;
-`From<v2::ExportError>` wraps the exact error in `ExportFailure`.
-For `ExportFailure`, `.code()` returns the fixed stable classification for the
-variant, while `.diagnostic().code` returns the preserved original cause code.
+`v2::TelemetryError::Shutdown { context }` is the canonical context- and
+diagnostic-carrying runtime admission guard; the retained root
+`TelemetryError::Shutdown` remains the unit variant described above.
+`From<v2::ExportError>` wraps the exact error in `v2::TelemetryError::ExportFailure`.
+For `v2::TelemetryError::ExportFailure`, `.code()` returns the fixed stable
+classification for the variant, while `.diagnostic().code` returns the preserved
+original cause code.
 `ExportError::Transport` is the explicit pass-through exception: its `.code()`
 also returns the preserved underlying `.diagnostic().code`. Existing root
 `ObservationError` guards remain unchanged. Flush/shutdown/config adapters
