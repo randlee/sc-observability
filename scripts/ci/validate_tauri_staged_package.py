@@ -50,7 +50,7 @@ def main() -> int:
         checkout = scratch / "tauri"
         shutil.copytree(source / "bindings/tauri", checkout)
         (checkout / "Cargo.toml").write_text(
-            patched_manifest((checkout / "Cargo.toml").read_text(), PATCHED_DEPENDENCIES),
+            patched_manifest((checkout / "Cargo.toml").read_text(encoding="utf-8"), PATCHED_DEPENDENCIES),
             encoding="utf-8",
         )
         extracted = scratch / "staged"
