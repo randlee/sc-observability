@@ -382,10 +382,11 @@ def aggregate(args) -> None:
     platform_count = len(policy['platforms'])
     platform_ids = {platform['id'] for platform in policy['platforms']}
     if platform_count == 6:
-        arm64 = next((platform for platform in policy['platforms'] if platform['id'] == 'windows-arm64'), None)
-        if arm64 is None or (arm64.get('machine'), arm64.get('wheel_platform'), arm64.get('rust_target')) != (
-                'ARM64', 'win_arm64', 'aarch64-pc-windows-msvc'):
-            raise DistributionError('Windows ARM64 policy handoff is incomplete')
+        from python_arm64 import apply_windows_arm64_overlay
+        try:
+            apply_windows_arm64_overlay(policy)
+        except RuntimeError as error:
+            raise DistributionError(str(error)) from error
     if len(platform_ids) != platform_count:
         raise DistributionError('platform policy contains duplicate identifiers')
     if platform_count not in (5, 6) or len(builds) != platform_count or len(cells) != platform_count * len(policy['interpreters']):

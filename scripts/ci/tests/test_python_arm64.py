@@ -3,7 +3,13 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from python_arm64 import PE_ARM64_MACHINE, is_pe_arm64, pe_machine
+from python_arm64 import (
+    PE_ARM64_MACHINE,
+    WINDOWS_ARM64_POLICY,
+    apply_windows_arm64_overlay,
+    is_pe_arm64,
+    pe_machine,
+)
 
 
 def pe(machine: int, offset: int = 0x80) -> bytes:
@@ -34,6 +40,14 @@ class WindowsArm64Tests(unittest.TestCase):
             with self.subTest(image=image):
                 self.assertIsNone(pe_machine(image))
                 self.assertFalse(is_pe_arm64(image))
+
+    def test_policy_overlay_adds_and_rejects_drift(self):
+        policy = {"platforms": []}
+        self.assertEqual(
+            apply_windows_arm64_overlay(policy)["platforms"], [WINDOWS_ARM64_POLICY]
+        )
+        with self.assertRaisesRegex(RuntimeError, "differs"):
+            apply_windows_arm64_overlay({"platforms": [{**WINDOWS_ARM64_POLICY, "runner": "x64"}]})
 
 
 if __name__ == '__main__':
