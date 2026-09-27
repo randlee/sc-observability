@@ -419,19 +419,11 @@ impl Telemetry {
     /// Flushes telemetry with a neutral flush failure while retaining fail-open
     /// exporter semantics.
     pub fn flush_typed(&self) -> Result<(), FlushFailure> {
-        let _ = self.flush_outcome().map_err(FlushFailure::from)?;
+        let _ = self.flush_outcome();
         Ok(())
     }
 
-    #[expect(
-        clippy::unnecessary_wraps,
-        reason = "the helper preserves a Result-shaped internal API so flush behavior can grow direct error propagation without reshaping public callers"
-    )]
-    #[allow(
-        deprecated,
-        reason = "flush_outcome retains the legacy internal result while flush_typed is the public path"
-    )]
-    fn flush_outcome(&self) -> Result<FlushOutcome, FlushError> {
+    fn flush_outcome(&self) -> FlushOutcome {
         let (log_batch, span_batch, metric_batch) = {
             let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
             let log_batch = if self.config.logs.is_some() {
@@ -487,7 +479,7 @@ impl Telemetry {
             }
         }
 
-        Ok(FlushOutcome { export_failure })
+        FlushOutcome { export_failure }
     }
 
     /// Flushes buffers, drops incomplete spans, and transitions the runtime to shutdown.
@@ -521,10 +513,7 @@ impl Telemetry {
             return Ok(());
         }
 
-        let flush_outcome = self
-            .flush_outcome()
-            .map_err(FlushFailure::from)
-            .map_err(shutdown_flush_failure)?;
+        let flush_outcome = self.flush_outcome();
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         let dropped = runtime.span_assembler.flush_incomplete() as u64;
         if dropped > 0 {
@@ -699,31 +688,6 @@ pub(crate) fn export_failure(message: impl Into<String>) -> TelemetryError {
 /// original timestamp, backtrace, and any attached source survive intact.
 fn export_failure_from_event(err: EventFailure) -> TelemetryError {
     TelemetryError::ExportFailure(err.into_context())
-}
-
-/// Converts a flush failure into a shutdown failure, chaining the flush
-/// failure as the shutdown context's native source.
-///
-/// `flush_outcome` never currently returns `Err` (it is intentionally
-/// `Result`-shaped so shutdown can propagate real flush failures without a
-/// public-signature change later; see its own `unnecessary_wraps` rationale),
-/// so this conversion is unreachable at runtime today. It is kept, rather
-/// than deleted, for that future propagation path, and is covered directly
-/// by `shutdown_flush_failure_preserves_flush_context_as_native_source`
-/// below so a regression in its error-context/source chaining is still
-/// caught even while the call site is dormant.
-fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
-    ShutdownFailure::from_context(Box::new(
-        ErrorContext::new(
-            error_codes::OTLP_EXPORT_TERMINAL,
-            "failed to flush telemetry during shutdown",
-            Remediation::recoverable(
-                "inspect telemetry health and retry shutdown after the exporter recovers",
-                ["retry shutdown"],
-            ),
-        )
-        .source(Box::new(error)),
-    ))
 }
 
 fn shutdown_export_failure_typed(
@@ -1443,45 +1407,6 @@ mod tests {
         );
         let source = std::error::Error::source(&*exported).expect("source must be preserved");
         assert_eq!(source.to_string(), "orphaned span event source");
-    }
-
-    #[test]
-    fn shutdown_flush_failure_preserves_flush_context_as_native_source() {
-        let flush_failure = FlushFailure::from_context(Box::new(
-            ErrorContext::new(
-                error_codes::OTLP_EXPORT_TERMINAL,
-                "log export failed",
-                Remediation::not_recoverable("test flush failure"),
-            )
-            .source(Box::new(std::io::Error::other("native flush source"))),
-        ));
-
-        let shutdown_failure = shutdown_flush_failure(flush_failure);
-
-        assert_eq!(
-            shutdown_failure.diagnostic().code,
-            error_codes::OTLP_EXPORT_TERMINAL
-        );
-        assert_eq!(
-            shutdown_failure.diagnostic().message,
-            "failed to flush telemetry during shutdown"
-        );
-        let shutdown_context = std::error::Error::source(&shutdown_failure)
-            .expect("shutdown failure preserves its context");
-        let chained_flush_failure = shutdown_context
-            .source()
-            .expect("shutdown context preserves the flush failure");
-        assert_eq!(
-            chained_flush_failure.to_string(),
-            "log export failed; caused by: native flush source"
-        );
-        let flush_context = chained_flush_failure
-            .source()
-            .expect("flush failure preserves its context");
-        let native_source = flush_context
-            .source()
-            .expect("flush context preserves the native export source");
-        assert_eq!(native_source.to_string(), "native flush source");
     }
 
     #[test]
