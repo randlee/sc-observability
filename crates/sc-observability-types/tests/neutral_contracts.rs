@@ -235,7 +235,13 @@ fn finite(n: f64) -> FiniteF64 {
     FiniteF64::new(n).unwrap()
 }
 fn histogram() -> HistogramPoint {
-    HistogramPoint::try_new(vec![1.0, 2.0], vec![1, 2, 3], 6, finite(12.0)).unwrap()
+    HistogramPoint::try_new(
+        vec![finite(1.0), finite(2.0)],
+        vec![1, 2, 3],
+        6,
+        finite(12.0),
+    )
+    .unwrap()
 }
 #[test]
 fn histogram_point_serde_rejects_invalid() {
@@ -259,7 +265,7 @@ fn histogram_point_serde_rejects_invalid() {
             "accepted {field}"
         );
     }
-    assert!(HistogramPoint::try_new(vec![f64::INFINITY], vec![0, 0], 0, finite(0.0)).is_err());
+    assert!(serde_json::from_value::<HistogramPoint>(json!({"explicit_bounds": [f64::INFINITY], "bucket_counts": [0, 0], "count": 0, "sum": 0.0})).is_err());
     assert!(HistogramPoint::try_new(vec![], vec![0], 0, finite(1.0)).is_err());
     assert!(HistogramPoint::try_new(vec![], vec![0], 0, finite(0.0)).is_ok());
     for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
