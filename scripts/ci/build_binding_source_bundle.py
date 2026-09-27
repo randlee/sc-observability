@@ -219,7 +219,9 @@ def build(root_manifest,output):
     qualified_evidence=None
     if qualified_stage.exists():
         from _log_staging import verify_stage
-        qualified_evidence=verify_stage(qualified_stage,root['version'])
+        # A qualified B.2 archive is immutable at the version it qualified.
+        # The workspace may have advanced to an unpublished candidate since.
+        qualified_evidence=verify_stage(qualified_stage)
         qualified=qualified_packages_for(qualified_evidence,source_sha)
     for package in unpublished:
         stem=f'{package["name"]}-{package["version"]}'

@@ -94,6 +94,11 @@ class StageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'version'):
             verify_stage(self.root, '1.3.0')
 
+    def test_accepts_qualified_stage_when_workspace_candidate_is_newer(self):
+        # The immutable stage verifies its recorded candidate version; a later
+        # workspace candidate is not allowed to rewrite qualification evidence.
+        verify_stage(self.root)
+
     def test_rejects_changed_source_even_with_updated_manifest(self):
         self.manifest['source_commit'] = 'b' * 40
         self.save()
