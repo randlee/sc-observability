@@ -29,10 +29,10 @@ class SupervisorTests(unittest.TestCase):
                  patch.object(supervisor, 'recover', side_effect=failure, return_value=True):
                 with self.assertRaises(SystemExit) as result:
                     supervisor.main()
-            report = json.loads((evidence / 'windows-supervisor.json').read_text())
+            report = json.loads((evidence / 'windows-supervisor.json').read_text(encoding='utf-8'))
             self.assertEqual(report['exit'], result.exception.code)
             if failure:
-                self.assertEqual((evidence / 'failed-recovery-1/identity-recovery.json').read_text(), 'retained journal')
+                self.assertEqual((evidence / 'failed-recovery-1/identity-recovery.json').read_text(encoding='utf-8'), 'retained journal')
                 self.assertEqual(report['recovery_errors'], [str(failure)])
             return result.exception.code
 
@@ -59,7 +59,7 @@ class SupervisorTests(unittest.TestCase):
             path = directory / 'platform.json'
             path.write_text(json.dumps({'status': 'passed', 'source_commit': 'retained-source'}))
             supervisor.invalidate_evidence(directory, 124)
-            report = json.loads(path.read_text())
+            report = json.loads(path.read_text(encoding='utf-8'))
             self.assertEqual(report['status'], 'failed')
             self.assertEqual(report['source_commit'], 'retained-source')
             self.assertEqual(report['windows_supervisor_exit'], 124)
