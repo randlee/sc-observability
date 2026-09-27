@@ -689,16 +689,12 @@ pub(crate) fn validated_telemetry_bounds(
 }
 
 /// A duration checked as strictly positive by ordered config validation.
-#[cfg_attr(
-    not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PositiveDuration(Duration);
 
 #[cfg_attr(
     not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 impl PositiveDuration {
     pub(crate) const fn get(self) -> Duration {
@@ -707,17 +703,9 @@ impl PositiveDuration {
 }
 
 /// Checked maximum number of simultaneously admitted records.
-#[cfg_attr(
-    not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct QueueCapacity(usize);
 
-#[cfg_attr(
-    not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
 impl QueueCapacity {
     pub(crate) const fn get(self) -> usize {
         self.0
@@ -725,17 +713,9 @@ impl QueueCapacity {
 }
 
 /// Checked aggregate serialized-byte budget for admitted records.
-#[cfg_attr(
-    not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct QueueByteCapacity(usize);
 
-#[cfg_attr(
-    not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
 impl QueueByteCapacity {
     pub(crate) const fn get(self) -> usize {
         self.0
@@ -743,16 +723,12 @@ impl QueueByteCapacity {
 }
 
 /// A percentage validated within zero through one hundred.
-#[cfg_attr(
-    not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct BoundedPercent(u8);
 
 #[cfg_attr(
     not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 impl BoundedPercent {
     pub(crate) const fn get(self) -> u8 {
@@ -761,10 +737,6 @@ impl BoundedPercent {
 }
 
 /// Positive lifecycle deadlines, both at least the request timeout.
-#[cfg_attr(
-    not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
 #[derive(Debug)]
 pub(crate) struct LifecycleBounds {
     flush: PositiveDuration,
@@ -773,7 +745,7 @@ pub(crate) struct LifecycleBounds {
 
 #[cfg_attr(
     not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 impl LifecycleBounds {
     pub(crate) const fn flush(&self) -> PositiveDuration {
@@ -785,10 +757,6 @@ impl LifecycleBounds {
 }
 
 /// Checked transport bounds; private fields prohibit unchecked factory construction.
-#[cfg_attr(
-    not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
 #[derive(Debug)]
 pub(crate) struct ValidatedTransportBounds {
     protocol: OtlpProtocol,
@@ -801,7 +769,7 @@ pub(crate) struct ValidatedTransportBounds {
 
 #[cfg_attr(
     not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 impl ValidatedTransportBounds {
     pub(crate) const fn protocol(&self) -> OtlpProtocol {
@@ -827,7 +795,7 @@ impl ValidatedTransportBounds {
 /// Backend-specific state; SDK and disabled transports cannot carry retry policy.
 #[cfg_attr(
     not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 #[derive(Debug)]
 pub(crate) enum BackendTransportBounds {
@@ -837,10 +805,6 @@ pub(crate) enum BackendTransportBounds {
 }
 
 /// Checked legacy retry policy produced only by ordered config validation.
-#[cfg_attr(
-    not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
-)]
 #[derive(Debug)]
 pub(crate) struct RetryPolicy {
     max_retries: u32,
@@ -853,7 +817,7 @@ pub(crate) struct RetryPolicy {
 
 #[cfg_attr(
     not(test),
-    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 impl RetryPolicy {
     pub(crate) const fn max_retries(&self) -> u32 {
