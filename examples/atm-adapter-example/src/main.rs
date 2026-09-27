@@ -297,11 +297,8 @@ fn telemetry_config_from_env(
             auth_header,
             ca_file,
             insecure_skip_verify,
-            timeout_ms: constants::OTLP_TIMEOUT_MS.into(),
+            timeout_ms: Some(constants::OTLP_TIMEOUT_MS.into()),
             debug_local_export,
-            max_retries: constants::OTLP_MAX_RETRIES,
-            initial_backoff_ms: constants::OTLP_INITIAL_BACKOFF_MS.into(),
-            max_backoff_ms: constants::OTLP_MAX_BACKOFF_MS.into(),
             ..OtelConfig::default()
         })
         .with_resource(sc_observability_otlp::ResourceAttributes {

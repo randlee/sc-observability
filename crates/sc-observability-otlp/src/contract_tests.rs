@@ -28,7 +28,7 @@ fn legacy_config() -> OtelConfig {
 #[test]
 fn contract_tests_validation_order() {
     let config = OtelConfig {
-        timeout_ms: 0_u64.into(),
+        timeout_ms: Some(0_u64.into()),
         queue_capacity: Some(0),
         ..legacy_config()
     };
@@ -116,7 +116,7 @@ fn contract_tests_every_legacy_duration_precedes_later_validation_bullets() {
 #[allow(deprecated)]
 fn contract_tests_retained_legacy_duration_precedes_capacity() {
     let error = validated_transport_bounds(&OtelConfig {
-        initial_backoff_ms: 0_u64.into(),
+        initial_backoff_ms: Some(0_u64.into()),
         queue_capacity: Some(0),
         ..legacy_config()
     })
@@ -165,7 +165,7 @@ fn contract_tests_timeout_origin_tracks_default_and_explicit_values() {
     );
 
     let explicit_timeout = validated_transport_bounds(&OtelConfig {
-        timeout_ms: 3_001_u64.into(),
+        timeout_ms: Some(3_001_u64.into()),
         lifecycle_shutdown_timeout_ms: Some(3_000_u64.into()),
         ..legacy_config()
     })
@@ -178,12 +178,27 @@ fn contract_tests_timeout_origin_tracks_default_and_explicit_values() {
         explicit_timeout.diagnostic().details.get("origin"),
         Some(&serde_json::Value::String("Explicit".to_owned()))
     );
+
+    let explicit_default_timeout = validated_transport_bounds(&OtelConfig {
+        timeout_ms: Some(constants::DEFAULT_OTLP_TIMEOUT_MS.into()),
+        lifecycle_shutdown_timeout_ms: Some(2_999_u64.into()),
+        ..legacy_config()
+    })
+    .expect_err("an explicit default timeout still records its explicit origin");
+    assert!(matches!(
+        explicit_default_timeout,
+        ConfigFailure::InvalidBoundOrdering { .. }
+    ));
+    assert_eq!(
+        explicit_default_timeout.diagnostic().details.get("origin"),
+        Some(&serde_json::Value::String("Explicit".to_owned()))
+    );
 }
 
 #[test]
 fn contract_tests_stable_failure_codes() {
     let zero = validated_transport_bounds(&OtelConfig {
-        timeout_ms: 0_u64.into(),
+        timeout_ms: Some(0_u64.into()),
         ..legacy_config()
     })
     .expect_err("zero timeout");
@@ -231,7 +246,14 @@ fn assert_sdk_not_applicable_field(config: &OtelConfig, expected_field: &str) {
 fn contract_tests_sdk_reports_max_retries_as_the_first_supplied_legacy_field() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            max_retries: constants::DEFAULT_OTLP_MAX_RETRIES + 1,
+            max_retries: Some(constants::DEFAULT_OTLP_MAX_RETRIES),
+            ..sdk_config()
+        },
+        "MaxRetries",
+    );
+    assert_sdk_not_applicable_field(
+        &OtelConfig {
+            max_retries: Some(constants::DEFAULT_OTLP_MAX_RETRIES + 1),
             ..sdk_config()
         },
         "MaxRetries",
@@ -253,7 +275,14 @@ fn contract_tests_sdk_reports_max_retries_as_the_first_supplied_legacy_field() {
 fn contract_tests_sdk_reports_initial_backoff_as_the_first_supplied_legacy_field() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            initial_backoff_ms: (constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS + 1).into(),
+            initial_backoff_ms: Some(constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS.into()),
+            ..sdk_config()
+        },
+        "InitialBackoff",
+    );
+    assert_sdk_not_applicable_field(
+        &OtelConfig {
+            initial_backoff_ms: Some((constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS + 1).into()),
             ..sdk_config()
         },
         "InitialBackoff",
@@ -275,7 +304,14 @@ fn contract_tests_sdk_reports_initial_backoff_as_the_first_supplied_legacy_field
 fn contract_tests_sdk_reports_max_backoff_as_the_first_supplied_legacy_field() {
     assert_sdk_not_applicable_field(
         &OtelConfig {
-            max_backoff_ms: (constants::DEFAULT_OTLP_MAX_BACKOFF_MS + 1).into(),
+            max_backoff_ms: Some(constants::DEFAULT_OTLP_MAX_BACKOFF_MS.into()),
+            ..sdk_config()
+        },
+        "MaxBackoff",
+    );
+    assert_sdk_not_applicable_field(
+        &OtelConfig {
+            max_backoff_ms: Some((constants::DEFAULT_OTLP_MAX_BACKOFF_MS + 1).into()),
             ..sdk_config()
         },
         "MaxBackoff",
@@ -289,6 +325,28 @@ fn contract_tests_sdk_reports_max_backoff_as_the_first_supplied_legacy_field() {
             ..sdk_config()
         },
         "MaxBackoff",
+    );
+}
+
+#[test]
+#[allow(deprecated)]
+fn contract_tests_disabled_rejects_explicit_default_retained_field() {
+    let error = validated_transport_bounds(&OtelConfig {
+        max_retries: Some(constants::DEFAULT_OTLP_MAX_RETRIES),
+        ..OtelConfig::default()
+    })
+    .expect_err("disabled transport must not silently accept an explicit retained field");
+    assert!(matches!(
+        error,
+        ConfigFailure::ConfigFieldNotApplicable { .. }
+    ));
+    assert_eq!(
+        error.diagnostic().details["field"].as_str(),
+        Some("MaxRetries")
+    );
+    assert_eq!(
+        error.diagnostic().details["target"].as_str(),
+        Some("Disabled")
     );
 }
 
