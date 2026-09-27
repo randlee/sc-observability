@@ -20,7 +20,10 @@ class DistributionError(ValueError):
     """A distribution failed an explicit qualification boundary."""
 
 
-def validate_requires_python(value: str, minimum: str = '3.10') -> str:
+PYTHON_FLOOR = '3.10'
+
+
+def validate_requires_python(value: str, minimum: str = PYTHON_FLOOR) -> str:
     """Parse an open-ended lower-bound requirement, rejecting caps/exclusions."""
     from packaging.specifiers import InvalidSpecifier, SpecifierSet
     from packaging.version import Version
@@ -180,8 +183,7 @@ def verify_native_architecture(data: bytes, tag: str) -> None:
         raise DistributionError('native executable architecture differs from wheel platform')
 
 
-def inspect_wheel(wheel: Path, policy: dict, version: str,
-                  expected_requires_python: str | None = None) -> dict:
+def inspect_wheel(wheel: Path, policy: dict, version: str, expected_requires_python: str) -> dict:
     from packaging.utils import parse_wheel_filename
     name, actual_version, _, tags = parse_wheel_filename(wheel.name)
     if name != 'sc-observability' or str(actual_version) != version:
@@ -223,11 +225,10 @@ def inspect_wheel(wheel: Path, policy: dict, version: str,
         if len(values) > 1:
             raise DistributionError('duplicate Requires-Python metadata')
         requires_python = values[0].strip() if values else None
-        expected = expected_requires_python or policy.get('expected_requires_python', '>=3.10')
-        if requires_python is None or validate_requires_python(requires_python) != validate_requires_python(expected):
+        if requires_python is None or validate_requires_python(requires_python) != validate_requires_python(expected_requires_python):
             raise DistributionError('source and wheel Requires-Python metadata disagree')
     return {'wheel': wheel.name, 'sha256': digest(wheel), 'tags': sorted(map(str, tags)),
-            'native_member': native[0], 'expected_requires_python': requires_python}
+            'native_member': native[0], 'wheel_requires_python': requires_python}
 
 
 def actual_cell(policy: dict) -> dict:

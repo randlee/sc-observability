@@ -87,13 +87,13 @@ class DistributionTests(unittest.TestCase):
             with zipfile.ZipFile(wheel, 'w') as archive:
                 archive.writestr('sc_observability/__init__.py', '')
             with self.assertRaisesRegex(DistributionError, 'missing package data'):
-                inspect_wheel(wheel, {'wheel_platform': 'win_amd64'}, '1.4.0')
+                inspect_wheel(wheel, {'wheel_platform': 'win_amd64'}, '1.4.0', '>=3.10')
             with self.assertRaisesRegex(DistributionError, 'wrong wheel ABI/platform'):
-                inspect_wheel(wheel, {'wheel_platform': 'manylinux_2_28_x86_64'}, '1.4.0')
+                inspect_wheel(wheel, {'wheel_platform': 'manylinux_2_28_x86_64'}, '1.4.0', '>=3.10')
             cp311 = Path(temporary) / 'sc_observability-1.4.0-cp311-abi3-win_amd64.whl'
             cp311.write_bytes(wheel.read_bytes())
             with self.assertRaisesRegex(DistributionError, 'wrong wheel ABI/platform'):
-                inspect_wheel(cp311, {'wheel_platform': 'win_amd64'}, '1.4.0')
+                inspect_wheel(cp311, {'wheel_platform': 'win_amd64'}, '1.4.0', '>=3.10')
 
     def test_debug_contract_reaches_isolated_python_and_rejects_invalid_values(self):
         import subprocess
@@ -112,7 +112,7 @@ class DistributionTests(unittest.TestCase):
 
     def test_binary_architecture_cannot_be_overridden_by_filename(self):
         from _python_distribution import verify_native_architecture
-        from test_python_arm64 import pe
+        from scripts.ci.tests.test_python_arm64 import pe
         arm = b'\xcf\xfa\xed\xfe' + (0x100000c).to_bytes(4, 'little')
         verify_native_architecture(arm, 'macosx_11_0_arm64')
         verify_native_architecture(pe(0xAA64), 'win_arm64')
@@ -144,7 +144,7 @@ class DistributionTests(unittest.TestCase):
                 source_python_contract(root)
 
     def test_wheel_metadata_is_parsed_and_compared_to_source(self):
-        from test_python_arm64 import pe
+        from scripts.ci.tests.test_python_arm64 import pe
         with tempfile.TemporaryDirectory() as temporary:
             wheel = Path(temporary) / 'sc_observability-1.4.0-cp310-abi3-win_arm64.whl'
             members = {
@@ -162,7 +162,7 @@ class DistributionTests(unittest.TestCase):
                 for name, content in members.items():
                     archive.writestr(name, content)
             policy = {'wheel_platform': 'win_arm64', 'expected_requires_python': '>=3.10'}
-            self.assertEqual(inspect_wheel(wheel, policy, '1.4.0')['expected_requires_python'], '>=3.10')
+            self.assertEqual(inspect_wheel(wheel, policy, '1.4.0', '>=3.10')['wheel_requires_python'], '>=3.10')
             with zipfile.ZipFile(wheel, 'w') as archive:
                 for name, content in members.items():
                     if isinstance(content, str):
@@ -170,7 +170,7 @@ class DistributionTests(unittest.TestCase):
                                                   'Requires-Python: >=3.10,<3.13')
                     archive.writestr(name, content)
             with self.assertRaisesRegex(DistributionError, 'Requires-Python'):
-                inspect_wheel(wheel, policy, '1.4.0')
+                inspect_wheel(wheel, policy, '1.4.0', '>=3.10')
 
     def test_instrumented_wheel_cannot_enter_publication_inventory(self):
         from _python_distribution import release_wheel, fault_paths
