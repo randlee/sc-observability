@@ -2,7 +2,10 @@ import io
 import importlib.machinery
 import importlib.util
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -69,6 +72,33 @@ class SprintReportTests(unittest.TestCase):
             with mock.patch.object(report, 'index_path', return_value=path) as index_path:
                 index = report.load_index(repo, None, 'obs-phase-x')[1]
             index_path.assert_called_once_with(repo, 'obs-phase-x')
+            self.assertEqual(index['root_bead_id'], 'obs-phase-x')
+
+    def test_root_lookup_executes_phase_id_fallback_end_to_end(self):
+        checkout = Path(__file__).resolve().parents[4]
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            subprocess.run(['git', 'init', '-q'], cwd=repo, check=True)
+            helper_dir = repo / '.claude/skills/atm-beads/scripts'
+            helper_dir.mkdir(parents=True)
+            for name in ('phase-index-path', 'sprint_index_common.py'):
+                shutil.copy2(checkout / '.claude/skills/atm-beads/scripts' / name, helper_dir / name)
+            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path.parent.mkdir(parents=True)
+            path.write_text('["x-1", "gate-1", []]\n')
+            bin_dir = repo / 'bin'
+            bin_dir.mkdir()
+            bd = bin_dir / 'bd'
+            bd.write_text('#!/bin/sh\nprintf \'[{"id":"obs-phase-x","metadata":{}}]\\n\'\n')
+            bd.chmod(0o755)
+            old_cwd = Path.cwd()
+            try:
+                os.chdir(repo)
+                with mock.patch.dict(os.environ, {'PATH': f'{bin_dir}{os.pathsep}{os.environ["PATH"]}'}):
+                    actual_path, index = report.load_index(repo, None, 'obs-phase-x')
+            finally:
+                os.chdir(old_cwd)
+            self.assertEqual(actual_path.resolve(), path.resolve())
             self.assertEqual(index['root_bead_id'], 'obs-phase-x')
 
     def test_main_reports_malformed_json_without_traceback(self):
