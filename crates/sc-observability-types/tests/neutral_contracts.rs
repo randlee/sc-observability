@@ -1,6 +1,8 @@
 //! Contract tests for consumers of the staged canonical surface.
 use sc_observability_types::v2::*;
-use sc_observability_types::{DiagnosticInfo, ErrorContext, Remediation, Timestamp, error_codes};
+use sc_observability_types::{
+    DiagnosticInfo, ErrorContext, MetricUnit, Remediation, Timestamp, error_codes,
+};
 use serde_json::json;
 use std::error::Error;
 
@@ -422,6 +424,10 @@ fn histogram_point_serde_rejects_invalid() {
     }
 }
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one exhaustive test keeps metric validation and every frozen wire envelope together"
+)]
 fn metric_model_failures() {
     let start = Timestamp::UNIX_EPOCH;
     let end = start + time::Duration::seconds(1);
@@ -479,7 +485,111 @@ fn metric_model_failures() {
         },
     )
     .unwrap();
+    assert_eq!(
+        serde_json::to_value(MetricValue::Gauge(finite(1.5))).unwrap(),
+        json!({"kind":"gauge","data":1.5})
+    );
+    assert_eq!(
+        serde_json::to_value(MetricValue::Sum {
+            value: finite(1.5),
+            monotonic: true,
+            temporality: AggregationTemporality::Delta,
+            start_time: start,
+        })
+        .unwrap(),
+        json!({
+            "kind": "sum",
+            "data": {
+                "value": 1.5,
+                "monotonic": true,
+                "temporality": "delta",
+                "start_time": "1970-01-01T00:00:00Z",
+            }
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(MetricValue::Histogram {
+            point: histogram(),
+            temporality: AggregationTemporality::Delta,
+            start_time: start,
+        })
+        .unwrap(),
+        json!({
+            "kind": "histogram",
+            "data": {
+                "point": {
+                    "explicit_bounds": [1.0, 2.0],
+                    "bucket_counts": [1, 2, 3],
+                    "count": 6,
+                    "sum": 12.0,
+                },
+                "temporality": "delta",
+                "start_time": "1970-01-01T00:00:00Z",
+            }
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(SpanKind::Client).unwrap(),
+        json!("client")
+    );
+    assert_eq!(
+        serde_json::to_value(SpanKind::Consumer).unwrap(),
+        json!("consumer")
+    );
+    assert_eq!(
+        serde_json::to_value(SpanKind::Internal).unwrap(),
+        json!("internal")
+    );
+    assert_eq!(
+        serde_json::to_value(SpanKind::Producer).unwrap(),
+        json!("producer")
+    );
+    assert_eq!(
+        serde_json::to_value(SpanKind::Server).unwrap(),
+        json!("server")
+    );
     let mut value = serde_json::to_value(&record).unwrap();
+    assert_eq!(
+        value,
+        json!({
+            "timestamp": "1970-01-01T00:00:01Z",
+            "service": "demo",
+            "name": "latency",
+            "value": {
+                "kind": "histogram",
+                "data": {
+                    "point": {
+                        "explicit_bounds": [1.0, 2.0],
+                        "bucket_counts": [1, 2, 3],
+                        "count": 6,
+                        "sum": 12.0,
+                    },
+                    "temporality": "delta",
+                    "start_time": "1970-01-01T00:00:00Z",
+                }
+            },
+            "unit": null,
+            "attributes": {},
+        })
+    );
+    let decorated_record = MetricRecord::try_new(
+        end,
+        sc_observability_types::ServiceName::new("demo").unwrap(),
+        sc_observability_types::MetricName::new("latency").unwrap(),
+        MetricValue::Gauge(finite(1.5)),
+    )
+    .unwrap()
+    .with_unit(Some(MetricUnit::new("ms").unwrap()))
+    .with_attributes(Attributes::from([(
+        "region".to_string(),
+        AttributeValue::String("us-west".to_string()),
+    )]));
+    let decorated_value = serde_json::to_value(decorated_record).unwrap();
+    assert_eq!(decorated_value["unit"], json!("ms"));
+    assert_eq!(
+        decorated_value["attributes"],
+        json!({"region": {"kind": "string", "data": "us-west"}})
+    );
     assert_eq!(
         serde_json::from_value::<MetricRecord>(value.clone()).unwrap(),
         record
