@@ -107,6 +107,8 @@ fn foreign_logger() -> FixtureDetachError {
 
 #[derive(Debug)]
 pub struct FixtureLogAttachment {
+    // Models the production bridge slot shared by an attachment and its saved
+    // controls: controls retain a Weak handle so they can observe detach.
     state: Arc<Mutex<FixtureAttachmentState>>,
 }
 
@@ -171,9 +173,12 @@ impl FixtureLogAttachment {
 impl FixtureLogControl {
     fn submit(&self) -> Result<(), FixtureDetachError> {
         let state = self.state.upgrade().ok_or_else(not_installed)?;
-        (state.lock().expect("fixture state lock").slot == FixtureSlotState::Attached)
-            .then_some(())
-            .ok_or_else(not_installed)
+        let slot = state.lock().expect("fixture state lock").slot;
+        if slot == FixtureSlotState::Attached {
+            Ok(())
+        } else {
+            Err(not_installed())
+        }
     }
 }
 
