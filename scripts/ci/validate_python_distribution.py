@@ -381,15 +381,16 @@ def aggregate(args) -> None:
     cells = [json.loads(path.read_text()) for path in cell_paths]
     platform_count = len(policy['platforms'])
     platform_ids = {platform['id'] for platform in policy['platforms']}
-    if platform_count == 6:
-        arm64 = next((platform for platform in policy['platforms'] if platform['id'] == 'windows-arm64'), None)
-        if arm64 is None or (arm64.get('machine'), arm64.get('wheel_platform'), arm64.get('rust_target')) != (
-                'ARM64', 'win_arm64', 'aarch64-pc-windows-msvc'):
-            raise DistributionError('Windows ARM64 policy handoff is incomplete')
+    if platform_count != 6:
+        raise DistributionError('aggregate requires exactly six platforms, six builds and 30 installed-suite cells')
+    arm64 = next((platform for platform in policy['platforms'] if platform['id'] == 'windows-arm64'), None)
+    if arm64 is None or (arm64.get('machine'), arm64.get('wheel_platform'), arm64.get('rust_target')) != (
+            'ARM64', 'win_arm64', 'aarch64-pc-windows-msvc'):
+        raise DistributionError('Windows ARM64 policy handoff is incomplete')
     if len(platform_ids) != platform_count:
         raise DistributionError('platform policy contains duplicate identifiers')
-    if platform_count not in (5, 6) or len(builds) != platform_count or len(cells) != platform_count * len(policy['interpreters']):
-        raise DistributionError('all policy builds and installed-suite cells are required')
+    if len(builds) != 6 or len(cells) != 30:
+        raise DistributionError('exactly six builds and 30 installed-suite cells are required')
     build_platforms = [build.get('platform') for build in builds]
     if set(build_platforms) != platform_ids or len(build_platforms) != len(set(build_platforms)):
         raise DistributionError('build records contain missing, duplicate or unsupported platforms')
