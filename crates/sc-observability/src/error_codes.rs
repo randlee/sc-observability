@@ -84,3 +84,19 @@ pub const LOG_UNKNOWN_KEY: ErrorCode = ErrorCode::new_static("LOG-003");
 pub const LOG_INVALID_VALUE: ErrorCode = ErrorCode::new_static("LOG-004");
 /// Settings diagnostic for log resolution.
 pub const LOG_RESOLUTION: ErrorCode = ErrorCode::new_static("LOG-005");
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::ALL;
+
+    #[test]
+    fn registry_codes_are_unique() {
+        let unique = ALL
+            .iter()
+            .map(sc_observability_types::ErrorCode::as_str)
+            .collect::<HashSet<_>>();
+        assert_eq!(unique.len(), ALL.len());
+    }
+}
