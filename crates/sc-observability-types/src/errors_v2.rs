@@ -12,12 +12,11 @@ macro_rules! context_error {
         pub enum $name {
             $(
                 #[doc = concat!(stringify!($variant), " failure; see the canonical cause mapping.")]
-                #[error("{context}")]
-                $variant {
-                    /// Diagnostic, remediation, source and construction backtrace.
-                    #[source]
-                    context: Box<ErrorContext>,
-                },
+                    #[error(transparent)]
+                    $variant {
+                        /// Diagnostic, remediation, source and construction backtrace.
+                        context: Box<ErrorContext>,
+                    },
             )+
         }
         impl $name {

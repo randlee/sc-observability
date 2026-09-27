@@ -36,13 +36,11 @@ fn canonical_error_variants_preserve_context() {
             let error = $name::$variant { context: original };
             assert_eq!(std::ptr::from_ref(error.context()), pointer);
             assert_eq!(DiagnosticInfo::diagnostic(&error), &diagnostic);
-            let original_source = error
-                .source()
-                .unwrap()
-                .source()
-                .unwrap()
-                .downcast_ref::<Sentinel>()
-                .unwrap();
+            assert_eq!(
+                error.to_string(),
+                "failure: bounded cause; caused by: sentinel source"
+            );
+            let original_source = error.source().unwrap().downcast_ref::<Sentinel>().unwrap();
             assert_eq!(original_source.0, 42);
             let saved = serde_json::to_value(&error).unwrap();
             assert!(saved.get("kind").is_some());
@@ -247,8 +245,6 @@ fn stable_failure_codes() {
     ));
     assert!(
         telemetry
-            .source()
-            .unwrap()
             .source()
             .unwrap()
             .source()
