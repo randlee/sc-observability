@@ -93,10 +93,16 @@ it in the foreground.
 
 ## Boundary Enforcement
 
-- Boundary validator: `scripts/ci/validate_repo_boundaries.sh`, run by
-  `just lint`; manifests under `boundaries/<crate>/*.toml`
-  (`allowed_dependents`, `allowed_dependencies`,
-  `allowed_test_double_paths`), index `boundaries/planning.toml`
+- Boundary manifest/schema validator: the `sc-lint` `lint sc-boundary` command
+  is currently smoke-tested by the sc-lint source preflight for tool and
+  repository-root discovery health only. The smoke check requires successful
+  JSON execution and rejects `CLI.CONFIG_ERROR`; it is not wired as a
+  merge-blocking gate on boundary-rule violations or on the schema and owner
+  layout of `boundaries/<crate>/*.toml`.
+- Cargo dependency allow-lists: `scripts/ci/validate_repo_boundaries.sh`, run
+  by `just lint`, and `scripts/ci/validate_dependency_bans.sh` enforce the
+  approved crate edges through hardcoded allow-lists; they do not read the
+  boundary manifests
 - Additional boundary docs `ruthless-boundary-qa` must read:
   `docs/architecture.md` (§6 Crate Boundary Table, ADR-002, ADR-006, ADR-009),
   `docs/api-design.md`, `docs/public-api-checklist.md`
