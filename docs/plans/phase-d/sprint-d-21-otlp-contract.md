@@ -453,11 +453,11 @@ enable the legacy adapter. `sdk::implementation` is `pub(crate)`, so D.7 can
 hand D.18 `crate::sdk::implementation::build_exporter_set` without editing its
 module root. SDK implementation/factory and lifecycle behavior remain D.7/D.6
 work. The machine-readable `[transport.*]` entries in
-`boundaries/sc-observability-otlp/otlp.toml` are the single direct dependency
+`policy/otlp-transport.toml` are the single direct dependency
 allowlist; both existing validators check optionality, backend binding,
 workspace/lock pins, and effective features. SDK transitive client dependencies
 (including reqwest 0.13, independent of legacy reqwest 0.12.28) are resolved in
-Cargo.lock and checked against `[sdk_transport_lock]` in the boundary record. No new Cargo-tree gate or validator framework is introduced.
+Cargo.lock and checked against `[sdk_transport_lock]` in the same policy file, outside sc-lint boundary manifests. No new Cargo-tree gate or validator framework is introduced.
 
 
 Created/staged by obs-d-21, owned by obs-d-7 from wave 2; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion or final compatibility retirement.
@@ -502,7 +502,7 @@ This contract releases obs-d-5–8 after obs-d-21-sanity; obs-d-18 additionally 
 - [ ] #1: cargo test -p sc-observability-otlp --lib contract_tests --all-features --locked runs nonzero validation_order, resolved_defaults, stable_failure_codes, record_and_byte_capacity and fake_exporter_contract cases; byte/record zero/overflow/upper bounds use the distinct types-owned variants/codes.
 - [ ] #1: cargo test -p sc-observability-types --test neutral_contracts --locked passes against obs-d-12's unchanged contract test suite; no types test file is edited.
 - [ ] #2: every declared module has a compiling stub; cargo check --workspace --all-features --locked and bash scripts/ci/validate_repo_boundaries.sh pass without a real backend. sdk/mod.rs and legacy_http_json/mod.rs contain mod implementation and cfg(test) mod tests.
-- [ ] #2–3: Cargo metadata, all owned dependency pins and resolved lockfiles report a consistent 2.0 graph after the atomic bump, including the authorized types-manifest version literal. Exact transport pins match the consumed section6/ADR-019 allowlist and remain in the owned boundary record.
+- [ ] #2–3: Cargo metadata, all owned dependency pins and resolved lockfiles report a consistent 2.0 graph after the atomic bump, including the authorized types-manifest version literal. Exact transport pins match the consumed section6/ADR-019 allowlist and remain in the owned transport policy file.
 - [ ] #3: OTLP-005/020/021 and PHD-003/004 config/lifecycle semantics match the read-only normative specification; no environment override or competing failure registry is introduced. Release documentation closes in obs-d-18. Root workspace invariant passes.
 
 ### f10 dependency-isolation evidence

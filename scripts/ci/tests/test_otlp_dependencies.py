@@ -15,7 +15,7 @@ class TransportPolicyTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        for relative in (MANIFEST, "Cargo.toml", "Cargo.lock", "boundaries/sc-observability-otlp/otlp.toml"):
+        for relative in (MANIFEST, "Cargo.toml", "Cargo.lock", "policy/otlp-transport.toml"):
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
