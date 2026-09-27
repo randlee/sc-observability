@@ -36,13 +36,11 @@ fn canonical_error_variants_preserve_context() {
             let error = $name::$variant { context: original };
             assert_eq!(std::ptr::from_ref(error.context()), pointer);
             assert_eq!(DiagnosticInfo::diagnostic(&error), &diagnostic);
-            let original_source = error
-                .source()
-                .unwrap()
-                .source()
-                .unwrap()
-                .downcast_ref::<Sentinel>()
-                .unwrap();
+            assert_eq!(
+                error.to_string(),
+                "failure: bounded cause; caused by: sentinel source"
+            );
+            let original_source = error.source().unwrap().downcast_ref::<Sentinel>().unwrap();
             assert_eq!(original_source.0, 42);
             let saved = serde_json::to_value(&error).unwrap();
             assert!(saved.get("kind").is_some());
@@ -178,6 +176,31 @@ fn canonical_error_variants_preserve_context() {
 }
 
 #[test]
+fn telemetry_shutdown_preserves_context_and_diagnostic() {
+    let original = context(error_codes::otlp::OTLP_TELEMETRY_SHUTDOWN);
+    let diagnostic = original.diagnostic().clone();
+    let pointer = std::ptr::from_ref(&*original);
+    let shutdown = TelemetryError::Shutdown { context: original };
+
+    assert_eq!(std::ptr::from_ref(shutdown.context()), pointer);
+    assert_eq!(DiagnosticInfo::diagnostic(&shutdown), &diagnostic);
+    assert!(
+        shutdown
+            .source()
+            .unwrap()
+            .source()
+            .unwrap()
+            .is::<Sentinel>()
+    );
+    let saved = serde_json::to_value(&shutdown).unwrap();
+    assert_eq!(
+        saved["Shutdown"]["context"]["diagnostic"]["remediation"]["kind"],
+        "recoverable"
+    );
+    assert_eq!(std::ptr::from_ref(&*shutdown.into_context()), pointer);
+}
+
+#[test]
 fn stable_failure_codes() {
     let mut seen = std::collections::HashSet::new();
     for code in error_codes::ALL {
@@ -212,6 +235,10 @@ fn stable_failure_codes() {
     }
     .into();
     assert_eq!(telemetry.code().as_str(), "OTLP_QUEUE_FULL");
+    assert_eq!(
+        DiagnosticInfo::diagnostic(&telemetry).code,
+        error_codes::otlp::OTLP_QUEUE_FULL
+    );
     assert!(matches!(
         &telemetry,
         TelemetryError::ExportFailure(ExportError::QueueFull { .. })
@@ -222,20 +249,32 @@ fn stable_failure_codes() {
             .unwrap()
             .source()
             .unwrap()
-            .source()
-            .unwrap()
             .is::<Sentinel>()
     );
+    let shutdown = TelemetryError::Shutdown {
+        context: Box::new(ErrorContext::new(
+            error_codes::otlp::OTLP_TELEMETRY_SHUTDOWN,
+            "telemetry runtime is shut down",
+            Remediation::recoverable("construct a new telemetry instance", [] as [&str; 0]),
+        )),
+    };
+    assert_eq!(shutdown.code().as_str(), "OTLP_TELEMETRY_SHUTDOWN");
     assert_eq!(
-        TelemetryError::Shutdown.code().as_str(),
-        "OTLP_TELEMETRY_SHUTDOWN"
+        shutdown.diagnostic().remediation,
+        Remediation::recoverable("construct a new telemetry instance", [] as [&str; 0])
     );
 }
 fn finite(n: f64) -> FiniteF64 {
     FiniteF64::new(n).unwrap()
 }
 fn histogram() -> HistogramPoint {
-    HistogramPoint::try_new(vec![1.0, 2.0], vec![1, 2, 3], 6, finite(12.0)).unwrap()
+    HistogramPoint::try_new(
+        vec![finite(1.0), finite(2.0)],
+        vec![1, 2, 3],
+        6,
+        finite(12.0),
+    )
+    .unwrap()
 }
 #[test]
 fn histogram_point_serde_rejects_invalid() {
@@ -259,12 +298,13 @@ fn histogram_point_serde_rejects_invalid() {
             "accepted {field}"
         );
     }
-    let error = HistogramPoint::try_new(vec![f64::INFINITY], vec![0, 0], 0, finite(0.0))
-        .expect_err("non-finite histogram bounds must be rejected");
-    assert_eq!(
-        error.diagnostic().code,
-        error_codes::SC_METRIC_INVALID_HISTOGRAM
-    );
+    assert!(serde_json::from_value::<HistogramPoint>(json!({
+        "explicit_bounds": [f64::INFINITY],
+        "bucket_counts": [0, 0],
+        "count": 0,
+        "sum": 0.0
+    }))
+    .is_err());
     let error = HistogramPoint::try_new(vec![], vec![0], 0, finite(1.0))
         .expect_err("a nonzero sum cannot have zero samples");
     assert_eq!(

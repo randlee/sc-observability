@@ -12,12 +12,11 @@ macro_rules! context_error {
         pub enum $name {
             $(
                 #[doc = concat!(stringify!($variant), " failure; see the canonical cause mapping.")]
-                #[error("{context}")]
-                $variant {
-                    /// Diagnostic, remediation, source and construction backtrace.
-                    #[source]
-                    context: Box<ErrorContext>,
-                },
+                    #[error(transparent)]
+                    $variant {
+                        /// Diagnostic, remediation, source and construction backtrace.
+                        context: Box<ErrorContext>,
+                    },
             )+
         }
         impl $name {
@@ -104,19 +103,52 @@ context_error!(
 #[derive(Debug, PartialEq, Serialize, Deserialize, thiserror::Error)]
 pub enum TelemetryError {
     /// Admission is closed; stable code `OTLP_TELEMETRY_SHUTDOWN`.
-    #[error("telemetry runtime is shut down")]
-    Shutdown,
+    #[error("{context}")]
+    Shutdown {
+        /// Diagnostic, remediation, source and construction backtrace.
+        #[source]
+        context: Box<ErrorContext>,
+    },
     /// Preserves the export variant, its context and typed source chain.
     #[error("{0}")]
     ExportFailure(#[from] ExportError),
 }
 impl TelemetryError {
+    /// Returns the original error context without reconstruction.
+    #[must_use]
+    pub fn context(&self) -> &ErrorContext {
+        match self {
+            Self::Shutdown { context } => context,
+            Self::ExportFailure(error) => error.context(),
+        }
+    }
+
+    /// Returns the preserved diagnostic.
+    #[must_use]
+    pub fn diagnostic(&self) -> &Diagnostic {
+        self.context().diagnostic()
+    }
+
+    /// Takes the original boxed context, preserving source identity and backtrace.
+    #[must_use]
+    pub fn into_context(self) -> Box<ErrorContext> {
+        match self {
+            Self::Shutdown { context } => context,
+            Self::ExportFailure(error) => error.into_context(),
+        }
+    }
+
     /// Returns the stable code without discarding the export cause.
     #[must_use]
     pub fn code(&self) -> crate::ErrorCode {
-        match self {
-            Self::Shutdown => crate::error_codes::otlp::OTLP_TELEMETRY_SHUTDOWN,
-            Self::ExportFailure(error) => error.diagnostic().code.clone(),
-        }
+        self.diagnostic().code.clone()
+    }
+}
+
+impl sealed::Sealed for TelemetryError {}
+
+impl DiagnosticInfo for TelemetryError {
+    fn diagnostic(&self) -> &Diagnostic {
+        self.diagnostic()
     }
 }
