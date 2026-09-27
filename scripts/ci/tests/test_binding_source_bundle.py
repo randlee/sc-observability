@@ -3,6 +3,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import shutil
 from pathlib import Path
 import importlib.util
 ROOT=Path(__file__).resolve().parents[3]
@@ -19,9 +20,23 @@ class SourceBoundaryTests(unittest.TestCase):
 
     def invoke(self,root):
         return subprocess.run([sys.executable,str(HELPER),'--root-manifest',str(root/'Cargo.toml'),'--output',str(root/'bundle')],capture_output=True,text=True)
-    def project(self,root,extra=''):
+    def project(self,root,extra='',version='0.1.0'):
         (root/'src').mkdir();(root/'src/lib.rs').write_text('pub fn fixture() {}\n')
-        (root/'Cargo.toml').write_text('[package]\nname="bundle-boundary-fixture"\nversion="0.1.0"\nedition="2024"\n[workspace]\n'+extra)
+        (root/'Cargo.toml').write_text(f'[package]\nname="bundle-boundary-fixture"\nversion="{version}"\nedition="2024"\n[workspace]\n'+extra)
+    def test_newer_workspace_candidate_verifies_qualified_stage_through_bundle(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);self.project(root,'[dependencies]\nserde_json="=1.0.149"\n',version='2.0.0')
+            stage=root/'docs/plans/phase-b/evidence/b2-final/stage'
+            shutil.copytree(ROOT/'docs/plans/phase-b/evidence/b2-final/stage',stage)
+            (root/'.gitignore').write_text('bundle/\n')
+            def run(*args):subprocess.run(args,cwd=root,check=True,capture_output=True,text=True)
+            run('cargo','generate-lockfile');run('git','init','-q');run('git','add','.')
+            run('git','-c','user.name=Binding Fixture','-c','user.email=binding-fixture@example.invalid','commit','-qm','new workspace candidate')
+            result=self.invoke(root)
+            self.assertEqual(result.returncode,0,result.stderr)
+            import json
+            manifest=json.loads((root/'bundle/manifest.json').read_text())
+            self.assertEqual(manifest['packages'][0]['version'],'2.0.0')
     def test_escaping_dependency_rejected_before_cargo(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary);self.project(root,'[dependencies]\nescape={path="../outside"}\n')
