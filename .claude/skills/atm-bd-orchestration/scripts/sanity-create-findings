@@ -103,6 +103,13 @@ def parent_layer(metadata: dict):
     raise HandoffError("checked bead metadata lacks layer")
 
 
+def child_priority(severity: str, parent_priority: int) -> int:
+    """A blocking child sits one below its parent (never below P4); other severities use the severity map."""
+    if severity == "blocking":
+        return min(parent_priority + 1, 4)
+    return priority_for_severity(severity)
+
+
 def sprint_bead_of(bead: str, show) -> str:
     """The stage:sprint bead that owns `bead`, following metadata.sprint_bead through findings."""
     seen = set()
@@ -146,6 +153,8 @@ def main() -> int:
         difficulty = parent_metadata.get("difficulty")
         if difficulty not in ("hard", "normal", "fast"):
             raise HandoffError("checked bead has no valid difficulty")
+        if not isinstance(parent.get("priority"), int) or isinstance(parent.get("priority"), bool):
+            raise HandoffError("checked bead has no integer priority")
         labels = [f"phase-{phase}", FINDING_LABEL, f"stack:{stack}"]
         sprint_bead = sprint_bead_of(args.bead, lambda b: parent if b == args.bead else
                                      json.loads(command(["bd", "show", b, "--json"], args.actor, capture=True))[0])
@@ -168,7 +177,7 @@ def main() -> int:
             }
             severity = str(finding.get("severity") or "blocking").lower()  # a sanity finding blocks unless the report says otherwise
             try:
-                priority = priority_for_severity(severity)
+                priority = child_priority(severity, parent["priority"])
             except KeyError as exc:
                 raise HandoffError(f"invalid finding severity: {severity}") from exc
             provenance = {
@@ -198,7 +207,7 @@ def main() -> int:
             created.append(child)
         for finding in findings:
             severity = str(finding.get("severity") or "blocking").lower()  # a sanity finding blocks unless the report says otherwise
-            command(["bd", "update", children[finding["finding_ref"]], "--priority", str(priority_for_severity(severity))], args.actor)
+            command(["bd", "update", children[finding["finding_ref"]], "--priority", str(child_priority(severity, parent["priority"]))], args.actor)
         for finding in findings:
             child = children[finding["finding_ref"]]
             dependencies = finding.get("depends_on", [])
