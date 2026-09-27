@@ -93,11 +93,13 @@ it in the foreground.
 
 ## Boundary Enforcement
 
-- Boundary manifest/schema validator: the `sc-lint` boundary lint, run by the
-  sc-lint source preflight, parses `boundaries/<crate>/*.toml` and enforces
-  their schema and owner layout (`allowed_dependents`,
-  `allowed_dependencies`, `allowed_test_double_paths`); the manifest index is
-  `boundaries/planning.toml`
+- Boundary manifest/schema validator: the `sc-lint` `lint sc-boundary` command
+  is currently smoke-tested by the sc-lint source preflight for tool and
+  repository-root discovery health only. The smoke check requires successful
+  JSON execution and rejects `CLI.CONFIG_ERROR`; it is not wired as a
+  merge-blocking gate on boundary-rule violations or on the schema and owner
+  layout of `boundaries/<crate>/*.toml`. The manifest index is
+  `boundaries/planning.toml`.
 - Cargo dependency allow-lists: `scripts/ci/validate_repo_boundaries.sh`, run
   by `just lint`, and `scripts/ci/validate_dependency_bans.sh` enforce the
   approved crate edges through hardcoded allow-lists; they do not read the
