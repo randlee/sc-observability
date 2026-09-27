@@ -91,7 +91,7 @@ def extract_sdist(archive: Path, output: Path) -> Path:
 
 def verify_source(root: Path) -> dict:
     """Check the frozen distribution inventory before Cargo or imports execute."""
-    record = json.loads((root / 'distribution-manifest.json').read_text())
+    record = json.loads((root / 'distribution-manifest.json').read_text(encoding='utf-8'))
     if record.get('schema_version') != 1 or record.get('publication') != 'pending_B.7':
         raise DistributionError('invalid distribution manifest')
     if len(record.get('source_commit', '')) != 40:

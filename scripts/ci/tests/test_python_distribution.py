@@ -126,7 +126,7 @@ class DistributionTests(unittest.TestCase):
 
     def test_policy_preserves_all_twenty_five_cells(self):
         path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
-        policy = json.loads(path.read_text())
+        policy = json.loads(path.read_text(encoding='utf-8'))
         self.assertEqual(policy['interpreters'], ['3.10', '3.11', '3.12', '3.13', '3.14'])
         self.assertEqual({p['id'] for p in policy['platforms']},
                          {'macos-arm64', 'macos-x86_64', 'linux-x86_64', 'linux-aarch64', 'windows-x86_64'})
@@ -159,7 +159,7 @@ class DistributionTests(unittest.TestCase):
     def test_aggregate_requires_opted_in_host_execution_on_the_cell_interpreter(self):
         from validate_python_distribution import aggregate
         policy_path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
-        policy = json.loads(policy_path.read_text())
+        policy = json.loads(policy_path.read_text(encoding='utf-8'))
         required = ('Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'pyproject.toml',
                     'python/sc_observability/__init__.py', 'python/sc_observability/generated/__init__.pyi',
                     'python/sc_observability/py.typed', 'rust-bundle/manifest.json')
@@ -198,7 +198,7 @@ class DistributionTests(unittest.TestCase):
     def test_aggregate_rejects_missing_duplicate_and_mixed_source_cells(self):
         from validate_python_distribution import aggregate
         policy_path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
-        policy = json.loads(policy_path.read_text())
+        policy = json.loads(policy_path.read_text(encoding='utf-8'))
         for mutation in ('missing', 'duplicate', 'mixed-source'):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)

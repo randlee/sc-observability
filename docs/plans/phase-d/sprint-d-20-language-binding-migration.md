@@ -15,7 +15,7 @@ Generated projection of `obs-d-20`; the bead is authoritative.
 - PR target (merge order only): `sprint/d-19-dto-and-schema-migration`
 - Blocked by: `obs-phase-d-plan-qa, obs-d-12-sanity`
 - Requirements: PHB-002, PHB-010, PHB-011, PHB-012, PHB-013, PHD-001, PHD-002, TYP-003, TYP-004, TYP-005
-- ADRs: ADR-002, ADR-011, ADR-014, ADR-015, ADR-017, ADR-019
+- ADRs: ADR-002, ADR-011, ADR-013, ADR-014, ADR-015, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `bindings/API-COVERAGE.md`
   - `bindings/python/sc-observability-py/LICENSE`
@@ -102,7 +102,7 @@ This boundary releases only its named artifact to obs-d-18 after its paired sani
 
 ## Acceptance criteria
 
-- [ ] #1: cargo test --locked -p sc-observability-py and Python owned/attached-mode tests pass with pinned interpreters; tagged_failures_preserve_diagnostics and attached_cannot_shutdown_host exercise public wrappers using local backend fixtures.
+- [ ] #1: cargo test --locked -p sc-observability-py and Python owned/attached-mode tests pass with pinned interpreters; `test_native_diagnostic_and_both_remediation_variants_round_trip` and `test_logging_shutdown_atexit_does_not_close_borrowed_logger` exercise public wrappers using local backend fixtures.
 - [ ] #2: npm --prefix bindings/typescript test and cargo test --locked --manifest-path bindings/tauri/Cargo.toml --features test pass with typed failure/unknown-variant/integer-bound tests; python3 scripts/ci/validate_typescript_control_flow.py finds no deliberate expected-failure throwing.
 - [ ] #1–3: owned Python transport and typing tests exercise observer timeout/cancellation without cancelling native work, and assert failed admission never becomes success. The fixtures require neither unfinished DTO generation nor sibling native-runtime edits.
 - [ ] #1–3: root workspace invariant passes; combined real native binding/schema qualification is explicitly obs-d-18's integration criterion.
