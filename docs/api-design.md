@@ -605,6 +605,8 @@ pub struct ServiceName(String);
 pub struct TargetCategory(String);
 pub struct ActionName(String);
 pub struct MetricName(String);
+pub struct StateName(String);
+pub struct EntityId(String);
 ```
 
 Ownership and usage:
@@ -642,6 +644,16 @@ Ownership and usage:
   - underlying type: validated `String`
   - used by: `MetricRecord.name`
   - invariant: non-empty metric identifier using `[A-Za-z0-9._\\-/]+`
+- `StateName`
+  - owner: `sc-observability-types`
+  - underlying type: validated `String`
+  - used by: `StateTransition.from_state` and `StateTransition.to_state`
+  - invariant: non-empty ASCII identifier using `[A-Za-z0-9._-]+`
+- `EntityId`
+  - owner: `sc-observability-types`
+  - underlying type: validated `String`
+  - used by: `StateTransition.entity_id`
+  - invariant: non-empty ASCII identifier using `[A-Za-z0-9._-]+`
 
 These newtypes should expose:
 
@@ -652,7 +664,7 @@ impl ToolName {
 }
 ```
 
-Equivalent constructors and accessors apply to the other four newtypes.
+Equivalent constructors and accessors apply to the other listed newtypes.
 
 ### 8.2 `Remediation`
 
@@ -855,16 +867,16 @@ Design direction:
 ```rust
 pub struct StateTransition {
     /// Stable category describing what changed, such as `task` or `subagent`.
-    pub entity_kind: String,
-    pub entity_id: Option<String>,
+    pub entity_kind: TargetCategory,
+    pub entity_id: Option<EntityId>,
     /// Previous stable state label.
-    pub from_state: String,
+    pub from_state: StateName,
     /// New stable state label.
-    pub to_state: String,
+    pub to_state: StateName,
     /// Optional human-readable explanation for why the transition occurred.
     pub reason: Option<String>,
     /// Optional action or event name that triggered the transition.
-    pub trigger: Option<String>,
+    pub trigger: Option<ActionName>,
 }
 ```
 
