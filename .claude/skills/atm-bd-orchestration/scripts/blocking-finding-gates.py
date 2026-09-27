@@ -38,6 +38,7 @@ def targets(finding: dict[str, Any], all_beads: list[dict[str, Any]]) -> tuple[s
     if meta.get("severity") != "blocking": return None, []
     source = meta.get("sprint_bead")
     by_id = {str(bead.get("id")): bead for bead in all_beads}
+    by_id.setdefault(str(finding.get("id")), finding)
     source_gate = next((str(bead.get("id")) for bead in all_beads
                         if SANITY_LABEL in (bead.get("labels") or [])
                         and str((bead.get("metadata") or {}).get("dev_bead")) == source), None)
