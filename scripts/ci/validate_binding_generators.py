@@ -12,8 +12,8 @@ sys.path.insert(0,str(ROOT/'scripts'))
 from _binding_schema import inspect_schema,validate
 from _hashing import digest
 def main():
-    schema=json.loads((ROOT/'bindings/schema/v1.json').read_text());inspect_schema(schema)
-    cases=json.loads((ROOT/'bindings/conformance/v1/schema-cases.json').read_text())
+    schema=json.loads((ROOT/'bindings/schema/v1.json').read_text(encoding='utf-8'));inspect_schema(schema)
+    cases=json.loads((ROOT/'bindings/conformance/v1/schema-cases.json').read_text(encoding='utf-8'))
     for case in cases:
         try:validate(schema,schema['x-sc-entrypoints'][case['entrypoint']],case['value']);actual=True
         except ValueError:actual=False

@@ -123,7 +123,7 @@ class BuildEvidenceTests(EvidenceTestsBase):
         self.build_evidence()
         evidence_path = self.out_dir / "bindings-candidate.json"
         self.assertTrue(evidence_path.exists())
-        record = json.loads(evidence_path.read_text())
+        record = json.loads(evidence_path.read_text(encoding='utf-8'))
         self.assertEqual(record["source_commit"], self.commit)
         self.assertEqual(record["candidate_version"], "9.9.9")
         # VALID_MANIFEST's ready entries: 2 crates + 1 pypi package.
@@ -142,7 +142,7 @@ class VerifyEvidenceTests(EvidenceTestsBase):
     def test_wrong_source_rejected(self) -> None:
         self.build_evidence()
         evidence_path = self.out_dir / "bindings-candidate.json"
-        record = json.loads(evidence_path.read_text())
+        record = json.loads(evidence_path.read_text(encoding='utf-8'))
         record["source_commit"] = "0" * 40
         evidence_path.write_text(json.dumps(record))
         with self.assertRaisesRegex(SystemExit, "wrong-source rejection"):
@@ -166,7 +166,7 @@ class VerifyEvidenceTests(EvidenceTestsBase):
     def test_missing_evidence_for_ready_artifact_rejected(self) -> None:
         self.build_evidence()
         evidence_path = self.out_dir / "bindings-candidate.json"
-        record = json.loads(evidence_path.read_text())
+        record = json.loads(evidence_path.read_text(encoding='utf-8'))
         del record["artifacts"]["sc-observability-binding-runtime"]
         evidence_path.write_text(json.dumps(record))
         with self.assertRaisesRegex(SystemExit, "missing-evidence rejection"):

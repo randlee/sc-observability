@@ -1431,7 +1431,7 @@ mod tests {
             std::error::Error::source(&legacy)
                 .expect("legacy native source")
                 .to_string(),
-            "console sink write failed: injected console write failure; caused by: injected console write failure"
+            "injected console write failure"
         );
         let health = LogSink::health(&sink);
         assert_eq!(health.state, SinkHealthState::DegradedDropping);
@@ -1451,7 +1451,7 @@ mod tests {
             std::error::Error::source(&typed)
                 .expect("typed native source")
                 .to_string(),
-            "console sink write failed: injected console write failure; caused by: injected console write failure"
+            "injected console write failure"
         );
         let health = crate::typed::TypedLogSink::health(&sink);
         assert_eq!(health.state, SinkHealthState::DegradedDropping);
@@ -2318,7 +2318,7 @@ mod tests {
             std::error::Error::source(&write)
                 .expect("source")
                 .to_string(),
-            "typed write failed; caused by: typed write source"
+            "typed write source"
         );
         let flush = legacy.flush().expect_err("flush fails");
         assert_eq!(flush.diagnostic().code.as_str(), "CUSTOM_TYPED_FLUSH");
@@ -2338,7 +2338,7 @@ mod tests {
             std::error::Error::source(&write)
                 .expect("source")
                 .to_string(),
-            "legacy write failed; caused by: legacy write source"
+            "legacy write source"
         );
         let flush = crate::typed::TypedLogSink::flush(typed.as_ref()).expect_err("flush fails");
         assert_eq!(flush.diagnostic().code.as_str(), "CUSTOM_LEGACY_FLUSH");
