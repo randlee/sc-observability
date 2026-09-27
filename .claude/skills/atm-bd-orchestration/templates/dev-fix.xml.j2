@@ -9,14 +9,15 @@ required_variables:
   - stack
   - worktree_path
   - branch
-  - sanity_bead
   - pr_target
   - findings
 optional_variables:
+  - sanity_bead
   - lead
   - cc
   - test_command
 defaults:
+  sanity_bead: ""
   lead: team-lead
   cc: team-lead
   test_command: "just validate"
@@ -34,7 +35,7 @@ metadata:
     transition: start
 ---
 <atm-task id="{{ task_id }}" sprint="{{ sprint }}" mode="dev-fix">
-  <description><![CDATA[Sanity check `{{ sanity_bead | string | cdata_escape }}` failed dev bead `{{ task_id | string | cdata_escape }}` and {{ lead | string | cdata_escape }} reopened it. Finish the work the sanity check found missing or wrong. `bd show {{ task_id | string | cdata_escape }}` is still the assignment.]]></description>
+  <description><![CDATA[{% if sanity_bead %}Sanity check `{{ sanity_bead | string | cdata_escape }}` failed dev bead `{{ task_id | string | cdata_escape }}` and {{ lead | string | cdata_escape }} reopened it.{% else %}{{ lead | string | cdata_escape }} reopened dev bead `{{ task_id | string | cdata_escape }}` after plan review.{% endif %} Finish the work the sanity check found missing or wrong. `bd show {{ task_id | string | cdata_escape }}` is still the assignment.]]></description>
 
   <worktree><![CDATA[{{ worktree_path | string | cdata_escape }}]]></worktree>
   <branch><![CDATA[{{ branch | string | cdata_escape }}]]></branch>
