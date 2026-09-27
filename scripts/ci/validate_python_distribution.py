@@ -25,7 +25,7 @@ def execute(command: list[str], cwd: Path | None = None) -> None:
 
 
 def policy_at(root: Path) -> dict:
-    return json.loads((root / 'qualification/platform-policy.json').read_text())
+    return json.loads((root / 'qualification/platform-policy.json').read_text(encoding='utf-8'))
 
 
 def verify_resolution(metadata: dict, artifact: Path) -> list[dict]:
@@ -78,7 +78,7 @@ def verify_embedding_features(metadata: dict) -> None:
 
 
 def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) -> dict:
-    bundle = json.loads((root / 'rust-bundle/manifest.json').read_text())
+    bundle = json.loads((root / 'rust-bundle/manifest.json').read_text(encoding='utf-8'))
     results = {}
     by_id = {package['id']: package for package in metadata['packages']}
     target_ids = {dependency['pkg'] for node in metadata['resolve']['nodes']
@@ -140,7 +140,7 @@ def negative_cases(root: Path, scratch: Path, sandbox: Sandbox, metadata: dict) 
     copy = scratch / 'extension-link-flags'
     shutil.copytree(root, copy)
     manifest_path = copy / 'embedding/Cargo.toml'
-    manifest = tomllib.loads(manifest_path.read_text())
+    manifest = tomllib.loads(manifest_path.read_text(encoding='utf-8'))
     dependency = manifest['dependencies']['pyo3']
     dependency.setdefault('features', []).append('extension-module')
     manifest_path.write_text(tomli_w.dumps(manifest))
@@ -225,7 +225,7 @@ def build(args) -> None:
             wheels = list((scratch / 'wheels').glob('*.whl'))
             if len(wheels) != 1:
                 raise DistributionError('expected exactly one ABI wheel for the platform')
-            features = tomllib.loads((root / 'pyproject.toml').read_text())['tool']['maturin']['features']
+            features = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))['tool']['maturin']['features']
             linked = {**linkage(wheels[0], selected, sandbox, scratch), 'role': 'production',
                       'maturin_features': features, 'publication': 'pending_B.7'}
             release_wheel(linked)
@@ -373,12 +373,12 @@ def cell(args) -> None:
 
 
 def aggregate(args) -> None:
-    policy = json.loads(args.policy.read_text())
+    policy = json.loads(args.policy.read_text(encoding='utf-8'))
     expected = {(p['id'], python) for p in policy['platforms'] for python in policy['interpreters']}
     build_paths = list(args.evidence.rglob('build-result.json'))
     cell_paths = list(args.evidence.rglob('cell-result.json'))
-    builds = [json.loads(path.read_text()) for path in build_paths]
-    cells = [json.loads(path.read_text()) for path in cell_paths]
+    builds = [json.loads(path.read_text(encoding='utf-8')) for path in build_paths]
+    cells = [json.loads(path.read_text(encoding='utf-8')) for path in cell_paths]
     platform_count = len(policy['platforms'])
     platform_ids = {platform['id'] for platform in policy['platforms']}
     if platform_count == 6:
@@ -418,7 +418,7 @@ def aggregate(args) -> None:
                 or source['source_commit'] != args.source_commit):
             raise DistributionError('source contract is not a completed qualification candidate')
         runtime_options(contract)
-        production_features = sorted(tomllib.loads((root / 'pyproject.toml').read_text())['tool']['maturin']['features'])
+        production_features = sorted(tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))['tool']['maturin']['features'])
         expected_requires_python = source['expected_requires_python']
     if any(item.get('expected_requires_python') != expected_requires_python for item in builds + cells):
         raise DistributionError('source and build/cell Requires-Python metadata disagree')

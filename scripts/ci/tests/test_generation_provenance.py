@@ -21,7 +21,7 @@ class GenerationProofTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / 'checkout'
         self.evidence_path = self.root / 'bindings/generation-manifest.json'
-        self.evidence = json.loads((ROOT / 'bindings/generation-manifest.json').read_text())
+        self.evidence = json.loads((ROOT / 'bindings/generation-manifest.json').read_text(encoding='utf-8'))
         paths = {*self.evidence['inputs'], *self.evidence['outputs'], 'bindings/generation-manifest.json'}
         for path in paths:
             target = self.root / path
