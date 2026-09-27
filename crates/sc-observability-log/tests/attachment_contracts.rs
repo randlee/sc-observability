@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use sc_observability_log::BridgeOptions;
 use sc_observability_types::{
-    ActionName, Level, LogEvent, OBSERVATION_ENVELOPE_VERSION, ProcessIdentity, SchemaVersion,
-    ServiceName, TargetCategory, Timestamp,
+    ActionName, ErrorCode, ErrorContext, Level, LogEvent, OBSERVATION_ENVELOPE_VERSION,
+    ProcessIdentity, Remediation, SchemaVersion, ServiceName, TargetCategory, Timestamp,
 };
 use serde_json::Map;
 
@@ -49,11 +49,57 @@ enum SlotState {
     Closing,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug)]
 enum DetachError {
-    Timeout,
-    NotInstalled,
-    ForeignLoggerInstalled,
+    Timeout(Box<ErrorContext>),
+    NotInstalled(Box<ErrorContext>),
+    ForeignLoggerInstalled(Box<ErrorContext>),
+}
+
+impl DetachError {
+    fn context(&self) -> &ErrorContext {
+        match self {
+            Self::Timeout(context)
+            | Self::NotInstalled(context)
+            | Self::ForeignLoggerInstalled(context) => context,
+        }
+    }
+}
+
+fn detach_error(
+    code: &'static str,
+    message: &'static str,
+    remediation: Remediation,
+) -> Box<ErrorContext> {
+    Box::new(ErrorContext::new(
+        ErrorCode::new_static(code),
+        message,
+        remediation,
+    ))
+}
+
+fn detach_timeout() -> DetachError {
+    DetachError::Timeout(detach_error(
+        "SC_LOG_DETACH_TIMEOUT",
+        "detach timed out",
+        Remediation::recoverable("retry detach", ["wait for drain"]),
+    ))
+}
+
+fn not_installed() -> DetachError {
+    DetachError::NotInstalled(detach_error(
+        "SC_LOG_DETACH_NOT_INSTALLED",
+        "attachment is not installed",
+        Remediation::not_recoverable("attach before using control"),
+    ))
+}
+
+fn foreign_logger() -> DetachError {
+    DetachError::ForeignLoggerInstalled(detach_error(
+        "SC_LOG_FOREIGN_LOGGER_INSTALLED",
+        "foreign logger is installed",
+        Remediation::not_recoverable("detach the existing logger"),
+    ))
 }
 
 #[derive(Debug)]
@@ -81,9 +127,7 @@ impl LogAttachment {
                     entered_calls: 0,
                 })),
             }),
-            SlotState::Owned | SlotState::Attached | SlotState::Closing => {
-                Err(DetachError::ForeignLoggerInstalled)
-            }
+            SlotState::Owned | SlotState::Attached | SlotState::Closing => Err(foreign_logger()),
         }
     }
 
@@ -108,10 +152,10 @@ impl LogAttachment {
             // A timed-out detach retains the attachment with admission closed,
             // so the caller can retry its bounded drain from this state.
             SlotState::Closing => {}
-            SlotState::Empty | SlotState::Owned => return Err(DetachError::NotInstalled),
+            SlotState::Empty | SlotState::Owned => return Err(not_installed()),
         }
         if state.entered_calls != 0 && timeout.is_zero() {
-            return Err(DetachError::Timeout);
+            return Err(detach_timeout());
         }
         state.entered_calls = 0;
         state.slot = SlotState::Empty;
@@ -121,10 +165,10 @@ impl LogAttachment {
 
 impl LogControl {
     fn submit(&self) -> Result<(), DetachError> {
-        let state = self.state.upgrade().ok_or(DetachError::NotInstalled)?;
+        let state = self.state.upgrade().ok_or_else(not_installed)?;
         (state.lock().expect("fixture state lock").slot == SlotState::Attached)
             .then_some(())
-            .ok_or(DetachError::NotInstalled)
+            .ok_or_else(not_installed)
     }
 }
 
@@ -158,25 +202,39 @@ fn contract_event() -> LogEvent {
     }
 }
 
+fn assert_detach_error(error: &DetachError, code: &str) {
+    assert_eq!(error.context().diagnostic().code.as_str(), code);
+    assert!(matches!(
+        error.context().diagnostic().remediation,
+        Remediation::Recoverable { .. } | Remediation::NotRecoverable { .. }
+    ));
+}
+
 #[test]
 fn detach_retry_after_timeout() {
     let mut attachment = LogAttachment::attach(SlotState::Empty).expect("empty slot attaches");
     let control = attachment.control();
     attachment.set_entered_calls(1);
-    assert_eq!(attachment.detach(Duration::ZERO), Err(DetachError::Timeout));
+    assert_detach_error(
+        &attachment.detach(Duration::ZERO).unwrap_err(),
+        "SC_LOG_DETACH_TIMEOUT",
+    );
     assert_eq!(
         attachment.slot(),
         SlotState::Closing,
         "timeout retains the attachment with admission closed"
     );
-    assert_eq!(control.submit(), Err(DetachError::NotInstalled));
+    assert_detach_error(
+        &control.submit().unwrap_err(),
+        "SC_LOG_DETACH_NOT_INSTALLED",
+    );
     attachment
         .detach(Duration::from_millis(1))
         .expect("retry detaches");
     assert_eq!(attachment.slot(), SlotState::Empty);
-    assert_eq!(
-        attachment.detach(Duration::from_millis(1)),
-        Err(DetachError::NotInstalled)
+    assert_detach_error(
+        &attachment.detach(Duration::from_millis(1)).unwrap_err(),
+        "SC_LOG_DETACH_NOT_INSTALLED",
     );
 }
 
@@ -188,15 +246,18 @@ fn stale_control_not_installed() {
         .submit()
         .expect("saved control is live before detach");
     attachment.detach(Duration::from_millis(1)).expect("detach");
-    assert_eq!(control.submit(), Err(DetachError::NotInstalled));
+    assert_detach_error(
+        &control.submit().unwrap_err(),
+        "SC_LOG_DETACH_NOT_INSTALLED",
+    );
 }
 
 #[test]
 fn foreign_logger_rejected() {
     for state in [SlotState::Owned, SlotState::Attached, SlotState::Closing] {
-        assert_eq!(
-            LogAttachment::attach(state).map(|_| ()),
-            Err(DetachError::ForeignLoggerInstalled)
+        assert_detach_error(
+            &LogAttachment::attach(state).unwrap_err(),
+            "SC_LOG_FOREIGN_LOGGER_INSTALLED",
         );
     }
 }
