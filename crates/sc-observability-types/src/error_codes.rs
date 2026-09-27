@@ -211,3 +211,24 @@ pub mod otlp {
         OTLP_TELEMETRY_SHUTDOWN,
     ];
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        ALL, SC_METRIC_INVALID_HISTOGRAM, SC_METRIC_INVALID_INTERVAL,
+        SC_METRIC_INVALID_TEMPORALITY, SC_METRIC_NON_FINITE, otlp,
+    };
+
+    #[test]
+    fn root_registry_contains_otlp_and_metric_codes() {
+        assert!(otlp::ALL.iter().all(|code| ALL.contains(code)));
+        for code in [
+            SC_METRIC_INVALID_HISTOGRAM,
+            SC_METRIC_INVALID_TEMPORALITY,
+            SC_METRIC_INVALID_INTERVAL,
+            SC_METRIC_NON_FINITE,
+        ] {
+            assert!(ALL.contains(&code), "missing metric code {code}");
+        }
+    }
+}
