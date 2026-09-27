@@ -16,7 +16,10 @@ def bead(key, labels=(), deps=(), status='closed', reason=''):
 
 class DagTests(unittest.TestCase):
     def setUp(self):
-        self.index = {'root_bead_id': 'phase-root', 'sprints': [{'dev_bead_id': 'work-1', 'sanity_bead_id': 'gate-1'}, {'dev_bead_id': 'work-2', 'sanity_bead_id': 'gate-2'}]}
+        self.index = {'root_bead_id': 'phase-root', 'sprints': [
+            {'dev_bead_id': 'work-1', 'sanity_bead_id': 'gate-1'},
+            {'dev_bead_id': 'work-2', 'sanity_bead_id': 'gate-2', 'depends_on_sanity_bead_ids': ['gate-1']},
+        ]}
         self.beads = {b['id']: b for b in [
             bead('plan', ['stage:plan-review']),
             bead('work-1', ['stage:dev'], ['plan']),
@@ -35,31 +38,33 @@ class DagTests(unittest.TestCase):
         for key in ('gate-1', 'gate-2'):
             self.snapshot['events'][key] = [{'event': 'completed', 'at': '2026-09-26T11:00:00Z'}]
 
-    def test_scope_and_real_edge_direction(self):
-        self.assertEqual(set(self.graph['nodes']), {'plan', 'work-1', 'work-2', 'gate-1', 'gate-2'})
+    def test_scope_and_canonical_edge_direction(self):
+        self.assertEqual(set(self.graph['nodes']), {'work-1', 'work-2', 'gate-1', 'gate-2'})
         self.assertEqual(self.graph['gate_pairs'], {'work-1': 'gate-1', 'work-2': 'gate-2'})
         source = dag.dot_source(self.graph, 'example')
         self.assertIn('"work-1" -> "gate-1";', source)
         self.assertIn('"gate-1" -> "work-2";', source)
         self.assertNotIn('finding', source)
         self.assertNotIn('"work-1" -> "work-2";', source)
-        # No synthesized downstream gate edge when the bead only names work.
+        # A mutable live dependency cannot alter the declared plan edge.
         self.beads['work-2']['dependencies'] = [{'type': 'blocks', 'depends_on_id': 'work-1'}]
         g = dag.build_graph(self.index, self.beads)
-        self.assertNotIn(['work-2', 'gate-1'], g['edges'])
+        self.assertIn(['work-2', 'gate-1'], g['edges'])
 
     def test_index_gate_mismatch_is_rejected(self):
+        self.index['sprints'][1]['depends_on_sanity_bead_ids'] = []
         self.index['sprints'][0]['sanity_bead_id'] = 'wrong-gate'
         with self.assertRaisesRegex(RuntimeError, 'does not match live gate'):
             dag.build_graph(self.index, self.beads)
         self.index['sprints'][0]['title'] = 'Duplicated title'
-        with self.assertRaisesRegex(RuntimeError, 'must contain only'):
+        with self.assertRaisesRegex(RuntimeError, 'normalized sprint item'):
             dag.build_graph(self.index, self.beads)
 
     def test_cycle_and_missing_gate_are_errors(self):
-        self.beads['work-1']['dependencies'].append({'type': 'blocks', 'depends_on_id': 'gate-2'})
+        self.index['sprints'][0]['depends_on_sanity_bead_ids'] = ['gate-2']
         with self.assertRaisesRegex(RuntimeError, 'cycle'):
             dag.build_graph(self.index, self.beads)
+        del self.index['sprints'][0]['depends_on_sanity_bead_ids']
         del self.beads['gate-1']
         with self.assertRaisesRegex(RuntimeError, 'expected one'):
             dag.build_graph(self.index, self.beads)
@@ -94,9 +99,9 @@ class DagTests(unittest.TestCase):
         self.assertNotIn('finding', self.graph['nodes'])
 
     def test_override_is_not_a_pass(self):
-        self.beads['plan']['close_reason'] = 'FAIL overridden by user'
+        self.beads['gate-1']['close_reason'] = 'FAIL overridden by user'
         result = dag.states(self.graph, self.snapshot, self.index)
-        self.assertEqual(result['plan']['state'], 'override')
+        self.assertEqual(result['gate-1']['state'], 'override')
 
     def test_qa_counts_all_rounds_and_preserves_failed_verdict(self):
         for number, verdict in [(1, 'FAIL'), (2, 'PASS')]:
