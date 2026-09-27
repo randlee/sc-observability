@@ -66,7 +66,7 @@ cutover, new releases of these crate names must come from this repo instead.
   each real publication with 12 bounded attempts and fails the sequence visibly
   if the exact non-yanked version does not appear. B.2 tests this gate with
   mocked responses and never invokes live publication.
-- `.github/workflows/b2-staged-consumer.yml` distributes a single immutable
+- `.github/workflows/b2-staged-consumer.yml` (dispatch-only preflight) distributes a single immutable
   stage to macOS, Linux and Windows; all three must attest the same candidate
   source SHA and archive checksums. Third-party dependencies can use crates.io;
   all first-party dependencies resolve only from freshly verified extractions.
