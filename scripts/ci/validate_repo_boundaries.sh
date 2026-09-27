@@ -184,6 +184,21 @@ if "atm-observability-adapter" not in arch:
 if "OTLP-017" not in req or "OTLP-018" not in req:
     raise SystemExit("requirements.md missing OTLP attachment/TelemetryConfig requirements")
 
+# Keep the architecture's public-only compile invariant aligned with the
+# explicitly temporary D.17 migration gate below.
+custom_sink_exception_markers = (
+    "temporary D.17 ownership exception",
+    "sprint-d-3-typed-sink-registration.md",
+    "validate_repo_boundaries.sh",
+    "obs-d-17#2",
+)
+for marker in custom_sink_exception_markers:
+    if marker not in arch:
+        raise SystemExit(
+            "architecture.md missing custom-sink D.17 migration exception marker: "
+            f"{marker!r}"
+        )
+
 # Enforce proving-artifact continuity: ATM boundary example must remain present before compilation.
 if not (root / "examples/atm-adapter-example/Cargo.toml").exists():
     raise SystemExit("examples/atm-adapter-example/Cargo.toml is missing")
