@@ -95,16 +95,20 @@ pub const ALL: &[ErrorCode] = &[
     LEVEL_REVISION_EXHAUSTED,
 ];
 
-/// Stable code for sc metric invalid histogram.
+/// Histogram bounds, bucket counts, or sum/count invariants are invalid.
+/// Recovery: provide finite increasing bounds, matching bucket counts, and a valid sum/count.
 pub const SC_METRIC_INVALID_HISTOGRAM: ErrorCode =
     ErrorCode::new_static("SC_METRIC_INVALID_HISTOGRAM");
-/// Stable code for sc metric invalid temporality.
+/// Metric temporality conflicts with the interval or monotonicity rules.
+/// Recovery: provide a nonempty delta interval and a nonnegative monotonic sum.
 pub const SC_METRIC_INVALID_TEMPORALITY: ErrorCode =
     ErrorCode::new_static("SC_METRIC_INVALID_TEMPORALITY");
-/// Stable code for sc metric invalid interval.
+/// A metric interval starts after its point timestamp.
+/// Recovery: set `start_time` at or before the point timestamp.
 pub const SC_METRIC_INVALID_INTERVAL: ErrorCode =
     ErrorCode::new_static("SC_METRIC_INVALID_INTERVAL");
-/// Stable code for sc metric non finite.
+/// A metric value or bound is NaN or infinite.
+/// Recovery: provide finite numeric values.
 pub const SC_METRIC_NON_FINITE: ErrorCode = ErrorCode::new_static("SC_METRIC_NON_FINITE");
 
 /// Types-owned transport diagnostic codes; transport crates re-export this registry.
@@ -124,7 +128,7 @@ pub mod otlp {
     /// Queue capacity is outside `1..=65_536`. Recovery: choose a bounded capacity.
     pub const OTLP_CONFIG_QUEUE_CAPACITY: ErrorCode =
         ErrorCode::new_static("OTLP_CONFIG_QUEUE_CAPACITY");
-    /// Zero, overflow or aggregate byte bound above 64 mib. Recovery: choose 1..=64 MiB (default 16 MiB).
+    /// Zero, overflow or aggregate byte bound above 64 MiB. Recovery: choose 1..=64 MiB (default 16 MiB).
     pub const OTLP_CONFIG_QUEUE_BYTE_CAPACITY: ErrorCode =
         ErrorCode::new_static("OTLP_CONFIG_QUEUE_BYTE_CAPACITY");
     /// Field is inapplicable to disabled transport or the selected backend. Recovery: omit it, enable transport, or select its applicable backend.
@@ -133,13 +137,13 @@ pub mod otlp {
     /// Selected backend does not implement the requested insecure verification override. Recovery: disable the override or choose an explicitly supporting backend.
     pub const OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED: ErrorCode =
         ErrorCode::new_static("OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED");
-    /// Endpoint url syntax is invalid. Recovery: provide a valid endpoint URL.
+    /// Endpoint URL syntax is invalid. Recovery: provide a valid endpoint URL.
     pub const OTLP_CONFIG_INVALID_ENDPOINT: ErrorCode =
         ErrorCode::new_static("OTLP_CONFIG_INVALID_ENDPOINT");
     /// Header/auth syntax or credential placement is invalid. Recovery: correct the header/auth configuration.
     pub const OTLP_CONFIG_INVALID_HEADER: ErrorCode =
         ErrorCode::new_static("OTLP_CONFIG_INVALID_HEADER");
-    /// Ca/auth/client/provider/legacy-worker initialization failed. Recovery: correct the bounded typed source and reconstruct.
+    /// CA/auth/client/provider/legacy-worker initialization failed. Recovery: correct the bounded typed source and reconstruct.
     pub const OTLP_TRANSPORT_CONSTRUCTION_FAILED: ErrorCode =
         ErrorCode::new_static("OTLP_TRANSPORT_CONSTRUCTION_FAILED");
     /// Feature/backend unavailable. Recovery: enable/select a supported backend.
@@ -148,13 +152,13 @@ pub mod otlp {
     /// Protocol invalid for backend. Recovery: select a matrix-supported protocol.
     pub const OTLP_UNSUPPORTED_PROTOCOL: ErrorCode =
         ErrorCode::new_static("OTLP_UNSUPPORTED_PROTOCOL");
-    /// Sdk construction lacks an entered tokio runtime. Recovery: construct inside the host runtime.
+    /// SDK construction lacks an entered Tokio runtime. Recovery: construct inside the host runtime.
     pub const OTLP_TOKIO_RUNTIME_REQUIRED: ErrorCode =
         ErrorCode::new_static("OTLP_TOKIO_RUNTIME_REQUIRED");
     /// Legacy synchronous lifecycle entered tokio; construction preserves this condition as the redacted source of `TransportConstructionFailed`. Recovery: use a plain thread or async lifecycle.
     pub const OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT: ErrorCode =
         ErrorCode::new_static("OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT");
-    /// Sdk synchronous completion requested. Recovery: await the typed async operation.
+    /// SDK synchronous completion requested. Recovery: await the typed async operation.
     pub const OTLP_ASYNC_LIFECYCLE_REQUIRED: ErrorCode =
         ErrorCode::new_static("OTLP_ASYNC_LIFECYCLE_REQUIRED");
     /// Host runtime ended before completion. Recovery: keep the runtime alive through awaited shutdown.
@@ -163,7 +167,7 @@ pub mod otlp {
     pub const OTLP_LIFECYCLE_TIMEOUT: ErrorCode = ErrorCode::new_static("OTLP_LIFECYCLE_TIMEOUT");
     /// Bounded admission queue saturated. Recovery: preserve fail-open behavior and inspect health.
     pub const OTLP_QUEUE_FULL: ErrorCode = ErrorCode::new_static("OTLP_QUEUE_FULL");
-    /// Sdk dispatcher or legacy worker terminated unexpectedly. Recovery: correct the terminal cause and construct a new instance.
+    /// SDK dispatcher or legacy worker terminated unexpectedly. Recovery: correct the terminal cause and construct a new instance.
     pub const OTLP_WORKER_TERMINATED: ErrorCode = ErrorCode::new_static("OTLP_WORKER_TERMINATED");
     /// Shutdown cancelled a retryable pre-barrier legacy sequence. Recovery: inspect terminal health; resend only if duplicates are acceptable.
     pub const OTLP_SHUTDOWN_CANCELLED_RETRY: ErrorCode =
@@ -177,7 +181,7 @@ pub mod otlp {
     /// Legacy maximum attempts ended before success. Recovery: restore collector health or adjust the validated policy.
     pub const OTLP_RETRY_ATTEMPTS_EXHAUSTED: ErrorCode =
         ErrorCode::new_static("OTLP_RETRY_ATTEMPTS_EXHAUSTED");
-    /// Sdk or legacy provider returned a terminal export failure. Recovery: inspect the preserved source and collector state.
+    /// SDK or legacy provider returned a terminal export failure. Recovery: inspect the preserved source and collector state.
     pub const OTLP_EXPORT_TERMINAL: ErrorCode = ErrorCode::new_static("OTLP_EXPORT_TERMINAL");
     /// Emit was attempted after shutdown began. Recovery: construct a new telemetry instance.
     pub const OTLP_TELEMETRY_SHUTDOWN: ErrorCode = ErrorCode::new_static("OTLP_TELEMETRY_SHUTDOWN");

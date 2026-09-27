@@ -77,12 +77,15 @@ pub const ALL: &[ErrorCode] = &[
     SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS,
 ];
 
-/// Canonical sc log detach timeout failure.
+/// The installed logger did not detach before the bounded deadline.
+/// Recovery: wait for in-flight logging to finish, then retry when the logger is quiescent.
 pub const SC_LOG_DETACH_TIMEOUT: ErrorCode = ErrorCode::new_static("SC_LOG_DETACH_TIMEOUT");
-/// Canonical sc log detach not installed failure.
+/// Detach was requested without an installed bridge.
+/// Recovery: install the bridge before detaching, or treat the bridge as already detached.
 pub const SC_LOG_DETACH_NOT_INSTALLED: ErrorCode =
     ErrorCode::new_static("SC_LOG_DETACH_NOT_INSTALLED");
-/// Canonical sc log foreign logger installed failure.
+/// Another logger owns the global logging facade.
+/// Recovery: remove the competing logger or detach only the bridge that owns the facade.
 pub const SC_LOG_FOREIGN_LOGGER_INSTALLED: ErrorCode =
     ErrorCode::new_static("SC_LOG_FOREIGN_LOGGER_INSTALLED");
 

@@ -64,13 +64,16 @@ pub const ALL: &[ErrorCode] = &[
     LOGGER_SINK_FAULT_INJECTED,
 ];
 
-/// Canonical sc log sink registration duplicate failure.
+/// A sink registration reused an existing sink identity.
+/// Recovery: register each sink once or use a distinct identity.
 pub const SC_LOG_SINK_REGISTRATION_DUPLICATE: ErrorCode =
     ErrorCode::new_static("SC_LOG_SINK_REGISTRATION_DUPLICATE");
-/// Canonical sc log sink registration invalid failure.
+/// Sink registration metadata or configuration failed validation.
+/// Recovery: provide a valid registration with the required metadata.
 pub const SC_LOG_SINK_REGISTRATION_INVALID: ErrorCode =
     ErrorCode::new_static("SC_LOG_SINK_REGISTRATION_INVALID");
-/// Canonical sc log sink registration closed failure.
+/// A sink registration was attempted after registration closed.
+/// Recovery: register before closure or create a new logger owner.
 pub const SC_LOG_SINK_REGISTRATION_CLOSED: ErrorCode =
     ErrorCode::new_static("SC_LOG_SINK_REGISTRATION_CLOSED");
 
