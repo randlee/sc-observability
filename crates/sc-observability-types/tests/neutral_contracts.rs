@@ -4,6 +4,88 @@ use sc_observability_types::{DiagnosticInfo, ErrorContext, Remediation, Timestam
 use serde_json::json;
 use std::error::Error;
 
+#[test]
+fn attribute_integer_variants_survive_native_serde() {
+    for original in [
+        AttributeValue::UInt(5),
+        AttributeValue::Int(5),
+        AttributeValue::Int(0),
+        AttributeValue::UInt(0),
+        AttributeValue::Int(i64::MIN),
+        AttributeValue::Int(i64::MAX),
+        AttributeValue::UInt(u64::try_from(i64::MAX).unwrap()),
+        AttributeValue::UInt(u64::MAX),
+    ] {
+        let encoded = serde_json::to_string(&original).unwrap();
+        let decoded: AttributeValue = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(decoded, original, "variant lost in {encoded}");
+        let encoded = serde_json::to_value(&original).unwrap();
+        let decoded: AttributeValue = serde_json::from_value(encoded).unwrap();
+        assert_eq!(decoded, original);
+    }
+}
+
+#[test]
+fn attribute_tags_preserve_nested_values_in_metric_records() {
+    let values = vec![
+        AttributeValue::Bool(true),
+        AttributeValue::Int(5),
+        AttributeValue::UInt(5),
+        AttributeValue::Float(finite(5.0)),
+        AttributeValue::String("5".to_owned()),
+        AttributeValue::Null,
+    ];
+    for (value, tag) in values
+        .iter()
+        .zip(["bool", "int", "uint", "float", "string", "null"])
+    {
+        let encoded = serde_json::to_value(value).unwrap();
+        assert_eq!(encoded["kind"], tag);
+        if tag == "null" {
+            assert_eq!(encoded, json!({"kind": "null"}));
+        }
+    }
+    assert_eq!(
+        serde_json::to_value(AttributeValue::UInt(5)).unwrap(),
+        json!({"kind": "uint", "data": 5})
+    );
+    assert_ne!(AttributeValue::Int(5), AttributeValue::UInt(5));
+    let object = AttributeValue::Object(Attributes::from([
+        ("kind".to_owned(), AttributeValue::String("uint".to_owned())),
+        ("data".to_owned(), AttributeValue::Array(values)),
+    ]));
+    let record = MetricRecord::try_new(
+        Timestamp::UNIX_EPOCH,
+        sc_observability_types::ServiceName::new("test").unwrap(),
+        sc_observability_types::MetricName::new("gauge").unwrap(),
+        MetricValue::Gauge(finite(1.0)),
+    )
+    .unwrap()
+    .with_attributes(Attributes::from([("nested".to_owned(), object)]));
+    let encoded = serde_json::to_string(&record).unwrap();
+    let decoded: MetricRecord = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(decoded, record);
+}
+
+#[test]
+fn attribute_serde_rejects_ambiguous_or_invalid_integer_payloads() {
+    for encoded in [
+        "5",
+        r#"{"kind":"uint","data":-1}"#,
+        r#"{"kind":"uint","data":18446744073709551616}"#,
+        r#"{"kind":"int","data":9223372036854775808}"#,
+        r#"{"kind":"int","data":1.5}"#,
+        r#"{"kind":"uint","data":"5"}"#,
+        r#"{"kind":"int"}"#,
+        r#"{"kind":"unknown","data":5}"#,
+    ] {
+        assert!(
+            serde_json::from_str::<AttributeValue>(encoded).is_err(),
+            "accepted {encoded}"
+        );
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 #[error("sentinel source")]
 struct Sentinel(u64);
@@ -298,11 +380,25 @@ fn histogram_point_serde_rejects_invalid() {
             "accepted {field}"
         );
     }
-    assert!(serde_json::from_value::<HistogramPoint>(json!({"explicit_bounds": [f64::INFINITY], "bucket_counts": [0, 0], "count": 0, "sum": 0.0})).is_err());
-    assert!(HistogramPoint::try_new(vec![], vec![0], 0, finite(1.0)).is_err());
+    assert!(
+        serde_json::from_value::<HistogramPoint>(json!({
+            "explicit_bounds": [f64::INFINITY],
+            "bucket_counts": [0, 0],
+            "count": 0,
+            "sum": 0.0
+        }))
+        .is_err()
+    );
+    let error = HistogramPoint::try_new(vec![], vec![0], 0, finite(1.0))
+        .expect_err("a nonzero sum cannot have zero samples");
+    assert_eq!(
+        error.diagnostic().code,
+        error_codes::SC_METRIC_INVALID_HISTOGRAM
+    );
     assert!(HistogramPoint::try_new(vec![], vec![0], 0, finite(0.0)).is_ok());
     for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        assert!(FiniteF64::new(value).is_err());
+        let error = FiniteF64::new(value).expect_err("non-finite values must be rejected");
+        assert_eq!(error.code(), &error_codes::SC_METRIC_NON_FINITE);
     }
 }
 #[test]
@@ -395,7 +491,7 @@ fn span_kind_links_flags_and_typestate_survive_export() {
     .end(SpanStatus::Ok, 42u64.into());
     assert_eq!(record.kind(), SpanKind::Server);
     assert_eq!(record.links(), &[link]);
-    assert_eq!(record.duration_ms().unwrap().as_u64(), 42);
+    assert_eq!(record.duration_ms().as_u64(), 42);
     let wire = serde_json::to_value(SpanSignal::Ended(record)).unwrap();
     assert_eq!(wire["Ended"]["trace"]["flags"], 131);
     assert_eq!(wire["Ended"]["kind"], "server");
@@ -522,6 +618,7 @@ mod legacy_compatibility {
 
     struct TypedIdentityError {
         calls: Arc<AtomicUsize>,
+        // The mutex lets this `&self` fixture transfer its owned failure exactly once.
         failure: Mutex<Option<IdentityFailure>>,
         expected_pointer: usize,
     }
@@ -540,6 +637,7 @@ mod legacy_compatibility {
 
     struct LegacyIdentityError {
         calls: Arc<AtomicUsize>,
+        // The mutex lets this `&self` fixture transfer its owned failure exactly once.
         failure: Mutex<Option<IdentityError>>,
         expected_pointer: usize,
     }
@@ -558,6 +656,7 @@ mod legacy_compatibility {
 
     struct TypedSubscriberError {
         calls: Arc<AtomicUsize>,
+        // The mutex lets this `&self` fixture transfer its owned failure exactly once.
         failure: Mutex<Option<SubscriberFailure>>,
         expected_pointer: usize,
     }
@@ -576,6 +675,7 @@ mod legacy_compatibility {
 
     struct LegacySubscriberError {
         calls: Arc<AtomicUsize>,
+        // The mutex lets this `&self` fixture transfer its owned failure exactly once.
         failure: Mutex<Option<SubscriberError>>,
         expected_pointer: usize,
     }
@@ -596,6 +696,7 @@ mod legacy_compatibility {
         log_calls: Arc<AtomicUsize>,
         span_calls: Arc<AtomicUsize>,
         metric_calls: Arc<AtomicUsize>,
+        // These mutexes let `&self` fixtures transfer each owned failure exactly once.
         log: Mutex<Option<ProjectionFailure>>,
         span: Mutex<Option<ProjectionFailure>>,
         metric: Mutex<Option<ProjectionFailure>>,
@@ -653,6 +754,7 @@ mod legacy_compatibility {
         log_calls: Arc<AtomicUsize>,
         span_calls: Arc<AtomicUsize>,
         metric_calls: Arc<AtomicUsize>,
+        // These mutexes let `&self` fixtures transfer each owned failure exactly once.
         log: Mutex<Option<ProjectionError>>,
         span: Mutex<Option<ProjectionError>>,
         metric: Mutex<Option<ProjectionError>>,

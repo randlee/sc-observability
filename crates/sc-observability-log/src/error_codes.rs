@@ -100,7 +100,12 @@ pub const SC_LOG_DETACH_TIMEOUT: ErrorCode = ErrorCode::new_static("SC_LOG_DETAC
 /// Recovery: install the bridge before detaching, or treat the bridge as already detached.
 pub const SC_LOG_DETACH_NOT_INSTALLED: ErrorCode =
     ErrorCode::new_static("SC_LOG_DETACH_NOT_INSTALLED");
-/// Another logger owns the global logging facade.
+/// `DetachError::ForeignLoggerInstalled`: another logger owns the global logging facade.
+///
+/// This is intentionally distinct from
+/// [`SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED`]: the latter reports an
+/// init-time attempt to install the owned bridge, whereas this code reports a
+/// non-owning attachment's foreign-facade rejection.
 /// Recovery: remove the competing logger or detach only the bridge that owns the facade.
 pub const SC_LOG_FOREIGN_LOGGER_INSTALLED: ErrorCode =
     ErrorCode::new_static("SC_LOG_FOREIGN_LOGGER_INSTALLED");
@@ -120,5 +125,21 @@ mod tests {
             assert!(seen.insert(code.as_str()), "duplicate code {code}");
         }
         assert_eq!(ALL.len(), 19);
+    }
+
+    #[test]
+    fn foreign_logger_codes_have_distinct_lifecycle_contracts() {
+        assert_eq!(
+            SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED.as_str(),
+            "SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED"
+        );
+        assert_eq!(
+            SC_LOG_FOREIGN_LOGGER_INSTALLED.as_str(),
+            "SC_LOG_FOREIGN_LOGGER_INSTALLED"
+        );
+        assert_ne!(
+            SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED,
+            SC_LOG_FOREIGN_LOGGER_INSTALLED
+        );
     }
 }

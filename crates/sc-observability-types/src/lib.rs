@@ -101,10 +101,13 @@ pub use validation::{
     ServiceName, SinkName, StateName, TargetCategory, ToolName, ValueValidationError,
 };
 
-/// Staged 2.0 contracts; integration activates these names at the crate root.
+/// Canonical error contracts and additive neutral signal models.
 ///
 /// The package remains at the workspace version until the atomic D.21 bump.
-/// Existing root exports retain their 1.x behavior during consumer migration.
+/// ADR-017 authorizes integration's canonical error migration. Neutral signal
+/// models remain under `v2`: the existing root `MetricRecord`, `TraceContext`,
+/// and `SpanRecord` APIs and serialization remain unchanged under ADR-012.
+/// The version bump does not authorize replacing those root signal types.
 pub mod v2 {
     #[doc(inline)]
     pub use crate::errors_v2::{
@@ -115,7 +118,7 @@ pub mod v2 {
     pub use crate::signals_v2::{
         AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint,
         MetricRecord, MetricValue, SpanEvent, SpanKind, SpanLink, SpanRecord, SpanSignal,
-        TraceContext, TraceFlags,
+        SpanState, TraceContext, TraceFlags,
     };
     #[doc(inline)]
     pub use crate::{SpanEnded, SpanStarted, SpanStatus};

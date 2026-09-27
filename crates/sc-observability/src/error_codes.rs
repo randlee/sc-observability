@@ -106,3 +106,19 @@ pub const LOG_INVALID_VALUE: ErrorCode = ErrorCode::new_static("LOG-004");
 /// Log settings could not be resolved from the configured inputs.
 /// Recovery: correct the reported inputs and retry settings resolution.
 pub const LOG_RESOLUTION: ErrorCode = ErrorCode::new_static("LOG-005");
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::ALL;
+
+    #[test]
+    fn registry_codes_are_unique() {
+        let unique = ALL
+            .iter()
+            .map(sc_observability_types::ErrorCode::as_str)
+            .collect::<HashSet<_>>();
+        assert_eq!(unique.len(), ALL.len());
+    }
+}

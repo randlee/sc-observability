@@ -1252,6 +1252,66 @@ historical import-provenance and generated-binding source-revision validators
 as recorded in [the CI policy](ci-policy.md). ADR-019’s Consequences sentence
 was reworded accordingly to describe the remaining validation.
 
+#### ADR-019 amendment: staged neutral signal contracts
+
+- **Status**: Accepted 2026-09-26 by the lead (ruling
+  `01M3F5BQFV804H5G4W6HFNZ03V`); the original ADR-019 acceptance above
+  is unchanged.
+- **Context**: ADR-017's error-wrapper replacement does not itself specify
+  the neutral signal model or its temporary public module. D.12 needs to
+  release these contracts while existing 1.x consumers continue to compile.
+- **Decision — staging and ownership**: Expose the canonical errors and
+  neutral signals under `sc_observability_types::v2` at the current workspace
+  package version. Existing root exports retain their 1.x behavior during
+  migration. D.21 activates workspace 2.0 versions atomically; D.18 activates
+  the canonical root exports and removes the temporary compatibility surface
+  after consumer migration and the reviewed major-break/semver gates. The
+  staging module is not a permanent second API. Neutral types remain owned
+  by `sc-observability-types`, without runtime, transport or upper-layer
+  dependencies (LAY-001, PHB-002, TYP-001/002).
+- **Decision — neutral values**: `Attributes` is an ordered
+  `BTreeMap<String, AttributeValue>`. `AttributeValue` represents booleans,
+  signed/unsigned integers, finite floats, strings, arrays, objects and null.
+  `FiniteF64` rejects NaN and infinities through construction and serde input.
+  These public values do not expose `serde_json::Value` or transport types.
+- **Decision — spans**: `TraceContext` carries validated trace/span IDs,
+  an optional parent and `TraceFlags`; the flags preserve all eight bits.
+  `SpanKind` distinguishes internal/server/client/producer/consumer work.
+  `SpanLink` carries its own IDs, flags and attributes. Private
+  `SpanRecord<SpanStarted>` fields and consuming `end` preserve the existing
+  typestate contract; only `SpanRecord<SpanEnded>` exposes final duration.
+  `SpanEvent` and `SpanSignal` represent lifecycle events without adding
+  application metadata to trace correlation.
+- **Decision — metrics**: `MetricRecord` contains discriminated `MetricValue`
+  (`Gauge`, `Sum`, `Histogram`) instead of a separate `MetricKind` plus `f64`.
+  `AggregationTemporality` and start timestamps carry delta/cumulative
+  semantics. Checked construction and serde input enforce finite values,
+  histogram bounds/bucket/count consistency, start at or before end,
+  nonempty delta intervals and nonnegative monotonic sums. `HistogramPoint`
+  preserves explicit bounds, integer bucket counts/count and finite sum.
+- **Decision — serde and wire projection**: Native `AttributeValue` serde is
+  untagged JSON-compatible data; `FiniteF64` is a number and `TraceFlags` a
+  byte. `SpanKind` and `AggregationTemporality` use snake-case tokens.
+  `MetricValue` uses adjacent `kind`/`data` tags, for example
+  `{"kind":"gauge","data":1.5}`. Records serialize named fields;
+  `SpanRecord` omits its typestate marker and `SpanSignal` uses external
+  `Started`/`Event`/`Ended` tags. Span records are serialize-only: wire input
+  must replay checked construction and `end`, not deserialize private state.
+  Native serde is distinct from the versioned DTO/schema envelope: D.19 owns
+  checked projections and generated models, including tagged attribute
+  values and decimal strings for lossless wide integers; D.20 owns language
+  adapters. Native source/backtrace objects never enter the wire envelope.
+- **Consequences**: A discriminated metric value prevents contradictory
+  kind/value combinations; checked neutral models share validation across
+  backends. Untagged native attributes do not preserve every Rust numeric
+  variant through JSON, so language boundaries use explicit DTO tags.
+  Temporary coexistence enables staged migration; it does not waive the
+  final replacement and compatibility-removal gates.
+- **Contracts**: TYP-008–019, PHD-001/002, PHB-002/010/012/013;
+  [canonical types and wire handoff](api-design.md#phase-d-canonical-types-and-wire-handoff).
+  D.12 owns the types and specification, D.19/20 consume them, and D.18
+  qualifies their final composition. ADR-019 remains in D.12's bead ADR list.
+
 ## 8. API-Design Consistency
 
 `api-design.md` matches the corrected layering:
@@ -1297,8 +1357,15 @@ They are intentionally narrower than a full ATM migration proof:
 ### Phase D types staging
 
 D.12 implements the accepted ADR-017/018/019 types contract under
-`sc_observability_types::v2`, leaving current root exports available during
-migration. It retains `version.workspace = true`; D.21 performs the atomic
+`sc_observability_types::v2`. ADR-017's canonical error migration does not
+replace the published root `MetricRecord`, `TraceContext`, or `SpanRecord`.
+Their construction, trait and serialization contracts remain intact under
+ADR-012; the new neutral models remain additive at the explicit `v2` path,
+including after D.18 integration. Any future root signal replacement needs
+a separately accepted ADR explicitly superseding ADR-012 for those named
+breaks before implementation, plus the PHD-002 manifest and API approval.
+A manifest entry alone does not expand ADR-017's scope.
+D.12 retains `version.workspace = true`; D.21 performs the atomic
 workspace 2.0 activation. The producer contract, constructors, serde shape,
 error inventory and DTO handoffs are specified in
 [API design](api-design.md#phase-d-canonical-types-and-wire-handoff).
