@@ -3,7 +3,8 @@
 #   1. dependencies: for every tuple [Y, sanity-Y, [X, ...]], sprint Y has a blocks edge to sanity-X;
 #   2. every sprint bead validates against SprintBead (scripts/bead_schema.py, published as schemas/sprint-bead.schema.json);
 #   3. every sanity bead validates against SanityBead, and its metadata.dev_bead is its sprint;
-#   4. bd doctor reports no error.
+#   4. bd doctor reports no error;
+#   5. only epics live at the top level: no open bead created since the phase root has no parent.
 #
 #   validate-plan --root <id> [--index <sprints.jsonl>]                 live beads
 #   validate-plan --file <plan.jsonl> --root <id> [--index <sprints.jsonl>]   rendered plan, before `bd import`
@@ -81,6 +82,17 @@ problems=$(jq -r -n --arg p "$prefix" --slurpfile plan "$index" --slurpfile all 
 schema=$(python3 "$here/bead_schema.py" validate "$scratch/beads.json" "$index" "$prefix"); rc=$?
 case $rc in 0|5) ;; *) echo "validate-plan: bead_schema.py failed to run" >&2; exit 2 ;; esac
 problems=$(printf '%s\n%s' "$problems" "$schema" | sed '/^$/d')
+
+# 5. epics only at the top level (closed beads are history and are not checked)
+if [ -n "$beads" ]; then cp "$scratch/beads.json" "$scratch/everything.json"
+else bd list --all -n 0 --json > "$scratch/everything.json" 2>"$scratch/bd.err" \
+  || { echo "validate-plan: bd list failed: $(cat "$scratch/bd.err")" >&2; exit 2; }; fi
+roots=$(jq -r --arg root "$root" '
+  ((.[] | select(.id == $root) | .created_at) // "") as $since
+  | .[] | select(.status != "closed" and (.parent // "") == "" and .issue_type != "epic" and (.created_at // "") >= $since)
+  | "\(.id): \(.issue_type) at the top level; only epics live at the top level, parent it under its epic"' "$scratch/everything.json") \
+  || { echo "validate-plan: the top-level check failed to run" >&2; exit 2; }
+problems=$(printf '%s\n%s' "$problems" "$roots" | sed '/^$/d')
 
 # 4. bd doctor
 if [ "$doctor" -eq 1 ]; then

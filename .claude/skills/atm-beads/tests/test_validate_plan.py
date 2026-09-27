@@ -14,7 +14,7 @@ PLAN = [["t-1", "x-t-1-sanity", []], ["t-2", "x-t-2-sanity", ["t-1"]]]
 
 
 def sprint(bid: str, blocks: list[str]) -> dict:
-    return {"id": bid, "assignee": "dev", "acceptance_criteria": "- [ ] #1: done",
+    return {"id": bid, "parent": "x-phase-t", "assignee": "dev", "acceptance_criteria": "- [ ] #1: done",
             "description": "Goal.\n\n## Deliverables\n1. the thing\n",
             "dependencies": [{"type": "blocks", "depends_on_id": b} for b in blocks],
             "metadata": {"requirements": ["NONE"], "adrs": ["ADR-1"], "worktree": "wt", "branch": f"sprint/{bid}",
@@ -22,11 +22,12 @@ def sprint(bid: str, blocks: list[str]) -> dict:
 
 
 def sanity(bid: str, dev: str) -> dict:
-    return {"id": bid, "assignee": "sanity", "metadata": {"dev_bead": dev},
+    return {"id": bid, "parent": "x-phase-t", "assignee": "sanity", "metadata": {"dev_bead": dev},
             "dependencies": [{"dependency_type": "blocks", "id": dev}]}
 
 
-VALID = [sprint("x-t-1", []), sanity("x-t-1-sanity", "x-t-1"),
+ROOT_EPIC = {"id": "x-phase-t", "issue_type": "epic", "status": "open", "created_at": "2026-09-25T00:00:00Z"}
+VALID = [ROOT_EPIC, sprint("x-t-1", []), sanity("x-t-1-sanity", "x-t-1"),
          sprint("x-t-2", ["x-t-1-sanity"]), sanity("x-t-2-sanity", "x-t-2")]
 
 
@@ -72,9 +73,17 @@ class ValidatePlan(unittest.TestCase):
                 self.assertTrue(lines[0].startswith(want), lines)
 
     def test_missing_bead(self):
-        rc, lines = run(VALID[:3])
+        rc, lines = run(VALID[:4])
         self.assertEqual((rc, lines), (5, ["x-t-2-sanity: sanity bead of x-t-2 is not in beads"]))
 
+
+    def test_only_epics_at_the_top_level(self):
+        stray = {"id": "x-stray", "issue_type": "task", "status": "open", "created_at": "2026-09-26T00:00:00Z"}
+        rc, lines = run(VALID + [stray])
+        self.assertEqual((rc, lines), (5, ["x-stray: task at the top level; only epics live at the top level, parent it under its epic"]))
+        for ok in ({**stray, "status": "closed"}, {**stray, "created_at": "2026-09-24T00:00:00Z"}, {**stray, "issue_type": "epic"}):
+            with self.subTest(bead=ok):
+                self.assertEqual(run(VALID + [ok])[0], 0)
 
     def test_published_schemas_are_exported_from_the_models(self):
         with tempfile.TemporaryDirectory() as d:
