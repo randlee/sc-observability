@@ -2418,10 +2418,21 @@ schema contract without changing native published serialization.
 
 D.12 stages this contract in `sc_observability_types::v2` at the current
 workspace package version. D.21 activates workspace version 2.0 atomically;
-D.18 activates root exports and retires compatibility after consumers migrate.
+D.18 activates the ADR-017 canonical error exports and retires their
+superseded compatibility surfaces after consumers migrate. Neutral signal
+models remain additive under `v2`; the existing root `MetricRecord`,
+`TraceContext`, and `SpanRecord` keep their published construction, trait
+and serialization contracts under ADR-012. Consumers opt into the new models
+through the explicit `v2` path. Root signal replacement is not part of this
+handoff, and neither a version bump nor a break-manifest entry authorizes it.
 ADR-017/018 were accepted through PR #225 and ADR-019 through PR #227.
 PHB-003/004/005 continue governing 1.x; PHD-001/002 govern the reviewed major
 migration. A staged module is not a release-baseline approval.
+
+A future root signal replacement requires a separately accepted ADR that
+explicitly supersedes ADR-012 for those named breaks, followed by the PHD-002
+manifest, migration evidence and API approval before activation. D.18 still
+owns the manifest and release gates for the approved error migration.
 
 ### Canonical errors
 

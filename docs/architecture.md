@@ -1357,8 +1357,15 @@ They are intentionally narrower than a full ATM migration proof:
 ### Phase D types staging
 
 D.12 implements the accepted ADR-017/018/019 types contract under
-`sc_observability_types::v2`, leaving current root exports available during
-migration. It retains `version.workspace = true`; D.21 performs the atomic
+`sc_observability_types::v2`. ADR-017's canonical error migration does not
+replace the published root `MetricRecord`, `TraceContext`, or `SpanRecord`.
+Their construction, trait and serialization contracts remain intact under
+ADR-012; the new neutral models remain additive at the explicit `v2` path,
+including after D.18 integration. Any future root signal replacement needs
+a separately accepted ADR explicitly superseding ADR-012 for those named
+breaks before implementation, plus the PHD-002 manifest and API approval.
+A manifest entry alone does not expand ADR-017's scope.
+D.12 retains `version.workspace = true`; D.21 performs the atomic
 workspace 2.0 activation. The producer contract, constructors, serde shape,
 error inventory and DTO handoffs are specified in
 [API design](api-design.md#phase-d-canonical-types-and-wire-handoff).
