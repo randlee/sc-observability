@@ -1,3 +1,4 @@
+import io
 import importlib.machinery
 import importlib.util
 import json
@@ -14,6 +15,12 @@ loader.exec_module(report)
 
 
 class SprintReportTests(unittest.TestCase):
+    def run_main_with_index(self, repo, path):
+        with mock.patch.object(report.subprocess, 'check_output', return_value=f'{repo}\n'):
+            with mock.patch.object(report.sys, 'argv', ['sprint-report', '--index', str(path)]):
+                with mock.patch.object(report.sys, 'stderr', new_callable=io.StringIO) as stderr:
+                    return report.main(), stderr.getvalue()
+
     def test_report_template_and_skill_keep_current_usage_text(self):
         repo = Path(__file__).resolve().parents[4]
         template = (repo / '.claude/skills/sprint-report/report.md.j2').read_text()
@@ -59,9 +66,44 @@ class SprintReportTests(unittest.TestCase):
             path = repo / 'docs/plans/phase-x/sprints.jsonl'
             path.parent.mkdir(parents=True)
             path.write_text('["x-1", "gate-1", []]\n')
-            with mock.patch.object(report, 'index_path', return_value=path):
+            with mock.patch.object(report, 'index_path', return_value=path) as index_path:
                 index = report.load_index(repo, None, 'obs-phase-x')[1]
+            index_path.assert_called_once_with(repo, 'obs-phase-x')
             self.assertEqual(index['root_bead_id'], 'obs-phase-x')
+
+    def test_main_reports_malformed_json_without_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path.parent.mkdir(parents=True)
+            path.write_text('{not json}\n')
+            code, error = self.run_main_with_index(repo, path)
+            self.assertEqual(code, 2)
+            self.assertIn('sprint-report:', error)
+            self.assertNotIn('Traceback', error)
+
+    def test_main_reports_row_without_id_without_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path.parent.mkdir(parents=True)
+            path.write_text('["", "gate-1", []]\n')
+            code, error = self.run_main_with_index(repo, path)
+            self.assertEqual(code, 2)
+            self.assertIn('sprint-report:', error)
+            self.assertNotIn('Traceback', error)
+
+    def test_main_rejects_empty_index_before_bd_show(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path.parent.mkdir(parents=True)
+            path.write_text('')
+            with mock.patch.object(report, 'run_json') as run_json:
+                code, error = self.run_main_with_index(repo, path)
+            self.assertEqual(code, 2)
+            run_json.assert_not_called()
+            self.assertIn('contains no sprints', error)
 
     def test_membership_index_reads_names_and_order_from_live_beads(self):
         index = {'sprints': [
