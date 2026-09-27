@@ -200,7 +200,7 @@ class Migration:
                 self.w(f"{gate}: not ready until the fix of {fid} lands", "dep", "add", gate, fid)
             elif fid not in pcc.deps(self.by[gate], "blocks"):
                 self.w(f"{gate}: not ready until the fix of {fid} lands", "dep", "add", gate, fid)
-            for target in self.check.downstream_targets(sprint):
+            for target in self.check.downstream_targets(sprint, self.check.blocker_closure(fid)):
                 if gate not in pcc.deps(self.by[target], "blocks"):
                     self.w(f"{target}: gated by blocking finding {fid}", "dep", "add", target, gate)
 

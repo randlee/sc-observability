@@ -26,6 +26,7 @@ EXPECT: dict[str, tuple[str, str] | None] = {
     "valid_index_with_policy": None,
     "valid_pass_with_qa": None,
     "valid_root_feature_under_epic": None,
+    "valid_ordered_overlap": None,
     "qa_under_root_validates": ("x-t-1-qa", "bd dep remove x-t-1-qa x-t-1 (validates), then bd update x-t-1-qa --parent x-t-1"),
     "finding_under_root_caused_by": ("x-t-1-qa-f1", "bd dep remove x-t-1-qa-f1 x-t-1 (caused-by), then bd update x-t-1-qa-f1 --parent x-t-1"),
     "root_task_at_top_level": ("x-phase-t", "phase root is a task; a phase root is an epic or a feature under an epic"),
@@ -61,6 +62,7 @@ EXPECT: dict[str, tuple[str, str] | None] = {
     "sanity_base_sha_commit_short": ("x-t-1-sanity", "base is a SHA"),
     "r16_downstream_not_gated": ("x-t-2", "not blocked by blocking finding x-t-1-qa-f1's sanity bead x-t-1-qa-f1-sanity"),
     "r16_in_progress_exempt_warns": None,
+    "r16_deferred_finding_exempts_upstream": None,
     "r16_blocking_finding_without_sanity": ("x-t-1-qa-f1", "no stage:dev-sanity bead"),
     "r16_gate_not_blocked_by_finding": ("x-t-1-qa-f1-sanity", "does not block on it"),
 }
@@ -149,8 +151,8 @@ class Constants(unittest.TestCase):
 
 class Parsing(unittest.TestCase):
     def test_acceptance_key_styles(self):
-        text = "- [ ] #1: a\n- [ ] #2–3: b\n- [ ] (D4) c\n- [ ] Deliverable 5: d\n- [ ] Deliverables 6–7: e\n- [ ] (#8/#9) f\n- [ ] fixes #88 in prose\n"
-        self.assertEqual(pcc.acceptance_refs(text), set(range(1, 10)))
+        text = "- [ ] #1: a\n- [ ] #2–3: b\n- [ ] (D4) c\n- [ ] Deliverable 5: d\n- [ ] Deliverables 6–7: e\n- [ ] (#8/#9) f\n- [ ] (`x-t-1#10/#11`) g\n- [ ] fixes #88 in prose\n"
+        self.assertEqual(pcc.acceptance_refs(text), set(range(1, 12)))
 
     def test_deliverables_list(self):
         self.assertEqual(pcc.parse_deliverables("## Goal\n1. not here\n## Deliverables\n1. a\n2. b\n\n## Acceptance\n3. no"), [1, 2])

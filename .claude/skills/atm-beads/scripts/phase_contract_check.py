@@ -48,7 +48,7 @@ DELIVERABLE_LINE = re.compile(r"^\s*(\d+)[.)]\s+\S")
 # acceptance keys: at the start of a checkbox line ("- [ ] #2–3:", "- [ ] Deliverables 1–3:", "- [ ] D4:")
 # or in parentheses anywhere on the line ("(D1–D3)", "(#1/#3)", "(#2)"). A bare "#88" in prose is an issue number.
 AC_LINE_KEY = re.compile(r"^\s*(?:-\s*\[.\]\s*)?(?:#|Deliverables?\s*|D)(\d+(?:\s*(?:[-–—/,]|and)\s*(?:#|D)?\d+)*)\s*[:.)]", re.IGNORECASE)
-AC_PAREN_KEY = re.compile(r"\((?:#|D)(\d+(?:\s*(?:[-–—/,]|and)\s*(?:#|D)?\d+)*)\)")
+AC_PAREN_KEY = re.compile(r"\(`?(?:[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?(?:#|D)(\d+(?:\s*(?:[-–—/,]|and)\s*(?:#|D)?\d+)*)`?\)")
 FOLDED = re.compile(r"^\s*folded into\s+\S+", re.IGNORECASE)
 Problems = list[str]
 
@@ -330,16 +330,17 @@ class PhaseCheck:
         san = self.sanity_of(sprint)
         return [d for d in self.devs() if d != sprint and d in self.by and san and san in self.blocker_closure(d)]
 
-    def downstream_targets(self, sprint: str) -> list[str]:
-        """Not-started downstream dev beads plus open, unclaimed findings/fixes on those sprints."""
+    def downstream_targets(self, sprint: str, exclude: set[str] = frozenset()) -> list[str]:
+        """Not-started downstream dev beads plus open, unclaimed findings/fixes on those sprints, minus `exclude`
+        (the gate's own blocker closure: a gate cannot block what it waits on)."""
         out = []
-        downstream = self.downstream_devs(sprint)
+        downstream = [d for d in self.downstream_devs(sprint) if d not in exclude]
         for d in downstream:
             if self.by[d].get("status") == "open":
                 out.append(d)
         for bid, b in self.by.items():
             if bid in self.phase_ids and stage(b) in (C.FINDING_LABEL, C.FIX_LABEL) and b.get("status") == "open" \
-                    and not b.get("assignee") and self.sprint_of(bid) in downstream:
+                    and not b.get("assignee") and bid not in exclude and self.sprint_of(bid) in downstream:
                 out.append(bid)
         return out
 
@@ -486,6 +487,8 @@ class PhaseCheck:
                     self.problem(cdev, f"consumes handoff {path} from {dev} but its owned_paths do not include it")
         for i, a in enumerate(devs):
             for b in devs[i + 1:]:
+                if b in self.blocker_closure(a) or a in self.blocker_closure(b):
+                    continue  # ordered sprints may share paths
                 for pa in meta(self.by[a]).get("owned_paths") or []:
                     for pb in meta(self.by[b]).get("owned_paths") or []:
                         if isinstance(pa, str) and isinstance(pb, str) and paths_overlap(pa, pb):
@@ -589,7 +592,7 @@ class PhaseCheck:
                 continue
             if fid not in deps(self.by.get(fsan, {}), "blocks"):
                 self.problem(fsan, f"sanity gate of blocking finding {fid} does not block on it, so it is ready before the fix lands (bd dep add {fsan} {fid})")
-            for target in self.downstream_targets(sprint):
+            for target in self.downstream_targets(sprint, self.blocker_closure(fid) | self.blocker_closure(fsan)):
                 if fsan not in deps(self.by[target], "blocks"):
                     self.problem(target, f"not blocked by blocking finding {fid}'s sanity bead {fsan} (bd dep add {target} {fsan})")
             for d in self.downstream_devs(sprint):

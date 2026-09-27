@@ -152,14 +152,14 @@
    "issue_type": "task",
    "metadata": {
     "branch": "sprint/t-3",
-    "pr_target": "sprint/t-1",
+    "pr_target": "sprint/t-2",
     "layer": 3,
     "sprint": "t-3",
     "difficulty": "normal",
     "owned_paths": [
-     "crates/t2/src/**"
+     "crates/t3/**"
     ],
-    "relation": "parallel_safe",
+    "relation": "must_follow",
     "requirements": [
      "NONE"
     ],
@@ -171,7 +171,7 @@
    "dependencies": [
     {
      "dependency_type": "blocks",
-     "depends_on_id": "x-t-1-sanity"
+     "depends_on_id": "x-t-2-sanity"
     }
    ],
    "parent": "x-phase-t",
@@ -198,6 +198,65 @@
     }
    ],
    "parent": "x-phase-t"
+  },
+  {
+   "id": "x-t-1-qa-f1",
+   "status": "open",
+   "labels": [
+    "stage:finding",
+    "severity:blocking"
+   ],
+   "priority": 1,
+   "issue_type": "task",
+   "metadata": {
+    "severity": "blocking",
+    "sprint_bead": "x-t-1",
+    "difficulty": "normal"
+   },
+   "dependencies": [
+    {
+     "dependency_type": "blocks",
+     "depends_on_id": "x-t-3-sanity"
+    }
+   ],
+   "parent": "x-t-1"
+  },
+  {
+   "id": "x-t-1-qa-f1-sanity",
+   "status": "open",
+   "labels": [
+    "stage:dev-sanity"
+   ],
+   "priority": 1,
+   "issue_type": "task",
+   "metadata": {
+    "dev_bead": "x-t-1-qa-f1",
+    "difficulty": "normal"
+   },
+   "dependencies": [
+    {
+     "dependency_type": "blocks",
+     "depends_on_id": "x-t-1-qa-f1"
+    }
+   ],
+   "parent": "x-t-1"
+  },
+  {
+   "id": "x-t-2-qa-f1",
+   "status": "open",
+   "labels": [
+    "stage:finding",
+    "severity:minor"
+   ],
+   "priority": 4,
+   "issue_type": "task",
+   "metadata": {
+    "severity": "minor",
+    "sprint_bead": "x-t-2",
+    "difficulty": "normal"
+   },
+   "dependencies": [],
+   "parent": "x-t-2"
   }
  ],
  "history": {},
