@@ -14,8 +14,9 @@ use sc_observability_otlp::{
     TelemetryConfigBuilder, TracesConfig,
 };
 use sc_observability_types::{
-    ActionName, CorrelationId, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-    MetricRecord, MetricUnit, LoggingHealthReport, Observation, ObservabilityHealthReport,
+    ActionName, CorrelationId, Diagnostic, EntityId, ErrorCode, Level, LogEvent, MetricKind,
+    MetricName, MetricRecord, MetricUnit, LoggingHealthReport, Observation,
+    ObservabilityHealthReport,
     OutcomeLabel, ProcessIdentity, ProjectionRegistration, Remediation,
     SchemaVersion, ServiceName, SpanEvent, SpanId, SpanRecord, SpanSignal, SpanStarted,
     SpanStatus, StateName, StateTransition, TargetCategory, TelemetryHealthReport, TraceContext,
@@ -665,7 +666,7 @@ fn state_transition(event: &HookEventKind) -> Option<StateTransition> {
     match event {
         HookEventKind::SubagentStart { .. } => Some(StateTransition {
             entity_kind: SUBAGENT_ENTITY_TARGET.clone(),
-            entity_id: Some("subagent-7".to_string()),
+            entity_id: Some(EntityId::new("subagent-7").expect("valid entity id")),
             from_state: SUBAGENT_IDLE_STATE.clone(),
             to_state: SUBAGENT_RUNNING_STATE.clone(),
             reason: None,
@@ -673,7 +674,7 @@ fn state_transition(event: &HookEventKind) -> Option<StateTransition> {
         }),
         HookEventKind::SubagentEnd { .. } => Some(StateTransition {
             entity_kind: SUBAGENT_ENTITY_TARGET.clone(),
-            entity_id: Some("subagent-7".to_string()),
+            entity_id: Some(EntityId::new("subagent-7").expect("valid entity id")),
             from_state: SUBAGENT_RUNNING_STATE.clone(),
             to_state: SUBAGENT_COMPLETED_STATE.clone(),
             reason: None,

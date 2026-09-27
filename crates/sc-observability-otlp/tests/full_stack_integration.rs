@@ -14,11 +14,12 @@ use sc_observability_types::typed::{
     legacy_metric_projector, legacy_span_projector,
 };
 use sc_observability_types::{
-    ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, LogProjector, MetricKind,
-    MetricName, MetricProjector, MetricRecord, MetricUnit, Observation, ObservationFilter,
-    OutcomeLabel, ProcessIdentity, ProjectionError, Remediation, SchemaVersion, ServiceName,
-    SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, StateTransition,
-    TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext, TraceId,
+    ActionName, Diagnostic, DurationMs, EntityId, ErrorCode, Level, LogEvent, LogProjector,
+    MetricKind, MetricName, MetricProjector, MetricRecord, MetricUnit, Observation,
+    ObservationFilter, OutcomeLabel, ProcessIdentity, ProjectionError, Remediation, SchemaVersion,
+    ServiceName, SpanEvent, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
+    StateTransition, TargetCategory, TelemetryHealthState, Timestamp, ToolName, TraceContext,
+    TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde_json::Map;
@@ -191,7 +192,7 @@ fn log_event(service: ServiceName, message: &str) -> LogEvent {
         }),
         state_transition: Some(StateTransition {
             entity_kind: TargetCategory::new("agent").expect("valid target"),
-            entity_id: Some("agent-123".to_string()),
+            entity_id: Some(EntityId::new("agent-123").expect("valid entity id")),
             from_state: sc_observability_types::StateName::new("idle").expect("valid state"),
             to_state: sc_observability_types::StateName::new("running").expect("valid state"),
             reason: None,
