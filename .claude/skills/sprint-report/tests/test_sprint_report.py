@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/sprint-report'
 loader = importlib.machinery.SourceFileLoader('sprint_report', str(SCRIPT))
@@ -38,6 +39,19 @@ class SprintReportTests(unittest.TestCase):
             path.write_text('["x-1", "gate-1", ["unknown"]]\n')
             with self.assertRaisesRegex(RuntimeError, 'unknown sprint'):
                 report.load_index(repo, path, 'obs-phase-x')
+            path.write_text('')
+            with self.assertRaisesRegex(RuntimeError, 'contains no sprints'):
+                report.load_index(repo, path, 'obs-phase-x')
+
+    def test_root_lookup_uses_phase_index_path_without_root_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path.parent.mkdir(parents=True)
+            path.write_text('["x-1", "gate-1", []]\n')
+            with mock.patch.object(report, 'index_path', return_value=path):
+                index = report.load_index(repo, None, 'obs-phase-x')[1]
+            self.assertEqual(index['root_bead_id'], 'obs-phase-x')
 
     def test_membership_index_reads_names_and_order_from_live_beads(self):
         index = {'sprints': [
