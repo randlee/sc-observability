@@ -477,7 +477,7 @@ fn span_kind_links_flags_and_typestate_survive_export() {
     .end(SpanStatus::Ok, 42u64.into());
     assert_eq!(record.kind(), SpanKind::Server);
     assert_eq!(record.links(), &[link]);
-    assert_eq!(record.duration_ms().unwrap().as_u64(), 42);
+    assert_eq!(record.duration_ms().as_u64(), 42);
     let wire = serde_json::to_value(SpanSignal::Ended(record)).unwrap();
     assert_eq!(wire["Ended"]["trace"]["flags"], 131);
     assert_eq!(wire["Ended"]["kind"], "server");

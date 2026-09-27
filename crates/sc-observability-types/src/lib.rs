@@ -118,7 +118,7 @@ pub mod v2 {
     pub use crate::signals_v2::{
         AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint,
         MetricRecord, MetricValue, SpanEvent, SpanKind, SpanLink, SpanRecord, SpanSignal,
-        TraceContext, TraceFlags,
+        SpanState, TraceContext, TraceFlags,
     };
     #[doc(inline)]
     pub use crate::{SpanEnded, SpanStarted, SpanStatus};
