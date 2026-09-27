@@ -8,10 +8,13 @@ import unittest
 import zipfile
 from argparse import Namespace
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _python_distribution import (DistributionError, extract_sdist, inspect_wheel, digest,
                                   source_python_contract, validate_requires_python, verify_source)
+from python_test_fixtures import pe
 
 
 class DistributionTests(unittest.TestCase):
@@ -94,6 +97,10 @@ class DistributionTests(unittest.TestCase):
             cp311.write_bytes(wheel.read_bytes())
             with self.assertRaisesRegex(DistributionError, 'wrong wheel ABI/platform'):
                 inspect_wheel(cp311, {'wheel_platform': 'win_amd64'}, '1.4.0', '>=3.10')
+            non_abi3 = Path(temporary) / 'sc_observability-1.4.0-cp310-cp310-win_amd64.whl'
+            non_abi3.write_bytes(wheel.read_bytes())
+            with self.assertRaisesRegex(DistributionError, 'wrong wheel ABI/platform'):
+                inspect_wheel(non_abi3, {'wheel_platform': 'win_amd64'}, '1.4.0', '>=3.10')
 
     def test_debug_contract_reaches_isolated_python_and_rejects_invalid_values(self):
         import subprocess
@@ -112,7 +119,6 @@ class DistributionTests(unittest.TestCase):
 
     def test_binary_architecture_cannot_be_overridden_by_filename(self):
         from _python_distribution import verify_native_architecture
-        from scripts.ci.tests.test_python_arm64 import pe
         arm = b'\xcf\xfa\xed\xfe' + (0x100000c).to_bytes(4, 'little')
         verify_native_architecture(arm, 'macosx_11_0_arm64')
         verify_native_architecture(pe(0x8664), 'win_amd64')
@@ -121,6 +127,10 @@ class DistributionTests(unittest.TestCase):
             verify_native_architecture(arm, 'macosx_10_13_x86_64')
         with self.assertRaisesRegex(DistributionError, 'architecture'):
             verify_native_architecture(b'MZ', 'win_amd64')
+        with self.assertRaisesRegex(DistributionError, 'architecture'):
+            verify_native_architecture(pe(0x8664), 'win_arm64')
+        with self.assertRaisesRegex(DistributionError, 'architecture'):
+            verify_native_architecture(pe(0xAA64), 'win_amd64')
 
     def test_verify_native_architecture_uses_pe_helper_once(self):
         from unittest.mock import patch
@@ -143,9 +153,19 @@ class DistributionTests(unittest.TestCase):
                 '[dependencies]\npyo3 = { version = "0.29.2", features = [] }\n')
             with self.assertRaisesRegex(DistributionError, 'abi3-py310'):
                 source_python_contract(root)
+            (root / 'pyproject.toml').write_text(
+                '[project]\nrequires-python = ">=3.10,<3.13"\n'
+                '[tool.maturin]\nfeatures = ["pyo3/abi3-py310"]\n')
+            (root / 'Cargo.toml').write_text(
+                '[dependencies]\npyo3 = { version = "0.29.2", features = ["abi3-py310"] }\n')
+            with self.assertRaisesRegex(DistributionError, 'open-ended'):
+                source_python_contract(root)
+            (root / 'pyproject.toml').write_text(
+                '[project]\nrequires-python = ">=3.10"\n[tool.maturin]\nfeatures = []\n')
+            with self.assertRaisesRegex(DistributionError, 'abi3-py310'):
+                source_python_contract(root)
 
     def test_wheel_metadata_is_parsed_and_compared_to_source(self):
-        from scripts.ci.tests.test_python_arm64 import pe
         with tempfile.TemporaryDirectory() as temporary:
             wheel = Path(temporary) / 'sc_observability-1.4.0-cp310-abi3-win_arm64.whl'
             members = {
@@ -194,6 +214,85 @@ class DistributionTests(unittest.TestCase):
                                     'wheel_platform': 'win_arm64',
                                     'rust_target': 'aarch64-pc-windows-msvc'})
         self.assertEqual(len(policy['interpreters']) * len(policy['platforms']), 30)
+
+    def _six_platform_aggregate_fixture(self, root: Path):
+        policy = json.loads((Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json').read_text())
+        policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
+                                    'wheel_platform': 'win_arm64',
+                                    'rust_target': 'aarch64-pc-windows-msvc'})
+        policy_path = root / 'policy.json'
+        policy_path.write_text(json.dumps(policy))
+        sdist = root / 'fixture.tar.gz'
+        sdist.write_bytes(b'fixture')
+        source = root / 'source'
+        source.mkdir()
+        (source / 'pyproject.toml').write_text(
+            '[tool.maturin]\nfeatures = ["pyo3/abi3-py310"]\n')
+        common = {'status': 'passed', 'source_commit': 'a' * 40,
+                  'sdist_sha256': digest(sdist), 'expected_requires_python': '>=3.10',
+                  'isolation': {'checkout': True, 'cargo_cache': True, 'network': True}}
+        for index, platform in enumerate(policy['platforms']):
+            build_dir = root / f'build-{index}'
+            build_dir.mkdir()
+            wheel_path = build_dir / f'wheel-{index}.whl'
+            wheel_path.write_bytes(f'wheel-{index}'.encode())
+            wheel = {'sha256': digest(wheel_path), 'wheel': wheel_path.name,
+                     'role': 'production', 'publication': 'pending_B.7',
+                     'maturin_features': ['pyo3/abi3-py310']}
+            build = {**common, 'platform': platform['id'], 'wheel': wheel,
+                     'embedding': 'passed', 'native_runtime_tests': 'passed',
+                     'negative_results': {str(number): 'passed' for number in range(9)}}
+            (build_dir / 'build-result.json').write_text(json.dumps(build))
+            for count, version in enumerate(policy['interpreters']):
+                cell_dir = root / f'cell-{index}-{count}'
+                cell_dir.mkdir()
+                cell = {**common, 'platform': platform['id'], 'python': version,
+                        'python_full': version,
+                        'runtime_suite': {'runtime_complete': True, 'embedding_in_each_cell': False},
+                        'wheel': {'sha256': wheel['sha256']}, 'typecheck': 'passed',
+                        'production_hooks_absent': True, 'test_count': 1,
+                        'test_cases': ['fixture::passes'],
+                        'commands': [{'command': ['python', '-m', 'pytest'], 'exit_code': 0},
+                                     {'command': ['python', '-m', 'mypy'], 'exit_code': 0}]}
+                (cell_dir / 'cell-result.json').write_text(json.dumps(cell))
+                (cell_dir / 'runtime.xml').write_text('<testsuite><testcase classname="fixture" name="passes" /></testsuite>')
+        return policy_path, sdist, source
+
+    def _aggregate_source_patches(self, source: Path):
+        return (patch('validate_python_distribution.extract_sdist', return_value=source),
+                patch('validate_python_distribution.verify_source', return_value={
+                    'runtime_suite': {'runtime_complete': True, 'embedding_in_each_cell': False},
+                    'source_commit': 'a' * 40, 'expected_requires_python': '>=3.10'}),
+                patch('validate_python_distribution.runtime_options'),
+                patch('validate_python_distribution.inspect_wheel',
+                      side_effect=lambda wheel, *_: {'sha256': digest(wheel)}))
+
+    def test_aggregate_has_a_valid_six_platform_positive_control(self):
+        from validate_python_distribution import aggregate
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            policy, sdist, source = self._six_platform_aggregate_fixture(root)
+            self.assertEqual(len(json.loads(policy.read_text())['platforms']), 6)
+            self.assertEqual(len(list(root.rglob('build-result.json'))), 6)
+            self.assertEqual(len(list(root.rglob('cell-result.json'))), 30)
+            patches = self._aggregate_source_patches(source)
+            with patches[0], patches[1], patches[2], patches[3]:
+                aggregate(Namespace(policy=policy, evidence=root, sdist=sdist, source_commit='a' * 40))
+
+    def test_aggregate_rejects_build_or_cell_requires_python_disagreement(self):
+        from validate_python_distribution import aggregate
+        for record_name in ('build-result.json', 'cell-result.json'):
+            with self.subTest(record_name=record_name), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                policy, sdist, source = self._six_platform_aggregate_fixture(root)
+                path = next(root.rglob(record_name))
+                record = json.loads(path.read_text())
+                record['expected_requires_python'] = '>=3.11'
+                path.write_text(json.dumps(record))
+                patches = self._aggregate_source_patches(source)
+                with patches[0], patches[1], patches[2], patches[3]:
+                    with self.assertRaisesRegex(DistributionError, 'Requires-Python metadata disagree'):
+                        aggregate(Namespace(policy=policy, evidence=root, sdist=sdist, source_commit='a' * 40))
 
     def test_frozen_inventory_rejects_tampering_missing_lock_and_extra_files(self):
         required = ('Cargo.toml', 'Cargo.lock', '.cargo/config.toml', 'pyproject.toml',

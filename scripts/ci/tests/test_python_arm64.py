@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from python_arm64 import (
     PE_ARM64_MACHINE,
     WINDOWS_ARM64_POLICY,
@@ -16,15 +17,7 @@ from python_arm64 import (
     require_native_windows_arm64,
     rustc_host,
 )
-
-
-def pe(machine: int, offset: int = 0x80) -> bytes:
-    image = bytearray(offset + 8)
-    image[:2] = b'MZ'
-    image[60:64] = offset.to_bytes(4, 'little')
-    image[offset:offset + 4] = b'PE\0\0'
-    image[offset + 4:offset + 6] = machine.to_bytes(2, 'little')
-    return bytes(image)
+from python_test_fixtures import pe
 
 
 class WindowsArm64Tests(unittest.TestCase):
