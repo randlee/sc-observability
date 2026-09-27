@@ -13,28 +13,24 @@ loader.exec_module(report)
 
 
 class SprintReportTests(unittest.TestCase):
-    def test_loads_only_bead_id_schema_and_rejects_legacy_copied_fields(self):
-        index = {'root_bead_id': 'phase-root', 'sprints': [
-            {'dev_bead_id': 'dev-1', 'sanity_bead_id': 'gate-1'}]}
+    def test_loads_compact_canonical_tuples_and_rejects_invalid_rows(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'sprints.json'
-            path.write_text(json.dumps(index))
-            self.assertEqual(report.load_index(Path(directory), path, None)[1], index)
-            path.write_text(json.dumps({**index, 'phase_id': 'copied'}))
-            with self.assertRaisesRegex(RuntimeError, 'only root_bead_id and sprints'):
-                report.load_index(Path(directory), path, None)
-            # declared phase facts (obs-bo-10 D1) are accepted and ignored by the report
-            path.write_text(json.dumps({**index, 'integration_branch': 'integrate/phase-x', 'policy': {'human_gates': []}}))
-            self.assertEqual(report.load_index(Path(directory), path, None)[1]['sprints'], index['sprints'])
-            index['sprints'][0]['title'] = 'copied'
-            path.write_text(json.dumps(index))
-            with self.assertRaisesRegex(RuntimeError, 'only dev_bead_id and sanity_bead_id'):
-                report.load_index(Path(directory), path, None)
-            del index['sprints'][0]['title']
-            index['root_bead_id'] = ''
-            path.write_text(json.dumps(index))
-            with self.assertRaisesRegex(RuntimeError, 'root_bead_id must be a nonempty bead ID'):
-                report.load_index(Path(directory), path, None)
+            repo = Path(directory)
+            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path.parent.mkdir(parents=True)
+            path.write_text('["x-1", "gate-1", []]\n["x-2", "gate-2", ["x-1"]]\n')
+            index = report.load_index(repo, path, 'obs-phase-x')[1]
+            self.assertEqual(index['root_bead_id'], 'obs-phase-x')
+            self.assertEqual(index['sprints'][1], {
+                'dev_bead_id': 'obs-x-2', 'sanity_bead_id': 'gate-2',
+                'depends_on_sanity_bead_ids': ['gate-1'],
+            })
+            path.write_text('["x-1", "gate-1"]\n')
+            with self.assertRaisesRegex(RuntimeError, 'each line must be'):
+                report.load_index(repo, path, 'obs-phase-x')
+            path.write_text('["x-1", "gate-1", ["unknown"]]\n')
+            with self.assertRaisesRegex(RuntimeError, 'unknown sprint'):
+                report.load_index(repo, path, 'obs-phase-x')
 
     def test_membership_index_reads_names_and_order_from_live_beads(self):
         index = {'sprints': [
