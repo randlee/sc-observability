@@ -62,16 +62,15 @@ Read only the one the current job needs.
 | [`resources/dev-sanity.md`](resources/dev-sanity.md) | writing or sending the sanity check assignment (recipient and message) |
 | [`resources/troubleshooting.md`](resources/troubleshooting.md) | a claim, close or assignee looks wrong, or `bd ready` misses assigned work |
 
-Every phase plan must include a committed `docs/plans/phase-<x>/sprints.json`:
-the authored definition of the phase (root ID, one dev/sanity pair per sprint,
-optional phase facts such as `policy.human_gates`). The planner writes it in
-the plan PR; it is never exported from beads. `validate-plan` requires the
-beads under the root to be exactly those pairs and must stay green from plan
-approval to phase end. Sprint content lives only in beads and is not
-duplicated in the file. Bead hierarchy: `resources/planning.md`.
+Every phase plan must include a committed `docs/plans/phase-<x>/sprints.jsonl`.
+Each line is `[sprint_name, sanity_bead_id, depends_on_sprint_names]`; the dev
+bead ID is derived as `obs-<sprint_name>`. The planner writes this compact
+graph authority in the plan PR; it is never exported from mutable Beads state.
+`validate-plan` requires the root's sprint pairs and direct declared
+sprint-to-sanity edges to match it. Bead hierarchy: `resources/planning.md`.
 The initial `docs/plans/phase-<x>/phase-<x>-dag.html` (embedded SVG) must also be
-committed and pushed with the index on the phase integration branch before
-plan review. `sprint-review --root <root>` produces both without a viewer;
+committed and pushed with the plan on the phase integration branch before
+plan review. `sprint-review --root <root>` refreshes the HTML without a viewer;
 `--view` optionally opens Wyvern in the background.
 
 ## Validation

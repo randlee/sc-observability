@@ -99,7 +99,7 @@ class BlockingGateTests(unittest.TestCase):
         finding = bead("f", [gates.FINDING_LABEL], metadata={"severity": "blocking", "sprint_bead": "s"}, dependencies=["open-sanity"])
         self.assertEqual(gates.targets(finding, rows), ("s-sanity", []))
 
-    def test_real_bd_argv_and_retry_are_idempotent(self):
+    def test_cli_is_a_noop_and_never_mutates_beads(self):
         rows = [
             bead("s", [gates.DEV_LABEL]),
             bead("s-sanity", [gates.SANITY_LABEL], metadata={"dev_bead": "s"}, dependencies=["s"]),
@@ -125,24 +125,8 @@ class BlockingGateTests(unittest.TestCase):
                 run = subprocess.run([*command, finding], text=True, capture_output=True, env=env)
                 self.assertEqual(run.returncode, 0, run.stderr)
 
-            self.assertEqual(
-                [json.loads(line) for line in log.read_text().splitlines()],
-                [
-                    ["show", "f", "--json"],
-                    ["list", "--all", "-n", "0", "--json"],
-                    ["create", "--id", "f-sanity", "--type", "task", "--status", "open",
-                     "--title", "sanity gate for f", "--labels", "stage:dev-sanity",
-                     "--metadata", '{"dev_bead": "f"}', "--silent"],
-                    ["update", "f-sanity", "--parent", "s"],
-                    ["dep", "add", "f-sanity", "f", "--type", "blocks"],
-                    ["dep", "add", "child", "f-sanity", "--type", "blocks"],
-                    ["dep", "add", "open", "f-sanity", "--type", "blocks"],
-                    ["show", "f", "--json"],
-                    ["list", "--all", "-n", "0", "--json"],
-                    ["show", "important", "--json"],
-                    ["list", "--all", "-n", "0", "--json"],
-                ],
-            )
+            self.assertEqual(log.read_text(), "")
+            self.assertEqual(json.loads(run.stdout)["edges"], [])
 
 
 if __name__ == "__main__":

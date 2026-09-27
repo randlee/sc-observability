@@ -112,9 +112,8 @@ bd gate create --id phase-d-integration --title 'phase d integration CI'
 bd dep add obs-d-7 phase-d-integration --type blocks
 ```
 
-Human gates require explicit user agreement recorded in the phase
-`sprints.json` as `policy.human_gates[]`; unattended phases must not contain
-an unrecorded human gate.
+Human gates require explicit user agreement recorded on the gate bead or phase
+root; the canonical `sprints.jsonl` contains only planned sprint dependencies.
 
 ### Parallel Quick Fix
 
@@ -171,7 +170,7 @@ No dev bead is dispatched until the plan passes review.
 2. Generate and publish the initial phase diagram before review:
    `.claude/skills/sprint-review/scripts/sprint-review --root <root>`.
    The phase integration branch must contain the committed/pushed
-   `docs/plans/phase-<x>/sprints.json` bead-ID index and
+   `docs/plans/phase-<x>/sprints.jsonl` canonical dependency tuples and
    `docs/plans/phase-<x>/phase-<x>-dag.html` with embedded SVG. Do not open the
    diagram unless `--view` was requested and Wyvern is available.
    Then run `.claude/skills/atm-beads/scripts/validate-plan --root <root>`

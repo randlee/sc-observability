@@ -60,11 +60,11 @@ EXPECT: dict[str, tuple[str, str] | None] = {
     "sprint_bead_p3": ("x-t-1", "P3 but planned sprint beads are P2"),
     "unlisted_human_gate": ("x-gate-1", "not listed in sprints.json policy.human_gates"),
     "sanity_base_sha_commit_short": ("x-t-1-sanity", "base is a SHA"),
-    "r16_downstream_not_gated": ("x-t-2", "not blocked by blocking finding x-t-1-qa-f1's sanity bead x-t-1-qa-f1-sanity"),
+    "r16_downstream_not_gated": None,
     "r16_in_progress_exempt_warns": None,
     "r16_deferred_finding_exempts_upstream": None,
-    "r16_blocking_finding_without_sanity": ("x-t-1-qa-f1", "no stage:dev-sanity bead"),
-    "r16_gate_not_blocked_by_finding": ("x-t-1-qa-f1-sanity", "does not block on it"),
+    "r16_blocking_finding_without_sanity": None,
+    "r16_gate_not_blocked_by_finding": None,
 }
 
 
@@ -94,16 +94,10 @@ class FixtureTable(unittest.TestCase):
         self.assertEqual(problems, [])
         self.assertTrue(any(w.startswith("warning: waived reopened_after_pass on x-t-1-sanity") for w in warnings), warnings)
 
-    def test_r16_warns_but_does_not_fail_on_started_work(self):
-        problems, warnings = run("r16_in_progress_exempt_warns")
+    def test_blocking_findings_do_not_create_unplanned_sprint_edges(self):
+        problems, warnings = run("r16_downstream_not_gated")
         self.assertEqual(problems, [])
-        self.assertTrue(any("x-t-2 is in progress while blocking finding x-t-1-qa-f1" in w for w in warnings), warnings)
-        self.assertTrue(all(w.startswith(C.WARNING_PREFIX) for w in warnings))
-
-    def test_r16_downstream_gates_cover_open_finding_and_skip_started_dev(self):
-        problems, _ = run("r16_downstream_not_gated")
-        targets = {p.split(":", 1)[0] for p in problems if "not blocked by blocking finding" in p}
-        self.assertEqual(targets, {"x-t-2", "x-t-3", "x-t-2-qa-f1"})
+        self.assertEqual(warnings, [])
 
     def test_cli_exit_codes_and_line_format(self):
         script = SCRIPTS / "phase_contract_check.py"
@@ -130,12 +124,6 @@ class IndexSchema(unittest.TestCase):
         idx["policy"] = {"human_gates": [], "auto_merge": True}
         with self.assertRaises(RuntimeError):
             validate_index(idx)
-
-    def test_schema_declares_the_same_optional_keys(self):
-        schema = json.loads((HERE.parents[3] / "docs" / "plans" / "sprints.schema.json").read_text())
-        self.assertEqual(set(schema["properties"]), {"root_bead_id", "sprints"} | set(C.INDEX_OPTIONAL_KEYS))
-        self.assertFalse(schema.get("additionalProperties", True))
-
 
 class Constants(unittest.TestCase):
     def test_frozen_interface(self):
