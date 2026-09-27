@@ -229,15 +229,16 @@ def inspect_wheel(wheel: Path, policy: dict, version: str, expected_requires_pyt
 
 def actual_cell(policy: dict) -> dict:
     python = f'{sys.version_info.major}.{sys.version_info.minor}'
-    if python not in policy['interpreters'] or platform.python_implementation() != 'CPython':
-        raise DistributionError('unsupported interpreter')
-    if sysconfig.get_config_var('Py_GIL_DISABLED'):
-        raise DistributionError('free-threaded Python is outside qualification')
     system, machine = platform.system(), platform.machine()
     platform_id = ({'Darwin': 'macos', 'Linux': 'linux', 'Windows': 'windows'}[system]
                    + '-' + {'AMD64': 'x86_64', 'ARM64': 'arm64'}.get(machine, machine))
     matches = [p for p in policy['platforms'] if p['id'] == platform_id]
     if len(matches) != 1:
         raise DistributionError(f'unsupported execution platform: {system}/{machine}')
+    interpreters = matches[0].get('interpreters', policy['interpreters'])
+    if python not in interpreters or platform.python_implementation() != 'CPython':
+        raise DistributionError('unsupported interpreter')
+    if sysconfig.get_config_var('Py_GIL_DISABLED'):
+        raise DistributionError('free-threaded Python is outside qualification')
     return {'python': python, 'python_full': sys.version, 'platform': platform_id,
             'platform_full': platform.platform(), 'machine': machine, 'gil_enabled': True}

@@ -4,6 +4,7 @@ import json
 import sys
 import tarfile
 import tempfile
+from types import SimpleNamespace
 import unittest
 import zipfile
 from argparse import Namespace
@@ -12,12 +13,29 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _python_distribution import (DistributionError, extract_sdist, inspect_wheel, digest,
+from _python_distribution import (DistributionError, actual_cell, extract_sdist, inspect_wheel, digest,
                                   source_python_contract, validate_requires_python, verify_source)
 from python_test_fixtures import pe
 
 
 class DistributionTests(unittest.TestCase):
+    def test_actual_cell_rejects_interpreter_outside_matched_platform_policy(self):
+        policy = {
+            'interpreters': ['3.10', '3.11', '3.12', '3.13', '3.14'],
+            'platforms': [{
+                'id': 'windows-arm64',
+                'interpreters': ['3.11', '3.12', '3.13', '3.14'],
+            }],
+        }
+        with patch('_python_distribution.platform.system', return_value='Windows'), \
+                patch('_python_distribution.platform.machine', return_value='ARM64'), \
+                patch('_python_distribution.platform.python_implementation', return_value='CPython'), \
+                patch('_python_distribution.platform.platform', return_value='Windows-ARM64'), \
+                patch('_python_distribution.sys.version_info', SimpleNamespace(major=3, minor=10)), \
+                patch('_python_distribution.sysconfig.get_config_var', return_value=None), \
+                self.assertRaisesRegex(DistributionError, 'unsupported interpreter'):
+            actual_cell(policy)
+
     def test_timeout_kills_descendants_that_hold_output_pipes(self):
         import os
         import time
