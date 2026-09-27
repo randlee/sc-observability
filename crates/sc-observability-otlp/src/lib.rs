@@ -57,8 +57,8 @@ pub use assembly::{CompleteSpan, SpanAssembler};
 #[doc(inline)]
 pub use config::{
     AuthHeader, ExporterBackend, LegacyRetryPolicy, LogsConfig, MetricsConfig, OtelConfig,
-    OtlpConfigField, OtlpConfigTarget, OtlpEndpoint, OtlpProtocol, ResolvedField,
-    ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder, TracesConfig, ValueOrigin,
+    OtlpEndpoint, OtlpProtocol, ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder,
+    TracesConfig,
 };
 #[doc(inline)]
 pub use projectors::TelemetryProjectors;
@@ -261,7 +261,14 @@ fn sdk_exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet
                             ["enable the otlp-sdk feature", "enter a Tokio runtime first"],
                         ),
                     )
-                    .detail("backend", Value::String("OpenTelemetrySdk".to_owned()))
+                    .detail(
+                        "backend",
+                        Value::String(
+                            config::ExporterBackend::OpenTelemetrySdk
+                                .stable_name()
+                                .to_owned(),
+                        ),
+                    )
                     .detail("feature", Value::String("otlp-sdk".to_owned()))
                     .detail("runtime", Value::String("caller-tokio".to_owned())),
                 ),
@@ -325,8 +332,8 @@ fn unsupported_protocol(
                     ["select a documented backend/protocol combination"],
                 ),
             )
-            .detail("backend", Value::String(format!("{backend:?}")))
-            .detail("protocol", Value::String(format!("{protocol:?}")))
+            .detail("backend", Value::String(backend.stable_name().to_owned()))
+            .detail("protocol", Value::String(protocol.stable_name().to_owned()))
             .detail(
                 "supported_protocols",
                 Value::String(supported_protocols.to_owned()),
@@ -350,7 +357,7 @@ fn unsupported_backend(
                     ["enable the named feature", "disable telemetry"],
                 ),
             )
-            .detail("backend", Value::String(format!("{backend:?}")))
+            .detail("backend", Value::String(backend.stable_name().to_owned()))
             .detail("feature", Value::String(feature.to_owned()))
             .detail("availability", Value::String(availability.to_owned())),
         ),
@@ -1180,7 +1187,7 @@ mod tests {
             );
             assert_eq!(
                 factory_error.diagnostic().details["backend"].as_str(),
-                Some("OpenTelemetrySdk")
+                Some("opentelemetry_sdk")
             );
             assert_eq!(
                 factory_error.diagnostic().details["feature"].as_str(),
@@ -1233,7 +1240,7 @@ mod tests {
         );
         assert_eq!(
             protocol_error.diagnostic().details["backend"].as_str(),
-            Some("LegacyHttpJson")
+            Some("legacy_http_json")
         );
 
         let config = legacy_telemetry_config(OtlpProtocol::HttpJson);
@@ -1266,7 +1273,7 @@ mod tests {
         assert!(matches!(error, ConfigFailure::UnsupportedProtocol { .. }));
         assert_eq!(
             error.diagnostic().details["backend"].as_str(),
-            Some("OpenTelemetrySdk")
+            Some("opentelemetry_sdk")
         );
         assert_eq!(
             error.diagnostic().details["supported_protocols"].as_str(),

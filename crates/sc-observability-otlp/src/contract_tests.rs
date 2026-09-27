@@ -41,28 +41,28 @@ fn contract_tests_validation_order() {
 fn contract_tests_every_legacy_duration_precedes_later_validation_bullets() {
     let cases = [
         (
-            "InitialBackoff",
+            "legacy_retry.initial_backoff_ms",
             LegacyRetryPolicy {
                 initial_backoff_ms: Some(0_u64.into()),
                 ..LegacyRetryPolicy::default()
             },
         ),
         (
-            "MaxBackoff",
+            "legacy_retry.max_backoff_ms",
             LegacyRetryPolicy {
                 max_backoff_ms: Some(0_u64.into()),
                 ..LegacyRetryPolicy::default()
             },
         ),
         (
-            "RetrySequenceTimeout",
+            "legacy_retry.retry_sequence_timeout_ms",
             LegacyRetryPolicy {
                 retry_sequence_timeout_ms: Some(0_u64.into()),
                 ..LegacyRetryPolicy::default()
             },
         ),
         (
-            "RetryAfterCap",
+            "legacy_retry.retry_after_cap_ms",
             LegacyRetryPolicy {
                 retry_after_cap_ms: Some(0_u64.into()),
                 ..LegacyRetryPolicy::default()
@@ -125,7 +125,7 @@ fn contract_tests_retained_legacy_duration_precedes_capacity() {
     assert!(matches!(error, ConfigFailure::ZeroDuration { .. }));
     assert_eq!(
         error.diagnostic().details["field"].as_str(),
-        Some("InitialBackoff")
+        Some("legacy_retry.initial_backoff_ms")
     );
 }
 
@@ -161,7 +161,7 @@ fn contract_tests_timeout_origin_tracks_default_and_explicit_values() {
     ));
     assert_eq!(
         default_timeout.diagnostic().details.get("origin"),
-        Some(&serde_json::Value::String("Default".to_owned()))
+        Some(&serde_json::Value::String("default".to_owned()))
     );
 
     let explicit_timeout = validated_transport_bounds(&OtelConfig {
@@ -176,7 +176,7 @@ fn contract_tests_timeout_origin_tracks_default_and_explicit_values() {
     ));
     assert_eq!(
         explicit_timeout.diagnostic().details.get("origin"),
-        Some(&serde_json::Value::String("Explicit".to_owned()))
+        Some(&serde_json::Value::String("explicit".to_owned()))
     );
 
     let explicit_default_timeout = validated_transport_bounds(&OtelConfig {
@@ -191,7 +191,7 @@ fn contract_tests_timeout_origin_tracks_default_and_explicit_values() {
     ));
     assert_eq!(
         explicit_default_timeout.diagnostic().details.get("origin"),
-        Some(&serde_json::Value::String("Explicit".to_owned()))
+        Some(&serde_json::Value::String("explicit".to_owned()))
     );
 }
 
@@ -249,14 +249,14 @@ fn contract_tests_sdk_reports_max_retries_as_the_first_supplied_legacy_field() {
             max_retries: Some(constants::DEFAULT_OTLP_MAX_RETRIES),
             ..sdk_config()
         },
-        "MaxRetries",
+        "legacy_retry.max_retries",
     );
     assert_sdk_not_applicable_field(
         &OtelConfig {
             max_retries: Some(constants::DEFAULT_OTLP_MAX_RETRIES + 1),
             ..sdk_config()
         },
-        "MaxRetries",
+        "legacy_retry.max_retries",
     );
     assert_sdk_not_applicable_field(
         &OtelConfig {
@@ -266,7 +266,7 @@ fn contract_tests_sdk_reports_max_retries_as_the_first_supplied_legacy_field() {
             }),
             ..sdk_config()
         },
-        "MaxRetries",
+        "legacy_retry.max_retries",
     );
 }
 
@@ -278,14 +278,14 @@ fn contract_tests_sdk_reports_initial_backoff_as_the_first_supplied_legacy_field
             initial_backoff_ms: Some(constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS.into()),
             ..sdk_config()
         },
-        "InitialBackoff",
+        "legacy_retry.initial_backoff_ms",
     );
     assert_sdk_not_applicable_field(
         &OtelConfig {
             initial_backoff_ms: Some((constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS + 1).into()),
             ..sdk_config()
         },
-        "InitialBackoff",
+        "legacy_retry.initial_backoff_ms",
     );
     assert_sdk_not_applicable_field(
         &OtelConfig {
@@ -295,7 +295,7 @@ fn contract_tests_sdk_reports_initial_backoff_as_the_first_supplied_legacy_field
             }),
             ..sdk_config()
         },
-        "InitialBackoff",
+        "legacy_retry.initial_backoff_ms",
     );
 }
 
@@ -307,14 +307,14 @@ fn contract_tests_sdk_reports_max_backoff_as_the_first_supplied_legacy_field() {
             max_backoff_ms: Some(constants::DEFAULT_OTLP_MAX_BACKOFF_MS.into()),
             ..sdk_config()
         },
-        "MaxBackoff",
+        "legacy_retry.max_backoff_ms",
     );
     assert_sdk_not_applicable_field(
         &OtelConfig {
             max_backoff_ms: Some((constants::DEFAULT_OTLP_MAX_BACKOFF_MS + 1).into()),
             ..sdk_config()
         },
-        "MaxBackoff",
+        "legacy_retry.max_backoff_ms",
     );
     assert_sdk_not_applicable_field(
         &OtelConfig {
@@ -324,7 +324,7 @@ fn contract_tests_sdk_reports_max_backoff_as_the_first_supplied_legacy_field() {
             }),
             ..sdk_config()
         },
-        "MaxBackoff",
+        "legacy_retry.max_backoff_ms",
     );
 }
 
@@ -342,11 +342,11 @@ fn contract_tests_disabled_rejects_explicit_default_retained_field() {
     ));
     assert_eq!(
         error.diagnostic().details["field"].as_str(),
-        Some("MaxRetries")
+        Some("legacy_retry.max_retries")
     );
     assert_eq!(
         error.diagnostic().details["target"].as_str(),
-        Some("Disabled")
+        Some("disabled")
     );
 }
 
@@ -360,7 +360,7 @@ fn contract_tests_sdk_reports_retry_jitter_as_the_first_supplied_legacy_field() 
             }),
             ..sdk_config()
         },
-        "RetryJitterPercent",
+        "legacy_retry.retry_jitter_percent",
     );
 }
 
@@ -378,7 +378,7 @@ fn contract_tests_sdk_reports_retry_sequence_timeout_before_later_wire_fields() 
             }),
             ..sdk_config()
         },
-        "RetrySequenceTimeout",
+        "legacy_retry.retry_sequence_timeout_ms",
     );
 }
 
@@ -474,6 +474,18 @@ fn contract_tests_remaining_validation_variants_and_bullet_order() {
         insecure,
         ConfigFailure::InsecureTransportRejected { .. }
     ));
+    assert_eq!(
+        insecure.diagnostic().details["field"].as_str(),
+        Some("insecure_skip_verify")
+    );
+    assert_eq!(
+        insecure.diagnostic().details["origin"].as_str(),
+        Some("explicit")
+    );
+    assert_eq!(
+        insecure.diagnostic().details["backend"].as_str(),
+        Some("legacy_http_json")
+    );
 
     let shutdown_before_retry_bound = validated_transport_bounds(&OtelConfig {
         lifecycle_shutdown_timeout_ms: Some(2_999_u64.into()),
@@ -490,7 +502,7 @@ fn contract_tests_remaining_validation_variants_and_bullet_order() {
     ));
     assert_eq!(
         shutdown_before_retry_bound.diagnostic().details["field"].as_str(),
-        Some("Timeout")
+        Some("timeout_ms")
     );
 
     let retry_after_cap = validated_transport_bounds(&OtelConfig {
@@ -508,7 +520,7 @@ fn contract_tests_remaining_validation_variants_and_bullet_order() {
     ));
     assert_eq!(
         retry_after_cap.diagnostic().details["field"].as_str(),
-        Some("RetryAfterCap")
+        Some("legacy_retry.retry_after_cap_ms")
     );
 }
 

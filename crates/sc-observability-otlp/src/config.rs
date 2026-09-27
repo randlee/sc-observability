@@ -42,6 +42,16 @@ pub enum OtlpProtocol {
     Grpc,
 }
 
+impl OtlpProtocol {
+    pub(crate) const fn stable_name(self) -> &'static str {
+        match self {
+            Self::HttpBinary => "http_binary",
+            Self::HttpJson => "http_json",
+            Self::Grpc => "grpc",
+        }
+    }
+}
+
 /// Backend selected for an enabled OTLP transport.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,10 +62,19 @@ pub enum ExporterBackend {
     LegacyHttpJson,
 }
 
+impl ExporterBackend {
+    pub(crate) const fn stable_name(self) -> &'static str {
+        match self {
+            Self::OpenTelemetrySdk => "opentelemetry_sdk",
+            Self::LegacyHttpJson => "legacy_http_json",
+        }
+    }
+}
+
 /// A named transport field used in deterministic validation diagnostics.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OtlpConfigField {
+pub(crate) enum OtlpConfigField {
     /// OTLP collector endpoint.
     Endpoint,
     /// Authorization or credential header.
@@ -82,38 +101,79 @@ pub enum OtlpConfigField {
     RetryAfterCap,
     /// Legacy jitter percentage.
     RetryJitterPercent,
+    /// TLS certificate-verification override.
+    InsecureSkipVerify,
+}
+
+impl OtlpConfigField {
+    const fn stable_name(self) -> &'static str {
+        match self {
+            Self::Endpoint => "endpoint",
+            Self::Header => "auth_header",
+            Self::Timeout => "timeout_ms",
+            Self::LifecycleFlushTimeout => "lifecycle_flush_timeout_ms",
+            Self::LifecycleShutdownTimeout => "lifecycle_shutdown_timeout_ms",
+            Self::QueueCapacity => "queue_capacity",
+            Self::QueueByteCapacity => "queue_byte_capacity",
+            Self::MaxRetries => "legacy_retry.max_retries",
+            Self::InitialBackoff => "legacy_retry.initial_backoff_ms",
+            Self::MaxBackoff => "legacy_retry.max_backoff_ms",
+            Self::RetrySequenceTimeout => "legacy_retry.retry_sequence_timeout_ms",
+            Self::RetryAfterCap => "legacy_retry.retry_after_cap_ms",
+            Self::RetryJitterPercent => "legacy_retry.retry_jitter_percent",
+            Self::InsecureSkipVerify => "insecure_skip_verify",
+        }
+    }
 }
 
 /// Whether a resolved transport value came from the caller or the contract default.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ValueOrigin {
+pub(crate) enum ValueOrigin {
     /// Contract default.
     Default,
     /// Caller-supplied value.
     Explicit,
 }
 
+impl ValueOrigin {
+    const fn stable_name(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Explicit => "explicit",
+        }
+    }
+}
+
 /// A resolved transport value with its stable field identity and source.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResolvedField<T> {
+pub(crate) struct ResolvedField<T> {
     /// Field represented by this value.
-    pub field: OtlpConfigField,
+    pub(crate) field: OtlpConfigField,
     /// Resolved value.
-    pub value: T,
+    pub(crate) value: T,
     /// Whether the value was explicit or defaulted.
-    pub origin: ValueOrigin,
+    pub(crate) origin: ValueOrigin,
 }
 
 /// The target at which an inapplicable field was rejected.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OtlpConfigTarget {
+pub(crate) enum OtlpConfigTarget {
     /// Transport is disabled and no backend is constructed.
     Disabled,
     /// A specific enabled backend was selected.
     Backend(ExporterBackend),
+}
+
+impl OtlpConfigTarget {
+    fn stable_name(self) -> String {
+        match self {
+            Self::Disabled => "disabled".to_owned(),
+            Self::Backend(backend) => format!("backend:{}", backend.stable_name()),
+        }
+    }
 }
 
 /// Legacy-only retry wire settings.
@@ -799,13 +859,7 @@ pub(crate) fn validated_transport_bounds(
     };
 
     if config.insecure_skip_verify && config.enabled {
-        return Err(config_failure(
-            ConfigFailureKind::InsecureTransportRejected,
-            otlp_error_codes::OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED,
-            "the selected backend does not support insecure certificate verification",
-            OtlpConfigField::Endpoint,
-            ValueOrigin::Explicit,
-        ));
+        return Err(insecure_transport_rejected(config.backend));
     }
 
     Ok(ValidatedTransportBounds {
@@ -1022,7 +1076,6 @@ enum ConfigFailureKind {
     InvalidJitterPercent,
     InvalidQueueCapacity,
     InvalidQueueByteCapacity,
-    InsecureTransportRejected,
 }
 
 fn invalid_bound(lower: &ResolvedField<u64>, upper: &ResolvedField<u64>) -> ConfigFailure {
@@ -1038,22 +1091,19 @@ fn invalid_bound(lower: &ResolvedField<u64>, upper: &ResolvedField<u64>) -> Conf
                     ["use documented defaults"],
                 ),
             )
-            .detail(
-                "field",
-                Value::String(format!("{field:?}", field = lower.field)),
-            )
+            .detail("field", Value::String(lower.field.stable_name().to_owned()))
             .detail(
                 "origin",
-                Value::String(format!("{origin:?}", origin = lower.origin)),
+                Value::String(lower.origin.stable_name().to_owned()),
             )
             .detail("lower_value", Value::from(lower.value))
             .detail(
                 "upper_field",
-                Value::String(format!("{field:?}", field = upper.field)),
+                Value::String(upper.field.stable_name().to_owned()),
             )
             .detail(
                 "upper_origin",
-                Value::String(format!("{origin:?}", origin = upper.origin)),
+                Value::String(upper.origin.stable_name().to_owned()),
             )
             .detail("upper_value", Value::from(upper.value)),
         ),
@@ -1071,9 +1121,12 @@ fn not_applicable(field: OtlpConfigField, target: OtlpConfigTarget) -> ConfigFai
                     ["use documented defaults"],
                 ),
             )
-            .detail("field", Value::String(format!("{field:?}")))
-            .detail("origin", Value::String("Explicit".to_owned()))
-            .detail("target", Value::String(format!("{target:?}"))),
+            .detail("field", Value::String(field.stable_name().to_owned()))
+            .detail(
+                "origin",
+                Value::String(ValueOrigin::Explicit.stable_name().to_owned()),
+            )
+            .detail("target", Value::String(target.stable_name())),
         ),
     }
 }
@@ -1094,8 +1147,8 @@ fn config_failure(
                 ["use documented defaults"],
             ),
         )
-        .detail("field", Value::String(format!("{field:?}")))
-        .detail("origin", Value::String(format!("{origin:?}"))),
+        .detail("field", Value::String(field.stable_name().to_owned()))
+        .detail("origin", Value::String(origin.stable_name().to_owned())),
     );
     match kind {
         ConfigFailureKind::ZeroDuration => ConfigFailure::ZeroDuration { context },
@@ -1105,9 +1158,30 @@ fn config_failure(
         ConfigFailureKind::InvalidQueueByteCapacity => {
             ConfigFailure::InvalidQueueByteCapacity { context }
         }
-        ConfigFailureKind::InsecureTransportRejected => {
-            ConfigFailure::InsecureTransportRejected { context }
-        }
+    }
+}
+
+fn insecure_transport_rejected(backend: ExporterBackend) -> ConfigFailure {
+    ConfigFailure::InsecureTransportRejected {
+        context: Box::new(
+            ErrorContext::new(
+                otlp_error_codes::OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED,
+                "the selected backend does not support insecure certificate verification",
+                Remediation::recoverable(
+                    "leave certificate verification enabled",
+                    ["use the documented TLS configuration"],
+                ),
+            )
+            .detail(
+                "field",
+                Value::String(OtlpConfigField::InsecureSkipVerify.stable_name().to_owned()),
+            )
+            .detail(
+                "origin",
+                Value::String(ValueOrigin::Explicit.stable_name().to_owned()),
+            )
+            .detail("backend", Value::String(backend.stable_name().to_owned())),
+        ),
     }
 }
 
@@ -1160,21 +1234,47 @@ fn is_valid_http_endpoint(value: &str) -> bool {
 
 fn invalid_endpoint(message: &str, remediation: &str) -> ConfigFailure {
     ConfigFailure::InvalidEndpoint {
-        context: Box::new(ErrorContext::new(
-            otlp_error_codes::OTLP_CONFIG_INVALID_ENDPOINT,
-            message,
-            Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
-        )),
+        context: Box::new(
+            ErrorContext::new(
+                otlp_error_codes::OTLP_CONFIG_INVALID_ENDPOINT,
+                message,
+                Remediation::recoverable(
+                    remediation,
+                    ["use the documented OTLP transport defaults"],
+                ),
+            )
+            .detail(
+                "field",
+                Value::String(OtlpConfigField::Endpoint.stable_name().to_owned()),
+            )
+            .detail(
+                "origin",
+                Value::String(ValueOrigin::Explicit.stable_name().to_owned()),
+            ),
+        ),
     }
 }
 
 fn invalid_header(message: &str, remediation: &str) -> ConfigFailure {
     ConfigFailure::InvalidHeader {
-        context: Box::new(ErrorContext::new(
-            otlp_error_codes::OTLP_CONFIG_INVALID_HEADER,
-            message,
-            Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
-        )),
+        context: Box::new(
+            ErrorContext::new(
+                otlp_error_codes::OTLP_CONFIG_INVALID_HEADER,
+                message,
+                Remediation::recoverable(
+                    remediation,
+                    ["use the documented OTLP transport defaults"],
+                ),
+            )
+            .detail(
+                "field",
+                Value::String(OtlpConfigField::Header.stable_name().to_owned()),
+            )
+            .detail(
+                "origin",
+                Value::String(ValueOrigin::Explicit.stable_name().to_owned()),
+            ),
+        ),
     }
 }
 
@@ -1261,6 +1361,29 @@ mod tests {
                 otlp_error_codes::OTLP_CONFIG_INVALID_ENDPOINT
             );
         }
+    }
+
+    #[test]
+    fn endpoint_and_header_diagnostics_name_explicit_stable_fields() {
+        let endpoint = OtlpEndpoint::new_typed("not-a-url").expect_err("invalid endpoint");
+        assert_eq!(
+            endpoint.diagnostic().details["field"].as_str(),
+            Some("endpoint")
+        );
+        assert_eq!(
+            endpoint.diagnostic().details["origin"].as_str(),
+            Some("explicit")
+        );
+
+        let header = AuthHeader::new_typed(" ").expect_err("invalid header");
+        assert_eq!(
+            header.diagnostic().details["field"].as_str(),
+            Some("auth_header")
+        );
+        assert_eq!(
+            header.diagnostic().details["origin"].as_str(),
+            Some("explicit")
+        );
     }
 
     #[test]
