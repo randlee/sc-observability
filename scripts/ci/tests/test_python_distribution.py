@@ -36,6 +36,21 @@ class DistributionTests(unittest.TestCase):
                 self.assertRaisesRegex(DistributionError, 'unsupported interpreter'):
             actual_cell(policy)
 
+    def test_actual_cell_falls_back_to_global_policy_without_platform_override(self):
+        policy = {
+            'interpreters': ['3.10'],
+            'platforms': [{'id': 'windows-arm64'}],
+        }
+        with patch('_python_distribution.platform.system', return_value='Windows'), \
+                patch('_python_distribution.platform.machine', return_value='ARM64'), \
+                patch('_python_distribution.platform.python_implementation', return_value='CPython'), \
+                patch('_python_distribution.platform.platform', return_value='Windows-ARM64'), \
+                patch('_python_distribution.sys.version_info', SimpleNamespace(major=3, minor=10)), \
+                patch('_python_distribution.sysconfig.get_config_var', return_value=None):
+            actual = actual_cell(policy)
+        self.assertEqual(actual['platform'], 'windows-arm64')
+        self.assertEqual(actual['python'], '3.10')
+
     def test_timeout_kills_descendants_that_hold_output_pipes(self):
         import os
         import time
