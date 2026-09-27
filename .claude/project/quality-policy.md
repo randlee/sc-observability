@@ -98,8 +98,7 @@ it in the foreground.
   repository-root discovery health only. The smoke check requires successful
   JSON execution and rejects `CLI.CONFIG_ERROR`; it is not wired as a
   merge-blocking gate on boundary-rule violations or on the schema and owner
-  layout of `boundaries/<crate>/*.toml`. The manifest index is
-  `boundaries/planning.toml`.
+  layout of `boundaries/<crate>/*.toml`.
 - Cargo dependency allow-lists: `scripts/ci/validate_repo_boundaries.sh`, run
   by `just lint`, and `scripts/ci/validate_dependency_bans.sh` enforce the
   approved crate edges through hardcoded allow-lists; they do not read the
