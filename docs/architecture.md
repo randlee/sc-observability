@@ -1,7 +1,7 @@
 # SC-Observability Architecture
 
-**Status**: Approved baseline; ADR-011–ADR-015 proposed for Phase B review;
-ADR-016 proposed for Phase C review
+**Status**: Approved baseline; ADR-011–ADR-016 Accepted; ADR-017–ADR-019
+Accepted for Phase D
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Related documents**:
 - [`requirements.md`](./requirements.md)
@@ -975,6 +975,17 @@ ADR navigation index (status is recorded in each decision below):
   EmitOutcome is an alias of core AdmissionOutcome, not a duplicate enum.
 - **Contracts**: PHB-001/002/014; [target API](plans/phase-b/target-bridge-api.md).
 
+**Amendment (2026-09-26, CI retirement)**: The pre-copy contract is historical
+acceptance evidence, not a permanent byte-identity restriction. The exact-blob
+rule prevented the sc-obs team from redesigning a crate already working and
+in use by BTIT. BTIT is moving to the new libraries, and the sc-obs team now
+owns the shared API, so that check is outdated. The crates are
+published and maintained here; reviewed Phase D changes intentionally evolve
+them. Retire the BTIT import/snapshot comparison jobs and adaptation records.
+Cargo compilation, behavioral tests, package verification and the existing
+single generated-binding input/output content-hash check remain the gates.
+No Git revision or historical blob pin is required for generated bindings.
+
 ### ADR-012: Additive Typed Errors And Warning-Only Migration
 
 - **Status**: Accepted 2026-09-26 by the technical lead (retroactive; implemented in Phase B; this PR is the acceptance record). Superseded in part by ADR-017 (2026-09-26) for the reviewed 2.0 breaks listed in `release/public-api-major-breaks.toml`; the 1.x additive decision recorded here is unchanged.
@@ -1018,6 +1029,12 @@ ADR navigation index (status is recorded in each decision below):
   feature graphs retain required sites; runtime changes cannot undo compile-time
   filtering. #96 is not a dependency; no timer/lease stack is introduced.
 - **Contracts**: PHB-007–009; [runtime contract](plans/phase-b/runtime-level-contract.md).
+
+**Amendment (2026-09-26, release preflight)**: ADR-013’s original B.P2
+qualification obligation was satisfied by the 1.4.x release, now in use by BTIT;
+B.2/B.P2 qualification remains available as publisher-run, on-demand release
+preflight before publishing, not as a sprint or integration PR gate, as recorded
+in [the CI policy](ci-policy.md).
 
 ### ADR-014: Result-Preserving Language Boundaries
 
@@ -1215,9 +1232,16 @@ ADR navigation index (status is recorded in each decision below):
   artifacts have producer/consumer handoffs, and backend implementations use
   the common lifecycle. No new boundary-rule framework is authorized. Cargo
   dependency graphs and Rust privacy enforce structural restrictions; existing
-  validators retain source/provenance checks they alone can enforce.
+  validators check generated-binding input/output hashes, package integrity
+  and dependency boundaries.
 - **Contracts**: PHD-001–004, PHB-002/010/013, LOG-004/009/042/046,
   OTLP-011/021/023, SRC-001–004; obs-d-12/13/17/8.
+
+**Amendment (2026-09-26, CI retirement)**: The CI trim in
+[PR #239](https://github.com/randlee/sc-observability/pull/239) retired the
+historical import-provenance and generated-binding source-revision validators
+as recorded in [the CI policy](ci-policy.md). ADR-019’s Consequences sentence
+was reworded accordingly to describe the remaining validation.
 
 ## 8. API-Design Consistency
 
