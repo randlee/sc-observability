@@ -27,6 +27,7 @@ use crate::maintenance::{
     BlockingEnqueueError, DiagnosticAdmitter, TryEnqueueError, WriterHealthSnapshot, WriterRuntime,
 };
 use crate::redact::{redact_bearer_token_text, redact_string_value};
+use crate::settings::{LOG_ENV_NAMESPACE_SUFFIX, SHARED_ENV_PREFIX};
 use crate::sinks::JsonlFileSink;
 use crate::{
     EnvSnapshot, LevelOwner, LogError, LogEvent, LogFailure, LogRoot, LogSettings,
@@ -46,7 +47,7 @@ impl LogSettings {
     pub fn from_env(snapshot: &EnvSnapshot, prefix: EnvPrefix) -> Result<Self, LogSettingsError> {
         let prefix_name = prefix.as_str().to_owned();
         drop(prefix);
-        let namespace = format!("{prefix_name}_LOG_");
+        let namespace = format!("{prefix_name}{LOG_ENV_NAMESPACE_SUFFIX}");
         let folded_namespace = namespace.to_ascii_uppercase();
         let mut seen = BTreeSet::new();
         let mut settings = Self::default();
@@ -145,7 +146,7 @@ impl LogSettings {
         snapshot: &EnvSnapshot,
         prefix: EnvPrefix,
     ) -> Result<Self, LogSettingsError> {
-        if prefix.as_str() == "SC" {
+        if prefix.as_str() == SHARED_ENV_PREFIX {
             return Err(LogSettingsError::prefix_collision(&prefix));
         }
         Self::from_env(snapshot, prefix)

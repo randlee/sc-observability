@@ -4,7 +4,7 @@ use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 
 use sc_observability::{
-    EnvSnapshot, LogSettings, LogSettingsError, LogSettingsInputs, RetainedLogPolicy,
+    EnvSnapshot, LogSettings, LogSettingsError, LogSettingsInputs, RetainedLogPolicy, error_codes,
 };
 use sc_observability_types::{EnvPrefix, LevelFilter, ServiceName};
 
@@ -93,19 +93,19 @@ fn rejects_empty_unknown_case_and_prefix_collision() {
         EnvPrefix::new("SC").unwrap(),
     )
     .unwrap_err();
-    assert_eq!(empty.code().as_str(), "SC_LOG_SETTINGS_INVALID_VALUE");
+    assert_eq!(empty.code(), error_codes::LOG_INVALID_VALUE);
     let unknown = LogSettings::from_env(
         &snapshot(&[("SC_LOG_UNKNOWN", "x")]),
         EnvPrefix::new("SC").unwrap(),
     )
     .unwrap_err();
-    assert_eq!(unknown.code().as_str(), "SC_LOG_SETTINGS_UNKNOWN_KEY");
+    assert_eq!(unknown.code(), error_codes::LOG_UNKNOWN_KEY);
     let case = LogSettings::from_env(
         &snapshot(&[("sc_log_level", "Info")]),
         EnvPrefix::new("SC").unwrap(),
     )
     .unwrap_err();
-    assert_eq!(case.code().as_str(), "SC_LOG_SETTINGS_INVALID_ENVIRONMENT");
+    assert_eq!(case.code(), error_codes::LOG_INVALID_ENVIRONMENT);
     let collision =
         LogSettings::from_application_env(&snapshot(&[]), EnvPrefix::new("SC").unwrap())
             .unwrap_err();
@@ -113,6 +113,15 @@ fn rejects_empty_unknown_case_and_prefix_collision() {
         collision,
         LogSettingsError::PrefixCollision { .. }
     ));
+    assert_eq!(collision.code(), error_codes::LOG_PREFIX_COLLISION);
+
+    for error in [&empty, &unknown, &case, &collision] {
+        assert!(
+            error_codes::ALL.contains(&error.code()),
+            "emitted code {} must be registered",
+            error.code(),
+        );
+    }
 }
 
 #[cfg(unix)]
@@ -124,7 +133,7 @@ fn rejects_non_utf8_key_in_selected_namespace() {
     )]);
 
     let error = LogSettings::from_env(&snapshot, EnvPrefix::new("SC").unwrap()).unwrap_err();
-    assert_eq!(error.code().as_str(), "SC_LOG_SETTINGS_INVALID_ENVIRONMENT");
+    assert_eq!(error.code(), error_codes::LOG_INVALID_ENVIRONMENT);
 }
 
 #[test]
@@ -137,7 +146,7 @@ fn empty_json_root_is_never_overridden_and_json_null_is_unset() {
         default_root: PathBuf::from("/default"),
     })
     .unwrap_err();
-    assert_eq!(error.code().as_str(), "SC_LOG_SETTINGS_INVALID_VALUE");
+    assert_eq!(error.code(), error_codes::LOG_INVALID_VALUE);
     let null: LogSettings =
         serde_json::from_str(r#"{"level":null,"retainedLogPolicy":null}"#).unwrap();
     let resolved = LogSettings::resolve(LogSettingsInputs {
