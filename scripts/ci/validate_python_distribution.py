@@ -39,7 +39,7 @@ def verify_resolution(metadata: dict, artifact: Path) -> list[dict]:
 
 
 def linkage(wheel: Path, policy: dict, sandbox: Sandbox, directory: Path) -> dict:
-    details = inspect_wheel(wheel, policy, policy.get('candidate_version', '1.4.0'))
+    details = inspect_wheel(wheel, policy, policy.get('candidate_version', '1.4.0'), policy['expected_requires_python'])
     with zipfile.ZipFile(wheel) as archive:
         native = directory / Path(details['native_member']).name
         native.write_bytes(archive.read(details['native_member']))
@@ -277,7 +277,7 @@ def cell(args) -> None:
         selected = {**next(item for item in policy['platforms'] if item['id'] == actual['platform']),
                     'expected_requires_python': source['expected_requires_python'],
                     'candidate_version': source['version']}
-        wheel = inspect_wheel(args.wheel, selected, source['version'])
+        wheel = inspect_wheel(args.wheel, selected, source['version'], source['expected_requires_python'])
         execute([sys.executable, '-m', 'venv', str(scratch / 'venv')])
         python = str(scratch / 'venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python'))
         execute([python, '-m', 'pip', 'install', '--disable-pip-version-check', str(args.wheel)])
@@ -292,7 +292,7 @@ def cell(args) -> None:
         if private_paths:
             if not args.instrumented_wheel:
                 raise DistributionError('private fault companion is required by the source contract')
-            private_wheel = inspect_wheel(args.instrumented_wheel, selected, source['version'])
+            private_wheel = inspect_wheel(args.instrumented_wheel, selected, source['version'], source['expected_requires_python'])
             if private_wheel['sha256'] == wheel['sha256']:
                 raise DistributionError('instrumented wheel cannot substitute for production')
             execute([sys.executable, '-m', 'venv', str(scratch / 'fault-venv')])
@@ -387,10 +387,16 @@ def aggregate(args) -> None:
             apply_windows_arm64_overlay(policy)
         except RuntimeError as error:
             raise DistributionError(str(error)) from error
+    if platform_count != 6:
+        raise DistributionError('aggregate requires exactly six platforms, six builds and 30 installed-suite cells')
+    arm64 = next((platform for platform in policy['platforms'] if platform['id'] == 'windows-arm64'), None)
+    if arm64 is None or (arm64.get('machine'), arm64.get('wheel_platform'), arm64.get('rust_target')) != (
+            'ARM64', 'win_arm64', 'aarch64-pc-windows-msvc'):
+        raise DistributionError('Windows ARM64 policy handoff is incomplete')
     if len(platform_ids) != platform_count:
         raise DistributionError('platform policy contains duplicate identifiers')
-    if platform_count not in (5, 6) or len(builds) != platform_count or len(cells) != platform_count * len(policy['interpreters']):
-        raise DistributionError('all policy builds and installed-suite cells are required')
+    if len(builds) != 6 or len(cells) != 30:
+        raise DistributionError('exactly six builds and 30 installed-suite cells are required')
     build_platforms = [build.get('platform') for build in builds]
     if set(build_platforms) != platform_ids or len(build_platforms) != len(set(build_platforms)):
         raise DistributionError('build records contain missing, duplicate or unsupported platforms')
@@ -476,13 +482,13 @@ def aggregate(args) -> None:
         production_paths.append(wheel)
         selected = {**selected, 'expected_requires_python': expected_requires_python,
                     'candidate_version': policy['candidate_version']}
-        inspected = inspect_wheel(wheel, selected, policy['candidate_version'])
+        inspected = inspect_wheel(wheel, selected, policy['candidate_version'], expected_requires_python)
         if fault_paths(contract):
             private = build.get('instrumented') or {}
             if (private.get('role') != 'instrumented' or private.get('publication') != 'never'
                     or private.get('maturin_features') != sorted(set(production_features) | {'test-hooks'})):
                 raise DistributionError('fault companion lacks exact non-public feature identity')
-            private_inspection = inspect_wheel(confined(path.parent, private['path']), selected, policy['candidate_version'])
+            private_inspection = inspect_wheel(confined(path.parent, private['path']), selected, policy['candidate_version'], expected_requires_python)
             if private_inspection['sha256'] != private.get('sha256') or private['sha256'] == inspected['sha256']:
                 raise DistributionError('retained fault companion identity disagrees with build evidence')
         if inspected['sha256'] != build['wheel']['sha256']:

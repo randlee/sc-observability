@@ -1,6 +1,8 @@
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from python_arm64 import (
@@ -9,6 +11,7 @@ from python_arm64 import (
     apply_windows_arm64_overlay,
     is_pe_arm64,
     pe_machine,
+    require_native_windows_arm64,
 )
 
 
@@ -48,6 +51,26 @@ class WindowsArm64Tests(unittest.TestCase):
         )
         with self.assertRaisesRegex(RuntimeError, "differs"):
             apply_windows_arm64_overlay({"platforms": [{**WINDOWS_ARM64_POLICY, "runner": "x64"}]})
+
+    def test_requires_native_windows_arm64_cpython(self):
+        rejected = (
+            ('Windows', 'AMD64', 'cpython'),
+            ('Linux', 'aarch64', 'cpython'),
+            ('Windows', 'ARM64', 'pypy'),
+        )
+        for system, machine, implementation in rejected:
+            with self.subTest(system=system, machine=machine, implementation=implementation):
+                with (patch('platform.system', return_value=system),
+                      patch('platform.machine', return_value=machine),
+                      patch('sys.implementation', SimpleNamespace(name=implementation))):
+                    with self.assertRaisesRegex(
+                            RuntimeError, 'native Windows ARM64 runner and CPython are required'):
+                        require_native_windows_arm64()
+
+        with (patch('platform.system', return_value='Windows'),
+              patch('platform.machine', return_value='ARM64'),
+              patch('sys.implementation', SimpleNamespace(name='cpython'))):
+            require_native_windows_arm64()
 
 
 if __name__ == '__main__':

@@ -11,7 +11,11 @@ def apply_windows_arm64_overlay(policy: dict) -> dict:
     row = next((item for item in policy["platforms"] if item["id"] == "windows-arm64"), None)
     if row is None:
         policy["platforms"].append(WINDOWS_ARM64_POLICY.copy())
-    elif any(row.get(key) != value for key, value in WINDOWS_ARM64_POLICY.items()):
+    elif any(
+        key != "runner" and row.get(key) != value
+        or key == "runner" and key in row and row[key] != value
+        for key, value in WINDOWS_ARM64_POLICY.items()
+    ):
         raise RuntimeError("Windows ARM64 policy row differs from the D.10 handoff")
     return policy
 
