@@ -271,7 +271,7 @@ class DistributionTests(unittest.TestCase):
                             record['embedding'] = {'status': 'passed', 'python': version,
                                 'python_full': 'wrong' if mutation == 'wrong-interpreter' else version}
                         (directory / 'cell-result.json').write_text(json.dumps(record))
-                with self.assertRaisesRegex(DistributionError, 'six builds|interpreter-matched embedded-host'):
+                with self.assertRaisesRegex(DistributionError, 'missing interpreter-matched embedded-host execution'):
                     aggregate(Namespace(policy=policy_path, evidence=root, sdist=sdist, source_commit='a' * 40))
 
     def test_aggregate_rejects_missing_duplicate_and_mixed_source_cells(self):
@@ -281,6 +281,12 @@ class DistributionTests(unittest.TestCase):
         policy['platforms'].append({'id': 'windows-arm64', 'machine': 'ARM64',
                                     'wheel_platform': 'win_arm64',
                                     'rust_target': 'aarch64-pc-windows-msvc'})
+        expected_messages = {
+            'missing': 'all policy builds and installed-suite cells are required',
+            'duplicate': 'matrix contains missing, duplicate or unsupported cells',
+            'wrong-target': 'build records contain missing, duplicate or unsupported platforms',
+            'mixed-source': 'mixed source/artifacts or incomplete isolation evidence',
+        }
         for mutation in ('missing', 'duplicate', 'wrong-target', 'mixed-source'):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -308,5 +314,5 @@ class DistributionTests(unittest.TestCase):
                         if mutation == 'duplicate' and index == 0 and count == 0:
                             record['python'] = '3.11'
                         (directory / 'cell-result.json').write_text(json.dumps(record))
-                with self.assertRaises(DistributionError):
+                with self.assertRaisesRegex(DistributionError, expected_messages[mutation]):
                     aggregate(Namespace(policy=policy_fixture, evidence=root, sdist=sdist, source_commit='a' * 40))
