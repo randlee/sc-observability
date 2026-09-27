@@ -87,8 +87,22 @@ def inspect_archive(
         }
 
 
-def verify_stage(stage: Path, version: str, source_commit: str | None = None) -> dict:
+def read_stage_manifest(stage: Path) -> dict:
+    """Load the stage manifest once and reject non-object JSON explicitly."""
     evidence = json.loads((stage / "stage-manifest.json").read_text())
+    if not isinstance(evidence, dict):
+        raise ValueError("stage manifest must be a JSON object")
+    return evidence
+
+
+def verify_stage(
+    stage: Path,
+    version: str,
+    source_commit: str | None = None,
+    *,
+    evidence: dict | None = None,
+) -> dict:
+    evidence = read_stage_manifest(stage) if evidence is None else evidence
     if (evidence.get("schema_version") != 1 or evidence.get("candidate_version") != version
             or evidence.get("publication") != "pending_B.7"):
         raise ValueError("stage schema/version/publication mismatch")

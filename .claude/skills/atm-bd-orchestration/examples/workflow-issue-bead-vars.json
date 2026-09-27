@@ -1,0 +1,6 @@
+{
+  "id": "obs-wf-example",
+  "title": "Example refusal workflow issue",
+  "description": "A pre-claim gate refused this example task.",
+  "remedy": "Correct the precondition and re-dispatch the task."
+}
