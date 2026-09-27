@@ -146,7 +146,8 @@ fi
 # Import JSONL is validated before bead creation; only live-root mode can check the published artifact.
 if [ -n "$root" ] && [ -z "$file" ] && [ -f "$index" ]; then
   if ! artifact_check=$("$here/check-phase-artifact" --root "$root" --index "$index" 2>&1); then
-    problems+=("$artifact_check")
+    problems+=("$root: PLAN.MISSING: published phase plan or diagram is missing from the integration branch
+  action[lead]: merge or publish the plan PR on the integration branch")
   fi
 fi
 
