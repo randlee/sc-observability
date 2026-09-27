@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import subprocess
 import sys
 import urllib.error
@@ -32,12 +31,6 @@ def run(command: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(command, cwd=ROOT, text=True, capture_output=True)
 
 
-def report_only_integration_pr() -> bool:
-    """Allow historical policy snapshots on non-protected integration PRs."""
-    return (os.environ.get('GITHUB_EVENT_NAME') == 'pull_request'
-            and os.environ.get('GITHUB_BASE_REF') not in ('', 'develop', 'main'))
-
-
 def registry_absent(crate: str) -> bool:
     request = urllib.request.Request(f'https://crates.io/api/v1/crates/{crate}', headers={'User-Agent': 'sc-observability-api-qualification/1.4.0'})
     try:
@@ -62,8 +55,7 @@ def main() -> int:
     public = {p['name']: p for p in metadata['packages'] if p.get('publish') != []}
     if set(public) != set(policy['crates']):
         raise ValueError('public API policy must name every public crate and exclude private crates')
-    if (any(package['version'] != policy['candidate_version'] for package in public.values())
-            and not report_only_integration_pr()):
+    if any(package['version'] != policy['candidate_version'] for package in public.values()):
         raise ValueError('API policy candidate version differs from workspace')
     CACHE.mkdir(parents=True, exist_ok=True)
     if args.mode == 'docs':
