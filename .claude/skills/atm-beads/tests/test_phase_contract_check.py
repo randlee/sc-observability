@@ -45,7 +45,7 @@ EXPECT: dict[str, tuple[str, str] | None] = {
     "acceptance_key_5_of_3": ("x-t-2", "#5 but there are 3"),
     "difficulty_medium": ("x-t-2", "'medium' is not one of"),
     "sprint_without_difficulty": ("x-t-2", "difficulty missing"),
-    "pr_target_sanity_outside_closure": ("x-t-3", "x-t-2-sanity is not in its blocker closure"),
+    "pr_target_sanity_outside_closure": None,
     "owned_path_overlap": ("x-t-2", "overlaps x-t-3's"),
     "handoff_outside_consumer_fence": ("x-t-2", "owned_paths do not include it"),
     "reopened_pass_sanity": ("x-t-1-sanity", "reopened at 2026-09-26T12:00+00:00 after a PASS"),

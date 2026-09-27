@@ -462,24 +462,11 @@ class PhaseCheck:
 
     def check_graph(self) -> None:
         devs = [d for d in self.devs() if d in self.by]
-        br2dev = self.branch_to_dev()
         for dev in devs:
             m = meta(self.by[dev])
-            pt = str(m.get("pr_target") or "")
-            if pt and pt != self.trunk and not (self.trunk == "" and pt.startswith("integrate/")):
-                below = br2dev.get(pt)
-                if below is None:
-                    self.problem(dev, f"pr_target {pt} is neither the integration branch nor a listed sprint's branch")
-                else:
-                    san = self.sanity_of(below)
-                    if san and san not in self.blocker_closure(dev):
-                        self.problem(dev, f"pr_target sprint {below}'s sanity bead {san} is not in its blocker closure (add `bd dep add {dev} {san}`)")
-            sanity_blockers = [x for x in deps(self.by[dev], "blocks") if has_label(self.by.get(x, {}), C.SANITY_LABEL) or x.endswith("-sanity")]
-            rel = str(m.get("relation") or "")
-            if rel == "root" and sanity_blockers:
-                self.problem(dev, f"relation root but blocked by {', '.join(sanity_blockers)}")
-            if rel in ("must_follow", "parallel_safe") and not sanity_blockers and pt != self.trunk:
-                self.problem(dev, f"relation {rel} but blocked by no sanity bead")
+            # pr_target records merge order only.  It must never infer an
+            # execution edge; the compact phase plan is authoritative for
+            # direct sprint-to-sanity dependencies.
             for h in m.get("handoffs") or []:
                 if not isinstance(h, dict) or not h.get("path") or not h.get("consumer"):
                     self.problem(dev, f"handoff {h!r} needs path and consumer")
