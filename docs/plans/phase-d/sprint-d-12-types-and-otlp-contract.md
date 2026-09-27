@@ -291,7 +291,15 @@ Handoff to obs-d-17: the canonical cause-to-variant mapping and ErrorContext con
 
 ## Handoff to obs-d-18 (wave 3)
 
-obs-d-18 activates canonical exports and removes compatibility after its implementation gates. It receives these types-owned files; registry/normative records otherwise remain read-only.
+obs-d-18 activates the ADR-017 canonical error exports and removes their
+superseded compatibility surfaces after its implementation gates. Neutral
+signal models remain additive under `sc_observability_types::v2`; retain the
+published root `MetricRecord`, `TraceContext`, and `SpanRecord` APIs and serde
+contracts under ADR-012. This handoff does not schedule their root replacement.
+The D.21 version bump and D.18 break manifest cannot authorize a new signal
+break: that requires a separately accepted ADR explicitly superseding ADR-012
+for the named types before implementation, followed by PHD-002 release gates.
+It receives these types-owned files; registry/normative records otherwise remain read-only.
 
 - `crates/sc-observability-types/src/diagnostic.rs`
 - `crates/sc-observability-types/src/errors.rs`
