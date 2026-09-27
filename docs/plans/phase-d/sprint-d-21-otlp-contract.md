@@ -447,6 +447,19 @@ obs-d-18 consumes the completed OTLP contract and atomic workspace-version artif
 
 ## Release gate
 
+## Complete module registration and byte-capacity closure
+
+The authoritative `lib.rs` registration list is `mod config;`, `mod contracts;`,
+`mod lifecycle;`, `#[cfg(test)] mod lifecycle_tests;`, `mod testing;`,
+`#[cfg(test)] mod contract_tests;`, `mod constants;`, `mod assembly;`,
+`mod error_codes;`, `mod projectors;`, `#[cfg(feature = "otlp-sdk")] mod sdk;`,
+and `#[cfg(feature = "legacy-http-json")] mod legacy_http_json;`.
+
+The wire table also contains `queue_byte_capacity` for both backends, default
+`16 MiB`, checked in `1..=64 MiB`. Ordered validation checks `queue_capacity`
+first and then `queue_byte_capacity`, returning `InvalidQueueCapacity` or
+`InvalidQueueByteCapacity` before backend-specific retry bounds.
+
 This contract releases obs-d-5–8 after obs-d-21-sanity; obs-d-18 additionally waits on that gate. Final production transports, collector equivalence and release approvals remain their named downstream gates. The root workspace invariant applies.
 
 ## Acceptance criteria

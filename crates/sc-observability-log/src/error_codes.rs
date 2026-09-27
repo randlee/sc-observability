@@ -56,6 +56,9 @@ pub const SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS: ErrorCode =
 
 /// Every code defined by this crate, in declaration order.
 pub const ALL: &[ErrorCode] = &[
+    SC_LOG_DETACH_TIMEOUT,
+    SC_LOG_DETACH_NOT_INSTALLED,
+    SC_LOG_FOREIGN_LOGGER_INSTALLED,
     SC_OBSERVABILITY_LOG_ALREADY_INITIALIZED,
     SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED,
     SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED,
@@ -74,6 +77,15 @@ pub const ALL: &[ErrorCode] = &[
     SC_OBSERVABILITY_LOG_FLUSH_IN_PROGRESS,
 ];
 
+/// Canonical sc log detach timeout failure.
+pub const SC_LOG_DETACH_TIMEOUT: ErrorCode = ErrorCode::new_static("SC_LOG_DETACH_TIMEOUT");
+/// Canonical sc log detach not installed failure.
+pub const SC_LOG_DETACH_NOT_INSTALLED: ErrorCode =
+    ErrorCode::new_static("SC_LOG_DETACH_NOT_INSTALLED");
+/// Canonical sc log foreign logger installed failure.
+pub const SC_LOG_FOREIGN_LOGGER_INSTALLED: ErrorCode =
+    ErrorCode::new_static("SC_LOG_FOREIGN_LOGGER_INSTALLED");
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -82,9 +94,12 @@ mod tests {
     fn all_codes_are_unique_and_prefixed() {
         let mut seen = std::collections::HashSet::new();
         for code in ALL {
-            assert!(code.as_str().starts_with("SC_OBSERVABILITY_LOG_"));
+            assert!(
+                code.as_str().starts_with("SC_OBSERVABILITY_LOG_")
+                    || code.as_str().starts_with("SC_LOG_")
+            );
             assert!(seen.insert(code.as_str()), "duplicate code {code}");
         }
-        assert_eq!(ALL.len(), 16);
+        assert_eq!(ALL.len(), 19);
     }
 }

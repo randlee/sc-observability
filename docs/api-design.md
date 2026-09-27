@@ -1801,7 +1801,7 @@ This shape is the v1 transport contract. It preserves the proven transport
 knobs while neutralizing the old ATM-specific surface.
 
 This section and its unconditional retry defaults are the frozen 1.x baseline,
-not the Phase D 2.0 candidate contract. D.6 exclusively owns the 2.0
+not the Phase D 2.0 candidate contract. D.21 exclusively owns the 2.0
 backend-aware optional fields, defaults, validation, public payload types, and
 stable errors; D.6 must revise this section as part of ADR-018/API approval.
 Later sprints reference that revision rather than redefining it.
@@ -2412,3 +2412,387 @@ bridge-native timeout ends its adapter call only; the native slot may still
 reject a new explicit flush until completion. Wire variants, diagnostic projections, integer/path
 conversion, unknown-result handling and package versions follow the sprint
 schema contract without changing native published serialization.
+
+
+## Phase D canonical types and wire handoff
+
+D.12 stages this contract in `sc_observability_types::v2` at the current
+workspace package version. D.21 activates workspace version 2.0 atomically;
+D.18 activates root exports and retires compatibility after consumers migrate.
+ADR-017/018 were accepted through PR #225 and ADR-019 through PR #227.
+PHB-003/004/005 continue governing 1.x; PHD-001/002 govern the reviewed major
+migration. A staged module is not a release-baseline approval.
+
+### Canonical errors
+
+Every canonical enum is non-exhaustive and every named variant carries
+`context: Box<ErrorContext>`. `context()`, `diagnostic()` and `into_context()`
+borrow or move that exact object, preserving its source and construction
+backtrace. `DiagnosticInfo` retains its existing seal. No conversion parses
+Display output, invents context fields, or replaces an unknown code with a
+success. Diagnostic details carry bounded, redacted metadata; credentials,
+header values, response bodies and file contents must not enter diagnostics.
+
+| Cause | Canonical variant |
+| --- | --- |
+| process identity validation | IdentityError::Process |
+| invalid configuration before construction | InitError::Configuration |
+| thread/client/provider startup failure | InitError::Runtime |
+| invalid event payload | EventError::Validation |
+| event routing failure | EventError::Routing |
+| flush drain/export failure, including timeout at flush | FlushError::Drain |
+| shutdown deadline exceeded | ShutdownError::Timeout |
+| other shutdown drain/provider failure | ShutdownError::Drain |
+| projection/subscriber callback failure | ProjectionError::Projection / SubscriberError::Subscriber respectively |
+| sink write / flush failure | LogSinkError::Write / LogSinkError::Flush respectively |
+| OTLP runtime cause | the identically named ExportError variant in the stable failure inventory |
+
+`MetricModelError::{InvalidHistogram, InvalidTemporality, InvalidInterval}`
+uses `SC_METRIC_INVALID_HISTOGRAM`, `SC_METRIC_INVALID_TEMPORALITY` and
+`SC_METRIC_INVALID_INTERVAL`. `FiniteF64::new` rejects NaN/infinities using
+`SC_METRIC_NON_FINITE` in `ValueValidationError`. These constants live in the
+shared `error_codes.rs`. Operational/context error serde uses a snake-case
+`kind` and a `context` object containing `diagnostic`; source objects and
+backtraces are deliberately not serialized. Native chaining preserves them.
+
+`v2::TelemetryError::Shutdown` remains a unit runtime guard;
+`From<v2::ExportError>` wraps the exact error in `ExportFailure` and `code()`
+returns its diagnostic code. Existing root `ObservationError` guards remain
+unchanged. Flush/shutdown/config adapters retain canonical failures as typed
+sources, carrying their diagnostic codes and remediation to the outer context.
+
+All ConfigFailure and ExportError variants below are types-owned. The single
+OTLP registry is `sc_observability_types::error_codes::otlp`; the OTLP crate
+re-exports it. `ExportError::Transport` remains the generic transport cause
+and preserves the underlying transport's registered code. It does not replace
+a more precise row below.
+
+| Variant | Stable code | Owning error type | Cause | Recovery | Redaction | Retryability |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ZeroDuration` | `OTLP_CONFIG_ZERO_DURATION` | `ConfigFailure` | required duration is zero | provide a positive value | field/value only | after config correction |
+| `DurationOverflow` | `OTLP_CONFIG_DURATION_OVERFLOW` | `ConfigFailure` | milliseconds cannot convert safely | reduce the field | field/value only | after config correction |
+| `InvalidBoundOrdering` | `OTLP_CONFIG_BOUND_ORDER` | `ConfigFailure` | resolved ordering rule fails | correct the named explicit/defaulted fields | field/value/origin only | after config correction |
+| `InvalidJitterPercent` | `OTLP_CONFIG_JITTER_PERCENT` | `ConfigFailure` | jitter exceeds 100 | use `0..=100` | field/value only | after config correction |
+| `InvalidQueueCapacity` | `OTLP_CONFIG_QUEUE_CAPACITY` | `ConfigFailure` | queue capacity is outside `1..=65_536` | choose a bounded capacity | field/value only | after config correction |
+| `InvalidQueueByteCapacity` | `OTLP_CONFIG_QUEUE_BYTE_CAPACITY` | `ConfigFailure` | zero, overflow or aggregate byte bound above 64 MiB | choose 1..=64 MiB (default 16 MiB) | field/value only | after config correction |
+| `ConfigFieldNotApplicable` | `OTLP_CONFIG_FIELD_NOT_APPLICABLE` | `ConfigFailure` | field is inapplicable to disabled transport or the selected backend | omit it, enable transport, or select its applicable backend | field/closed target only | after config correction |
+| `InsecureTransportRejected` | `OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED` | `ConfigFailure` | selected backend does not implement the requested insecure verification override | disable the override or choose an explicitly supporting backend | backend only | after config correction |
+| `InvalidEndpoint` | `OTLP_CONFIG_INVALID_ENDPOINT` | `ConfigFailure` | endpoint URL syntax is invalid | provide a valid endpoint URL | field only | after config correction |
+| `InvalidHeader` | `OTLP_CONFIG_INVALID_HEADER` | `ConfigFailure` | header/auth syntax or credential placement is invalid | correct the header/auth configuration | field only | after config correction |
+| `TransportConstructionFailed` | `OTLP_TRANSPORT_CONSTRUCTION_FAILED` | `ConfigFailure` | CA/auth/client/provider/legacy-worker initialization failed | correct the bounded typed source and reconstruct | bounded typed source; never path contents, credentials, header values, or response bodies | after config/environment correction |
+| `UnsupportedBackend` | `OTLP_UNSUPPORTED_BACKEND` | `ConfigFailure` | feature/backend unavailable | enable/select a supported backend | enum values only | after build/config correction |
+| `UnsupportedProtocol` | `OTLP_UNSUPPORTED_PROTOCOL` | `ConfigFailure` | protocol invalid for backend | select a matrix-supported protocol | enum values only | after config correction |
+| `TokioRuntimeRequired` | `OTLP_TOKIO_RUNTIME_REQUIRED` | `ConfigFailure` | SDK construction lacks an entered Tokio runtime | construct inside the host runtime | no dynamic data | after entering a runtime |
+| `BlockingBackendInAsyncContext` | `OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT` | `ExportError` | legacy synchronous lifecycle entered Tokio; construction preserves this condition as the redacted source of `TransportConstructionFailed` | use a plain thread or async lifecycle | no dynamic data | in a supported context |
+| `AsyncLifecycleRequired` | `OTLP_ASYNC_LIFECYCLE_REQUIRED` | `ExportError` | SDK synchronous completion requested | await the typed async operation | no dynamic data | through async lifecycle |
+| `RuntimeTerminated` | `OTLP_RUNTIME_TERMINATED` | `ExportError` | host runtime ended before completion | keep the runtime alive through awaited shutdown | bounded state/counts | with a live replacement runtime/instance |
+| `LifecycleTimeout` | `OTLP_LIFECYCLE_TIMEOUT` | `ExportError` | monotonic lifecycle deadline elapsed | inspect terminal health and transport/provider | duration/state only | operation-specific |
+| `QueueFull` | `OTLP_QUEUE_FULL` | `ExportError` | bounded admission queue saturated | preserve fail-open behavior and inspect health | capacity/depth only | yes, later admission |
+| `WorkerTerminated` | `OTLP_WORKER_TERMINATED` | `ExportError` | SDK dispatcher or legacy worker terminated unexpectedly | correct the terminal cause and construct a new instance | bounded typed source; no credentials | only with a new instance |
+| `ShutdownCancelledRetry` | `OTLP_SHUTDOWN_CANCELLED_RETRY` | `ExportError` | shutdown cancelled a retryable pre-barrier legacy sequence | inspect terminal health; resend only if duplicates are acceptable | attempt/count only | caller decision; duplicates possible |
+| `RetryDeadlineExhausted` | `OTLP_RETRY_DEADLINE_EXHAUSTED` | `ExportError` | no legacy sequence budget remains | increase the validated sequence bound or restore collector health | budget/attempt only | new operation after recovery |
+| `NonRetryableHttpStatus` | `OTLP_HTTP_STATUS_TERMINAL` | `ExportError` | collector returned a non-retryable HTTP status | correct request/auth/config before retrying | status/category only; no body/headers | after cause correction |
+| `RetryAttemptsExhausted` | `OTLP_RETRY_ATTEMPTS_EXHAUSTED` | `ExportError` | legacy maximum attempts ended before success | restore collector health or adjust the validated policy | attempt/count only | new operation after recovery |
+| `TerminalExportFailure` | `OTLP_EXPORT_TERMINAL` | `ExportError` | SDK or legacy provider returned a terminal export failure | inspect the preserved source and collector state | bounded typed source; no credentials | source-dependent |
+| `Shutdown` | `OTLP_TELEMETRY_SHUTDOWN` | `TelemetryError` | emit was attempted after shutdown began | construct a new telemetry instance | no dynamic data | only on a new instance |
+
+Core `error_codes.rs` owns `SC_LOG_SINK_REGISTRATION_DUPLICATE`,
+`SC_LOG_SINK_REGISTRATION_INVALID`, `SC_LOG_SINK_REGISTRATION_CLOSED`, and
+settings constants `LOG_PREFIX_COLLISION` (`LOG-001`),
+`LOG_INVALID_ENVIRONMENT` (`LOG-002`), `LOG_UNKNOWN_KEY` (`LOG-003`),
+`LOG_INVALID_VALUE` (`LOG-004`), `LOG_RESOLUTION` (`LOG-005`). The existing
+settings code spellings are retained; these are diagnostics, not requirement
+IDs. The bridge registry owns `SC_LOG_DETACH_TIMEOUT`,
+`SC_LOG_DETACH_NOT_INSTALLED`, `SC_LOG_FOREIGN_LOGGER_INSTALLED`.
+DTO and routing registry values retain their existing meanings.
+
+### Neutral signals
+
+All names in this subsection are staged in `v2`. `TraceFlags::new(u8)` keeps
+all input bits; `sampled()` reads bit 0. Serde encodes flags as a byte number.
+`TraceContext::new(trace_id, span_id, flags)` has no parent until
+`with_parent` is called. Trace/span identifiers validate on serde input as
+well as construction. `SpanLink::new(trace_id, span_id, flags, attributes)`
+contains no nested trace context. `SpanKind` uses `internal`, `server`,
+`client`, `producer`, `consumer` serde tokens.
+
+`Attributes` is an ordered string-keyed map of neutral `AttributeValue`
+boolean, signed/unsigned integer, finite float, string, array, object or null
+values. Its public API has no serde_json, runtime or transport type dependency.
+The existing crate dependency on serde_json remains for 1.x diagnostics.
+
+`SpanRecord<SpanStarted>::new(timestamp, service, name, trace, attributes)`
+creates an internal span with no links. `with_kind` and `with_links` populate
+those fields; `end(status, duration)` is the only route to
+`SpanRecord<SpanEnded>`. Fields remain private; only ended records expose
+`duration_ms`. No deserializer can synthesize an ended producer record.
+`SpanSignal::{Started, Event, Ended}` supplies the export state discriminant;
+serialization preserves kind, links and flags. Consumers constructing native
+records from a wire DTO must replay checked construction and `end`.
+
+`MetricRecord::try_new(timestamp, service, name, value)` checks the interval;
+`with_unit` and `with_attributes` set validated metadata. Its fields are
+private and serde goes through the same checked constructor. Gauge has no
+start time. Sum and histogram require explicit Delta/Cumulative temporality
+and start time. Start after timestamp is `InvalidInterval`; an empty Delta
+interval and negative monotonic sum are `InvalidTemporality`. Cumulative may
+have an initial zero-length interval. Sequence continuity across points is a
+producer concern, not a single-record invariant.
+
+`HistogramPoint::try_new(bounds, buckets, count, sum)` requires finite,
+strictly increasing bounds; exactly one more bucket than bounds; checked
+bucket addition equal to count; and zero sum when count is zero. Empty bounds
+with one bucket are valid. Negative samples/sums are valid. Sum is FiniteF64.
+`explicit_bounds`, `bucket_counts`, `count`, `sum` are read-only accessors.
+Serde uses that constructor and cannot bypass these checks.
+
+Native metric serde is frozen as `{"kind":"gauge","data":1.5}`,
+`{"kind":"sum","data":{"value":1.5,"monotonic":true,
+"temporality":"delta","start_time":"1970-01-01T00:00:00Z"}}`, or
+`{"kind":"histogram","data":{"point":{"explicit_bounds":[1.0],
+"bucket_counts":[1,0],"count":1,"sum":0.5},"temporality":"cumulative",
+"start_time":"1970-01-01T00:00:00Z"}}`. The record adds `timestamp`,
+`service`, `name`, `value`, `unit`, and `attributes`. Timestamps use the shared
+UTC-normalizing RFC3339 codec.
+
+### DTO and language conversion contract
+
+D.19 owns checked DTO/schema conversions and generated models. D.20 consumes
+this compatible operational envelope independently using local fixtures.
+Both retain schema version 1 and exact outer field names/discriminants:
+`{"kind":"ok","schema_version":1,"value":...}` or
+`{"kind":"error","schema_version":1,"error":...}`. Internal ResultDto
+has the same `kind`/`value`/`error` fields without `schema_version`.
+Admission is `{"kind":"accepted"}` or `{"kind":"filtered"}`;
+completion is `{"kind":"completed"}`. Admission never claims persistence.
+
+Failure keeps its existing `kind` plus flattened Diagnostic fields (`at`,
+`code`, `message`, `remediation`). D.19 may add optional `cause`, `docs` and
+`details` fields to retain redacted metadata; their absence remains valid and
+existing adapters continue using the required four-field envelope. Native causes map to
+existing wire categories: payload/config/model validation to `validation`,
+admission saturation to `queue_full`, shutdown guards to `closed`, deadlines
+to `timeout`, cancellation to `cancelled`, I/O to `io`, and unavailable worker
+or runtime to `unavailable`. Preserve the original registered diagnostic code,
+message, remediation, docs and bounded details; a category is not a replacement
+code. Unknown remote discriminants use `unknown_remote` with `remote_kind` and
+the received diagnostic. Never convert an unknown or malformed failure to ok.
+Unexpected local failures use the existing `internal` diagnostic boundary.
+
+Native source objects/backtraces stay native. Only deliberately redacted
+cause/details are projected. Existing DTO size and field validation stays in
+force, with its existing binding error registry. Unknown schema versions
+return `unsupported_version`; malformed fields return `validation`. Tauri
+commands resolve tagged operational errors; Python returns them as data.
+Neither expected failures nor observer cancellation throw or cancel native work.
+
+New neutral signals are staged/additive until D.18 activation. Signal DTO
+field names and discriminants match the native specification above, except
+all i64/u64 values (including histogram count/buckets and integer attributes)
+use the existing canonical decimal-string DTO codec. Never round through
+JavaScript Number. Floats remain finite numbers, flags remain a byte, and
+bounds/counts/sum/temporality/start_time must all survive conversion. Invalid
+histograms or intervals are rejected through checked native constructors;
+no synthetic scalar histogram or inferred interval is permitted.
+
+### Reviewed OTLP reference specification (D.21 handoff)
+
+D.21 owns implementation of the following reviewed contract; this section is
+read-only input for that sprint. Its configuration validation produces the
+types-owned ConfigFailure enum above, with field/value/origin/target metadata
+in bounded Diagnostic.details, not extra enum fields. Lifecycle and exporter
+traits remain crate-private, Send + Sync, with Send lifecycle futures.
+
+The factory validates this closed matrix before allocating providers/workers:
+
+| Backend | Valid protocol | Required feature/runtime | Invalid result |
+| --- | --- | --- | --- |
+| disabled (transport disabled) | none | none | the sole no-network disabled implementation |
+| `OpenTelemetrySdk` | SDK-supported gRPC or HTTP/protobuf | `otlp-sdk`; entered caller Tokio runtime | stable unsupported-protocol/runtime error |
+| `LegacyHttpJson` | `HttpJson` only | `legacy-http-json`; plain-thread construction | reserved typed error until D.8 |
+
+Delete public/production `Noop*Exporter` fallbacks; disabled construction is an
+explicit private disabled set and an enabled selection can never reach it.
+Every existing `OtelConfig` field receives one disposition: endpoint,
+headers/auth, CA/TLS and `timeout_ms` map to the SDK/legacy builders;
+`debug_local_export` is a separate diagnostic mirror outside exporter
+selection; `insecure_skip_verify` is either implemented by the backend with an
+explicit security warning or rejected at construction—never ignored.
+`timeout_ms` covers the entire legacy HTTP request, including connect, TLS,
+request write, response headers, and response read. Endpoint and header/auth
+values are validated before provider/worker construction; malformed endpoints,
+invalid header syntax, and forbidden credential placement return named
+construction failures without retaining secret values.
+
+### Validated transport contract
+
+D.21 owns transport field/default/validation implementation; D.12 owns the
+canonical error definitions and registry. The 2.0 wire surface uses direct shared transport
+fields plus a grouped `legacy_retry` object:
+
+| Field | Applicability | Default when absent |
+| --- | --- | --- |
+| `timeout_ms` | both backends; maps to request/export timeout | `3_000` |
+| `lifecycle_flush_timeout_ms` | both backends | `30_000` |
+| `lifecycle_shutdown_timeout_ms` | both backends | `30_000` |
+| `queue_capacity` | both backends; bounded admission queue | `1_024` |
+| `legacy_retry.max_retries` | legacy only, optional on wire | `3` |
+| `legacy_retry.initial_backoff_ms` | legacy only, optional on wire | `250` |
+| `legacy_retry.max_backoff_ms` | legacy only, optional on wire | `5_000` |
+| `legacy_retry.retry_sequence_timeout_ms` | legacy only, optional on wire | `30_000` |
+| `legacy_retry.retry_after_cap_ms` | legacy only, optional on wire | `5_000` |
+| `legacy_retry.retry_jitter_percent` | legacy only, optional on wire | `20` |
+
+`queue_capacity` counts admitted records, not batches, and is validated as `1..=65_536`. A separate checked `queue_byte_capacity` defaults to 16 MiB, has a hard 64 MiB maximum, and bounds the serialized payload bytes held by all queued/in-flight batches. Admission reserves both record and byte credits atomically; either exhausted budget returns QueueFull. Records larger than 1 MiB are rejected before enqueue; batches split at 512 records or 1 MiB. The queue cannot retain 65,536 one-MiB batches. A 413 is terminal for that split batch,
+which is counted once as failed/dropped rather than retried as a larger batch.
+`shutdown_async_typed` has one drain budget: it starts at shutdown entry and
+covers cancellation, the in-flight request, barrier, and worker join. On
+expiry it returns `LifecycleTimeout` with remaining admitted work accounted.
+
+```rust
+#[non_exhaustive]
+pub struct TelemetryHealth {
+    pub queue_depth: usize,
+    pub queue_capacity: usize,
+    pub worker_state: WorkerState,
+    pub last_terminal_failure: Option<Diagnostic>,
+    pub last_success: Option<Timestamp>,
+}
+```
+
+For `OpenTelemetrySdk`, the three shared timeout fields map to SDK lifecycle /
+export construction. Any explicit legacy-only field—including the pre-existing
+`max_retries`, `initial_backoff_ms`, and `max_backoff_ms`—returns
+`ConfigFieldNotApplicable`. Nothing is ignored. This 2.0 optional-field change
+and its migration from the former unconditional retry defaults are documented.
+
+Defaults are resolved **before** validation. Each resolved value retains
+`ValueOrigin::{Default, Explicit}` so an error identifies both the offending
+field and whether a conflicting peer was defaulted. Partial overrides are
+therefore deterministic and reviewable.
+
+All raw serialized millisecond/percent fields are converted exactly once:
+
+```rust
+#[non_exhaustive]
+pub enum OtlpConfigField {
+    Endpoint,
+    Header,
+    Timeout,
+    LifecycleFlushTimeout,
+    LifecycleShutdownTimeout,
+    QueueCapacity,
+    QueueByteCapacity,
+    MaxRetries,
+    InitialBackoff,
+    MaxBackoff,
+    RetrySequenceTimeout,
+    RetryAfterCap,
+    RetryJitterPercent,
+}
+
+#[non_exhaustive]
+pub enum ValueOrigin { Default, Explicit }
+
+#[non_exhaustive]
+pub struct ResolvedField<T> {
+    pub field: OtlpConfigField,
+    pub value: T,
+    pub origin: ValueOrigin,
+}
+
+#[non_exhaustive]
+pub enum OtlpConfigTarget { Disabled, Backend(ExporterBackend) }
+
+pub(crate) struct PositiveDuration(Duration);
+
+impl PositiveDuration {
+    fn try_from_millis(field: OtlpConfigField, value: u64)
+        -> Result<Self, ConfigFailure>;
+}
+
+pub(crate) struct LifecycleBounds {
+    flush: PositiveDuration,
+    shutdown: PositiveDuration,
+}
+
+pub(crate) struct BoundedPercent(u8); // checked 0..=100
+
+pub(crate) struct RetryPolicy {
+    max_retries: u32,
+    initial_backoff: PositiveDuration,
+    max_backoff: PositiveDuration,
+    sequence_timeout: PositiveDuration,
+    retry_after_cap: PositiveDuration,
+    jitter: BoundedPercent,
+}
+
+pub(crate) struct ValidatedTransportBounds {
+    queue_capacity: QueueCapacity,
+    queue_byte_capacity: QueueByteCapacity,
+    request_timeout: PositiveDuration,
+    lifecycle: LifecycleBounds,
+    backend: BackendTransportBounds,
+}
+
+pub(crate) enum BackendTransportBounds {
+    Disabled,
+    Sdk,
+    Legacy(RetryPolicy),
+}
+
+impl ValidatedTransportBounds {
+    fn try_from_config(config: &OtelConfig) -> Result<Self, ConfigFailure>;
+}
+```
+
+`TelemetryHealth`, `OtlpConfigField`, `ValueOrigin`, `ResolvedField`, and
+`OtlpConfigTarget` are `#[non_exhaustive]` public types so their 2.0 contracts
+can add fields or variants without a further breaking release.
+
+The constructor derives `Disabled` from `config.enabled == false`; otherwise
+it derives the backend only from `config.backend`.
+`LifecycleBounds` holds checked positive flush/shutdown durations;
+`RetryPolicy` holds `max_retries`, checked initial/max/sequence/Retry-After
+durations, and `BoundedPercent(0..=100)`. `BackendTransportBounds` makes legacy
+retry state unrepresentable for SDK. Validation, using checked arithmetic, is:
+
+- every millisecond duration is positive and convertible to `Duration`;
+- `lifecycle_shutdown_timeout_ms >= timeout_ms`;
+- `lifecycle_flush_timeout_ms >= timeout_ms`;
+- `queue_capacity` is in `1..=65_536`, otherwise `InvalidQueueCapacity`;
+- for legacy, `max_backoff_ms >= initial_backoff_ms`;
+- for legacy, `retry_sequence_timeout_ms >= timeout_ms`;
+- for legacy, `0 < retry_after_cap_ms <= retry_sequence_timeout_ms`;
+- for legacy, `retry_jitter_percent <= 100`;
+- reject every explicit field inapplicable to disabled transport or the
+  selected backend with `ConfigFieldNotApplicable`;
+- reject a requested insecure verification override when the selected backend
+  does not explicitly support it with `InsecureTransportRejected`.
+- validate endpoint URL syntax, header/auth syntax, and credential placement;
+  otherwise return `InvalidEndpoint` or `InvalidHeader` with a redacted,
+  field-only payload.
+
+Checks execute in exactly this listed order and return the first failure; they
+are not aggregated. Within the first bullet, fields are checked in the wire
+table's top-to-bottom order. This makes every multi-violation diagnostic
+deterministic.
+
+Both factories receive only `ValidatedTransportBounds` and cannot inspect or
+reparse raw fields. Deadlines use a monotonic injectable clock and start when
+the public operation is admitted.
+
+Construction order is fixed: resolve defaults and create `ResolvedField`
+values; run the ordered validation list above; build
+`ValidatedTransportBounds`; then check feature/backend/protocol availability.
+Thus a malformed legacy config fails deterministically before D.6's reserved
+`UnsupportedBackend`. Disabled transport still validates explicitly supplied
+shared fields, rejects every explicit legacy-only retry field with
+`ConfigFieldNotApplicable { target: OtlpConfigTarget::Disabled, .. }`, yields
+`BackendTransportBounds::Disabled`, and never constructs a network
+provider/worker. SDK inapplicability instead records
+`OtlpConfigTarget::Backend(ExporterBackend::OpenTelemetrySdk)`.
+
+
+The complete private signatures and module handoff are recorded in
+[sprint D.21](plans/phase-d/sprint-d-21-otlp-contract.md).

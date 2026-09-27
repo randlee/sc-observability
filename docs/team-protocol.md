@@ -158,6 +158,22 @@ not a sender-local path.
 
 ## Notes
 
+## Phase Dispatch Gate
+
+For a phase development, fix, sanity, or QA assignment, the assignee first
+runs `validate-plan --root <phase> --scope <bead>` and checks `bd ready`.
+The claim must succeed without force. A dev or fix branch is based only on its
+bead's declared `pr_target`; its difficulty must fit the assignee's roster
+model. Sanity refuses a stale, dirty, zero-delta, or previously PASSed check.
+QA refuses a PR whose base differs from `pr_target` or whose head differs from
+the sanity PASS commit (`SANITY_STALE`). Every refusal creates an `obs-wf`
+child outside the phase tree before the refusal task close.
+
+- A sanity PASS creates and dispatches QA immediately.
+- QA with only minor findings is PASS with those findings retained as backlog.
+- Blocking or important findings get exactly one fix round; a second FAIL is
+  `ROUND_CAP` and stops for root cause.
+
 - If blocked, start the task anyway with the blocker in the start line (`atm task start <task-id> "blocked: <why>"`), or close it `refused` with the reason; never leave a task-linked message unanswered.
 - If work will take time, send periodic progress updates.
 - Prefer concise, explicit messages with branch/commit/test context when relevant.

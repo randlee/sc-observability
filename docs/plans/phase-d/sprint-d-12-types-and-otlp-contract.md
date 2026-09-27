@@ -317,3 +317,14 @@ obs-d-18 alone owns docs/project-plan.md in dev. Use: "obs-d-12 owns canonical e
 - [ ] #2–3: cargo test -p sc-observability-types --test neutral_contracts --locked runs nonzero canonical_error_variants_preserve_context, metric_model_failures, histogram_point_serde_rejects_invalid and stable_failure_codes cases. All ConfigFailure/ExportError variants and registry rows are owned by types; code/remediation/source survive.
 - [ ] #2: zero/out-of-range record and byte capacity failures have distinct InvalidQueueCapacity/InvalidQueueByteCapacity variants and OTLP_CONFIG_QUEUE_CAPACITY/OTLP_CONFIG_QUEUE_BYTE_CAPACITY codes; this checks error definitions, not transport admission.
 - [ ] #1–3: the root workspace invariant passes without obs-d-21, OTLP module stubs or production adapters. No requirement to activate the workspace 2.0 Cargo version blocks types closure.
+
+
+## Implementation contract
+
+The canonical staged entry point is `sc_observability_types::v2`. Exact serde,
+constructor, interval and language-projection rules are frozen in
+[API design](../../api-design.md#phase-d-canonical-types-and-wire-handoff).
+`neutral_contracts` exercises every canonical variant's context/source,
+histogram serde rejection, metric interval semantics, registry uniqueness and
+span flags/links. Types retains `version.workspace = true`; D.21 changes the
+workspace version atomically. This sprint does not retire the 1.x exports.
