@@ -298,13 +298,15 @@ fn histogram_point_serde_rejects_invalid() {
             "accepted {field}"
         );
     }
-    assert!(serde_json::from_value::<HistogramPoint>(json!({
-        "explicit_bounds": [f64::INFINITY],
-        "bucket_counts": [0, 0],
-        "count": 0,
-        "sum": 0.0
-    }))
-    .is_err());
+    assert!(
+        serde_json::from_value::<HistogramPoint>(json!({
+            "explicit_bounds": [f64::INFINITY],
+            "bucket_counts": [0, 0],
+            "count": 0,
+            "sum": 0.0
+        }))
+        .is_err()
+    );
     let error = HistogramPoint::try_new(vec![], vec![0], 0, finite(1.0))
         .expect_err("a nonzero sum cannot have zero samples");
     assert_eq!(
