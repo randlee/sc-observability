@@ -628,7 +628,16 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
 }
 
 pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), InitFailure> {
-    validated_transport_bounds(&config.transport).map_err(config_failure_to_init_failure)?;
+    validated_telemetry_bounds(config).map(|_| ())
+}
+
+/// Validates a complete telemetry configuration once and returns its checked
+/// transport bounds for factory construction.
+pub(crate) fn validated_telemetry_bounds(
+    config: &TelemetryConfig,
+) -> Result<ValidatedTransportBounds, InitFailure> {
+    let bounds =
+        validated_transport_bounds(&config.transport).map_err(config_failure_to_init_failure)?;
     if config.transport.enabled && config.transport.endpoint.is_none() {
         return Err(InitFailure::from_context(Box::new(ErrorContext::new(
             error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
@@ -668,7 +677,7 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
             ),
         ))));
     }
-    Ok(())
+    Ok(bounds)
 }
 
 /// Checked, backend-neutral transport bounds. Backend factories receive this
@@ -781,6 +790,18 @@ pub(crate) fn validated_transport_bounds(
     if flush.value < timeout.value {
         return Err(invalid_bound(&timeout, &flush));
     }
+    let legacy_retry =
+        if config.enabled && matches!(config.backend, ExporterBackend::LegacyHttpJson) {
+            Some(resolve_retry(
+                config
+                    .legacy_retry
+                    .as_ref()
+                    .or(direct_legacy_fields.then_some(&direct_retry)),
+                &timeout,
+            )?)
+        } else {
+            None
+        };
     if !(1..=constants::MAX_OTLP_QUEUE_CAPACITY).contains(&queue_capacity.value) {
         return Err(config_failure(
             ConfigFailureKind::InvalidQueueCapacity,
@@ -816,16 +837,9 @@ pub(crate) fn validated_transport_bounds(
                 }
                 BackendTransportBounds::Sdk
             }
-            ExporterBackend::LegacyHttpJson => {
-                let retry = resolve_retry(
-                    config
-                        .legacy_retry
-                        .as_ref()
-                        .or(direct_legacy_fields.then_some(&direct_retry)),
-                    &timeout,
-                )?;
-                BackendTransportBounds::Legacy(retry)
-            }
+            ExporterBackend::LegacyHttpJson => BackendTransportBounds::Legacy(
+                legacy_retry.expect("legacy backend resolves its retry policy"),
+            ),
         }
     } else {
         if let Some(field) = legacy_retry_field {

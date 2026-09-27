@@ -452,6 +452,7 @@ fn contract_tests_record_and_byte_capacity() {
     );
 }
 
+#[test]
 fn contract_tests_bound_messages_use_named_constants() {
     let records = validated_transport_bounds(&OtelConfig {
         queue_capacity: Some(constants::MAX_OTLP_QUEUE_CAPACITY + 1),
