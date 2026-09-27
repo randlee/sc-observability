@@ -1,8 +1,6 @@
 name: Python packaging boundaries
 
 on:
-  push:
-    branches: [feature/phase-b-4a-python-packaging]
   pull_request:
     paths:
       - 'scripts/ci/*python*'
