@@ -386,7 +386,7 @@ legacy-http-json = []
 
 D.21 records the optional otlp-sdk feature's reviewed opentelemetry family pins and the legacy-http-json feature's reqwest =0.12.28 (blocking/json/rustls-tls, default features off), httpdate =1.0.3, getrandom and tokio rt/sync allowlist in owned manifests/lock/boundaries against the read-only architecture section6/ADR-019 amendment supplied by obs-d-12. Legacy requires no caller runtime and no SDK/tonic dependency; reqwest's internal Tokio graph is explicit. Existing boundary validators and Cargo feature tests enforce this; no new parallel validator framework.
 
-The only exporter traits and ExporterSet are pub(crate), as OTLP-011 and ADR-018 require. No public Exporter, undefined Signal, public ExporterSet or facade re-export is added. D.21's factory contract and recording test doubles compile without real SDK/legacy implementations. Module declarations expose separate contract and implementation files so D.7 and D.8 are siblings. obs-d-21 registers future log-settings/legacy examples and workspace members; obs-d-7 owns examples/otlp-sdk/Cargo.toml as the explicit exception.
+The shared OTLP structs, public exporter traits, and ExporterSet move to obs-d-22's `sc_observability_types::otlp` module; D.21 re-exports or consumes them and owns field-move proto conversion, while every concrete implementation remains in its behavior-owning crate. See D.22's **Interim placement (user ruling 2026-09-27)**: `crate::contracts` is the sole re-export seam. D.21's factory contract and recording test doubles compile without real SDK/legacy implementations. Module declarations expose separate contract and implementation files so D.7 and D.8 are siblings. obs-d-21 registers future log-settings/legacy examples and workspace members; obs-d-7 owns examples/otlp-sdk/Cargo.toml as the explicit exception.
 
 Contract tests are self-contained and do not require completed production adapters. Any compatibility scaffolding needed for the existing workspace is explicitly transitional contract glue, not a claimed production implementation; each retiring consumer is named above, and D.18's migration gate rejects any leftover obsolete wrapper. Contract closure requires workspace compilation, not production collector behavior.
 
@@ -461,6 +461,24 @@ first and then `queue_byte_capacity`, returning `InvalidQueueCapacity` or
 `InvalidQueueByteCapacity` before backend-specific retry bounds.
 
 This contract releases obs-d-5–8 after obs-d-21-sanity; obs-d-18 additionally waits on that gate. Final production transports, collector equivalence and release approvals remain their named downstream gates. The root workspace invariant applies.
+
+## Amendment (2026-09-27): shared OTLP types crate
+
+Maintainer ruling (plan decision 10). obs-d-22 applies this amendment to the D.21-owned files it names; D.21's existing entries are unchanged.
+
+1. Register `crates/sc-observability-otlp-types` as a workspace member with boundary manifest `boundaries/sc-observability-otlp-types/otlp-types.toml`. Only `sc-observability-otlp` depends on it.
+2. Add to the `[transport.*]` scheme of `policy/otlp-transport.toml`:
+
+| Entry | Version | Backends | Default features | Features |
+| --- | --- | --- | --- | --- |
+| `opentelemetry-proto` | `=0.33.0` | `otlp-sdk`, `legacy-http-json` | off | `gen-tonic-messages`, `logs`, `trace`, `metrics`, `with-serde`; `otlp-sdk` adds `gen-tonic` |
+| `prost` | `=0.14.4` | `otlp-sdk`, `legacy-http-json` | on | none |
+| `tonic` | `=0.14.6` | `otlp-sdk` | off | `channel`, `tls-ring`, `tls-webpki-roots` |
+| `reqwest-sdk` (`package = "reqwest"`) | `=0.13.5` | `otlp-sdk` | off | `rustls` |
+
+3. Request-client contract: obs-d-7 sends gRPC through the `opentelemetry-proto` generated tonic clients over a `tonic` channel, and HTTP/protobuf through the async `reqwest-sdk` client (the reqwest/Rustls version the SDK path already resolves), both on the caller's Tokio runtime. obs-d-8 sends OTLP/JSON through the existing blocking `reqwest =0.12.28` entry. The renamed key keeps the two reqwest versions distinct.
+4. `sc-observability-otlp` depends on `sc-observability-otlp-types` unconditionally; `otlp-sdk` adds `tonic`, `reqwest-sdk`, `prost` and `opentelemetry-proto/gen-tonic`. The legacy-only graph then contains `opentelemetry-proto`, `prost`, and `opentelemetry`/`opentelemetry_sdk` with default features off, and still excludes `tonic`, `opentelemetry-otlp` and `rt-tokio`.
+5. Both backends instantiate `ExporterSet<L, S, M>` with the obs-d-22 resource-group types; the exporter trait signatures are unchanged.
 
 ## Acceptance criteria
 
