@@ -95,10 +95,7 @@ fn typed_sink_consumer_explicitly_imports_the_opt_in_trait() {
     struct ConsumerTypedSink;
 
     impl TypedLogSink for ConsumerTypedSink {
-        fn write(
-            &self,
-            _event: &LogEvent,
-        ) -> Result<(), sc_observability_types::typed::LogSinkFailure> {
+        fn write(&self, _event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
             Ok(())
         }
 
@@ -128,12 +125,12 @@ fn flush_command_flushes_each_sink_once_after_an_admitted_event() {
     }
 
     impl LogSink for CountingSink {
-        fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+        fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
             self.writes.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
 
-        fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
+        fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
             self.flushes.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }

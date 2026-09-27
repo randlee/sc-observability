@@ -66,6 +66,22 @@ Generated projection of `obs-d-21`; the bead is authoritative.
   - `scripts/ci/validate_repo_boundaries.sh`
   - `docs/plans/phase-d/sprint-d-21-otlp-contract.md`
 
+## F13 scope handoff ledger
+
+The phase ruling that keeps same-wave path fences disjoint and names
+cross-wave handoffs governs the incidental files reported by REQ-QA-003. They
+are accounted for as follows; none expands D.21's owned-path fence:
+
+| Path | Governing owner or ruling |
+| --- | --- |
+| `bindings/generation-manifest.json` | `obs-d-19` owns the generated binding manifest and its source/output digests. |
+| `examples/atm-adapter-example/src/main.rs` | `obs-d-17` owns the ATM consumer example source; `obs-d-18` receives it after D.17 closes. |
+| `examples/atm-adapter-example/Cargo.lock` | Generated lockfile consumed by D.17's locked ATM-example check; it is handed off with that example and is not an independent D.21 contract artifact. |
+| `examples/otlp-legacy/src/main.rs` | D.21 deliverable 2 creates declared OTLP placeholders next to the D.21-owned example manifest; implementation remains with the later OTLP consumer owner. |
+
+This ledger applies the phase-level ownership ruling and records the required
+handoffs without broadening the D.21 metadata projection.
+
 ## Goal
 
 Close the OTLP contract after obs-d-12's types sanity gate, releasing obs-d-5–8 without delaying types-only implementation work. This is the second stage within numbered wave 1; it is not an independent root.
@@ -392,7 +408,7 @@ Contract tests are self-contained and do not require completed production adapte
 
 ## Module roots and standalone contract closure
 
-obs-d-21 owns and stubs sdk/mod.rs and legacy_http_json/mod.rs, including their module declaration lines; obs-d-7/8 own only their respective implementation.rs and tests.rs after the staged-file handoff; examples/otlp-sdk/Cargo.toml is owned by obs-d-7. Each module root contains `mod implementation;` and `#[cfg(test)] mod tests;`. obs-d-21 creates compilable placeholders for those declared files and creates assembly.rs/projectors.rs placeholders before declaring them in lib.rs. obs-d-5 replaces its assembly/projector placeholders after contract sanity. Module roots remain read-only to implementation consumers. Contract closure requires obs-d-12-sanity but remains independent of obs-d-13; it cannot rely on the logging contract landing first.
+obs-d-21 owns and stubs sdk/mod.rs and legacy_http_json/mod.rs, including their module declaration lines; obs-d-7/8 own only their respective implementation.rs and tests.rs after the staged-file handoff; examples/otlp-sdk/Cargo.toml is owned by obs-d-7. The SDK module root contains `pub(crate) mod implementation;`; the legacy root contains `mod implementation;`. Both contain `#[cfg(test)] mod tests;`. obs-d-21 creates compilable placeholders for those declared files and creates assembly.rs/projectors.rs placeholders before declaring them in lib.rs. obs-d-5 replaces its assembly/projector placeholders after contract sanity. Module roots remain read-only to implementation consumers. Contract closure requires obs-d-12-sanity but remains independent of obs-d-13; it cannot rely on the logging contract landing first.
 
 ## Boundary enforcement scope
 
@@ -424,6 +440,41 @@ Created/staged by obs-d-21, owned by obs-d-6 from wave 2; after this bead closes
 - `crates/sc-observability-otlp/src/lifecycle_tests.rs`
 
 ## Handoff to obs-d-7 (wave 2)
+
+The reviewed f10 contract handoff uses `crate::contracts::ExporterSet` with
+its default signal parameters. `LogExporter`, `TraceExporter`, and
+`MetricExporter` receive slices of `ExportRecord<LogRecord>`,
+`ExportRecord<CompleteSpan>`, and `ExportRecord<sc_observability_types::v2::MetricRecord>`.
+Every record carries neutral `Resource` (typed attributes/schema URL) and
+`InstrumentationScope` (name/version/schema URL/typed attributes), separately
+from signal attributes. `LogRecord` retains the existing neutral `LogEvent`,
+adds the flags for its optional trace and v2 typed attributes. `CompleteSpan`
+contains a v2 `SpanRecord<SpanEnded>` plus ordered v2 events; its trace flags,
+kind, links, status and timing remain intact. The v2 metric retains checked
+histogram buckets/count/sum and aggregation temporality/start time. Backend
+conversion must preserve these fields; these contracts introduce no SDK types
+into the neutral types crate and do not implement collector behavior.
+
+The existing public root facade is unchanged. Its single private
+`ExporterSet<LogEvent, assembly::CompleteSpan, root::MetricRecord>` alias and
+explicit trait specializations are temporary compatibility glue. D.7 uses
+only the default v2 contracts. D.18 may remove the compatibility specialization
+when composing the facade after the open root-model API decision; this
+handoff does not authorize a public root API replacement.
+
+`otlp-sdk` enables all three SDK signals, gRPC/Tonic with Rustls/webpki roots,
+HTTP/protobuf with the asynchronous reqwest/Rustls client, SDK `rt-tokio`,
+and the direct Tokio handle needed to use the caller's runtime. It does not
+enable the legacy adapter. `sdk::implementation` is `pub(crate)`, so D.7 can
+hand D.18 `crate::sdk::implementation::build_exporter_set` without editing its
+module root. SDK implementation/factory and lifecycle behavior remain D.7/D.6
+work. The machine-readable `[transport.*]` entries in
+`policy/otlp-transport.toml` are the single direct dependency
+allowlist; both existing validators check optionality, backend binding,
+workspace/lock pins, and effective features. SDK transitive client dependencies
+(including reqwest 0.13, independent of legacy reqwest 0.12.28) are resolved in
+Cargo.lock and checked against `[sdk_transport_lock]` in the same policy file, outside sc-lint boundary manifests. No new Cargo-tree gate or validator framework is introduced.
+
 
 Created/staged by obs-d-21, owned by obs-d-7 from wave 2; after this bead closes it makes no further edits. The receiver consumes the staged contract/implementation and owns production completion or final compatibility retirement.
 
@@ -467,5 +518,17 @@ This contract releases obs-d-5–8 after obs-d-21-sanity; obs-d-18 additionally 
 - [ ] #1: cargo test -p sc-observability-otlp --lib contract_tests --all-features --locked runs nonzero validation_order, resolved_defaults, stable_failure_codes, record_and_byte_capacity and fake_exporter_contract cases; byte/record zero/overflow/upper bounds use the distinct types-owned variants/codes.
 - [ ] #1: cargo test -p sc-observability-types --test neutral_contracts --locked passes against obs-d-12's unchanged contract test suite; no types test file is edited.
 - [ ] #2: every declared module has a compiling stub; cargo check --workspace --all-features --locked and bash scripts/ci/validate_repo_boundaries.sh pass without a real backend. sdk/mod.rs and legacy_http_json/mod.rs contain mod implementation and cfg(test) mod tests.
-- [ ] #2–3: Cargo metadata, all owned dependency pins and resolved lockfiles report a consistent 2.0 graph after the atomic bump, including the authorized types-manifest version literal. Exact transport pins match the consumed section6/ADR-019 allowlist and remain in the owned boundary record.
+- [ ] #2–3: Cargo metadata, all owned dependency pins and resolved lockfiles report a consistent 2.0 graph after the atomic bump, including the authorized types-manifest version literal. Exact transport pins match the consumed section6/ADR-019 allowlist and remain in the owned transport policy file.
 - [ ] #3: OTLP-005/020/021 and PHD-003/004 config/lifecycle semantics match the read-only normative specification; no environment override or competing failure registry is introduced. Release documentation closes in obs-d-18. Root workspace invariant passes.
+
+### f10 dependency-isolation evidence
+
+On the f10 fix, `cargo tree -p sc-observability-otlp --locked --no-default-features
+-e normal,build` was inspected for the default graph and each backend feature.
+`--features legacy-http-json` contains reqwest 0.12.28 and no OpenTelemetry or
+Tonic package. `--features otlp-sdk` contains the OpenTelemetry 0.33 family,
+Tonic 0.14.6 and asynchronous reqwest 0.13.5, with no legacy reqwest 0.12.28.
+The default graph contains neither transport stack. The contract test compiles
+all six gRPC/HTTP signal builders and exercises SDK Tokio delay on a caller
+runtime. These are construction and isolation checks, not collector delivery
+qualification (D.7/D.9).

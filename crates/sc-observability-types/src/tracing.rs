@@ -2,103 +2,71 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ActionName, ErrorCode, StateName, TargetCategory, ValueValidationError, error_codes};
+use crate::{
+    ActionName, EntityId, ErrorCode, StateName, TargetCategory, ValueValidationError, error_codes,
+};
 
-/// Validated 32-character lowercase hexadecimal trace identifier.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct TraceId(String);
+macro_rules! validated_hex_id_type {
+    ($name:ident, $doc:literal, $length:expr, $code:expr) => {
+        #[doc = $doc]
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[serde(try_from = "String")]
+        pub struct $name(String);
 
-impl TraceId {
-    /// Creates a validated lowercase hexadecimal trace identifier.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ValueValidationError`] when the trace identifier is not a
-    /// 32-character lowercase hexadecimal value.
-    pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
-        let value = value.into();
-        validate_lower_hex(
-            &value,
-            crate::constants::TRACE_ID_LEN,
-            &error_codes::TRACE_ID_INVALID,
-        )?;
-        Ok(Self(value))
-    }
+        impl $name {
+            /// Creates a validated lowercase hexadecimal identifier.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ValueValidationError`] when the identifier does not
+            /// have the required lowercase hexadecimal shape.
+            pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
+                let value = value.into();
+                validate_lower_hex(&value, $length, $code)?;
+                Ok(Self(value))
+            }
 
-    /// Returns the underlying lowercase hexadecimal trace identifier.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+            /// Returns the underlying lowercase hexadecimal identifier.
+            #[must_use]
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(&self.0)
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                self.as_str()
+            }
+        }
+
+        impl TryFrom<String> for $name {
+            type Error = ValueValidationError;
+
+            fn try_from(value: String) -> Result<Self, Self::Error> {
+                Self::new(value)
+            }
+        }
+    };
 }
 
-impl fmt::Display for TraceId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl AsRef<str> for TraceId {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl TryFrom<String> for TraceId {
-    type Error = ValueValidationError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new(value)
-    }
-}
-
-/// Validated 16-character lowercase hexadecimal span identifier.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct SpanId(String);
-
-impl SpanId {
-    /// Creates a validated lowercase hexadecimal span identifier.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ValueValidationError`] when the span identifier is not a
-    /// 16-character lowercase hexadecimal value.
-    pub fn new(value: impl Into<String>) -> Result<Self, ValueValidationError> {
-        let value = value.into();
-        validate_lower_hex(
-            &value,
-            crate::constants::SPAN_ID_LEN,
-            &error_codes::SPAN_ID_INVALID,
-        )?;
-        Ok(Self(value))
-    }
-
-    /// Returns the underlying lowercase hexadecimal span identifier.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for SpanId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl AsRef<str> for SpanId {
-    fn as_ref(&self) -> &str {
-        self.as_str()
-    }
-}
-
-impl TryFrom<String> for SpanId {
-    type Error = ValueValidationError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new(value)
-    }
-}
+validated_hex_id_type!(
+    TraceId,
+    "Validated 32-character lowercase hexadecimal trace identifier.",
+    crate::constants::TRACE_ID_LEN,
+    &error_codes::TRACE_ID_INVALID
+);
+validated_hex_id_type!(
+    SpanId,
+    "Validated 16-character lowercase hexadecimal span identifier.",
+    crate::constants::SPAN_ID_LEN,
+    &error_codes::SPAN_ID_INVALID
+);
 
 pub(crate) fn validate_lower_hex(
     value: &str,
@@ -140,8 +108,8 @@ pub struct TraceContext {
 pub struct StateTransition {
     /// Stable category describing what changed, such as `task` or `subagent`.
     pub entity_kind: TargetCategory,
-    /// Optional caller-owned identifier for the entity that changed.
-    pub entity_id: Option<String>,
+    /// Optional validated caller-owned identifier for the entity that changed.
+    pub entity_id: Option<EntityId>,
     /// Previous stable state label.
     pub from_state: StateName,
     /// New stable state label.

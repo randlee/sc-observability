@@ -15,7 +15,7 @@ Generated projection of `obs-d-12`; the bead is authoritative.
 - PR target (merge order only): `integrate/phase-d`
 - Blocked by: `obs-phase-d-plan-qa`
 - Requirements: LAY-001, LAY-006, LAY-007, LOG-014, LOG-016, LOG-018, LOG-019, LOG-047, LOG-048, NFR-005, NFR-008, NFR-010, NFR-011, NFR-012, OBS-003, OBS-007, OBS-012, OBS-021, OTLP-005, OTLP-006, OTLP-007, OTLP-013, OTLP-021, PHB-002, PHB-003, PHB-004, PHB-005, PHB-010, PHB-012, PHB-013, PHD-001, PHD-002, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-020, TYP-021, TYP-022, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
-- ADRs: ADR-002, ADR-003, ADR-005, ADR-006, ADR-011, ADR-014, ADR-015, ADR-017, ADR-018, ADR-019
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-006, ADR-011, ADR-012, ADR-014, ADR-015, ADR-017, ADR-018, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability-dto/src/error_codes.rs`
   - `crates/sc-observability-log/src/error_codes.rs`
@@ -226,6 +226,7 @@ corresponding typed lifecycle failure.
 | `InsecureTransportRejected` | `OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED` | `ConfigFailure` | selected backend does not implement the requested insecure verification override | disable the override or choose an explicitly supporting backend | backend only | after config correction |
 | `InvalidEndpoint` | `OTLP_CONFIG_INVALID_ENDPOINT` | `ConfigFailure` | endpoint URL syntax is invalid | provide a valid endpoint URL | field only | after config correction |
 | `InvalidHeader` | `OTLP_CONFIG_INVALID_HEADER` | `ConfigFailure` | header/auth syntax or credential placement is invalid | correct the header/auth configuration | field only | after config correction |
+| `InvalidConfig` | `OTLP_CONFIG_INVALID` | legacy `InitFailure` compatibility | generic configuration construction failed | inspect the typed configuration diagnostic | no additional data | after config correction |
 | `TransportConstructionFailed` | `OTLP_TRANSPORT_CONSTRUCTION_FAILED` | `ConfigFailure` | CA/auth/client/provider/legacy-worker initialization failed | correct the bounded typed source and reconstruct | bounded typed source; never path contents, credentials, header values, or response bodies | after config/environment correction |
 | `UnsupportedBackend` | `OTLP_UNSUPPORTED_BACKEND` | `ConfigFailure` | feature/backend unavailable | enable/select a supported backend | enum values only | after build/config correction |
 | `UnsupportedProtocol` | `OTLP_UNSUPPORTED_PROTOCOL` | `ConfigFailure` | protocol invalid for backend | select a matrix-supported protocol | enum values only | after config correction |
@@ -241,6 +242,9 @@ corresponding typed lifecycle failure.
 | `NonRetryableHttpStatus` | `OTLP_HTTP_STATUS_TERMINAL` | `ExportError` | collector returned a non-retryable HTTP status | correct request/auth/config before retrying | status/category only; no body/headers | after cause correction |
 | `RetryAttemptsExhausted` | `OTLP_RETRY_ATTEMPTS_EXHAUSTED` | `ExportError` | legacy maximum attempts ended before success | restore collector health or adjust the validated policy | attempt/count only | new operation after recovery |
 | `TerminalExportFailure` | `OTLP_EXPORT_TERMINAL` | `ExportError` | SDK or legacy provider returned a terminal export failure | inspect the preserved source and collector state | bounded typed source; no credentials | source-dependent |
+| `SpanAssemblyFailed` | `OTLP_SPAN_ASSEMBLY_FAILED` | legacy `EventFailure` / `ProjectionFailure` compatibility | lifecycle signals cannot form a complete span | emit matching signals in order | identifiers only | after correcting signal order |
+| `FlushFailed` | `OTLP_FLUSH_FAILED` | legacy `FlushFailure` / `ShutdownFailure` compatibility | telemetry flush cannot complete | inspect exporter health and retry after recovery | bounded source/state | after recovery |
+| `IncompleteSpanDropped` | `OTLP_INCOMPLETE_SPAN_DROPPED` | legacy `ShutdownFailure` compatibility | shutdown drops unmatched span state | emit matching ended signals before shutdown | count only | on a new complete sequence |
 | `Shutdown` | `OTLP_TELEMETRY_SHUTDOWN` | `TelemetryError` | emit was attempted after shutdown began | construct a new telemetry instance | no dynamic data | only on a new instance |
 
 
@@ -291,7 +295,15 @@ Handoff to obs-d-17: the canonical cause-to-variant mapping and ErrorContext con
 
 ## Handoff to obs-d-18 (wave 3)
 
-obs-d-18 activates canonical exports and removes compatibility after its implementation gates. It receives these types-owned files; registry/normative records otherwise remain read-only.
+obs-d-18 activates the ADR-017 canonical error exports and removes their
+superseded compatibility surfaces after its implementation gates. Neutral
+signal models remain additive under `sc_observability_types::v2`; retain the
+published root `MetricRecord`, `TraceContext`, and `SpanRecord` APIs and serde
+contracts under ADR-012. This handoff does not schedule their root replacement.
+The D.21 version bump and D.18 break manifest cannot authorize a new signal
+break: that requires a separately accepted ADR explicitly superseding ADR-012
+for the named types before implementation, followed by PHD-002 release gates.
+It receives these types-owned files; registry/normative records otherwise remain read-only.
 
 - `crates/sc-observability-types/src/diagnostic.rs`
 - `crates/sc-observability-types/src/errors.rs`
@@ -317,3 +329,14 @@ obs-d-18 alone owns docs/project-plan.md in dev. Use: "obs-d-12 owns canonical e
 - [ ] #2–3: cargo test -p sc-observability-types --test neutral_contracts --locked runs nonzero canonical_error_variants_preserve_context, metric_model_failures, histogram_point_serde_rejects_invalid and stable_failure_codes cases. All ConfigFailure/ExportError variants and registry rows are owned by types; code/remediation/source survive.
 - [ ] #2: zero/out-of-range record and byte capacity failures have distinct InvalidQueueCapacity/InvalidQueueByteCapacity variants and OTLP_CONFIG_QUEUE_CAPACITY/OTLP_CONFIG_QUEUE_BYTE_CAPACITY codes; this checks error definitions, not transport admission.
 - [ ] #1–3: the root workspace invariant passes without obs-d-21, OTLP module stubs or production adapters. No requirement to activate the workspace 2.0 Cargo version blocks types closure.
+
+
+## Implementation contract
+
+The canonical staged entry point is `sc_observability_types::v2`. Exact serde,
+constructor, interval and language-projection rules are frozen in
+[API design](../../api-design.md#phase-d-canonical-types-and-wire-handoff).
+`neutral_contracts` exercises every canonical variant's context/source,
+histogram serde rejection, metric interval semantics, registry uniqueness and
+span flags/links. Types retains `version.workspace = true`; D.21 changes the
+workspace version atomically. This sprint does not retire the 1.x exports.

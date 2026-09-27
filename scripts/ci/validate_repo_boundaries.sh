@@ -57,7 +57,11 @@ if "sc-observability-otlp" in obs_deps or "sc-observe" in obs_deps:
 if "sc-observability-otlp" in observe_runtime_deps:
     raise SystemExit("sc-observe must not depend on sc-observability-otlp")
 required_otlp = {"serde_json", "thiserror", "sc-observability-types"}
-allowed_otlp = required_otlp | {"sc-observability"}
+# ADR-019's machine allowlist is owned by policy/otlp-transport.toml.
+sys.path.insert(0, str(root / "scripts/ci"))
+from otlp_dependencies import validate_transport_dependencies
+transport_names = validate_transport_dependencies(root)
+allowed_otlp = required_otlp | {"sc-observability"} | transport_names
 if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
     raise SystemExit(
         "sc-observability-otlp runtime dependencies drifted from allowed baseline"

@@ -422,16 +422,12 @@ pub trait LogFilter: Send + Sync {
 /// This trait is intentionally open for downstream implementations. Adding
 /// required methods or tightening object-safety guarantees is therefore a
 /// semver-significant public API change.
-#[allow(
-    deprecated,
-    reason = "LogSink preserves its published LogSinkError trait signature"
-)]
 pub trait LogSink: Send + Sync {
     /// Writes one event to the sink.
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
+    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError>;
 
     /// Flushes any buffered sink state.
-    fn flush(&self) -> Result<(), LogSinkError> {
+    fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
         Ok(())
     }
 
@@ -700,9 +696,9 @@ mod sealed_emitters {
     dead_code,
     reason = "crate-local emitter trait is intentionally available for logging-only injection"
 )]
-#[allow(
+#[expect(
     deprecated,
-    reason = "the crate-local compatibility emitter preserves its EventError signature"
+    reason = "the crate-local compatibility emitter retains the deprecated legacy EventError boundary"
 )]
 pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
@@ -710,9 +706,9 @@ pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
 
 impl sealed_emitters::Sealed for Logger<Running> {}
 
-#[allow(
+#[expect(
     deprecated,
-    reason = "the crate-local compatibility emitter delegates through the retained legacy logger boundary"
+    reason = "the crate-local compatibility emitter calls the retained deprecated logger boundary"
 )]
 impl LogEmitter for Logger<Running> {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError> {
@@ -846,12 +842,14 @@ mod tests {
     struct FailSink;
 
     impl LogSink for FailSink {
-        fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
-            Err(LogSinkError(Box::new(ErrorContext::new(
-                error_codes::LOGGER_SINK_WRITE_FAILED,
-                "fail sink write failed",
-                Remediation::not_recoverable("test sink intentionally fails"),
-            ))))
+        fn write(&self, _event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
+            Err(sc_observability_types::v2::LogSinkError::Write {
+                context: Box::new(ErrorContext::new(
+                    error_codes::LOGGER_SINK_WRITE_FAILED,
+                    "fail sink write failed",
+                    Remediation::not_recoverable("test sink intentionally fails"),
+                )),
+            })
         }
 
         fn health(&self) -> SinkHealth {
@@ -874,7 +872,7 @@ mod tests {
     }
 
     impl LogSink for RecordingEventSink {
-        fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
+        fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
             self.events
                 .lock()
                 .expect("recording events mutex poisoned")
@@ -892,11 +890,11 @@ mod tests {
     }
 
     impl LogSink for RecordingFlushSink {
-        fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+        fn write(&self, _event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
             Ok(())
         }
 
-        fn flush(&self) -> Result<(), LogSinkError> {
+        fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
             self.flush_calls.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
@@ -1429,7 +1427,7 @@ mod tests {
             std::error::Error::source(&legacy)
                 .expect("legacy native source")
                 .to_string(),
-            "console sink write failed: injected console write failure; caused by: injected console write failure"
+            "injected console write failure"
         );
         let health = LogSink::health(&sink);
         assert_eq!(health.state, SinkHealthState::DegradedDropping);
@@ -1449,7 +1447,7 @@ mod tests {
             std::error::Error::source(&typed)
                 .expect("typed native source")
                 .to_string(),
-            "console sink write failed: injected console write failure; caused by: injected console write failure"
+            "injected console write failure"
         );
         let health = crate::typed::TypedLogSink::health(&sink);
         assert_eq!(health.state, SinkHealthState::DegradedDropping);
@@ -1525,16 +1523,21 @@ mod tests {
         struct FlushFailSink;
 
         impl LogSink for FlushFailSink {
-            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+            fn write(
+                &self,
+                _event: &LogEvent,
+            ) -> Result<(), sc_observability_types::v2::LogSinkError> {
                 Ok(())
             }
 
-            fn flush(&self) -> Result<(), LogSinkError> {
-                Err(LogSinkError(Box::new(ErrorContext::new(
-                    error_codes::LOGGER_FLUSH_FAILED,
-                    "flush failed",
-                    Remediation::not_recoverable("test sink intentionally fails flush"),
-                ))))
+            fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
+                Err(sc_observability_types::v2::LogSinkError::Flush {
+                    context: Box::new(ErrorContext::new(
+                        error_codes::LOGGER_FLUSH_FAILED,
+                        "flush failed",
+                        Remediation::not_recoverable("test sink intentionally fails flush"),
+                    )),
+                })
             }
 
             fn health(&self) -> SinkHealth {
@@ -1975,7 +1978,10 @@ mod tests {
         }
 
         impl LogSink for PanicSink {
-            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+            fn write(
+                &self,
+                _event: &LogEvent,
+            ) -> Result<(), sc_observability_types::v2::LogSinkError> {
                 self.entered.store(true, Ordering::SeqCst);
                 panic!("injected sink panic terminates writer");
             }
@@ -2159,7 +2165,7 @@ mod tests {
             fn write(
                 &self,
                 _event: &LogEvent,
-            ) -> Result<(), sc_observability_types::typed::LogSinkFailure> {
+            ) -> Result<(), sc_observability_types::v2::LogSinkError> {
                 self.writes.fetch_add(1, Ordering::SeqCst);
                 Ok(())
             }
@@ -2212,10 +2218,10 @@ mod tests {
             fn write(
                 &self,
                 _event: &LogEvent,
-            ) -> Result<(), sc_observability_types::typed::LogSinkFailure> {
+            ) -> Result<(), sc_observability_types::v2::LogSinkError> {
                 self.writes.fetch_add(1, Ordering::SeqCst);
-                Err(sc_observability_types::typed::LogSinkFailure::from_context(
-                    Box::new(
+                Err(sc_observability_types::v2::LogSinkError::Write {
+                    context: Box::new(
                         ErrorContext::new(
                             ErrorCode::new_static("CUSTOM_TYPED_WRITE"),
                             "typed write failed",
@@ -2223,13 +2229,13 @@ mod tests {
                         )
                         .source(Box::new(std::io::Error::other("typed write source"))),
                     ),
-                ))
+                })
             }
 
-            fn flush(&self) -> Result<(), sc_observability_types::typed::LogSinkFailure> {
+            fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
                 self.flushes.fetch_add(1, Ordering::SeqCst);
-                Err(sc_observability_types::typed::LogSinkFailure::from_context(
-                    Box::new(
+                Err(sc_observability_types::v2::LogSinkError::Flush {
+                    context: Box::new(
                         ErrorContext::new(
                             ErrorCode::new_static("CUSTOM_TYPED_FLUSH"),
                             "typed flush failed",
@@ -2237,7 +2243,7 @@ mod tests {
                         )
                         .source(Box::new(std::io::Error::other("typed flush source"))),
                     ),
-                ))
+                })
             }
 
             fn health(&self) -> SinkHealth {
@@ -2255,28 +2261,35 @@ mod tests {
         }
 
         impl LogSink for LegacyFailingSink {
-            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+            fn write(
+                &self,
+                _event: &LogEvent,
+            ) -> Result<(), sc_observability_types::v2::LogSinkError> {
                 self.writes.fetch_add(1, Ordering::SeqCst);
-                Err(LogSinkError(Box::new(
-                    ErrorContext::new(
-                        ErrorCode::new_static("CUSTOM_LEGACY_WRITE"),
-                        "legacy write failed",
-                        Remediation::recoverable("retry", ["retry"]),
-                    )
-                    .source(Box::new(std::io::Error::other("legacy write source"))),
-                )))
+                Err(sc_observability_types::v2::LogSinkError::Write {
+                    context: Box::new(
+                        ErrorContext::new(
+                            ErrorCode::new_static("CUSTOM_LEGACY_WRITE"),
+                            "legacy write failed",
+                            Remediation::recoverable("retry", ["retry"]),
+                        )
+                        .source(Box::new(std::io::Error::other("legacy write source"))),
+                    ),
+                })
             }
 
-            fn flush(&self) -> Result<(), LogSinkError> {
+            fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
                 self.flushes.fetch_add(1, Ordering::SeqCst);
-                Err(LogSinkError(Box::new(
-                    ErrorContext::new(
-                        ErrorCode::new_static("CUSTOM_LEGACY_FLUSH"),
-                        "legacy flush failed",
-                        Remediation::recoverable("retry", ["retry"]),
-                    )
-                    .source(Box::new(std::io::Error::other("legacy flush source"))),
-                )))
+                Err(sc_observability_types::v2::LogSinkError::Flush {
+                    context: Box::new(
+                        ErrorContext::new(
+                            ErrorCode::new_static("CUSTOM_LEGACY_FLUSH"),
+                            "legacy flush failed",
+                            Remediation::recoverable("retry", ["retry"]),
+                        )
+                        .source(Box::new(std::io::Error::other("legacy flush source"))),
+                    ),
+                })
             }
 
             fn health(&self) -> SinkHealth {
@@ -2301,7 +2314,7 @@ mod tests {
             std::error::Error::source(&write)
                 .expect("source")
                 .to_string(),
-            "typed write failed; caused by: typed write source"
+            "typed write source"
         );
         let flush = legacy.flush().expect_err("flush fails");
         assert_eq!(flush.diagnostic().code.as_str(), "CUSTOM_TYPED_FLUSH");
@@ -2321,7 +2334,7 @@ mod tests {
             std::error::Error::source(&write)
                 .expect("source")
                 .to_string(),
-            "legacy write failed; caused by: legacy write source"
+            "legacy write source"
         );
         let flush = crate::typed::TypedLogSink::flush(typed.as_ref()).expect_err("flush fails");
         assert_eq!(flush.diagnostic().code.as_str(), "CUSTOM_LEGACY_FLUSH");

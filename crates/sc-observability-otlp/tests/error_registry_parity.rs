@@ -6,8 +6,10 @@
 //! each code). This test is the single place able to see all four crates'
 //! `error_codes` registries at once and asserts each typed constructor's
 //! produced diagnostic code equals its owning crate's registry constant, so
-//! a renamed or removed registry constant is caught here instead of only by
-//! runtime string-matching drift.
+//! a renamed registry constant is caught here instead of only by runtime
+//! string-matching drift. Compatibility constructors whose legacy literals
+//! remain types-owned are intentionally not asserted against this transport
+//! registry: D.21 exposes only the types-owned OTLP registry.
 
 use sc_observability_types::Remediation;
 use sc_observability_types::typed::{
@@ -49,15 +51,15 @@ fn init_failure_matches_owning_registry() {
     );
     assert_owning_code!(
         InitFailure::invalid_telemetry_config("x", remediation()),
-        sc_observability_otlp::error_codes::TELEMETRY_INVALID_CONFIG
+        sc_observability_types::error_codes::otlp::OTLP_CONFIG_INVALID
     );
     assert_owning_code!(
         InitFailure::invalid_protocol("x", remediation()),
-        sc_observability_otlp::error_codes::TELEMETRY_INVALID_PROTOCOL
+        sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_PROTOCOL
     );
     assert_owning_code!(
         InitFailure::exporter_initialization("x", remediation()),
-        sc_observability_otlp::error_codes::TELEMETRY_EXPORTER_INIT_FAILED
+        sc_observability_types::error_codes::otlp::OTLP_TRANSPORT_CONSTRUCTION_FAILED
     );
     assert_owning_code!(
         InitFailure::identity_resolution("x", remediation()),
@@ -89,7 +91,7 @@ fn event_failure_matches_owning_registry() {
     );
     assert_owning_code!(
         EventFailure::span_assembly("x", remediation()),
-        sc_observability_otlp::error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED
+        sc_observability_types::error_codes::otlp::OTLP_SPAN_ASSEMBLY_FAILED
     );
 }
 
@@ -109,11 +111,11 @@ fn flush_failure_matches_owning_registry() {
     );
     assert_owning_code!(
         FlushFailure::telemetry_flush("x", remediation()),
-        sc_observability_otlp::error_codes::TELEMETRY_FLUSH_FAILED
+        sc_observability_types::error_codes::otlp::OTLP_FLUSH_FAILED
     );
     assert_owning_code!(
         FlushFailure::closed("x", remediation()),
-        sc_observability_otlp::error_codes::TELEMETRY_SHUTDOWN
+        sc_observability_types::error_codes::otlp::OTLP_TELEMETRY_SHUTDOWN
     );
 }
 
@@ -121,11 +123,11 @@ fn flush_failure_matches_owning_registry() {
 fn shutdown_failure_matches_owning_registry() {
     assert_owning_code!(
         ShutdownFailure::telemetry_flush("x", remediation()),
-        sc_observability_otlp::error_codes::TELEMETRY_FLUSH_FAILED
+        sc_observability_types::error_codes::otlp::OTLP_FLUSH_FAILED
     );
     assert_owning_code!(
         ShutdownFailure::incomplete_spans("x", remediation()),
-        sc_observability_otlp::error_codes::TELEMETRY_INCOMPLETE_SPAN_DROPPED
+        sc_observability_types::error_codes::otlp::OTLP_INCOMPLETE_SPAN_DROPPED
     );
     assert_owning_code!(
         ShutdownFailure::writer_degraded("x", remediation()),
@@ -141,15 +143,15 @@ fn shutdown_failure_matches_owning_registry() {
 fn projection_failure_matches_owning_registry() {
     assert_owning_code!(
         ProjectionFailure::telemetry_closed("x", remediation()),
-        sc_observability_otlp::error_codes::TELEMETRY_SHUTDOWN
+        sc_observability_types::error_codes::otlp::OTLP_TELEMETRY_SHUTDOWN
     );
     assert_owning_code!(
         ProjectionFailure::telemetry_export("x", remediation()),
-        sc_observability_otlp::error_codes::TELEMETRY_EXPORT_FAILED
+        sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL
     );
     assert_owning_code!(
         ProjectionFailure::span_assembly("x", remediation()),
-        sc_observability_otlp::error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED
+        sc_observability_types::error_codes::otlp::OTLP_SPAN_ASSEMBLY_FAILED
     );
     assert_owning_code!(
         ProjectionFailure::routing("x", remediation()),
@@ -189,6 +191,6 @@ fn log_sink_failure_matches_owning_registry() {
 fn export_failure_matches_owning_registry() {
     assert_owning_code!(
         ExportFailure::export("x", remediation()),
-        sc_observability_otlp::error_codes::TELEMETRY_EXPORT_FAILED
+        sc_observability_types::error_codes::otlp::OTLP_EXPORT_TERMINAL
     );
 }

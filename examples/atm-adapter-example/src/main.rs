@@ -2,30 +2,28 @@
 
 mod constants;
 
-use std::env;
 use std::collections::HashMap;
+use std::env;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex};
 
 use sc_observability::RetainedLogPolicy;
 use sc_observability_otlp::{
     AuthHeader, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol, Telemetry,
-    TelemetryConfig,
-    TelemetryConfigBuilder, TracesConfig,
-};
-use sc_observability_types::{
-    ActionName, CorrelationId, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-    MetricRecord, MetricUnit, LoggingHealthReport, Observation, ObservabilityHealthReport,
-    OutcomeLabel, ProcessIdentity, ProjectionRegistration, Remediation,
-    SchemaVersion, ServiceName, SpanEvent, SpanId, SpanRecord, SpanSignal, SpanStarted,
-    SpanStatus, StateName, StateTransition, TargetCategory, TelemetryHealthReport, TraceContext,
-    TraceId,
-    OBSERVATION_ENVELOPE_VERSION,
+    TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
 };
 use sc_observability_types::typed::ProjectionFailure;
+use sc_observability_types::{
+    ActionName, CorrelationId, Diagnostic, EntityId, ErrorCode, Level, LogEvent,
+    LoggingHealthReport, MetricKind, MetricName, MetricRecord, MetricUnit,
+    OBSERVATION_ENVELOPE_VERSION, ObservabilityHealthReport, Observation, OutcomeLabel,
+    ProcessIdentity, ProjectionRegistration, Remediation, SchemaVersion, ServiceName, SpanEvent,
+    SpanId, SpanRecord, SpanSignal, SpanStarted, SpanStatus, StateName, StateTransition,
+    TargetCategory, TelemetryHealthReport, TraceContext, TraceId,
+};
 use sc_observe::{Observability, ObservabilityConfig};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AgentContext {
@@ -88,10 +86,9 @@ static ATM_EVENTS_TOTAL: LazyLock<MetricName> =
     LazyLock::new(|| MetricName::new("atm.events_total").expect("valid metric"));
 static ATM_TOOL_USE_DURATION_MS: LazyLock<MetricName> =
     LazyLock::new(|| MetricName::new("atm.tool_use_duration_ms").expect("valid metric"));
-static OBSERVATION_VERSION: LazyLock<SchemaVersion> =
-    LazyLock::new(|| {
-        SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("valid schema version")
-    });
+static OBSERVATION_VERSION: LazyLock<SchemaVersion> = LazyLock::new(|| {
+    SchemaVersion::new(OBSERVATION_ENVELOPE_VERSION).expect("valid schema version")
+});
 static SUBAGENT_ENTITY_TARGET: LazyLock<TargetCategory> =
     LazyLock::new(|| TargetCategory::new("subagent").expect("valid target category"));
 static SUBAGENT_IDLE_STATE: LazyLock<StateName> =
@@ -150,18 +147,24 @@ fn build_observability(
     let runtime = Observability::builder(observability_config)
         .register_projection(
             ProjectionRegistration::new()
-                .with_log_projector(sc_observability_types::typed::legacy_log_projector(Arc::new(AttachedLogProjector {
-                    telemetry: telemetry.clone(),
-                    inner: Arc::new(AtmLogProjector),
-                })))
-                .with_span_projector(sc_observability_types::typed::legacy_span_projector(Arc::new(AttachedSpanProjector {
-                    telemetry: telemetry.clone(),
-                    inner: Arc::new(AtmSpanProjector::default()),
-                })))
-                .with_metric_projector(sc_observability_types::typed::legacy_metric_projector(Arc::new(AttachedMetricProjector {
-                    telemetry: telemetry.clone(),
-                    inner: Arc::new(AtmMetricProjector),
-                }))),
+                .with_log_projector(sc_observability_types::typed::legacy_log_projector(
+                    Arc::new(AttachedLogProjector {
+                        telemetry: telemetry.clone(),
+                        inner: Arc::new(AtmLogProjector),
+                    }),
+                ))
+                .with_span_projector(sc_observability_types::typed::legacy_span_projector(
+                    Arc::new(AttachedSpanProjector {
+                        telemetry: telemetry.clone(),
+                        inner: Arc::new(AtmSpanProjector::default()),
+                    }),
+                ))
+                .with_metric_projector(sc_observability_types::typed::legacy_metric_projector(
+                    Arc::new(AttachedMetricProjector {
+                        telemetry: telemetry.clone(),
+                        inner: Arc::new(AtmMetricProjector),
+                    }),
+                )),
         )
         .build_typed()?;
 
@@ -285,23 +288,21 @@ fn telemetry_config_from_env(
     let insecure_skip_verify = parse_bool_env("ATM_OTEL_INSECURE_SKIP_VERIFY")?.unwrap_or(false);
     let debug_local_export = parse_bool_env("ATM_OTEL_DEBUG_LOCAL_EXPORT")?.unwrap_or(false);
 
+    let mut transport = OtelConfig::default();
+    transport.enabled = endpoint.is_some();
+    transport.endpoint = endpoint;
+    transport.protocol = protocol;
+    transport.auth_header = auth_header;
+    transport.ca_file = ca_file;
+    transport.insecure_skip_verify = insecure_skip_verify;
+    transport.timeout_ms = Some(constants::OTLP_TIMEOUT_MS.into());
+    transport.debug_local_export = debug_local_export;
+
     Ok(TelemetryConfigBuilder::new(service)
         .enable_logs(LogsConfig::default())
         .enable_traces(TracesConfig::default())
         .enable_metrics(MetricsConfig::default())
-        .with_transport(OtelConfig {
-            enabled: endpoint.is_some(),
-            endpoint,
-            protocol,
-            auth_header,
-            ca_file,
-            insecure_skip_verify,
-            timeout_ms: constants::OTLP_TIMEOUT_MS.into(),
-            debug_local_export,
-            max_retries: constants::OTLP_MAX_RETRIES,
-            initial_backoff_ms: constants::OTLP_INITIAL_BACKOFF_MS.into(),
-            max_backoff_ms: constants::OTLP_MAX_BACKOFF_MS.into(),
-        })
+        .with_transport(transport)
         .with_resource(sc_observability_otlp::ResourceAttributes {
             attributes: [
                 ("service.namespace".to_string(), json!("atm")),
@@ -350,7 +351,12 @@ fn project_health(
             .last_error
             .as_ref()
             .map(|summary| summary.message.clone())
-            .or_else(|| telemetry.last_error.as_ref().map(|summary| summary.message.clone())),
+            .or_else(|| {
+                telemetry
+                    .last_error
+                    .as_ref()
+                    .map(|summary| summary.message.clone())
+            }),
     }
 }
 
@@ -533,7 +539,9 @@ impl sc_observability_types::typed::TypedSpanProjector<AgentInfoEvent> for AtmSp
                     common_fields(&observation.payload),
                 ))]
             }
-            HookEventKind::ToolUse { tool, duration_ms, .. } => vec![SpanSignal::Event(SpanEvent {
+            HookEventKind::ToolUse {
+                tool, duration_ms, ..
+            } => vec![SpanSignal::Event(SpanEvent {
                 timestamp: observation.timestamp,
                 trace: trace.clone(),
                 name: TOOL_USE_ACTION.clone(),
@@ -649,9 +657,7 @@ fn log_message(event: &HookEventKind) -> String {
     }
 }
 
-fn outcome(
-    event: &HookEventKind,
-) -> Result<Option<OutcomeLabel>, ProjectionFailure> {
+fn outcome(event: &HookEventKind) -> Result<Option<OutcomeLabel>, ProjectionFailure> {
     match event {
         HookEventKind::SubagentEnd { outcome } => Ok(Some(
             OutcomeLabel::new(outcome.clone()).map_err(validation_to_projection_failure)?,
@@ -664,7 +670,7 @@ fn state_transition(event: &HookEventKind) -> Option<StateTransition> {
     match event {
         HookEventKind::SubagentStart { .. } => Some(StateTransition {
             entity_kind: SUBAGENT_ENTITY_TARGET.clone(),
-            entity_id: Some("subagent-7".to_string()),
+            entity_id: Some(EntityId::new("subagent-7").expect("valid entity id")),
             from_state: SUBAGENT_IDLE_STATE.clone(),
             to_state: SUBAGENT_RUNNING_STATE.clone(),
             reason: None,
@@ -672,7 +678,7 @@ fn state_transition(event: &HookEventKind) -> Option<StateTransition> {
         }),
         HookEventKind::SubagentEnd { .. } => Some(StateTransition {
             entity_kind: SUBAGENT_ENTITY_TARGET.clone(),
-            entity_id: Some("subagent-7".to_string()),
+            entity_id: Some(EntityId::new("subagent-7").expect("valid entity id")),
             from_state: SUBAGENT_RUNNING_STATE.clone(),
             to_state: SUBAGENT_COMPLETED_STATE.clone(),
             reason: None,
@@ -684,8 +690,14 @@ fn state_transition(event: &HookEventKind) -> Option<StateTransition> {
 
 fn common_fields(payload: &AgentInfoEvent) -> Map<String, Value> {
     Map::from_iter([
-        ("team".to_string(), Value::from(payload.context.team.clone())),
-        ("agent_id".to_string(), Value::from(payload.context.agent_id.clone())),
+        (
+            "team".to_string(),
+            Value::from(payload.context.team.clone()),
+        ),
+        (
+            "agent_id".to_string(),
+            Value::from(payload.context.agent_id.clone()),
+        ),
         (
             "subagent_id".to_string(),
             payload
@@ -709,6 +721,8 @@ fn trace_key(trace: &TraceContext) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sc_observability_types::Timestamp;
+    use sc_observability_types::typed::TypedSpanProjector;
     use time::Duration;
 
     fn service_name() -> ServiceName {

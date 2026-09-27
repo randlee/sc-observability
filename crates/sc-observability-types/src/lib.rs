@@ -9,6 +9,7 @@ pub mod constants;
 mod diagnostic;
 pub mod error_codes;
 mod errors;
+mod errors_v2;
 mod events;
 mod health;
 mod level;
@@ -17,6 +18,7 @@ mod primitives;
 mod process;
 mod projection;
 mod query;
+mod signals_v2;
 mod span;
 mod tracing;
 pub mod typed;
@@ -95,6 +97,30 @@ pub use span::{SpanEnded, SpanEvent, SpanRecord, SpanSignal, SpanStarted, SpanSt
 pub use tracing::{SpanId, StateTransition, TraceContext, TraceId};
 #[doc(inline)]
 pub use validation::{
-    ActionName, CorrelationId, EnvPrefix, MetricName, MetricUnit, OutcomeLabel, SchemaVersion,
-    ServiceName, SinkName, StateName, TargetCategory, ToolName, ValueValidationError,
+    ActionName, CorrelationId, EntityId, EnvPrefix, MetricName, MetricUnit, OutcomeLabel,
+    SchemaVersion, ServiceName, SinkName, StateName, TargetCategory, ToolName,
+    ValueValidationError,
 };
+
+/// Canonical error contracts and additive neutral signal models.
+///
+/// The package remains at the workspace version until the atomic D.21 bump.
+/// ADR-017 authorizes integration's canonical error migration. Neutral signal
+/// models remain under `v2`: the existing root `MetricRecord`, `TraceContext`,
+/// and `SpanRecord` APIs and serialization remain unchanged under ADR-012.
+/// The version bump does not authorize replacing those root signal types.
+pub mod v2 {
+    #[doc(inline)]
+    pub use crate::errors_v2::{
+        ConfigFailure, EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError,
+        MetricModelError, ProjectionError, ShutdownError, SubscriberError, TelemetryError,
+    };
+    #[doc(inline)]
+    pub use crate::signals_v2::{
+        AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint,
+        MetricRecord, MetricValue, SpanEvent, SpanKind, SpanLink, SpanRecord, SpanSignal,
+        SpanState, TraceContext, TraceFlags,
+    };
+    #[doc(inline)]
+    pub use crate::{SpanEnded, SpanStarted, SpanStatus};
+}

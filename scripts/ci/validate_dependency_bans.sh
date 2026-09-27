@@ -124,7 +124,11 @@ required_otlp = {
     "thiserror",
     "sc-observability-types",
 }
-allowed_otlp = required_otlp | {"sc-observability"}
+# ADR-019's machine allowlist is owned by policy/otlp-transport.toml.
+sys.path.insert(0, str(root / "scripts/ci"))
+from otlp_dependencies import validate_transport_dependencies
+transport_names = validate_transport_dependencies(root)
+allowed_otlp = required_otlp | {"sc-observability"} | transport_names
 if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
     raise SystemExit(
         "sc-observability-otlp runtime dependency set drifted from allowed baseline: "
@@ -255,3 +259,5 @@ print("dependency ban validation passed")
 PY
 
 python3 scripts/ci/validate_binding_runtime_dependencies.py
+
+python3 -m unittest scripts.ci.tests.test_otlp_dependencies

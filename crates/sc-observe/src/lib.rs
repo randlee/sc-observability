@@ -91,13 +91,9 @@ impl ObservabilityConfig {
     ///
     /// assert_eq!(config.tool_name.as_str(), "demo-tool");
     /// ```
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility constructor keeps the published InitError signature"
-    )]
-    #[allow(
-        deprecated,
-        reason = "retained compatibility accessor keeps the published InitError signature"
     )]
     #[deprecated(
         since = "1.4.0",
@@ -133,11 +129,7 @@ impl ObservabilityConfig {
     }
 
     /// Derives the logging/telemetry service name from the configured tool.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility accessor keeps the published InitError signature"
-    )]
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility accessor keeps the published InitError signature"
     )]
@@ -262,11 +254,7 @@ fn log_error_summary(error: &LogError) -> DiagnosticSummary {
 
 impl Observability {
     /// Builds a runtime using the documented default logger integration.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility constructor keeps the published InitError signature"
-    )]
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility constructor keeps the published InitError signature"
     )]
@@ -392,11 +380,7 @@ impl Observability {
     ///
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing its registered sinks.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility lifecycle method keeps the published FlushError signature"
-    )]
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility lifecycle method keeps the published FlushError signature"
     )]
@@ -438,11 +422,7 @@ impl Observability {
     ///
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing sinks or updating query/follow health during shutdown.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility lifecycle method keeps the published ShutdownError signature"
-    )]
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility lifecycle method keeps the published ShutdownError signature"
     )]
@@ -694,11 +674,7 @@ impl ObservabilityBuilder {
     }
 
     /// Finalizes registration and constructs the routing runtime.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility builder method keeps the published InitError signature"
-    )]
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility builder method keeps the published InitError signature"
     )]
@@ -778,11 +754,11 @@ mod tests {
         TypedObservationSubscriber, legacy_subscriber,
     };
     use sc_observability_types::{
-        ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
-        MetricRecord, MetricUnit, ObservationFilter, ObservationSubscriber, ProcessIdentity,
-        ProjectionError, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
-        SubscriberError, TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp,
-        TraceContext, TraceId,
+        ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
+        MetricUnit, ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError,
+        SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError,
+        TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext,
+        TraceId,
     };
     use serde_json::Map;
     use std::sync::mpsc;
@@ -1345,10 +1321,10 @@ mod tests {
         release: Mutex<mpsc::Receiver<()>>,
     }
     impl LogSink for BlockingFlushSink {
-        fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
+        fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
             Ok(())
         }
-        fn flush(&self) -> Result<(), LogSinkError> {
+        fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
             if self.armed.swap(false, Ordering::SeqCst) {
                 let _ = self.entered.send(());
                 let _ = self
@@ -1362,11 +1338,13 @@ mod tests {
             if self.flush_calls.fetch_add(1, Ordering::SeqCst) == 0 {
                 let _ = self.seed_completed.send(());
             }
-            Err(LogSinkError(Box::new(ErrorContext::new(
-                sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                "controlled flush failure",
-                Remediation::not_recoverable("test fixture"),
-            ))))
+            Err(sc_observability_types::v2::LogSinkError::Flush {
+                context: Box::new(ErrorContext::new(
+                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                    "controlled flush failure",
+                    Remediation::not_recoverable("test fixture"),
+                )),
+            })
         }
         fn health(&self) -> SinkHealth {
             SinkHealth {
@@ -1654,17 +1632,22 @@ mod tests {
         }
 
         impl LogSink for FlushFailSink {
-            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+            fn write(
+                &self,
+                _event: &LogEvent,
+            ) -> Result<(), sc_observability_types::v2::LogSinkError> {
                 Ok(())
             }
 
-            fn flush(&self) -> Result<(), LogSinkError> {
+            fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
                 let call = self.flush_calls.fetch_add(1, Ordering::SeqCst);
-                let result = Err(LogSinkError(Box::new(ErrorContext::new(
-                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                    "flush failed",
-                    Remediation::not_recoverable("test sink intentionally fails flush"),
-                ))));
+                let result = Err(sc_observability_types::v2::LogSinkError::Flush {
+                    context: Box::new(ErrorContext::new(
+                        sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                        "flush failed",
+                        Remediation::not_recoverable("test sink intentionally fails flush"),
+                    )),
+                });
                 if call == 0 {
                     let _ = self.flush_completed.send(());
                 }

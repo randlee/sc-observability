@@ -18,9 +18,11 @@
 
 use std::fmt;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::{constants, error_codes};
 use sc_observability_types::typed::InitFailure;
+use sc_observability_types::v2::ConfigFailure;
 #[allow(
     deprecated,
     reason = "OTLP config retains InitError in its published compatibility signatures"
@@ -39,12 +41,171 @@ pub enum OtlpProtocol {
     Grpc,
 }
 
+impl OtlpProtocol {
+    pub(crate) const fn stable_name(self) -> &'static str {
+        match self {
+            Self::HttpBinary => "http_binary",
+            Self::HttpJson => "http_json",
+            Self::Grpc => "grpc",
+        }
+    }
+}
+
+/// Backend selected for an enabled OTLP transport.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExporterBackend {
+    /// The asynchronous OpenTelemetry SDK backend.
+    OpenTelemetrySdk,
+    /// The reserved blocking HTTP/JSON backend.
+    LegacyHttpJson,
+}
+
+impl ExporterBackend {
+    pub(crate) const fn stable_name(self) -> &'static str {
+        match self {
+            Self::OpenTelemetrySdk => "opentelemetry_sdk",
+            Self::LegacyHttpJson => "legacy_http_json",
+        }
+    }
+}
+
+/// A named transport field used in deterministic validation diagnostics.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OtlpConfigField {
+    /// OTLP collector endpoint.
+    Endpoint,
+    /// Authorization or credential header.
+    Header,
+    /// Per-request timeout.
+    Timeout,
+    /// Lifecycle flush timeout.
+    LifecycleFlushTimeout,
+    /// Lifecycle shutdown timeout.
+    LifecycleShutdownTimeout,
+    /// Record admission capacity.
+    QueueCapacity,
+    /// Aggregate byte admission capacity.
+    QueueByteCapacity,
+    /// Legacy maximum retries.
+    MaxRetries,
+    /// Legacy initial retry backoff.
+    InitialBackoff,
+    /// Legacy maximum retry backoff.
+    MaxBackoff,
+    /// Legacy complete retry-sequence timeout.
+    RetrySequenceTimeout,
+    /// Legacy Retry-After cap.
+    RetryAfterCap,
+    /// Legacy jitter percentage.
+    RetryJitterPercent,
+    /// TLS certificate-verification override.
+    InsecureSkipVerify,
+}
+
+impl OtlpConfigField {
+    const fn stable_name(self) -> &'static str {
+        match self {
+            Self::Endpoint => "endpoint",
+            Self::Header => "auth_header",
+            Self::Timeout => "timeout_ms",
+            Self::LifecycleFlushTimeout => "lifecycle_flush_timeout_ms",
+            Self::LifecycleShutdownTimeout => "lifecycle_shutdown_timeout_ms",
+            Self::QueueCapacity => "queue_capacity",
+            Self::QueueByteCapacity => "queue_byte_capacity",
+            Self::MaxRetries => "legacy_retry.max_retries",
+            Self::InitialBackoff => "legacy_retry.initial_backoff_ms",
+            Self::MaxBackoff => "legacy_retry.max_backoff_ms",
+            Self::RetrySequenceTimeout => "legacy_retry.retry_sequence_timeout_ms",
+            Self::RetryAfterCap => "legacy_retry.retry_after_cap_ms",
+            Self::RetryJitterPercent => "legacy_retry.retry_jitter_percent",
+            Self::InsecureSkipVerify => "insecure_skip_verify",
+        }
+    }
+}
+
+/// Whether a resolved transport value came from the caller or the contract default.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ValueOrigin {
+    /// Contract default.
+    Default,
+    /// Caller-supplied value.
+    Explicit,
+}
+
+impl ValueOrigin {
+    const fn stable_name(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Explicit => "explicit",
+        }
+    }
+}
+
+/// A resolved transport value with its stable field identity and source.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ResolvedField<T> {
+    /// Field represented by this value.
+    pub(crate) field: OtlpConfigField,
+    /// Resolved value.
+    pub(crate) value: T,
+    /// Whether the value was explicit or defaulted.
+    pub(crate) origin: ValueOrigin,
+}
+
+/// The target at which an inapplicable field was rejected.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OtlpConfigTarget {
+    /// Transport is disabled and no backend is constructed.
+    Disabled,
+    /// A specific enabled backend was selected.
+    Backend(ExporterBackend),
+}
+
+impl OtlpConfigTarget {
+    fn stable_name(self) -> String {
+        match self {
+            Self::Disabled => "disabled".to_owned(),
+            Self::Backend(backend) => format!("backend:{}", backend.stable_name()),
+        }
+    }
+}
+
+/// Legacy-only retry wire settings.
+#[non_exhaustive]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LegacyRetryPolicy {
+    /// Maximum retry attempts.
+    pub max_retries: Option<u32>,
+    /// Initial retry delay.
+    pub initial_backoff_ms: Option<DurationMs>,
+    /// Maximum retry delay.
+    pub max_backoff_ms: Option<DurationMs>,
+    /// Complete retry-sequence deadline.
+    pub retry_sequence_timeout_ms: Option<DurationMs>,
+    /// Upper bound for a server-supplied Retry-After delay.
+    pub retry_after_cap_ms: Option<DurationMs>,
+    /// Jitter percentage bounded by `MAX_OTLP_RETRY_JITTER_PERCENT`.
+    pub retry_jitter_percent: Option<u8>,
+}
+
 /// Validated OTLP endpoint URL.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OtlpEndpoint(String);
 
 impl OtlpEndpoint {
-    /// Creates a validated OTLP endpoint using the documented HTTP(S) schemes.
+    /// Creates a validated OTLP endpoint using the documented HTTP(S) subset.
+    ///
+    /// The endpoint grammar intentionally admits `http://` or `https://` URLs
+    /// with an ASCII DNS host (letters, digits, `.` and `-`) or bracketed IPv6
+    /// literal, each with an optional numeric port and path/query/fragment.
+    /// It rejects URL userinfo, underscores, raw Unicode host names, and
+    /// unbracketed IPv6 literals. Callers requiring broader URL support must
+    /// normalize it before constructing this contract type.
     #[allow(
         deprecated,
         reason = "retained compatibility constructor keeps the published InitError signature"
@@ -54,28 +215,30 @@ impl OtlpEndpoint {
         note = "Use OtlpEndpoint::new_typed(); see migrate-error-api.md."
     )]
     pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
-        Self::new_typed(value).map_err(Into::into)
+        Self::new_typed(value)
+            .map_err(config_failure_to_init_failure)
+            .map_err(Into::into)
     }
 
-    /// Creates a validated OTLP endpoint with a neutral initialization failure.
+    /// Creates a validated OTLP endpoint with a canonical configuration failure.
     ///
     /// Emptiness is checked against the trimmed value, but the original,
     /// untrimmed `value` is stored: this is intentional retained legacy
     /// behavior, not an oversight, and both the legacy [`OtlpEndpoint::new`]
     /// and this typed constructor preserve it identically. Callers that
     /// require a trimmed endpoint must trim before calling.
-    pub fn new_typed(value: impl Into<String>) -> Result<Self, InitFailure> {
+    pub fn new_typed(value: impl Into<String>) -> Result<Self, ConfigFailure> {
         let value = value.into();
         if value.trim().is_empty() {
-            return Err(invalid_transport_value_typed(
+            return Err(invalid_endpoint(
                 "endpoint must not be empty",
                 "set an explicit http:// or https:// OTLP endpoint",
             ));
         }
-        if !(value.starts_with("http://") || value.starts_with("https://")) {
-            return Err(invalid_transport_value_typed(
-                "endpoint must start with http:// or https://",
-                "set an OTLP endpoint with an explicit HTTP(S) scheme",
+        if !is_valid_http_endpoint(&value) {
+            return Err(invalid_endpoint(
+                "endpoint must be a valid http:// or https:// URL with a host",
+                "set an OTLP endpoint with an explicit HTTP(S) scheme and host",
             ));
         }
         Ok(Self(value))
@@ -107,7 +270,9 @@ impl TryFrom<String> for OtlpEndpoint {
     type Error = InitError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new_typed(value).map_err(Into::into)
+        Self::new_typed(value)
+            .map_err(config_failure_to_init_failure)
+            .map_err(Into::into)
     }
 }
 
@@ -139,22 +304,30 @@ impl AuthHeader {
         note = "Use AuthHeader::new_typed(); see migrate-error-api.md."
     )]
     pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
-        Self::new_typed(value).map_err(Into::into)
+        Self::new_typed(value)
+            .map_err(config_failure_to_init_failure)
+            .map_err(Into::into)
     }
 
-    /// Creates a validated authorization header with a neutral initialization failure.
+    /// Creates a validated authorization header with a canonical configuration failure.
     ///
     /// Emptiness is checked against the trimmed value, but the original,
     /// untrimmed `value` is stored: this is intentional retained legacy
     /// behavior, not an oversight, and both the legacy [`AuthHeader::new`]
     /// and this typed constructor preserve it identically. Callers that
     /// require a trimmed header value must trim before calling.
-    pub fn new_typed(value: impl Into<String>) -> Result<Self, InitFailure> {
+    pub fn new_typed(value: impl Into<String>) -> Result<Self, ConfigFailure> {
         let value = value.into();
         if value.trim().is_empty() {
-            return Err(invalid_transport_value_typed(
+            return Err(invalid_header(
                 "auth header must not be empty",
                 "set a non-empty authorization header or omit it entirely",
+            ));
+        }
+        if value.chars().any(char::is_control) {
+            return Err(invalid_header(
+                "auth header must not contain control characters",
+                "remove CR, LF, and other control characters from the authorization header",
             ));
         }
         Ok(Self(value))
@@ -186,15 +359,20 @@ impl TryFrom<String> for AuthHeader {
     type Error = InitError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::new_typed(value).map_err(Into::into)
+        Self::new_typed(value)
+            .map_err(config_failure_to_init_failure)
+            .map_err(Into::into)
     }
 }
 
 /// Transport-level OTLP configuration.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OtelConfig {
     /// Whether transport/export is enabled.
     pub enabled: bool,
+    /// Backend selected when transport is enabled.
+    pub backend: ExporterBackend,
     /// Optional OTLP endpoint URL.
     pub endpoint: Option<OtlpEndpoint>,
     /// Transport protocol to use.
@@ -205,32 +383,67 @@ pub struct OtelConfig {
     pub ca_file: Option<PathBuf>,
     /// Whether TLS certificate verification is skipped.
     pub insecure_skip_verify: bool,
-    /// Per-export timeout.
-    pub timeout_ms: DurationMs,
+    /// Optional per-export timeout. `None` uses the documented default.
+    pub timeout_ms: Option<DurationMs>,
+    /// Time allowed for a lifecycle flush barrier.
+    pub lifecycle_flush_timeout_ms: Option<DurationMs>,
+    /// Time allowed for an ordered lifecycle shutdown.
+    pub lifecycle_shutdown_timeout_ms: Option<DurationMs>,
+    /// Bounded record admission capacity.
+    pub queue_capacity: Option<usize>,
+    /// Bounded aggregate serialized payload-byte admission capacity.
+    pub queue_byte_capacity: Option<usize>,
     /// Whether local debug export output is enabled.
     pub debug_local_export: bool,
-    /// Maximum export retry attempts.
-    pub max_retries: u32,
-    /// Initial retry backoff.
-    pub initial_backoff_ms: DurationMs,
-    /// Maximum retry backoff.
-    pub max_backoff_ms: DurationMs,
+    /// Legacy-only retry settings. `None` means no legacy-only field was supplied.
+    pub legacy_retry: Option<LegacyRetryPolicy>,
+    /// Retained compatibility retry count. `None` means the field was not supplied.
+    #[deprecated(since = "2.0.0", note = "Use legacy_retry.max_retries")]
+    pub max_retries: Option<u32>,
+    /// Retained compatibility initial backoff. `None` means the field was not supplied.
+    #[deprecated(since = "2.0.0", note = "Use legacy_retry.initial_backoff_ms")]
+    pub initial_backoff_ms: Option<DurationMs>,
+    /// Retained compatibility maximum backoff. `None` means the field was not supplied.
+    #[deprecated(since = "2.0.0", note = "Use legacy_retry.max_backoff_ms")]
+    pub max_backoff_ms: Option<DurationMs>,
 }
 
+#[allow(
+    deprecated,
+    reason = "the retained compatibility fields must preserve their historical defaults until D.18"
+)]
 impl Default for OtelConfig {
     fn default() -> Self {
         Self {
             enabled: false,
+            backend: ExporterBackend::OpenTelemetrySdk,
             endpoint: None,
             protocol: OtlpProtocol::HttpBinary,
             auth_header: None,
             ca_file: None,
             insecure_skip_verify: false,
-            timeout_ms: constants::DEFAULT_OTLP_TIMEOUT_MS.into(),
+            timeout_ms: None,
+            lifecycle_flush_timeout_ms: None,
+            lifecycle_shutdown_timeout_ms: None,
+            queue_capacity: None,
+            queue_byte_capacity: None,
             debug_local_export: false,
-            max_retries: constants::DEFAULT_OTLP_MAX_RETRIES,
-            initial_backoff_ms: constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS.into(),
-            max_backoff_ms: constants::DEFAULT_OTLP_MAX_BACKOFF_MS.into(),
+            legacy_retry: None,
+            max_retries: None,
+            initial_backoff_ms: None,
+            max_backoff_ms: None,
+        }
+    }
+}
+
+impl OtelConfig {
+    /// Starts an OTLP configuration for the selected backend and protocol.
+    #[must_use]
+    pub fn new(backend: ExporterBackend, protocol: OtlpProtocol) -> Self {
+        Self {
+            backend,
+            protocol,
+            ..Self::default()
         }
     }
 }
@@ -314,7 +527,7 @@ pub struct TelemetryConfig {
 }
 
 /// Builder for documented v1 telemetry defaults.
-#[expect(
+#[allow(
     missing_debug_implementations,
     reason = "the builder stores partially configured runtime values, and a public Debug surface would not add meaningful API value"
 )]
@@ -423,31 +636,24 @@ pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError>
 }
 
 pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), InitFailure> {
+    validated_telemetry_bounds(config).map(|_| ())
+}
+
+/// Validates a complete telemetry configuration once and returns its checked
+/// transport bounds for factory construction.
+pub(crate) fn validated_telemetry_bounds(
+    config: &TelemetryConfig,
+) -> Result<ValidatedTransportBounds, InitFailure> {
+    let bounds =
+        validated_transport_bounds(&config.transport).map_err(config_failure_to_init_failure)?;
     if config.transport.enabled && config.transport.endpoint.is_none() {
         return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
             "enabled telemetry requires an endpoint",
             Remediation::recoverable(
                 "set OtelConfig.endpoint before constructing Telemetry",
                 ["disable telemetry for local-only runs if OTLP is not required"],
             ),
-        ))));
-    }
-    if u64::from(config.transport.timeout_ms) == 0 {
-        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
-            "timeout_ms must be greater than zero",
-            Remediation::recoverable(
-                "set timeout_ms to a positive value",
-                ["use documented defaults"],
-            ),
-        ))));
-    }
-    if config.transport.initial_backoff_ms > config.transport.max_backoff_ms {
-        return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
-            "initial_backoff_ms must not exceed max_backoff_ms",
-            Remediation::recoverable("fix the backoff configuration", ["use documented defaults"]),
         ))));
     }
     if config.transport.enabled
@@ -456,7 +662,7 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
         && config.metrics.is_none()
     {
         return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
             "at least one telemetry signal must be enabled",
             Remediation::recoverable(
                 "enable logs, traces, or metrics before constructing Telemetry",
@@ -471,7 +677,7 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
             .is_some_and(|cfg| cfg.batch_size == 0 || u64::from(cfg.export_interval_ms) == 0)
     {
         return Err(InitFailure::from_context(Box::new(ErrorContext::new(
-            error_codes::TELEMETRY_INVALID_CONFIG,
+            error_codes::OTLP_TRANSPORT_CONSTRUCTION_FAILED,
             "telemetry batch sizing and export intervals must be positive",
             Remediation::recoverable(
                 "set batch sizes and export intervals above zero",
@@ -479,15 +685,658 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
             ),
         ))));
     }
-    Ok(())
+    Ok(bounds)
 }
 
-fn invalid_transport_value_typed(message: &str, remediation: &str) -> InitFailure {
-    InitFailure::from_context(Box::new(ErrorContext::new(
-        error_codes::TELEMETRY_INVALID_CONFIG,
-        message,
-        Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
-    )))
+/// A duration checked as strictly positive by ordered config validation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PositiveDuration(Duration);
+
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+impl PositiveDuration {
+    pub(crate) const fn get(self) -> Duration {
+        self.0
+    }
+}
+
+/// Checked maximum number of simultaneously admitted records.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct QueueCapacity(usize);
+
+impl QueueCapacity {
+    pub(crate) const fn get(self) -> usize {
+        self.0
+    }
+}
+
+/// Checked aggregate serialized-byte budget for admitted records.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct QueueByteCapacity(usize);
+
+impl QueueByteCapacity {
+    pub(crate) const fn get(self) -> usize {
+        self.0
+    }
+}
+
+/// A percentage validated within zero through one hundred.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BoundedPercent(u8);
+
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+impl BoundedPercent {
+    pub(crate) const fn get(self) -> u8 {
+        self.0
+    }
+}
+
+/// Positive lifecycle deadlines, both at least the request timeout.
+#[derive(Debug)]
+pub(crate) struct LifecycleBounds {
+    flush: PositiveDuration,
+    shutdown: PositiveDuration,
+}
+
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+impl LifecycleBounds {
+    pub(crate) const fn flush(&self) -> PositiveDuration {
+        self.flush
+    }
+    pub(crate) const fn shutdown(&self) -> PositiveDuration {
+        self.shutdown
+    }
+}
+
+/// Checked transport bounds; private fields prohibit unchecked factory construction.
+#[derive(Debug)]
+pub(crate) struct ValidatedTransportBounds {
+    protocol: OtlpProtocol,
+    queue_capacity: QueueCapacity,
+    queue_byte_capacity: QueueByteCapacity,
+    request_timeout: PositiveDuration,
+    lifecycle: LifecycleBounds,
+    backend: BackendTransportBounds,
+}
+
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+impl ValidatedTransportBounds {
+    pub(crate) const fn protocol(&self) -> OtlpProtocol {
+        self.protocol
+    }
+    pub(crate) const fn queue_capacity(&self) -> QueueCapacity {
+        self.queue_capacity
+    }
+    pub(crate) const fn queue_byte_capacity(&self) -> QueueByteCapacity {
+        self.queue_byte_capacity
+    }
+    pub(crate) const fn request_timeout(&self) -> PositiveDuration {
+        self.request_timeout
+    }
+    pub(crate) const fn lifecycle(&self) -> &LifecycleBounds {
+        &self.lifecycle
+    }
+    pub(crate) const fn backend(&self) -> &BackendTransportBounds {
+        &self.backend
+    }
+}
+
+/// Backend-specific state; SDK and disabled transports cannot carry retry policy.
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+#[derive(Debug)]
+pub(crate) enum BackendTransportBounds {
+    Disabled,
+    Sdk,
+    Legacy(RetryPolicy),
+}
+
+/// Checked legacy retry policy produced only by ordered config validation.
+#[derive(Debug)]
+pub(crate) struct RetryPolicy {
+    max_retries: u32,
+    initial_backoff: PositiveDuration,
+    max_backoff: PositiveDuration,
+    sequence_timeout: PositiveDuration,
+    retry_after_cap: PositiveDuration,
+    jitter: BoundedPercent,
+}
+
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+impl RetryPolicy {
+    pub(crate) const fn max_retries(&self) -> u32 {
+        self.max_retries
+    }
+    pub(crate) const fn initial_backoff(&self) -> PositiveDuration {
+        self.initial_backoff
+    }
+    pub(crate) const fn max_backoff(&self) -> PositiveDuration {
+        self.max_backoff
+    }
+    pub(crate) const fn sequence_timeout(&self) -> PositiveDuration {
+        self.sequence_timeout
+    }
+    pub(crate) const fn retry_after_cap(&self) -> PositiveDuration {
+        self.retry_after_cap
+    }
+    pub(crate) const fn jitter(&self) -> BoundedPercent {
+        self.jitter
+    }
+}
+
+/// Resolves defaults and validates a transport in the documented first-failure
+/// order. This is crate-visible for backend factories and contract tests.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the normative validation order is intentionally visible and linear"
+)]
+pub(crate) fn validated_transport_bounds(
+    config: &OtelConfig,
+) -> Result<ValidatedTransportBounds, ConfigFailure> {
+    #[allow(deprecated)]
+    let direct_legacy_fields = config.max_retries.is_some()
+        || config.initial_backoff_ms.is_some()
+        || config.max_backoff_ms.is_some();
+    let legacy_retry_field = first_legacy_retry_field(config);
+    #[allow(deprecated)]
+    let direct_retry = LegacyRetryPolicy {
+        max_retries: config.max_retries,
+        initial_backoff_ms: config.initial_backoff_ms,
+        max_backoff_ms: config.max_backoff_ms,
+        ..LegacyRetryPolicy::default()
+    };
+    let timeout = resolve_duration(
+        OtlpConfigField::Timeout,
+        config.timeout_ms,
+        constants::DEFAULT_OTLP_TIMEOUT_MS,
+    );
+    let flush = resolve_duration(
+        OtlpConfigField::LifecycleFlushTimeout,
+        config.lifecycle_flush_timeout_ms,
+        constants::DEFAULT_OTLP_LIFECYCLE_FLUSH_TIMEOUT_MS,
+    );
+    let shutdown = resolve_duration(
+        OtlpConfigField::LifecycleShutdownTimeout,
+        config.lifecycle_shutdown_timeout_ms,
+        constants::DEFAULT_OTLP_LIFECYCLE_SHUTDOWN_TIMEOUT_MS,
+    );
+    let queue_capacity = resolve_usize(
+        OtlpConfigField::QueueCapacity,
+        config.queue_capacity,
+        constants::DEFAULT_OTLP_QUEUE_CAPACITY,
+    );
+    let queue_byte_capacity = resolve_usize(
+        OtlpConfigField::QueueByteCapacity,
+        config.queue_byte_capacity,
+        constants::DEFAULT_OTLP_QUEUE_BYTE_CAPACITY,
+    );
+
+    // The ordering below is normative: do not aggregate failures or move
+    // checks without updating the D.21 contract tests.
+    let request_timeout = checked_duration(&timeout)?;
+    let lifecycle_flush_timeout = checked_duration(&flush)?;
+    let lifecycle_shutdown_timeout = checked_duration(&shutdown)?;
+    if shutdown.value < timeout.value {
+        return Err(invalid_bound(&timeout, &shutdown));
+    }
+    if flush.value < timeout.value {
+        return Err(invalid_bound(&timeout, &flush));
+    }
+    let legacy_retry =
+        if config.enabled && matches!(config.backend, ExporterBackend::LegacyHttpJson) {
+            Some(resolve_retry(
+                config
+                    .legacy_retry
+                    .as_ref()
+                    .or(direct_legacy_fields.then_some(&direct_retry)),
+                &timeout,
+            )?)
+        } else {
+            None
+        };
+    if !(1..=constants::MAX_OTLP_QUEUE_CAPACITY).contains(&queue_capacity.value) {
+        return Err(config_failure(
+            ConfigFailureKind::InvalidQueueCapacity,
+            error_codes::OTLP_CONFIG_QUEUE_CAPACITY,
+            format!(
+                "queue capacity must be in 1..={}",
+                constants::MAX_OTLP_QUEUE_CAPACITY
+            ),
+            queue_capacity.field,
+            queue_capacity.origin,
+        ));
+    }
+    if queue_byte_capacity.value == 0
+        || queue_byte_capacity.value > constants::MAX_OTLP_QUEUE_BYTE_CAPACITY
+    {
+        return Err(config_failure(
+            ConfigFailureKind::InvalidQueueByteCapacity,
+            error_codes::OTLP_CONFIG_QUEUE_BYTE_CAPACITY,
+            "queue byte capacity must be in 1..=64 MiB",
+            queue_byte_capacity.field,
+            queue_byte_capacity.origin,
+        ));
+    }
+
+    let backend = if config.enabled {
+        match config.backend {
+            ExporterBackend::OpenTelemetrySdk => {
+                if let Some(field) = legacy_retry_field {
+                    return Err(not_applicable(
+                        field,
+                        OtlpConfigTarget::Backend(ExporterBackend::OpenTelemetrySdk),
+                    ));
+                }
+                BackendTransportBounds::Sdk
+            }
+            ExporterBackend::LegacyHttpJson => BackendTransportBounds::Legacy(
+                legacy_retry.expect("legacy backend resolves its retry policy"),
+            ),
+        }
+    } else {
+        if let Some(field) = legacy_retry_field {
+            return Err(not_applicable(field, OtlpConfigTarget::Disabled));
+        }
+        BackendTransportBounds::Disabled
+    };
+
+    if config.insecure_skip_verify && config.enabled {
+        return Err(insecure_transport_rejected(config.backend));
+    }
+
+    Ok(ValidatedTransportBounds {
+        protocol: config.protocol,
+        queue_capacity: QueueCapacity(queue_capacity.value),
+        queue_byte_capacity: QueueByteCapacity(queue_byte_capacity.value),
+        request_timeout,
+        lifecycle: LifecycleBounds {
+            flush: lifecycle_flush_timeout,
+            shutdown: lifecycle_shutdown_timeout,
+        },
+        backend,
+    })
+}
+
+/// Returns the first legacy-only retry setting supplied by the caller.
+///
+/// The order is part of the deterministic validation contract. Retained
+/// direct fields and their `legacy_retry` successors share the same identity,
+/// so either representation reports the same first applicable field.
+#[allow(
+    deprecated,
+    reason = "the selector preserves diagnostics for retained direct retry fields"
+)]
+fn first_legacy_retry_field(config: &OtelConfig) -> Option<OtlpConfigField> {
+    let retry = config.legacy_retry.as_ref();
+    if config.max_retries.is_some() || retry.is_some_and(|value| value.max_retries.is_some()) {
+        return Some(OtlpConfigField::MaxRetries);
+    }
+    if config.initial_backoff_ms.is_some()
+        || retry.is_some_and(|value| value.initial_backoff_ms.is_some())
+    {
+        return Some(OtlpConfigField::InitialBackoff);
+    }
+    if config.max_backoff_ms.is_some() || retry.is_some_and(|value| value.max_backoff_ms.is_some())
+    {
+        return Some(OtlpConfigField::MaxBackoff);
+    }
+    if retry.is_some_and(|value| value.retry_sequence_timeout_ms.is_some()) {
+        return Some(OtlpConfigField::RetrySequenceTimeout);
+    }
+    if retry.is_some_and(|value| value.retry_after_cap_ms.is_some()) {
+        return Some(OtlpConfigField::RetryAfterCap);
+    }
+    if retry.is_some_and(|value| value.retry_jitter_percent.is_some()) {
+        return Some(OtlpConfigField::RetryJitterPercent);
+    }
+
+    // An explicitly supplied but empty compatibility block is still
+    // inapplicable outside the legacy backend; retain the original field.
+    config
+        .legacy_retry
+        .as_ref()
+        .map(|_| OtlpConfigField::MaxRetries)
+}
+
+fn resolve_duration(
+    field: OtlpConfigField,
+    raw: Option<DurationMs>,
+    default: u64,
+) -> ResolvedField<u64> {
+    ResolvedField {
+        field,
+        value: raw.map_or(default, u64::from),
+        origin: if raw.is_some() {
+            ValueOrigin::Explicit
+        } else {
+            ValueOrigin::Default
+        },
+    }
+}
+
+fn resolve_usize(
+    field: OtlpConfigField,
+    raw: Option<usize>,
+    default: usize,
+) -> ResolvedField<usize> {
+    ResolvedField {
+        field,
+        value: raw.unwrap_or(default),
+        origin: if raw.is_some() {
+            ValueOrigin::Explicit
+        } else {
+            ValueOrigin::Default
+        },
+    }
+}
+
+fn checked_duration(value: &ResolvedField<u64>) -> Result<PositiveDuration, ConfigFailure> {
+    if value.value == 0 {
+        return Err(config_failure(
+            ConfigFailureKind::ZeroDuration,
+            error_codes::OTLP_CONFIG_ZERO_DURATION,
+            "duration must be greater than zero",
+            value.field,
+            value.origin,
+        ));
+    }
+    Ok(PositiveDuration(Duration::from_millis(value.value)))
+}
+
+fn resolve_retry(
+    raw: Option<&LegacyRetryPolicy>,
+    timeout: &ResolvedField<u64>,
+) -> Result<RetryPolicy, ConfigFailure> {
+    let raw = raw.cloned().unwrap_or_default();
+    let initial = resolve_duration(
+        OtlpConfigField::InitialBackoff,
+        raw.initial_backoff_ms,
+        constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS,
+    );
+    let maximum = resolve_duration(
+        OtlpConfigField::MaxBackoff,
+        raw.max_backoff_ms,
+        constants::DEFAULT_OTLP_MAX_BACKOFF_MS,
+    );
+    let sequence = resolve_duration(
+        OtlpConfigField::RetrySequenceTimeout,
+        raw.retry_sequence_timeout_ms,
+        constants::DEFAULT_OTLP_RETRY_SEQUENCE_TIMEOUT_MS,
+    );
+    let after_cap = resolve_duration(
+        OtlpConfigField::RetryAfterCap,
+        raw.retry_after_cap_ms,
+        constants::DEFAULT_OTLP_RETRY_AFTER_CAP_MS,
+    );
+    let jitter = ResolvedField {
+        field: OtlpConfigField::RetryJitterPercent,
+        value: raw
+            .retry_jitter_percent
+            .unwrap_or(constants::DEFAULT_OTLP_RETRY_JITTER_PERCENT),
+        origin: if raw.retry_jitter_percent.is_some() {
+            ValueOrigin::Explicit
+        } else {
+            ValueOrigin::Default
+        },
+    };
+    let initial_backoff = checked_duration(&initial)?;
+    let max_backoff = checked_duration(&maximum)?;
+    let sequence_timeout = checked_duration(&sequence)?;
+    let retry_after_cap = checked_duration(&after_cap)?;
+    if maximum.value < initial.value {
+        return Err(invalid_bound(&initial, &maximum));
+    }
+    if sequence.value < timeout.value {
+        return Err(invalid_bound(timeout, &sequence));
+    }
+    if after_cap.value > sequence.value {
+        return Err(invalid_bound(&after_cap, &sequence));
+    }
+    if jitter.value > constants::MAX_OTLP_RETRY_JITTER_PERCENT {
+        return Err(config_failure(
+            ConfigFailureKind::InvalidJitterPercent,
+            error_codes::OTLP_CONFIG_JITTER_PERCENT,
+            format!(
+                "retry jitter percent must be in 0..={}",
+                constants::MAX_OTLP_RETRY_JITTER_PERCENT
+            ),
+            jitter.field,
+            jitter.origin,
+        ));
+    }
+    Ok(RetryPolicy {
+        max_retries: raw
+            .max_retries
+            .unwrap_or(constants::DEFAULT_OTLP_MAX_RETRIES),
+        initial_backoff,
+        max_backoff,
+        sequence_timeout,
+        retry_after_cap,
+        jitter: BoundedPercent(jitter.value),
+    })
+}
+
+#[derive(Clone, Copy)]
+enum ConfigFailureKind {
+    ZeroDuration,
+    InvalidJitterPercent,
+    InvalidQueueCapacity,
+    InvalidQueueByteCapacity,
+}
+
+fn invalid_bound(lower: &ResolvedField<u64>, upper: &ResolvedField<u64>) -> ConfigFailure {
+    // Preserve both resolved fields in structured diagnostics without exposing
+    // credentials or raw endpoint data.
+    ConfigFailure::InvalidBoundOrdering {
+        context: Box::new(
+            ErrorContext::new(
+                error_codes::OTLP_CONFIG_BOUND_ORDER,
+                "resolved transport bounds are out of order",
+                Remediation::recoverable(
+                    "correct the named OTLP configuration fields",
+                    ["use documented defaults"],
+                ),
+            )
+            .detail("field", Value::String(lower.field.stable_name().to_owned()))
+            .detail(
+                "origin",
+                Value::String(lower.origin.stable_name().to_owned()),
+            )
+            .detail("lower_value", Value::from(lower.value))
+            .detail(
+                "upper_field",
+                Value::String(upper.field.stable_name().to_owned()),
+            )
+            .detail(
+                "upper_origin",
+                Value::String(upper.origin.stable_name().to_owned()),
+            )
+            .detail("upper_value", Value::from(upper.value)),
+        ),
+    }
+}
+
+fn not_applicable(field: OtlpConfigField, target: OtlpConfigTarget) -> ConfigFailure {
+    ConfigFailure::ConfigFieldNotApplicable {
+        context: Box::new(
+            ErrorContext::new(
+                error_codes::OTLP_CONFIG_FIELD_NOT_APPLICABLE,
+                "configuration field is not applicable to the selected transport target",
+                Remediation::recoverable(
+                    "omit the field or choose an applicable backend",
+                    ["use documented defaults"],
+                ),
+            )
+            .detail("field", Value::String(field.stable_name().to_owned()))
+            .detail(
+                "origin",
+                Value::String(ValueOrigin::Explicit.stable_name().to_owned()),
+            )
+            .detail("target", Value::String(target.stable_name())),
+        ),
+    }
+}
+
+fn config_failure(
+    kind: ConfigFailureKind,
+    code: sc_observability_types::ErrorCode,
+    message: impl Into<String>,
+    field: OtlpConfigField,
+    origin: ValueOrigin,
+) -> ConfigFailure {
+    let context = Box::new(
+        ErrorContext::new(
+            code,
+            message,
+            Remediation::recoverable(
+                "correct the named OTLP configuration field",
+                ["use documented defaults"],
+            ),
+        )
+        .detail("field", Value::String(field.stable_name().to_owned()))
+        .detail("origin", Value::String(origin.stable_name().to_owned())),
+    );
+    match kind {
+        ConfigFailureKind::ZeroDuration => ConfigFailure::ZeroDuration { context },
+        ConfigFailureKind::InvalidJitterPercent => ConfigFailure::InvalidJitterPercent { context },
+        ConfigFailureKind::InvalidQueueCapacity => ConfigFailure::InvalidQueueCapacity { context },
+        ConfigFailureKind::InvalidQueueByteCapacity => {
+            ConfigFailure::InvalidQueueByteCapacity { context }
+        }
+    }
+}
+
+fn insecure_transport_rejected(backend: ExporterBackend) -> ConfigFailure {
+    ConfigFailure::InsecureTransportRejected {
+        context: Box::new(
+            ErrorContext::new(
+                error_codes::OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED,
+                "the selected backend does not support insecure certificate verification",
+                Remediation::recoverable(
+                    "leave certificate verification enabled",
+                    ["use the documented TLS configuration"],
+                ),
+            )
+            .detail(
+                "field",
+                Value::String(OtlpConfigField::InsecureSkipVerify.stable_name().to_owned()),
+            )
+            .detail(
+                "origin",
+                Value::String(ValueOrigin::Explicit.stable_name().to_owned()),
+            )
+            .detail("backend", Value::String(backend.stable_name().to_owned())),
+        ),
+    }
+}
+
+fn config_failure_to_init_failure(error: ConfigFailure) -> InitFailure {
+    InitFailure::from_context(error.into_context())
+}
+
+fn is_valid_http_endpoint(value: &str) -> bool {
+    // Preserve the retained raw-value behavior for harmless trailing spaces,
+    // while validating the URL-shaped portion and rejecting control bytes.
+    if value.chars().any(char::is_control) {
+        return false;
+    }
+    let value = value.trim_end();
+    let Some((scheme, remainder)) = value.split_once("://") else {
+        return false;
+    };
+    if !matches!(scheme, "http" | "https") {
+        return false;
+    }
+    let authority = remainder.split(['/', '?', '#']).next().unwrap_or_default();
+    if authority.is_empty()
+        || authority.contains('@')
+        || authority.contains('\\')
+        || authority.chars().any(char::is_whitespace)
+    {
+        return false;
+    }
+
+    if let Some(bracketed) = authority.strip_prefix('[') {
+        let Some((host, port)) = bracketed.split_once(']') else {
+            return false;
+        };
+        return !host.is_empty()
+            && (port.is_empty()
+                || port.strip_prefix(':').is_some_and(|value| {
+                    !value.is_empty() && value.chars().all(|ch| ch.is_ascii_digit())
+                }));
+    }
+
+    let (host, port) = authority
+        .rsplit_once(':')
+        .map_or((authority, None), |(host, port)| (host, Some(port)));
+    !host.is_empty()
+        && host
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-'))
+        && port.is_none_or(|value| !value.is_empty() && value.chars().all(|ch| ch.is_ascii_digit()))
+}
+
+fn invalid_endpoint(message: &str, remediation: &str) -> ConfigFailure {
+    ConfigFailure::InvalidEndpoint {
+        context: Box::new(
+            ErrorContext::new(
+                error_codes::OTLP_CONFIG_INVALID_ENDPOINT,
+                message,
+                Remediation::recoverable(
+                    remediation,
+                    ["use the documented OTLP transport defaults"],
+                ),
+            )
+            .detail(
+                "field",
+                Value::String(OtlpConfigField::Endpoint.stable_name().to_owned()),
+            )
+            .detail(
+                "origin",
+                Value::String(ValueOrigin::Explicit.stable_name().to_owned()),
+            ),
+        ),
+    }
+}
+
+fn invalid_header(message: &str, remediation: &str) -> ConfigFailure {
+    ConfigFailure::InvalidHeader {
+        context: Box::new(
+            ErrorContext::new(
+                error_codes::OTLP_CONFIG_INVALID_HEADER,
+                message,
+                Remediation::recoverable(
+                    remediation,
+                    ["use the documented OTLP transport defaults"],
+                ),
+            )
+            .detail(
+                "field",
+                Value::String(OtlpConfigField::Header.stable_name().to_owned()),
+            )
+            .detail(
+                "origin",
+                Value::String(ValueOrigin::Explicit.stable_name().to_owned()),
+            ),
+        ),
+    }
 }
 
 #[cfg(test)]
@@ -497,6 +1346,7 @@ fn invalid_transport_value_typed(message: &str, remediation: &str) -> InitFailur
 )]
 mod tests {
     use super::*;
+    use sc_observability_types::v2::ConfigFailure;
     use sc_observability_types::{DiagnosticInfo, ServiceName};
 
     #[test]
@@ -550,10 +1400,13 @@ mod tests {
     fn otlp_endpoint_accepts_valid_http_and_https_values() {
         let https = OtlpEndpoint::new("https://otel.example.internal").expect("valid https");
         let http = OtlpEndpoint::try_from("http://localhost:4318".to_string()).expect("valid http");
+        let ipv6 = OtlpEndpoint::new_typed("https://[::1]:4318/v1/logs?signal=logs")
+            .expect("valid bracketed IPv6 endpoint");
 
         assert_eq!(https.as_ref(), "https://otel.example.internal");
         assert_eq!(https.to_string(), "https://otel.example.internal");
         assert_eq!(http.as_str(), "http://localhost:4318");
+        assert_eq!(ipv6.as_str(), "https://[::1]:4318/v1/logs?signal=logs");
     }
 
     #[test]
@@ -563,9 +1416,75 @@ mod tests {
     }
 
     #[test]
+    fn otlp_endpoint_enforces_the_documented_http_subset() {
+        for endpoint in [
+            "https://user:password@otel.example.internal",
+            "https://otel_collector.example.internal",
+            "https://münich.example.internal",
+            "https://::1:4318",
+        ] {
+            assert!(
+                OtlpEndpoint::new_typed(endpoint).is_err(),
+                "the documented subset rejects {endpoint:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn typed_endpoint_rejects_missing_hosts_with_the_canonical_failure() {
+        for value in ["https://", "http://", "https://?signal=logs", "not-a-url"] {
+            let error = OtlpEndpoint::new_typed(value).expect_err("invalid endpoint");
+            assert!(matches!(error, ConfigFailure::InvalidEndpoint { .. }));
+            assert_eq!(
+                error.diagnostic().code,
+                error_codes::OTLP_CONFIG_INVALID_ENDPOINT
+            );
+        }
+    }
+
+    #[test]
+    fn endpoint_and_header_diagnostics_name_explicit_stable_fields() {
+        let endpoint = OtlpEndpoint::new_typed("not-a-url").expect_err("invalid endpoint");
+        assert_eq!(
+            endpoint.diagnostic().details["field"].as_str(),
+            Some("endpoint")
+        );
+        assert_eq!(
+            endpoint.diagnostic().details["origin"].as_str(),
+            Some("explicit")
+        );
+
+        let header = AuthHeader::new_typed(" ").expect_err("invalid header");
+        assert_eq!(
+            header.diagnostic().details["field"].as_str(),
+            Some("auth_header")
+        );
+        assert_eq!(
+            header.diagnostic().details["origin"].as_str(),
+            Some("explicit")
+        );
+    }
+
+    #[test]
     fn auth_header_rejects_empty_values() {
         assert!(AuthHeader::new("").is_err());
         assert!(AuthHeader::new("   ").is_err());
+    }
+
+    #[test]
+    fn typed_auth_header_rejects_control_characters_with_the_canonical_failure() {
+        for value in [
+            "Bearer token\r\nInjected: true",
+            "Bearer\u{0000}token",
+            "Bearer\t token",
+        ] {
+            let error = AuthHeader::new_typed(value).expect_err("invalid header");
+            assert!(matches!(error, ConfigFailure::InvalidHeader { .. }));
+            assert_eq!(
+                error.diagnostic().code,
+                error_codes::OTLP_CONFIG_INVALID_HEADER
+            );
+        }
     }
 
     #[test]
@@ -693,7 +1612,7 @@ mod tests {
 
         let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(OtelConfig {
-                timeout_ms: 0_u64.into(),
+                timeout_ms: Some(0_u64.into()),
                 ..transport()
             })
             .enable_logs(LogsConfig::default())
@@ -701,7 +1620,7 @@ mod tests {
             .expect_err("legacy zero timeout");
         let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(OtelConfig {
-                timeout_ms: 0_u64.into(),
+                timeout_ms: Some(0_u64.into()),
                 ..transport()
             })
             .enable_logs(LogsConfig::default())
@@ -711,8 +1630,12 @@ mod tests {
 
         let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(OtelConfig {
-                initial_backoff_ms: 2_000_u64.into(),
-                max_backoff_ms: 1_000_u64.into(),
+                backend: ExporterBackend::LegacyHttpJson,
+                legacy_retry: Some(LegacyRetryPolicy {
+                    initial_backoff_ms: Some(2_000_u64.into()),
+                    max_backoff_ms: Some(1_000_u64.into()),
+                    ..LegacyRetryPolicy::default()
+                }),
                 ..transport()
             })
             .enable_logs(LogsConfig::default())
@@ -720,8 +1643,12 @@ mod tests {
             .expect_err("legacy inverted backoff");
         let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(OtelConfig {
-                initial_backoff_ms: 2_000_u64.into(),
-                max_backoff_ms: 1_000_u64.into(),
+                backend: ExporterBackend::LegacyHttpJson,
+                legacy_retry: Some(LegacyRetryPolicy {
+                    initial_backoff_ms: Some(2_000_u64.into()),
+                    max_backoff_ms: Some(1_000_u64.into()),
+                    ..LegacyRetryPolicy::default()
+                }),
                 ..transport()
             })
             .enable_logs(LogsConfig::default())
@@ -773,7 +1700,7 @@ mod tests {
             service_name,
             resource: ResourceAttributes::default(),
             transport: OtelConfig {
-                timeout_ms: 0_u64.into(),
+                timeout_ms: Some(0_u64.into()),
                 ..OtelConfig::default()
             },
             logs: None,
@@ -788,14 +1715,41 @@ mod tests {
     }
 
     #[test]
+    fn validate_config_checks_transport_before_missing_enabled_endpoint() {
+        let config = TelemetryConfig {
+            service_name: ServiceName::new("demo").expect("service"),
+            resource: ResourceAttributes::default(),
+            transport: OtelConfig {
+                enabled: true,
+                timeout_ms: Some(0_u64.into()),
+                ..OtelConfig::default()
+            },
+            logs: Some(LogsConfig::default()),
+            traces: None,
+            metrics: None,
+        };
+
+        let typed = validate_config_typed(&config)
+            .expect_err("transport validation precedes the missing endpoint check");
+        assert_eq!(
+            typed.diagnostic().code,
+            error_codes::OTLP_CONFIG_ZERO_DURATION
+        );
+    }
+
+    #[test]
     fn validate_config_rejects_backoff_inversion() {
         let service_name = ServiceName::new("demo").expect("service");
         let config = TelemetryConfig {
             service_name,
             resource: ResourceAttributes::default(),
             transport: OtelConfig {
-                initial_backoff_ms: 2000_u64.into(),
-                max_backoff_ms: 1000_u64.into(),
+                backend: ExporterBackend::LegacyHttpJson,
+                legacy_retry: Some(LegacyRetryPolicy {
+                    initial_backoff_ms: Some(2000_u64.into()),
+                    max_backoff_ms: Some(1000_u64.into()),
+                    ..LegacyRetryPolicy::default()
+                }),
                 ..OtelConfig::default()
             },
             logs: None,

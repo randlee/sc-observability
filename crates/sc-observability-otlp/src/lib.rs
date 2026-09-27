@@ -11,24 +11,37 @@
 
 mod assembly;
 mod config;
+#[cfg(test)]
+mod contract_tests;
+mod contracts;
+mod lifecycle;
+#[cfg(test)]
+mod lifecycle_tests;
 mod projectors;
+mod testing;
 
-pub mod constants;
-pub mod error_codes;
+#[cfg(feature = "legacy-http-json")]
+mod legacy_http_json;
+#[cfg(feature = "otlp-sdk")]
+mod sdk;
+
+mod constants;
+mod error_codes;
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
-use config::validate_config_typed;
-use sc_observability_types::typed::{
-    EventFailure, ExportFailure, FlushFailure, InitFailure, ShutdownFailure,
-};
+use config::{BackendTransportBounds, ValidatedTransportBounds, validated_telemetry_bounds};
+#[cfg(test)]
+use config::{validate_config_typed, validated_transport_bounds};
+use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
+use sc_observability_types::v2::{ConfigFailure, ExportError};
 #[allow(
     deprecated,
     reason = "telemetry retains legacy error names in its published compatibility signatures"
 )]
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, ErrorContext, FlushError, InitError, LogEvent, MetricRecord,
+    DiagnosticSummary, ErrorContext, FlushError, InitError, LogEvent, MetricRecord,
     ObservabilityHealthProvider, Remediation, ShutdownError, SinkName, SpanSignal,
     telemetry_health_provider_sealed,
 };
@@ -43,29 +56,18 @@ use serde_json::Value;
 pub use assembly::{CompleteSpan, SpanAssembler};
 #[doc(inline)]
 pub use config::{
-    AuthHeader, LogsConfig, MetricsConfig, OtelConfig, OtlpEndpoint, OtlpProtocol,
-    ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder, TracesConfig,
+    AuthHeader, ExporterBackend, LegacyRetryPolicy, LogsConfig, MetricsConfig, OtelConfig,
+    OtlpEndpoint, OtlpProtocol, ResourceAttributes, TelemetryConfig, TelemetryConfigBuilder,
+    TracesConfig,
 };
 #[doc(inline)]
 pub use projectors::TelemetryProjectors;
 
-/// Exporter contract for projected log records.
-pub(crate) trait LogExporter: Send + Sync {
-    /// Exports one batch of log events.
-    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportFailure>;
-}
+use contracts::{ExporterLifecycle, LifecycleFuture, LogExporter, MetricExporter, TraceExporter};
 
-/// Exporter contract for completed spans.
-pub(crate) trait TraceExporter: Send + Sync {
-    /// Exports one batch of completed spans.
-    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportFailure>;
-}
-
-/// Exporter contract for projected metrics.
-pub(crate) trait MetricExporter: Send + Sync {
-    /// Exports one batch of metric records.
-    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportFailure>;
-}
+// Temporary root-facade specialization. D.18 can remove this alias when the
+// facade composition decision is made; backend adapters use the v2 defaults.
+type ExporterSet = contracts::ExporterSet<LogEvent, CompleteSpan, MetricRecord>;
 
 /// OTLP-backed telemetry runtime.
 #[expect(
@@ -75,9 +77,7 @@ pub(crate) trait MetricExporter: Send + Sync {
 pub struct Telemetry {
     config: TelemetryConfig,
     shutdown: AtomicBool,
-    log_exporter: Arc<dyn LogExporter>,
-    trace_exporter: Arc<dyn TraceExporter>,
-    metric_exporter: Arc<dyn MetricExporter>,
+    exporters: ExporterSet,
     // MUTEX: exporter flush/shutdown paths mutate buffers and per-signal runtime health together;
     // Mutex keeps the buffered state and last_error snapshot consistent, and RwLock would not help
     // because these operations are write-heavy critical sections.
@@ -91,7 +91,7 @@ struct FlushOutcome {
     /// The final exporter failure in deterministic flush order. Health retains
     /// summaries for every failing exporter, while shutdown keeps this owned
     /// value so callers can traverse its native source chain.
-    export_failure: Option<ExportFailure>,
+    export_failure: Option<ExportError>,
 }
 
 #[derive(Default)]
@@ -145,30 +145,201 @@ static TRACES_EXPORTER_NAME: LazyLock<SinkName> =
 static METRICS_EXPORTER_NAME: LazyLock<SinkName> =
     LazyLock::new(|| SinkName::new("metrics").expect("metrics exporter name is valid"));
 
-struct NoopLogExporter;
-struct NoopTraceExporter;
-struct NoopMetricExporter;
+/// Explicit disabled-transport exporters. They are never selected for an
+/// enabled backend; the factory rejects enabled selections until D.6-D.8
+/// supply their concrete exporter sets.
+struct DisabledLogExporter;
+struct DisabledTraceExporter;
+struct DisabledMetricExporter;
+struct DisabledLifecycle;
 
-impl LogExporter for NoopLogExporter {
-    fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportFailure> {
+impl LogExporter<LogEvent> for DisabledLogExporter {
+    fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
-impl TraceExporter for NoopTraceExporter {
-    fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportFailure> {
+impl TraceExporter<CompleteSpan> for DisabledTraceExporter {
+    fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
-impl MetricExporter for NoopMetricExporter {
-    fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportFailure> {
+impl MetricExporter<MetricRecord> for DisabledMetricExporter {
+    fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportError> {
         Ok(())
+    }
+}
+
+impl ExporterLifecycle for DisabledLifecycle {
+    fn blocking_preflight(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn flush_async(&self) -> LifecycleFuture {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn shutdown_async(&self) -> LifecycleFuture {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn flush_blocking(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+
+    fn shutdown_blocking(&self) -> Result<(), ExportError> {
+        Ok(())
+    }
+}
+
+/// Consumes only fully validated transport bounds before selecting one common
+/// exporter shape. Protocol, feature, and caller-runtime availability are
+/// deliberately checked here, after the configuration's normative ordered
+/// validation, so an unavailable backend cannot mask a malformed config.
+fn exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet, ConfigFailure> {
+    match bounds.backend() {
+        BackendTransportBounds::Disabled => Ok(ExporterSet {
+            logs: Arc::new(DisabledLogExporter),
+            traces: Arc::new(DisabledTraceExporter),
+            metrics: Arc::new(DisabledMetricExporter),
+            lifecycle: Arc::new(DisabledLifecycle),
+        }),
+        BackendTransportBounds::Sdk => sdk_exporter_factory(bounds),
+        BackendTransportBounds::Legacy(_) => legacy_exporter_factory(bounds),
+    }
+}
+
+fn sdk_exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet, ConfigFailure> {
+    if !matches!(
+        bounds.protocol(),
+        config::OtlpProtocol::Grpc | config::OtlpProtocol::HttpBinary
+    ) {
+        return Err(unsupported_protocol(
+            config::ExporterBackend::OpenTelemetrySdk,
+            bounds.protocol(),
+            "Grpc, HttpBinary",
+        ));
+    }
+
+    #[cfg(feature = "otlp-sdk")]
+    {
+        if tokio::runtime::Handle::try_current().is_err() {
+            return Err(ConfigFailure::TokioRuntimeRequired {
+                context: Box::new(
+                    ErrorContext::new(
+                        sc_observability_types::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED,
+                        "the OpenTelemetry SDK backend must be constructed inside a Tokio runtime",
+                        Remediation::recoverable(
+                            "construct telemetry from the host Tokio runtime",
+                            ["enable the otlp-sdk feature", "enter a Tokio runtime first"],
+                        ),
+                    )
+                    .detail(
+                        "backend",
+                        Value::String(
+                            config::ExporterBackend::OpenTelemetrySdk
+                                .stable_name()
+                                .to_owned(),
+                        ),
+                    )
+                    .detail("feature", Value::String("otlp-sdk".to_owned()))
+                    .detail("runtime", Value::String("caller-tokio".to_owned())),
+                ),
+            });
+        }
+        Err(unsupported_backend(
+            config::ExporterBackend::OpenTelemetrySdk,
+            "otlp-sdk",
+            "SDK adapter implementation is not installed yet",
+        ))
+    }
+
+    #[cfg(not(feature = "otlp-sdk"))]
+    Err(unsupported_backend(
+        config::ExporterBackend::OpenTelemetrySdk,
+        "otlp-sdk",
+        "the otlp-sdk feature is disabled",
+    ))
+}
+
+fn legacy_exporter_factory(
+    bounds: &ValidatedTransportBounds,
+) -> Result<ExporterSet, ConfigFailure> {
+    if bounds.protocol() != config::OtlpProtocol::HttpJson {
+        return Err(unsupported_protocol(
+            config::ExporterBackend::LegacyHttpJson,
+            bounds.protocol(),
+            "HttpJson",
+        ));
+    }
+
+    #[cfg(feature = "legacy-http-json")]
+    {
+        Err(unsupported_backend(
+            config::ExporterBackend::LegacyHttpJson,
+            "legacy-http-json",
+            "legacy HTTP/JSON adapter implementation is not installed yet",
+        ))
+    }
+
+    #[cfg(not(feature = "legacy-http-json"))]
+    Err(unsupported_backend(
+        config::ExporterBackend::LegacyHttpJson,
+        "legacy-http-json",
+        "the legacy-http-json feature is disabled",
+    ))
+}
+
+fn unsupported_protocol(
+    backend: config::ExporterBackend,
+    protocol: config::OtlpProtocol,
+    supported_protocols: &str,
+) -> ConfigFailure {
+    ConfigFailure::UnsupportedProtocol {
+        context: Box::new(
+            ErrorContext::new(
+                sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_PROTOCOL,
+                "the selected exporter backend does not support the configured protocol",
+                Remediation::recoverable(
+                    "select a protocol supported by the selected exporter backend",
+                    ["select a documented backend/protocol combination"],
+                ),
+            )
+            .detail("backend", Value::String(backend.stable_name().to_owned()))
+            .detail("protocol", Value::String(protocol.stable_name().to_owned()))
+            .detail(
+                "supported_protocols",
+                Value::String(supported_protocols.to_owned()),
+            ),
+        ),
+    }
+}
+
+fn unsupported_backend(
+    backend: config::ExporterBackend,
+    feature: &str,
+    availability: &str,
+) -> ConfigFailure {
+    ConfigFailure::UnsupportedBackend {
+        context: Box::new(
+            ErrorContext::new(
+                sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND,
+                "enabled exporter backend is unavailable",
+                Remediation::recoverable(
+                    "enable the selected backend feature or select disabled telemetry",
+                    ["enable the named feature", "disable telemetry"],
+                ),
+            )
+            .detail("backend", Value::String(backend.stable_name().to_owned()))
+            .detail("feature", Value::String(feature.to_owned()))
+            .detail("availability", Value::String(availability.to_owned())),
+        ),
     }
 }
 
 impl Telemetry {
-    /// Creates a telemetry runtime with the default no-op exporters.
+    /// Creates a telemetry runtime through the validated exporter factory.
     #[allow(
         deprecated,
         reason = "retained compatibility constructor keeps the published InitError signature"
@@ -183,12 +354,10 @@ impl Telemetry {
 
     /// Creates a telemetry runtime with neutral initialization failures.
     pub fn new_typed(config: TelemetryConfig) -> Result<Self, InitFailure> {
-        Self::new_with_exporters_typed(
-            config,
-            Arc::new(NoopLogExporter),
-            Arc::new(NoopTraceExporter),
-            Arc::new(NoopMetricExporter),
-        )
+        let bounds = validated_telemetry_bounds(&config)?;
+        let exporters = exporter_factory(&bounds)
+            .map_err(|error| InitFailure::from_context(error.into_context()))?;
+        Ok(Self::new_with_validated_exporter_set(config, exporters))
     }
 
     #[cfg(test)]
@@ -198,31 +367,50 @@ impl Telemetry {
     )]
     fn new_with_exporters(
         config: TelemetryConfig,
-        log_exporter: Arc<dyn LogExporter>,
-        trace_exporter: Arc<dyn TraceExporter>,
-        metric_exporter: Arc<dyn MetricExporter>,
+        log_exporter: Arc<dyn LogExporter<LogEvent>>,
+        trace_exporter: Arc<dyn TraceExporter<CompleteSpan>>,
+        metric_exporter: Arc<dyn MetricExporter<MetricRecord>>,
     ) -> Result<Self, InitError> {
         Self::new_with_exporters_typed(config, log_exporter, trace_exporter, metric_exporter)
             .map_err(Into::into)
     }
 
+    #[cfg(test)]
     fn new_with_exporters_typed(
         config: TelemetryConfig,
-        log_exporter: Arc<dyn LogExporter>,
-        trace_exporter: Arc<dyn TraceExporter>,
-        metric_exporter: Arc<dyn MetricExporter>,
+        log_exporter: Arc<dyn LogExporter<LogEvent>>,
+        trace_exporter: Arc<dyn TraceExporter<CompleteSpan>>,
+        metric_exporter: Arc<dyn MetricExporter<MetricRecord>>,
+    ) -> Result<Self, InitFailure> {
+        Self::new_with_exporter_set_typed(
+            config,
+            ExporterSet {
+                logs: log_exporter,
+                traces: trace_exporter,
+                metrics: metric_exporter,
+                lifecycle: Arc::new(testing::RecordingLifecycle::default()),
+            },
+        )
+    }
+
+    #[cfg(test)]
+    fn new_with_exporter_set_typed(
+        config: TelemetryConfig,
+        exporters: ExporterSet,
     ) -> Result<Self, InitFailure> {
         validate_config_typed(&config)?;
-        Ok(Self {
+        Ok(Self::new_with_validated_exporter_set(config, exporters))
+    }
+
+    fn new_with_validated_exporter_set(config: TelemetryConfig, exporters: ExporterSet) -> Self {
+        Self {
             config,
             shutdown: AtomicBool::new(false),
-            log_exporter,
-            trace_exporter,
-            metric_exporter,
+            exporters,
             runtime: Mutex::new(TelemetryRuntime::default()),
             dropped_exports_total: AtomicU64::new(0),
             malformed_spans_total: AtomicU64::new(0),
-        })
+        }
     }
 
     /// Buffers one projected log event for later export.
@@ -266,7 +454,7 @@ impl Telemetry {
         {
             self.malformed_spans_total.fetch_add(1, Ordering::SeqCst);
             let context = ErrorContext::new(
-                error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
+                error_codes::OTLP_SPAN_ASSEMBLY_FAILED,
                 "received ended span without a matching started span",
                 Remediation::not_recoverable(
                     "emit the started span before the matching ended span",
@@ -327,19 +515,11 @@ impl Telemetry {
     /// Flushes telemetry with a neutral flush failure while retaining fail-open
     /// exporter semantics.
     pub fn flush_typed(&self) -> Result<(), FlushFailure> {
-        let _ = self.flush_outcome().map_err(FlushFailure::from)?;
+        let _ = self.flush_outcome();
         Ok(())
     }
 
-    #[expect(
-        clippy::unnecessary_wraps,
-        reason = "the helper preserves a Result-shaped internal API so flush behavior can grow direct error propagation without reshaping public callers"
-    )]
-    #[allow(
-        deprecated,
-        reason = "flush_outcome retains the legacy internal result while flush_typed is the public path"
-    )]
-    fn flush_outcome(&self) -> Result<FlushOutcome, FlushError> {
+    fn flush_outcome(&self) -> FlushOutcome {
         let (log_batch, span_batch, metric_batch) = {
             let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
             let log_batch = if self.config.logs.is_some() {
@@ -362,7 +542,7 @@ impl Telemetry {
         let mut export_failure = None;
 
         if !log_batch.is_empty() {
-            match self.log_exporter.export_logs(&log_batch) {
+            match self.exporters.logs.export_logs(&log_batch) {
                 Ok(()) => self.record_export_success(ExporterKind::Logs),
                 Err(err) => {
                     self.record_export_failure(ExporterKind::Logs, log_batch.len() as u64, &err);
@@ -372,7 +552,7 @@ impl Telemetry {
         }
 
         if !span_batch.is_empty() {
-            match self.trace_exporter.export_spans(&span_batch) {
+            match self.exporters.traces.export_spans(&span_batch) {
                 Ok(()) => self.record_export_success(ExporterKind::Traces),
                 Err(err) => {
                     self.record_export_failure(ExporterKind::Traces, span_batch.len() as u64, &err);
@@ -382,7 +562,7 @@ impl Telemetry {
         }
 
         if !metric_batch.is_empty() {
-            match self.metric_exporter.export_metrics(&metric_batch) {
+            match self.exporters.metrics.export_metrics(&metric_batch) {
                 Ok(()) => self.record_export_success(ExporterKind::Metrics),
                 Err(err) => {
                     self.record_export_failure(
@@ -395,7 +575,7 @@ impl Telemetry {
             }
         }
 
-        Ok(FlushOutcome { export_failure })
+        FlushOutcome { export_failure }
     }
 
     /// Flushes buffers, drops incomplete spans, and transitions the runtime to shutdown.
@@ -429,17 +609,14 @@ impl Telemetry {
             return Ok(());
         }
 
-        let flush_outcome = self
-            .flush_outcome()
-            .map_err(FlushFailure::from)
-            .map_err(shutdown_flush_failure)?;
+        let flush_outcome = self.flush_outcome();
         let mut runtime = self.runtime.lock().expect("telemetry runtime poisoned");
         let dropped = runtime.span_assembler.flush_incomplete() as u64;
         if dropped > 0 {
             self.dropped_exports_total
                 .fetch_add(dropped, Ordering::SeqCst);
             let context = ErrorContext::new(
-                error_codes::TELEMETRY_INCOMPLETE_SPAN_DROPPED,
+                error_codes::OTLP_INCOMPLETE_SPAN_DROPPED,
                 "dropped incomplete spans during shutdown",
                 Remediation::recoverable(
                     "ensure all started spans receive matching ended signals before shutdown",
@@ -528,7 +705,7 @@ impl Telemetry {
         &self,
         exporter_kind: ExporterKind,
         dropped: u64,
-        error: &ExportFailure,
+        error: &ExportError,
     ) {
         self.dropped_exports_total
             .fetch_add(dropped, Ordering::SeqCst);
@@ -594,7 +771,7 @@ impl MetricEmitter for Telemetry {
 )]
 pub(crate) fn export_failure(message: impl Into<String>) -> TelemetryError {
     TelemetryError::ExportFailure(Box::new(ErrorContext::new(
-        error_codes::TELEMETRY_EXPORT_FAILED,
+        error_codes::OTLP_EXPORT_TERMINAL,
         message,
         Remediation::not_recoverable("retry/export policy is owned by telemetry runtime"),
     )))
@@ -620,10 +797,11 @@ fn export_failure_from_event(err: EventFailure) -> TelemetryError {
 /// by `shutdown_flush_failure_preserves_flush_context_as_native_source`
 /// below so a regression in its error-context/source chaining is still
 /// caught even while the call site is dormant.
+#[cfg_attr(not(test), allow(dead_code))]
 fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
     ShutdownFailure::from_context(Box::new(
         ErrorContext::new(
-            error_codes::TELEMETRY_FLUSH_FAILED,
+            error_codes::OTLP_FLUSH_FAILED,
             "failed to flush telemetry during shutdown",
             Remediation::recoverable(
                 "inspect telemetry health and retry shutdown after the exporter recovers",
@@ -635,7 +813,7 @@ fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
 }
 
 fn shutdown_export_failure_typed(
-    error: ExportFailure,
+    error: ExportError,
     diagnostic_summary: Option<DiagnosticSummary>,
 ) -> ShutdownFailure {
     // The legacy shutdown path selected `runtime.last_error` after incomplete
@@ -643,7 +821,7 @@ fn shutdown_export_failure_typed(
     // typed source chain keeps the actual exporter failure available to callers.
     let summary = diagnostic_summary.unwrap_or_else(|| DiagnosticSummary::from(error.diagnostic()));
     let mut context = ErrorContext::new(
-        error_codes::TELEMETRY_FLUSH_FAILED,
+        error_codes::OTLP_FLUSH_FAILED,
         "failed to flush telemetry during shutdown",
         Remediation::recoverable(
             "inspect telemetry health and retry shutdown after the exporter recovers",
@@ -667,92 +845,33 @@ fn shutdown_export_failure_typed(
 )]
 mod tests {
     use super::*;
+    use crate::testing::{RecordingLogExporter, RecordingMetricExporter, RecordingTraceExporter};
+    use sc_observability_types::DiagnosticInfo;
     use sc_observability_types::{
-        ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-        ProcessIdentity, ServiceName, SpanEvent, SpanId, SpanRecord, SpanStarted, StateTransition,
-        TargetCategory, Timestamp, TraceContext, TraceId,
+        ActionName, Diagnostic, DurationMs, EntityId, ErrorCode, Level, LogEvent, MetricKind,
+        MetricName, ProcessIdentity, ServiceName, SpanEvent, SpanId, SpanRecord, SpanStarted,
+        StateTransition, TargetCategory, Timestamp, TraceContext, TraceId,
     };
     use serde_json::{Map, json};
 
     use crate::assembly::span_key;
 
-    #[derive(Default)]
-    struct RecordingLogExporter {
-        calls: Mutex<Vec<usize>>,
-        fail: AtomicBool,
-    }
-
-    impl LogExporter for RecordingLogExporter {
-        fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportFailure> {
-            self.calls.lock().expect("calls poisoned").push(batch.len());
-            if self.fail.load(Ordering::SeqCst) {
-                Err(ExportFailure::from_context(Box::new(ErrorContext::new(
-                    error_codes::TELEMETRY_EXPORT_FAILED,
-                    "log export failed",
-                    Remediation::not_recoverable("test exporter failure"),
-                ))))
-            } else {
-                Ok(())
-            }
-        }
-    }
-
-    #[derive(Default)]
-    struct RecordingTraceExporter {
-        calls: Mutex<Vec<usize>>,
-        fail: AtomicBool,
-    }
-
-    impl TraceExporter for RecordingTraceExporter {
-        fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportFailure> {
-            self.calls.lock().expect("calls poisoned").push(batch.len());
-            if self.fail.load(Ordering::SeqCst) {
-                Err(ExportFailure::from_context(Box::new(ErrorContext::new(
-                    error_codes::TELEMETRY_EXPORT_FAILED,
-                    "trace export failed",
-                    Remediation::not_recoverable("test exporter failure"),
-                ))))
-            } else {
-                Ok(())
-            }
-        }
-    }
-
-    #[derive(Default)]
-    struct RecordingMetricExporter {
-        calls: Mutex<Vec<usize>>,
-        fail: AtomicBool,
-    }
-
-    impl MetricExporter for RecordingMetricExporter {
-        fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportFailure> {
-            self.calls.lock().expect("calls poisoned").push(batch.len());
-            if self.fail.load(Ordering::SeqCst) {
-                Err(ExportFailure::from_context(Box::new(ErrorContext::new(
-                    error_codes::TELEMETRY_EXPORT_FAILED,
-                    "metric export failed",
-                    Remediation::not_recoverable("test exporter failure"),
-                ))))
-            } else {
-                Ok(())
-            }
-        }
-    }
-
     struct SourcePreservingLogExporter;
 
-    impl LogExporter for SourcePreservingLogExporter {
-        fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportFailure> {
-            Err(ExportFailure::from_context(Box::new(
-                ErrorContext::new(
-                    ErrorCode::new_static("SC_TEST_CUSTOM_EXPORT"),
-                    "custom log exporter failed",
-                    Remediation::not_recoverable("test native exporter source retention"),
-                )
-                .source(Box::new(std::io::Error::other(
-                    "custom exporter native source",
-                ))),
-            )))
+    impl LogExporter<LogEvent> for SourcePreservingLogExporter {
+        fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
+            Err(ExportError::Transport {
+                context: Box::new(
+                    ErrorContext::new(
+                        ErrorCode::new_static("SC_TEST_CUSTOM_EXPORT"),
+                        "custom log exporter failed",
+                        Remediation::not_recoverable("test native exporter source retention"),
+                    )
+                    .source(Box::new(std::io::Error::other(
+                        "custom exporter native source",
+                    ))),
+                ),
+            })
         }
     }
 
@@ -788,6 +907,46 @@ mod tests {
             .expect("valid telemetry config")
     }
 
+    fn legacy_telemetry_config(protocol: OtlpProtocol) -> TelemetryConfig {
+        TelemetryConfigBuilder::new(service_name())
+            .enable_logs(LogsConfig::default())
+            .with_transport(OtelConfig {
+                enabled: true,
+                backend: ExporterBackend::LegacyHttpJson,
+                protocol,
+                endpoint: Some(
+                    OtlpEndpoint::new("https://otel.example.internal")
+                        .expect("valid OTLP endpoint"),
+                ),
+                ..OtelConfig::default()
+            })
+            .build()
+            .expect("valid legacy telemetry config")
+    }
+
+    /// Test-only construction seam: enabled production configurations must
+    /// receive concrete exporters rather than the factory inventing a
+    /// successful fallback exporter.
+    fn test_telemetry(config: TelemetryConfig) -> Telemetry {
+        Telemetry::new_with_exporters(
+            config,
+            Arc::new(RecordingLogExporter::default()),
+            Arc::new(RecordingTraceExporter::default()),
+            Arc::new(RecordingMetricExporter::default()),
+        )
+        .expect("test telemetry")
+    }
+
+    fn test_telemetry_typed(config: TelemetryConfig) -> Telemetry {
+        Telemetry::new_with_exporters_typed(
+            config,
+            Arc::new(RecordingLogExporter::default()),
+            Arc::new(RecordingTraceExporter::default()),
+            Arc::new(RecordingMetricExporter::default()),
+        )
+        .expect("typed test telemetry")
+    }
+
     fn trace_context() -> TraceContext {
         TraceContext {
             trace_id: TraceId::new("0123456789abcdef0123456789abcdef").expect("valid trace id"),
@@ -821,7 +980,7 @@ mod tests {
             }),
             state_transition: Some(StateTransition {
                 entity_kind: TargetCategory::new("agent").expect("valid target"),
-                entity_id: Some("agent-123".to_string()),
+                entity_id: Some(EntityId::new("agent-123").expect("valid entity id")),
                 from_state: sc_observability_types::StateName::new("idle").expect("valid state"),
                 to_state: sc_observability_types::StateName::new("running").expect("valid state"),
                 reason: None,
@@ -903,6 +1062,218 @@ mod tests {
         let typed_context = std::error::Error::source(&typed).expect("typed context");
         assert!(legacy_context.source().is_none());
         assert!(typed_context.source().is_none());
+    }
+
+    #[test]
+    fn enabled_backend_factory_returns_canonical_unsupported_backend() {
+        let config = telemetry_config();
+        let bounds = validated_transport_bounds(&config.transport).expect("valid transport");
+        let Err(factory_error) = exporter_factory(&bounds) else {
+            panic!("an enabled backend needs an installed implementation");
+        };
+        #[cfg(not(feature = "otlp-sdk"))]
+        {
+            assert!(matches!(
+                factory_error,
+                ConfigFailure::UnsupportedBackend { .. }
+            ));
+            assert_eq!(
+                factory_error.diagnostic().code,
+                sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
+            );
+            assert_eq!(
+                factory_error.diagnostic().details["backend"].as_str(),
+                Some("opentelemetry_sdk")
+            );
+            assert_eq!(
+                factory_error.diagnostic().details["feature"].as_str(),
+                Some("otlp-sdk")
+            );
+        }
+        #[cfg(feature = "otlp-sdk")]
+        {
+            assert!(matches!(
+                factory_error,
+                ConfigFailure::TokioRuntimeRequired { .. }
+            ));
+            assert_eq!(
+                factory_error.diagnostic().code,
+                sc_observability_types::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED
+            );
+        }
+
+        let Err(constructor_error) = Telemetry::new_typed(telemetry_config()) else {
+            panic!("the retained constructor preserves the factory diagnostic");
+        };
+        #[cfg(not(feature = "otlp-sdk"))]
+        assert_eq!(
+            constructor_error.diagnostic().code,
+            sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
+        );
+        #[cfg(feature = "otlp-sdk")]
+        assert_eq!(
+            constructor_error.diagnostic().code,
+            sc_observability_types::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED
+        );
+    }
+
+    #[test]
+    fn injected_exporter_set_routes_enabled_signals_and_reports_health() {
+        let log_exporter = Arc::new(RecordingLogExporter::default());
+        let trace_exporter = Arc::new(RecordingTraceExporter::default());
+        let metric_exporter = Arc::new(RecordingMetricExporter::default());
+        let telemetry = Telemetry::new_with_exporters(
+            telemetry_config(),
+            log_exporter.clone(),
+            trace_exporter.clone(),
+            metric_exporter.clone(),
+        )
+        .expect("enabled telemetry with injected exporters");
+
+        telemetry
+            .emit_log(&log_event(service_name(), "injected routing"))
+            .expect("route log");
+        let (started, ended) = complete_span_signals();
+        telemetry.emit_span(&started).expect("route span start");
+        telemetry.emit_span(&ended).expect("route span end");
+        telemetry
+            .emit_metric(&metric_record())
+            .expect("route metric");
+        telemetry.flush().expect("flush injected exporters");
+
+        assert_eq!(*log_exporter.calls.lock().expect("calls poisoned"), vec![1]);
+        assert_eq!(
+            *trace_exporter.calls.lock().expect("calls poisoned"),
+            vec![1]
+        );
+        assert_eq!(
+            *metric_exporter.calls.lock().expect("calls poisoned"),
+            vec![1]
+        );
+        let health = telemetry.health();
+        assert_eq!(health.state, TelemetryHealthState::Healthy);
+        assert!(
+            health
+                .exporter_statuses
+                .iter()
+                .all(|status| status.state == ExporterHealthState::Healthy)
+        );
+    }
+
+    #[test]
+    fn legacy_factory_rejects_non_json_protocol_before_backend_availability() {
+        let mut invalid_config = legacy_telemetry_config(OtlpProtocol::HttpJson);
+        invalid_config.transport.protocol = OtlpProtocol::HttpBinary;
+        let bounds = validated_transport_bounds(&invalid_config.transport)
+            .expect("configuration bounds precede backend availability");
+        let Err(protocol_error) = exporter_factory(&bounds) else {
+            panic!("the legacy HTTP/JSON backend must reject a binary protocol");
+        };
+        assert!(matches!(
+            protocol_error,
+            ConfigFailure::UnsupportedProtocol { .. }
+        ));
+        assert_eq!(
+            protocol_error.diagnostic().code,
+            sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_PROTOCOL
+        );
+        assert_eq!(
+            protocol_error.diagnostic().details["backend"].as_str(),
+            Some("legacy_http_json")
+        );
+
+        let config = legacy_telemetry_config(OtlpProtocol::HttpJson);
+        let bounds = validated_transport_bounds(&config.transport).expect("valid transport");
+        let Err(backend_error) = exporter_factory(&bounds) else {
+            panic!("the configured legacy backend remains unavailable");
+        };
+        assert!(matches!(
+            backend_error,
+            ConfigFailure::UnsupportedBackend { .. }
+        ));
+        assert_eq!(
+            backend_error.diagnostic().code,
+            sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
+        );
+        assert_eq!(
+            backend_error.diagnostic().details["feature"].as_str(),
+            Some("legacy-http-json")
+        );
+    }
+
+    #[test]
+    fn sdk_factory_rejects_http_json_before_feature_availability() {
+        let mut config = telemetry_config();
+        config.transport.protocol = OtlpProtocol::HttpJson;
+        let bounds = validated_transport_bounds(&config.transport).expect("valid bounds");
+        let Err(error) = exporter_factory(&bounds) else {
+            panic!("SDK has no HTTP/JSON transport");
+        };
+        assert!(matches!(error, ConfigFailure::UnsupportedProtocol { .. }));
+        assert_eq!(
+            error.diagnostic().details["backend"].as_str(),
+            Some("opentelemetry_sdk")
+        );
+        assert_eq!(
+            error.diagnostic().details["supported_protocols"].as_str(),
+            Some("Grpc, HttpBinary")
+        );
+    }
+
+    #[cfg(feature = "otlp-sdk")]
+    #[test]
+    fn sdk_factory_requires_a_caller_tokio_runtime_after_feature_checks() {
+        let config = telemetry_config();
+        let bounds = validated_transport_bounds(&config.transport).expect("valid bounds");
+        let Err(error) = exporter_factory(&bounds) else {
+            panic!("no caller runtime is entered");
+        };
+        assert!(matches!(error, ConfigFailure::TokioRuntimeRequired { .. }));
+        assert_eq!(
+            error.diagnostic().details["feature"].as_str(),
+            Some("otlp-sdk")
+        );
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        runtime.block_on(async {
+            let Err(error) = exporter_factory(&bounds) else {
+                panic!("D.7 owns the real SDK exporter implementation");
+            };
+            assert!(matches!(error, ConfigFailure::UnsupportedBackend { .. }));
+            assert_eq!(
+                error.diagnostic().details["availability"].as_str(),
+                Some("SDK adapter implementation is not installed yet")
+            );
+        });
+    }
+
+    #[test]
+    fn disabled_factory_constructs_and_telemetry_carries_one_exporter_set() {
+        let config = TelemetryConfigBuilder::new(service_name())
+            .build()
+            .expect("disabled configuration is valid");
+        let bounds = validated_transport_bounds(&config.transport).expect("valid transport");
+        let exporters = exporter_factory(&bounds).expect("disabled factory set");
+        exporters.logs.export_logs(&[]).expect("disabled logs");
+        exporters.traces.export_spans(&[]).expect("disabled traces");
+        exporters
+            .metrics
+            .export_metrics(&[])
+            .expect("disabled metrics");
+        exporters
+            .lifecycle
+            .blocking_preflight()
+            .expect("disabled lifecycle");
+
+        let telemetry = Telemetry::new_typed(config).expect("disabled telemetry");
+        telemetry
+            .exporters
+            .lifecycle
+            .flush_blocking()
+            .expect("telemetry owns the factory lifecycle");
     }
 
     #[test]
@@ -1117,8 +1488,8 @@ mod tests {
             trace,
             Map::new(),
         );
-        let legacy = Telemetry::new(telemetry_config()).expect("legacy telemetry");
-        let typed = Telemetry::new_typed(telemetry_config()).expect("typed telemetry");
+        let legacy = test_telemetry(telemetry_config());
+        let typed = test_telemetry_typed(telemetry_config());
 
         legacy
             .emit_span(&SpanSignal::Started(started.clone()))
@@ -1143,7 +1514,7 @@ mod tests {
     #[test]
     fn orphaned_ended_span_returns_export_failure_and_is_counted() {
         let trace = trace_context();
-        let telemetry = Telemetry::new(telemetry_config()).expect("telemetry");
+        let telemetry = test_telemetry(telemetry_config());
         let ended = SpanRecord::<SpanStarted>::new(
             Timestamp::UNIX_EPOCH,
             service_name(),
@@ -1161,14 +1532,14 @@ mod tests {
         assert_eq!(health.malformed_spans_total, 1);
         assert_eq!(
             health.last_error.and_then(|summary| summary.code),
-            Some(error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED)
+            Some(error_codes::OTLP_SPAN_ASSEMBLY_FAILED)
         );
     }
 
     #[test]
     fn orphaned_span_event_returns_export_failure_from_span_assembler() {
         let trace = trace_context();
-        let telemetry = Telemetry::new(telemetry_config()).expect("telemetry");
+        let telemetry = test_telemetry(telemetry_config());
         let event = SpanEvent {
             timestamp: Timestamp::UNIX_EPOCH,
             trace,
@@ -1185,7 +1556,7 @@ mod tests {
         };
         assert_eq!(
             context.diagnostic().code,
-            error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED
+            error_codes::OTLP_SPAN_ASSEMBLY_FAILED
         );
         assert_eq!(
             context.diagnostic().message,
@@ -1197,7 +1568,7 @@ mod tests {
     fn export_failure_from_event_moves_original_context_without_reconstruction() {
         let context = Box::new(
             ErrorContext::new(
-                error_codes::TELEMETRY_SPAN_ASSEMBLY_FAILED,
+                error_codes::OTLP_EXPORT_TERMINAL,
                 "received span event without a matching started span",
                 Remediation::not_recoverable(
                     "emit started, event, and ended span signals in order",
@@ -1229,7 +1600,7 @@ mod tests {
     fn shutdown_flush_failure_preserves_flush_context_as_native_source() {
         let flush_failure = FlushFailure::from_context(Box::new(
             ErrorContext::new(
-                error_codes::TELEMETRY_EXPORT_FAILED,
+                error_codes::OTLP_EXPORT_TERMINAL,
                 "log export failed",
                 Remediation::not_recoverable("test flush failure"),
             )
@@ -1240,7 +1611,7 @@ mod tests {
 
         assert_eq!(
             shutdown_failure.diagnostic().code,
-            error_codes::TELEMETRY_FLUSH_FAILED
+            error_codes::OTLP_FLUSH_FAILED
         );
         assert_eq!(
             shutdown_failure.diagnostic().message,
@@ -1449,8 +1820,8 @@ mod tests {
         // Emitters intentionally remain the B.1 legacy public surface. This
         // pairs their unchanged calls after each lifecycle entry point rather
         // than adding parallel typed emitter methods to this preparation layer.
-        let legacy = Telemetry::new(telemetry_config()).expect("legacy telemetry");
-        let typed = Telemetry::new_typed(telemetry_config()).expect("typed telemetry");
+        let legacy = test_telemetry(telemetry_config());
+        let typed = test_telemetry_typed(telemetry_config());
         let trace = trace_context();
         let started = SpanRecord::<SpanStarted>::new(
             Timestamp::UNIX_EPOCH,
@@ -1553,7 +1924,7 @@ mod tests {
 
     #[test]
     fn repeated_shutdown_is_idempotent() {
-        let telemetry = Telemetry::new(telemetry_config()).expect("telemetry");
+        let telemetry = test_telemetry(telemetry_config());
 
         telemetry.shutdown().expect("first shutdown");
         telemetry.shutdown().expect("second shutdown");
@@ -1561,7 +1932,7 @@ mod tests {
 
     #[test]
     fn typed_telemetry_lifecycle_preserves_fail_open_and_repeat_shutdown() {
-        let telemetry = Telemetry::new_typed(telemetry_config()).expect("typed telemetry");
+        let telemetry = test_telemetry_typed(telemetry_config());
 
         telemetry
             .flush_typed()
@@ -1658,18 +2029,23 @@ mod tests {
                 Some(ErrorCode::new_static("SC_TEST_CUSTOM_EXPORT"))
             );
 
-            let shutdown_context =
-                std::error::Error::source(error).expect("shutdown failure preserves its context");
-            let export_failure = shutdown_context
-                .source()
-                .expect("shutdown context preserves export failure");
-            let export_context = export_failure
-                .source()
-                .expect("export failure preserves its context");
-            let native_source = export_context
-                .source()
-                .expect("export context preserves native source");
-            assert_eq!(native_source.to_string(), "custom exporter native source");
+            let mut source = std::error::Error::source(error);
+            let mut saw_export_failure = false;
+            let mut final_source = None;
+            while let Some(current) = source {
+                saw_export_failure |= current.downcast_ref::<ExportError>().is_some();
+                final_source = Some(current.to_string());
+                source = current.source();
+            }
+            assert!(
+                saw_export_failure,
+                "source chain retains the export failure"
+            );
+            assert_eq!(
+                final_source.as_deref(),
+                Some("custom exporter native source"),
+                "source chain ends at the native exporter source"
+            );
         }
 
         let legacy = Telemetry::new_with_exporters(
@@ -1709,7 +2085,7 @@ mod tests {
         where
             E: DiagnosticInfo,
         {
-            assert_eq!(error.diagnostic().code, error_codes::TELEMETRY_FLUSH_FAILED);
+            assert_eq!(error.diagnostic().code, error_codes::OTLP_FLUSH_FAILED);
             assert_eq!(
                 error.diagnostic().cause.as_deref(),
                 Some("dropped incomplete spans during shutdown")
@@ -1717,7 +2093,7 @@ mod tests {
             assert_eq!(
                 error.diagnostic().details.get("exporter_error_code"),
                 Some(&Value::String(
-                    error_codes::TELEMETRY_INCOMPLETE_SPAN_DROPPED
+                    error_codes::OTLP_INCOMPLETE_SPAN_DROPPED
                         .as_str()
                         .to_owned(),
                 ))
@@ -1727,7 +2103,7 @@ mod tests {
             assert_eq!(health.dropped_exports_total, 2);
             assert_eq!(
                 health.last_error.and_then(|summary| summary.code),
-                Some(error_codes::TELEMETRY_INCOMPLETE_SPAN_DROPPED)
+                Some(error_codes::OTLP_INCOMPLETE_SPAN_DROPPED)
             );
             assert_eq!(
                 health.exporter_statuses[0].state,

@@ -111,6 +111,7 @@ def validate_stage_manifest(
     evidence: object,
     version: str | None = None,
     source_commit: str | None = None,
+    workspace_version: str | None = None,
 ) -> dict:
     """Validate every field consumed by stage verification and extraction."""
     if not isinstance(evidence, dict):
@@ -120,6 +121,8 @@ def validate_stage_manifest(
             or (version is not None and evidence.get("candidate_version") != version)
             or evidence.get("publication") != "pending_B.7"):
         raise ValueError("stage schema/version/publication mismatch")
+    if workspace_version is not None and not isinstance(workspace_version, str):
+        raise ValueError("workspace candidate version mismatch")
     actual_source = evidence.get("source_commit", "")
     if not isinstance(actual_source, str) or not re.fullmatch(r"[0-9a-f]{40}", actual_source) or (
         source_commit and actual_source != source_commit
@@ -140,19 +143,21 @@ def validate_stage_manifest(
 
 def verify_stage(
     stage: Path,
-    version: str,
+    version: str | None = None,
     source_commit: str | None = None,
     *,
     evidence: dict | None = None,
+    workspace_version: str | None = None,
 ) -> dict:
     evidence = read_stage_manifest(stage) if evidence is None else evidence
-    validate_stage_manifest(evidence, version, source_commit)
+    validate_stage_manifest(evidence, version, source_commit, workspace_version)
+    qualified_version = evidence["candidate_version"]
     actual_source = evidence["source_commit"]
     for item in evidence["packages"]:
         archive = safe_path(stage, item["archive"])
         if sha256(archive) != item["archive_sha256"]:
             raise ValueError(f"archive checksum mismatch: {item['name']}")
-        inspected = inspect_archive(archive, item["name"], version, actual_source)
+        inspected = inspect_archive(archive, item["name"], qualified_version, actual_source)
         for key in ("files", "normalized_manifest", "manifest_sha256"):
             if inspected[key] != item[key]:
                 raise ValueError(f"archive {key} mismatch: {item['name']}")

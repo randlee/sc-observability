@@ -5,11 +5,10 @@ use std::sync::{Arc, Mutex, RwLock, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use sc_observability_types::typed::ClassifiedError;
 use sc_observability_types::typed::FlushFailure;
 use sc_observability_types::{
-    DiagnosticInfo, DiagnosticSummary, ErrorContext, FileCount, MaintenanceHealthReport,
-    MaintenanceWorkerState, Remediation, Timestamp, WriterState,
+    DiagnosticSummary, ErrorContext, FileCount, MaintenanceHealthReport, MaintenanceWorkerState,
+    Remediation, Timestamp, WriterState,
 };
 
 use crate::sinks::JsonlFileSink;
