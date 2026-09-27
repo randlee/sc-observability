@@ -236,9 +236,13 @@ def dispatch_rows(ready: list[dict[str, Any]], members: list[dict[str, Any]], ac
     return sorted(rows, key=lambda row: (int(row["priority"]), int(row["layer"]), row["id"]))
 
 
-def render_dispatch(rows: list[dict[str, str]]) -> str:
-    return "\n".join("{priority} {layer} {id} {stage} {severity} {sprint} {difficulty} {agents}".format(**row)
-                     for row in rows)
+def render_dispatch(rows: list[dict[str, str]], members: list[dict[str, Any]] = ()) -> str:
+    unknown = sorted(str(m.get("identity") or m.get("id") or "") for m in members
+                     if str(m.get("model") or "").lower() in ("", "unknown", "none"))
+    head = ["prerequisite: every roster member has `model` set"
+            + (f"; unknown: {', '.join(unknown)}" if unknown else "")]
+    return "\n".join(head + ["{priority} {layer} {id} {stage} {severity} {sprint} {difficulty} {agents}".format(**row)
+                             for row in rows])
 
 
 def main() -> int:
@@ -300,7 +304,7 @@ def main() -> int:
                     if any(edge_type(edge) == "parent-child" and edge_id(edge) in descendants
                            for edge in bead.get("dependencies") or []) and bead.get("id") not in descendants:
                         descendants.add(str(bead["id"])); changed = True
-            print(render_dispatch(dispatch_rows([bead for bead in ready if str(bead.get("id")) in descendants], members, active)))
+            print(render_dispatch(dispatch_rows([bead for bead in ready if str(bead.get("id")) in descendants], members, active), members))
             return 0
         blocked_ids = {bead["id"] for bead in run_json(repo, "bd", "blocked", "--json")}
         dev_ids = set(row_ids)
