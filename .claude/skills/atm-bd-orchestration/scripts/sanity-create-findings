@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create one child finding bead for every unfinished deliverable.
+"""Create one finding bead, a child of the sprint bead, for every unfinished deliverable.
 
 Usage:
   sanity-create-findings --task <sanity-bead> --bead <checked-bead> \
@@ -9,7 +9,9 @@ Usage:
 The vars file is the JSON emitted by sanity-merge. On success, stdout is a
 JSON object containing every child bead id and its finding reference. It also
 adds `finding_bead_ids` to the supplied report vars so the final ATM report
-links directly to the created child beads. The script is idempotent for a
+links directly to the created child beads. The only edges it adds are
+`blocks` edges between the beads it creates, where a finding's `depends_on`
+names another finding of the same report. The script is idempotent for a
 task/commit/finding_ref tuple: a retry reuses the existing child instead of
 creating a duplicate.
 """
@@ -101,6 +103,20 @@ def parent_layer(metadata: dict):
     raise HandoffError("checked bead metadata lacks layer")
 
 
+def sprint_bead_of(bead: str, show) -> str:
+    """The stage:sprint bead that owns `bead`, following metadata.sprint_bead through findings."""
+    seen = set()
+    while bead not in seen:
+        seen.add(bead)
+        row = show(bead)
+        if "stage:sprint" in (row.get("labels") or []):
+            return bead
+        bead = (row.get("metadata") or {}).get("sprint_bead") or ""
+        if not bead:
+            break
+    raise HandoffError("checked bead has no stage:sprint bead through metadata.sprint_bead")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--task", required=True)
@@ -131,7 +147,9 @@ def main() -> int:
         if difficulty not in ("hard", "normal", "fast"):
             raise HandoffError("checked bead has no valid difficulty")
         labels = [f"phase-{phase}", FINDING_LABEL, f"stack:{stack}"]
-        children = existing_children(args.bead, args.actor, args.task, report["commit"])
+        sprint_bead = sprint_bead_of(args.bead, lambda b: parent if b == args.bead else
+                                     json.loads(command(["bd", "show", b, "--json"], args.actor, capture=True))[0])
+        children = existing_children(sprint_bead, args.actor, args.task, report["commit"])
         created = []
         for finding in findings:
             ref = finding.get("finding_ref")
@@ -157,7 +175,7 @@ def main() -> int:
                 "phase": phase, "sprint": sprint, "stack": stack,
                 "found_on_layer": layer,
                 "found_at_commit": report["commit"], "reviewer": args.reviewer,
-                "finding_ref": ref, "sprint_bead": args.bead, "severity": severity,
+                "finding_ref": ref, "sprint_bead": sprint_bead, "severity": severity,
                 "difficulty": difficulty,
             }
             metadata = {**provenance, "sanity_finding": payload}
@@ -168,7 +186,7 @@ def main() -> int:
             title = f"{args.bead} D{finding['deliverable']} not done: {deliverable_text[:80]}"
             child = command([
                 "bd", "create", title, "--type", "bug", "--status", "open",
-                "--parent", args.bead, "--description", description,
+                "--parent", sprint_bead, "--description", description,
                 "--acceptance", acceptance,
                 "--priority", str(priority),
                 "--labels", ",".join(labels), "--no-inherit-labels",
