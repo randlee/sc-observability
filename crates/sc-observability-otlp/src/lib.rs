@@ -797,6 +797,7 @@ fn export_failure_from_event(err: EventFailure) -> TelemetryError {
 /// by `shutdown_flush_failure_preserves_flush_context_as_native_source`
 /// below so a regression in its error-context/source chaining is still
 /// caught even while the call site is dormant.
+#[cfg_attr(not(test), allow(dead_code))]
 fn shutdown_flush_failure(error: FlushFailure) -> ShutdownFailure {
     ShutdownFailure::from_context(Box::new(
         ErrorContext::new(
