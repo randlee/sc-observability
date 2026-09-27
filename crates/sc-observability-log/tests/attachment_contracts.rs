@@ -103,7 +103,7 @@ fn foreign_logger() -> FixtureDetachError {
 }
 
 #[derive(Debug)]
-struct FixtureLogAttachment {
+pub struct FixtureLogAttachment {
     state: Arc<Mutex<FixtureAttachmentState>>,
 }
 
@@ -114,7 +114,7 @@ struct FixtureAttachmentState {
 }
 
 #[derive(Debug, Clone)]
-struct FixtureLogControl {
+pub struct FixtureLogControl {
     state: Weak<Mutex<FixtureAttachmentState>>,
 }
 
@@ -268,12 +268,6 @@ fn foreign_logger_rejected() {
             "SC_LOG_FOREIGN_LOGGER_INSTALLED",
         );
     }
-}
-
-#[test]
-fn attachment_has_no_owner_authority() {
-    let cases = trybuild::TestCases::new();
-    cases.compile_fail("tests/ui/log_control_not_owner.rs");
 }
 
 #[test]

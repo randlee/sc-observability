@@ -1,0 +1,43 @@
+error[E0599]: no method named `elevate_level` found for struct `FixtureLogAttachment` in the current scope
+  --> tests/ui/fixture_attachment_no_owner_authority.rs:12:24
+   |
+12 |     let _ = attachment.elevate_level();
+   |                        ^^^^^^^^^^^^^ method not found in `FixtureLogAttachment`
+   |
+  ::: tests/ui/../attachment_contracts.rs
+   |
+   | pub struct FixtureLogAttachment {
+   | ------------------------------- method `elevate_level` not found for this struct
+
+error[E0599]: no method named `reset_level` found for struct `FixtureLogAttachment` in the current scope
+  --> tests/ui/fixture_attachment_no_owner_authority.rs:13:24
+   |
+13 |     let _ = attachment.reset_level();
+   |                        ^^^^^^^^^^^ method not found in `FixtureLogAttachment`
+   |
+  ::: tests/ui/../attachment_contracts.rs
+   |
+   | pub struct FixtureLogAttachment {
+   | ------------------------------- method `reset_level` not found for this struct
+
+error[E0599]: no method named `shutdown` found for struct `FixtureLogAttachment` in the current scope
+  --> tests/ui/fixture_attachment_no_owner_authority.rs:14:24
+   |
+14 |     let _ = attachment.shutdown(Duration::ZERO);
+   |                        ^^^^^^^^ method not found in `FixtureLogAttachment`
+   |
+  ::: tests/ui/../attachment_contracts.rs
+   |
+   | pub struct FixtureLogAttachment {
+   | ------------------------------- method `shutdown` not found for this struct
+
+error[E0599]: no method named `elevate_level` found for struct `FixtureLogControl` in the current scope
+  --> tests/ui/fixture_attachment_no_owner_authority.rs:18:21
+   |
+18 |     let _ = control.elevate_level();
+   |                     ^^^^^^^^^^^^^ method not found in `FixtureLogControl`
+   |
+  ::: tests/ui/../attachment_contracts.rs
+   |
+   | pub struct FixtureLogControl {
+   | ---------------------------- method `elevate_level` not found for this struct
