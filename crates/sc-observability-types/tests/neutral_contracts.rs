@@ -267,6 +267,10 @@ fn histogram_point_serde_rejects_invalid() {
     }
 }
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one exhaustive test keeps metric validation and every frozen wire envelope together"
+)]
 fn metric_model_failures() {
     let start = Timestamp::UNIX_EPOCH;
     let end = start + time::Duration::seconds(1);
@@ -327,6 +331,45 @@ fn metric_model_failures() {
     assert_eq!(
         serde_json::to_value(MetricValue::Gauge(finite(1.5))).unwrap(),
         json!({"kind":"gauge","data":1.5})
+    );
+    assert_eq!(
+        serde_json::to_value(MetricValue::Sum {
+            value: finite(1.5),
+            monotonic: true,
+            temporality: AggregationTemporality::Delta,
+            start_time: start,
+        })
+        .unwrap(),
+        json!({
+            "kind": "sum",
+            "data": {
+                "value": 1.5,
+                "monotonic": true,
+                "temporality": "delta",
+                "start_time": "1970-01-01T00:00:00Z",
+            }
+        })
+    );
+    assert_eq!(
+        serde_json::to_value(MetricValue::Histogram {
+            point: histogram(),
+            temporality: AggregationTemporality::Delta,
+            start_time: start,
+        })
+        .unwrap(),
+        json!({
+            "kind": "histogram",
+            "data": {
+                "point": {
+                    "explicit_bounds": [1.0, 2.0],
+                    "bucket_counts": [1, 2, 3],
+                    "count": 6,
+                    "sum": 12.0,
+                },
+                "temporality": "delta",
+                "start_time": "1970-01-01T00:00:00Z",
+            }
+        })
     );
     assert_eq!(
         serde_json::to_value(SpanKind::Client).unwrap(),
