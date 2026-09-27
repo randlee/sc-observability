@@ -108,6 +108,10 @@ class SprintReportTests(unittest.TestCase):
     def test_closed_dev_without_sanity_is_flagged(self):
         self.assertEqual(report.status_icon({'status': 'closed'}, None), '🚩')
 
+    def test_missing_sanity_gate_is_flagged_except_for_blocked_work(self):
+        self.assertEqual(report.status_icon({'status': 'in_progress'}, None), '🚩')
+        self.assertEqual(report.status_icon({'status': 'blocked'}, None), '🚧')
+
     def test_dev_done_requires_explicit_sanity_pass(self):
         dev = {'status': 'closed'}
         self.assertEqual(report.status_icon(dev, {'status': 'closed'}), '🚩')
