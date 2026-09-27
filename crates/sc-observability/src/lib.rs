@@ -422,10 +422,6 @@ pub trait LogFilter: Send + Sync {
 /// This trait is intentionally open for downstream implementations. Adding
 /// required methods or tightening object-safety guarantees is therefore a
 /// semver-significant public API change.
-#[allow(
-    deprecated,
-    reason = "LogSink preserves its published LogSinkError trait signature"
-)]
 pub trait LogSink: Send + Sync {
     /// Writes one event to the sink.
     fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError>;
@@ -700,9 +696,9 @@ mod sealed_emitters {
     dead_code,
     reason = "crate-local emitter trait is intentionally available for logging-only injection"
 )]
-#[allow(
+#[expect(
     deprecated,
-    reason = "the crate-local compatibility emitter preserves its EventError signature"
+    reason = "the crate-local compatibility emitter retains the deprecated legacy EventError boundary"
 )]
 pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
@@ -710,9 +706,9 @@ pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
 
 impl sealed_emitters::Sealed for Logger<Running> {}
 
-#[allow(
+#[expect(
     deprecated,
-    reason = "the crate-local compatibility emitter delegates through the retained legacy logger boundary"
+    reason = "the crate-local compatibility emitter calls the retained deprecated logger boundary"
 )]
 impl LogEmitter for Logger<Running> {
     fn emit_log(&self, event: LogEvent) -> Result<(), EventError> {

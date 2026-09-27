@@ -91,13 +91,9 @@ impl ObservabilityConfig {
     ///
     /// assert_eq!(config.tool_name.as_str(), "demo-tool");
     /// ```
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility constructor keeps the published InitError signature"
-    )]
-    #[allow(
-        deprecated,
-        reason = "retained compatibility accessor keeps the published InitError signature"
     )]
     #[deprecated(
         since = "1.4.0",
@@ -133,11 +129,7 @@ impl ObservabilityConfig {
     }
 
     /// Derives the logging/telemetry service name from the configured tool.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility accessor keeps the published InitError signature"
-    )]
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility accessor keeps the published InitError signature"
     )]
@@ -262,11 +254,7 @@ fn log_error_summary(error: &LogError) -> DiagnosticSummary {
 
 impl Observability {
     /// Builds a runtime using the documented default logger integration.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility constructor keeps the published InitError signature"
-    )]
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility constructor keeps the published InitError signature"
     )]
@@ -392,11 +380,7 @@ impl Observability {
     ///
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing its registered sinks.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility lifecycle method keeps the published FlushError signature"
-    )]
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility lifecycle method keeps the published FlushError signature"
     )]
@@ -438,11 +422,7 @@ impl Observability {
     ///
     /// Panics if the attached logger encounters a poisoned internal mutex while
     /// flushing sinks or updating query/follow health during shutdown.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility lifecycle method keeps the published ShutdownError signature"
-    )]
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility lifecycle method keeps the published ShutdownError signature"
     )]
@@ -694,11 +674,7 @@ impl ObservabilityBuilder {
     }
 
     /// Finalizes registration and constructs the routing runtime.
-    #[allow(
-        deprecated,
-        reason = "retained compatibility builder method keeps the published InitError signature"
-    )]
-    #[allow(
+    #[expect(
         deprecated,
         reason = "retained compatibility builder method keeps the published InitError signature"
     )]
