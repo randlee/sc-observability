@@ -1,0 +1,10 @@
+{"blk": 28, "imp": 78, "min": 59, "open": 165, "phase": "d", "snapshot_at": "2026-09-27T11:14:10Z", "snapshot_local": "04:14", "tot": 317, "trigger_task": "obs-ci-encoding-f1"}
+{"blk": 23, "imp": 77, "min": 57, "open": 157, "phase": "d", "snapshot_at": "2026-09-27T17:54:55Z", "snapshot_local": "10:54", "tot": 320, "trigger_task": "obs-ci-b2-retire-qa-f9"}
+{"blk": 23, "imp": 76, "min": 57, "open": 156, "phase": "d", "snapshot_at": "2026-09-27T18:07:15Z", "snapshot_local": "11:07", "tot": 320, "trigger_task": "obs-sprint-index-qa-f14"}
+{"blk": 23, "imp": 76, "min": 57, "open": 156, "phase": "d", "snapshot_at": "2026-09-27T18:07:16Z", "snapshot_local": "11:07", "tot": 320, "trigger_task": "obs-d-6-qa-f14"}
+{"blk": 23, "imp": 76, "min": 59, "open": 158, "phase": "d", "snapshot_at": "2026-09-27T18:14:54Z", "snapshot_local": "11:14", "tot": 322, "trigger_task": "obs-d-12-qa-f27"}
+{"blk": 23, "imp": 76, "min": 59, "open": 158, "phase": "d", "snapshot_at": "2026-09-27T18:15:35Z", "snapshot_local": "11:15", "tot": 322, "trigger_task": "obs-d-12-qa-f26"}
+{"blk": 23, "imp": 76, "min": 57, "open": 156, "phase": "d", "snapshot_at": "2026-09-27T18:27:55Z", "snapshot_local": "11:27", "tot": 322, "trigger_task": "obs-ci-b2-retire-qa-f9-qa-f1"}
+{"blk": 24, "imp": 77, "min": 57, "open": 158, "phase": "d", "snapshot_at": "2026-09-27T18:31:32Z", "snapshot_local": "11:31", "tot": 324, "trigger_task": "obs-d-20-qa-f4"}
+{"blk": 23, "imp": 77, "min": 58, "open": 158, "phase": "d", "snapshot_at": "2026-09-27T18:38:21Z", "snapshot_local": "11:38", "tot": 327, "trigger_task": "obs-d-12-qa-f28"}
+{"blk": 21, "imp": 72, "min": 48, "open": 141, "phase": "d", "snapshot_at": "2026-09-27T19:12:54Z", "snapshot_local": "12:12", "tot": 327, "trigger_task": "obs-d-10-qa-f5-qa-f1"}
