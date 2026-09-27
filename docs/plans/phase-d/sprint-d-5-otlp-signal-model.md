@@ -15,7 +15,7 @@ Generated projection of `obs-d-5`; the bead is authoritative.
 - PR target (merge order only): `sprint/d-4-error-enums-2-0`
 - Blocked by: `obs-d-21-sanity`
 - Requirements: LAY-005, LAY-006, NFR-001, NFR-004, NFR-005, NFR-006, NFR-007, NFR-009, OTLP-001, OTLP-003, OTLP-008, OTLP-009, OTLP-010, OTLP-011, OTLP-012, OTLP-013, OTLP-014, OTLP-015, OTLP-016, OTLP-017, OTLP-021, OTLP-022, PHB-010, PHB-011, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-021, TYP-023, TYP-024, TYP-027, TYP-028, TYP-029, TYP-030, TYP-031
-- ADRs: ADR-001, ADR-002, ADR-004, ADR-005, ADR-009, ADR-017, ADR-018
+- ADRs: ADR-001, ADR-002, ADR-004, ADR-005, ADR-009, ADR-017, ADR-018, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability-otlp/src/assembly.rs`
   - `crates/sc-observability-otlp/src/projectors.rs`
@@ -59,6 +59,9 @@ Created/staged by obs-d-5 and owned by obs-d-18 from wave 3; after this bead clo
 
 - `crates/sc-observability-otlp/src/assembly.rs`
 - `crates/sc-observability-otlp/src/projectors.rs`
+
+ADR-019 governs the consumed types-owned OTLP error-code registry and projector
+mappings; D.5 defines neither a second registry nor transport configuration.
 ## Acceptance criteria
 
 - [ ] Deliverable 1: `cargo test -p sc-observability-otlp --lib assembly --locked` and `cargo test -p sc-observability-otlp --lib projectors --locked` each run nonzero tests covering span completion and field-preserving projection.

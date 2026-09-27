@@ -13,9 +13,9 @@ Generated projection of `obs-d-19`; the bead is authoritative.
 - Branch: `sprint/d-19-dto-and-schema-migration`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-19-dto-and-schema-migration`
 - PR target (merge order only): `sprint/d-17-log-consumer-error-migration`
-- Blocked by: `obs-phase-d-plan-qa`, `obs-d-12-sanity`
-- Requirements: LAY-001, PHB-002, PHB-010, PHB-012, PHB-013, PHD-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-007
-- ADRs: ADR-002, ADR-005, ADR-011, ADR-014, ADR-017
+- Blocked by: `obs-phase-d-plan-qa, obs-d-12-sanity`
+- Requirements: LAY-001, PHB-002, PHB-010, PHB-012, PHB-013, PHD-001, PHD-002, TYP-002, TYP-003, TYP-004, TYP-005, TYP-007
+- ADRs: ADR-002, ADR-005, ADR-011, ADR-014, ADR-017, ADR-019
 - Owned paths (metadata projection):
   - `bindings/conformance/v1/conversion-cases.json`
   - `bindings/conformance/v1/schema-cases.json`
@@ -61,6 +61,8 @@ obs-d-20 owns language transport/extraction adapters and runtime tests; obs-d-18
 ## Independent boundary closure
 
 Consume obs-d-12's frozen neutral types and wire-projection specification after its sanity gate. DTO owns projection only, never native runtime/bridge mapping. obs-d-19 owns canonical schema and generated model output together, preventing a same-wave generation dependency on obs-d-20. Operational envelope field names and discriminants used by obs-d-20 are frozen by obs-d-12; adapters compile/test against the existing compatible envelope plus local fixtures, not unfinished new schema output. New neutral signal fields remain additive/staged until integration activation. Reject invalid histograms and temporal intervals on checked conversion; never lose count/sum/bounds or coerce an unknown error into success. Existing generator commands consume the canonical schema. Do not modify error_codes.rs: consume obs-d-12's registry read-only.
+
+PHD-001/PHD-002 and ADR-019 govern the canonical DTO/error projection and integration handoff consumed by this sprint.
 
 ## Handoff from obs-d-12
 

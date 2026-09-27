@@ -122,6 +122,8 @@ class SanitySplit(unittest.TestCase):
         self.assertIn("pub mod retry", first["deliverable"]["text"])
         self.assertIn("in the types crate.", first["deliverable"]["text"])
         self.assertEqual(first["deliverables_total"], 2)
+        self.assertNotIn("acceptance_criteria", first)
+        self.assertNotIn("design", first)
         self.assertEqual(first["commit"], self.repo.sha)
         self.assertEqual(first["base_sha"], self.repo.base_sha)
         self.assertEqual(first["owned_paths"], ["crates/types/src/**"])
