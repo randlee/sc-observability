@@ -133,7 +133,7 @@ class SourceBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary);self.project(root)
             lock='version = 4\n[[package]]\nname="bundle-boundary-fixture"\nversion="0.0.1"\n';(root/'Cargo.lock').write_text(lock)
-            result=self.invoke(root);self.assertNotEqual(result.returncode,0);self.assertIn('BUNDLE_STALE_LOCK',result.stderr);self.assertEqual((root/'Cargo.lock').read_text(),lock)
+            result=self.invoke(root);self.assertNotEqual(result.returncode,0);self.assertIn('BUNDLE_STALE_LOCK',result.stderr);self.assertEqual((root/'Cargo.lock').read_text(encoding='utf-8'),lock)
     def test_path_only_dependency_rejected_before_staging(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary);self.project(root,'[dependencies]\nlocal={path="local"}\n')
@@ -163,7 +163,7 @@ class SourceBoundaryTests(unittest.TestCase):
             run('git','-c','user.name=Binding Fixture','-c','user.email=binding-fixture@example.invalid','commit','-qm','reviewed isolated fixture')
             result=self.invoke(adapter)
             self.assertEqual(result.returncode,0,result.stderr)
-            record=json.loads((adapter/'bundle/manifest.json').read_text())
+            record=json.loads((adapter/'bundle/manifest.json').read_text(encoding='utf-8'))
             self.assertEqual({item['name'] for item in record['packages']},{'serde_json','standalone-binding-fixture'})
             self.assertEqual(len(record['package_commands']),2)
             self.assertEqual(record['registry_selection'],[])
@@ -179,7 +179,7 @@ class SourceBoundaryTests(unittest.TestCase):
             run('git','add','.')
             run('git','-c','user.name=Binding Fixture','-c','user.email=binding-fixture@example.invalid','commit','-qm','reviewed fixture')
             result=self.invoke(root);self.assertEqual(result.returncode,0,result.stderr)
-            record=json.loads((root/'bundle/manifest.json').read_text())
+            record=json.loads((root/'bundle/manifest.json').read_text(encoding='utf-8'))
             selection={(p['name'],p['version']) for p in record['registry_selection']}
             self.assertIn(('serde_json','1.0.149'),selection)
             self.assertIn(('libc','0.2.189'),selection)

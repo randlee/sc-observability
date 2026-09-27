@@ -62,14 +62,14 @@ def validate_consumer_manifest(document, package, workspace=None):
         raise ValueError(f'{package} forbidden host edge: {sorted(actual & forbidden)}')
 
 def main():
-    workspace = tomllib.loads((ROOT/'Cargo.toml').read_text())
-    document = tomllib.loads((ROOT/'crates/sc-observability-binding-runtime/Cargo.toml').read_text())
+    workspace = tomllib.loads((ROOT/'Cargo.toml').read_text(encoding='utf-8'))
+    document = tomllib.loads((ROOT/'crates/sc-observability-binding-runtime/Cargo.toml').read_text(encoding='utf-8'))
     validate_manifest(document, workspace)
     for package, path in {
         'sc-observability-tauri': ROOT/'bindings/tauri/Cargo.toml',
         'sc-observability-py': ROOT/'bindings/python/sc-observability-py/Cargo.toml',
     }.items():
-        validate_consumer_manifest(tomllib.loads(path.read_text()), package, workspace)
+        validate_consumer_manifest(tomllib.loads(path.read_text(encoding='utf-8')), package, workspace)
     metadata = json.loads(subprocess.check_output(['cargo','metadata','--locked','--format-version','1'], cwd=ROOT, text=True))
     packages = {p['id']:p for p in metadata['packages']}
     runtime = next(p for p in packages.values() if p['name']=='sc-observability-binding-runtime')
