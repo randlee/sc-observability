@@ -324,7 +324,34 @@ fn metric_model_failures() {
         },
     )
     .unwrap();
+    assert_eq!(
+        serde_json::to_value(MetricValue::Gauge(finite(1.5))).unwrap(),
+        json!({"kind":"gauge","data":1.5})
+    );
+    assert_eq!(
+        serde_json::to_value(SpanKind::Client).unwrap(),
+        json!("client")
+    );
+    assert_eq!(
+        serde_json::to_value(SpanKind::Consumer).unwrap(),
+        json!("consumer")
+    );
+    assert_eq!(
+        serde_json::to_value(SpanKind::Internal).unwrap(),
+        json!("internal")
+    );
+    assert_eq!(
+        serde_json::to_value(SpanKind::Producer).unwrap(),
+        json!("producer")
+    );
+    assert_eq!(
+        serde_json::to_value(SpanKind::Server).unwrap(),
+        json!("server")
+    );
     let mut value = serde_json::to_value(&record).unwrap();
+    assert_eq!(value["timestamp"], json!("1970-01-01T00:00:01Z"));
+    assert_eq!(value["value"]["kind"], "histogram");
+    assert!(value.get("service").is_some() && value.get("name").is_some());
     assert_eq!(
         serde_json::from_value::<MetricRecord>(value.clone()).unwrap(),
         record
