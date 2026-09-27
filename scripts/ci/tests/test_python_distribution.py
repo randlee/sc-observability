@@ -115,16 +115,17 @@ class DistributionTests(unittest.TestCase):
         from test_python_arm64 import pe
         arm = b'\xcf\xfa\xed\xfe' + (0x100000c).to_bytes(4, 'little')
         verify_native_architecture(arm, 'macosx_11_0_arm64')
+        verify_native_architecture(pe(0x8664), 'win_amd64')
         verify_native_architecture(pe(0xAA64), 'win_arm64')
         with self.assertRaisesRegex(DistributionError, 'architecture'):
             verify_native_architecture(arm, 'macosx_10_13_x86_64')
         with self.assertRaisesRegex(DistributionError, 'architecture'):
             verify_native_architecture(b'MZ', 'win_amd64')
 
-    def test_verify_native_architecture_uses_arm64_helper_once(self):
+    def test_verify_native_architecture_uses_pe_helper_once(self):
         from unittest.mock import patch
         from _python_distribution import verify_native_architecture
-        with patch('python_arm64.is_pe_arm64', return_value=True) as helper:
+        with patch('_python_distribution.pe_machine', return_value=0xAA64) as helper:
             verify_native_architecture(b'fixture', 'win_arm64')
         helper.assert_called_once_with(b'fixture')
 
