@@ -1,6 +1,8 @@
 [package]
 authors.workspace = true
 name = "sc-observability-types"
+# D.12 stages v2 at the current workspace version. D.21 owns only the
+# version activation handoff during its atomic workspace 2.0 bump.
 version.workspace = true
 edition.workspace = true
 license.workspace = true
