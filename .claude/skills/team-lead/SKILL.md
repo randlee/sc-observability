@@ -122,7 +122,7 @@ store. That is disaster recovery and needs the user's instruction.
 
 ## Step 4 — Project Status
 
-Read `docs/project-plan.md`, check open PRs with `atm gh pr list`, and output a
+Read `docs/project-plan.md`, check open PRs with `gh pr list`, and output a
 concise status: current phase, open PRs, each teammate's last known task, and
 the next sprints ready to run. Stay silent in ATM unless a teammate has to act.
 
