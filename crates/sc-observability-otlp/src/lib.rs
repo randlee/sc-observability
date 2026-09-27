@@ -64,9 +64,11 @@ pub use config::{
 #[doc(inline)]
 pub use projectors::TelemetryProjectors;
 
-use contracts::{
-    ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, MetricExporter, TraceExporter,
-};
+use contracts::{ExporterLifecycle, LifecycleFuture, LogExporter, MetricExporter, TraceExporter};
+
+// Temporary root-facade specialization. D.18 can remove this alias when the
+// facade composition decision is made; backend adapters use the v2 defaults.
+type ExporterSet = contracts::ExporterSet<LogEvent, CompleteSpan, MetricRecord>;
 
 /// OTLP-backed telemetry runtime.
 #[expect(
@@ -152,19 +154,19 @@ struct DisabledTraceExporter;
 struct DisabledMetricExporter;
 struct DisabledLifecycle;
 
-impl LogExporter for DisabledLogExporter {
+impl LogExporter<LogEvent> for DisabledLogExporter {
     fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
-impl TraceExporter for DisabledTraceExporter {
+impl TraceExporter<CompleteSpan> for DisabledTraceExporter {
     fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
-impl MetricExporter for DisabledMetricExporter {
+impl MetricExporter<MetricRecord> for DisabledMetricExporter {
     fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportError> {
         Ok(())
     }
@@ -274,9 +276,9 @@ impl Telemetry {
     )]
     fn new_with_exporters(
         config: TelemetryConfig,
-        log_exporter: Arc<dyn LogExporter>,
-        trace_exporter: Arc<dyn TraceExporter>,
-        metric_exporter: Arc<dyn MetricExporter>,
+        log_exporter: Arc<dyn LogExporter<LogEvent>>,
+        trace_exporter: Arc<dyn TraceExporter<CompleteSpan>>,
+        metric_exporter: Arc<dyn MetricExporter<MetricRecord>>,
     ) -> Result<Self, InitError> {
         Self::new_with_exporters_typed(config, log_exporter, trace_exporter, metric_exporter)
             .map_err(Into::into)
@@ -285,9 +287,9 @@ impl Telemetry {
     #[cfg(test)]
     fn new_with_exporters_typed(
         config: TelemetryConfig,
-        log_exporter: Arc<dyn LogExporter>,
-        trace_exporter: Arc<dyn TraceExporter>,
-        metric_exporter: Arc<dyn MetricExporter>,
+        log_exporter: Arc<dyn LogExporter<LogEvent>>,
+        trace_exporter: Arc<dyn TraceExporter<CompleteSpan>>,
+        metric_exporter: Arc<dyn MetricExporter<MetricRecord>>,
     ) -> Result<Self, InitFailure> {
         Self::new_with_exporter_set_typed(
             config,
@@ -759,9 +761,9 @@ mod tests {
     use super::*;
     use sc_observability_types::DiagnosticInfo;
     use sc_observability_types::{
-        ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-        ProcessIdentity, ServiceName, SpanEvent, SpanId, SpanRecord, SpanStarted, StateTransition,
-        TargetCategory, Timestamp, TraceContext, TraceId,
+        ActionName, Diagnostic, DurationMs, EntityId, ErrorCode, Level, LogEvent, MetricKind,
+        MetricName, ProcessIdentity, ServiceName, SpanEvent, SpanId, SpanRecord, SpanStarted,
+        StateTransition, TargetCategory, Timestamp, TraceContext, TraceId,
     };
     use serde_json::{Map, json};
 
@@ -773,7 +775,7 @@ mod tests {
         fail: AtomicBool,
     }
 
-    impl LogExporter for RecordingLogExporter {
+    impl LogExporter<LogEvent> for RecordingLogExporter {
         fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError> {
             self.calls.lock().expect("calls poisoned").push(batch.len());
             if self.fail.load(Ordering::SeqCst) {
@@ -796,7 +798,7 @@ mod tests {
         fail: AtomicBool,
     }
 
-    impl TraceExporter for RecordingTraceExporter {
+    impl TraceExporter<CompleteSpan> for RecordingTraceExporter {
         fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError> {
             self.calls.lock().expect("calls poisoned").push(batch.len());
             if self.fail.load(Ordering::SeqCst) {
@@ -819,7 +821,7 @@ mod tests {
         fail: AtomicBool,
     }
 
-    impl MetricExporter for RecordingMetricExporter {
+    impl MetricExporter<MetricRecord> for RecordingMetricExporter {
         fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError> {
             self.calls.lock().expect("calls poisoned").push(batch.len());
             if self.fail.load(Ordering::SeqCst) {
@@ -838,7 +840,7 @@ mod tests {
 
     struct SourcePreservingLogExporter;
 
-    impl LogExporter for SourcePreservingLogExporter {
+    impl LogExporter<LogEvent> for SourcePreservingLogExporter {
         fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
             Err(ExportError::Transport {
                 context: Box::new(
@@ -960,7 +962,7 @@ mod tests {
             }),
             state_transition: Some(StateTransition {
                 entity_kind: TargetCategory::new("agent").expect("valid target"),
-                entity_id: Some("agent-123".to_string()),
+                entity_id: Some(EntityId::new("agent-123").expect("valid entity id")),
                 from_state: sc_observability_types::StateName::new("idle").expect("valid state"),
                 to_state: sc_observability_types::StateName::new("running").expect("valid state"),
                 reason: None,
@@ -1876,18 +1878,23 @@ mod tests {
                 Some(ErrorCode::new_static("SC_TEST_CUSTOM_EXPORT"))
             );
 
-            let shutdown_context =
-                std::error::Error::source(error).expect("shutdown failure preserves its context");
-            let export_failure = shutdown_context
-                .source()
-                .expect("shutdown context preserves export failure");
-            let export_context = export_failure
-                .source()
-                .expect("export failure preserves its context");
-            let native_source = export_context
-                .source()
-                .expect("export context preserves native source");
-            assert_eq!(native_source.to_string(), "custom exporter native source");
+            let mut source = std::error::Error::source(error);
+            let mut saw_export_failure = false;
+            let mut final_source = None;
+            while let Some(current) = source {
+                saw_export_failure |= current.downcast_ref::<ExportError>().is_some();
+                final_source = Some(current.to_string());
+                source = current.source();
+            }
+            assert!(
+                saw_export_failure,
+                "source chain retains the export failure"
+            );
+            assert_eq!(
+                final_source.as_deref(),
+                Some("custom exporter native source"),
+                "source chain ends at the native exporter source"
+            );
         }
 
         let legacy = Telemetry::new_with_exporters(

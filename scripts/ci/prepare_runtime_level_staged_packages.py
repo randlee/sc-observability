@@ -50,9 +50,9 @@ def checked_run(command: list[str], cwd: Path) -> str:
 
 def normalized_manifest(path: Path, version: str) -> bytes:
     """Resolve workspace inheritance and remove local paths for a standalone crate."""
-    rendered = path.read_text()
+    rendered = path.read_text(encoding="utf-8")
     if re.search(r"(?m)^authors\.workspace = true$", rendered):
-        workspace = tomllib.loads((path.parents[2] / "Cargo.toml").read_text())
+        workspace = tomllib.loads((path.parents[2] / "Cargo.toml").read_text(encoding="utf-8"))
         authors = json.dumps(workspace["workspace"]["package"]["authors"])
         rendered = re.sub(r"(?m)^authors\.workspace = true$", lambda _: f"authors = {authors}", rendered)
     rendered = re.sub(r"(?m)^version\.workspace = true$", f'version = "{version}"', rendered)
@@ -74,7 +74,7 @@ def normalized_lock(path: Path, version: str) -> bytes:
     return re.sub(
         rf'(?ms)(name = "(?:{names})"\nversion = )"\d+\.\d+\.\d+"',
         rf'\g<1>"{version}"',
-        path.read_text(),
+        path.read_text(encoding="utf-8"),
     ).encode()
 
 
@@ -121,7 +121,7 @@ def candidate_workspace_manifest(content: str, version: str) -> str:
 
 
 def verify_stage(output: Path) -> None:
-    evidence = json.loads((output / "stage-manifest.json").read_text())
+    evidence = json.loads((output / "stage-manifest.json").read_text(encoding="utf-8"))
     if evidence.get("schema_version") != 2:
         raise SystemExit("unsupported stage manifest schema")
     for package in evidence["packages"]:
@@ -161,7 +161,7 @@ def main() -> int:
     workspace = output / "workspace"
     shutil.copytree(source, workspace, ignore=shutil.ignore_patterns(".git", "target", ".DS_Store"))
     root_toml = workspace / "Cargo.toml"
-    root_toml.write_text(candidate_workspace_manifest(root_toml.read_text(), args.version))
+    root_toml.write_text(candidate_workspace_manifest(root_toml.read_text(encoding="utf-8"), args.version))
     archives, extracted = output / "archives", output / "extracted"
     archives.mkdir(parents=True)
     extracted.mkdir()

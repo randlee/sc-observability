@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="phase-root-bead" content="obs-phase-d">
+  <meta name="wyvern:width" content="1536">
+  <meta name="wyvern:height" content="864">
+  <title>Sprint review · Phase D</title>
+  <script id="wyvern-initial-size">
+    (() => {
+      function sizeWindow(event) {
+        const bounds = (event && event.detail) || window.__wyvernViewportBounds || {};
+        const screen = window.screen || {};
+        const width = Math.round(0.8 * (bounds.available_width || screen.availWidth || 1920));
+        const height = Math.round(0.8 * (bounds.available_height || screen.availHeight || 1080));
+        document.querySelector('meta[name="wyvern:width"]').content = String(width);
+        document.querySelector('meta[name="wyvern:height"]').content = String(height);
+        if (window.ipc && typeof window.ipc.postMessage === 'function') {
+          window.ipc.postMessage('resize:' + width + 'x' + height);
+        }
+      }
+      window.addEventListener('wyvern:viewport-bounds', sizeWindow);
+      sizeWindow();
+    })();
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #172b43; background: white; font: 14px system-ui, sans-serif; }
+    header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px;
+      padding: 12px 18px; background: #f8fafc; border-bottom: 1px solid #dbe3ed; }
+    h1 { margin: 0 auto 0 0; font-size: 17px; }
+    button { font: inherit; color: inherit; background: white; border: 1px solid #a8b7c9;
+      border-radius: 5px; padding: 5px 12px; cursor: pointer; }
+    button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+    output { min-width: 45px; text-align: center; }
+    main { overflow: auto; height: calc(100vh - 59px); padding: 12px; }
+    #diagram { width: 100%; }
+    #diagram > svg { display: block; width: 100%; height: auto; }
+    @media print { header { position: static; } button, output { display: none; }
+      main { height: auto; overflow: visible; } #diagram { width: 100% !important; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Sprint review · Phase D</h1>
+    <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+    <output id="zoom-level" aria-live="polite">100%</output>
+    <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+    <button id="fit" type="button">Fit</button>
+  </header>
+  <main aria-label="Sprint dependency diagram">
+    <div id="diagram"><svg xmlns="http://www.w3.org/2000/svg" width="1404.0pt" height="1471.0pt" viewBox="0.0 0.0 1404.0 1471.0">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(28.8 1353.8)">
+<title>execution</title>
+<polygon fill="white" stroke="none" points="-28.8,28.8 -28.8,-1353.8 1374.96,-1353.8 1374.96,28.8 -28.8,28.8" />
+<text xml:space="preserve" text-anchor="middle" x="673.08" y="-1303" font-family="Arial" font-size="20.00">Phase D — execution order</text>
+<text xml:space="preserve" text-anchor="middle" x="673.08" y="-1279" font-family="Arial" font-size="20.00">Sprint completes → its gate passes → downstream sprint starts</text>
+<g id="clust1" class="cluster">
+<title>cluster_obs-d-1</title>
+</g>
+<g id="clust2" class="cluster">
+<title>cluster_obs-d-2</title>
+</g>
+<g id="clust3" class="cluster">
+<title>cluster_obs-d-3</title>
+</g>
+<g id="clust4" class="cluster">
+<title>cluster_obs-d-4</title>
+</g>
+<g id="clust5" class="cluster">
+<title>cluster_obs-d-5</title>
+</g>
+<g id="clust6" class="cluster">
+<title>cluster_obs-d-6</title>
+</g>
+<g id="clust7" class="cluster">
+<title>cluster_obs-d-7</title>
+</g>
+<g id="clust8" class="cluster">
+<title>cluster_obs-d-8</title>
+</g>
+<g id="clust9" class="cluster">
+<title>cluster_obs-d-9</title>
+</g>
+<g id="clust10" class="cluster">
+<title>cluster_obs-d-10</title>
+</g>
+<g id="clust11" class="cluster">
+<title>cluster_obs-d-12</title>
+</g>
+<g id="clust12" class="cluster">
+<title>cluster_obs-d-13</title>
+</g>
+<g id="clust13" class="cluster">
+<title>cluster_obs-d-14</title>
+</g>
+<g id="clust14" class="cluster">
+<title>cluster_obs-d-15</title>
+</g>
+<g id="clust15" class="cluster">
+<title>cluster_obs-d-16</title>
+</g>
+<g id="clust16" class="cluster">
+<title>cluster_obs-d-17</title>
+</g>
+<g id="clust17" class="cluster">
+<title>cluster_obs-d-18</title>
+</g>
+<g id="clust18" class="cluster">
+<title>cluster_obs-d-19</title>
+</g>
+<g id="clust19" class="cluster">
+<title>cluster_obs-d-20</title>
+</g>
+<g id="clust20" class="cluster">
+<title>cluster_obs-d-21</title>
+</g>
+
+<g id="node1" class="node">
+<title>obs-d-1 — dev complete at b0a9abf; sanity PASS recorded</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M340.45,-1224C340.45,-1224 303.09,-1224 303.09,-1224 297.09,-1224 291.09,-1218 291.09,-1212 291.09,-1212 291.09,-1200 291.09,-1200 291.09,-1194 297.09,-1188 303.09,-1188 303.09,-1188 340.45,-1188 340.45,-1188 346.45,-1188 352.45,-1194 352.45,-1200 352.45,-1200 352.45,-1212 352.45,-1212 352.45,-1218 346.45,-1224 340.45,-1224" />
+<text xml:space="preserve" text-anchor="middle" x="321.77" y="-1202.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-1</text>
+</g>
+
+<g id="node2" class="node">
+<title>obs-d-1-sanity — PASS at 1906b81f41f4c383d85d1644549fc10c2179aa26; completed sanity iterations: 3</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M515.03,-1225.01C515.03,-1225.01 498.16,-1244.22 498.16,-1244.22 494.19,-1248.73 484.23,-1253.23 478.23,-1253.23 478.23,-1253.23 436.79,-1253.23 436.79,-1253.23 430.79,-1253.23 420.83,-1248.73 416.87,-1244.22 416.87,-1244.22 399.99,-1225.01 399.99,-1225.01 396.03,-1220.51 396.03,-1211.49 399.99,-1206.99 399.99,-1206.99 416.87,-1187.78 416.87,-1187.78 420.83,-1183.27 430.79,-1178.77 436.79,-1178.77 436.79,-1178.77 478.23,-1178.77 478.23,-1178.77 484.23,-1178.77 494.19,-1183.27 498.16,-1187.78 498.16,-1187.78 515.03,-1206.99 515.03,-1206.99 519,-1211.49 519,-1220.51 515.03,-1225.01" />
+<text xml:space="preserve" text-anchor="middle" x="457.51" y="-1219.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-1</text>
+<text xml:space="preserve" text-anchor="middle" x="457.51" y="-1204.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge2" class="edge">
+<title>obs-d-1-&gt;obs-d-1-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M352.79,-1208.24C362.91,-1209 374.68,-1209.88 386.57,-1210.77" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="386.26,-1213.38 393.93,-1211.32 386.65,-1208.14 386.26,-1213.38" />
+</g>
+
+<g id="node7" class="node">
+<title>obs-d-4 — dev complete at 4c2e7b0; Open sanity findings: obs-d-4-qa-f3-sanity, obs-d-4-qa-f2-sanity, obs-d-4-qa-f1-sanity</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M611.93,-1136C611.93,-1136 574.57,-1136 574.57,-1136 568.57,-1136 562.57,-1130 562.57,-1124 562.57,-1124 562.57,-1112 562.57,-1112 562.57,-1106 568.57,-1100 574.57,-1100 574.57,-1100 611.93,-1100 611.93,-1100 617.93,-1100 623.93,-1106 623.93,-1112 623.93,-1112 623.93,-1124 623.93,-1124 623.93,-1130 617.93,-1136 611.93,-1136" />
+<text xml:space="preserve" text-anchor="middle" x="593.25" y="-1114.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-4</text>
+</g>
+
+<g id="edge43" class="edge">
+<title>obs-d-1-sanity-&gt;obs-d-4</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M499.52,-1189.09C509.89,-1182.06 520.93,-1174.38 530.96,-1167 541.64,-1159.14 553.06,-1150.17 563.12,-1142.07" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="564.64,-1144.21 568.82,-1137.45 561.34,-1140.13 564.64,-1144.21" />
+</g>
+
+<g id="node33" class="node">
+<title>obs-d-18 — Blocked by unfinished prerequisites</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M887.02,-734C887.02,-734 842.43,-734 842.43,-734 836.43,-734 830.43,-728 830.43,-722 830.43,-722 830.43,-710 830.43,-710 830.43,-704 836.43,-698 842.43,-698 842.43,-698 887.02,-698 887.02,-698 893.02,-698 899.02,-704 899.02,-710 899.02,-710 899.02,-722 899.02,-722 899.02,-728 893.02,-734 887.02,-734" />
+<text xml:space="preserve" text-anchor="middle" x="864.73" y="-712.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-18</text>
+</g>
+
+<g id="edge16" class="edge">
+<title>obs-d-1-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M510.75,-1230.28C585.92,-1247.32 724.14,-1265.04 802.43,-1191 835.22,-1160 856.47,-840.12 862.18,-743.49" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="864.8,-743.73 862.61,-736.09 859.55,-743.42 864.8,-743.73" />
+</g>
+
+<g id="node3" class="node">
+<title>obs-d-2 — dev fix complete at 731fd39; Open sanity findings: obs-d-2-qa-f1-sanity</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M340.45,-1021C340.45,-1021 303.09,-1021 303.09,-1021 297.09,-1021 291.09,-1015 291.09,-1009 291.09,-1009 291.09,-997 291.09,-997 291.09,-991 297.09,-985 303.09,-985 303.09,-985 340.45,-985 340.45,-985 346.45,-985 352.45,-991 352.45,-997 352.45,-997 352.45,-1009 352.45,-1009 352.45,-1015 346.45,-1021 340.45,-1021" />
+<text xml:space="preserve" text-anchor="middle" x="321.77" y="-999.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-2</text>
+</g>
+
+<g id="node4" class="node">
+<title>obs-d-2-sanity — Open sanity findings: obs-d-2-qa-f1-sanity; completed sanity iterations: 6</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M515.03,-1003.01C515.03,-1003.01 498.16,-1022.22 498.16,-1022.22 494.19,-1026.73 484.23,-1031.23 478.23,-1031.23 478.23,-1031.23 436.79,-1031.23 436.79,-1031.23 430.79,-1031.23 420.83,-1026.73 416.87,-1022.22 416.87,-1022.22 399.99,-1003.01 399.99,-1003.01 396.03,-998.51 396.03,-989.49 399.99,-984.99 399.99,-984.99 416.87,-965.78 416.87,-965.78 420.83,-961.27 430.79,-956.77 436.79,-956.77 436.79,-956.77 478.23,-956.77 478.23,-956.77 484.23,-956.77 494.19,-961.27 498.16,-965.78 498.16,-965.78 515.03,-984.99 515.03,-984.99 519,-989.49 519,-998.51 515.03,-1003.01" />
+<text xml:space="preserve" text-anchor="middle" x="457.51" y="-997.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-2</text>
+<text xml:space="preserve" text-anchor="middle" x="457.51" y="-982.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge36" class="edge">
+<title>obs-d-2-&gt;obs-d-2-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M352.79,-1000.98C362.79,-1000.31 374.39,-999.53 386.14,-998.74" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="386.09,-1001.37 393.39,-998.25 385.73,-996.13 386.09,-1001.37" />
+</g>
+
+<g id="node29" class="node">
+<title>obs-d-16 — Blocked by unfinished prerequisites</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M615.54,-979C615.54,-979 570.96,-979 570.96,-979 564.96,-979 558.96,-973 558.96,-967 558.96,-967 558.96,-955 558.96,-955 558.96,-949 564.96,-943 570.96,-943 570.96,-943 615.54,-943 615.54,-943 621.54,-943 627.54,-949 627.54,-955 627.54,-955 627.54,-967 627.54,-967 627.54,-973 621.54,-979 615.54,-979" />
+<text xml:space="preserve" text-anchor="middle" x="593.25" y="-957.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-16</text>
+</g>
+
+<g id="edge11" class="edge">
+<title>obs-d-2-sanity-&gt;obs-d-16</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M511.75,-980.86C524.53,-977.71 538,-974.39 550.19,-971.38" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="550.47,-974.01 557.12,-969.67 549.21,-968.92 550.47,-974.01" />
+</g>
+
+<g id="edge23" class="edge">
+<title>obs-d-2-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M502.95,-1017.39C517.8,-1024.07 534.72,-1030.49 550.96,-1034 571.3,-1038.4 801.48,-1036.79 802.43,-1036 847.41,-998.83 859.7,-813.76 862.78,-743.3" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="865.4,-743.49 863.08,-735.88 860.15,-743.27 865.4,-743.49" />
+</g>
+
+<g id="node5" class="node">
+<title>obs-d-3 — dev restack complete at 3515204; PASS at 0728610adab46026ade5b94a7ce383d109d161b0; PASS predates latest dev completion</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M340.45,-1126C340.45,-1126 303.09,-1126 303.09,-1126 297.09,-1126 291.09,-1120 291.09,-1114 291.09,-1114 291.09,-1102 291.09,-1102 291.09,-1096 297.09,-1090 303.09,-1090 303.09,-1090 340.45,-1090 340.45,-1090 346.45,-1090 352.45,-1096 352.45,-1102 352.45,-1102 352.45,-1114 352.45,-1114 352.45,-1120 346.45,-1126 340.45,-1126" />
+<text xml:space="preserve" text-anchor="middle" x="321.77" y="-1104.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-3</text>
+</g>
+
+<g id="node6" class="node">
+<title>obs-d-3-sanity — PASS at 0728610adab46026ade5b94a7ce383d109d161b0; PASS predates latest dev completion; completed sanity iterations: 3</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M515.03,-1127.01C515.03,-1127.01 498.16,-1146.22 498.16,-1146.22 494.19,-1150.73 484.23,-1155.23 478.23,-1155.23 478.23,-1155.23 436.79,-1155.23 436.79,-1155.23 430.79,-1155.23 420.83,-1150.73 416.87,-1146.22 416.87,-1146.22 399.99,-1127.01 399.99,-1127.01 396.03,-1122.51 396.03,-1113.49 399.99,-1108.99 399.99,-1108.99 416.87,-1089.78 416.87,-1089.78 420.83,-1085.27 430.79,-1080.77 436.79,-1080.77 436.79,-1080.77 478.23,-1080.77 478.23,-1080.77 484.23,-1080.77 494.19,-1085.27 498.16,-1089.78 498.16,-1089.78 515.03,-1108.99 515.03,-1108.99 519,-1113.49 519,-1122.51 515.03,-1127.01" />
+<text xml:space="preserve" text-anchor="middle" x="457.51" y="-1121.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-3</text>
+<text xml:space="preserve" text-anchor="middle" x="457.51" y="-1106.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge42" class="edge">
+<title>obs-d-3-&gt;obs-d-3-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M352.79,-1110.24C362.91,-1111 374.68,-1111.88 386.57,-1112.77" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="386.26,-1115.38 393.93,-1113.32 386.65,-1110.14 386.26,-1115.38" />
+</g>
+
+<g id="edge45" class="edge">
+<title>obs-d-3-sanity-&gt;obs-d-4</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M523.42,-1118C533.6,-1118 543.85,-1118 553.21,-1118" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="552.99,-1120.63 560.49,-1118 552.99,-1115.38 552.99,-1120.63" />
+</g>
+
+<g id="edge26" class="edge">
+<title>obs-d-3-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M499.04,-1145.55C514.57,-1154.57 532.91,-1163.43 550.96,-1168 605.13,-1181.71 760.35,-1204.77 802.43,-1168 834.66,-1139.85 856.16,-837.14 862.07,-743.46" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="864.69,-743.71 862.54,-736.06 859.45,-743.38 864.69,-743.71" />
+</g>
+
+<g id="node8" class="node">
+<title>obs-d-4-sanity — Open sanity findings: obs-d-4-qa-f3-sanity, obs-d-4-qa-f2-sanity, obs-d-4-qa-f1-sanity; completed sanity iterations: 1</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M786.51,-1128.01C786.51,-1128.01 769.63,-1147.22 769.63,-1147.22 765.67,-1151.73 755.71,-1156.23 749.71,-1156.23 749.71,-1156.23 708.27,-1156.23 708.27,-1156.23 702.27,-1156.23 692.31,-1151.73 688.35,-1147.22 688.35,-1147.22 671.47,-1128.01 671.47,-1128.01 667.51,-1123.51 667.51,-1114.49 671.47,-1109.99 671.47,-1109.99 688.35,-1090.78 688.35,-1090.78 692.31,-1086.27 702.27,-1081.77 708.27,-1081.77 708.27,-1081.77 749.71,-1081.77 749.71,-1081.77 755.71,-1081.77 765.67,-1086.27 769.63,-1090.78 769.63,-1090.78 786.51,-1109.99 786.51,-1109.99 790.47,-1114.49 790.47,-1123.51 786.51,-1128.01" />
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-1122.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-4</text>
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-1107.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge46" class="edge">
+<title>obs-d-4-&gt;obs-d-4-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M624.26,-1118.22C633.35,-1118.29 643.75,-1118.37 654.39,-1118.45" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="654.09,-1121.07 661.61,-1118.5 654.13,-1115.82 654.09,-1121.07" />
+</g>
+
+<g id="edge27" class="edge">
+<title>obs-d-4-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M775.15,-1096.61C785.57,-1089.46 795.59,-1080.58 802.43,-1070 837.59,-1015.61 856.04,-816.5 861.76,-743.27" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="864.37,-743.6 862.32,-735.92 859.13,-743.2 864.37,-743.6" />
+</g>
+
+<g id="node9" class="node">
+<title>obs-d-5 — dev complete; sanity r2 PASS at 342c52c; post-cascade sanity obs-d-5-sanity-2 PASS at 82a5579 (reopened by the QA SANITY_STALE refusal); sanity PASS recorded</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M611.93,-570C611.93,-570 574.57,-570 574.57,-570 568.57,-570 562.57,-564 562.57,-558 562.57,-558 562.57,-546 562.57,-546 562.57,-540 568.57,-534 574.57,-534 574.57,-534 611.93,-534 611.93,-534 617.93,-534 623.93,-540 623.93,-546 623.93,-546 623.93,-558 623.93,-558 623.93,-564 617.93,-570 611.93,-570" />
+<text xml:space="preserve" text-anchor="middle" x="593.25" y="-548.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-5</text>
+</g>
+
+<g id="node10" class="node">
+<title>obs-d-5-sanity — PASS at 342c52ca6d3a350bdf1aeb50e186d0c235f4900f; completed sanity iterations: 2</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M786.51,-552.01C786.51,-552.01 769.63,-571.22 769.63,-571.22 765.67,-575.73 755.71,-580.23 749.71,-580.23 749.71,-580.23 708.27,-580.23 708.27,-580.23 702.27,-580.23 692.31,-575.73 688.35,-571.22 688.35,-571.22 671.47,-552.01 671.47,-552.01 667.51,-547.51 667.51,-538.49 671.47,-533.99 671.47,-533.99 688.35,-514.78 688.35,-514.78 692.31,-510.27 702.27,-505.77 708.27,-505.77 708.27,-505.77 749.71,-505.77 749.71,-505.77 755.71,-505.77 765.67,-510.27 769.63,-514.78 769.63,-514.78 786.51,-533.99 786.51,-533.99 790.47,-538.49 790.47,-547.51 786.51,-552.01" />
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-546.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-5</text>
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-531.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge48" class="edge">
+<title>obs-d-5-&gt;obs-d-5-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M624.26,-549.98C634.27,-549.31 645.87,-548.53 657.62,-547.74" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="657.56,-550.37 664.87,-547.25 657.21,-545.13 657.56,-550.37" />
+</g>
+
+<g id="edge28" class="edge">
+<title>obs-d-5-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M773.55,-567.14C783.87,-574.22 794.25,-582.62 802.43,-592 827.83,-621.1 845.51,-662.57 855.14,-689.39" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="852.58,-690.02 857.53,-696.24 857.54,-688.29 852.58,-690.02" />
+</g>
+
+<g id="node11" class="node">
+<title>obs-d-6 — dev complete at 0de4b1c: D2 canonical preservation and D3 shared D21 recording-exporter lifecycle coverage are complete; targeted and full validation pass.; sanity PASS recorded</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M611.93,-871C611.93,-871 574.57,-871 574.57,-871 568.57,-871 562.57,-865 562.57,-859 562.57,-859 562.57,-847 562.57,-847 562.57,-841 568.57,-835 574.57,-835 574.57,-835 611.93,-835 611.93,-835 617.93,-835 623.93,-841 623.93,-847 623.93,-847 623.93,-859 623.93,-859 623.93,-865 617.93,-871 611.93,-871" />
+<text xml:space="preserve" text-anchor="middle" x="593.25" y="-849.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-6</text>
+</g>
+
+<g id="node12" class="node">
+<title>obs-d-6-sanity — PASS at 0de4b1c35093d2769455cd5a8c7f0a8d8e9bf6b9 by lead ruling (2026-09-27T08:56:31Z): every numbered deliverable is written; r3 items obs-d-6.5/6.6/6.7 are correctness/test-quality defects (QA scope) on code unchanged since r2, reclassified as phase-root findings; completed sanity iterations: 3</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M786.51,-872.01C786.51,-872.01 769.63,-891.22 769.63,-891.22 765.67,-895.73 755.71,-900.23 749.71,-900.23 749.71,-900.23 708.27,-900.23 708.27,-900.23 702.27,-900.23 692.31,-895.73 688.35,-891.22 688.35,-891.22 671.47,-872.01 671.47,-872.01 667.51,-867.51 667.51,-858.49 671.47,-853.99 671.47,-853.99 688.35,-834.78 688.35,-834.78 692.31,-830.27 702.27,-825.77 708.27,-825.77 708.27,-825.77 749.71,-825.77 749.71,-825.77 755.71,-825.77 765.67,-830.27 769.63,-834.78 769.63,-834.78 786.51,-853.99 786.51,-853.99 790.47,-858.49 790.47,-867.51 786.51,-872.01" />
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-866.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-6</text>
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-851.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge50" class="edge">
+<title>obs-d-6-&gt;obs-d-6-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M624.26,-855.24C634.39,-856 646.16,-856.88 658.05,-857.77" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="657.74,-860.38 665.41,-858.32 658.13,-855.14 657.74,-860.38" />
+</g>
+
+<g id="edge29" class="edge">
+<title>obs-d-6-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M772.92,-838.28C783.25,-831.21 793.79,-822.96 802.43,-814 823.01,-792.68 840.24,-763.35 851.14,-742.34" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="853.44,-743.61 854.49,-735.73 848.76,-741.23 853.44,-743.61" />
+</g>
+
+<g id="node13" class="node">
+<title>obs-d-7 — Work in progress</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M611.93,-773C611.93,-773 574.57,-773 574.57,-773 568.57,-773 562.57,-767 562.57,-761 562.57,-761 562.57,-749 562.57,-749 562.57,-743 568.57,-737 574.57,-737 574.57,-737 611.93,-737 611.93,-737 617.93,-737 623.93,-743 623.93,-749 623.93,-749 623.93,-761 623.93,-761 623.93,-767 617.93,-773 611.93,-773" />
+<text xml:space="preserve" text-anchor="middle" x="593.25" y="-751.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-7</text>
+</g>
+
+<g id="node14" class="node">
+<title>obs-d-7-sanity — Blocked by unfinished prerequisites; completed sanity iterations: 0</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M786.51,-774.01C786.51,-774.01 769.63,-793.22 769.63,-793.22 765.67,-797.73 755.71,-802.23 749.71,-802.23 749.71,-802.23 708.27,-802.23 708.27,-802.23 702.27,-802.23 692.31,-797.73 688.35,-793.22 688.35,-793.22 671.47,-774.01 671.47,-774.01 667.51,-769.51 667.51,-760.49 671.47,-755.99 671.47,-755.99 688.35,-736.78 688.35,-736.78 692.31,-732.27 702.27,-727.77 708.27,-727.77 708.27,-727.77 749.71,-727.77 749.71,-727.77 755.71,-727.77 765.67,-732.27 769.63,-736.78 769.63,-736.78 786.51,-755.99 786.51,-755.99 790.47,-760.49 790.47,-769.51 786.51,-774.01" />
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-768.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-7</text>
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-753.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge52" class="edge">
+<title>obs-d-7-&gt;obs-d-7-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M624.26,-757.24C634.39,-758 646.16,-758.88 658.05,-759.77" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="657.74,-762.38 665.41,-760.32 658.13,-757.14 657.74,-762.38" />
+</g>
+
+<g id="edge30" class="edge">
+<title>obs-d-7-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M779.03,-747.03C792.97,-741.92 808.03,-736.41 821.53,-731.46" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="822.37,-733.95 828.51,-728.9 820.57,-729.02 822.37,-733.95" />
+</g>
+
+<g id="node15" class="node">
+<title>obs-d-8 — Blocked by unfinished prerequisites</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M611.93,-676C611.93,-676 574.57,-676 574.57,-676 568.57,-676 562.57,-670 562.57,-664 562.57,-664 562.57,-652 562.57,-652 562.57,-646 568.57,-640 574.57,-640 574.57,-640 611.93,-640 611.93,-640 617.93,-640 623.93,-646 623.93,-652 623.93,-652 623.93,-664 623.93,-664 623.93,-670 617.93,-676 611.93,-676" />
+<text xml:space="preserve" text-anchor="middle" x="593.25" y="-654.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-8</text>
+</g>
+
+<g id="node16" class="node">
+<title>obs-d-8-sanity — Blocked by unfinished prerequisites; completed sanity iterations: 0</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M786.51,-676.01C786.51,-676.01 769.63,-695.22 769.63,-695.22 765.67,-699.73 755.71,-704.23 749.71,-704.23 749.71,-704.23 708.27,-704.23 708.27,-704.23 702.27,-704.23 692.31,-699.73 688.35,-695.22 688.35,-695.22 671.47,-676.01 671.47,-676.01 667.51,-671.51 667.51,-662.49 671.47,-657.99 671.47,-657.99 688.35,-638.78 688.35,-638.78 692.31,-634.27 702.27,-629.77 708.27,-629.77 708.27,-629.77 749.71,-629.77 749.71,-629.77 755.71,-629.77 765.67,-634.27 769.63,-638.78 769.63,-638.78 786.51,-657.99 786.51,-657.99 790.47,-662.49 790.47,-671.51 786.51,-676.01" />
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-670.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-8</text>
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-655.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge54" class="edge">
+<title>obs-d-8-&gt;obs-d-8-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M624.26,-660.02C634.27,-660.69 645.87,-661.47 657.62,-662.26" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="657.21,-664.87 664.87,-662.75 657.56,-659.63 657.21,-664.87" />
+</g>
+
+<g id="edge31" class="edge">
+<title>obs-d-8-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M779.03,-684.97C792.97,-690.08 808.03,-695.59 821.53,-700.54" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="820.57,-702.98 828.51,-703.1 822.37,-698.05 820.57,-702.98" />
+</g>
+
+<g id="node17" class="node">
+<title>obs-d-9 — Blocked by unfinished prerequisites</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M1151.27,-734C1151.27,-734 1113.91,-734 1113.91,-734 1107.91,-734 1101.91,-728 1101.91,-722 1101.91,-722 1101.91,-710 1101.91,-710 1101.91,-704 1107.91,-698 1113.91,-698 1113.91,-698 1151.27,-698 1151.27,-698 1157.27,-698 1163.27,-704 1163.27,-710 1163.27,-710 1163.27,-722 1163.27,-722 1163.27,-728 1157.27,-734 1151.27,-734" />
+<text xml:space="preserve" text-anchor="middle" x="1132.59" y="-712.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-9</text>
+</g>
+
+<g id="node18" class="node">
+<title>obs-d-9-sanity — Blocked by unfinished prerequisites; completed sanity iterations: 0</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M1322.24,-725.01C1322.24,-725.01 1305.36,-744.22 1305.36,-744.22 1301.4,-748.73 1291.44,-753.23 1285.44,-753.23 1285.44,-753.23 1243.99,-753.23 1243.99,-753.23 1237.99,-753.23 1228.03,-748.73 1224.07,-744.22 1224.07,-744.22 1207.19,-725.01 1207.19,-725.01 1203.23,-720.51 1203.23,-711.49 1207.19,-706.99 1207.19,-706.99 1224.07,-687.78 1224.07,-687.78 1228.03,-683.27 1237.99,-678.77 1243.99,-678.77 1243.99,-678.77 1285.44,-678.77 1285.44,-678.77 1291.44,-678.77 1301.4,-683.27 1305.36,-687.78 1305.36,-687.78 1322.24,-706.99 1322.24,-706.99 1326.2,-711.49 1326.2,-720.51 1322.24,-725.01" />
+<text xml:space="preserve" text-anchor="middle" x="1264.72" y="-719.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-9</text>
+<text xml:space="preserve" text-anchor="middle" x="1264.72" y="-704.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge56" class="edge">
+<title>obs-d-9-&gt;obs-d-9-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M1163.45,-716C1171.38,-716 1180.31,-716 1189.5,-716" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="1189.49,-718.63 1196.99,-716 1189.49,-713.38 1189.49,-718.63" />
+</g>
+
+<g id="node19" class="node">
+<title>obs-d-10 — dev complete at 5e657c2; sanity PASS recorded</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M615.54,-71C615.54,-71 570.96,-71 570.96,-71 564.96,-71 558.96,-65 558.96,-59 558.96,-59 558.96,-47 558.96,-47 558.96,-41 564.96,-35 570.96,-35 570.96,-35 615.54,-35 615.54,-35 621.54,-35 627.54,-41 627.54,-47 627.54,-47 627.54,-59 627.54,-59 627.54,-65 621.54,-71 615.54,-71" />
+<text xml:space="preserve" text-anchor="middle" x="593.25" y="-49.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-10</text>
+</g>
+
+<g id="node20" class="node">
+<title>obs-d-10-sanity — PASS at 5e657c29fc04c75e8618b4203dd8c94a733edd18; completed sanity iterations: 3</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M786.51,-62.01C786.51,-62.01 769.63,-81.22 769.63,-81.22 765.67,-85.73 755.71,-90.23 749.71,-90.23 749.71,-90.23 708.27,-90.23 708.27,-90.23 702.27,-90.23 692.31,-85.73 688.35,-81.22 688.35,-81.22 671.47,-62.01 671.47,-62.01 667.51,-57.51 667.51,-48.49 671.47,-43.99 671.47,-43.99 688.35,-24.78 688.35,-24.78 692.31,-20.27 702.27,-15.77 708.27,-15.77 708.27,-15.77 749.71,-15.77 749.71,-15.77 755.71,-15.77 765.67,-20.27 769.63,-24.78 769.63,-24.78 786.51,-43.99 786.51,-43.99 790.47,-48.49 790.47,-57.51 786.51,-62.01" />
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-56.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-10</text>
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-41.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge3" class="edge">
+<title>obs-d-10-&gt;obs-d-10-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M628,-53C636.01,-53 644.86,-53 653.9,-53" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="653.73,-55.63 661.23,-53 653.73,-50.38 653.73,-55.63" />
+</g>
+
+<g id="edge17" class="edge">
+<title>obs-d-10-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M775.68,-75.06C786.09,-82.22 795.98,-91.18 802.43,-102 862.7,-203.04 864.67,-582.68 864.02,-688.48" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="861.39,-688.31 863.96,-695.83 866.64,-688.35 861.39,-688.31" />
+</g>
+
+<g id="node21" class="node">
+<title>obs-d-12 — dev complete at 6418b665144a015732c4c8db121efcd8521006df; sanity PASS recorded</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M72.59,-575C72.59,-575 28,-575 28,-575 22,-575 16,-569 16,-563 16,-563 16,-551 16,-551 16,-545 22,-539 28,-539 28,-539 72.59,-539 72.59,-539 78.59,-539 84.59,-545 84.59,-551 84.59,-551 84.59,-563 84.59,-563 84.59,-569 78.59,-575 72.59,-575" />
+<text xml:space="preserve" text-anchor="middle" x="50.29" y="-553.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-12</text>
+</g>
+
+<g id="node22" class="node">
+<title>obs-d-12-sanity — PASS at 6418b665144a015732c4c8db121efcd8521006df; completed sanity iterations: 1</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M243.56,-566.01C243.56,-566.01 226.68,-585.22 226.68,-585.22 222.72,-589.73 212.76,-594.23 206.76,-594.23 206.76,-594.23 165.31,-594.23 165.31,-594.23 159.31,-594.23 149.35,-589.73 145.39,-585.22 145.39,-585.22 128.51,-566.01 128.51,-566.01 124.55,-561.51 124.55,-552.49 128.51,-547.99 128.51,-547.99 145.39,-528.78 145.39,-528.78 149.35,-524.27 159.31,-519.77 165.31,-519.77 165.31,-519.77 206.76,-519.77 206.76,-519.77 212.76,-519.77 222.72,-524.27 226.68,-528.78 226.68,-528.78 243.56,-547.99 243.56,-547.99 247.52,-552.49 247.52,-561.51 243.56,-566.01" />
+<text xml:space="preserve" text-anchor="middle" x="186.03" y="-560.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-12</text>
+<text xml:space="preserve" text-anchor="middle" x="186.03" y="-545.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge4" class="edge">
+<title>obs-d-12-&gt;obs-d-12-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M85.04,-557C93.05,-557 101.91,-557 110.94,-557" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="110.77,-559.63 118.27,-557 110.77,-554.38 110.77,-559.63" />
+</g>
+
+<g id="edge44" class="edge">
+<title>obs-d-12-sanity-&gt;obs-d-4</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M191.6,-594.7C205.14,-703.54 246.19,-1012.43 279.48,-1043 320.86,-1081 478.97,-1047.71 530.96,-1069 544.71,-1074.63 557.87,-1084.36 568.45,-1093.68" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="566.43,-1095.38 573.73,-1098.51 569.97,-1091.51 566.43,-1095.38" />
+</g>
+
+<g id="node25" class="node">
+<title>obs-d-14 — dev complete at 7720af7; sanity PASS recorded</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M615.54,-473C615.54,-473 570.96,-473 570.96,-473 564.96,-473 558.96,-467 558.96,-461 558.96,-461 558.96,-449 558.96,-449 558.96,-443 564.96,-437 570.96,-437 570.96,-437 615.54,-437 615.54,-437 621.54,-437 627.54,-443 627.54,-449 627.54,-449 627.54,-461 627.54,-461 627.54,-467 621.54,-473 615.54,-473" />
+<text xml:space="preserve" text-anchor="middle" x="593.25" y="-451.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-14</text>
+</g>
+
+<g id="edge6" class="edge">
+<title>obs-d-12-sanity-&gt;obs-d-14</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M240.01,-543.67C321.33,-523.19 475.33,-484.43 549.81,-465.68" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="550.16,-468.3 556.8,-463.92 548.88,-463.21 550.16,-468.3" />
+</g>
+
+<g id="node27" class="node">
+<title>obs-d-15 — dev complete at 04b3ebbf; Open sanity findings: obs-d-15-qa-f2-sanity</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M615.54,-375C615.54,-375 570.96,-375 570.96,-375 564.96,-375 558.96,-369 558.96,-363 558.96,-363 558.96,-351 558.96,-351 558.96,-345 564.96,-339 570.96,-339 570.96,-339 615.54,-339 615.54,-339 621.54,-339 627.54,-345 627.54,-351 627.54,-351 627.54,-363 627.54,-363 627.54,-369 621.54,-375 615.54,-375" />
+<text xml:space="preserve" text-anchor="middle" x="593.25" y="-353.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-15</text>
+</g>
+
+<g id="edge8" class="edge">
+<title>obs-d-12-sanity-&gt;obs-d-15</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M232.15,-534.5C247.2,-527.01 264.05,-518.63 279.48,-511 376.62,-462.92 490.9,-406.75 550.81,-377.33" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="551.76,-379.79 557.34,-374.13 549.45,-375.08 551.76,-379.79" />
+</g>
+
+<g id="edge10" class="edge">
+<title>obs-d-12-sanity-&gt;obs-d-16</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M209.42,-594.52C226.47,-621.15 251.69,-656.71 279.48,-683 376.39,-774.72 450.66,-740.43 530.96,-847 549.15,-871.14 536.48,-885.47 550.96,-912 555.51,-920.35 561.63,-928.59 567.76,-935.86" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="565.76,-937.56 572.69,-941.47 569.71,-934.1 565.76,-937.56" />
+</g>
+
+<g id="node31" class="node">
+<title>obs-d-17 — dev complete at 929e603; sanity PASS recorded</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M344.07,-914C344.07,-914 299.48,-914 299.48,-914 293.48,-914 287.48,-908 287.48,-902 287.48,-902 287.48,-890 287.48,-890 287.48,-884 293.48,-878 299.48,-878 299.48,-878 344.07,-878 344.07,-878 350.07,-878 356.07,-884 356.07,-890 356.07,-890 356.07,-902 356.07,-902 356.07,-908 350.07,-914 344.07,-914" />
+<text xml:space="preserve" text-anchor="middle" x="321.77" y="-892.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-17</text>
+</g>
+
+<g id="edge13" class="edge">
+<title>obs-d-12-sanity-&gt;obs-d-17</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M201.4,-594.59C219.41,-641.57 251.33,-724.38 279.48,-795 289.56,-820.29 301.34,-849.02 309.73,-869.36" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="307.26,-870.26 312.55,-876.18 312.11,-868.25 307.26,-870.26" />
+</g>
+
+<g id="node35" class="node">
+<title>obs-d-19 — dev complete at 249ef3372f30fc95bfe2f8cf84080ecba3b009cb; Open sanity findings: obs-d-19-qa-f3-sanity, obs-d-19-qa-f2-sanity, obs-d-19-qa-f1-sanity</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M615.54,-277C615.54,-277 570.96,-277 570.96,-277 564.96,-277 558.96,-271 558.96,-265 558.96,-265 558.96,-253 558.96,-253 558.96,-247 564.96,-241 570.96,-241 570.96,-241 615.54,-241 615.54,-241 621.54,-241 627.54,-247 627.54,-253 627.54,-253 627.54,-265 627.54,-265 627.54,-271 621.54,-277 615.54,-277" />
+<text xml:space="preserve" text-anchor="middle" x="593.25" y="-255.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-19</text>
+</g>
+
+<g id="edge33" class="edge">
+<title>obs-d-12-sanity-&gt;obs-d-19</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M221.86,-523.1C238.88,-506.92 259.88,-487.54 279.48,-471 327.61,-430.4 340.35,-420.92 392.07,-385 446.77,-347.01 512.51,-306.58 553.34,-282.05" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="554.59,-284.37 559.67,-278.26 551.89,-279.86 554.59,-284.37" />
+</g>
+
+<g id="node37" class="node">
+<title>obs-d-20 — dev complete at 56b2ab3; D1-D3 fixed, validated, rebased onto origin/sprint/d-19-dto-and-schema-migration, and pushed; downstream obs-d-20-qa remains open for QA; PASS at 81e7635e8b7fa531cad6cde1e35b4a840f43cbc3; PASS predates latest dev completion</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M615.54,-179C615.54,-179 570.96,-179 570.96,-179 564.96,-179 558.96,-173 558.96,-167 558.96,-167 558.96,-155 558.96,-155 558.96,-149 564.96,-143 570.96,-143 570.96,-143 615.54,-143 615.54,-143 621.54,-143 627.54,-149 627.54,-155 627.54,-155 627.54,-167 627.54,-167 627.54,-173 621.54,-179 615.54,-179" />
+<text xml:space="preserve" text-anchor="middle" x="593.25" y="-157.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-20</text>
+</g>
+
+<g id="edge37" class="edge">
+<title>obs-d-12-sanity-&gt;obs-d-20</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M207.05,-519.39C224.45,-488.08 251.23,-442.97 279.48,-407 323.46,-351 337.02,-338.18 392.07,-293 444.21,-250.2 510.56,-208.69 552.23,-183.99" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="553.34,-186.38 558.47,-180.31 550.67,-181.86 553.34,-186.38" />
+</g>
+
+<g id="node39" class="node">
+<title>obs-d-21 — dev complete at 5d067f9; obs-d-21.10 and obs-d-21.11 fixed and closed; PR #250 updated; Open sanity findings: obs-d-21-qa-f19-sanity</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M344.07,-643C344.07,-643 299.48,-643 299.48,-643 293.48,-643 287.48,-637 287.48,-631 287.48,-631 287.48,-619 287.48,-619 287.48,-613 293.48,-607 299.48,-607 299.48,-607 344.07,-607 344.07,-607 350.07,-607 356.07,-613 356.07,-619 356.07,-619 356.07,-631 356.07,-631 356.07,-637 350.07,-643 344.07,-643" />
+<text xml:space="preserve" text-anchor="middle" x="321.77" y="-621.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-21</text>
+</g>
+
+<g id="edge39" class="edge">
+<title>obs-d-12-sanity-&gt;obs-d-21</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M231.94,-579.83C247.18,-587.58 264.13,-596.2 279.1,-603.81" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="277.77,-606.08 285.64,-607.14 280.15,-601.4 277.77,-606.08" />
+</g>
+
+<g id="node23" class="node">
+<title>obs-d-13 — dev complete at c71b2b8; Open sanity findings: obs-d-13-qa-f4-sanity, obs-d-13-qa-f3-sanity, obs-d-13-qa-f2-sanity</title>
+<path fill="#edf3fb" stroke="#9caec2" d="M72.59,-1078C72.59,-1078 28,-1078 28,-1078 22,-1078 16,-1072 16,-1066 16,-1066 16,-1054 16,-1054 16,-1048 22,-1042 28,-1042 28,-1042 72.59,-1042 72.59,-1042 78.59,-1042 84.59,-1048 84.59,-1054 84.59,-1054 84.59,-1066 84.59,-1066 84.59,-1072 78.59,-1078 72.59,-1078" />
+<text xml:space="preserve" text-anchor="middle" x="50.29" y="-1056.1" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-13</text>
+</g>
+
+<g id="node24" class="node">
+<title>obs-d-13-sanity — Open sanity findings: obs-d-13-qa-f4-sanity, obs-d-13-qa-f3-sanity, obs-d-13-qa-f2-sanity; completed sanity iterations: 2</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M243.56,-1069.01C243.56,-1069.01 226.68,-1088.22 226.68,-1088.22 222.72,-1092.73 212.76,-1097.23 206.76,-1097.23 206.76,-1097.23 165.31,-1097.23 165.31,-1097.23 159.31,-1097.23 149.35,-1092.73 145.39,-1088.22 145.39,-1088.22 128.51,-1069.01 128.51,-1069.01 124.55,-1064.51 124.55,-1055.49 128.51,-1050.99 128.51,-1050.99 145.39,-1031.78 145.39,-1031.78 149.35,-1027.27 159.31,-1022.77 165.31,-1022.77 165.31,-1022.77 206.76,-1022.77 206.76,-1022.77 212.76,-1022.77 222.72,-1027.27 226.68,-1031.78 226.68,-1031.78 243.56,-1050.99 243.56,-1050.99 247.52,-1055.49 247.52,-1064.51 243.56,-1069.01" />
+<text xml:space="preserve" text-anchor="middle" x="186.03" y="-1063.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-13</text>
+<text xml:space="preserve" text-anchor="middle" x="186.03" y="-1048.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge5" class="edge">
+<title>obs-d-13-&gt;obs-d-13-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M85.04,-1060C93.05,-1060 101.91,-1060 110.94,-1060" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="110.77,-1062.63 118.27,-1060 110.77,-1057.38 110.77,-1062.63" />
+</g>
+
+<g id="edge1" class="edge">
+<title>obs-d-13-sanity-&gt;obs-d-1</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M217.8,-1097.46C235.37,-1118.38 258.1,-1144.65 279.48,-1167 284.07,-1171.8 289.11,-1176.78 294.03,-1181.5" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="292.12,-1183.3 299.37,-1186.55 295.73,-1179.49 292.12,-1183.3" />
+</g>
+
+<g id="edge35" class="edge">
+<title>obs-d-13-sanity-&gt;obs-d-2</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M234.18,-1039.9C250.05,-1033.14 267.54,-1025.69 282.62,-1019.26" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="283.25,-1021.84 289.12,-1016.49 281.2,-1017.01 283.25,-1021.84" />
+</g>
+
+<g id="edge41" class="edge">
+<title>obs-d-13-sanity-&gt;obs-d-3</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M236.45,-1077.74C251.61,-1083.18 268.06,-1089.08 282.36,-1094.21" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="281.38,-1096.65 289.33,-1096.71 283.15,-1091.71 281.38,-1096.65" />
+</g>
+
+<g id="edge14" class="edge">
+<title>obs-d-13-sanity-&gt;obs-d-17</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M217,-1022.27C234.99,-999.74 258.4,-970.61 279.48,-945 285.97,-937.11 293.13,-928.57 299.63,-920.87" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="301.41,-922.82 304.25,-915.4 297.4,-919.43 301.41,-922.82" />
+</g>
+
+<g id="node26" class="node">
+<title>obs-d-14-sanity — PASS at 7720af71572f921c72304876d278867371833609; completed sanity iterations: 1</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M786.51,-454.01C786.51,-454.01 769.63,-473.22 769.63,-473.22 765.67,-477.73 755.71,-482.23 749.71,-482.23 749.71,-482.23 708.27,-482.23 708.27,-482.23 702.27,-482.23 692.31,-477.73 688.35,-473.22 688.35,-473.22 671.47,-454.01 671.47,-454.01 667.51,-449.51 667.51,-440.49 671.47,-435.99 671.47,-435.99 688.35,-416.78 688.35,-416.78 692.31,-412.27 702.27,-407.77 708.27,-407.77 708.27,-407.77 749.71,-407.77 749.71,-407.77 755.71,-407.77 765.67,-412.27 769.63,-416.78 769.63,-416.78 786.51,-435.99 786.51,-435.99 790.47,-440.49 790.47,-449.51 786.51,-454.01" />
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-448.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-14</text>
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-433.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge7" class="edge">
+<title>obs-d-14-&gt;obs-d-14-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M628,-452.48C637.16,-451.79 647.42,-451.02 657.79,-450.25" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="657.89,-452.87 665.18,-449.7 657.5,-447.64 657.89,-452.87" />
+</g>
+
+<g id="edge18" class="edge">
+<title>obs-d-14-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M774.46,-467.86C784.88,-475.01 795.08,-483.76 802.43,-494 845.78,-554.36 858.49,-644.1 862.21,-688.73" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="859.58,-688.78 862.76,-696.06 864.81,-688.39 859.58,-688.78" />
+</g>
+
+<g id="node28" class="node">
+<title>obs-d-15-sanity — Open sanity findings: obs-d-15-qa-f2-sanity; completed sanity iterations: 1</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M786.51,-356.01C786.51,-356.01 769.63,-375.22 769.63,-375.22 765.67,-379.73 755.71,-384.23 749.71,-384.23 749.71,-384.23 708.27,-384.23 708.27,-384.23 702.27,-384.23 692.31,-379.73 688.35,-375.22 688.35,-375.22 671.47,-356.01 671.47,-356.01 667.51,-351.51 667.51,-342.49 671.47,-337.99 671.47,-337.99 688.35,-318.78 688.35,-318.78 692.31,-314.27 702.27,-309.77 708.27,-309.77 708.27,-309.77 749.71,-309.77 749.71,-309.77 755.71,-309.77 765.67,-314.27 769.63,-318.78 769.63,-318.78 786.51,-337.99 786.51,-337.99 790.47,-342.49 790.47,-351.51 786.51,-356.01" />
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-350.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-15</text>
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-335.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge9" class="edge">
+<title>obs-d-15-&gt;obs-d-15-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M628,-354.48C637.16,-353.79 647.42,-353.02 657.79,-352.25" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="657.89,-354.87 665.18,-351.7 657.5,-349.64 657.89,-354.87" />
+</g>
+
+<g id="edge19" class="edge">
+<title>obs-d-15-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M775.03,-369.47C785.45,-376.63 795.5,-385.48 802.43,-396 834.39,-444.49 854.52,-621.08 861.23,-689.06" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="858.59,-688.97 861.92,-696.18 863.81,-688.46 858.59,-688.97" />
+</g>
+
+<g id="node30" class="node">
+<title>obs-d-16-sanity — Blocked by unfinished prerequisites; completed sanity iterations: 0</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M786.51,-970.01C786.51,-970.01 769.63,-989.22 769.63,-989.22 765.67,-993.73 755.71,-998.23 749.71,-998.23 749.71,-998.23 708.27,-998.23 708.27,-998.23 702.27,-998.23 692.31,-993.73 688.35,-989.22 688.35,-989.22 671.47,-970.01 671.47,-970.01 667.51,-965.51 667.51,-956.49 671.47,-951.99 671.47,-951.99 688.35,-932.78 688.35,-932.78 692.31,-928.27 702.27,-923.77 708.27,-923.77 708.27,-923.77 749.71,-923.77 749.71,-923.77 755.71,-923.77 765.67,-928.27 769.63,-932.78 769.63,-932.78 786.51,-951.99 786.51,-951.99 790.47,-956.49 790.47,-965.51 786.51,-970.01" />
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-964.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-16</text>
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-949.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge12" class="edge">
+<title>obs-d-16-&gt;obs-d-16-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M628,-961C636.01,-961 644.86,-961 653.9,-961" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="653.73,-963.63 661.23,-961 653.73,-958.38 653.73,-963.63" />
+</g>
+
+<g id="edge20" class="edge">
+<title>obs-d-16-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M774.6,-937.71C784.9,-930.61 795,-921.99 802.43,-912 840.95,-860.23 855.64,-783.69 860.95,-743.29" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="863.53,-743.79 861.84,-736.02 858.32,-743.15 863.53,-743.79" />
+</g>
+
+<g id="node32" class="node">
+<title>obs-d-17-sanity — PASS at 929e603d3ef05a7f6f8cad71c23c386de0d2246b; completed sanity iterations: 1</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M515.03,-905.01C515.03,-905.01 498.16,-924.22 498.16,-924.22 494.19,-928.73 484.23,-933.23 478.23,-933.23 478.23,-933.23 436.79,-933.23 436.79,-933.23 430.79,-933.23 420.83,-928.73 416.87,-924.22 416.87,-924.22 399.99,-905.01 399.99,-905.01 396.03,-900.51 396.03,-891.49 399.99,-886.99 399.99,-886.99 416.87,-867.78 416.87,-867.78 420.83,-863.27 430.79,-858.77 436.79,-858.77 436.79,-858.77 478.23,-858.77 478.23,-858.77 484.23,-858.77 494.19,-863.27 498.16,-867.78 498.16,-867.78 515.03,-886.99 515.03,-886.99 519,-891.49 519,-900.51 515.03,-905.01" />
+<text xml:space="preserve" text-anchor="middle" x="457.51" y="-899.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-17</text>
+<text xml:space="preserve" text-anchor="middle" x="457.51" y="-884.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge15" class="edge">
+<title>obs-d-17-&gt;obs-d-17-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M356.52,-896C364.53,-896 373.39,-896 382.42,-896" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="382.25,-898.63 389.75,-896 382.25,-893.38 382.25,-898.63" />
+</g>
+
+<g id="edge21" class="edge">
+<title>obs-d-17-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M503.15,-919.27C513.45,-926.37 523.55,-934.99 530.96,-945 548.94,-969.29 526.64,-992.04 550.96,-1010 595.91,-1043.2 759.07,-1045.25 802.43,-1010 843.69,-976.46 858.12,-809.73 862.28,-743.34" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="864.88,-743.68 862.71,-736.04 859.64,-743.37 864.88,-743.68" />
+</g>
+
+<g id="node34" class="node">
+<title>obs-d-18-sanity — Blocked by unfinished prerequisites; completed sanity iterations: 0</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M1057.99,-725.01C1057.99,-725.01 1041.11,-744.22 1041.11,-744.22 1037.15,-748.73 1027.19,-753.23 1021.19,-753.23 1021.19,-753.23 979.75,-753.23 979.75,-753.23 973.75,-753.23 963.78,-748.73 959.82,-744.22 959.82,-744.22 942.94,-725.01 942.94,-725.01 938.98,-720.51 938.98,-711.49 942.94,-706.99 942.94,-706.99 959.82,-687.78 959.82,-687.78 963.78,-683.27 973.75,-678.77 979.75,-678.77 979.75,-678.77 1021.19,-678.77 1021.19,-678.77 1027.19,-678.77 1037.15,-683.27 1041.11,-687.78 1041.11,-687.78 1057.99,-706.99 1057.99,-706.99 1061.95,-711.49 1061.95,-720.51 1057.99,-725.01" />
+<text xml:space="preserve" text-anchor="middle" x="1000.47" y="-719.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-18</text>
+<text xml:space="preserve" text-anchor="middle" x="1000.47" y="-704.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge32" class="edge">
+<title>obs-d-18-&gt;obs-d-18-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M899.48,-716C907.49,-716 916.34,-716 925.38,-716" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="925.21,-718.63 932.71,-716 925.21,-713.38 925.21,-718.63" />
+</g>
+
+<g id="edge55" class="edge">
+<title>obs-d-18-sanity-&gt;obs-d-9</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M1066.53,-716C1075.49,-716 1084.44,-716 1092.72,-716" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="1092.5,-718.63 1100,-716 1092.5,-713.38 1092.5,-718.63" />
+</g>
+
+<g id="node36" class="node">
+<title>obs-d-19-sanity — Open sanity findings: obs-d-19-qa-f3-sanity, obs-d-19-qa-f2-sanity, obs-d-19-qa-f1-sanity; completed sanity iterations: 1</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M786.51,-258.01C786.51,-258.01 769.63,-277.22 769.63,-277.22 765.67,-281.73 755.71,-286.23 749.71,-286.23 749.71,-286.23 708.27,-286.23 708.27,-286.23 702.27,-286.23 692.31,-281.73 688.35,-277.22 688.35,-277.22 671.47,-258.01 671.47,-258.01 667.51,-253.51 667.51,-244.49 671.47,-239.99 671.47,-239.99 688.35,-220.78 688.35,-220.78 692.31,-216.27 702.27,-211.77 708.27,-211.77 708.27,-211.77 749.71,-211.77 749.71,-211.77 755.71,-211.77 765.67,-216.27 769.63,-220.78 769.63,-220.78 786.51,-239.99 786.51,-239.99 790.47,-244.49 790.47,-253.51 786.51,-258.01" />
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-252.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-19</text>
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-237.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge34" class="edge">
+<title>obs-d-19-&gt;obs-d-19-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M628,-256.48C637.16,-255.79 647.42,-255.02 657.79,-254.25" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="657.89,-256.87 665.18,-253.7 657.5,-251.64 657.89,-256.87" />
+</g>
+
+<g id="edge22" class="edge">
+<title>obs-d-19-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M775.34,-271.27C785.76,-278.43 795.73,-287.33 802.43,-298 843.76,-363.78 858.66,-606.91 862.58,-688.84" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="859.93,-688.47 862.9,-695.84 865.17,-688.23 859.93,-688.47" />
+</g>
+
+<g id="node38" class="node">
+<title>obs-d-20-sanity — PASS at 81e7635e8b7fa531cad6cde1e35b4a840f43cbc3; PASS predates latest dev completion; completed sanity iterations: 2</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M786.51,-160.01C786.51,-160.01 769.63,-179.22 769.63,-179.22 765.67,-183.73 755.71,-188.23 749.71,-188.23 749.71,-188.23 708.27,-188.23 708.27,-188.23 702.27,-188.23 692.31,-183.73 688.35,-179.22 688.35,-179.22 671.47,-160.01 671.47,-160.01 667.51,-155.51 667.51,-146.49 671.47,-141.99 671.47,-141.99 688.35,-122.78 688.35,-122.78 692.31,-118.27 702.27,-113.77 708.27,-113.77 708.27,-113.77 749.71,-113.77 749.71,-113.77 755.71,-113.77 765.67,-118.27 769.63,-122.78 769.63,-122.78 786.51,-141.99 786.51,-141.99 790.47,-146.49 790.47,-155.51 786.51,-160.01" />
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-154.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-20</text>
+<text xml:space="preserve" text-anchor="middle" x="728.99" y="-139.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge38" class="edge">
+<title>obs-d-20-&gt;obs-d-20-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M628,-158.48C637.16,-157.79 647.42,-157.02 657.79,-156.25" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="657.89,-158.87 665.18,-155.7 657.5,-153.64 657.89,-158.87" />
+</g>
+
+<g id="edge24" class="edge">
+<title>obs-d-20-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M775.54,-173.14C785.96,-180.3 795.88,-189.24 802.43,-200 853.15,-283.24 861.92,-593.64 863.42,-688.37" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="860.8,-688.4 863.53,-695.86 866.05,-688.32 860.8,-688.4" />
+</g>
+
+<g id="node40" class="node">
+<title>obs-d-21-sanity — Open sanity findings: obs-d-21-qa-f19-sanity; completed sanity iterations: 14</title>
+<path fill="#e6f1e9" stroke="#a0b8a8" d="M515.03,-643.01C515.03,-643.01 498.16,-662.22 498.16,-662.22 494.19,-666.73 484.23,-671.23 478.23,-671.23 478.23,-671.23 436.79,-671.23 436.79,-671.23 430.79,-671.23 420.83,-666.73 416.87,-662.22 416.87,-662.22 399.99,-643.01 399.99,-643.01 396.03,-638.51 396.03,-629.49 399.99,-624.99 399.99,-624.99 416.87,-605.78 416.87,-605.78 420.83,-601.27 430.79,-596.77 436.79,-596.77 436.79,-596.77 478.23,-596.77 478.23,-596.77 484.23,-596.77 494.19,-601.27 498.16,-605.78 498.16,-605.78 515.03,-624.99 515.03,-624.99 519,-629.49 519,-638.51 515.03,-643.01" />
+<text xml:space="preserve" text-anchor="middle" x="457.51" y="-637.9" font-family="Arial" font-size="13.00" fill="#172b43">obs-d-21</text>
+<text xml:space="preserve" text-anchor="middle" x="457.51" y="-622.3" font-family="Arial" font-size="13.00" fill="#172b43">sanity gate</text>
+</g>
+
+<g id="edge40" class="edge">
+<title>obs-d-21-&gt;obs-d-21-sanity</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M356.52,-627.27C365.62,-627.88 375.81,-628.57 386.11,-629.26" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="385.77,-631.87 393.43,-629.76 386.13,-626.63 385.77,-631.87" />
+</g>
+
+<g id="edge47" class="edge">
+<title>obs-d-21-sanity-&gt;obs-d-5</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M500.46,-608.28C517.87,-597.61 537.9,-585.33 554.8,-574.96" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="555.82,-577.42 560.84,-571.26 553.07,-572.94 555.82,-577.42" />
+</g>
+
+<g id="edge49" class="edge">
+<title>obs-d-21-sanity-&gt;obs-d-6</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M479.73,-671.72C494.59,-698.58 514.64,-735.68 530.96,-769 540.58,-788.66 538.31,-796.14 550.96,-814 554.48,-818.97 558.71,-823.82 563.1,-828.31" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="561.12,-830.05 568.33,-833.39 564.78,-826.28 561.12,-830.05" />
+</g>
+
+<g id="edge51" class="edge">
+<title>obs-d-21-sanity-&gt;obs-d-7</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M494.7,-666.74C516.85,-686.78 544.72,-712 565,-730.34" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="563.22,-732.27 570.54,-735.36 566.74,-728.38 563.22,-732.27" />
+</g>
+
+<g id="edge53" class="edge">
+<title>obs-d-21-sanity-&gt;obs-d-8</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M514.45,-644.04C527.57,-646.39 541.27,-648.85 553.45,-651.04" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="552.87,-653.6 560.72,-652.34 553.8,-648.43 552.87,-653.6" />
+</g>
+
+<g id="edge25" class="edge">
+<title>obs-d-21-sanity-&gt;obs-d-18</title>
+<path fill="none" stroke="#647a94" stroke-width="1.15" d="M513.55,-622.88C525.81,-620.85 538.79,-619.05 550.96,-618 606.64,-613.22 753.55,-590.92 802.43,-618 829.67,-633.09 846.41,-665.89 855.37,-689.39" />
+<polygon fill="#647a94" stroke="#647a94" stroke-width="1.15" points="852.83,-690.08 857.84,-696.25 857.77,-688.3 852.83,-690.08" />
+</g>
+<g class="state-badges"><g class="state-badge" transform="translate(311.77 -1233)"><rect width="20" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /></g><g class="qa-badge" transform="translate(298.27 -1197)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0:3:6</text><title>QA FAIL: 0:3:6 open blocking:important:minor; obs-d-1-qa</title></g><g class="state-badge" transform="translate(438.51 -1262.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#15803d">3</text></g><g class="state-badge" transform="translate(583.25 -1145)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(569.75 -1109)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">3:2:1</text><title>QA FAIL: 3:2:1 open blocking:important:minor; obs-d-4-qa</title></g><g class="state-badge" transform="translate(854.73 -743)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="state-badge" transform="translate(311.77 -1030)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(298.27 -994)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">1:9:8</text><title>QA FAIL: 1:9:8 open blocking:important:minor; obs-d-2-qa</title></g><g class="state-badge" transform="translate(438.51 -1040.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">6</text></g><g class="state-badge" transform="translate(583.25 -988)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="state-badge" transform="translate(311.77 -1135)"><rect width="20" height="18" rx="6" fill="white" stroke="#b45309" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b45309">?</text></g><g class="qa-badge" transform="translate(298.27 -1099)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">3:6:6</text><title>QA FAIL: 3:6:6 open blocking:important:minor; obs-d-3-qa</title></g><g class="state-badge" transform="translate(438.51 -1164.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b45309" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b45309">?</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b45309">3</text></g><g class="state-badge" transform="translate(709.99 -1165.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">1</text></g><g class="state-badge" transform="translate(583.25 -579)"><rect width="20" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /></g><g class="qa-badge" transform="translate(569.75 -543)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0:5:3</text><title>QA FAIL: 0:5:3 open blocking:important:minor; obs-d-5-qa</title></g><g class="state-badge" transform="translate(709.99 -589.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#15803d">2</text></g><g class="state-badge" transform="translate(583.25 -880)"><rect width="20" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /></g><g class="qa-badge" transform="translate(569.75 -844)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">3:7:1</text><title>QA FAIL: 3:7:1 open blocking:important:minor; obs-d-6-qa</title></g><g class="state-badge" transform="translate(709.99 -909.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#15803d">3</text></g><g class="state-badge" transform="translate(583.25 -782)"><rect width="20" height="18" rx="6" fill="white" stroke="#2563eb" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#2563eb">↻</text></g><g class="state-badge" transform="translate(709.99 -811.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0</text></g><g class="state-badge" transform="translate(583.25 -685)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="state-badge" transform="translate(709.99 -713.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0</text></g><g class="state-badge" transform="translate(1122.59 -743)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="state-badge" transform="translate(1245.72 -762.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0</text></g><g class="state-badge" transform="translate(583.25 -80)"><rect width="20" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /></g><g class="qa-badge" transform="translate(569.75 -44)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0:1:0</text><title>QA FAIL: 0:1:0 open blocking:important:minor; obs-d-10-qa</title></g><g class="state-badge" transform="translate(709.99 -99.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#15803d">3</text></g><g class="state-badge" transform="translate(40.29 -584)"><rect width="20" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /></g><g class="qa-badge" transform="translate(26.79 -548)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0:0:0</text><title>QA FAIL: 0:0:0 open blocking:important:minor; obs-d-12-qa</title></g><g class="state-badge" transform="translate(167.03 -603.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#15803d">1</text></g><g class="state-badge" transform="translate(583.25 -482)"><rect width="20" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /></g><g class="qa-badge" transform="translate(569.75 -446)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">2:1:1</text><title>QA FAIL: 2:1:1 open blocking:important:minor; obs-d-14-qa, obs-fix-observe-flush-tests-qa</title></g><g class="state-badge" transform="translate(583.25 -384)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(569.75 -348)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">1:5:5</text><title>QA FAIL: 1:5:5 open blocking:important:minor; obs-d-15-qa</title></g><g class="state-badge" transform="translate(311.77 -923)"><rect width="20" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /></g><g class="qa-badge" transform="translate(298.27 -887)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">2:5:2</text><title>QA FAIL: 2:5:2 open blocking:important:minor; obs-d-17-qa</title></g><g class="state-badge" transform="translate(583.25 -286)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(569.75 -250)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">1:6:9</text><title>QA FAIL: 1:6:9 open blocking:important:minor; obs-d-19-qa</title></g><g class="state-badge" transform="translate(583.25 -188)"><rect width="20" height="18" rx="6" fill="white" stroke="#b45309" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b45309">?</text></g><g class="qa-badge" transform="translate(566.25 -152)"><rect width="54" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="27.0" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0:12:4</text><title>QA FAIL: 0:12:4 open blocking:important:minor; obs-d-20-qa</title></g><g class="state-badge" transform="translate(311.77 -652)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(298.27 -616)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0:9:5</text><title>QA FAIL: 0:9:5 open blocking:important:minor; obs-d-21-qa</title></g><g class="state-badge" transform="translate(40.29 -1087)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><g class="qa-badge" transform="translate(26.79 -1051)"><rect width="47" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="23.5" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">3:4:5</text><title>QA FAIL: 3:4:5 open blocking:important:minor; obs-d-13-qa</title></g><g class="state-badge" transform="translate(167.03 -1106.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">2</text></g><g class="state-badge" transform="translate(709.99 -491.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#15803d">1</text></g><g class="state-badge" transform="translate(709.99 -393.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">1</text></g><g class="state-badge" transform="translate(709.99 -1007.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0</text></g><g class="state-badge" transform="translate(438.51 -942.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#15803d">1</text></g><g class="state-badge" transform="translate(981.47 -762.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">0</text></g><g class="state-badge" transform="translate(709.99 -295.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">1</text></g><g class="state-badge" transform="translate(709.99 -197.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b45309" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b45309">?</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b45309">2</text></g><g class="state-badge" transform="translate(438.51 -680.23)"><rect width="38" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text><text x="27" y="13" text-anchor="middle" font-family="Arial" font-size="12" font-weight="bold" fill="#b91c1c">14</text></g></g></g>
+<g class="state-legend" font-family="Arial" font-size="14" fill="#334155"><rect x="0" y="1383.0" width="1404.0" height="88" fill="white" /><g class="state-badge" transform="translate(30 1392)"><rect width="20" height="18" rx="6" fill="white" stroke="#15803d" stroke-width="1.2" /><path d="M 5 9 L 8 12 L 14 5" fill="none" stroke="#15803d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" /></g><text x="56" y="1406.0">Complete / sanity PASS</text><g class="state-badge" transform="translate(232 1392)"><rect width="20" height="18" rx="6" fill="white" stroke="#64748b" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#64748b">○</text></g><text x="258" y="1406.0">Pending</text><g class="state-badge" transform="translate(329 1392)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><text x="355" y="1406.0">Blocked</text><g class="state-badge" transform="translate(426 1392)"><rect width="20" height="18" rx="6" fill="white" stroke="#2563eb" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#2563eb">↻</text></g><text x="452" y="1406.0">Active</text><g class="state-badge" transform="translate(516 1392)"><rect width="20" height="18" rx="6" fill="white" stroke="#b91c1c" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b91c1c">!</text></g><text x="542" y="1406.0">Findings</text><g class="state-badge" transform="translate(620 1392)"><rect width="20" height="18" rx="6" fill="white" stroke="#b45309" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#b45309">?</text></g><text x="646" y="1406.0">Unconfirmed</text><g class="state-badge" transform="translate(745 1392)"><rect width="20" height="18" rx="6" fill="white" stroke="#7e22ce" stroke-width="1.2" /><text x="10" y="13" text-anchor="middle" font-family="Arial" font-size="15" font-weight="bold" fill="#7e22ce">↷</text></g><text x="771" y="1406.0">User override</text><text x="30" y="1435.0" font-size="12">Top = dev/sanity; gate number = completed sanity iterations; ? = unavailable. Dev check requires sanity PASS. Snapshot: 2026-09-27T16:56:26.087576+00:00</text><text x="30" y="1457.0" font-size="12">Bottom = QA: assigned / active / pass, or open blocking:important:minor findings after FAIL. Blank = undispatched.</text></g></svg></div>
+  </main>
+  <script>
+    const diagram = document.getElementById('diagram');
+    let zoom = 1;
+    function setZoom(value) {
+      zoom = Math.max(0.5, Math.min(4, value));
+      diagram.style.width = (zoom * 100) + '%';
+      document.getElementById('zoom-level').textContent = Math.round(zoom * 100) + '%';
+    }
+    document.getElementById('zoom-out').addEventListener('click', () => setZoom(zoom / 1.25));
+    document.getElementById('zoom-in').addEventListener('click', () => setZoom(zoom * 1.25));
+    document.getElementById('fit').addEventListener('click', () => setZoom(1));
+  </script>
+</body>
+</html>

@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from prepare_log_staged_packages import package_command
-from _log_staging import PRIVATE_PACKAGE, PACKAGES, inspect_archive, sha256, verify_stage
+from _log_staging import PRIVATE_PACKAGE, PACKAGES, extract_verified, inspect_archive, sha256, verify_stage
 from validate_log_staged_consumer import validate_resolution
 from validate_public_api import approval_for
 from wait_for_registry_version import wait
@@ -94,6 +94,11 @@ class StageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'version'):
             verify_stage(self.root, '1.3.0')
 
+    def test_accepts_qualified_stage_when_workspace_candidate_is_newer(self):
+        # The immutable stage verifies its recorded candidate version; a later
+        # workspace candidate is not allowed to rewrite qualification evidence.
+        verify_stage(self.root, workspace_version='2.0.0')
+
     def test_rejects_changed_source_even_with_updated_manifest(self):
         self.manifest['source_commit'] = 'b' * 40
         self.save()
@@ -104,8 +109,79 @@ class StageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'source commit'):
             verify_stage(self.root, VERSION, 'b' * 40)
 
+    def test_rejects_non_string_source_commit(self):
+        self.manifest['source_commit'] = 5
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'source commit'):
+            verify_stage(self.root, VERSION)
+
+    def test_rejects_non_list_packages(self):
+        self.manifest['packages'] = {}
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'packages must be a list of objects'):
+            verify_stage(self.root, VERSION)
+
+    def test_rejects_non_object_package(self):
+        self.manifest['packages'][0] = 5
+        self.save()
+        with self.assertRaisesRegex(ValueError, 'packages must be a list of objects'):
+            verify_stage(self.root, VERSION)
+
+    def test_rejects_missing_package_evidence_fields(self):
+        original = self.manifest['packages'][0].copy()
+        for field in ('archive', 'archive_sha256', 'normalized_manifest', 'manifest_sha256', 'files'):
+            with self.subTest(field=field):
+                self.manifest['packages'][0] = original.copy()
+                self.manifest['packages'][0].pop(field)
+                self.save()
+                with self.assertRaisesRegex(ValueError, f'package field {field}'):
+                    verify_stage(self.root, VERSION)
+
+    def test_rejects_wrong_package_evidence_field_types(self):
+        original = self.manifest['packages'][0].copy()
+        for field, value in (
+            ('archive', 5),
+            ('archive_sha256', 5),
+            ('normalized_manifest', 5),
+            ('manifest_sha256', 5),
+            ('files', []),
+        ):
+            with self.subTest(field=field):
+                self.manifest['packages'][0] = original.copy()
+                self.manifest['packages'][0][field] = value
+                self.save()
+                with self.assertRaisesRegex(ValueError, f'package field {field}'):
+                    verify_stage(self.root, VERSION)
+
+    def test_extract_verified_rejects_malformed_package_evidence(self):
+        evidence = json.loads(json.dumps(self.manifest))
+        evidence['packages'][0].pop('archive')
+        with self.assertRaisesRegex(ValueError, 'package field archive'):
+            extract_verified(self.root, evidence, self.root / 'extracted')
+
+    def test_rejects_missing_or_wrong_package_name_and_version(self):
+        original = self.manifest['packages'][0].copy()
+        for field, value in (('name', None), ('version', 5)):
+            with self.subTest(field=field):
+                self.manifest['packages'][0] = original.copy()
+                if value is None:
+                    self.manifest['packages'][0].pop(field)
+                else:
+                    self.manifest['packages'][0][field] = value
+                self.save()
+                with self.assertRaisesRegex(ValueError, f'package field {field}'):
+                    verify_stage(self.root, VERSION)
+
+    def test_extract_verified_rejects_missing_top_level_packages(self):
+        evidence = json.loads(json.dumps(self.manifest))
+        evidence.pop('packages')
+        with self.assertRaisesRegex(ValueError, 'packages must be a list of objects'):
+            extract_verified(self.root, evidence, self.root / 'extracted')
+
     def test_rejects_private_package_leak(self):
-        self.manifest['packages'].append({'name': 'sc-observability-log-consumer-check'})
+        private = self.manifest['packages'][0].copy()
+        private['name'] = PRIVATE_PACKAGE
+        self.manifest['packages'].append(private)
         self.save()
         with self.assertRaisesRegex(ValueError, 'six public'):
             verify_stage(self.root, VERSION)

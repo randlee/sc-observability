@@ -71,8 +71,17 @@ packages are in use by BTIT; running their published-package checks on Phase D
 sprint changes is inappropriate because the published 1.4.x dependencies lack
 the new API. The package-stage, staged-consumer and complete-platform evidence
 jobs, scripts, fixtures and tests remain available for release qualification.
-The publisher runs the retained checks by dispatching both workflows on the
-candidate ref before publishing and verifying successful completion. B.2 runs
+The checked-in B.P2 authority is
+`release/runtime-level-qualification.toml`, whose historical pair is candidate
+`1.3.0` against baseline `1.2.0`. That pair is the recorded B.P2 qualification
+used for the 1.4.x release; it is not a qualification for a later candidate.
+Before a later release, the publisher must update and requalify the authority,
+the frozen baseline fixture, the handoff, and the retained evidence before
+dispatching B.P2 for that candidate. The publisher then dispatches the
+applicable retained workflows on the candidate ref before publishing and
+verifies successful completion: B.2 for the current six-package release train,
+and B.P2 only when its candidate/baseline authority matches the release plan.
+B.2 runs
 `test_log_staging.py` and `test_generation_provenance.py`; B.P2 runs
 `test_validate_runtime_level_qualification_metadata.py`,
 `test_validate_runtime_level_platform_evidence.py`,
@@ -84,6 +93,12 @@ only on dispatch in CI. No PR workflow discovers all of `scripts/ci/tests`:
 binding, packaging and platform suites. Those suites do not run the six
 preflight checks listed here. The preflight aggregators always run after their
 platform consumers succeed, retaining complete-platform evidence requirements.
+
+The binding source bundle uses B.2 qualified archives only when the B.2 candidate
+version matches the workspace release train; otherwise it builds unpublished
+Cargo packages from source (obs-ci-stage-bundle). A corrupt or unreadable B.2
+stage still fails the bundle build; only a verified release-train mismatch
+falls back to source.
 
 ## Retired historical gates
 
