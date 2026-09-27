@@ -2479,10 +2479,14 @@ shared `error_codes.rs`. Operational/context error serde uses a snake-case
 backtraces are deliberately not serialized. Native chaining preserves them.
 
 `v2::TelemetryError::Shutdown` remains a unit runtime guard;
-`From<v2::ExportError>` wraps the exact error in `ExportFailure` and `code()`
-returns its diagnostic code. Existing root `ObservationError` guards remain
-unchanged. Flush/shutdown/config adapters retain canonical failures as typed
-sources, carrying their diagnostic codes and remediation to the outer context.
+`From<v2::ExportError>` wraps the exact error in `ExportFailure`.
+For `ExportFailure`, `.code()` returns the fixed stable classification for the
+variant, while `.diagnostic().code` returns the preserved original cause code.
+`ExportError::Transport` is the explicit pass-through exception: its `.code()`
+also returns the preserved underlying `.diagnostic().code`. Existing root
+`ObservationError` guards remain unchanged. Flush/shutdown/config adapters
+retain canonical failures as typed sources, carrying their preserved
+diagnostic codes and remediation to the outer context.
 
 All ConfigFailure and ExportError variants below are types-owned. The single
 OTLP registry is `sc_observability_types::error_codes::otlp`; the OTLP crate
