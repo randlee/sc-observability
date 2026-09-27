@@ -230,7 +230,11 @@ phase root also appears in it; it is never dispatched.
 
 After every bead write, run `validate-plan --root <root>`. On any problem,
 stop dispatching and report it to the user; never repair the graph
-(`bd dep`, `--parent`). Verify branches read-only (`git -C <worktree> log`,
+(`bd dep`, `--parent`). A DAG problem is fixed by replanning: edit
+`sprints.jsonl` in a `/sc-git-worktree` branch off `develop` and merge the
+plan PR. While a phase is in motion its sprint DAG is frozen; only
+dependencies to fix beads created during the phase are added or changed.
+Verify branches read-only (`git -C <worktree> log`,
 `git diff`, `gh pr view`); never run a state-changing command in an
 assignee's worktree.
 
