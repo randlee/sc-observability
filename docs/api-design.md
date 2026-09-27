@@ -2481,9 +2481,10 @@ backtraces are deliberately not serialized. Native chaining preserves them.
 `v2::TelemetryError::Shutdown { context }` is the canonical context- and
 diagnostic-carrying runtime admission guard; the retained root
 `TelemetryError::Shutdown` remains the unit variant described above.
-`From<v2::ExportError>` wraps the exact error in `ExportFailure`.
-For `ExportFailure`, `.code()` returns the fixed stable classification for the
-variant, while `.diagnostic().code` returns the preserved original cause code.
+`From<v2::ExportError>` wraps the exact error in `v2::TelemetryError::ExportFailure`.
+For `v2::TelemetryError::ExportFailure`, `.code()` returns the fixed stable
+classification for the variant, while `.diagnostic().code` returns the preserved
+original cause code.
 `ExportError::Transport` is the explicit pass-through exception: its `.code()`
 also returns the preserved underlying `.diagnostic().code`. Existing root
 `ObservationError` guards remain unchanged. Flush/shutdown/config adapters
