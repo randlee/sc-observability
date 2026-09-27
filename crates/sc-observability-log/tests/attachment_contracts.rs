@@ -103,12 +103,14 @@ impl LogAttachment {
 
     fn detach(&mut self, timeout: Duration) -> Result<(), DetachError> {
         let mut state = self.state.lock().expect("fixture state lock");
-        if state.slot != SlotState::Attached {
-            return Err(DetachError::NotInstalled);
+        match state.slot {
+            SlotState::Attached => state.slot = SlotState::Closing,
+            // A timed-out detach retains the attachment with admission closed,
+            // so the caller can retry its bounded drain from this state.
+            SlotState::Closing => {}
+            SlotState::Empty | SlotState::Owned => return Err(DetachError::NotInstalled),
         }
-        state.slot = SlotState::Closing;
         if state.entered_calls != 0 && timeout.is_zero() {
-            state.slot = SlotState::Attached;
             return Err(DetachError::Timeout);
         }
         state.entered_calls = 0;
@@ -159,17 +161,23 @@ fn contract_event() -> LogEvent {
 #[test]
 fn detach_retry_after_timeout() {
     let mut attachment = LogAttachment::attach(SlotState::Empty).expect("empty slot attaches");
+    let control = attachment.control();
     attachment.set_entered_calls(1);
     assert_eq!(attachment.detach(Duration::ZERO), Err(DetachError::Timeout));
     assert_eq!(
         attachment.slot(),
-        SlotState::Attached,
-        "timeout retains attachment"
+        SlotState::Closing,
+        "timeout retains the attachment with admission closed"
     );
+    assert_eq!(control.submit(), Err(DetachError::NotInstalled));
     attachment
         .detach(Duration::from_millis(1))
         .expect("retry detaches");
     assert_eq!(attachment.slot(), SlotState::Empty);
+    assert_eq!(
+        attachment.detach(Duration::from_millis(1)),
+        Err(DetachError::NotInstalled)
+    );
 }
 
 #[test]
