@@ -708,6 +708,8 @@ fn trace_key(trace: &TraceContext) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sc_observability_types::typed::TypedSpanProjector;
+    use sc_observability_types::Timestamp;
     use time::Duration;
 
     fn service_name() -> ServiceName {
