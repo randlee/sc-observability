@@ -221,6 +221,16 @@ class DistributionTests(unittest.TestCase):
                 with self.assertRaises(DistributionError):
                     verify_source(root)
 
+    def test_aggregate_rejects_five_platform_policy(self):
+        from validate_python_distribution import aggregate
+        policy_path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sdist = root / 'fixture.tar.gz'
+            sdist.write_bytes(b'fixture')
+            with self.assertRaisesRegex(DistributionError, 'exactly six platforms, six builds and 30'):
+                aggregate(Namespace(policy=policy_path, evidence=root, sdist=sdist, source_commit='a' * 40))
+
     def test_aggregate_requires_opted_in_host_execution_on_the_cell_interpreter(self):
         from validate_python_distribution import aggregate
         policy_path = Path(__file__).resolve().parents[3] / 'release/python-platform-policy.json'
