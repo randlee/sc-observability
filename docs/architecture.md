@@ -1022,8 +1022,8 @@ No Git revision or historical blob pin is required for generated bindings.
   or config construction. Baseline is immutable; overrides are nonpersistent,
   above-or-equal to baseline, and explicitly reset by the owner. Attached clients
   request authorized changes from the application rather than gaining ownership.
-- **Consequences**: B.P2-qualified staged core support must be available before
-  accepted BTIT integration and copy; B.7 owns later live publication. One
+- **Consequences**: The accepted 1.4.x release supplied the staged core support
+  used by BTIT integration and copy; B.7 owned later live publication. One
   coherent revision identifies each actual transition. Queued events
   are not retroactively filtered. Failed diagnostic admission is distinct from a
   successful change and preserves queue/redaction/sink policy. Supported release
@@ -1255,8 +1255,9 @@ was reworded accordingly to describe the remaining validation.
 #### ADR-019 amendment: staged neutral signal contracts
 
 - **Status**: Accepted 2026-09-26 by the lead (ruling
-  `01M3F5BQFV804H5G4W6HFNZ03V`); the original ADR-019 acceptance above
-  is unchanged.
+  `01M3F5BQFV804H5G4W6HFNZ03V`); native attribute serde amended to the
+  tagged form 2026-09-27 by the maintainer. The original ADR-019 acceptance
+  above is unchanged.
 - **Context**: ADR-017's error-wrapper replacement does not itself specify
   the neutral signal model or its temporary public module. D.12 needs to
   release these contracts while existing 1.x consumers continue to compile.
@@ -1289,12 +1290,12 @@ was reworded accordingly to describe the remaining validation.
   histogram bounds/bucket/count consistency, start at or before end,
   nonempty delta intervals and nonnegative monotonic sums. `HistogramPoint`
   preserves explicit bounds, integer bucket counts/count and finite sum.
-- **Decision — serde and wire projection** (amended per ruling
-  `01M3F5BQFV804H5G4W6HFNZ03V`): Native `AttributeValue` serde is adjacently
-  tagged with `kind`/`data`; `null` omits `data`, and the representation
-  preserves each variant, including `Int` versus `UInt`, recursively through
-  arrays and objects. `FiniteF64` is a number and `TraceFlags` a byte.
-  `SpanKind` and `AggregationTemporality` use snake-case tokens.
+- **Decision — serde and wire projection**: Native `AttributeValue` serde is
+  adjacently tagged, for example `{"kind":"int","data":5}`; `kind` is one of
+  `bool`, `int`, `uint`, `float`, `string`, `array`, `object` or `null`, and
+  `null` has no `data`. Tags preserve the exact variant, including `Int` and
+  `UInt` of the same non-negative value, recursively through arrays and
+  objects. `FiniteF64` is a number and `TraceFlags` a byte. `SpanKind` and `AggregationTemporality` use snake-case tokens.
   `MetricValue` uses adjacent `kind`/`data` tags, for example
   `{"kind":"gauge","data":1.5}`. Records serialize named fields;
   `SpanRecord` omits its typestate marker and `SpanSignal` uses external
@@ -1306,13 +1307,12 @@ was reworded accordingly to describe the remaining validation.
   adapters. Native source/backtrace objects never enter the wire envelope.
 - **Consequences**: A discriminated metric value prevents contradictory
   kind/value combinations; checked neutral models share validation across
-  backends. Tagged native attributes preserve every Rust numeric variant
-  through JSON, including recursively nested arrays and objects; language
-  boundaries retain explicit DTO tags as well.
+  backends. Tagged native attributes round-trip every Rust numeric variant
+  exactly through JSON; language boundaries still use D.19's explicit DTO tags.
   Temporary coexistence enables staged migration; it does not waive the
   final replacement and compatibility-removal gates.
 - **Contracts**: TYP-008–019, PHD-001/002, PHB-002/010/012/013;
-  [canonical types and wire handoff](api-design.md#phase-d-canonical-types-and-wire-handoff).
+  canonical types and wire handoff in [API design](api-design.md) (section added by D.12).
   D.12 owns the types and specification, D.19/20 consume them, and D.18
   qualifies their final composition. ADR-019 remains in D.12's bead ADR list.
 

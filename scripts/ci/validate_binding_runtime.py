@@ -33,11 +33,11 @@ def source_digest():
         value.update(path.relative_to(ROOT).as_posix().encode()+b'\0'+path.read_text(encoding="utf-8").replace('\r\n','\n').encode())
     return value.hexdigest()
 def cases():
-    source=(ROOT/'crates'/PACKAGE/'src/tests.rs').read_text()
+    source=(ROOT/'crates'/PACKAGE/'src/tests.rs').read_text(encoding='utf-8')
     return re.findall(r'"([a-z0-9_]+)"',source.split('const CASES: &[&str] = &[',1)[1].split('];',1)[0])
 def negatives():
-    manifest=tomllib.loads((ROOT/'crates'/PACKAGE/'Cargo.toml').read_text())
-    workspace=tomllib.loads((ROOT/'Cargo.toml').read_text())
+    manifest=tomllib.loads((ROOT/'crates'/PACKAGE/'Cargo.toml').read_text(encoding='utf-8'))
+    workspace=tomllib.loads((ROOT/'Cargo.toml').read_text(encoding='utf-8'))
     for host in ('tauri','pyo3'):
         for target in (False,True):
             test=copy.deepcopy(manifest)
@@ -75,12 +75,12 @@ def platform_run(output):
 def aggregate(directory, consumer):
     expected=cases()
     for system in ('Darwin','Linux','Windows'):
-        report=json.loads((directory/f'{system.lower()}.json').read_text())
+        report=json.loads((directory/f'{system.lower()}.json').read_text(encoding='utf-8'))
         if report['platform']!=system or report['runtime_source_sha256']!=source_digest(): raise RuntimeError(f'stale platform evidence {system}')
         for profile in ('debug','release'):
             cell=report['profiles'][profile]
             if cell['status']!='passed' or cell['cases']!=expected or digest(directory/cell['log'])!=cell['sha256']: raise RuntimeError(f'incomplete platform evidence {system}/{profile}')
-    proof=json.loads(consumer.read_text())
+        proof=json.loads(consumer.read_text(encoding='utf-8'))
     if proof.get('runtime_source_sha256')!=source_digest(): raise RuntimeError('stale packaged consumer source proof')
     if proof['status']!='passed' or not all(p['denied'] for p in proof['isolation_probes'].values()): raise RuntimeError('isolated consumer proof incomplete')
     if PACKAGE not in proof['archives'] or 'runtime core+bridge' not in proof['consumer_output']: raise RuntimeError('consumer did not exercise packaged runtime')
@@ -93,7 +93,7 @@ def consumer_run(evidence):
         bundle=Path(parent)/'bundle'
         subprocess.run([sys.executable,str(ROOT/'scripts/ci/build_binding_source_bundle.py'),'--root-manifest',str(ROOT/'crates'/PACKAGE/'Cargo.toml'),'--output',str(bundle)],cwd=ROOT,check=True)
         subprocess.run([sys.executable,str(ROOT/'scripts/ci/validate_binding_bundle.py'),'--bundle',str(bundle),'--evidence',str(evidence),'--consumer-source',str(ROOT/'scripts/ci/fixtures/binding-runtime-consumer/main.rs'),'--expected-marker','BINDING_CONSUMER_OK runtime core+bridge'],cwd=ROOT,check=True)
-        proof=json.loads(evidence.read_text());proof['runtime_source_sha256']=source_digest();proof['consumer_source_sha256']=digest(ROOT/'scripts/ci/fixtures/binding-runtime-consumer/main.rs')
+        proof=json.loads(evidence.read_text(encoding='utf-8'));proof['runtime_source_sha256']=source_digest();proof['consumer_source_sha256']=digest(ROOT/'scripts/ci/fixtures/binding-runtime-consumer/main.rs')
         evidence.write_text(json.dumps(proof,indent=2)+'\n')
         (evidence.parent/'binding-runtime-bundle-manifest.json').write_bytes((bundle/'manifest.json').read_bytes())
 
@@ -101,7 +101,7 @@ def main():
     parser=argparse.ArgumentParser(); parser.add_argument('--platform-only',action='store_true');parser.add_argument('--evidence',type=Path,default=ROOT/'target/binding-runtime-platforms');parser.add_argument('--consumer-evidence',type=Path,default=ROOT/'target/binding-runtime-consumer.json');parser.add_argument('--aggregate-only',action='store_true');parser.add_argument('--consumer-only',action='store_true');args=parser.parse_args()
     dependencies();negatives()
     golden=ROOT/'crates'/PACKAGE/'tests/native-diagnostic.json'
-    if hashlib.sha256(golden.read_text().replace('\r\n','\n').encode()).hexdigest() != '3f5a4f41bb9cd140a5f207811b26e33063fa5e9d96385aa17b7c3128095e5f3e':
+    if hashlib.sha256(golden.read_text(encoding='utf-8').replace('\r\n','\n').encode()).hexdigest() != '3f5a4f41bb9cd140a5f207811b26e33063fa5e9d96385aa17b7c3128095e5f3e':
         raise RuntimeError('native diagnostic golden overwritten; explicit contract review required')
     if args.consumer_only:
         consumer_run(args.consumer_evidence)

@@ -113,8 +113,9 @@ fn context(code: sc_observability_types::ErrorCode) -> Box<ErrorContext> {
 )]
 fn canonical_error_variants_preserve_context() {
     macro_rules! check {
-        ($name:ident::$variant:ident, $code:expr) => {{
-            let original = context(error_codes::VALUE_VALIDATION_FAILED);
+        ($name:ident::$variant:ident, $code:expr) => {{ check!($name::$variant, error_codes::VALUE_VALIDATION_FAILED, $code) }};
+        ($name:ident::$variant:ident, $context_code:expr, $code:expr) => {{
+            let original = context($context_code);
             let diagnostic = original.diagnostic().clone();
             let pointer = std::ptr::from_ref(&*original);
             let error = $name::$variant { context: original };
@@ -151,14 +152,10 @@ fn canonical_error_variants_preserve_context() {
     check!(SubscriberError::Subscriber, error_codes::DIAGNOSTIC_INVALID);
     check!(LogSinkError::Write, error_codes::DIAGNOSTIC_INVALID);
     check!(LogSinkError::Flush, error_codes::DIAGNOSTIC_INVALID);
-    let transport_context = context(error_codes::IDENTITY_RESOLUTION_FAILED);
-    let transport = ExportError::Transport {
-        context: transport_context,
-    };
-    assert_eq!(
-        transport.code(),
+    check!(
+        ExportError::Transport,
         error_codes::IDENTITY_RESOLUTION_FAILED,
-        "Transport preserves its underlying diagnostic code"
+        error_codes::IDENTITY_RESOLUTION_FAILED
     );
     check!(
         ExportError::BlockingBackendInAsyncContext,

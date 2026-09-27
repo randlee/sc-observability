@@ -70,7 +70,7 @@ class EvidenceTests(unittest.TestCase):
 
     def report(self, mutate):
         path = self.root / 'Linux/platform.json'
-        value = json.loads(path.read_text())
+        value = json.loads(path.read_text(encoding='utf-8'))
         mutate(value)
         path.write_text(json.dumps(value))
 
@@ -102,7 +102,7 @@ class EvidenceTests(unittest.TestCase):
 
     def test_rehashed_pristine_artifact_drift(self):
         path = self.root / 'Linux/build-inputs.json'
-        value = json.loads(path.read_text())
+        value = json.loads(path.read_text(encoding='utf-8'))
         value['files']['host/Cargo.lock'] = 'different'
         path.write_text(json.dumps(value))
         self.report(lambda report: report.update(pristine_inputs_sha256=gate.digest(path)))
@@ -130,7 +130,7 @@ class EvidenceTests(unittest.TestCase):
 
     def test_rehashed_skipped_real_ipc_case(self):
         path = self.root / 'Linux/ipc.json'
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding='utf-8'))
         record['forbidden']['records'].pop()
         path.write_text(json.dumps(record))
         self.report(lambda report: report.update(ipc_sha256=gate.digest(path)))
@@ -139,7 +139,7 @@ class EvidenceTests(unittest.TestCase):
 
     def test_missing_release_runtime_case(self):
         path = self.root / 'Linux/native-runtime/linux.json'
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding='utf-8'))
         record['profiles']['release']['cases'].pop()
         path.write_text(json.dumps(record))
         with self.assertRaisesRegex(ValueError, 'missing native lifecycle/resource fixture'):
