@@ -89,7 +89,7 @@ def inspect_archive(
 
 def read_stage_manifest(stage: Path) -> dict:
     """Load the stage manifest once and reject non-object JSON explicitly."""
-    evidence = json.loads((stage / "stage-manifest.json").read_text())
+    evidence = json.loads((stage / "stage-manifest.json").read_text(encoding="utf-8"))
     if not isinstance(evidence, dict):
         raise ValueError("stage manifest must be a JSON object")
     return evidence
