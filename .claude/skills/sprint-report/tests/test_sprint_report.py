@@ -13,6 +13,13 @@ loader.exec_module(report)
 
 
 class SprintReportTests(unittest.TestCase):
+    def test_phase_d_index_excludes_folded_d11(self):
+        repo = Path(__file__).resolve().parents[4]
+        index = report.load_index(
+            repo, repo / 'docs/plans/phase-d/sprints.jsonl', 'obs-phase-d'
+        )[1]
+        self.assertNotIn('obs-d-11', report.index_bead_pairs(index))
+
     def test_loads_compact_canonical_tuples_and_rejects_invalid_rows(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
