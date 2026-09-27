@@ -12,7 +12,7 @@ constructor = "none"
 [composition]
 roots = []
 [dependencies]
-allowed_dependents = ["rust-python-logging", "sc-observability-py"]
+allowed_dependents = ["rust-python-logging", "sc-observability-py", "sc-observability-tauri"]
 allowed_dependencies = ["sc-observability", "sc-observability-dto", "sc-observability-log", "sc-observability-types"]
 forbidden_edges = []
 [references]
