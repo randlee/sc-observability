@@ -98,7 +98,27 @@ fn stop(owner: &CoreLoggerOwner) {
 }
 fn code<T>(result: Result<T, Failure>, expected: &str) {
     match result {
-        Err(error) => assert_eq!(error.diagnostic().code, expected),
+        Err(error) => {
+            assert_eq!(error.diagnostic().code, expected);
+            let wire = serde_json::to_value(&error).expect("failure serializes to its tagged DTO");
+            assert!(
+                serde_json::to_value(error.diagnostic())
+                    .expect("diagnostic serializes")
+                    .get("remediation")
+                    .is_some(),
+                "{expected} must retain remediation in its DTO"
+            );
+            assert!(
+                wire["kind"].is_string(),
+                "{expected} must retain its tagged DTO failure kind"
+            );
+            if expected == dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT {
+                assert!(
+                    wire["operation"].is_string(),
+                    "timeout DTO failures must retain their operation"
+                );
+            }
+        }
         Ok(_) => panic!("expected {expected}"),
     }
 }
