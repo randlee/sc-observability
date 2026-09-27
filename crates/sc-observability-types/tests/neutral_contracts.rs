@@ -113,13 +113,15 @@ fn context(code: sc_observability_types::ErrorCode) -> Box<ErrorContext> {
 )]
 fn canonical_error_variants_preserve_context() {
     macro_rules! check {
-        ($name:ident::$variant:ident, $code:expr) => {{
-            let original = context($code);
+        ($name:ident::$variant:ident, $code:expr) => {{ check!($name::$variant, error_codes::VALUE_VALIDATION_FAILED, $code) }};
+        ($name:ident::$variant:ident, $context_code:expr, $code:expr) => {{
+            let original = context($context_code);
             let diagnostic = original.diagnostic().clone();
             let pointer = std::ptr::from_ref(&*original);
             let error = $name::$variant { context: original };
             assert_eq!(std::ptr::from_ref(error.context()), pointer);
             assert_eq!(DiagnosticInfo::diagnostic(&error), &diagnostic);
+            assert_eq!(error.code(), $code);
             assert_eq!(
                 error.to_string(),
                 "failure: bounded cause; caused by: sentinel source"
@@ -135,7 +137,10 @@ fn canonical_error_variants_preserve_context() {
             assert_eq!(std::ptr::from_ref(&*error.into_context()), pointer);
         }};
     }
-    check!(IdentityError::Process, error_codes::DIAGNOSTIC_INVALID);
+    check!(
+        IdentityError::Process,
+        error_codes::IDENTITY_RESOLUTION_FAILED
+    );
     check!(InitError::Configuration, error_codes::DIAGNOSTIC_INVALID);
     check!(InitError::Runtime, error_codes::DIAGNOSTIC_INVALID);
     check!(EventError::Validation, error_codes::DIAGNOSTIC_INVALID);
@@ -147,7 +152,11 @@ fn canonical_error_variants_preserve_context() {
     check!(SubscriberError::Subscriber, error_codes::DIAGNOSTIC_INVALID);
     check!(LogSinkError::Write, error_codes::DIAGNOSTIC_INVALID);
     check!(LogSinkError::Flush, error_codes::DIAGNOSTIC_INVALID);
-    check!(ExportError::Transport, error_codes::DIAGNOSTIC_INVALID);
+    check!(
+        ExportError::Transport,
+        error_codes::IDENTITY_RESOLUTION_FAILED,
+        error_codes::IDENTITY_RESOLUTION_FAILED
+    );
     check!(
         ExportError::BlockingBackendInAsyncContext,
         error_codes::otlp::OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT
@@ -315,18 +324,26 @@ fn stable_failure_codes() {
         assert_ne!(record.diagnostic().code, bytes.diagnostic().code);
     }
     let telemetry: TelemetryError = ExportError::QueueFull {
-        context: context(error_codes::otlp::OTLP_QUEUE_FULL),
+        context: context(error_codes::VALUE_VALIDATION_FAILED),
     }
     .into();
     assert_eq!(telemetry.code().as_str(), "OTLP_QUEUE_FULL");
     assert_eq!(
         DiagnosticInfo::diagnostic(&telemetry).code,
-        error_codes::otlp::OTLP_QUEUE_FULL
+        error_codes::VALUE_VALIDATION_FAILED
     );
     assert!(matches!(
         &telemetry,
         TelemetryError::ExportFailure(ExportError::QueueFull { .. })
     ));
+    let TelemetryError::ExportFailure(error) = &telemetry else {
+        unreachable!("queue-full export failure must remain preserved")
+    };
+    assert_eq!(
+        error.diagnostic().code,
+        error_codes::VALUE_VALIDATION_FAILED,
+        "the preserved diagnostic may describe the underlying source, while the error variant fixes the public stable code"
+    );
     assert!(
         telemetry
             .source()
@@ -566,7 +583,10 @@ fn metric_model_failures() {
     )]));
     let decorated_value = serde_json::to_value(decorated_record).unwrap();
     assert_eq!(decorated_value["unit"], json!("ms"));
-    assert_eq!(decorated_value["attributes"], json!({"region": "us-west"}));
+    assert_eq!(
+        decorated_value["attributes"],
+        json!({"region": {"kind": "string", "data": "us-west"}})
+    );
     assert_eq!(
         serde_json::from_value::<MetricRecord>(value.clone()).unwrap(),
         record

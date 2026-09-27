@@ -94,8 +94,8 @@ For consumers that export to OTLP:
 
 ## Typed Error Adoption (B.1e warning rollout)
 
-The additive typed error methods and B.1e warning rollout are implemented and
-validated on the current stack. B.2 qualifies the result before B.7
+The additive typed error methods and B.1e warning rollout were implemented and
+validated on the current stack. B.2 qualified the result before B.7
 publication. For exact old/new symbols, nine wrapper families, typed kind matching,
 source retention, custom-trait adapters, rollback and narrow warning policy,
 use the [typed error migration reference](../.claude/skills/sc-observability-adopting/references/migrate-error-api.md)
@@ -112,7 +112,8 @@ unchanged `with_log_projector`, `with_span_projector` and
 `with_metric_projector` methods; no `with_typed_*` builders exist.
 
 This guide does not promise warning-free legacy compilation under
-`-D deprecated`, introduce a removal schedule or claim B.2/B.7 completion.
+`-D deprecated`, introduce a removal schedule or claim that B.2/B.7 remain open
+completion gates.
 
 ## Breaking API Renames
 

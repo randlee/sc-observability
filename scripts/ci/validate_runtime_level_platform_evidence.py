@@ -20,7 +20,7 @@ def validate_evidence(evidence_dir: Path) -> None:
         if not path.is_file():
             missing.append(platform)
             continue
-        result = json.loads(path.read_text())
+        result = json.loads(path.read_text(encoding="utf-8"))
         candidate = result.get("candidate", {})
         archives = candidate.get("archives")
         identity = (

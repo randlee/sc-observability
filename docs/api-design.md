@@ -2369,8 +2369,8 @@ B.1e migration implementation records that inventory in
 [`plans/phase-b/warning-inventory-b-1e.md`](plans/phase-b/warning-inventory-b-1e.md)
 and routes adopters through
 `.claude/skills/sc-observability-adopting/references/migrate-error-api.md`.
-The record activates the authorized warning attributes at the exact next-minor
-version after the B.P2 staged prerequisite; B.2 qualifies that
+The record activated the authorized warning attributes at the exact next-minor
+version after the B.P2 staged prerequisite; B.2 qualified that
 result. The two B.P1 owner constructors remain method-level
 exemptions, while explicit `InitError` wrapper use is documented separately.
 
@@ -2391,8 +2391,8 @@ The new OperationDiagnostic provides required code, message, remediation and
 timestamp for operation outcomes; existing DiagnosticSummary remains an optional
 code plus message/time summary. Conversions preserve available original data
 and use explicitly documented fallback remediation only when an operation has
-already discarded it. B.P2-qualified staged core support is consumed before BTIT
-bridge integration; B.7 owns later publication. Existing standalone
+already discarded it. The accepted 1.4.x release supplied the staged core support
+consumed by BTIT bridge integration; B.7 owned later publication. Existing standalone
 constructors preserve baseline filtering without acquiring an external owner.
 The core and every adapter use the same effective admission level. Mutation is
 serialized against shutdown; diagnostic admission is reported separately and
@@ -2478,11 +2478,18 @@ shared `error_codes.rs`. Operational/context error serde uses a snake-case
 `kind` and a `context` object containing `diagnostic`; source objects and
 backtraces are deliberately not serialized. Native chaining preserves them.
 
-`v2::TelemetryError::Shutdown` remains a unit runtime guard;
-`From<v2::ExportError>` wraps the exact error in `ExportFailure` and `code()`
-returns its diagnostic code. Existing root `ObservationError` guards remain
-unchanged. Flush/shutdown/config adapters retain canonical failures as typed
-sources, carrying their diagnostic codes and remediation to the outer context.
+`v2::TelemetryError::Shutdown { context }` is the canonical context- and
+diagnostic-carrying runtime admission guard; the retained root
+`TelemetryError::Shutdown` remains the unit variant described above.
+`From<v2::ExportError>` wraps the exact error in `v2::TelemetryError::ExportFailure`.
+For `v2::TelemetryError::ExportFailure`, `.code()` returns the fixed stable
+classification for the variant, while `.diagnostic().code` returns the preserved
+original cause code.
+`ExportError::Transport` is the explicit pass-through exception: its `.code()`
+also returns the preserved underlying `.diagnostic().code`. Existing root
+`ObservationError` guards remain unchanged. Flush/shutdown/config adapters
+retain canonical failures as typed sources, carrying their preserved
+diagnostic codes and remediation to the outer context.
 
 All ConfigFailure and ExportError variants below are types-owned. The single
 OTLP registry is `sc_observability_types::error_codes::otlp`; the OTLP crate
