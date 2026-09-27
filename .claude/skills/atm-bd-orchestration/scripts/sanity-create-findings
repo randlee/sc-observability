@@ -104,9 +104,10 @@ def parent_layer(metadata: dict):
 
 
 def child_priority(severity: str, parent_priority: int) -> int:
-    """A blocking child sits one below its parent (never below P4); other severities use the severity map."""
+    """A blocking child ranks one above its parent, ahead of the parent's peers, within P1..P4;
+    other severities use the severity map."""
     if severity == "blocking":
-        return min(parent_priority + 1, 4)
+        return max(1, min(parent_priority - 1, 4))
     return priority_for_severity(severity)
 
 

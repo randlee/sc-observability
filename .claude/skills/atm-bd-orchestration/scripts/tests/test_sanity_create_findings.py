@@ -15,8 +15,8 @@ SPEC.loader.exec_module(module)
 
 
 class ParentLayerTests(unittest.TestCase):
-    def test_blocking_child_sits_one_below_its_parent(self):
-        self.assertEqual([module.child_priority("blocking", p) for p in (1, 2, 3, 4)], [2, 3, 4, 4])
+    def test_blocking_child_ranks_one_above_its_parent(self):
+        self.assertEqual([module.child_priority("blocking", p) for p in (0, 1, 2, 3, 4, 5)], [1, 1, 1, 2, 3, 4])
         self.assertEqual(module.child_priority("minor", 1), 4)
 
     def test_sprint_bead_follows_findings_to_the_sprint(self):
