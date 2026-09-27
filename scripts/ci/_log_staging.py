@@ -95,6 +95,18 @@ def read_stage_manifest(stage: Path) -> dict:
     return evidence
 
 
+def validate_package_item(item: object) -> dict:
+    """Validate package evidence before any required field is indexed."""
+    if not isinstance(item, dict):
+        raise ValueError("stage package item must be an object")
+    for key in ("archive", "archive_sha256", "normalized_manifest", "manifest_sha256"):
+        if not isinstance(item.get(key), str):
+            raise ValueError(f"stage package field {key} must be a string")
+    if not isinstance(item.get("files"), dict):
+        raise ValueError("stage package field files must be an object")
+    return item
+
+
 def verify_stage(
     stage: Path,
     version: str,
@@ -116,7 +128,8 @@ def verify_stage(
         raise ValueError("stage packages must be a list of objects")
     if tuple(item.get("name") for item in packages) != PACKAGES:
         raise ValueError("stage must contain exactly the six public packages in release order")
-    for item in packages:
+    for raw_item in packages:
+        item = validate_package_item(raw_item)
         if item.get("version") != version:
             raise ValueError("package version mismatch")
         archive = safe_path(stage, item["archive"])
@@ -131,7 +144,8 @@ def verify_stage(
 
 def extract_verified(stage: Path, evidence: dict, destination: Path) -> dict[str, Path]:
     paths = {}
-    for item in evidence["packages"]:
+    for raw_item in evidence["packages"]:
+        item = validate_package_item(raw_item)
         archive = safe_path(stage, item["archive"])
         # Verify again immediately before extraction; never consume cached extractions.
         if sha256(archive) != item["archive_sha256"]:
