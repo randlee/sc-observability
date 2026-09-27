@@ -479,7 +479,7 @@ class PhaseCheck:
             par = parent_of(c)
             if c.get("status") != "closed" and isinstance(meta(c).get("sanity_finding"), dict) \
                     and self.by.get(par, {}).get("status") == "closed":
-                self.problem(par, f"closed with open sanity finding {cid}; the lead reopens it and assigns dev-fix")
+                self.problem(par, f"closed with open sanity finding {cid}; the lead reopens it, or closes every open sanity finding under it as not valid")
         # sanity: never reopened after PASS
         for san in sanities:
             prev = None
