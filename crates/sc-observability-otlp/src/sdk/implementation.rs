@@ -34,13 +34,17 @@ impl CallerRuntime {
     /// D.6 owns admission and accounting.  The permit is intentionally moved
     /// into the spawned task, so both an SDK result and task cancellation use
     /// `Admitted::complete`/`Drop` rather than creating a second counter path.
-    pub(crate) fn spawn_export<T, F>(&self, admitted: Admitted<T>, export: F)
+    pub(crate) fn spawn_export<T, F>(
+        &self,
+        admitted: Admitted<T>,
+        export: F,
+    ) -> tokio::task::JoinHandle<()>
     where
         T: Send + 'static,
         F: Future<Output = Result<(), ExportError>> + Send + 'static,
     {
         self.handle.spawn(async move {
             let _value = admitted.complete(export.await);
-        });
+        })
     }
 }
