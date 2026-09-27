@@ -1,9 +1,9 @@
 # Error API migration
 
 This reference is for an adopter who is ready to move from the retained
-diagnostic wrappers to the additive typed failure APIs. B.1e implements and
-validates the warning-only migration after the B.P2 prerequisite; B.2
-qualifies that result for Phase-B readiness. Publication follows a later
+diagnostic wrappers to the additive typed failure APIs. B.1e implemented and
+validated the warning-only migration after the B.P2 prerequisite; B.2
+qualified that result for Phase-B readiness. Publication followed a later
 Phase-C `sc-publish` migration and separate authorization. The current workspace implements
 the typed counterparts and actionable `1.4.0` warnings.
 
@@ -11,8 +11,8 @@ the typed counterparts and actionable `1.4.0` warnings.
 
 Use the typed APIs only after the consumer has verified the replacement at the
 same version as its existing `sc-observability` dependencies. The B.P2 staged
-prerequisite is `1.3.0`; B.1e selects the next-minor warning candidate
-`1.4.0` and validates it. B.2 qualifies the B.1e result; publication is
+prerequisite was `1.3.0`; B.1e selected the next-minor warning candidate
+`1.4.0` and validated it. B.2 qualified the B.1e result; publication was
 separately authorized after Phase-C migration, followed by BTIT adoption.
 There is no removal schedule and no planned major release. A legacy consumer continues
 to build and run with default lints; `-D warnings` or `-D deprecated` may fail

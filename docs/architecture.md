@@ -1021,8 +1021,8 @@ No Git revision or historical blob pin is required for generated bindings.
   or config construction. Baseline is immutable; overrides are nonpersistent,
   above-or-equal to baseline, and explicitly reset by the owner. Attached clients
   request authorized changes from the application rather than gaining ownership.
-- **Consequences**: B.P2-qualified staged core support must be available before
-  accepted BTIT integration and copy; B.7 owns later live publication. One
+- **Consequences**: The accepted 1.4.x release supplied the staged core support
+  used by BTIT integration and copy; B.7 owned later live publication. One
   coherent revision identifies each actual transition. Queued events
   are not retroactively filtered. Failed diagnostic admission is distinct from a
   successful change and preserves queue/redaction/sink policy. Supported release
