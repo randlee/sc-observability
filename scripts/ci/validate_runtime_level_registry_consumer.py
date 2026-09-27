@@ -71,11 +71,11 @@ def cargo_project(root: Path, version: str, patches: str, source: str) -> None:
 
 
 def baseline_source() -> str:
-    return (FIXTURES / "baseline.rs").read_text()
+    return (FIXTURES / "baseline.rs").read_text(encoding="utf-8")
 
 
 def candidate_source() -> str:
-    return (FIXTURES / "candidate.rs").read_text()
+    return (FIXTURES / "candidate.rs").read_text(encoding="utf-8")
 
 
 def main() -> int:
@@ -97,7 +97,7 @@ def main() -> int:
     verified = None
     if args.stage:
         manifest = args.stage / "stage-manifest.json"
-        evidence = json.loads(manifest.read_text())
+        evidence = json.loads(manifest.read_text(encoding="utf-8"))
         if evidence.get("candidate_version") != args.version or evidence.get("schema_version") != 2:
             raise SystemExit("stage manifest does not match candidate version/schema")
         if tuple(item.get("name") for item in evidence.get("packages", [])) != EXPECTED_PACKAGES or any(item.get("version") != args.version for item in evidence["packages"]):

@@ -16,7 +16,7 @@
 - [x] Publish manifest exists at `release/publish-artifacts.toml`.
 - [x] Publish order validation script exists and passes.
 - [x] Release preflight workflow exists.
-- [ ] Before publishing, the publisher dispatches `b2-staged-consumer.yml` and `bp2-staged-consumer.yml` on the candidate ref and verifies both complete successfully.
+- Historical B.P2 qualification for candidate 1.3.0 against baseline 1.2.0 is recorded in `release/runtime-level-qualification.toml`; it is not an open Phase D / 2.x candidate gate. Per release: follow the [CI release-preflight policy](ci-policy.md#release-preflight) for the applicable candidate.
 - [x] Release workflow exists.
 - [x] CI includes docs-consistency and dependency-ban validation.
 - [x] Repo-boundary validation passes.

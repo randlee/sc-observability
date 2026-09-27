@@ -34,12 +34,19 @@ jobs:
         shell: bash
         run: bash scripts/ci/validate_binding_runtime.sh --platform-only
       - name: Retain complete platform proof
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v6
         with:
           name: binding-runtime-${{ matrix.os }}
           path: target/binding-runtime-platforms
           if-no-files-found: error
+      - name: Retain failed platform logs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: binding-runtime-failure-${{ matrix.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: target/binding-runtime-platforms
+          if-no-files-found: warn
   packaged-consumer:
     if: ${{ github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main' }}
     runs-on: macos-latest
