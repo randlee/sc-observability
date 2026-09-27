@@ -54,7 +54,7 @@ def run_consumer(stage: Path, version: str, result_path: Path, source_commit: st
             f'\n[workspace]\n\n[dependencies]\n{dependencies}\nserde_json = "1"\n\n[patch.crates-io]\n{patches}\n')
         (project / "src/main.rs").write_bytes((ROOT / "scripts/ci/fixtures/log-staged-consumer/main.rs").read_bytes())
         env = {key: value for key, value in os.environ.items() if not key.startswith("CARGO_") and key not in ("RUSTFLAGS", "RUSTDOCFLAGS", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER")}
-        env["RUSTUP_TOOLCHAIN"] = tomllib.loads((ROOT / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
+        env["RUSTUP_TOOLCHAIN"] = tomllib.loads((ROOT / "rust-toolchain.toml").read_text(encoding="utf-8"))["toolchain"]["channel"]
         env["CARGO_HOME"] = str(isolated / "cargo-home")
         env["CARGO_TARGET_DIR"] = str(isolated / "target")
         commands = []

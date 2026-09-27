@@ -192,7 +192,7 @@ def check_source_contract() -> None:
         "otlp_assembly": ROOT / "crates" / "sc-observability-otlp" / "src" / "assembly.rs",
         "otlp_runtime": ROOT / "crates" / "sc-observability-otlp" / "src" / "lib.rs",
     }
-    text = {name: path.read_text() for name, path in sources.items()}
+    text = {name: path.read_text(encoding="utf-8") for name, path in sources.items()}
 
     for legacy, typed in WRAPPERS:
         item_window(
@@ -220,7 +220,7 @@ def check_source_contract() -> None:
         ROOT / "crates" / "sc-observability" / "src" / "builder.rs",
         ROOT / "crates" / "sc-observability" / "src" / "sinks.rs",
     ):
-        source = path.read_text()
+        source = path.read_text(encoding="utf-8")
         assert_true(
             re.search(r"#!\[allow\(\s*deprecated", source, re.S) is None,
             f"{path.name} hides compatibility warnings with a whole-module allowance",
@@ -246,8 +246,8 @@ def check_source_contract() -> None:
     emit_window = "\n".join(emit_lines[max(0, emit_indices[0] - 8) : emit_indices[0]])
     assert_true('since = "1.2.0"' in emit_window, "Logger::emit existing 1.2.0 warning changed")
 
-    migrated = (FIXTURE_ROOT / "migrated" / "src" / "main.rs").read_text()
-    matrix = (FIXTURE_ROOT / "migrated" / "src" / "compatibility_matrix.rs").read_text()
+    migrated = (FIXTURE_ROOT / "migrated" / "src" / "main.rs").read_text(encoding="utf-8")
+    matrix = (FIXTURE_ROOT / "migrated" / "src" / "compatibility_matrix.rs").read_text(encoding="utf-8")
     for required in (
         "new_with_level_owner(",
         "new_with_level_owner_typed(",
@@ -280,7 +280,7 @@ def check_source_contract() -> None:
 
     skill = ROOT / ".claude" / "skills" / "sc-observability-adopting" / "references" / "migrate-error-api.md"
     assert_true(skill.exists(), "migration skill reference is missing")
-    skill_text = skill.read_text()
+    skill_text = skill.read_text(encoding="utf-8")
     assert_true(
         "ClassifiedError" in skill_text and "kind()" in skill_text,
         "skill reference lacks typed matching guidance",
@@ -381,7 +381,7 @@ def check_fixture(name: str, expected_notes: tuple[str, ...] = ()) -> list[dict]
     assert_true(result.returncode == 0, f"{name} cargo check failed:\n{result.stderr}")
     deprecated = [d for d in diagnostics if d.get("code", {}).get("code") == "deprecated"]
     assert_true(len(deprecated) == len(diagnostics), f"{name} emitted an unexpected non-deprecation warning")
-    source = (FIXTURE_ROOT / name / "src" / "main.rs").read_text()
+    source = (FIXTURE_ROOT / name / "src" / "main.rs").read_text(encoding="utf-8")
     validate_diagnostics(name, diagnostics, source, expected_notes)
     messages = "\n".join(rendered(d) for d in deprecated)
     for note in expected_notes:
@@ -399,7 +399,7 @@ def check_fixture(name: str, expected_notes: tuple[str, ...] = ()) -> list[dict]
 
 
 def check_partial_allow(source: str | None = None) -> None:
-    source = source or (FIXTURE_ROOT / "partial" / "src" / "main.rs").read_text()
+    source = source or (FIXTURE_ROOT / "partial" / "src" / "main.rs").read_text(encoding="utf-8")
     assert_true(
         re.search(r"#\[allow\(\s*deprecated\s*,\s*reason\s*=", source, re.S) is not None,
         "partial fixture lacks a reason-bearing local compatibility allow",
@@ -411,7 +411,7 @@ def check_partial_allow(source: str | None = None) -> None:
 
 
 def check_negative_controls() -> None:
-    partial_source = (FIXTURE_ROOT / "partial" / "src" / "main.rs").read_text()
+    partial_source = (FIXTURE_ROOT / "partial" / "src" / "main.rs").read_text(encoding="utf-8")
     broad = partial_source.replace(
         "#[allow(\n    deprecated,",
         "#![allow(deprecated)]\n\n#[allow(\n    deprecated,",
@@ -423,7 +423,7 @@ def check_negative_controls() -> None:
     else:
         raise AssertionError("negative broad-allow control did not trigger the real predicate")
 
-    source = (ROOT / "crates" / "sc-observability-types" / "src" / "errors.rs").read_text()
+    source = (ROOT / "crates" / "sc-observability-types" / "src" / "errors.rs").read_text(encoding="utf-8")
     identity_note = "Use sc_observability_types::typed::IdentityFailure; see migrate-error-api.md."
 
     def rejected(mutated: str, message: str) -> None:
@@ -451,7 +451,7 @@ def check_negative_controls() -> None:
     )
     rejected(misplaced, "misplaced attribute negative did not trigger")
 
-    legacy_source = (FIXTURE_ROOT / "legacy" / "src" / "main.rs").read_text()
+    legacy_source = (FIXTURE_ROOT / "legacy" / "src" / "main.rs").read_text(encoding="utf-8")
     notes = migration_notes()
     result, diagnostics = cargo_check_json("legacy")
     assert_true(result.returncode == 0, "negative-control legacy fixture could not compile")
@@ -536,7 +536,7 @@ def main() -> int:
         validate_diagnostics(
             "migrated",
             migrated_diagnostics,
-            (FIXTURE_ROOT / "migrated" / "src" / "main.rs").read_text(),
+            (FIXTURE_ROOT / "migrated" / "src" / "main.rs").read_text(encoding="utf-8"),
             (),
         )
         assert_true(
