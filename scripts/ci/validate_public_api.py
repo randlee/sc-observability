@@ -17,7 +17,7 @@ CACHE = ROOT / 'target/public-api'
 
 def approval_for(crate: str, version: str, directory: Path, api_sha256: str) -> bool:
     for path in directory.glob('*.json'):
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding='utf-8'))
         scoped = record.get('crates', {}).get(crate, {})
         if (record.get('schema_version') == 1 and record.get('candidate_version') == version
                 and scoped.get('status') == 'approved' and scoped.get('reviewer')
@@ -48,7 +48,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('mode', choices=('diff', 'semver', 'docs'))
     args = parser.parse_args()
-    policy = json.loads((ROOT / 'release/public-api-policy.json').read_text())
+    policy = json.loads((ROOT / 'release/public-api-policy.json').read_text(encoding='utf-8'))
     metadata_result = run(['cargo', 'metadata', '--locked', '--no-deps', '--format-version', '1'])
     metadata_result.check_returncode()
     metadata = json.loads(metadata_result.stdout)
@@ -59,7 +59,7 @@ def main() -> int:
         raise ValueError('API policy candidate version differs from workspace')
     CACHE.mkdir(parents=True, exist_ok=True)
     if args.mode == 'docs':
-        report = json.loads((CACHE / 'public-api-diff.json').read_text())
+        report = json.loads((CACHE / 'public-api-diff.json').read_text(encoding='utf-8'))
         head = run(['git', 'rev-parse', 'HEAD']).stdout.strip()
         if report.get('source_commit') != head or report.get('candidate_version') != policy['candidate_version']:
             raise ValueError('API diff report is stale; rerun diff at this source revision')
