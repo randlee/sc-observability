@@ -6,7 +6,7 @@ use crate::{
 use arc_swap::{ArcSwap, ArcSwapOption};
 use sc_observability::{LevelOwner, Logger, Running};
 use sc_observability_dto::{self as dto, CompletionDto, Failure, LogHealthDto, LogSnapshotDto};
-use sc_observability_types::{self as native, DiagnosticInfo};
+use sc_observability_types as native;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -91,7 +91,8 @@ impl Coordinator {
     pub(crate) fn create(
         build: impl FnOnce() -> Result<(Backend, LogHealthDto), Failure>,
     ) -> Result<Arc<Self>, Failure> {
-        let timer = crate::timer::shared()?;
+        let timer = crate::timer::shared()
+            .map_err(|error| conversion::canonical(&error, conversion::Kind::Unavailable))?;
         let dispatcher = Dispatcher::new();
         let gate = Arc::new(StartGate {
             state: Mutex::new(Start::Parked),
@@ -124,7 +125,8 @@ impl Coordinator {
                     for helper in helpers {
                         let _ = helper.join();
                     }
-                    return Err(error::start_failed(cause.to_string()));
+                    let typed = error::init_runtime(cause.to_string(), Some(Box::new(cause)));
+                    return Err(conversion::canonical(&typed, conversion::Kind::Unavailable));
                 }
             }
         }
@@ -140,7 +142,7 @@ impl Coordinator {
                 return Err(error);
             }
         };
-        let shutdown = Operation::new(&dispatcher, &timer);
+        let shutdown = Operation::new(&dispatcher, &timer, error::OperationKind::Shutdown);
         let shared = Arc::new(Self {
             backend,
             snapshot: ArcSwap::from_pointee(health),
@@ -202,7 +204,8 @@ impl Coordinator {
             Backend::Core { logger, stamp, .. } => {
                 let mut stamp = stamp.clone();
                 stamp.timestamp = native::Timestamp::now_utc();
-                let event = conversion::event(event, stamp, origin)?;
+                let event = conversion::event(event, stamp, origin)
+                    .map_err(|error| conversion::canonical(&error, conversion::Kind::Validation))?;
                 let logger = logger.load_full().ok_or_else(error::closed)?;
                 logger
                     .try_log_with_outcome_typed(event)
@@ -219,7 +222,10 @@ impl Coordinator {
                     timestamp: native::Timestamp::now_utc(),
                     identity: native::ProcessIdentity::default(),
                 };
-                let event = conversion::bridge_event(conversion::event(event, stamp, origin)?);
+                let event =
+                    conversion::bridge_event(conversion::event(event, stamp, origin).map_err(
+                        |error| conversion::canonical(&error, conversion::Kind::Validation),
+                    )?);
                 control
                     .try_log(event)
                     .map(conversion::admission)
@@ -260,7 +266,7 @@ impl Coordinator {
             ));
         }
         queue.query = true;
-        let operation = Operation::new(&self.dispatcher, &self.timer);
+        let operation = Operation::new(&self.dispatcher, &self.timer, error::OperationKind::Query);
         queue
             .items
             .push_back(Work::Query(Box::new(query), operation.clone()));
@@ -277,7 +283,7 @@ impl Coordinator {
             ));
         }
         queue.flush = true;
-        let operation = Operation::new(&self.dispatcher, &self.timer);
+        let operation = Operation::new(&self.dispatcher, &self.timer, error::OperationKind::Flush);
         queue
             .items
             .push_back(Work::Flush(timeout, operation.clone()));
@@ -347,7 +353,10 @@ impl Coordinator {
                                 .load_full()
                                 .ok_or_else(error::closed)?
                                 .flush_typed()
-                                .map_err(|error| conversion::core_flush(&error))?,
+                                .map_err(|error| {
+                                    let (typed, kind) = conversion::core_flush(error);
+                                    conversion::canonical(&typed, kind)
+                                })?,
                             Backend::Bridge(control) => {
                                 control.flush(timeout).map_err(conversion::bridge_flush)?;
                             }
@@ -415,11 +424,13 @@ impl Coordinator {
                     conversion::bridge_health(control.health().map_err(conversion::bridge_control)?)
                 }
             }))
-            .unwrap_or_else(|_| Err(error::internal("native shutdown panicked")));
+            .unwrap_or_else(|_| {
+                let error = error::shutdown_drain("native shutdown panicked");
+                Err(conversion::canonical(&error, conversion::Kind::Internal))
+            });
         let result = if self.failed.load(Ordering::SeqCst) {
-            Err(error::internal(
-                "helper failure prevents confirmed shutdown",
-            ))
+            let error = error::shutdown_drain("helper failure prevents confirmed shutdown");
+            Err(conversion::canonical(&error, conversion::Kind::Internal))
         } else {
             result
         };
@@ -468,12 +479,15 @@ impl Coordinator {
 }
 
 pub(crate) fn core(config: sc_observability::LoggerConfig) -> Result<Arc<Coordinator>, Failure> {
-    core_from_factory(|| core_parts(config))
+    core_from_factory(|| {
+        core_parts(config)
+            .map_err(|error| conversion::canonical(&error, conversion::Kind::Unavailable))
+    })
 }
 
 fn core_parts(
     mut config: sc_observability::LoggerConfig,
-) -> Result<(dto::EventStamp, Logger<Running>, LevelOwner), Failure> {
+) -> Result<(dto::EventStamp, Logger<Running>, LevelOwner), native::v2::InitError> {
     let stamp = dto::EventStamp {
         service: config.service_name.clone(),
         timestamp: native::Timestamp::now_utc(),
@@ -483,9 +497,13 @@ fn core_parts(
                 hostname: hostname.clone(),
                 pid: *pid,
             },
-            native::ProcessIdentityPolicy::Resolver(resolver) => resolver
-                .resolve()
-                .map_err(|e| conversion::context(e.diagnostic(), conversion::Kind::Unavailable))?,
+            native::ProcessIdentityPolicy::Resolver(resolver) => {
+                resolver
+                    .resolve()
+                    .map_err(|e| native::v2::InitError::Configuration {
+                        context: native::typed::IdentityFailure::from(e).into_context(),
+                    })?
+            }
         },
     };
     // Resolve once: native diagnostic events and producer events share the
@@ -494,8 +512,10 @@ fn core_parts(
         hostname: stamp.identity.hostname.clone(),
         pid: stamp.identity.pid,
     };
-    let (logger, level) = Logger::new_with_level_owner_typed(config)
-        .map_err(|e| conversion::context(e.diagnostic(), conversion::Kind::Unavailable))?;
+    let (logger, level) =
+        Logger::new_with_level_owner_typed(config).map_err(|e| native::v2::InitError::Runtime {
+            context: e.into_context(),
+        })?;
     Ok((stamp, logger, level))
 }
 

@@ -7,6 +7,17 @@ use sc_observability_dto as dto;
 use sc_observability_log as bridge;
 use sc_observability_types as native;
 
+fn remediation(value: &dto::RemediationDto) -> native::Remediation {
+    match value {
+        dto::RemediationDto::Recoverable { steps } => native::Remediation::Recoverable {
+            steps: native::RecoverableSteps::all(steps.clone()),
+        },
+        dto::RemediationDto::NotRecoverable { justification } => {
+            native::Remediation::not_recoverable(justification.clone())
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum Kind {
     Validation,
@@ -16,6 +27,14 @@ pub(crate) enum Kind {
     Io,
     Timeout,
     Internal,
+}
+pub(crate) fn diagnostic(value: &native::Diagnostic) -> Diagnostic {
+    Diagnostic {
+        at: value.timestamp.to_string(),
+        code: value.code.as_str().into(),
+        message: value.message.clone(),
+        remediation: value.remediation.clone().into(),
+    }
 }
 fn failure(diagnostic: Diagnostic, kind: Kind) -> Failure {
     if let Err(error) = dto::validate_diagnostic(&diagnostic, "response.error") {
@@ -39,15 +58,10 @@ fn failure(diagnostic: Diagnostic, kind: Kind) -> Failure {
     }
 }
 pub(crate) fn context(value: &native::Diagnostic, kind: Kind) -> Failure {
-    failure(
-        Diagnostic {
-            at: value.timestamp.to_string(),
-            code: value.code.as_str().into(),
-            message: value.message.clone(),
-            remediation: value.remediation.clone().into(),
-        },
-        kind,
-    )
+    failure(diagnostic(value), kind)
+}
+pub(crate) fn canonical<T: DiagnosticInfo>(value: &T, kind: Kind) -> Failure {
+    failure(diagnostic(value.diagnostic()), kind)
 }
 fn operation(value: native::OperationDiagnostic, kind: Kind) -> Failure {
     failure(value.into(), kind)
@@ -83,7 +97,10 @@ pub(crate) fn core_admission(value: sc_observability::TryLogFailure) -> Failure 
             } else {
                 Kind::Validation
             };
-            context(error.diagnostic(), kind)
+            let typed = native::v2::EventError::Validation {
+                context: error.into_context(),
+            };
+            canonical(&typed, kind)
         }
         E::QueueFull(error) => context(error.diagnostic(), Kind::QueueFull),
         E::WriterDegraded(error) => context(error.diagnostic(), Kind::Unavailable),
@@ -91,14 +108,14 @@ pub(crate) fn core_admission(value: sc_observability::TryLogFailure) -> Failure 
         _ => crate::error::internal("unrecognized native admission variant"),
     }
 }
-pub(crate) fn core_flush(error: &native::typed::FlushFailure) -> Failure {
+pub(crate) fn core_flush(error: native::typed::FlushFailure) -> (native::v2::FlushError, Kind) {
     use native::typed::FlushFailureKind as K;
     let kind = match error.kind() {
         K::Closed => Kind::Closed,
         K::WriterDegraded => Kind::Unavailable,
         _ => Kind::Io,
     };
-    context(error.diagnostic(), kind)
+    (crate::error::flush_drain(error.into_context()), kind)
 }
 pub(crate) fn query(error: &native::QueryError) -> Failure {
     let kind = match &error {
@@ -208,8 +225,15 @@ pub(crate) fn event(
     value: dto::LogEventDto,
     stamp: dto::EventStamp,
     origin: ProducerOrigin,
-) -> Result<native::LogEvent, Failure> {
-    let mut event = dto::to_core_event(value, stamp)?;
+) -> Result<native::LogEvent, native::v2::EventError> {
+    let mut event = dto::to_core_event(value, stamp).map_err(|error| {
+        let diagnostic = error.diagnostic();
+        crate::error::event_validation(Box::new(native::ErrorContext::new(
+            native::ErrorCode::new_owned(diagnostic.code.clone()),
+            diagnostic.message.clone(),
+            remediation(&diagnostic.remediation),
+        )))
+    })?;
     let (language, channel) = match origin {
         ProducerOrigin::TauriFrontend => ("typescript", "tauri"),
         ProducerOrigin::Python => ("python", "pyo3"),
