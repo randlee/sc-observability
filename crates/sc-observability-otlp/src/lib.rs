@@ -668,9 +668,9 @@ fn shutdown_export_failure_typed(
 mod tests {
     use super::*;
     use sc_observability_types::{
-        ActionName, Diagnostic, DurationMs, ErrorCode, Level, LogEvent, MetricKind, MetricName,
-        ProcessIdentity, ServiceName, SpanEvent, SpanId, SpanRecord, SpanStarted, StateTransition,
-        TargetCategory, Timestamp, TraceContext, TraceId,
+        ActionName, Diagnostic, DurationMs, EntityId, ErrorCode, Level, LogEvent, MetricKind,
+        MetricName, ProcessIdentity, ServiceName, SpanEvent, SpanId, SpanRecord, SpanStarted,
+        StateTransition, TargetCategory, Timestamp, TraceContext, TraceId,
     };
     use serde_json::{Map, json};
 
@@ -821,7 +821,7 @@ mod tests {
             }),
             state_transition: Some(StateTransition {
                 entity_kind: TargetCategory::new("agent").expect("valid target"),
-                entity_id: Some("agent-123".to_string()),
+                entity_id: Some(EntityId::new("agent-123").expect("valid entity id")),
                 from_state: sc_observability_types::StateName::new("idle").expect("valid state"),
                 to_state: sc_observability_types::StateName::new("running").expect("valid state"),
                 reason: None,

@@ -97,8 +97,9 @@ pub use span::{SpanEnded, SpanEvent, SpanRecord, SpanSignal, SpanStarted, SpanSt
 pub use tracing::{SpanId, StateTransition, TraceContext, TraceId};
 #[doc(inline)]
 pub use validation::{
-    ActionName, CorrelationId, EnvPrefix, MetricName, MetricUnit, OutcomeLabel, SchemaVersion,
-    ServiceName, SinkName, StateName, TargetCategory, ToolName, ValueValidationError,
+    ActionName, CorrelationId, EntityId, EnvPrefix, MetricName, MetricUnit, OutcomeLabel,
+    SchemaVersion, ServiceName, SinkName, StateName, TargetCategory, ToolName,
+    ValueValidationError,
 };
 
 /// Canonical error contracts and additive neutral signal models.
