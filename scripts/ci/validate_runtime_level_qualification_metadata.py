@@ -49,9 +49,9 @@ def validate_version_declarations(values: dict[str, str], handoff: Path, baselin
     """Reject drift in the current handoff or frozen released-baseline fixture."""
     candidate, baseline = values["candidate_version"], values["baseline_version"]
     declaration = f"Candidate version: `{candidate}` (the next minor after the current `{baseline}` release)."
-    if declaration not in handoff.read_text():
+    if declaration not in handoff.read_text(encoding="utf-8"):
         raise SystemExit("B.P2 handoff current candidate/baseline declaration disagrees with qualification metadata")
-    fixture = tomllib.loads(baseline_fixture.read_text())
+    fixture = tomllib.loads(baseline_fixture.read_text(encoding="utf-8"))
     dependencies = fixture.get("dependencies", {})
     expected = f"={baseline}"
     if (fixture.get("package", {}).get("version") != baseline
@@ -63,15 +63,15 @@ def validate_version_declarations(values: dict[str, str], handoff: Path, baselin
 def main() -> int:
     values = qualification()
     packages = release_packages()
-    workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())
+    workspace = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))
     members = tuple(workspace["workspace"]["members"])
     validate_workspace_member_roster(members, packages)
 
-    artifacts = tomllib.loads(PUBLISH_ARTIFACTS.read_text())["crates"]
+    artifacts = tomllib.loads(PUBLISH_ARTIFACTS.read_text(encoding="utf-8"))["crates"]
     if tuple(item["cargo_toml"] for item in artifacts) != tuple(f"crates/{package}/Cargo.toml" for package in packages):
         raise SystemExit("publish artifact Cargo.toml paths do not match its package roster")
 
-    workflow = (ROOT / ".github" / "workflows" / "bp2-staged-consumer.yml").read_text()
+    workflow = (ROOT / ".github" / "workflows" / "bp2-staged-consumer.yml").read_text(encoding="utf-8")
     required = "scripts/ci/_runtime_level_common.py --candidate-version"
     if workflow.count(required) != 2:
         raise SystemExit("B.P2 workflow must derive both staging and consumer versions from qualification metadata")
@@ -87,9 +87,9 @@ def main() -> int:
 
     fixtures = ROOT / "scripts" / "ci" / "fixtures" / "runtime-level-consumer"
     for fixture in (fixtures / "baseline.rs", fixtures / "candidate.rs"):
-        if not fixture.is_file() or not fixture.read_text().strip():
+        if not fixture.is_file() or not fixture.read_text(encoding="utf-8").strip():
             raise SystemExit(f"missing checked-in consumer fixture: {fixture}")
-    if "candidate_version" not in QUALIFICATION.read_text() or "baseline_version" not in QUALIFICATION.read_text():
+    if "candidate_version" not in QUALIFICATION.read_text(encoding="utf-8") or "baseline_version" not in QUALIFICATION.read_text(encoding="utf-8"):
         raise SystemExit("qualification metadata is incomplete")
     print("B.P2 qualification metadata and roster are coherent")
     return 0

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 def main():
-    evidence=json.loads((ROOT/'bindings/generation-manifest.json').read_text())
+    evidence=json.loads((ROOT/'bindings/generation-manifest.json').read_text(encoding='utf-8'))
     for path,expected in evidence['inputs'].items():
         current=(ROOT/path).read_bytes()
         if hashlib.sha256(current).hexdigest()!=expected:raise SystemExit(f'generation source/toolchain drift: {path}')

@@ -300,7 +300,7 @@ fn all_stored_event_fields_and_trusted_output_survive() {
     });
     native.state_transition = Some(core::StateTransition {
         entity_kind: core::TargetCategory::new("worker").unwrap(),
-        entity_id: Some("worker-1".into()),
+        entity_id: Some(core::EntityId::new("worker-1").unwrap()),
         from_state: core::StateName::new("idle").unwrap(),
         to_state: core::StateName::new("active").unwrap(),
         reason: Some("work".into()),
