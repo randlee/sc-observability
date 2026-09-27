@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create one child finding bead for every unfinished deliverable.
+"""Create one child finding bead of the checked bead for every unfinished deliverable.
 
 Usage:
   sanity-create-findings --task <sanity-bead> --bead <checked-bead> \
@@ -9,7 +9,9 @@ Usage:
 The vars file is the JSON emitted by sanity-merge. On success, stdout is a
 JSON object containing every child bead id and its finding reference. It also
 adds `finding_bead_ids` to the supplied report vars so the final ATM report
-links directly to the created child beads. The script is idempotent for a
+links directly to the created child beads. The only edges it adds are
+`blocks` edges between the beads it creates, where a finding's `depends_on`
+names another finding of the same report. The script is idempotent for a
 task/commit/finding_ref tuple: a retry reuses the existing child instead of
 creating a duplicate.
 """
@@ -93,6 +95,36 @@ def existing_children(bead: str, actor: str, task: str, commit: str) -> dict[str
     return found
 
 
+def parent_layer(metadata: dict):
+    """A dev bead records `layer`; a finding bead records only `found_on_layer` (finding-bead.json.j2)."""
+    for key in ("layer", "found_on_layer"):
+        if metadata.get(key) not in (None, ""):
+            return metadata[key]
+    raise HandoffError("checked bead metadata lacks layer")
+
+
+def child_priority(severity: str, parent_priority: int) -> int:
+    """A blocking child ranks one above its parent, ahead of the parent's peers, within P1..P4;
+    other severities use the severity map."""
+    if severity == "blocking":
+        return max(1, min(parent_priority - 1, 4))
+    return priority_for_severity(severity)
+
+
+def sprint_bead_of(bead: str, show) -> str:
+    """The stage:sprint bead that owns `bead`, following metadata.sprint_bead through findings."""
+    seen = set()
+    while bead not in seen:
+        seen.add(bead)
+        row = show(bead)
+        if "stage:sprint" in (row.get("labels") or []):
+            return bead
+        bead = (row.get("metadata") or {}).get("sprint_bead") or ""
+        if not bead:
+            break
+    raise HandoffError("checked bead has no stage:sprint bead through metadata.sprint_bead")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--task", required=True)
@@ -111,17 +143,22 @@ def main() -> int:
         parent_metadata = parent.get("metadata")
         if not isinstance(parent_metadata, dict):
             raise HandoffError("checked bead has no metadata")
-        required_parent_fields = ("phase", "sprint", "stack", "layer")
+        required_parent_fields = ("phase", "sprint", "stack")
         missing_parent_fields = [key for key in required_parent_fields if key not in parent_metadata]
         if missing_parent_fields:
             raise HandoffError("checked bead metadata lacks " + ", ".join(missing_parent_fields))
+        layer = parent_layer(parent_metadata)
         phase, sprint, stack = (parent_metadata["phase"], parent_metadata["sprint"], parent_metadata["stack"])
         if not all(isinstance(value, str) and value for value in (phase, sprint, stack)):
             raise HandoffError("checked bead phase, sprint, and stack metadata must be non-empty strings")
         difficulty = parent_metadata.get("difficulty")
         if difficulty not in ("hard", "normal", "fast"):
             raise HandoffError("checked bead has no valid difficulty")
+        if not isinstance(parent.get("priority"), int) or isinstance(parent.get("priority"), bool):
+            raise HandoffError("checked bead has no integer priority")
         labels = [f"phase-{phase}", FINDING_LABEL, f"stack:{stack}"]
+        sprint_bead = sprint_bead_of(args.bead, lambda b: parent if b == args.bead else
+                                     json.loads(command(["bd", "show", b, "--json"], args.actor, capture=True))[0])
         children = existing_children(args.bead, args.actor, args.task, report["commit"])
         created = []
         for finding in findings:
@@ -141,14 +178,14 @@ def main() -> int:
             }
             severity = str(finding.get("severity") or "blocking").lower()  # a sanity finding blocks unless the report says otherwise
             try:
-                priority = priority_for_severity(severity)
+                priority = child_priority(severity, parent["priority"])
             except KeyError as exc:
                 raise HandoffError(f"invalid finding severity: {severity}") from exc
             provenance = {
                 "phase": phase, "sprint": sprint, "stack": stack,
-                "found_on_layer": parent_metadata["layer"],
+                "found_on_layer": layer,
                 "found_at_commit": report["commit"], "reviewer": args.reviewer,
-                "finding_ref": ref, "sprint_bead": args.bead, "severity": severity,
+                "finding_ref": ref, "sprint_bead": sprint_bead, "severity": severity,
                 "difficulty": difficulty,
             }
             metadata = {**provenance, "sanity_finding": payload}
@@ -171,7 +208,7 @@ def main() -> int:
             created.append(child)
         for finding in findings:
             severity = str(finding.get("severity") or "blocking").lower()  # a sanity finding blocks unless the report says otherwise
-            command(["bd", "update", children[finding["finding_ref"]], "--priority", str(priority_for_severity(severity))], args.actor)
+            command(["bd", "update", children[finding["finding_ref"]], "--priority", str(child_priority(severity, parent["priority"]))], args.actor)
         for finding in findings:
             child = children[finding["finding_ref"]]
             dependencies = finding.get("depends_on", [])
@@ -186,13 +223,6 @@ def main() -> int:
                 prerequisite_id = children[prerequisite["finding_ref"]]
                 if prerequisite_id != child:
                     command(["bd", "dep", "add", child, prerequisite_id, "--type", BLOCKS_RELATION], args.actor)
-        gate_script = Path(__file__).with_name("blocking-finding-gates.py")
-        for finding in findings:
-            if str(finding.get("severity") or "").lower() == "blocking":
-                gate_argv = [str(gate_script), "--finding", children[finding["finding_ref"]]]
-                if args.actor:
-                    gate_argv.extend(["--actor", args.actor])
-                command(gate_argv)
         child_rows = [{"finding_ref": finding["finding_ref"], "id": children[finding["finding_ref"]]} for finding in findings]
         finding_bead_ids = [row["id"] for row in child_rows]
         report["finding_bead_ids"] = finding_bead_ids

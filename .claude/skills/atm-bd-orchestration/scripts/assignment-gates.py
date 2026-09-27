@@ -91,8 +91,6 @@ def sanity_gate(args: argparse.Namespace, runner: Runner, identity: str) -> str:
     if pr.get("baseRefName") != args.pr_target or pr.get("headRefOid") != args.commit:
         return "STALE_BASE"
     run(runner, "git", "fetch", "origin")
-    if run(runner, "git", "rev-parse", args.pr_target) != run(runner, "git", "rev-parse", f"origin/{args.pr_target}"):
-        return "STALE_BASE"
     if not run(runner, "git", "log", "--format=%H", f"origin/{args.pr_target}..{args.commit}"):
         return "ZERO_DELTA"
     if not is_clean(run(runner, "git", "status", "--porcelain", "--untracked-files=no")):

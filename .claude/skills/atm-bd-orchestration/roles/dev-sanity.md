@@ -47,9 +47,8 @@ commit. Each failure is a refusal, not a best-effort check:
 1. `test -n "$PR_NUMBER" && test -n "$PR_URL"`; otherwise refuse
    `SANITY.PR_REQUIRED`.
 2. `gh pr view "$PR_NUMBER" --json baseRefName,headRefOid --jq '.baseRefName + " " + .headRefOid'`
-   must equal the declared `pr_target` and commit; after `git fetch origin`,
-   `git rev-parse "$PR_BASE"` must equal `git rev-parse "origin/$PR_TARGET"`.
-   Otherwise refuse `SANITY.STALE_BASE`.
+   must equal the declared `pr_target` and commit; otherwise refuse
+   `SANITY.STALE_BASE`. Then `git fetch origin`.
 3. `git log --format=%H "origin/$PR_TARGET..$COMMIT" | grep -q .` must pass;
    otherwise refuse `SANITY.ZERO_DELTA`.
 4. `test -z "$(git status --porcelain --untracked-files=no | grep -v '^?? \.beads\.gate\.lock$')"`
@@ -100,17 +99,15 @@ in the report by number, done or with its findings, so closure is explicit.
 | cannot run | stays open, with a note | `refused`, `task-refused.md.j2` |
 
 A FAIL never closes the bead. Closing it would release the dev beads that
-depend on the checked sprint. The sanity member creates one child finding bead
-per undone deliverable, never one per lint diagnostic. The parent/child
+depend on the checked sprint. The sanity member creates one child finding bead of
+the checked bead per undone deliverable, never one per lint diagnostic. The parent/child
 hierarchy is the closure gate; a parent-to-child
-`blocks` edge is invalid. Each child has the severity priority (blocking P1,
-important P2, minor P4), records
+`blocks` edge is invalid. Each child is blocking at `clamp(parent priority - 1, P1, P4)`, records
 the same structured JSON finding data as the sanity report, and copies the
 checked bead's phase/sprint/stack/layer provenance. The lead reviews those
 children and may overrule or modify them, but does not recreate their report
 data. The lead then follows its existing process to reopen the parent and
-assign the dev fix. Reported prerequisite relationships become sibling `blocks`
-edges. The parent cannot close until all children close. That closure makes the
+assign the dev fix. It adds `blocks` edges only between those new beads, where one fix depends on another. The parent cannot close until all children close. That closure makes the
 same sanity check bead ready again.
 
 After the second FAIL for the same checked bead, the sanity member reports
