@@ -2509,6 +2509,7 @@ a more precise row below.
 | `InsecureTransportRejected` | `OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED` | `ConfigFailure` | selected backend does not implement the requested insecure verification override | disable the override or choose an explicitly supporting backend | backend only | after config correction |
 | `InvalidEndpoint` | `OTLP_CONFIG_INVALID_ENDPOINT` | `ConfigFailure` | endpoint URL syntax is invalid | provide a valid endpoint URL | field only | after config correction |
 | `InvalidHeader` | `OTLP_CONFIG_INVALID_HEADER` | `ConfigFailure` | header/auth syntax or credential placement is invalid | correct the header/auth configuration | field only | after config correction |
+| `InvalidConfig` | `OTLP_CONFIG_INVALID` | legacy `InitFailure` compatibility | generic configuration construction failed | inspect the typed configuration diagnostic | no additional data | after config correction |
 | `TransportConstructionFailed` | `OTLP_TRANSPORT_CONSTRUCTION_FAILED` | `ConfigFailure` | CA/auth/client/provider/legacy-worker initialization failed | correct the bounded typed source and reconstruct | bounded typed source; never path contents, credentials, header values, or response bodies | after config/environment correction |
 | `UnsupportedBackend` | `OTLP_UNSUPPORTED_BACKEND` | `ConfigFailure` | feature/backend unavailable | enable/select a supported backend | enum values only | after build/config correction |
 | `UnsupportedProtocol` | `OTLP_UNSUPPORTED_PROTOCOL` | `ConfigFailure` | protocol invalid for backend | select a matrix-supported protocol | enum values only | after config correction |
@@ -2524,6 +2525,9 @@ a more precise row below.
 | `NonRetryableHttpStatus` | `OTLP_HTTP_STATUS_TERMINAL` | `ExportError` | collector returned a non-retryable HTTP status | correct request/auth/config before retrying | status/category only; no body/headers | after cause correction |
 | `RetryAttemptsExhausted` | `OTLP_RETRY_ATTEMPTS_EXHAUSTED` | `ExportError` | legacy maximum attempts ended before success | restore collector health or adjust the validated policy | attempt/count only | new operation after recovery |
 | `TerminalExportFailure` | `OTLP_EXPORT_TERMINAL` | `ExportError` | SDK or legacy provider returned a terminal export failure | inspect the preserved source and collector state | bounded typed source; no credentials | source-dependent |
+| `SpanAssemblyFailed` | `OTLP_SPAN_ASSEMBLY_FAILED` | legacy `EventFailure` / `ProjectionFailure` compatibility | lifecycle signals cannot form a complete span | emit matching signals in order | identifiers only | after correcting signal order |
+| `FlushFailed` | `OTLP_FLUSH_FAILED` | legacy `FlushFailure` / `ShutdownFailure` compatibility | telemetry flush cannot complete | inspect exporter health and retry after recovery | bounded source/state | after recovery |
+| `IncompleteSpanDropped` | `OTLP_INCOMPLETE_SPAN_DROPPED` | legacy `ShutdownFailure` compatibility | shutdown drops unmatched span state | emit matching ended signals before shutdown | count only | on a new complete sequence |
 | `Shutdown` | `OTLP_TELEMETRY_SHUTDOWN` | `TelemetryError` | emit was attempted after shutdown began | construct a new telemetry instance | no dynamic data | only on a new instance |
 
 Core `error_codes.rs` owns `SC_LOG_SINK_REGISTRATION_DUPLICATE`,

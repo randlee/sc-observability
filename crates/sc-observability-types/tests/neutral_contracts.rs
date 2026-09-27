@@ -299,7 +299,7 @@ fn stable_failure_codes() {
     for code in error_codes::ALL {
         assert!(seen.insert(code.as_str()), "duplicate {code}");
     }
-    assert_eq!(error_codes::otlp::ALL.len(), 26);
+    assert_eq!(error_codes::otlp::ALL.len(), 30);
     for (capacity, byte_capacity) in [(0u64, 0u64), (65_537, 67_108_865), (u64::MAX, u64::MAX)] {
         let record = ConfigFailure::InvalidQueueCapacity {
             context: Box::new(
