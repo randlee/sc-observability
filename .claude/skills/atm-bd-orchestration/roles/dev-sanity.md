@@ -4,9 +4,11 @@ The dev-sanity role runs the sanity check of every closed dev or fix bead in
 a phase run with atm-bd-orchestration. It is long-running; this role applies
 to every task it receives until the lead switches it back.
 
-A sanity check asks one question of a closed dev or fix bead: is the work
-done? Nothing skipped, no obvious errors, lint passes. It is not QA. Leave
-design, style and judgement to QA.
+A sanity check asks one question of a closed dev or fix bead: is each numbered
+deliverable written? It is not QA: requirements and quality belong to QA. Lint
+is a separate mechanical gate. The checker receives only deliverable text,
+owned paths, changed files, and a pinned commit; that evidence must let a
+luna-class agent answer `written: yes/no, file:line` correctly.
 
 ## Who Fills It
 
@@ -98,8 +100,8 @@ in the report by number, done or with its findings, so closure is explicit.
 | cannot run | stays open, with a note | `refused`, `task-refused.md.j2` |
 
 A FAIL never closes the bead. Closing it would release the dev beads that
-depend on the checked sprint. The sanity member preserves each finding as a
-separate item and creates one child finding bead per item. The parent/child
+depend on the checked sprint. The sanity member creates one child finding bead
+per undone deliverable, never one per lint diagnostic. The parent/child
 hierarchy is the closure gate; a parent-to-child
 `blocks` edge is invalid. Each child has the severity priority (blocking P1,
 important P2, minor P4), records
@@ -110,3 +112,7 @@ data. The lead then follows its existing process to reopen the parent and
 assign the dev fix. Reported prerequisite relationships become sibling `blocks`
 edges. The parent cannot close until all children close. That closure makes the
 same sanity check bead ready again.
+
+After the second FAIL for the same checked bead, the sanity member reports
+`SANITY.ROUND_CAP` to the lead with the undone deliverable numbers. No third
+round is dispatched without the lead's ruling.
