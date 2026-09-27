@@ -12,17 +12,4 @@ constructor = "none"
 [composition]
 roots = []
 [dependencies]
-allowed_dependents = ["log-settings-example", "rust-python-logging", "sc-observability", "sc-observability-binding-runtime", "sc-observability-dto", "sc-observability-log", "sc-observability-otlp", "sc-observability-py", "sc-observe"]
-allowed_dependencies = []
-forbidden_edges = []
-[references]
-scope = "outside_owner_crate"
-forbidden = []
-[testing]
-allowed_test_double_paths = []
-forbidden_test_bypasses = []
-[enforcement]
-lint_rules = ["LINT-SC-OBSERVABILITY-TYPES-BOUNDARY"]
-review_gates = ["workspace_dependency_policy"]
-[status]
-state = "concrete_landed"
+allowed_dependents = ["log-settings-example", "rust-python-logging", "sc-observability", "sc-observability-binding-runtime", "sc-observability-dto", "sc-observability-log", "sc-observability-otlp", "sc-observability-py", "sc-observability-tauri", "sc-observe"]
