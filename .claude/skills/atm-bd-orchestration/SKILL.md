@@ -102,8 +102,9 @@ important P2, minor P4).
 
 ## Gate Beads
 
-`bd gate` is the strategic way to hold work. A gate may represent critical CI
-or integration testing (`gh:run` or `gh:pr`), a timer, or a human decision.
+`bd gate` is the strategic way to hold work. A gate holds work to prioritize
+other work, waits for critical CI or integration testing (`gh:run` or
+`gh:pr`), a timer, or a human decision.
 Create the gate and wire the work explicitly, for example:
 
 ```bash
