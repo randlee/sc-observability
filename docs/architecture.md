@@ -1288,7 +1288,7 @@ They are intentionally narrower than a full ATM migration proof:
 
 ### Phase D types staging
 
-D.12 implements the accepted ADR-017/019 types contract under
+D.12 implements the accepted ADR-017/018/019 types contract under
 `sc_observability_types::v2`. ADR-017's canonical error migration does not
 replace the published root `MetricRecord`, `TraceContext`, or `SpanRecord`.
 Their construction, trait and serialization contracts remain intact under
