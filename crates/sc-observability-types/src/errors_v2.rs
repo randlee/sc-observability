@@ -85,84 +85,72 @@ context_error!(
 pub enum ExportError {
     /// Transport failure; preserves its underlying registered diagnostic code.
     #[error(transparent)]
-    /// Diagnostic, remediation, source and construction backtrace.
     Transport {
         #[doc = "Diagnostic, remediation, source and construction backtrace."]
         context: Box<ErrorContext>,
     },
     /// Blocking backend in async context failure; see the canonical cause mapping.
     #[error(transparent)]
-    /// Diagnostic, remediation, source and construction backtrace.
     BlockingBackendInAsyncContext {
         #[doc = "Diagnostic, remediation, source and construction backtrace."]
         context: Box<ErrorContext>,
     },
     /// Async lifecycle required failure; see the canonical cause mapping.
     #[error(transparent)]
-    /// Diagnostic, remediation, source and construction backtrace.
     AsyncLifecycleRequired {
         #[doc = "Diagnostic, remediation, source and construction backtrace."]
         context: Box<ErrorContext>,
     },
     /// Runtime terminated failure; see the canonical cause mapping.
     #[error(transparent)]
-    /// Diagnostic, remediation, source and construction backtrace.
     RuntimeTerminated {
         #[doc = "Diagnostic, remediation, source and construction backtrace."]
         context: Box<ErrorContext>,
     },
     /// Lifecycle timeout failure; see the canonical cause mapping.
     #[error(transparent)]
-    /// Diagnostic, remediation, source and construction backtrace.
     LifecycleTimeout {
         #[doc = "Diagnostic, remediation, source and construction backtrace."]
         context: Box<ErrorContext>,
     },
     /// Queue full failure; see the canonical cause mapping.
     #[error(transparent)]
-    /// Diagnostic, remediation, source and construction backtrace.
     QueueFull {
         #[doc = "Diagnostic, remediation, source and construction backtrace."]
         context: Box<ErrorContext>,
     },
     /// Worker terminated failure; see the canonical cause mapping.
     #[error(transparent)]
-    /// Diagnostic, remediation, source and construction backtrace.
     WorkerTerminated {
         #[doc = "Diagnostic, remediation, source and construction backtrace."]
         context: Box<ErrorContext>,
     },
     /// Shutdown cancelled retry failure; see the canonical cause mapping.
     #[error(transparent)]
-    /// Diagnostic, remediation, source and construction backtrace.
     ShutdownCancelledRetry {
         #[doc = "Diagnostic, remediation, source and construction backtrace."]
         context: Box<ErrorContext>,
     },
     /// Retry deadline exhausted failure; see the canonical cause mapping.
     #[error(transparent)]
-    /// Diagnostic, remediation, source and construction backtrace.
     RetryDeadlineExhausted {
         #[doc = "Diagnostic, remediation, source and construction backtrace."]
         context: Box<ErrorContext>,
     },
     /// Non-retryable HTTP status failure; see the canonical cause mapping.
     #[error(transparent)]
-    /// Diagnostic, remediation, source and construction backtrace.
     NonRetryableHttpStatus {
         #[doc = "Diagnostic, remediation, source and construction backtrace."]
         context: Box<ErrorContext>,
     },
     /// Retry attempts exhausted failure; see the canonical cause mapping.
     #[error(transparent)]
-    /// Diagnostic, remediation, source and construction backtrace.
     RetryAttemptsExhausted {
         #[doc = "Diagnostic, remediation, source and construction backtrace."]
         context: Box<ErrorContext>,
     },
     /// Terminal export failure; see the canonical cause mapping.
     #[error(transparent)]
-    /// Diagnostic, remediation, source and construction backtrace.
     TerminalExportFailure {
         #[doc = "Diagnostic, remediation, source and construction backtrace."]
         context: Box<ErrorContext>,
