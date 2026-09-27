@@ -1,9 +1,5 @@
 //! Crate-local constants for `sc-observability-otlp`.
 
-/// Number of milliseconds in one second.
-pub const MILLIS_PER_SECOND: u64 = 1_000;
-/// Number of nanoseconds in one millisecond.
-pub const NANOS_PER_MILLISECOND: u64 = 1_000_000;
 /// Default OTLP request timeout in milliseconds.
 pub const DEFAULT_OTLP_TIMEOUT_MS: u64 = 3_000;
 /// Default time allowed for a backend flush barrier.

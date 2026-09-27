@@ -198,7 +198,14 @@ pub struct LegacyRetryPolicy {
 pub struct OtlpEndpoint(String);
 
 impl OtlpEndpoint {
-    /// Creates a validated OTLP endpoint using the documented HTTP(S) schemes.
+    /// Creates a validated OTLP endpoint using the documented HTTP(S) subset.
+    ///
+    /// The endpoint grammar intentionally admits `http://` or `https://` URLs
+    /// with an ASCII DNS host (letters, digits, `.` and `-`) or bracketed IPv6
+    /// literal, each with an optional numeric port and path/query/fragment.
+    /// It rejects URL userinfo, underscores, raw Unicode host names, and
+    /// unbracketed IPv6 literals. Callers requiring broader URL support must
+    /// normalize it before constructing this contract type.
     #[allow(
         deprecated,
         reason = "retained compatibility constructor keeps the published InitError signature"
@@ -946,30 +953,7 @@ fn checked_duration(value: &ResolvedField<u64>) -> Result<Duration, ConfigFailur
             value.origin,
         ));
     }
-    // `Duration::from_millis` is total for u64 inputs, but this explicit
-    // checked conversion protects the contract if the representation changes.
-    let seconds = value.value / constants::MILLIS_PER_SECOND;
-    let nanos = (value.value % constants::MILLIS_PER_SECOND)
-        .checked_mul(constants::NANOS_PER_MILLISECOND)
-        .ok_or_else(|| {
-            config_failure(
-                ConfigFailureKind::DurationOverflow,
-                error_codes::OTLP_CONFIG_DURATION_OVERFLOW,
-                "duration milliseconds overflow nanosecond conversion",
-                value.field,
-                value.origin,
-            )
-        })?;
-    let nanos = u32::try_from(nanos).map_err(|_| {
-        config_failure(
-            ConfigFailureKind::DurationOverflow,
-            error_codes::OTLP_CONFIG_DURATION_OVERFLOW,
-            "duration milliseconds overflow nanosecond conversion",
-            value.field,
-            value.origin,
-        )
-    })?;
-    Ok(Duration::new(seconds, nanos))
+    Ok(Duration::from_millis(value.value))
 }
 
 fn resolve_retry(
@@ -1048,7 +1032,6 @@ fn resolve_retry(
 #[derive(Clone, Copy)]
 enum ConfigFailureKind {
     ZeroDuration,
-    DurationOverflow,
     InvalidJitterPercent,
     InvalidQueueCapacity,
     InvalidQueueByteCapacity,
@@ -1128,7 +1111,6 @@ fn config_failure(
     );
     match kind {
         ConfigFailureKind::ZeroDuration => ConfigFailure::ZeroDuration { context },
-        ConfigFailureKind::DurationOverflow => ConfigFailure::DurationOverflow { context },
         ConfigFailureKind::InvalidJitterPercent => ConfigFailure::InvalidJitterPercent { context },
         ConfigFailureKind::InvalidQueueCapacity => ConfigFailure::InvalidQueueCapacity { context },
         ConfigFailureKind::InvalidQueueByteCapacity => {
@@ -1315,16 +1297,34 @@ mod tests {
     fn otlp_endpoint_accepts_valid_http_and_https_values() {
         let https = OtlpEndpoint::new("https://otel.example.internal").expect("valid https");
         let http = OtlpEndpoint::try_from("http://localhost:4318".to_string()).expect("valid http");
+        let ipv6 = OtlpEndpoint::new_typed("https://[::1]:4318/v1/logs?signal=logs")
+            .expect("valid bracketed IPv6 endpoint");
 
         assert_eq!(https.as_ref(), "https://otel.example.internal");
         assert_eq!(https.to_string(), "https://otel.example.internal");
         assert_eq!(http.as_str(), "http://localhost:4318");
+        assert_eq!(ipv6.as_str(), "https://[::1]:4318/v1/logs?signal=logs");
     }
 
     #[test]
     fn otlp_endpoint_rejects_empty_or_scheme_less_values() {
         assert!(OtlpEndpoint::new("").is_err());
         assert!(OtlpEndpoint::new("otel.example.internal").is_err());
+    }
+
+    #[test]
+    fn otlp_endpoint_enforces_the_documented_http_subset() {
+        for endpoint in [
+            "https://user:password@otel.example.internal",
+            "https://otel_collector.example.internal",
+            "https://münich.example.internal",
+            "https://::1:4318",
+        ] {
+            assert!(
+                OtlpEndpoint::new_typed(endpoint).is_err(),
+                "the documented subset rejects {endpoint:?}"
+            );
+        }
     }
 
     #[test]
