@@ -25,7 +25,6 @@
     "bindings/schema/v1.json": "f294e210753c28a26220e1ac385cfdd6c23f0f00a817f86104dd4aa6d5639a1b",
     "bindings/typescript/src/generated/index.ts": "b85b0eee58e1192e955c4e40300318d35922189cfd3f5b53c449a4d6bd24688c"
   },
-  "source_revision": "9947cbdf9691fe39b715c5bd55fadd044b8c9ee1",
   "toolchain": {
     "python": "3.12.10",
     "rust": "1.94.1",

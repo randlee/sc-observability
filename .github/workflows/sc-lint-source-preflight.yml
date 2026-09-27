@@ -3,6 +3,7 @@ name: sc-lint source preflight
 on:
   pull_request:
     paths:
+      - ".github/scripts/tests/**"
       - ".github/actions/setup-sc-lint/**"
       - ".github/scripts/setup_sc_lint_source.py"
       - ".github/scripts/verify_sc_lint_source_receipt.py"
@@ -24,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2022]
+        os: ${{ fromJSON((github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main') && '["ubuntu-latest","windows-2022"]' || '["ubuntu-latest"]') }}
     steps:
       - name: Check out consumer
         uses: actions/checkout@v5
