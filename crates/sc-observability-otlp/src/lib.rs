@@ -64,9 +64,11 @@ pub use config::{
 #[doc(inline)]
 pub use projectors::TelemetryProjectors;
 
-use contracts::{
-    ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, MetricExporter, TraceExporter,
-};
+use contracts::{ExporterLifecycle, LifecycleFuture, LogExporter, MetricExporter, TraceExporter};
+
+// Temporary root-facade specialization. D.18 can remove this alias when the
+// facade composition decision is made; backend adapters use the v2 defaults.
+type ExporterSet = contracts::ExporterSet<LogEvent, CompleteSpan, MetricRecord>;
 
 /// OTLP-backed telemetry runtime.
 #[expect(
@@ -152,19 +154,19 @@ struct DisabledTraceExporter;
 struct DisabledMetricExporter;
 struct DisabledLifecycle;
 
-impl LogExporter for DisabledLogExporter {
+impl LogExporter<LogEvent> for DisabledLogExporter {
     fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
-impl TraceExporter for DisabledTraceExporter {
+impl TraceExporter<CompleteSpan> for DisabledTraceExporter {
     fn export_spans(&self, _batch: &[CompleteSpan]) -> Result<(), ExportError> {
         Ok(())
     }
 }
 
-impl MetricExporter for DisabledMetricExporter {
+impl MetricExporter<MetricRecord> for DisabledMetricExporter {
     fn export_metrics(&self, _batch: &[MetricRecord]) -> Result<(), ExportError> {
         Ok(())
     }
@@ -274,9 +276,9 @@ impl Telemetry {
     )]
     fn new_with_exporters(
         config: TelemetryConfig,
-        log_exporter: Arc<dyn LogExporter>,
-        trace_exporter: Arc<dyn TraceExporter>,
-        metric_exporter: Arc<dyn MetricExporter>,
+        log_exporter: Arc<dyn LogExporter<LogEvent>>,
+        trace_exporter: Arc<dyn TraceExporter<CompleteSpan>>,
+        metric_exporter: Arc<dyn MetricExporter<MetricRecord>>,
     ) -> Result<Self, InitError> {
         Self::new_with_exporters_typed(config, log_exporter, trace_exporter, metric_exporter)
             .map_err(Into::into)
@@ -285,9 +287,9 @@ impl Telemetry {
     #[cfg(test)]
     fn new_with_exporters_typed(
         config: TelemetryConfig,
-        log_exporter: Arc<dyn LogExporter>,
-        trace_exporter: Arc<dyn TraceExporter>,
-        metric_exporter: Arc<dyn MetricExporter>,
+        log_exporter: Arc<dyn LogExporter<LogEvent>>,
+        trace_exporter: Arc<dyn TraceExporter<CompleteSpan>>,
+        metric_exporter: Arc<dyn MetricExporter<MetricRecord>>,
     ) -> Result<Self, InitFailure> {
         Self::new_with_exporter_set_typed(
             config,
@@ -773,7 +775,7 @@ mod tests {
         fail: AtomicBool,
     }
 
-    impl LogExporter for RecordingLogExporter {
+    impl LogExporter<LogEvent> for RecordingLogExporter {
         fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError> {
             self.calls.lock().expect("calls poisoned").push(batch.len());
             if self.fail.load(Ordering::SeqCst) {
@@ -796,7 +798,7 @@ mod tests {
         fail: AtomicBool,
     }
 
-    impl TraceExporter for RecordingTraceExporter {
+    impl TraceExporter<CompleteSpan> for RecordingTraceExporter {
         fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError> {
             self.calls.lock().expect("calls poisoned").push(batch.len());
             if self.fail.load(Ordering::SeqCst) {
@@ -819,7 +821,7 @@ mod tests {
         fail: AtomicBool,
     }
 
-    impl MetricExporter for RecordingMetricExporter {
+    impl MetricExporter<MetricRecord> for RecordingMetricExporter {
         fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError> {
             self.calls.lock().expect("calls poisoned").push(batch.len());
             if self.fail.load(Ordering::SeqCst) {
@@ -838,7 +840,7 @@ mod tests {
 
     struct SourcePreservingLogExporter;
 
-    impl LogExporter for SourcePreservingLogExporter {
+    impl LogExporter<LogEvent> for SourcePreservingLogExporter {
         fn export_logs(&self, _batch: &[LogEvent]) -> Result<(), ExportError> {
             Err(ExportError::Transport {
                 context: Box::new(

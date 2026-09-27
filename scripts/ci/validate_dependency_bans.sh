@@ -124,18 +124,11 @@ required_otlp = {
     "thiserror",
     "sc-observability-types",
 }
-# ADR-019's single Phase-D transport allowlist. The OTLP manifest keeps every
-# transport entry optional and binds it to one of its two backend features.
-allowed_otlp = required_otlp | {
-    "sc-observability",
-    "opentelemetry",
-    "opentelemetry_sdk",
-    "opentelemetry-otlp",
-    "reqwest",
-    "httpdate",
-    "getrandom",
-    "tokio",
-}
+# ADR-019's machine allowlist is owned by the OTLP boundary record.
+sys.path.insert(0, str(root / "scripts/ci"))
+from otlp_dependencies import validate_transport_dependencies
+transport_names = validate_transport_dependencies(root)
+allowed_otlp = required_otlp | {"sc-observability"} | transport_names
 if not required_otlp.issubset(otlp_runtime_deps) or not otlp_runtime_deps.issubset(allowed_otlp):
     raise SystemExit(
         "sc-observability-otlp runtime dependency set drifted from allowed baseline: "
@@ -266,3 +259,5 @@ print("dependency ban validation passed")
 PY
 
 python3 scripts/ci/validate_binding_runtime_dependencies.py
+
+python3 -m unittest scripts.ci.tests.test_otlp_dependencies
