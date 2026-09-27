@@ -136,11 +136,11 @@ impl MetricProjector<String> for LegacyAdapters {
 struct TypedSink;
 
 impl TypedLogSink for TypedSink {
-    fn write(&self, _event: &LogEvent) -> Result<(), sc_observability_types::typed::LogSinkFailure> {
+    fn write(&self, _event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
         Ok(())
     }
 
-    fn flush(&self) -> Result<(), sc_observability_types::typed::LogSinkFailure> {
+    fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
         Ok(())
     }
 
@@ -156,11 +156,11 @@ impl TypedLogSink for TypedSink {
 struct LegacySink;
 
 impl LogSink for LegacySink {
-    fn write(&self, _event: &LogEvent) -> Result<(), sc_observability_types::LogSinkError> {
+    fn write(&self, _event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
         Ok(())
     }
 
-    fn flush(&self) -> Result<(), sc_observability_types::LogSinkError> {
+    fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
         Ok(())
     }
 

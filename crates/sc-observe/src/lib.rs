@@ -778,11 +778,11 @@ mod tests {
         TypedObservationSubscriber, legacy_subscriber,
     };
     use sc_observability_types::{
-        ActionName, Diagnostic, ErrorCode, Level, LogEvent, LogSinkError, MetricKind, MetricName,
-        MetricRecord, MetricUnit, ObservationFilter, ObservationSubscriber, ProcessIdentity,
-        ProjectionError, SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted,
-        SubscriberError, TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp,
-        TraceContext, TraceId,
+        ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricRecord,
+        MetricUnit, ObservationFilter, ObservationSubscriber, ProcessIdentity, ProjectionError,
+        SpanId, SpanProjector, SpanRecord, SpanSignal, SpanStarted, SubscriberError,
+        TargetCategory, TelemetryHealthReport, TelemetryHealthState, Timestamp, TraceContext,
+        TraceId,
     };
     use serde_json::Map;
     use std::sync::mpsc;
@@ -1345,10 +1345,10 @@ mod tests {
         release: Mutex<mpsc::Receiver<()>>,
     }
     impl LogSink for BlockingFlushSink {
-        fn write(&self, _: &LogEvent) -> Result<(), LogSinkError> {
+        fn write(&self, _: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError> {
             Ok(())
         }
-        fn flush(&self) -> Result<(), LogSinkError> {
+        fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
             if self.armed.swap(false, Ordering::SeqCst) {
                 let _ = self.entered.send(());
                 let _ = self
@@ -1362,11 +1362,13 @@ mod tests {
             if self.flush_calls.fetch_add(1, Ordering::SeqCst) == 0 {
                 let _ = self.seed_completed.send(());
             }
-            Err(LogSinkError(Box::new(ErrorContext::new(
-                sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                "controlled flush failure",
-                Remediation::not_recoverable("test fixture"),
-            ))))
+            Err(sc_observability_types::v2::LogSinkError::Flush {
+                context: Box::new(ErrorContext::new(
+                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                    "controlled flush failure",
+                    Remediation::not_recoverable("test fixture"),
+                )),
+            })
         }
         fn health(&self) -> SinkHealth {
             SinkHealth {
@@ -1654,17 +1656,22 @@ mod tests {
         }
 
         impl LogSink for FlushFailSink {
-            fn write(&self, _event: &LogEvent) -> Result<(), LogSinkError> {
+            fn write(
+                &self,
+                _event: &LogEvent,
+            ) -> Result<(), sc_observability_types::v2::LogSinkError> {
                 Ok(())
             }
 
-            fn flush(&self) -> Result<(), LogSinkError> {
+            fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
                 let call = self.flush_calls.fetch_add(1, Ordering::SeqCst);
-                let result = Err(LogSinkError(Box::new(ErrorContext::new(
-                    sc_observability::error_codes::LOGGER_FLUSH_FAILED,
-                    "flush failed",
-                    Remediation::not_recoverable("test sink intentionally fails flush"),
-                ))));
+                let result = Err(sc_observability_types::v2::LogSinkError::Flush {
+                    context: Box::new(ErrorContext::new(
+                        sc_observability::error_codes::LOGGER_FLUSH_FAILED,
+                        "flush failed",
+                        Remediation::not_recoverable("test sink intentionally fails flush"),
+                    )),
+                });
                 if call == 0 {
                     let _ = self.flush_completed.send(());
                 }

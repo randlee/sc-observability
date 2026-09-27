@@ -211,7 +211,10 @@ struct TestBlockingSink {
     reason = "the test-only sink implements the published compatibility trait signature"
 )]
 impl sc_observability::LogSink for TestBlockingSink {
-    fn write(&self, _: &sc_observability::LogEvent) -> Result<(), sc_observability::LogSinkError> {
+    fn write(
+        &self,
+        _: &sc_observability::LogEvent,
+    ) -> Result<(), sc_observability_types::v2::LogSinkError> {
         let mut state = self
             .gate
             .state
