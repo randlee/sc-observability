@@ -38,6 +38,98 @@ fn contract_tests_validation_order() {
 }
 
 #[test]
+fn contract_tests_every_legacy_duration_precedes_later_validation_bullets() {
+    let cases = [
+        (
+            "InitialBackoff",
+            LegacyRetryPolicy {
+                initial_backoff_ms: Some(0_u64.into()),
+                ..LegacyRetryPolicy::default()
+            },
+        ),
+        (
+            "MaxBackoff",
+            LegacyRetryPolicy {
+                max_backoff_ms: Some(0_u64.into()),
+                ..LegacyRetryPolicy::default()
+            },
+        ),
+        (
+            "RetrySequenceTimeout",
+            LegacyRetryPolicy {
+                retry_sequence_timeout_ms: Some(0_u64.into()),
+                ..LegacyRetryPolicy::default()
+            },
+        ),
+        (
+            "RetryAfterCap",
+            LegacyRetryPolicy {
+                retry_after_cap_ms: Some(0_u64.into()),
+                ..LegacyRetryPolicy::default()
+            },
+        ),
+    ];
+
+    for (field, legacy_retry) in cases {
+        for (later_failure, config) in [
+            (
+                "capacity",
+                OtelConfig {
+                    legacy_retry: Some(legacy_retry.clone()),
+                    queue_capacity: Some(0),
+                    ..legacy_config()
+                },
+            ),
+            (
+                "protocol availability",
+                OtelConfig {
+                    legacy_retry: Some(legacy_retry.clone()),
+                    protocol: OtlpProtocol::Grpc,
+                    ..legacy_config()
+                },
+            ),
+            (
+                "insecure transport",
+                OtelConfig {
+                    legacy_retry: Some(legacy_retry),
+                    insecure_skip_verify: true,
+                    ..legacy_config()
+                },
+            ),
+        ] {
+            let error = validated_transport_bounds(&config)
+                .expect_err("a zero legacy duration must be rejected first");
+            assert!(
+                matches!(error, ConfigFailure::ZeroDuration { .. }),
+                "{field} must precede {later_failure}; got {error:?}"
+            );
+            assert_eq!(
+                error.diagnostic().details["field"].as_str(),
+                Some(field),
+                "{field} must precede {later_failure}"
+            );
+        }
+    }
+}
+
+#[test]
+#[allow(deprecated)]
+fn contract_tests_retained_legacy_duration_precedes_capacity() {
+    let error = validated_transport_bounds(&OtelConfig {
+        initial_backoff_ms: 0_u64.into(),
+        queue_capacity: Some(0),
+        ..legacy_config()
+    })
+    .expect_err("the retained initial backoff field must keep wire ordering");
+
+    assert!(matches!(error, ConfigFailure::ZeroDuration { .. }));
+    assert_eq!(
+        error.diagnostic().details["field"].as_str(),
+        Some("InitialBackoff")
+    );
+}
+
+#[test]
 fn contract_tests_resolved_defaults() {
     let bounds = validated_transport_bounds(&legacy_config()).expect("default legacy bounds");
     assert_eq!(bounds.queue_capacity, 1_024);
