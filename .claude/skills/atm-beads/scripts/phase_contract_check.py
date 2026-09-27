@@ -330,16 +330,17 @@ class PhaseCheck:
         san = self.sanity_of(sprint)
         return [d for d in self.devs() if d != sprint and d in self.by and san and san in self.blocker_closure(d)]
 
-    def downstream_targets(self, sprint: str) -> list[str]:
-        """Not-started downstream dev beads plus open, unclaimed findings/fixes on those sprints."""
+    def downstream_targets(self, sprint: str, exclude: set[str] = frozenset()) -> list[str]:
+        """Not-started downstream dev beads plus open, unclaimed findings/fixes on those sprints, minus `exclude`
+        (the gate's own blocker closure: a gate cannot block what it waits on)."""
         out = []
-        downstream = self.downstream_devs(sprint)
+        downstream = [d for d in self.downstream_devs(sprint) if d not in exclude]
         for d in downstream:
             if self.by[d].get("status") == "open":
                 out.append(d)
         for bid, b in self.by.items():
             if bid in self.phase_ids and stage(b) in (C.FINDING_LABEL, C.FIX_LABEL) and b.get("status") == "open" \
-                    and not b.get("assignee") and self.sprint_of(bid) in downstream:
+                    and not b.get("assignee") and bid not in exclude and self.sprint_of(bid) in downstream:
                 out.append(bid)
         return out
 
@@ -591,7 +592,7 @@ class PhaseCheck:
                 continue
             if fid not in deps(self.by.get(fsan, {}), "blocks"):
                 self.problem(fsan, f"sanity gate of blocking finding {fid} does not block on it, so it is ready before the fix lands (bd dep add {fsan} {fid})")
-            for target in self.downstream_targets(sprint):
+            for target in self.downstream_targets(sprint, self.blocker_closure(fid) | self.blocker_closure(fsan)):
                 if fsan not in deps(self.by[target], "blocks"):
                     self.problem(target, f"not blocked by blocking finding {fid}'s sanity bead {fsan} (bd dep add {target} {fsan})")
             for d in self.downstream_devs(sprint):

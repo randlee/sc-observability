@@ -113,6 +113,46 @@
         "bead": "obs-d-6",
         "check": "started_before_blocker",
         "reason": "started 2026-09-26 19:31Z on the pre-contract ready rule; obs-d-21-sanity passed 19:41Z"
+      },
+      {
+        "bead": "obs-d-1",
+        "check": "started_before_blocker",
+        "reason": "started 2026-09-26 under the pre-contract dispatch; history"
+      },
+      {
+        "bead": "obs-d-2",
+        "check": "started_before_blocker",
+        "reason": "started 2026-09-26 under the pre-contract dispatch; history"
+      },
+      {
+        "bead": "obs-d-3",
+        "check": "started_before_blocker",
+        "reason": "started 2026-09-26 under the pre-contract dispatch; history"
+      },
+      {
+        "bead": "obs-d-10",
+        "check": "started_before_blocker",
+        "reason": "started 2026-09-26 under the pre-contract dispatch; history"
+      },
+      {
+        "bead": "obs-d-13",
+        "check": "started_before_blocker",
+        "reason": "started 2026-09-26 under the pre-contract dispatch; history"
+      },
+      {
+        "bead": "obs-d-15",
+        "check": "started_before_blocker",
+        "reason": "started 2026-09-26 under the pre-contract dispatch; history"
+      },
+      {
+        "bead": "obs-d-19",
+        "check": "started_before_blocker",
+        "reason": "started 2026-09-26 under the pre-contract dispatch; history"
+      },
+      {
+        "bead": "obs-d-20",
+        "check": "started_before_blocker",
+        "reason": "started 2026-09-26 under the pre-contract dispatch; history"
       }
     ]
   }
