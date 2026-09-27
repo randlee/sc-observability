@@ -6,5 +6,7 @@
   "worktree_path": "/Users/randlee/github/sc-observability-worktrees/sprint/d-4-otlp-sync-exporter",
   "branch": "sprint/d-4-otlp-sync-exporter",
   "lead": "obs-lead",
-  "cc": ""
+  "cc": "",
+  "primary_checkout": "/Users/randlee/github/sc-observability",
+  "phase_root": "obs-phase-d"
 }

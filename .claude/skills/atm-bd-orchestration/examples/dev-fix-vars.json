@@ -8,5 +8,7 @@
   "pr_target": "integrate/phase-d",
   "findings": "- crates/sc-observability-otlp/src/sync.rs:88 retry policy deliverable D.4-2 is not implemented (todo!())\n- `just lint`: clippy::needless_return at crates/sc-observability-otlp/src/sync.rs:141",
   "lead": "obs-lead",
-  "cc": ""
+  "cc": "",
+  "primary_checkout": "/Users/randlee/github/sc-observability",
+  "phase_root": "obs-phase-d"
 }
