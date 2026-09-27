@@ -462,6 +462,24 @@ first and then `queue_byte_capacity`, returning `InvalidQueueCapacity` or
 
 This contract releases obs-d-5–8 after obs-d-21-sanity; obs-d-18 additionally waits on that gate. Final production transports, collector equivalence and release approvals remain their named downstream gates. The root workspace invariant applies.
 
+## Amendment (2026-09-27): shared OTLP types crate
+
+Maintainer ruling (plan decision 10). obs-d-22 applies this amendment to the D.21-owned files it names; D.21's existing entries are unchanged.
+
+1. Register `crates/sc-observability-otlp-types` as a workspace member with boundary manifest `boundaries/sc-observability-otlp-types/otlp-types.toml`. Only `sc-observability-otlp` depends on it.
+2. Add to the `[transport.*]` scheme of `policy/otlp-transport.toml`:
+
+| Entry | Version | Backends | Default features | Features |
+| --- | --- | --- | --- | --- |
+| `opentelemetry-proto` | `=0.33.0` | `otlp-sdk`, `legacy-http-json` | off | `gen-tonic-messages`, `logs`, `trace`, `metrics`, `with-serde`; `otlp-sdk` adds `gen-tonic` |
+| `prost` | `=0.14.4` | `otlp-sdk`, `legacy-http-json` | on | none |
+| `tonic` | `=0.14.6` | `otlp-sdk` | off | `channel`, `tls-ring`, `tls-webpki-roots` |
+| `reqwest-sdk` (`package = "reqwest"`) | `=0.13.5` | `otlp-sdk` | off | `rustls` |
+
+3. Request-client contract: obs-d-7 sends gRPC through the `opentelemetry-proto` generated tonic clients over a `tonic` channel, and HTTP/protobuf through the async `reqwest-sdk` client (the reqwest/Rustls version the SDK path already resolves), both on the caller's Tokio runtime. obs-d-8 sends OTLP/JSON through the existing blocking `reqwest =0.12.28` entry. The renamed key keeps the two reqwest versions distinct.
+4. `sc-observability-otlp` depends on `sc-observability-otlp-types` unconditionally; `otlp-sdk` adds `tonic`, `reqwest-sdk`, `prost` and `opentelemetry-proto/gen-tonic`. The legacy-only graph then contains `opentelemetry-proto`, `prost`, and `opentelemetry`/`opentelemetry_sdk` with default features off, and still excludes `tonic`, `opentelemetry-otlp` and `rt-tokio`.
+5. Both backends instantiate `ExporterSet<L, S, M>` with the obs-d-22 resource-group types; the exporter trait signatures are unchanged.
+
 ## Acceptance criteria
 
 - [ ] #1: cargo test -p sc-observability-otlp --lib contract_tests --all-features --locked runs nonzero validation_order, resolved_defaults, stable_failure_codes, record_and_byte_capacity and fake_exporter_contract cases; byte/record zero/overflow/upper bounds use the distinct types-owned variants/codes.

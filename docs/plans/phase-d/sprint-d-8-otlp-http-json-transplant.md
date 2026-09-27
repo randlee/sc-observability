@@ -5,7 +5,7 @@ Generated projection of `obs-d-8`; the bead is authoritative.
 ## Plan metadata
 
 - Wave: 2
-- Layer: 12
+- Layer: 13
 - Assignee / model: lobs / luna
 - Relation: `must_follow`
 - Closure: `boundary`
@@ -13,7 +13,7 @@ Generated projection of `obs-d-8`; the bead is authoritative.
 - Branch: `sprint/d-8-otlp-http-json-transplant`
 - Worktree: `/Users/randlee/github/sc-observability-worktrees/sprint/d-8-otlp-http-json-transplant`
 - PR target (merge order only): `sprint/d-7-otlp-sdk-tokio`
-- Blocked by: `obs-d-21-sanity`
+- Blocked by: `obs-d-21-sanity`, `obs-d-22-sanity`
 - Requirements: LAY-005, NFR-004, NFR-007, OTLP-012, OTLP-013, OTLP-021, OTLP-023, PHD-003, PHD-004
 - ADRs: ADR-004, ADR-005, ADR-014, ADR-017, ADR-018, ADR-019
 - Owned paths (metadata projection):
@@ -24,7 +24,7 @@ Generated projection of `obs-d-8`; the bead is authoritative.
 
 ## Goal
 
-Transplant the immutable 7b39f4e7f72b6845edec4eab4cd671611661445f HTTP/JSON exporter into the legacy adapter boundary, parallel with D.7. A plain owned worker exclusively constructs/uses/drops reqwest; no caller runtime is required.
+Transplant the immutable 7b39f4e7f72b6845edec4eab4cd671611661445f HTTP/JSON exporter into the legacy adapter boundary, parallel with D.7, sending the shared obs-d-22 OTLP requests as OTLP/JSON instead of its own JSON model. A plain owned worker exclusively constructs/uses/drops reqwest; no caller runtime is required.
 
 ## Deliverables
 
@@ -32,17 +32,17 @@ Transplant the immutable 7b39f4e7f72b6845edec4eab4cd671611661445f HTTP/JSON expo
 
 2. Preserve copied HTTP/client behavior and document only the four authorized safety deltas in module docs and tests: retry classification, bounded server pacing/jitter, shutdown cancellation and overall retry deadline. No additional provenance matrix or JSON is required.
 
-3. Adapt neutral D.12 signals and D.21 configuration/crate-private exporter interfaces without adding error variants or changing the single failure mapping.
+3. Serialize obs-d-22 `OtlpLogs`/`OtlpSpans`/`OtlpMetrics` batches as OTLP/JSON over the blocking client, taking them by value or by reference and encoding them straight to the wire with no intermediate model, per-record conversion or clone; a clone forced by a signature is named and justified in module docs. Before relying on it, verify that `opentelemetry-proto`'s serde output follows the OTLP/JSON encoding (hex trace/span ids, 64-bit integers as strings); otherwise add a thin JSON layer in `implementation.rs`. Consume D.21 configuration/crate-private exporter interfaces without adding error variants or changing the single failure mapping.
 
 4. Implement bounded record/byte admission, capacity-one control saturation behavior, ordered barrier completion, worker panic/exit propagation, finite construction handshake and drop-without-shutdown accounting as specified below.
 
 5. Add plain-thread, entered-Tokio rejection, async responsiveness, request/backoff cancellation, retry bounds and response-loss accounting tests; add examples/otlp-legacy source using the D.21 contract fixture.
 
-6. Run existing dependency/boundary validation and prove the legacy-only build excludes the official SDK/tonic while acknowledging reqwest's internal Tokio graph; consume D.21's pins unchanged.
+6. Run existing dependency/boundary validation and prove the legacy-only build excludes tonic, `opentelemetry-otlp` and the SDK runtime while acknowledging reqwest's internal Tokio graph and `opentelemetry-proto`'s default-features-off `opentelemetry`/`opentelemetry_sdk` dependencies (D.21 amendment 2026-09-27); consume D.21's pins unchanged.
 
 ## This Sprint Does Not Close
 
-No SDK implementation, normative/manifest/registry edit, additional validator framework, Python binding implementation or publication. D.18 composes real backends; D.9 owns collector/dashboard qualification.
+No SDK implementation, OTLP data model or neutral→proto projection (D.22), normative/manifest/registry edit, additional validator framework, Python binding implementation or publication. D.18 composes real backends; D.9 owns collector/dashboard qualification.
 
 ## Design
 
@@ -61,9 +61,9 @@ pub(crate) struct OtlpHttpExporter {
 }
 
 impl OtlpHttpExporter {
-    fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError>;
-    fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError>;
-    fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError>;
+    fn export_logs(&self, batch: &[OtlpLogs]) -> Result<(), ExportError>;
+    fn export_spans(&self, batch: &[OtlpSpans]) -> Result<(), ExportError>;
+    fn export_metrics(&self, batch: &[OtlpMetrics]) -> Result<(), ExportError>;
 }
 
 // Private worker-thread-owned value; never crosses to a caller thread.
@@ -88,9 +88,10 @@ are authorized deltas—not claims about the legacy implementation:
 | `thread::sleep` cannot be interrupted | use worker-owned cancelable wait woken by shutdown | `changed: shutdown cancellation` |
 | per-request timeout but no overall bound | add finite sequence deadline covering attempts and waits | `changed: retry deadline` |
 
-The no-redesign rule applies to payload encoding, endpoints, client/auth/CA
+The no-redesign rule applies to endpoints, client/auth/CA
 construction, request execution, maximum attempts, and the exponential/cap
-algorithm. It explicitly carves out only the four safety deltas above. The
+algorithm. It explicitly carves out only the four safety deltas above and
+the payload, which is obs-d-22's OTLP/JSON (plan decision 10). The
 existing immutable provenance manifest must name each delta and preserve copied tests
 alongside new delta-specific fixtures.
 
@@ -112,8 +113,8 @@ Consume the legacy-http-json dependency/version/feature allowlist from obs-d-21 
 
 Each transplanted exporter implements the same crate-private `LogExporter`,
 `TraceExporter`, or `MetricExporter` trait used by D.21, and its backend state
-implements the separate common `ExporterLifecycle`. Signal methods clone and
-enqueue owned batches; the worker executes the copied blocking request/retry
+implements the separate common `ExporterLifecycle`. Signal methods encode the
+borrowed batch to OTLP/JSON bytes and enqueue the bytes, cloning no record; the worker executes the copied blocking request/retry
 code outside telemetry locks. `flush_blocking`/`shutdown_blocking` wait for the
 ordered barrier's real terminal result on plain callers; async lifecycle awaits
 the same result. Backend choice remains construction/injection; no legacy
@@ -190,6 +191,10 @@ OTLP-023 still requires the existing immutable docs/plans/phase-d/legacy-otlp-pr
 
 The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
+## Handoff from obs-d-22 (wave 2)
+
+Consume `sc-observability-otlp-types` read-only after obs-d-22-sanity; D.8 adds no second projection.
+
 ## Handoff from obs-d-21 (wave 1)
 
 Created by obs-d-21, owned here from wave 2. Consume its completed sanity-gated artifact; preserve the contract while implementing or retiring staged compatibility. This serial handoff is why relation is must_follow; no same-wave sibling shares these paths.
@@ -207,9 +212,9 @@ legacy-worker behavior.
 
 - [ ] Deliverable 1: source-pin/disposition tests externally prove every relevant legacy implementation symbol and copied transport/endpoint/auth/CA/payload test is retained from the immutable provenance source.
 - [ ] Deliverable 2: loopback tests externally verify the retained request behavior and exactly the four authorized deltas: retry classification, bounded Retry-After/jitter, shutdown cancellation, and sequence deadline.
-- [ ] Deliverable 3: `cargo test -p sc-observability-otlp --features legacy-http-json --locked` proves D.12 neutral payload/typed results and D.21 config consumption without new error mappings or inline retry constants.
+- [ ] Deliverable 3: `cargo test -p sc-observability-otlp --features legacy-http-json --locked` proves obs-d-22 OTLP/JSON payloads with no record clone, the serde encoding check, typed results and D.21 config consumption without new error mappings or inline retry constants.
 - [ ] Deliverable 4: external saturation tests prove nonblocking record/byte admission, capacity-one control progress, ordered barrier completion, bounded construction, and exact-once worker exit/drop accounting through D.6’s lifecycle core.
 - [ ] Deliverable 5: external fixtures prove plain-thread operation, entered-Tokio rejection, async responsiveness, cancellation, bounded Retry-After parsing, and response-loss accounting.
-- [ ] Deliverable 6: existing dependency/boundary validation proves the legacy-only build excludes the official SDK/tonic and consumes the D.21 allowlist unchanged.
+- [ ] Deliverable 6: existing dependency/boundary validation proves the legacy-only build excludes tonic, `opentelemetry-otlp` and the SDK runtime and consumes the D.21 allowlist unchanged.
 - [ ] This sprint does not close production composition or collector equivalence; D.18 and D.9 own those outcomes.
 - [ ] RSH-005: a deterministic slow-initializer fixture delays legacy worker construction and proves the finite construction handshake returns the specified typed failure or publishes a ready handle; it never waits on scheduler speed.

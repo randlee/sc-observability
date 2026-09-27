@@ -4,7 +4,7 @@ Generated projection of `obs-phase-d`; beads are authoritative.
 
 ## Phase D — logging, OTLP, and Python distribution
 
-The plan has twenty dev sprints. obs-d-12 is the types root; obs-d-21 consumes it as the OTLP contract stage. Types-only consumers release after obs-d-12-sanity, while obs-d-5–8 release after obs-d-21-sanity. obs-d-11 remains folded into obs-d-10. Beads are authoritative; documents project them. Concrete artifact gates determine execution; layer/pr_target records merge order only. One append-only phase stack targets integrate/phase-d.
+The plan has twenty-one dev sprints. obs-d-12 is the types root; obs-d-21 consumes it as the OTLP contract stage. Types-only consumers release after obs-d-12-sanity, while obs-d-5–8 and obs-d-22 release after obs-d-21-sanity; obs-d-7/8 also wait on obs-d-22-sanity. obs-d-11 remains folded into obs-d-10. Beads are authoritative; documents project them. Concrete artifact gates determine execution; layer/pr_target records merge order only. One append-only phase stack targets integrate/phase-d.
 
 ## Sprint and wave table
 
@@ -20,16 +20,17 @@ The plan has twenty dev sprints. obs-d-12 is the types root; obs-d-21 consumes i
 | 2 | obs-d-4 | lobs/luna | parallel_safe | 8 | sc-observability error migration |
 | 2 | obs-d-5 | cobs/terra | must_follow | 9 | OTLP signal projectors |
 | 2 | obs-d-6 | lobs/luna | must_follow | 10 | OTLP lifecycle module |
-| 2 | obs-d-7 | cobs/terra | must_follow | 11 | OTLP SDK adapter module |
-| 2 | obs-d-8 | lobs/luna | must_follow | 12 | OTLP HTTP JSON module |
-| 2 | obs-d-14 | cobs/terra | parallel_safe | 13 | sc-observe |
-| 2 | obs-d-15 | lobs/luna | parallel_safe | 14 | sc-observability-binding-runtime |
-| 2 | obs-d-16 | cobs/terra | parallel_safe | 15 | sc-observability-log error migration |
-| 2 | obs-d-17 | lobs/luna | parallel_safe | 16 | log consumer migration |
-| 2 | obs-d-19 | cobs2/terra | must_follow | 17 | neutral DTO/schema and generated models |
-| 2 | obs-d-20 | lobs2/luna | must_follow | 18 | Python and TypeScript/Tauri adapters |
-| 3 | obs-d-18 | cobs/terra | must_follow | 19 | phase integration |
-| 4 | obs-d-9 | cobs/terra | must_follow | 20 | OTLP dual-path qualification |
+| 2 | obs-d-22 | cobs/terra | must_follow | 11 | sc-observability-otlp-types shared OTLP wire model |
+| 2 | obs-d-7 | cobs/terra | must_follow | 12 | OTLP SDK adapter module |
+| 2 | obs-d-8 | lobs/luna | must_follow | 13 | OTLP HTTP JSON module |
+| 2 | obs-d-14 | cobs/terra | parallel_safe | 14 | sc-observe |
+| 2 | obs-d-15 | lobs/luna | parallel_safe | 15 | sc-observability-binding-runtime |
+| 2 | obs-d-16 | cobs/terra | parallel_safe | 16 | sc-observability-log error migration |
+| 2 | obs-d-17 | lobs/luna | parallel_safe | 17 | log consumer migration |
+| 2 | obs-d-19 | cobs2/terra | must_follow | 18 | neutral DTO/schema and generated models |
+| 2 | obs-d-20 | lobs2/luna | must_follow | 19 | Python and TypeScript/Tauri adapters |
+| 3 | obs-d-18 | cobs/terra | must_follow | 20 | phase integration |
+| 4 | obs-d-9 | cobs/terra | must_follow | 21 | OTLP dual-path qualification |
 
 ## Boundary map and execution graph
 
@@ -48,6 +49,7 @@ obs-d-12 freezes canonical errors/signals and wire projection specifications; ob
 
 8. Scoped split authorized by the user; no plan-review round is restarted. Lead ruling 01M3E7Z46AA9DNNMC73BDE37JG assigns obs-d-12 to aobs and obs-d-21 to lobs. Numbered wave 1 contains independent roots obs-d-12/13/10 plus obs-d-21 as a second contract stage following obs-d-12-sanity. Only the four OTLP implementation consumers (obs-d-5–8) move from types sanity to OTLP sanity; obs-d-18 explicitly waits on obs-d-21-sanity too. Layers 1..20 are unique; layer2 targets the types branch, layer3 targets the OTLP-contract branch.
 9. Version-line exception: the types manifest fence stays with obs-d-12, which stages the v2 API at the current Cargo version. A handoff in both designs permits obs-d-21 to edit only the types manifest version literal during the atomic workspace bump. This explicit exception is serialized by obs-d-12-sanity and does not duplicate path fences. Shared normative documents remain read-only to obs-d-21.
+10. **Shared OTLP wire model: maintainer ruling 2026-09-27**. Both OTLP backends use one wire data model in the new workspace crate `sc-observability-otlp-types` (obs-d-22), so moving a consumer from the legacy backend to the Tokio backend changes only the transport. The pinned `opentelemetry_sdk` 0.33 cannot carry pre-built records: `ResourceMetrics` construction is crate-private, `PushMetricExporter` accepts only `&ResourceMetrics`, and `SpanEvents`/`SpanLinks` have no public constructors, so the D.21 neutral `MetricRecord` and `CompleteSpan` cannot be exported losslessly through the SDK exporters. The crate uses `opentelemetry-proto` 0.33 messages directly, or `#[repr(transparent)]` newtypes that map 1:1 to them, aligned with upstream rather than with the sc crates, so an upstream bump or a switch to upstream types is mechanical. Callers build logs, spans and metrics in that representation; the neutral→proto projection from obs-d-12 types is the only conversion and moves data, never clones it; resource grouping moves each record into its `ResourceLogs`/`ResourceSpans`/`ResourceMetrics`. obs-d-7 (tonic gRPC, reqwest HTTP/protobuf on the caller runtime through obs-d-6) and obs-d-8 (blocking OTLP/JSON) are transports that encode that representation straight to the wire with no intermediate model and no clone; a clone is allowed only where a signature forces it and is named and justified. `sc-observability-types` stays OpenTelemetry-free (ADR-019). The dependency amendment is recorded in the obs-d-21 sprint document. obs-d-22 takes layer 11; later layers shift by one (1..21 unique).
 
 ## Workspace invariant and replace-versus-coexist sequence
 
@@ -55,7 +57,7 @@ Every sprint closes with `cargo check --workspace --all-features --locked` and `
 
 ## Parallelism after correction
 
-20 dev sprints and four numbered waves; numbered wave 1 has two dependency stages. Measured critical path is five dev sprints: obs-d-12 → obs-d-21 → obs-d-7 → obs-d-18 → obs-d-9 (sanity/plan-QA gates excluded). Do not label it four merely because both contracts are in wave 1. The scoped split releases seven direct types-contract consumers independently of OTLP work: obs-d-4/14/15/16/17/19/20; obs-d-17 also retains its logging-contract gate. obs-d-1/2/3 keep their existing logging-contract gates. Wave 2 has fourteen beads; maximum dependency-independent width remains fifteen with root obs-d-10 alongside released implementations. The useful gain is earlier release of types-only work, not a claimed shorter OTLP critical path.
+21 dev sprints and four numbered waves; numbered wave 1 has two dependency stages. Measured critical path is six dev sprints: obs-d-12 → obs-d-21 → obs-d-22 → obs-d-7 → obs-d-18 → obs-d-9 (sanity/plan-QA gates excluded). Do not label it four merely because both contracts are in wave 1. The scoped split releases seven direct types-contract consumers independently of OTLP work: obs-d-4/14/15/16/17/19/20; obs-d-17 also retains its logging-contract gate. obs-d-1/2/3 keep their existing logging-contract gates. Wave 2 has fifteen beads; maximum dependency-independent width remains fifteen with root obs-d-10 alongside released implementations. The useful gain is earlier release of types-only work, not a claimed shorter OTLP critical path.
 
 ## Wave table
 
@@ -71,16 +73,17 @@ Every sprint closes with `cargo check --workspace --all-features --locked` and `
 | 2 | obs-d-4 | lobs/luna | parallel_safe | 8 | sc-observability error migration |
 | 2 | obs-d-5 | cobs/terra | must_follow | 9 | OTLP signal projectors |
 | 2 | obs-d-6 | lobs/luna | must_follow | 10 | OTLP lifecycle module |
-| 2 | obs-d-7 | cobs/terra | must_follow | 11 | OTLP SDK adapter module |
-| 2 | obs-d-8 | lobs/luna | must_follow | 12 | OTLP HTTP JSON module |
-| 2 | obs-d-14 | cobs/terra | parallel_safe | 13 | sc-observe |
-| 2 | obs-d-15 | lobs/luna | parallel_safe | 14 | sc-observability-binding-runtime |
-| 2 | obs-d-16 | cobs/terra | parallel_safe | 15 | sc-observability-log error migration |
-| 2 | obs-d-17 | lobs/luna | parallel_safe | 16 | log consumer migration |
-| 2 | obs-d-19 | cobs2/terra | must_follow | 17 | neutral DTO/schema and generated models |
-| 2 | obs-d-20 | lobs2/luna | must_follow | 18 | Python and TypeScript/Tauri adapters |
-| 3 | obs-d-18 | cobs/terra | must_follow | 19 | phase integration |
-| 4 | obs-d-9 | cobs/terra | must_follow | 20 | OTLP dual-path qualification |
+| 2 | obs-d-22 | cobs/terra | must_follow | 11 | sc-observability-otlp-types shared OTLP wire model |
+| 2 | obs-d-7 | cobs/terra | must_follow | 12 | OTLP SDK adapter module |
+| 2 | obs-d-8 | lobs/luna | must_follow | 13 | OTLP HTTP JSON module |
+| 2 | obs-d-14 | cobs/terra | parallel_safe | 14 | sc-observe |
+| 2 | obs-d-15 | lobs/luna | parallel_safe | 15 | sc-observability-binding-runtime |
+| 2 | obs-d-16 | cobs/terra | parallel_safe | 16 | sc-observability-log error migration |
+| 2 | obs-d-17 | lobs/luna | parallel_safe | 17 | log consumer migration |
+| 2 | obs-d-19 | cobs2/terra | must_follow | 18 | neutral DTO/schema and generated models |
+| 2 | obs-d-20 | lobs2/luna | must_follow | 19 | Python and TypeScript/Tauri adapters |
+| 3 | obs-d-18 | cobs/terra | must_follow | 20 | phase integration |
+| 4 | obs-d-9 | cobs/terra | must_follow | 21 | OTLP dual-path qualification |
 
 ## Requirement mapping
 
@@ -124,7 +127,7 @@ Source: the 56 numbered deliverables of D.1 to D.11 as written in develop's `doc
 | D.6.5 | d-6#3 |
 | D.6.6 | d-6#4, d-18#4 |
 | D.7.1 | d-21#2, d-7#1 |
-| D.7.2 | d-7#2 |
+| D.7.2 | d-22#3, d-7#2 |
 | D.7.3 | d-7#3, d-18#2 |
 | D.7.4 | d-7#4 |
 | D.8.1 | d-8#1 |
@@ -153,6 +156,7 @@ Source: the 56 numbered deliverables of D.1 to D.11 as written in develop's `doc
 obs-d-19 #1–3 own DTO/schema/generated-model migration formerly included in obs-d-18 #5; obs-d-20 #1–3 own language adapter migration. obs-d-18 #5 now qualifies their real composition with logging and transport artifacts. Former obs-d-11 #1–4 map to obs-d-10 #5–8. Per-sprint document projection is supporting review material, not an independent closure gate.
 
 Measured against the 56 original deliverables (lead, 2026-09-26, fix round 2): nine items are additions with no original row: d-4#2, d-14#3, d-15#3, d-16#2 and d-17#2 retype the local tests of each migration boundary; d-18#5 qualifies the composed d-19/d-20 outputs; d-19#2 and d-19#3 update the schema generator, conformance corpus and typing checks; d-20#3 updates transport/runtime/typing fixtures and examples. Every other item in every bead has an original row above.
+obs-d-22 (decision 10, 2026-09-27): #3 carries D.7.2's lossless projection; #1, #2, #4 and #5 are additions with no original row.
 Split accounting: old obs-d-12 #1 → obs-d-12 #1 plus obs-d-21 #2 (boundary records); old #2 → obs-d-12 #2; old #3 → obs-d-12 #3; old #4 → obs-d-21 #1 plus obs-d-12 #3 (neutral tests); old #5 → obs-d-21 #2; old #6 → obs-d-12 #1 (types manifest/specification) plus obs-d-21 #3 (atomic workspace activation). No numbered deliverable is dropped. The new sprint projection is the only added owned path; the old path/REQ/ADR unions are preserved.
 
 ## Acceptance criteria

@@ -5,7 +5,7 @@ Generated projection of `obs-d-15`; the bead is authoritative.
 ## Plan metadata
 
 - Wave: 2
-- Layer: 14
+- Layer: 15
 - Assignee / model: lobs / luna
 - Relation: `parallel_safe`
 - Closure: `boundary`
