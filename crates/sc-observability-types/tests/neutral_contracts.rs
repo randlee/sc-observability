@@ -1,6 +1,8 @@
 //! Contract tests for consumers of the staged canonical surface.
 use sc_observability_types::v2::*;
-use sc_observability_types::{DiagnosticInfo, ErrorContext, Remediation, Timestamp, error_codes};
+use sc_observability_types::{
+    DiagnosticInfo, ErrorContext, MetricUnit, Remediation, Timestamp, error_codes,
+};
 use serde_json::json;
 use std::error::Error;
 
@@ -392,9 +394,44 @@ fn metric_model_failures() {
         json!("server")
     );
     let mut value = serde_json::to_value(&record).unwrap();
-    assert_eq!(value["timestamp"], json!("1970-01-01T00:00:01Z"));
-    assert_eq!(value["value"]["kind"], "histogram");
-    assert!(value.get("service").is_some() && value.get("name").is_some());
+    assert_eq!(
+        value,
+        json!({
+            "timestamp": "1970-01-01T00:00:01Z",
+            "service": "demo",
+            "name": "latency",
+            "value": {
+                "kind": "histogram",
+                "data": {
+                    "point": {
+                        "explicit_bounds": [1.0, 2.0],
+                        "bucket_counts": [1, 2, 3],
+                        "count": 6,
+                        "sum": 12.0,
+                    },
+                    "temporality": "delta",
+                    "start_time": "1970-01-01T00:00:00Z",
+                }
+            },
+            "unit": null,
+            "attributes": {},
+        })
+    );
+    let decorated_record = MetricRecord::try_new(
+        end,
+        sc_observability_types::ServiceName::new("demo").unwrap(),
+        sc_observability_types::MetricName::new("latency").unwrap(),
+        MetricValue::Gauge(finite(1.5)),
+    )
+    .unwrap()
+    .with_unit(Some(MetricUnit::new("ms").unwrap()))
+    .with_attributes(Attributes::from([(
+        "region".to_string(),
+        AttributeValue::String("us-west".to_string()),
+    )]));
+    let decorated_value = serde_json::to_value(decorated_record).unwrap();
+    assert_eq!(decorated_value["unit"], json!("ms"));
+    assert_eq!(decorated_value["attributes"], json!({"region": "us-west"}));
     assert_eq!(
         serde_json::from_value::<MetricRecord>(value.clone()).unwrap(),
         record
