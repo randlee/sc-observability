@@ -162,6 +162,15 @@ class SprintReportTests(unittest.TestCase):
         qa = {'status': 'closed', 'close_reason': 'FAIL: two findings', 'metadata': {'round': 2}}
         self.assertEqual(report.qa_summary(qa, [{'status': 'closed'}]), 'R2 FAIL (0 open)')
 
+    def test_explicit_qa_verdict_overrides_legacy_close_text(self):
+        qa = {
+            'status': 'closed',
+            'close_reason': 'PASS: stale legacy text',
+            'metadata': {'round': 2, 'verdict': 'FAIL'},
+        }
+        self.assertEqual(report.qa_verdict(qa), 'FAIL')
+        self.assertEqual(report.qa_icon(qa, [{'status': 'closed'}]), '🚩')
+
     def test_verdict_is_prefix_not_substring(self):
         qa = {'status': 'closed', 'close_reason': 'not a FAIL verdict', 'metadata': {'round': 1}}
         self.assertEqual(report.qa_summary(qa, []), 'R1 UNKNOWN (0 open)')
