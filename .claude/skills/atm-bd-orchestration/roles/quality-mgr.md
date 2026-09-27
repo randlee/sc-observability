@@ -129,13 +129,11 @@ screen said. What happens next depends on the verdict:
 - `difficulty` is required when rendering a finding. Copy it from the
   checked sprint/finding; never select a default. The dispatch report prints
   `UNCLASSIFIED` and no agent for a live bead missing it.
-- After filing every blocking finding, run `blocking-finding-gates.py --finding
-  <id>` before dispatch. `<id>-sanity` is the finding's sole sanity gate, not
-  a duplicate: it is parented under the finding's sprint dev bead and waits on
-  the finding through a `blocks` edge, then blocks only open downstream dev and
-  unclaimed finding/fix work. Important and minor findings do not add gates.
-- Findings are `parallel_safe` by default. Set `blocked_by` only when one fix
-  needs another finding's fix first.
+- A blocking finding never adds a dependency to another planned sprint. The
+  canonical `sprints.jsonl` plan is the sole source of those edges; file and
+  dispatch the finding's own remediation through its normal finding/fix flow.
+- Findings are `parallel_safe` by default. Set `blocked_by` only to another finding
+  of this round, when its fix needs that one's fix first.
 - Ids are `<qa bead>-f<n>`, numbered in report order.
 - Every finding closes with a close reason. You close ceremony findings. The
   fixer closes the rest, as fixed or not reproducible. In a fix round you
