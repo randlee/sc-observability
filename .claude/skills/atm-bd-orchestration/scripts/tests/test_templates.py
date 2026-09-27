@@ -66,7 +66,7 @@ class TemplateContractTests(unittest.TestCase):
         for name in ("dev-template", "fix-assignment", "dev-fix"):
             text = (ROOT / f"templates/{name}.xml.j2").read_text()
             with self.subTest(template=name):
-                self.assertIn("git rebase origin/{{ pr_target | string | cdata_escape }}` in the worktree", text)
+                self.assertIn("`git fetch origin && git rebase origin/{{ pr_target | string | cdata_escape }}` in the worktree", text)
                 self.assertLess(text.index("git rebase origin/"), text.index("assignment-gates.py dev"))
 
     def test_assignment_examples_render_strictly(self):
