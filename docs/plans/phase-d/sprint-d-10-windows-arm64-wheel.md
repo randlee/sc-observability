@@ -70,6 +70,68 @@ The only file fence is `metadata.owned_paths`; paths mentioned as dependencies a
 
 The supported Python invariant is `Requires-Python >=3.10`, with no upper bound or exclusion, and `abi3-py310`/`cp310-abi3` remains the artifact contract. D.18 records this invariant and its change-control rule in `docs/project-plan.md` under PLAN-SCOPE-022, and that record must agree with the guard's expected values. Raising the floor or introducing an upper/exclusion bound requires a separately approved compatibility decision, an updated interpreter matrix, and updated guard expected values; it must not arrive as an incidental packaging edit. `docs/project-plan.md` remains outside the D.10 fence.
 
+### Native CPython 3.10 provisioning blocker (2026-09-27)
+
+Finding `obs-d-10-qa-f5` remains unresolved pending a provisioning or
+compatibility decision. At source
+`008f3aa732c970acc55e3742948085a1e4c1064a`, the wheel job requests Python 3.10,
+and the installed-suite matrix also requires a native Windows ARM64 3.10 cell.
+No native 3.10 provisioning alternative is configured in either job.
+
+The [actions/python-versions manifest at
+96cf261124d1e3fbc49339879ac37f935c25653f](https://github.com/actions/python-versions/blob/96cf261124d1e3fbc49339879ac37f935c25653f/versions-manifest.json)
+contains 22 stable 3.10 release entries and zero `win32`/`arm64` files for them.
+Native Windows ARM64 files are present for 3.11 through 3.14. Reproduce the
+missing 3.10 asset check against that immutable catalog:
+
+```bash
+python3 - <<'PY'
+import json
+from urllib.request import urlopen
+
+revision = "96cf261124d1e3fbc49339879ac37f935c25653f"
+url = f"https://raw.githubusercontent.com/actions/python-versions/{revision}/versions-manifest.json"
+with urlopen(url) as response:
+    releases = json.load(response)
+stable = [r for r in releases if r["stable"] and r["version"].startswith("3.10.")]
+native = [f for r in stable for f in r["files"]
+          if f["platform"] == "win32" and f["arch"] == "arm64"]
+assert len(stable) == 22
+assert not native
+print("BLOCKED: no native Windows ARM64 CPython 3.10 asset")
+PY
+```
+
+The [published Windows 11 ARM runner inventory](https://github.com/actions/partner-runner-images/blob/main/images/arm-windows-11-image.md)
+for image `20260105.41.1` lists cached Python 3.12.10, 3.13.11 and 3.14.2,
+not 3.10. This is inventory evidence, not a live runner preflight. The
+[official Python 3.10.11 release](https://www.python.org/downloads/release/python-31011/)
+also provides no Windows ARM64 installer. A custom interpreter build has not
+been provisioned or validated by this finding investigation.
+
+The following source-head query returned `[]` on 2026-09-27:
+
+```bash
+gh run list --workflow b4a-python-distributions.yml \
+  --commit 008f3aa732c970acc55e3742948085a1e4c1064a \
+  --json databaseId,url,status,conclusion
+```
+
+The workflow's 50 most recent run records were also inspected; the newest was
+from 2026-09-19, before this D.10 source. No six-wheel/30-cell qualification
+run is claimed. Unit tests and successful local repository validation cannot
+substitute for that native artifact evidence.
+
+Decision requested from the technical lead: either retain the 3.10 contract
+and assign a pinned, supportable native 3.10 provisioning path with real
+Windows ARM64 evidence, or obtain explicit approval for a compatibility
+change. A floor or platform-specific interpreter exception must specify the
+resulting supported matrix, package metadata/ABI contract and guard values;
+it cannot silently drop the 3.10 cell or reuse the unchanged 30-cell claim.
+After the decision and implementation, rerun qualification at one immutable
+source and retain the run URL and artifacts. Until then, the existing floor,
+release policy and native-evidence rejection checks remain in force.
+
 ## Acceptance criteria
 
 - [ ] Deliverables 1–3: `python3 -m unittest discover -s scripts/ci/tests -p test_python_arm64.py` passes actual PE ARM64 and wrong-architecture/malformed cases, and the D.10 workflow/prepare path demonstrates a native Windows ARM64 wheel at an immutable source SHA.
