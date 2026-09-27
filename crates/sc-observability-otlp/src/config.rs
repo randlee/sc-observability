@@ -623,6 +623,7 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
 )]
 #[derive(Debug)]
 pub(crate) struct ValidatedTransportBounds {
+    pub(crate) protocol: OtlpProtocol,
     pub(crate) queue_capacity: usize,
     pub(crate) queue_byte_capacity: usize,
     pub(crate) request_timeout: Duration,
@@ -773,32 +774,6 @@ pub(crate) fn validated_transport_bounds(
         BackendTransportBounds::Disabled
     };
 
-    if config.enabled
-        && matches!(config.backend, ExporterBackend::LegacyHttpJson)
-        && config.protocol != OtlpProtocol::HttpJson
-    {
-        return Err(ConfigFailure::UnsupportedProtocol {
-            context: Box::new(
-                ErrorContext::new(
-                    error_codes::OTLP_UNSUPPORTED_PROTOCOL,
-                    "the legacy HTTP/JSON exporter requires the HTTP/JSON protocol",
-                    Remediation::recoverable(
-                        "select HttpJson when using the legacy HTTP/JSON exporter",
-                        [
-                            "select HttpJson",
-                            "or select a backend that supports the configured protocol",
-                        ],
-                    ),
-                )
-                .detail("backend", Value::String("LegacyHttpJson".to_owned()))
-                .detail(
-                    "protocol",
-                    Value::String(format!("{protocol:?}", protocol = config.protocol)),
-                ),
-            ),
-        });
-    }
-
     if config.insecure_skip_verify && config.enabled {
         return Err(config_failure(
             ConfigFailureKind::InsecureTransportRejected,
@@ -810,6 +785,7 @@ pub(crate) fn validated_transport_bounds(
     }
 
     Ok(ValidatedTransportBounds {
+        protocol: config.protocol,
         queue_capacity: queue_capacity.value,
         queue_byte_capacity: queue_byte_capacity.value,
         request_timeout,

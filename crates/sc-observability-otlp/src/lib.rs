@@ -220,28 +220,140 @@ impl ExporterLifecycle for TestLifecycle {
 }
 
 /// Consumes only fully validated transport bounds before selecting one common
-/// exporter shape. Enabled backends cannot silently fall back to disabled
-/// exporters while their concrete implementations are still staged elsewhere.
+/// exporter shape. Protocol, feature, and caller-runtime availability are
+/// deliberately checked here, after the configuration's normative ordered
+/// validation, so an unavailable backend cannot mask a malformed config.
 fn exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet, ConfigFailure> {
-    match bounds.backend {
+    match &bounds.backend {
         BackendTransportBounds::Disabled => Ok(ExporterSet {
             logs: Arc::new(DisabledLogExporter),
             traces: Arc::new(DisabledTraceExporter),
             metrics: Arc::new(DisabledMetricExporter),
             lifecycle: Arc::new(DisabledLifecycle),
         }),
-        BackendTransportBounds::Sdk | BackendTransportBounds::Legacy(_) => {
-            Err(ConfigFailure::UnsupportedBackend {
-                context: Box::new(ErrorContext::new(
-                    sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND,
-                    "enabled exporter backend has no installed implementation",
-                    Remediation::recoverable(
-                        "select disabled telemetry until the selected backend implementation is installed",
-                        ["disable telemetry"],
-                    ),
-                )),
-            })
+        BackendTransportBounds::Sdk => sdk_exporter_factory(bounds),
+        BackendTransportBounds::Legacy(_) => legacy_exporter_factory(bounds),
+    }
+}
+
+fn sdk_exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet, ConfigFailure> {
+    if !matches!(
+        bounds.protocol,
+        config::OtlpProtocol::Grpc | config::OtlpProtocol::HttpBinary
+    ) {
+        return Err(unsupported_protocol(
+            config::ExporterBackend::OpenTelemetrySdk,
+            bounds.protocol,
+            "Grpc, HttpBinary",
+        ));
+    }
+
+    #[cfg(feature = "otlp-sdk")]
+    {
+        if tokio::runtime::Handle::try_current().is_err() {
+            return Err(ConfigFailure::TokioRuntimeRequired {
+                context: Box::new(
+                    ErrorContext::new(
+                        sc_observability_types::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED,
+                        "the OpenTelemetry SDK backend must be constructed inside a Tokio runtime",
+                        Remediation::recoverable(
+                            "construct telemetry from the host Tokio runtime",
+                            ["enable the otlp-sdk feature", "enter a Tokio runtime first"],
+                        ),
+                    )
+                    .detail("backend", Value::String("OpenTelemetrySdk".to_owned()))
+                    .detail("feature", Value::String("otlp-sdk".to_owned()))
+                    .detail("runtime", Value::String("caller-tokio".to_owned())),
+                ),
+            });
         }
+        return Err(unsupported_backend(
+            config::ExporterBackend::OpenTelemetrySdk,
+            "otlp-sdk",
+            "SDK adapter implementation is not installed yet",
+        ));
+    }
+
+    #[cfg(not(feature = "otlp-sdk"))]
+    Err(unsupported_backend(
+        config::ExporterBackend::OpenTelemetrySdk,
+        "otlp-sdk",
+        "the otlp-sdk feature is disabled",
+    ))
+}
+
+fn legacy_exporter_factory(
+    bounds: &ValidatedTransportBounds,
+) -> Result<ExporterSet, ConfigFailure> {
+    if bounds.protocol != config::OtlpProtocol::HttpJson {
+        return Err(unsupported_protocol(
+            config::ExporterBackend::LegacyHttpJson,
+            bounds.protocol,
+            "HttpJson",
+        ));
+    }
+
+    #[cfg(feature = "legacy-http-json")]
+    {
+        return Err(unsupported_backend(
+            config::ExporterBackend::LegacyHttpJson,
+            "legacy-http-json",
+            "legacy HTTP/JSON adapter implementation is not installed yet",
+        ));
+    }
+
+    #[cfg(not(feature = "legacy-http-json"))]
+    Err(unsupported_backend(
+        config::ExporterBackend::LegacyHttpJson,
+        "legacy-http-json",
+        "the legacy-http-json feature is disabled",
+    ))
+}
+
+fn unsupported_protocol(
+    backend: config::ExporterBackend,
+    protocol: config::OtlpProtocol,
+    supported_protocols: &str,
+) -> ConfigFailure {
+    ConfigFailure::UnsupportedProtocol {
+        context: Box::new(
+            ErrorContext::new(
+                sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_PROTOCOL,
+                "the selected exporter backend does not support the configured protocol",
+                Remediation::recoverable(
+                    "select a protocol supported by the selected exporter backend",
+                    ["select a documented backend/protocol combination"],
+                ),
+            )
+            .detail("backend", Value::String(format!("{backend:?}")))
+            .detail("protocol", Value::String(format!("{protocol:?}")))
+            .detail(
+                "supported_protocols",
+                Value::String(supported_protocols.to_owned()),
+            ),
+        ),
+    }
+}
+
+fn unsupported_backend(
+    backend: config::ExporterBackend,
+    feature: &str,
+    availability: &str,
+) -> ConfigFailure {
+    ConfigFailure::UnsupportedBackend {
+        context: Box::new(
+            ErrorContext::new(
+                sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND,
+                "enabled exporter backend is unavailable",
+                Remediation::recoverable(
+                    "enable the selected backend feature or select disabled telemetry",
+                    ["enable the named feature", "disable telemetry"],
+                ),
+            )
+            .detail("backend", Value::String(format!("{backend:?}")))
+            .detail("feature", Value::String(feature.to_owned()))
+            .detail("availability", Value::String(availability.to_owned())),
+        ),
     }
 }
 
@@ -1020,21 +1132,49 @@ mod tests {
         let Err(factory_error) = exporter_factory(&bounds) else {
             panic!("an enabled backend needs an installed implementation");
         };
-        assert!(matches!(
-            factory_error,
-            ConfigFailure::UnsupportedBackend { .. }
-        ));
-        assert_eq!(
-            factory_error.diagnostic().code,
-            sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
-        );
+        #[cfg(not(feature = "otlp-sdk"))]
+        {
+            assert!(matches!(
+                factory_error,
+                ConfigFailure::UnsupportedBackend { .. }
+            ));
+            assert_eq!(
+                factory_error.diagnostic().code,
+                sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
+            );
+            assert_eq!(
+                factory_error.diagnostic().details["backend"].as_str(),
+                Some("OpenTelemetrySdk")
+            );
+            assert_eq!(
+                factory_error.diagnostic().details["feature"].as_str(),
+                Some("otlp-sdk")
+            );
+        }
+        #[cfg(feature = "otlp-sdk")]
+        {
+            assert!(matches!(
+                factory_error,
+                ConfigFailure::TokioRuntimeRequired { .. }
+            ));
+            assert_eq!(
+                factory_error.diagnostic().code,
+                sc_observability_types::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED
+            );
+        }
 
         let Err(constructor_error) = Telemetry::new_typed(telemetry_config()) else {
             panic!("the retained constructor preserves the factory diagnostic");
         };
+        #[cfg(not(feature = "otlp-sdk"))]
         assert_eq!(
             constructor_error.diagnostic().code,
             sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
+        );
+        #[cfg(feature = "otlp-sdk")]
+        assert_eq!(
+            constructor_error.diagnostic().code,
+            sc_observability_types::error_codes::otlp::OTLP_TOKIO_RUNTIME_REQUIRED
         );
     }
 
@@ -1042,8 +1182,10 @@ mod tests {
     fn legacy_factory_rejects_non_json_protocol_before_backend_availability() {
         let mut invalid_config = legacy_telemetry_config(OtlpProtocol::HttpJson);
         invalid_config.transport.protocol = OtlpProtocol::HttpBinary;
-        let Err(protocol_error) = validated_transport_bounds(&invalid_config.transport) else {
-            panic!("the legacy HTTP/JSON configuration must reject a binary protocol");
+        let bounds = validated_transport_bounds(&invalid_config.transport)
+            .expect("configuration bounds precede backend availability");
+        let Err(protocol_error) = exporter_factory(&bounds) else {
+            panic!("the legacy HTTP/JSON backend must reject a binary protocol");
         };
         assert!(matches!(
             protocol_error,
@@ -1052,6 +1194,10 @@ mod tests {
         assert_eq!(
             protocol_error.diagnostic().code,
             sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_PROTOCOL
+        );
+        assert_eq!(
+            protocol_error.diagnostic().details["backend"].as_str(),
+            Some("LegacyHttpJson")
         );
 
         let config = legacy_telemetry_config(OtlpProtocol::HttpJson);
@@ -1067,6 +1213,59 @@ mod tests {
             backend_error.diagnostic().code,
             sc_observability_types::error_codes::otlp::OTLP_UNSUPPORTED_BACKEND
         );
+        assert_eq!(
+            backend_error.diagnostic().details["feature"].as_str(),
+            Some("legacy-http-json")
+        );
+    }
+
+    #[test]
+    fn sdk_factory_rejects_http_json_before_feature_availability() {
+        let mut config = telemetry_config();
+        config.transport.protocol = OtlpProtocol::HttpJson;
+        let bounds = validated_transport_bounds(&config.transport).expect("valid bounds");
+        let Err(error) = exporter_factory(&bounds) else {
+            panic!("SDK has no HTTP/JSON transport");
+        };
+        assert!(matches!(error, ConfigFailure::UnsupportedProtocol { .. }));
+        assert_eq!(
+            error.diagnostic().details["backend"].as_str(),
+            Some("OpenTelemetrySdk")
+        );
+        assert_eq!(
+            error.diagnostic().details["supported_protocols"].as_str(),
+            Some("Grpc, HttpBinary")
+        );
+    }
+
+    #[cfg(feature = "otlp-sdk")]
+    #[test]
+    fn sdk_factory_requires_a_caller_tokio_runtime_after_feature_checks() {
+        let config = telemetry_config();
+        let bounds = validated_transport_bounds(&config.transport).expect("valid bounds");
+        let Err(error) = exporter_factory(&bounds) else {
+            panic!("no caller runtime is entered");
+        };
+        assert!(matches!(error, ConfigFailure::TokioRuntimeRequired { .. }));
+        assert_eq!(
+            error.diagnostic().details["feature"].as_str(),
+            Some("otlp-sdk")
+        );
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        runtime.block_on(async {
+            let Err(error) = exporter_factory(&bounds) else {
+                panic!("D.7 owns the real SDK exporter implementation");
+            };
+            assert!(matches!(error, ConfigFailure::UnsupportedBackend { .. }));
+            assert_eq!(
+                error.diagnostic().details["availability"].as_str(),
+                Some("SDK adapter implementation is not installed yet")
+            );
+        });
     }
 
     #[test]
