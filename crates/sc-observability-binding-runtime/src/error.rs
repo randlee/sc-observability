@@ -144,19 +144,23 @@ pub(crate) fn shutdown_drain(message: impl Into<String>) -> native::v2::Shutdown
     }
 }
 
+pub(crate) fn flush_observer_timeout() -> native::v2::FlushError {
+    native::v2::FlushError::Drain {
+        context: context(
+            ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_TIMEOUT),
+            "flush observation deadline elapsed",
+            Remediation::recoverable(
+                "wait for the existing flush operation",
+                std::iter::empty::<String>(),
+            ),
+        ),
+    }
+}
+
 pub(crate) fn observer_timeout(kind: OperationKind) -> Failure {
     match kind {
         OperationKind::Flush => {
-            let error = native::v2::FlushError::Drain {
-                context: context(
-                    ErrorCode::new_static(codes::SC_OBSERVABILITY_BINDING_TIMEOUT),
-                    "flush observation deadline elapsed",
-                    Remediation::recoverable(
-                        "wait for the existing flush operation",
-                        std::iter::empty::<String>(),
-                    ),
-                ),
-            };
+            let error = flush_observer_timeout();
             Failure::Timeout {
                 diagnostic: Box::new(crate::conversion::diagnostic(error.diagnostic())),
                 operation: "flush".into(),

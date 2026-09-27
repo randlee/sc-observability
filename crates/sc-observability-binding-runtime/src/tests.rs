@@ -880,14 +880,25 @@ fn d15_coordinator_fixture() {
 }
 
 fn d15_operation_fixture() {
+    let native_error = crate::error::flush_observer_timeout();
+    assert_canonical_context(
+        &native_error,
+        dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+        1,
+    );
+    let (_root, owner, backend) = core();
+    let operation: Operation<u32> = Operation::new(
+        &backend.shared.dispatcher,
+        &crate::timer::shared().unwrap(),
+        crate::error::OperationKind::Flush,
+    );
     assert_failure(
-        Err::<(), _>(crate::error::observer_timeout(
-            crate::error::OperationKind::Flush,
-        )),
+        operation.wait(Duration::ZERO),
         dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
         "timeout",
         Some("flush"),
     );
+    stop(&owner);
     observer_bounds();
 }
 
