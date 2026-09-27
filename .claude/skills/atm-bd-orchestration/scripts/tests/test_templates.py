@@ -35,6 +35,16 @@ class TemplateContractTests(unittest.TestCase):
     def test_workflow_issue_template_exists(self):
         self.assertTrue((ROOT / "templates/workflow-issue-bead.json.j2").exists())
 
+    def test_gate_commands_render_root_and_primary_checkout(self):
+        for name in ("dev-template", "fix-assignment", "dev-fix", "dev-sanity-template"):
+            text = (ROOT / f"templates/{name}.xml.j2").read_text()
+            with self.subTest(template=name):
+                self.assertNotIn("<phase>", text)
+                self.assertNotIn("git worktree list", text)
+                self.assertIn("{{ primary_checkout | string | cdata_escape }}/.claude/skills/", text)
+                if name != "dev-sanity-template":
+                    self.assertIn("--root {{ phase_root | string | cdata_escape }}", text)
+
     def test_assignment_examples_render_strictly(self):
         examples = ROOT / "examples"
         templates = sorted((ROOT / "templates").glob("*.j2"))
