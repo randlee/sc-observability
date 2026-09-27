@@ -315,8 +315,8 @@ pub struct OtelConfig {
     pub ca_file: Option<PathBuf>,
     /// Whether TLS certificate verification is skipped.
     pub insecure_skip_verify: bool,
-    /// Per-export timeout.
-    pub timeout_ms: DurationMs,
+    /// Optional per-export timeout. `None` uses the documented default.
+    pub timeout_ms: Option<DurationMs>,
     /// Time allowed for a lifecycle flush barrier.
     pub lifecycle_flush_timeout_ms: Option<DurationMs>,
     /// Time allowed for an ordered lifecycle shutdown.
@@ -329,15 +329,15 @@ pub struct OtelConfig {
     pub debug_local_export: bool,
     /// Legacy-only retry settings. `None` means no legacy-only field was supplied.
     pub legacy_retry: Option<LegacyRetryPolicy>,
-    /// Retained compatibility retry count; D.18 migrates callers to `legacy_retry`.
+    /// Retained compatibility retry count. `None` means the field was not supplied.
     #[deprecated(since = "2.0.0", note = "Use legacy_retry.max_retries")]
-    pub max_retries: u32,
-    /// Retained compatibility initial backoff; D.18 migrates callers to `legacy_retry`.
+    pub max_retries: Option<u32>,
+    /// Retained compatibility initial backoff. `None` means the field was not supplied.
     #[deprecated(since = "2.0.0", note = "Use legacy_retry.initial_backoff_ms")]
-    pub initial_backoff_ms: DurationMs,
-    /// Retained compatibility maximum backoff; D.18 migrates callers to `legacy_retry`.
+    pub initial_backoff_ms: Option<DurationMs>,
+    /// Retained compatibility maximum backoff. `None` means the field was not supplied.
     #[deprecated(since = "2.0.0", note = "Use legacy_retry.max_backoff_ms")]
-    pub max_backoff_ms: DurationMs,
+    pub max_backoff_ms: Option<DurationMs>,
 }
 
 #[allow(
@@ -354,16 +354,16 @@ impl Default for OtelConfig {
             auth_header: None,
             ca_file: None,
             insecure_skip_verify: false,
-            timeout_ms: constants::DEFAULT_OTLP_TIMEOUT_MS.into(),
+            timeout_ms: None,
             lifecycle_flush_timeout_ms: None,
             lifecycle_shutdown_timeout_ms: None,
             queue_capacity: None,
             queue_byte_capacity: None,
             debug_local_export: false,
             legacy_retry: None,
-            max_retries: constants::DEFAULT_OTLP_MAX_RETRIES,
-            initial_backoff_ms: constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS.into(),
-            max_backoff_ms: constants::DEFAULT_OTLP_MAX_BACKOFF_MS.into(),
+            max_retries: None,
+            initial_backoff_ms: None,
+            max_backoff_ms: None,
         }
     }
 }
@@ -672,18 +672,20 @@ pub(crate) fn validated_transport_bounds(
     config: &OtelConfig,
 ) -> Result<ValidatedTransportBounds, ConfigFailure> {
     #[allow(deprecated)]
-    let direct_legacy_fields = config.max_retries != constants::DEFAULT_OTLP_MAX_RETRIES
-        || u64::from(config.initial_backoff_ms) != constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS
-        || u64::from(config.max_backoff_ms) != constants::DEFAULT_OTLP_MAX_BACKOFF_MS;
+    let direct_legacy_fields = config.max_retries.is_some()
+        || config.initial_backoff_ms.is_some()
+        || config.max_backoff_ms.is_some();
     let legacy_retry_field = first_legacy_retry_field(config);
+    #[allow(deprecated)]
+    let direct_retry = LegacyRetryPolicy {
+        max_retries: config.max_retries,
+        initial_backoff_ms: config.initial_backoff_ms,
+        max_backoff_ms: config.max_backoff_ms,
+        ..LegacyRetryPolicy::default()
+    };
     let timeout = resolve_duration(
         OtlpConfigField::Timeout,
-        // `timeout_ms` predates the optional transport fields, so its default
-        // is materialized in `OtelConfig::default()`. Preserve the contract
-        // origin rather than treating that materialized default as caller
-        // input.
-        (u64::from(config.timeout_ms) != constants::DEFAULT_OTLP_TIMEOUT_MS)
-            .then_some(config.timeout_ms),
+        config.timeout_ms,
         constants::DEFAULT_OTLP_TIMEOUT_MS,
     );
     let flush = resolve_duration(
@@ -754,13 +756,6 @@ pub(crate) fn validated_transport_bounds(
                 BackendTransportBounds::Sdk
             }
             ExporterBackend::LegacyHttpJson => {
-                #[allow(deprecated)]
-                let direct_retry = LegacyRetryPolicy {
-                    max_retries: Some(config.max_retries),
-                    initial_backoff_ms: Some(config.initial_backoff_ms),
-                    max_backoff_ms: Some(config.max_backoff_ms),
-                    ..LegacyRetryPolicy::default()
-                };
                 let retry = resolve_retry(
                     config
                         .legacy_retry
@@ -835,18 +830,15 @@ pub(crate) fn validated_transport_bounds(
 )]
 fn first_legacy_retry_field(config: &OtelConfig) -> Option<OtlpConfigField> {
     let retry = config.legacy_retry.as_ref();
-    if config.max_retries != constants::DEFAULT_OTLP_MAX_RETRIES
-        || retry.is_some_and(|value| value.max_retries.is_some())
-    {
+    if config.max_retries.is_some() || retry.is_some_and(|value| value.max_retries.is_some()) {
         return Some(OtlpConfigField::MaxRetries);
     }
-    if u64::from(config.initial_backoff_ms) != constants::DEFAULT_OTLP_INITIAL_BACKOFF_MS
+    if config.initial_backoff_ms.is_some()
         || retry.is_some_and(|value| value.initial_backoff_ms.is_some())
     {
         return Some(OtlpConfigField::InitialBackoff);
     }
-    if u64::from(config.max_backoff_ms) != constants::DEFAULT_OTLP_MAX_BACKOFF_MS
-        || retry.is_some_and(|value| value.max_backoff_ms.is_some())
+    if config.max_backoff_ms.is_some() || retry.is_some_and(|value| value.max_backoff_ms.is_some())
     {
         return Some(OtlpConfigField::MaxBackoff);
     }
@@ -1404,7 +1396,7 @@ mod tests {
 
         let legacy = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(OtelConfig {
-                timeout_ms: 0_u64.into(),
+                timeout_ms: Some(0_u64.into()),
                 ..transport()
             })
             .enable_logs(LogsConfig::default())
@@ -1412,7 +1404,7 @@ mod tests {
             .expect_err("legacy zero timeout");
         let typed = TelemetryConfigBuilder::new(ServiceName::new("demo").expect("service"))
             .with_transport(OtelConfig {
-                timeout_ms: 0_u64.into(),
+                timeout_ms: Some(0_u64.into()),
                 ..transport()
             })
             .enable_logs(LogsConfig::default())
@@ -1492,7 +1484,7 @@ mod tests {
             service_name,
             resource: ResourceAttributes::default(),
             transport: OtelConfig {
-                timeout_ms: 0_u64.into(),
+                timeout_ms: Some(0_u64.into()),
                 ..OtelConfig::default()
             },
             logs: None,
@@ -1513,7 +1505,7 @@ mod tests {
             resource: ResourceAttributes::default(),
             transport: OtelConfig {
                 enabled: true,
-                timeout_ms: 0_u64.into(),
+                timeout_ms: Some(0_u64.into()),
                 ..OtelConfig::default()
             },
             logs: Some(LogsConfig::default()),
