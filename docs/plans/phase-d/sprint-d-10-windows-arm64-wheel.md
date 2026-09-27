@@ -46,18 +46,19 @@ Own the native Windows ARM64 build adapter and the open-ended Python distributio
 
 7. Wire the D.10 PE ARM64 helper into `verify_native_architecture`, require six wheels and 30 native installed-suite cells from one immutable source, and reject missing/duplicate/wrong-target records alongside source/artifact metadata comparison. This evidence closes independently of D.18 release-policy activation.
 
-8. Provide a handoff/specification for aobs to record the invariant and explicit change-control rule in the shared plan: raising the floor or adding an upper bound requires a separately approved compatibility decision, an updated supported-interpreter matrix, and updated guard expected values, not an incidental packaging edit.
+8. Provide a handoff/specification for obs-d-18 to record the invariant and explicit change-control rule in `docs/project-plan.md` under PLAN-SCOPE-022: raising the floor or adding an upper bound requires a separately approved compatibility decision, an updated supported-interpreter matrix, and updated guard expected values, not an incidental packaging edit.
 
 ## This Sprint Does Not Close
 
 D.18 still owns `release/**` policy/inventory activation and publication. This sprint does not add future Python versions, alter the minimum version, implement #88/OTEL functionality, or claim release publication without the immutable six-platform evidence.
+
 ## Design
 
 ## Python distribution boundary
 
 D.10 owns native ARM64 build/prepare behavior, the focused PE helper, the source/wheel metadata guard, and the qualification tests in its combined fence. The helper consumes wheel bytes/tag and returns the existing typed validation shape; the validator wires it into `verify_native_architecture` once. Workflow jobs execute against one immutable sdist/source commit, never cross-built evidence disguised as native execution. The existing B.4a aggregate invocation remains the integration hook.
 
-The Python guard parses source TOML and wheel `METADATA`, rejects upper/exclusion bounds, and retains `abi3-py310`/`cp310-abi3` validation. It preserves the original missing/duplicate/architecture/feature checks and requires six builds plus 30 installed-suite cells at one source/version. D.10 sends the invariant/change-control wording to aobs for the shared plan; `docs/project-plan.md` is D.12-owned and outside this fence. D.12 owns the 2.0 Cargo workspace bump and OTLP config contract. D.18 owns all `release/**` policy activation and release baseline/inventory; no release policy file is edited here. The native artifact proof and guard tests are independently closable before that activation.
+The Python guard parses source TOML and wheel `METADATA`, rejects upper/exclusion bounds, and retains `abi3-py310`/`cp310-abi3` validation. It preserves the original missing/duplicate/architecture/feature checks and requires six builds plus 30 installed-suite cells at one source/version. D.10 hands the invariant/change-control wording to obs-d-18 for recording in `docs/project-plan.md` under PLAN-SCOPE-022; that record is outside this fence. D.12 owns the 2.0 Cargo workspace bump and OTLP config contract. D.18 owns all `release/**` policy activation and release baseline/inventory; no release policy file is edited here. The native artifact proof and guard tests are independently closable before that activation.
 
 ADR-015 constrains the embedded-Python/shared-binding assumptions of the Python distribution surface; ADR-016 constrains the B.4a/shared-publishing preflight boundary. D.10 performs preflight and artifact qualification only and does not publish.
 
@@ -67,10 +68,7 @@ D.10 provides this exact policy row for D.18 to write in `release/python-platfor
 
 The only file fence is `metadata.owned_paths`; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 
-### Handoff to aobs
-
-The supported Python invariant is `Requires-Python >=3.10`, with no upper bound or exclusion, and `abi3-py310`/`cp310-abi3` remains the artifact contract. Raising the floor or introducing an upper/exclusion bound requires a separately approved compatibility decision, an updated interpreter matrix, and updated guard expected values; it must not arrive as an incidental packaging edit. This specification is handed to aobs for the shared plan; `docs/project-plan.md` remains outside the D.10 fence.
-## Acceptance criteria
+The supported Python invariant is `Requires-Python >=3.10`, with no upper bound or exclusion, and `abi3-py310`/`cp310-abi3` remains the artifact contract. D.18 records this invariant and its change-control rule in `docs/project-plan.md` under PLAN-SCOPE-022, and that record must agree with the guard's expected values. Raising the floor or introducing an upper/exclusion bound requires a separately approved compatibility decision, an updated interpreter matrix, and updated guard expected values; it must not arrive as an incidental packaging edit. `docs/project-plan.md` remains outside the D.10 fence.
 
 ## Acceptance criteria
 
@@ -78,6 +76,6 @@ The supported Python invariant is `Requires-Python >=3.10`, with no upper bound 
 - [ ] Deliverable 4: the sprint projection specifies `windows-arm64`, machine `ARM64`, `win_arm64`, and `aarch64-pc-windows-msvc` consistently and states that no `release/**` file is edited.
 - [ ] Deliverables 5–6: `python3 -m unittest discover -s scripts/ci/tests -p test_python_distribution.py` passes the open-ended `>=3.10`/`abi3-py310`/`cp310-abi3` contract and fails deterministically for every negative fixture, including source/artifact metadata disagreement.
 - [ ] Deliverable 7: validator tests prove the PE helper is used once by `verify_native_architecture` and reject missing, duplicate, wrong-target, or mixed-source records; qualification evidence covers six wheels and 30 native installed-suite cells and is independently closable before D.18 release-policy activation.
-- [ ] Deliverable 8: the aobs handoff/specification records the invariant and change-control rule in the shared plan and agrees with the guard's expected values.
+- [ ] Deliverable 8: the obs-d-18 handoff/specification records the invariant and change-control rule in `docs/project-plan.md` under PLAN-SCOPE-022 and agrees with the guard's expected values.
 - [ ] The combined boundary does not add future Python versions, raise the minimum version, implement #88/OTEL functionality, activate `release/**`, or publish artifacts; D.18 owns policy activation/publication.
 - [ ] At this bead's close, `cargo check --workspace --all-features --locked` and `cargo test --workspace --locked` pass as the lead's intermediate-workspace invariant.
