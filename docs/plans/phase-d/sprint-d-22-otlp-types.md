@@ -4,7 +4,7 @@ Generated projection of `obs-d-22`; the bead is authoritative.
 
 ## Plan metadata
 
-- Wave: 2
+- Wave: 1.5
 - Layer: 11
 - Assignee / model: cobs / terra
 - Relation: `must_follow`
