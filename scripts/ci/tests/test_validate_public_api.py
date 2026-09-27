@@ -1,10 +1,14 @@
 """CLI exit-code contracts for the public API validator."""
 import contextlib
 import io
+import sys
 import unittest
 from unittest.mock import patch
+from pathlib import Path
 
-from validate_public_api import cli
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from validate_public_api import cli  # noqa: E402
 
 
 class PublicApiCliTests(unittest.TestCase):
