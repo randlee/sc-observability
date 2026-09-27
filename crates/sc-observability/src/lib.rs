@@ -27,6 +27,7 @@ mod maintenance;
 mod query;
 mod redact;
 mod runtime;
+mod settings;
 mod sinks;
 pub mod typed;
 
@@ -69,6 +70,10 @@ pub use sc_observability_types::{
 use sc_observability_types::{LevelFilter, ProcessIdentityPolicy};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
+#[doc(inline)]
+pub use settings::{
+    EnvSnapshot, LogRoot, LogSettings, LogSettingsError, LogSettingsInputs, ResolvedLogSettings,
+};
 #[cfg(feature = "fault-injection")]
 #[doc(inline)]
 pub use sinks::RetainedSinkFaultInjector;
