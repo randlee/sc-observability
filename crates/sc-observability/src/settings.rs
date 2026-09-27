@@ -7,7 +7,7 @@ use sc_observability_types::{EnvPrefix, ErrorCode, ErrorContext, LevelFilter, Re
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::RetainedLogPolicy;
+use crate::{RetainedLogPolicy, error_codes};
 
 /// Optional logging overrides accepted from JSON or an environment namespace.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -157,7 +157,7 @@ impl LogSettingsError {
     pub(crate) fn invalid_value(message: impl Into<String>) -> Self {
         Self::InvalidValue {
             context: Box::new(ErrorContext::new(
-                ErrorCode::new_static("SC_LOG_SETTINGS_INVALID_VALUE"),
+                error_codes::LOG_INVALID_VALUE,
                 message,
                 Remediation::recoverable(
                     "correct the supplied logging setting",
@@ -170,7 +170,7 @@ impl LogSettingsError {
     pub(crate) fn environment(message: impl Into<String>) -> Self {
         Self::InvalidEnvironment {
             context: Box::new(ErrorContext::new(
-                ErrorCode::new_static("SC_LOG_SETTINGS_INVALID_ENVIRONMENT"),
+                error_codes::LOG_INVALID_ENVIRONMENT,
                 message,
                 Remediation::recoverable(
                     "correct the selected logging environment namespace",
@@ -183,7 +183,7 @@ impl LogSettingsError {
     pub(crate) fn unknown_key(message: impl Into<String>) -> Self {
         Self::UnknownKey {
             context: Box::new(ErrorContext::new(
-                ErrorCode::new_static("SC_LOG_SETTINGS_UNKNOWN_KEY"),
+                error_codes::LOG_UNKNOWN_KEY,
                 message,
                 Remediation::recoverable(
                     "remove or rename the unsupported logging environment key",
@@ -196,13 +196,19 @@ impl LogSettingsError {
     pub(crate) fn prefix_collision(prefix: &EnvPrefix) -> Self {
         Self::PrefixCollision {
             context: Box::new(ErrorContext::new(
-                ErrorCode::new_static("SC_LOG_SETTINGS_PREFIX_COLLISION"),
-                format!("application prefix {} collides with SC", prefix.as_str()),
+                error_codes::LOG_PREFIX_COLLISION,
+                format!(
+                    "application prefix {} collides with {SHARED_ENV_PREFIX}",
+                    prefix.as_str()
+                ),
                 Remediation::recoverable(
-                    "choose an application prefix other than SC",
+                    format!("choose an application prefix other than {SHARED_ENV_PREFIX}"),
                     std::iter::empty::<String>(),
                 ),
             )),
         }
     }
 }
+
+pub(crate) const SHARED_ENV_PREFIX: &str = "SC";
+pub(crate) const LOG_ENV_NAMESPACE_SUFFIX: &str = "_LOG_";
