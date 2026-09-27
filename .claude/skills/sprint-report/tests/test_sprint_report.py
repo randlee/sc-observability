@@ -171,6 +171,23 @@ class SprintReportTests(unittest.TestCase):
         self.assertEqual(rows[1]['agents'], 'UNCLASSIFIED')
         self.assertIn('UNCLASSIFIED', report.render_dispatch(rows))
 
+    def test_dispatch_fixture_matches_three_model_classes_and_waits(self):
+        members = [
+            {'identity': 'luna', 'model': 'gpt-6-luna'},
+            {'identity': 'terra', 'model': 'gpt-6-terra'},
+            {'identity': 'astra', 'model': 'gpt-6-astra'},
+        ]
+        ready = [
+            {'id': 'normal', 'priority': 2, 'metadata': {'layer': 2, 'difficulty': 'normal'}},
+            {'id': 'fast', 'priority': 2, 'metadata': {'layer': 3, 'difficulty': 'fast'}},
+            {'id': 'hard', 'priority': 1, 'metadata': {'layer': 4, 'difficulty': 'hard'}},
+        ]
+        rows = report.dispatch_rows(ready, members, set())
+        self.assertEqual([row['id'] for row in rows], ['hard', 'normal', 'fast'])
+        self.assertEqual([row['agents'] for row in rows], ['astra', 'terra', 'luna'])
+        hard_wait = report.dispatch_rows([ready[2]], members[:1], set())
+        self.assertEqual(hard_wait[0]['agents'], 'WAIT')
+
 
 if __name__ == '__main__':
     unittest.main()
