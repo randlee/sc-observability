@@ -129,7 +129,7 @@ def main() -> int:
                 "file": finding["file"], "line": finding["line"],
                 "issue": finding["issue"], "depends_on": finding.get("depends_on", []),
             }
-            severity = str(finding.get("severity") or "").lower()
+            severity = str(finding.get("severity") or "blocking").lower()  # a sanity finding blocks unless the report says otherwise
             try:
                 priority = priority_for_severity(severity)
             except KeyError as exc:
@@ -160,7 +160,7 @@ def main() -> int:
             children[ref] = child
             created.append(child)
         for finding in findings:
-            severity = str(finding.get("severity") or "").lower()
+            severity = str(finding.get("severity") or "blocking").lower()  # a sanity finding blocks unless the report says otherwise
             command(["bd", "update", children[finding["finding_ref"]], "--priority", str(priority_for_severity(severity))], args.actor)
         for finding in findings:
             child = children[finding["finding_ref"]]

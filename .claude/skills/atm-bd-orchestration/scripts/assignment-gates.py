@@ -35,7 +35,7 @@ def metadata(bead: dict[str, Any]) -> dict[str, Any]:
 
 def refusal_for_difficulty(bead: dict[str, Any], members: list[dict[str, Any]], identity: str) -> str | None:
     difficulty = metadata(bead).get("difficulty")
-    member = next((row for row in members if row.get("identity") == identity or row.get("id") == identity), None)
+    member = next((row for row in members if identity in (row.get("name"), row.get("identity"), row.get("id"))), None)
     if not isinstance(difficulty, str) or not model_matches(str((member or {}).get("model") or ""), difficulty):
         return "DIFFICULTY_MISMATCH"
     return None

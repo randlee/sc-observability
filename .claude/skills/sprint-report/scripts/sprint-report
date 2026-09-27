@@ -220,8 +220,8 @@ def dispatch_rows(ready: list[dict[str, Any]], members: list[dict[str, Any]], ac
         if difficulty not in DIFFICULTY_MODELS:
             fitting = "UNCLASSIFIED"
         else:
-            names = [str(member.get("identity") or member.get("id") or "") for member in members
-                     if str(member.get("identity") or member.get("id") or "") not in active
+            names = [str(member.get("name") or member.get("identity") or member.get("id") or "") for member in members
+                     if str(member.get("name") or member.get("identity") or member.get("id") or "") not in active
                      and any(model in str(member.get("model") or "").lower() for model in DIFFICULTY_MODELS[difficulty])]
             fitting = ",".join(filter(None, names)) or "WAIT"
         try:
@@ -237,7 +237,7 @@ def dispatch_rows(ready: list[dict[str, Any]], members: list[dict[str, Any]], ac
 
 
 def render_dispatch(rows: list[dict[str, str]], members: list[dict[str, Any]] = ()) -> str:
-    unknown = sorted(str(m.get("identity") or m.get("id") or "") for m in members
+    unknown = sorted(str(m.get("name") or m.get("identity") or m.get("id") or "") for m in members
                      if str(m.get("model") or "").lower() in ("", "unknown", "none"))
     head = ["prerequisite: every roster member has `model` set"
             + (f"; unknown: {', '.join(unknown)}" if unknown else "")]
@@ -295,7 +295,7 @@ def main() -> int:
             if not isinstance(tasks, list):
                 tasks = tasks.get("tasks", [])
             active = {str(task.get("assignee") or task.get("owner") or "") for task in tasks
-                      if str(task.get("state") or task.get("status") or "") in {"active", "queued", "assigned"}}
+                      if str(task.get("state") or task.get("status") or "") not in {"completed", "cancelled", "refused", "closed", "failed"}}
             descendants = {index["root_bead_id"]}
             changed = True
             while changed:

@@ -18,7 +18,10 @@ class TemplateContractTests(unittest.TestCase):
     def test_finding_requires_difficulty_and_priority_map_is_current(self):
         text = (ROOT / "templates/finding-bead.json.j2").read_text()
         self.assertIn("- difficulty", text)
-        self.assertIn('"important": 2', text)
+        import json, sys
+        sys.path.insert(0, str(ROOT.parents[1] / "atm-beads" / "scripts"))
+        from plan_contract import SEVERITY_PRIORITY
+        self.assertIn(json.dumps(SEVERITY_PRIORITY).replace(", ", ", "), text)  # the literal mirrors plan_contract; Jinja cannot import it
         self.assertIn('"difficulty"', text)
         self.assertIn("## Deliverables\\n1.", text)
 
