@@ -154,8 +154,29 @@ class StageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'package field archive'):
             extract_verified(self.root, evidence, self.root / 'extracted')
 
+    def test_rejects_missing_or_wrong_package_name_and_version(self):
+        original = self.manifest['packages'][0].copy()
+        for field, value in (('name', None), ('version', 5)):
+            with self.subTest(field=field):
+                self.manifest['packages'][0] = original.copy()
+                if value is None:
+                    self.manifest['packages'][0].pop(field)
+                else:
+                    self.manifest['packages'][0][field] = value
+                self.save()
+                with self.assertRaisesRegex(ValueError, f'package field {field}'):
+                    verify_stage(self.root, VERSION)
+
+    def test_extract_verified_rejects_missing_top_level_packages(self):
+        evidence = json.loads(json.dumps(self.manifest))
+        evidence.pop('packages')
+        with self.assertRaisesRegex(ValueError, 'packages must be a list of objects'):
+            extract_verified(self.root, evidence, self.root / 'extracted')
+
     def test_rejects_private_package_leak(self):
-        self.manifest['packages'].append({'name': 'sc-observability-log-consumer-check'})
+        private = self.manifest['packages'][0].copy()
+        private['name'] = PRIVATE_PACKAGE
+        self.manifest['packages'].append(private)
         self.save()
         with self.assertRaisesRegex(ValueError, 'six public'):
             verify_stage(self.root, VERSION)
