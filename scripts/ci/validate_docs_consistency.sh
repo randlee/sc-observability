@@ -8,6 +8,9 @@ root = Path(".")
 requirements = (root / "docs/requirements.md").read_text(encoding="utf-8")
 architecture = (root / "docs/architecture.md").read_text(encoding="utf-8")
 api_design = (root / "docs/api-design.md").read_text(encoding="utf-8")
+ci_policy = (root / "docs/ci-policy.md").read_text(encoding="utf-8")
+publishing = (root / "docs/publishing.md").read_text(encoding="utf-8")
+readiness = (root / "docs/release-readiness-checklist.md").read_text(encoding="utf-8")
 expected_stack = "sc-observability-types\n  <- sc-observability\n    <- sc-observe\n      <- sc-observability-otlp"
 if expected_stack not in requirements:
     raise SystemExit("requirements.md missing canonical layered dependency order")
@@ -39,6 +42,18 @@ required_ids = ["LAY-004", "OTLP-017", "OTLP-018", "NFR-009", "NFR-010"]
 for req_id in required_ids:
     if req_id not in requirements:
         raise SystemExit(f"requirements.md missing required rule: {req_id}")
+
+historical_b_p2_pair = "candidate\n`1.3.0` against baseline `1.2.0`"
+if historical_b_p2_pair not in ci_policy:
+    raise SystemExit("ci-policy.md missing the authoritative historical B.P2 candidate/baseline pair")
+if "The publisher then dispatches the" not in ci_policy:
+    raise SystemExit("ci-policy.md missing the single publisher dispatch procedure")
+if "ci-policy.md#release-preflight" not in publishing:
+    raise SystemExit("publishing.md must link to the CI release-preflight policy")
+if "ci-policy.md#release-preflight" not in readiness or "Per release:" not in readiness:
+    raise SystemExit("release-readiness-checklist.md must link the per-release preflight action")
+if "Before publishing, the publisher dispatches" in publishing or "on the candidate ref and verifies" in readiness:
+    raise SystemExit("release-preflight dispatch instructions must not be duplicated in downstream docs")
 
 print("docs consistency validation passed")
 PY
