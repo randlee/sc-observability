@@ -66,6 +66,22 @@ Generated projection of `obs-d-21`; the bead is authoritative.
   - `scripts/ci/validate_repo_boundaries.sh`
   - `docs/plans/phase-d/sprint-d-21-otlp-contract.md`
 
+## F13 scope handoff ledger
+
+The phase ruling that keeps same-wave path fences disjoint and names
+cross-wave handoffs governs the incidental files reported by REQ-QA-003. They
+are accounted for as follows; none expands D.21's owned-path fence:
+
+| Path | Governing owner or ruling |
+| --- | --- |
+| `bindings/generation-manifest.json` | `obs-d-19` owns the generated binding manifest and its source/output digests. |
+| `examples/atm-adapter-example/src/main.rs` | `obs-d-17` owns the ATM consumer example source; `obs-d-18` receives it after D.17 closes. |
+| `examples/atm-adapter-example/Cargo.lock` | Generated lockfile consumed by D.17's locked ATM-example check; it is handed off with that example and is not an independent D.21 contract artifact. |
+| `examples/otlp-legacy/src/main.rs` | D.21 deliverable 2 creates declared OTLP placeholders next to the D.21-owned example manifest; implementation remains with the later OTLP consumer owner. |
+
+This ledger applies the phase-level ownership ruling and records the required
+handoffs without broadening the D.21 metadata projection.
+
 ## Goal
 
 Close the OTLP contract after obs-d-12's types sanity gate, releasing obs-d-5–8 without delaying types-only implementation work. This is the second stage within numbered wave 1; it is not an independent root.
