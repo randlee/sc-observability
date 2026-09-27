@@ -160,13 +160,24 @@ def states(graph, snapshot, index):
     return result
 
 
+def is_qa_of(bead, dev_id):
+    """A QA round of dev_id: a stage:qa child of it (phase contract; bd keeps one edge type per pair) or a
+    pre-contract round that `validates` it."""
+    edges = bead.get('dependencies') or []
+    if any(edge.get('type') == 'validates' and edge.get('depends_on_id') == dev_id for edge in edges):
+        return True
+    if 'stage:qa' not in (bead.get('labels') or []):
+        return False
+    metadata = bead.get('metadata') if isinstance(bead.get('metadata'), dict) else {}
+    return bead.get('parent') == dev_id or metadata.get('checked_bead') == dev_id or any(
+        edge.get('type') == 'parent-child' and edge.get('depends_on_id') == dev_id for edge in edges)
+
+
 def qa_states(graph, beads, index):
     """Share table QA semantics, counting open findings across every round."""
     result = {}
     for key in graph['nodes']:
-        rounds = [bead for bead in beads.values() if any(
-            edge.get('type') == 'validates' and edge.get('depends_on_id') == key
-            for edge in bead.get('dependencies') or [])]
+        rounds = [bead for bead in beads.values() if is_qa_of(bead, key)]
         selected = choose_round(rounds)
         round_ids = {bead['id'] for bead in rounds}
         findings = [bead for bead in beads.values() if any(

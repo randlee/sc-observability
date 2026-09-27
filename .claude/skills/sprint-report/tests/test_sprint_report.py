@@ -20,10 +20,12 @@ class SprintReportTests(unittest.TestCase):
             path = Path(directory) / 'sprints.json'
             path.write_text(json.dumps(index))
             self.assertEqual(report.load_index(Path(directory), path, None)[1], index)
-            for field in ('phase_id', 'integration_branch'):
-                path.write_text(json.dumps({**index, field: 'copied'}))
-                with self.assertRaisesRegex(RuntimeError, 'only root_bead_id and sprints'):
-                    report.load_index(Path(directory), path, None)
+            path.write_text(json.dumps({**index, 'phase_id': 'copied'}))
+            with self.assertRaisesRegex(RuntimeError, 'only root_bead_id and sprints'):
+                report.load_index(Path(directory), path, None)
+            # declared phase facts (obs-bo-10 D1) are accepted and ignored by the report
+            path.write_text(json.dumps({**index, 'integration_branch': 'integrate/phase-x', 'policy': {'human_gates': []}}))
+            self.assertEqual(report.load_index(Path(directory), path, None)[1]['sprints'], index['sprints'])
             index['sprints'][0]['title'] = 'copied'
             path.write_text(json.dumps(index))
             with self.assertRaisesRegex(RuntimeError, 'only dev_bead_id and sanity_bead_id'):
