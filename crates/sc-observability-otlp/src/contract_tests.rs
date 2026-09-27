@@ -9,9 +9,8 @@ use super::config::{
 };
 use super::constants;
 use super::contracts::{CompleteSpan, ExportRecord, LogRecord};
-use super::contracts::{
-    ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter, MetricExporter, TraceExporter,
-};
+use super::contracts::{ExporterSet, LogExporter, MetricExporter, TraceExporter};
+use super::testing::{LifecycleCall, recording_exporter_set};
 use sc_observability_types::error_codes::otlp;
 use sc_observability_types::v2::MetricRecord;
 use sc_observability_types::v2::{ConfigFailure, ExportError};
@@ -555,60 +554,77 @@ fn contract_tests_remaining_validation_variants_and_bullet_order() {
     );
 }
 
-struct FakeLifecycle;
-impl ExporterLifecycle for FakeLifecycle {
-    fn blocking_preflight(&self) -> Result<(), ExportError> {
-        Ok(())
-    }
-    fn flush_async(&self) -> LifecycleFuture {
-        Box::pin(async { Ok(()) })
-    }
-    fn shutdown_async(&self) -> LifecycleFuture {
-        Box::pin(async { Ok(()) })
-    }
-    fn flush_blocking(&self) -> Result<(), ExportError> {
-        Ok(())
-    }
-    fn shutdown_blocking(&self) -> Result<(), ExportError> {
-        Ok(())
-    }
-}
-
-struct FakeLog;
-impl LogExporter for FakeLog {
-    fn export_logs(&self, _batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
-        Ok(())
-    }
-}
-struct FakeTrace;
-impl TraceExporter for FakeTrace {
-    fn export_spans(&self, _batch: &[ExportRecord<CompleteSpan>]) -> Result<(), ExportError> {
-        Ok(())
-    }
-}
-struct FakeMetric;
-impl MetricExporter for FakeMetric {
-    fn export_metrics(&self, _batch: &[ExportRecord<MetricRecord>]) -> Result<(), ExportError> {
-        Ok(())
-    }
-}
-
 #[test]
 fn contract_tests_fake_exporter_contract() {
-    let exporters = ExporterSet {
-        logs: Arc::new(FakeLog),
-        traces: Arc::new(FakeTrace),
-        metrics: Arc::new(FakeMetric),
-        lifecycle: Arc::new(FakeLifecycle),
-    };
-    exporters.logs.export_logs(&[]).expect("fake logs");
-    exporters.traces.export_spans(&[]).expect("fake spans");
-    exporters.metrics.export_metrics(&[]).expect("fake metrics");
-    exporters
+    let fixture = recording_exporter_set::<
+        ExportRecord<LogRecord>,
+        ExportRecord<CompleteSpan>,
+        ExportRecord<MetricRecord>,
+    >();
+    fixture
+        .exporters
+        .logs
+        .export_logs(&[])
+        .expect("record logs");
+    fixture
+        .exporters
+        .traces
+        .export_spans(&[])
+        .expect("record spans");
+    fixture
+        .exporters
+        .metrics
+        .export_metrics(&[])
+        .expect("record metrics");
+    fixture
+        .exporters
         .lifecycle
         .blocking_preflight()
-        .expect("fake preflight");
-    exporters.lifecycle.flush_blocking().expect("fake flush");
+        .expect("record preflight");
+    fixture
+        .exporters
+        .lifecycle
+        .flush_blocking()
+        .expect("record flush");
+
+    assert_eq!(*fixture.logs.calls.lock().expect("calls poisoned"), vec![0]);
+    assert_eq!(
+        *fixture.traces.calls.lock().expect("calls poisoned"),
+        vec![0]
+    );
+    assert_eq!(
+        *fixture.metrics.calls.lock().expect("calls poisoned"),
+        vec![0]
+    );
+    assert_eq!(
+        fixture.logs.batches.lock().expect("batches poisoned").len(),
+        1
+    );
+    assert_eq!(
+        fixture
+            .traces
+            .batches
+            .lock()
+            .expect("batches poisoned")
+            .len(),
+        1
+    );
+    assert_eq!(
+        fixture
+            .metrics
+            .batches
+            .lock()
+            .expect("batches poisoned")
+            .len(),
+        1
+    );
+    assert_eq!(
+        *fixture.lifecycle.calls.lock().expect("calls poisoned"),
+        vec![
+            LifecycleCall::BlockingPreflight,
+            LifecycleCall::FlushBlocking
+        ]
+    );
 }
 
 #[cfg(feature = "otlp-sdk")]
@@ -719,11 +735,16 @@ fn contract_tests_v2_exporters_retain_signal_and_context() {
             }],
         },
     };
+    let recording = recording_exporter_set::<
+        ExportRecord<LogRecord>,
+        ExportRecord<CompleteSpan>,
+        ExportRecord<MetricRecord>,
+    >();
     let exporters: ExporterSet = ExporterSet {
-        logs: Arc::new(FakeLog),
+        logs: recording.exporters.logs,
         traces: Arc::new(CheckTrace(span.clone())),
         metrics: Arc::new(CheckMetric(metric.clone())),
-        lifecycle: Arc::new(FakeLifecycle),
+        lifecycle: recording.exporters.lifecycle,
     };
     exporters.traces.export_spans(&[span]).unwrap();
     exporters.metrics.export_metrics(&[metric]).unwrap();

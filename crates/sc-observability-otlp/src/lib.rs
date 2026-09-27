@@ -193,32 +193,6 @@ impl ExporterLifecycle for DisabledLifecycle {
     }
 }
 
-#[cfg(test)]
-struct TestLifecycle;
-
-#[cfg(test)]
-impl ExporterLifecycle for TestLifecycle {
-    fn blocking_preflight(&self) -> Result<(), ExportError> {
-        Ok(())
-    }
-
-    fn flush_async(&self) -> LifecycleFuture {
-        Box::pin(async { Ok(()) })
-    }
-
-    fn shutdown_async(&self) -> LifecycleFuture {
-        Box::pin(async { Ok(()) })
-    }
-
-    fn flush_blocking(&self) -> Result<(), ExportError> {
-        Ok(())
-    }
-
-    fn shutdown_blocking(&self) -> Result<(), ExportError> {
-        Ok(())
-    }
-}
-
 /// Consumes only fully validated transport bounds before selecting one common
 /// exporter shape. Protocol, feature, and caller-runtime availability are
 /// deliberately checked here, after the configuration's normative ordered
@@ -414,7 +388,7 @@ impl Telemetry {
                 logs: log_exporter,
                 traces: trace_exporter,
                 metrics: metric_exporter,
-                lifecycle: Arc::new(TestLifecycle),
+                lifecycle: Arc::new(testing::RecordingLifecycle::default()),
             },
         )
     }
@@ -845,6 +819,7 @@ fn shutdown_export_failure_typed(
 )]
 mod tests {
     use super::*;
+    use crate::testing::{RecordingLogExporter, RecordingMetricExporter, RecordingTraceExporter};
     use sc_observability_types::DiagnosticInfo;
     use sc_observability_types::{
         ActionName, Diagnostic, DurationMs, EntityId, ErrorCode, Level, LogEvent, MetricKind,
@@ -854,75 +829,6 @@ mod tests {
     use serde_json::{Map, json};
 
     use crate::assembly::span_key;
-
-    #[derive(Default)]
-    struct RecordingLogExporter {
-        calls: Mutex<Vec<usize>>,
-        fail: AtomicBool,
-    }
-
-    impl LogExporter<LogEvent> for RecordingLogExporter {
-        fn export_logs(&self, batch: &[LogEvent]) -> Result<(), ExportError> {
-            self.calls.lock().expect("calls poisoned").push(batch.len());
-            if self.fail.load(Ordering::SeqCst) {
-                Err(ExportError::Transport {
-                    context: Box::new(ErrorContext::new(
-                        error_codes::OTLP_EXPORT_TERMINAL,
-                        "log export failed",
-                        Remediation::not_recoverable("test exporter failure"),
-                    )),
-                })
-            } else {
-                Ok(())
-            }
-        }
-    }
-
-    #[derive(Default)]
-    struct RecordingTraceExporter {
-        calls: Mutex<Vec<usize>>,
-        fail: AtomicBool,
-    }
-
-    impl TraceExporter<CompleteSpan> for RecordingTraceExporter {
-        fn export_spans(&self, batch: &[CompleteSpan]) -> Result<(), ExportError> {
-            self.calls.lock().expect("calls poisoned").push(batch.len());
-            if self.fail.load(Ordering::SeqCst) {
-                Err(ExportError::Transport {
-                    context: Box::new(ErrorContext::new(
-                        error_codes::OTLP_EXPORT_TERMINAL,
-                        "trace export failed",
-                        Remediation::not_recoverable("test exporter failure"),
-                    )),
-                })
-            } else {
-                Ok(())
-            }
-        }
-    }
-
-    #[derive(Default)]
-    struct RecordingMetricExporter {
-        calls: Mutex<Vec<usize>>,
-        fail: AtomicBool,
-    }
-
-    impl MetricExporter<MetricRecord> for RecordingMetricExporter {
-        fn export_metrics(&self, batch: &[MetricRecord]) -> Result<(), ExportError> {
-            self.calls.lock().expect("calls poisoned").push(batch.len());
-            if self.fail.load(Ordering::SeqCst) {
-                Err(ExportError::Transport {
-                    context: Box::new(ErrorContext::new(
-                        error_codes::OTLP_EXPORT_TERMINAL,
-                        "metric export failed",
-                        Remediation::not_recoverable("test exporter failure"),
-                    )),
-                })
-            } else {
-                Ok(())
-            }
-        }
-    }
 
     struct SourcePreservingLogExporter;
 
