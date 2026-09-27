@@ -605,6 +605,8 @@ pub struct ServiceName(String);
 pub struct TargetCategory(String);
 pub struct ActionName(String);
 pub struct MetricName(String);
+pub struct StateName(String);
+pub struct EntityId(String);
 ```
 
 Ownership and usage:
@@ -642,6 +644,16 @@ Ownership and usage:
   - underlying type: validated `String`
   - used by: `MetricRecord.name`
   - invariant: non-empty metric identifier using `[A-Za-z0-9._\\-/]+`
+- `StateName`
+  - owner: `sc-observability-types`
+  - underlying type: validated `String`
+  - used by: `StateTransition.from_state` and `StateTransition.to_state`
+  - invariant: non-empty ASCII identifier using `[A-Za-z0-9._-]+`
+- `EntityId`
+  - owner: `sc-observability-types`
+  - underlying type: validated `String`
+  - used by: `StateTransition.entity_id`
+  - invariant: non-empty ASCII identifier using `[A-Za-z0-9._-]+`
 
 These newtypes should expose:
 
@@ -652,7 +664,7 @@ impl ToolName {
 }
 ```
 
-Equivalent constructors and accessors apply to the other four newtypes.
+Equivalent constructors and accessors apply to the other listed newtypes.
 
 ### 8.2 `Remediation`
 
@@ -855,16 +867,16 @@ Design direction:
 ```rust
 pub struct StateTransition {
     /// Stable category describing what changed, such as `task` or `subagent`.
-    pub entity_kind: String,
-    pub entity_id: Option<String>,
+    pub entity_kind: TargetCategory,
+    pub entity_id: Option<EntityId>,
     /// Previous stable state label.
-    pub from_state: String,
+    pub from_state: StateName,
     /// New stable state label.
-    pub to_state: String,
+    pub to_state: StateName,
     /// Optional human-readable explanation for why the transition occurred.
     pub reason: Option<String>,
     /// Optional action or event name that triggered the transition.
-    pub trigger: Option<String>,
+    pub trigger: Option<ActionName>,
 }
 ```
 
@@ -2418,10 +2430,21 @@ schema contract without changing native published serialization.
 
 D.12 stages this contract in `sc_observability_types::v2` at the current
 workspace package version. D.21 activates workspace version 2.0 atomically;
-D.18 activates root exports and retires compatibility after consumers migrate.
+D.18 activates the ADR-017 canonical error exports and retires their
+superseded compatibility surfaces after consumers migrate. Neutral signal
+models remain additive under `v2`; the existing root `MetricRecord`,
+`TraceContext`, and `SpanRecord` keep their published construction, trait
+and serialization contracts under ADR-012. Consumers opt into the new models
+through the explicit `v2` path. Root signal replacement is not part of this
+handoff, and neither a version bump nor a break-manifest entry authorizes it.
 ADR-017/018 were accepted through PR #225 and ADR-019 through PR #227.
 PHB-003/004/005 continue governing 1.x; PHD-001/002 govern the reviewed major
 migration. A staged module is not a release-baseline approval.
+
+A future root signal replacement requires a separately accepted ADR that
+explicitly supersedes ADR-012 for those named breaks, followed by the PHD-002
+manifest, migration evidence and API approval before activation. D.18 still
+owns the manifest and release gates for the approved error migration.
 
 ### Canonical errors
 
@@ -2520,6 +2543,17 @@ contains no nested trace context. `SpanKind` uses `internal`, `server`,
 boolean, signed/unsigned integer, finite float, string, array, object or null
 values. Its public API has no serde_json, runtime or transport type dependency.
 The existing crate dependency on serde_json remains for 1.x diagnostics.
+
+Native attribute serde uses `{"kind":"int","data":5}` for `Int(5)` and
+`{"kind":"uint","data":5}` for `UInt(5)`. The tags are `bool`, `int`,
+`uint`, `float`, `string`, `array`, `object`, and `null`; null has no `data`
+field. Arrays contain tagged values and objects map names to tagged values
+recursively. Native equality distinguishes variants, even for equal
+non-negative numbers, and serde preserves that distinction over the full
+i64/u64 ranges. Bare untagged values are rejected rather than inferred.
+This is the staged v2 native representation; existing 1.x JSON attributes
+are unchanged. The DTO conversion below retains the tags but encodes integer
+payloads as canonical decimal strings.
 
 `SpanRecord<SpanStarted>::new(timestamp, service, name, trace, attributes)`
 creates an internal span with no links. `with_kind` and `with_links` populate

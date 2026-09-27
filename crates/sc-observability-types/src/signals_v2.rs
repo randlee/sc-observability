@@ -52,15 +52,20 @@ impl std::fmt::Display for FiniteF64 {
 }
 
 /// Neutral attribute values without transport or JSON-library types in the API.
+///
+/// Native serde uses a `kind` tag and a `data` payload (omitted for `null`).
+/// Tags preserve the exact variant, including signed and unsigned integers
+/// with the same non-negative value, recursively through arrays and objects.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "kind", content = "data", rename_all = "snake_case")]
 pub enum AttributeValue {
     /// Boolean value.
     Bool(bool),
     /// Signed integer, preserved without floating-point coercion.
     Int(i64),
-    /// Unsigned integer, preserved without floating-point coercion.
+    /// Unsigned integer, preserved without signed or floating-point coercion.
+    #[serde(rename = "uint")]
     UInt(u64),
     /// Finite floating-point value.
     Float(FiniteF64),
@@ -189,7 +194,7 @@ pub enum AggregationTemporality {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "HistogramInput")]
 pub struct HistogramPoint {
-    explicit_bounds: Vec<f64>,
+    explicit_bounds: Vec<FiniteF64>,
     bucket_counts: Vec<u64>,
     count: u64,
     sum: FiniteF64,
@@ -204,7 +209,13 @@ struct HistogramInput {
 impl TryFrom<HistogramInput> for HistogramPoint {
     type Error = MetricModelError;
     fn try_from(v: HistogramInput) -> Result<Self, Self::Error> {
-        Self::try_new(v.explicit_bounds, v.bucket_counts, v.count, v.sum)
+        let bounds = v.explicit_bounds.into_iter().map(FiniteF64::new)
+            .collect::<Result<Vec<_>, _>>().map_err(|_| MetricModelError::InvalidHistogram {
+                context: Box::new(ErrorContext::new(error_codes::SC_METRIC_INVALID_HISTOGRAM,
+                    "invalid histogram distribution", Remediation::recoverable(
+                        "Provide finite increasing bounds, one more bucket than bounds, and matching count/sum", [] as [&str; 0]))),
+            })?;
+        Self::try_new(bounds, v.bucket_counts, v.count, v.sum)
     }
 }
 impl HistogramPoint {
@@ -214,13 +225,12 @@ impl HistogramPoint {
     /// Returns `InvalidHistogram` for non-finite or unordered bounds, mismatched
     /// bucket lengths, overflowing/mismatched counts, or nonzero sum with zero count.
     pub fn try_new(
-        explicit_bounds: Vec<f64>,
+        explicit_bounds: Vec<FiniteF64>,
         bucket_counts: Vec<u64>,
         count: u64,
         sum: FiniteF64,
     ) -> Result<Self, MetricModelError> {
-        if explicit_bounds.iter().any(|b| !b.is_finite())
-            || explicit_bounds.windows(2).any(|b| b[0] >= b[1])
+        if explicit_bounds.windows(2).any(|b| b[0] >= b[1])
             || explicit_bounds.len().checked_add(1) != Some(bucket_counts.len())
             || bucket_counts
                 .iter()
@@ -248,7 +258,7 @@ impl HistogramPoint {
     }
     /// Returns strictly increasing finite bounds.
     #[must_use]
-    pub fn explicit_bounds(&self) -> &[f64] {
+    pub fn explicit_bounds(&self) -> &[FiniteF64] {
         &self.explicit_bounds
     }
     /// Returns counts, including the final unbounded bucket.
@@ -446,9 +456,23 @@ impl MetricRecord {
     }
 }
 
+/// Typestate-specific storage carried by a producer-facing span record.
+pub trait SpanState {
+    /// Duration representation valid for this lifecycle state.
+    type Duration;
+}
+
+impl SpanState for SpanStarted {
+    type Duration = ();
+}
+
+impl SpanState for SpanEnded {
+    type Duration = DurationMs;
+}
+
 /// Producer-facing span record whose lifecycle is encoded via typestate.
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct SpanRecord<S> {
+pub struct SpanRecord<S: SpanState> {
     timestamp: Timestamp,
     service: ServiceName,
     name: ActionName,
@@ -456,7 +480,7 @@ pub struct SpanRecord<S> {
     status: SpanStatus,
     diagnostic: Option<Diagnostic>,
     attributes: Attributes,
-    duration_ms: Option<DurationMs>,
+    duration_ms: S::Duration,
     kind: SpanKind,
     links: Vec<SpanLink>,
     #[serde(skip)]
@@ -481,7 +505,7 @@ impl SpanRecord<SpanStarted> {
             status: SpanStatus::Unset,
             diagnostic: None,
             attributes,
-            duration_ms: None,
+            duration_ms: (),
             kind: SpanKind::Internal,
             links: Vec::new(),
             marker: PhantomData,
@@ -518,7 +542,7 @@ impl SpanRecord<SpanStarted> {
             status,
             diagnostic: self.diagnostic,
             attributes: self.attributes,
-            duration_ms: Some(duration),
+            duration_ms: duration,
             kind: self.kind,
             links: self.links,
             marker: PhantomData,
@@ -526,7 +550,7 @@ impl SpanRecord<SpanStarted> {
     }
 }
 
-impl<S> SpanRecord<S> {
+impl<S: SpanState> SpanRecord<S> {
     /// Returns the span role.
     #[must_use]
     pub fn kind(&self) -> SpanKind {
@@ -586,7 +610,7 @@ impl SpanRecord<SpanEnded> {
     ///
     /// Only `end` constructs this typestate, so a duration is always present.
     #[must_use]
-    pub fn duration_ms(&self) -> Option<DurationMs> {
+    pub fn duration_ms(&self) -> DurationMs {
         self.duration_ms
     }
 }

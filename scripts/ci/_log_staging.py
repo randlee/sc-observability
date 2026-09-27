@@ -87,11 +87,31 @@ def inspect_archive(
         }
 
 
-def verify_stage(stage: Path, version: str, source_commit: str | None = None) -> dict:
+def read_stage_manifest(stage: Path) -> dict:
+    """Load the stage manifest once and reject non-object JSON explicitly."""
     evidence = json.loads((stage / "stage-manifest.json").read_text())
-    if (evidence.get("schema_version") != 1 or evidence.get("candidate_version") != version
+    if not isinstance(evidence, dict):
+        raise ValueError("stage manifest must be a JSON object")
+    return evidence
+
+
+def verify_stage(
+    stage: Path,
+    version: str | None = None,
+    source_commit: str | None = None,
+    *,
+    evidence: dict | None = None,
+    workspace_version: str | None = None,
+) -> dict:
+    evidence = read_stage_manifest(stage) if evidence is None else evidence
+    qualified_version = evidence.get("candidate_version")
+    if (evidence.get("schema_version") != 1 or (version is not None and qualified_version != version)
             or evidence.get("publication") != "pending_B.7"):
         raise ValueError("stage schema/version/publication mismatch")
+    if not isinstance(qualified_version, str):
+        raise ValueError("stage schema/version/publication mismatch")
+    if workspace_version is not None and not isinstance(workspace_version, str):
+        raise ValueError("workspace candidate version mismatch")
     actual_source = evidence.get("source_commit", "")
     if not re.fullmatch(r"[0-9a-f]{40}", actual_source) or (source_commit and actual_source != source_commit):
         raise ValueError("stage source commit mismatch")
@@ -99,12 +119,12 @@ def verify_stage(stage: Path, version: str, source_commit: str | None = None) ->
     if tuple(item.get("name") for item in packages) != PACKAGES:
         raise ValueError("stage must contain exactly the six public packages in release order")
     for item in packages:
-        if item.get("version") != version:
+        if item.get("version") != qualified_version:
             raise ValueError("package version mismatch")
         archive = safe_path(stage, item["archive"])
         if sha256(archive) != item["archive_sha256"]:
             raise ValueError(f"archive checksum mismatch: {item['name']}")
-        inspected = inspect_archive(archive, item["name"], version, actual_source)
+        inspected = inspect_archive(archive, item["name"], qualified_version, actual_source)
         for key in ("files", "normalized_manifest", "manifest_sha256"):
             if inspected[key] != item[key]:
                 raise ValueError(f"archive {key} mismatch: {item['name']}")
