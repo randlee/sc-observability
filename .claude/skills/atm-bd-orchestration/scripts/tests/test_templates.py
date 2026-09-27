@@ -45,6 +45,18 @@ class TemplateContractTests(unittest.TestCase):
                 if name != "dev-sanity-template":
                     self.assertIn("--root {{ phase_root | string | cdata_escape }}", text)
 
+    def test_finding_bead_deliverables_are_splittable(self):
+        import importlib.machinery, importlib.util, json, subprocess
+        loader = importlib.machinery.SourceFileLoader("sanity_split", str(ROOT / "scripts/sanity-split"))
+        split = importlib.util.module_from_spec(importlib.util.spec_from_loader("sanity_split", loader))
+        loader.exec_module(split)
+        result = subprocess.run(["sc-compose", "render", "--file", str(ROOT / "templates/finding-bead.json.j2"),
+                                 "--var-file", str(ROOT / "examples/finding-bead-vars.json"), "--strict"],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        items = split.parse_deliverables(json.loads(result.stdout)["description"])
+        self.assertEqual(len(items), 1)
+
     def test_assignment_examples_render_strictly(self):
         examples = ROOT / "examples"
         templates = sorted((ROOT / "templates").glob("*.j2"))
