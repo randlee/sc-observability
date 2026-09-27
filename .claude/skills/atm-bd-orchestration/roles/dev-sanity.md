@@ -47,9 +47,8 @@ commit. Each failure is a refusal, not a best-effort check:
 1. `test -n "$PR_NUMBER" && test -n "$PR_URL"`; otherwise refuse
    `SANITY.PR_REQUIRED`.
 2. `gh pr view "$PR_NUMBER" --json baseRefName,headRefOid --jq '.baseRefName + " " + .headRefOid'`
-   must equal the declared `pr_target` and commit; after `git fetch origin`,
-   `git rev-parse "$PR_BASE"` must equal `git rev-parse "origin/$PR_TARGET"`.
-   Otherwise refuse `SANITY.STALE_BASE`.
+   must equal the declared `pr_target` and commit; otherwise refuse
+   `SANITY.STALE_BASE`. Then `git fetch origin`.
 3. `git log --format=%H "origin/$PR_TARGET..$COMMIT" | grep -q .` must pass;
    otherwise refuse `SANITY.ZERO_DELTA`.
 4. `test -z "$(git status --porcelain --untracked-files=no | grep -v '^?? \.beads\.gate\.lock$')"`

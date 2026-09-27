@@ -45,6 +45,10 @@ class TemplateContractTests(unittest.TestCase):
                 if name != "dev-sanity-template":
                     self.assertIn("--root {{ phase_root | string | cdata_escape }}", text)
 
+    def test_sanity_template_has_no_stale_base_check(self):
+        text = (ROOT / "templates/dev-sanity-template.xml.j2").read_text()
+        self.assertNotIn("STALE_BASE", text)  # sanity-split pins origin/<base> itself (three-dot diff)
+
     def test_finding_bead_deliverables_are_splittable(self):
         import importlib.machinery, importlib.util, json, subprocess
         loader = importlib.machinery.SourceFileLoader("sanity_split", str(ROOT / "scripts/sanity-split"))
