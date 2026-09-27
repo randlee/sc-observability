@@ -49,8 +49,7 @@ bead and blocks every dev bead that requires it. Its assignment is
    dev-task completion.
 2. Lead assigns the sanity check.
 3. If sanity check fails, the sanity member files every reported failure as a
-   child finding bead of the dev bead. It adds sibling `blocks` edges only for
-   reported fix prerequisites. Lead reviews those child findings, then reopens
+   child finding bead of the checked bead. It adds `blocks` edges only between those new beads, where one fix depends on another. Lead reviews those child findings, then reopens
    the dev bead and gives the dev agent a dev-fix assignment:
 
    ```bash
