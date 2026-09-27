@@ -1289,9 +1289,12 @@ was reworded accordingly to describe the remaining validation.
   histogram bounds/bucket/count consistency, start at or before end,
   nonempty delta intervals and nonnegative monotonic sums. `HistogramPoint`
   preserves explicit bounds, integer bucket counts/count and finite sum.
-- **Decision — serde and wire projection**: Native `AttributeValue` serde is
-  untagged JSON-compatible data; `FiniteF64` is a number and `TraceFlags` a
-  byte. `SpanKind` and `AggregationTemporality` use snake-case tokens.
+- **Decision — serde and wire projection** (amended per ruling
+  `01M3F5BQFV804H5G4W6HFNZ03V`): Native `AttributeValue` serde is adjacently
+  tagged with `kind`/`data`; `null` omits `data`, and the representation
+  preserves each variant, including `Int` versus `UInt`, recursively through
+  arrays and objects. `FiniteF64` is a number and `TraceFlags` a byte.
+  `SpanKind` and `AggregationTemporality` use snake-case tokens.
   `MetricValue` uses adjacent `kind`/`data` tags, for example
   `{"kind":"gauge","data":1.5}`. Records serialize named fields;
   `SpanRecord` omits its typestate marker and `SpanSignal` uses external
@@ -1303,8 +1306,9 @@ was reworded accordingly to describe the remaining validation.
   adapters. Native source/backtrace objects never enter the wire envelope.
 - **Consequences**: A discriminated metric value prevents contradictory
   kind/value combinations; checked neutral models share validation across
-  backends. Untagged native attributes do not preserve every Rust numeric
-  variant through JSON, so language boundaries use explicit DTO tags.
+  backends. Tagged native attributes preserve every Rust numeric variant
+  through JSON, including recursively nested arrays and objects; language
+  boundaries retain explicit DTO tags as well.
   Temporary coexistence enables staged migration; it does not waive the
   final replacement and compatibility-removal gates.
 - **Contracts**: TYP-008–019, PHD-001/002, PHB-002/010/012/013;
