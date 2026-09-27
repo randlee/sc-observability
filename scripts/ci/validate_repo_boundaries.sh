@@ -194,6 +194,32 @@ subprocess.run(
     check=True,
 )
 
+# The custom-sink consumer remains a D.17-owned migration, but it must not be
+# invisible while the v2 LogSink signature makes its retained implementation
+# fail. Keep the current public-only failure explicit until that owner changes
+# this check to require a successful compile.
+custom_sink_manifest = root / "examples/custom-sink-example/Cargo.toml"
+if not custom_sink_manifest.exists():
+    raise SystemExit("examples/custom-sink-example/Cargo.toml is missing")
+
+custom_sink_check = subprocess.run(
+    ["cargo", "check", "--manifest-path", str(custom_sink_manifest)],
+    cwd=root,
+    capture_output=True,
+    text=True,
+)
+custom_sink_output = custom_sink_check.stdout + custom_sink_check.stderr
+if custom_sink_check.returncode == 0:
+    raise SystemExit(
+        "custom-sink-example unexpectedly compiled; D.17 must replace the "
+        "tracked E0053 gate with a successful consumer compile check"
+    )
+if "error[E0053]" not in custom_sink_output or "AuditSink" not in custom_sink_output:
+    raise SystemExit(
+        "custom-sink-example failed without the tracked AuditSink E0053 "
+        "diagnostic; investigate before updating the D.17 migration gate"
+    )
+
 print("repo boundary validation passed")
 PY
 
