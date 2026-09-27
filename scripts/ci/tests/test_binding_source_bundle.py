@@ -48,7 +48,7 @@ class SourceBoundaryTests(unittest.TestCase):
                 contents.addfile(member,io.BytesIO(body))
         return archive
 
-    def project_with_stage(self,root,root_version,stage_version,*,corrupt=False,missing_candidate=False):
+    def project_with_stage(self,root,root_version,stage_version,*,corrupt=False,missing_candidate=False,candidate_present=False,candidate_value=None):
         package=root/'crates/sc-observability-types';(package/'src').mkdir(parents=True)
         (root/'Cargo.toml').write_text('[workspace]\nmembers=["crates/sc-observability-types"]\nresolver="2"\n')
         (package/'Cargo.toml').write_text('[package]\nname="sc-observability-types"\nversion='+json.dumps(root_version)+'\nedition="2024"\nlicense="MIT"\n[dependencies]\nserde_json="1"\n')
@@ -65,6 +65,7 @@ class SourceBoundaryTests(unittest.TestCase):
             packages.append({'name':name,'version':stage_version,'archive':archive.relative_to(stage).as_posix(),'archive_sha256':sha256(archive),**details})
         manifest={'schema_version':1,'candidate_version':stage_version,'publication':'pending_B.7','source_commit':source_commit,'packages':packages}
         if missing_candidate:manifest.pop('candidate_version')
+        elif candidate_present:manifest['candidate_version']=candidate_value
         if corrupt:manifest['packages'][0]['archive_sha256']='0'*64
         (stage/'stage-manifest.json').write_text(json.dumps(manifest))
         return package/'Cargo.toml'
@@ -91,11 +92,17 @@ class SourceBoundaryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'archive checksum mismatch'):
                 BUNDLE.build(manifest,root/'bundle')
 
-    def test_build_rejects_a_stage_without_candidate_version(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root=Path(temporary);manifest=self.project_with_stage(root,'2.0.0','1.4.0',missing_candidate=True)
-            with self.assertRaisesRegex(BUNDLE.BundleError,'candidate_version must be a string'):
-                BUNDLE.build(manifest,root/'bundle')
+    def test_build_rejects_missing_or_non_string_candidate_version(self):
+        cases=[
+            ('absent', {'missing_candidate':True}),
+            ('integer', {'candidate_present':True, 'candidate_value':5}),
+            ('null', {'candidate_present':True, 'candidate_value':None}),
+        ]
+        for label, options in cases:
+            with self.subTest(candidate_version=label), tempfile.TemporaryDirectory() as temporary:
+                root=Path(temporary);manifest=self.project_with_stage(root,'2.0.0','1.4.0',**options)
+                with self.assertRaisesRegex(BUNDLE.BundleError,'candidate_version must be a string'):
+                    BUNDLE.build(manifest,root/'bundle')
 
     def test_build_rejects_a_non_object_stage_manifest(self):
         with tempfile.TemporaryDirectory() as temporary:
