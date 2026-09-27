@@ -1,0 +1,193 @@
+import importlib.machinery
+import importlib.util
+import json
+from pathlib import Path
+import tempfile
+import unittest
+
+SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/sprint-report'
+loader = importlib.machinery.SourceFileLoader('sprint_report', str(SCRIPT))
+spec = importlib.util.spec_from_loader(loader.name, loader)
+report = importlib.util.module_from_spec(spec)
+loader.exec_module(report)
+
+
+class SprintReportTests(unittest.TestCase):
+    def test_loads_only_bead_id_schema_and_rejects_legacy_copied_fields(self):
+        index = {'root_bead_id': 'phase-root', 'sprints': [
+            {'dev_bead_id': 'dev-1', 'sanity_bead_id': 'gate-1'}]}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'sprints.json'
+            path.write_text(json.dumps(index))
+            self.assertEqual(report.load_index(Path(directory), path, None)[1], index)
+            path.write_text(json.dumps({**index, 'phase_id': 'copied'}))
+            with self.assertRaisesRegex(RuntimeError, 'only root_bead_id and sprints'):
+                report.load_index(Path(directory), path, None)
+            # declared phase facts (obs-bo-10 D1) are accepted and ignored by the report
+            path.write_text(json.dumps({**index, 'integration_branch': 'integrate/phase-x', 'policy': {'human_gates': []}}))
+            self.assertEqual(report.load_index(Path(directory), path, None)[1]['sprints'], index['sprints'])
+            index['sprints'][0]['title'] = 'copied'
+            path.write_text(json.dumps(index))
+            with self.assertRaisesRegex(RuntimeError, 'only dev_bead_id and sanity_bead_id'):
+                report.load_index(Path(directory), path, None)
+            del index['sprints'][0]['title']
+            index['root_bead_id'] = ''
+            path.write_text(json.dumps(index))
+            with self.assertRaisesRegex(RuntimeError, 'root_bead_id must be a nonempty bead ID'):
+                report.load_index(Path(directory), path, None)
+
+    def test_membership_index_reads_names_and_order_from_live_beads(self):
+        index = {'sprints': [
+            {'dev_bead_id': 'dev-1', 'sanity_bead_id': 'gate-1'},
+            {'dev_bead_id': 'dev-2', 'sanity_bead_id': 'gate-2'}]}
+        beads = {'dev-1': {'title': 'First', 'metadata': {'sprint': 's-1', 'layer': 2}},
+                 'dev-2': {'title': 'Second', 'metadata': {'sprint': 's-2', 'layer': 1}}}
+        rows = report.live_sprint_rows(index, beads)
+        self.assertEqual([row['id'] for row in rows], ['dev-2', 'dev-1'])
+        beads['dev-1']['metadata']['layer'] = 0
+        beads['dev-1']['title'] = 'Changed in beads'
+        rows = report.live_sprint_rows(index, beads)
+        self.assertEqual(rows[0]['title'], 'Changed in beads')
+        self.assertEqual(rows[0]['sprint'], 's-1')
+        self.assertEqual(set(index['sprints'][0]), {'dev_bead_id', 'sanity_bead_id'})
+
+    def test_historical_sanity_count_counts_only_completed_runs(self):
+        events = {'events': [{'event': event} for event in (
+            'assigned', 'started', 'completed', 'reopened', 'started',
+            'completed', 'reopened', 'started', 'completed', 'refused'
+        )]}
+        self.assertEqual(report.completed_sanity_runs(events), 3)
+        self.assertEqual(report.completed_sanity_runs({'events': []}), 0)
+
+    def test_sanity_iterations_use_cumulative_completion_not_line_count(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'phase-d.jsonl'
+            self.assertEqual(report.sanity_iterations(path), {})
+            runs = [
+                {'task': 'sanity-1', 'iteration': i, 'verdict': 'PASS', 'completed_at': '2026-09-26'}
+                for i in (10, 13, 13, 11)
+            ]
+            runs.append({'task': 'sanity-1', 'iteration': 14, 'verdict': 'IN PROGRESS'})
+            runs.append({'task': 'sanity-2', 'iteration': 6, 'verdict': 'FAIL', 'completed_at': '2026-09-26'})
+            path.write_text('\n'.join(json.dumps(run) for run in runs) + '\n')
+            self.assertEqual(report.sanity_iterations(path), {'sanity-1': 13, 'sanity-2': 6})
+
+    def test_qa_table_uses_original_icons(self):
+        cases = [
+            (None, [], ''),
+            ({'status': 'open'}, [], '📥'),
+            ({'status': 'in_progress'}, [], '🌀'),
+            ({'status': 'closed', 'close_reason': 'PASS: verified'}, [], '✅'),
+            ({'status': 'closed', 'close_reason': 'FAIL: findings'}, [{'status': 'closed'}], '🚩'),
+            ({'status': 'closed', 'close_reason': 'PASS: verified'}, [{'status': 'open'}], '🚩'),
+        ]
+        for qa, findings, expected in cases:
+            with self.subTest(qa=qa, findings=findings):
+                self.assertEqual(report.qa_icon(qa, findings), expected)
+
+    def test_open_pr_preferred_over_closed_reuse(self):
+        prs = [{'number': 4, 'headRefName': 'sprint/d-1', 'state': 'OPEN'},
+               {'number': 6, 'headRefName': 'sprint/d-1', 'state': 'CLOSED'}]
+        self.assertEqual(report.select_pr(prs, 'sprint/d-1')['number'], 4)
+        self.assertIsNone(report.select_pr(prs, None))
+
+    def test_running_check_is_not_green(self):
+        self.assertEqual(report.check_icon({'statusCheckRollup': [{'status': 'IN_PROGRESS', 'conclusion': ''}]}), '🌀')
+
+    def test_closed_dev_without_sanity_is_flagged(self):
+        self.assertEqual(report.status_icon({'status': 'closed'}, None), '🚩')
+
+    def test_dev_done_requires_explicit_sanity_pass(self):
+        dev = {'status': 'closed'}
+        self.assertEqual(report.status_icon(dev, {'status': 'closed'}), '🚩')
+        self.assertEqual(report.status_icon(dev, {'status': 'closed', 'close_reason': 'FAIL at abc'}), '🚩')
+        self.assertEqual(report.status_icon(dev, {'status': 'closed', 'close_reason': 'PASS at abc'}), '✅')
+        self.assertEqual(report.status_icon(dev, {'status': 'closed', 'metadata': {'verdict': 'PASS'}}), '✅')
+        self.assertEqual(report.status_icon(dev, {'status': 'open'}), '📥')
+
+    def test_dependency_blocked_open_sprint_is_not_assigned(self):
+        dev, sanity = {'status': 'open'}, {'status': 'open'}
+        self.assertEqual(report.status_icon(dev, sanity, blocked=True), '🚧')
+        self.assertEqual(report.status_icon(dev, sanity), '📥')
+        self.assertEqual(report.status_icon({'status': 'blocked'}, sanity), '🚧')
+
+    def test_findings_counts_severity_and_excludes_closed(self):
+        findings = [
+            {'status': 'open', 'metadata': {'severity': 'blocking'}},
+            {'status': 'in_progress', 'metadata': {'severity': 'important'}},
+            {'status': 'open', 'labels': ['severity:minor']},
+            {'status': 'closed', 'metadata': {'severity': 'blocking'}},
+        ]
+        self.assertEqual(report.findings_summary(findings), '1:1:1')
+        self.assertEqual(report.findings_summary([]), '0:0:0')
+
+    def test_dev_sanity_findings_and_fixing_icons(self):
+        dev, sanity = {'status': 'closed'}, {'status': 'open'}
+        self.assertEqual(report.status_icon(dev, sanity, [{'status': 'open'}]), '🚩')
+        self.assertEqual(report.status_icon(dev, sanity, [{'status': 'in_progress'}]), '🔨')
+
+    def test_ci_blocked_ready_and_failure_precedence(self):
+        pr = {'state': 'OPEN', 'isDraft': False, 'mergeable': 'MERGEABLE',
+              'mergeStateStatus': 'CLEAN', 'statusCheckRollup': [{'conclusion': 'SUCCESS'}]}
+        self.assertEqual(report.check_icon(pr), '✅')
+        self.assertEqual(report.check_icon(pr, merge_ready=True), '🚀')
+        self.assertEqual(report.check_icon(dict(pr, isDraft=True)), '✅')
+        pr['mergeStateStatus'] = 'BLOCKED'
+        self.assertEqual(report.check_icon(pr), '🚧')
+        pr['statusCheckRollup'] = [{'conclusion': 'FAILURE'}]
+        self.assertEqual(report.check_icon(pr), '❌')
+
+    def test_merge_ready_requires_sanity_qa_pass_and_closed_findings(self):
+        qa = {'status': 'closed', 'metadata': {'verdict': 'PASS'}}
+        self.assertTrue(report.review_ready('✅', qa, []))
+        self.assertFalse(report.review_ready('📥', qa, []))
+        self.assertFalse(report.review_ready('✅', None, []))
+        self.assertFalse(report.review_ready('✅', {'status': 'in_progress'}, []))
+        self.assertFalse(report.review_ready('✅', {'status': 'closed', 'close_reason': 'FAIL: findings'}, []))
+        self.assertFalse(report.review_ready('✅', qa, [
+            {'status': 'open', 'metadata': {'severity': 'blocking'}}]))
+
+    def test_fail_verdict_survives_closed_findings(self):
+        qa = {'status': 'closed', 'close_reason': 'FAIL: two findings', 'metadata': {'round': 2}}
+        self.assertEqual(report.qa_summary(qa, [{'status': 'closed'}]), 'R2 FAIL (0 open)')
+
+    def test_verdict_is_prefix_not_substring(self):
+        qa = {'status': 'closed', 'close_reason': 'not a FAIL verdict', 'metadata': {'round': 1}}
+        self.assertEqual(report.qa_summary(qa, []), 'R1 UNKNOWN (0 open)')
+
+    def test_finding_relation_not_id_prefix(self):
+        finding = {'id': 'unrelated-name', 'dependencies': [{'depends_on_id': 'qa-2', 'type': 'discovered-from'}]}
+        self.assertTrue(report.related_bead(finding, 'qa-2', 'discovered-from'))
+        self.assertFalse(report.related_bead({'id': 'qa-2-f1'}, 'qa-2', 'discovered-from'))
+
+    def test_dispatch_prioritizes_and_never_assigns_unclassified(self):
+        rows = report.dispatch_rows([
+            {'id': 'minor', 'priority': 4, 'metadata': {'layer': 3, 'difficulty': 'fast'}},
+            {'id': 'blocking', 'priority': 1, 'metadata': {'layer': 2, 'severity': 'blocking', 'difficulty': 'hard'}},
+            {'id': 'unknown', 'priority': 2, 'metadata': {'layer': 1}},
+        ], [{'identity': 'luna', 'model': 'gpt-6-luna'}, {'identity': 'astra', 'model': 'gpt-6-astra'}], set())
+        self.assertEqual([row['id'] for row in rows], ['blocking', 'unknown', 'minor'])
+        self.assertEqual(rows[0]['agents'], 'astra')
+        self.assertEqual(rows[1]['agents'], 'UNCLASSIFIED')
+        self.assertIn('UNCLASSIFIED', report.render_dispatch(rows))
+
+    def test_dispatch_fixture_matches_three_model_classes_and_waits(self):
+        members = [
+            {'identity': 'luna', 'model': 'gpt-6-luna'},
+            {'identity': 'terra', 'model': 'gpt-6-terra'},
+            {'identity': 'astra', 'model': 'gpt-6-astra'},
+        ]
+        ready = [
+            {'id': 'normal', 'priority': 2, 'metadata': {'layer': 2, 'difficulty': 'normal'}},
+            {'id': 'fast', 'priority': 2, 'metadata': {'layer': 3, 'difficulty': 'fast'}},
+            {'id': 'hard', 'priority': 1, 'metadata': {'layer': 4, 'difficulty': 'hard'}},
+        ]
+        rows = report.dispatch_rows(ready, members, set())
+        self.assertEqual([row['id'] for row in rows], ['hard', 'normal', 'fast'])
+        self.assertEqual([row['agents'] for row in rows], ['astra', 'terra', 'luna'])
+        hard_wait = report.dispatch_rows([ready[2]], members[:1], set())
+        self.assertEqual(hard_wait[0]['agents'], 'WAIT')
+
+
+if __name__ == '__main__':
+    unittest.main()
