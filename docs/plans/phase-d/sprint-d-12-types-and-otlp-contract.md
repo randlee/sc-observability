@@ -15,7 +15,7 @@ Generated projection of `obs-d-12`; the bead is authoritative.
 - PR target (merge order only): `integrate/phase-d`
 - Blocked by: `obs-phase-d-plan-qa`
 - Requirements: LAY-001, LAY-006, LAY-007, LOG-014, LOG-016, LOG-018, LOG-019, LOG-047, LOG-048, NFR-005, NFR-008, NFR-010, NFR-011, NFR-012, OBS-003, OBS-007, OBS-012, OBS-021, OTLP-005, OTLP-006, OTLP-007, OTLP-013, OTLP-021, PHB-002, PHB-003, PHB-004, PHB-005, PHB-010, PHB-012, PHB-013, PHD-001, PHD-002, SRC-001, SRC-002, SRC-003, SRC-004, SRC-005, SRC-006, TYP-001, TYP-002, TYP-003, TYP-004, TYP-005, TYP-006, TYP-007, TYP-008, TYP-009, TYP-010, TYP-011, TYP-012, TYP-013, TYP-014, TYP-015, TYP-016, TYP-017, TYP-018, TYP-019, TYP-020, TYP-021, TYP-022, TYP-023, TYP-024, TYP-030, TYP-031, TYP-039
-- ADRs: ADR-002, ADR-003, ADR-005, ADR-006, ADR-011, ADR-014, ADR-015, ADR-017, ADR-018, ADR-019
+- ADRs: ADR-002, ADR-003, ADR-005, ADR-006, ADR-011, ADR-012, ADR-014, ADR-015, ADR-017, ADR-018, ADR-019
 - Owned paths (metadata projection):
   - `crates/sc-observability-dto/src/error_codes.rs`
   - `crates/sc-observability-log/src/error_codes.rs`
