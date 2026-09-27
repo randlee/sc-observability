@@ -8,3 +8,5 @@
 {"blk": 24, "imp": 77, "min": 57, "open": 158, "phase": "d", "snapshot_at": "2026-09-27T18:31:32Z", "snapshot_local": "11:31", "tot": 324, "trigger_task": "obs-d-20-qa-f4"}
 {"blk": 23, "imp": 77, "min": 58, "open": 158, "phase": "d", "snapshot_at": "2026-09-27T18:38:21Z", "snapshot_local": "11:38", "tot": 327, "trigger_task": "obs-d-12-qa-f28"}
 {"blk": 21, "imp": 72, "min": 48, "open": 141, "phase": "d", "snapshot_at": "2026-09-27T19:12:54Z", "snapshot_local": "12:12", "tot": 327, "trigger_task": "obs-d-10-qa-f5-qa-f1"}
+{"blk": 22, "imp": 73, "min": 49, "open": 144, "phase": "d", "snapshot_at": "2026-09-27T22:22:33Z", "snapshot_local": "15:22", "tot": 330, "trigger_task": "obs-d-21-qa-f6"}
+{"blk": 22, "imp": 74, "min": 50, "open": 146, "phase": "d", "snapshot_at": "2026-09-27T22:22:33Z", "snapshot_local": "15:22", "tot": 332, "trigger_task": "obs-d-21-qa-f22"}
