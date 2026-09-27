@@ -19,10 +19,22 @@ pub const DEFAULT_OTLP_QUEUE_BYTE_CAPACITY: usize = 16 * 1024 * 1024;
 /// Hard upper bound for the aggregate payload-byte admission budget (64 MiB).
 pub const MAX_OTLP_QUEUE_BYTE_CAPACITY: usize = 64 * 1024 * 1024;
 /// Largest single record accepted by the contract (1 MiB).
+#[expect(
+    dead_code,
+    reason = "staged batch bounds are consumed by downstream exporter implementations"
+)]
 pub const MAX_OTLP_RECORD_BYTES: usize = 1024 * 1024;
 /// Maximum records in one backend batch.
+#[expect(
+    dead_code,
+    reason = "staged batch bounds are consumed by downstream exporter implementations"
+)]
 pub const MAX_OTLP_BATCH_RECORDS: usize = 512;
 /// Maximum serialized bytes in one backend batch (1 MiB).
+#[expect(
+    dead_code,
+    reason = "staged batch bounds are consumed by downstream exporter implementations"
+)]
 pub const MAX_OTLP_BATCH_BYTES: usize = 1024 * 1024;
 /// Default maximum number of OTLP export retries.
 pub const DEFAULT_OTLP_MAX_RETRIES: u32 = 3;

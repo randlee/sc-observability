@@ -21,7 +21,6 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::{constants, error_codes};
-use sc_observability_types::error_codes::otlp as otlp_error_codes;
 use sc_observability_types::typed::InitFailure;
 use sc_observability_types::v2::ConfigFailure;
 #[allow(
@@ -713,7 +712,7 @@ pub(crate) fn validated_transport_bounds(
     if !(1..=constants::MAX_OTLP_QUEUE_CAPACITY).contains(&queue_capacity.value) {
         return Err(config_failure(
             ConfigFailureKind::InvalidQueueCapacity,
-            otlp_error_codes::OTLP_CONFIG_QUEUE_CAPACITY,
+            error_codes::OTLP_CONFIG_QUEUE_CAPACITY,
             format!(
                 "queue capacity must be in 1..={}",
                 constants::MAX_OTLP_QUEUE_CAPACITY
@@ -727,7 +726,7 @@ pub(crate) fn validated_transport_bounds(
     {
         return Err(config_failure(
             ConfigFailureKind::InvalidQueueByteCapacity,
-            otlp_error_codes::OTLP_CONFIG_QUEUE_BYTE_CAPACITY,
+            error_codes::OTLP_CONFIG_QUEUE_BYTE_CAPACITY,
             "queue byte capacity must be in 1..=64 MiB",
             queue_byte_capacity.field,
             queue_byte_capacity.origin,
@@ -777,7 +776,7 @@ pub(crate) fn validated_transport_bounds(
         return Err(ConfigFailure::UnsupportedProtocol {
             context: Box::new(
                 ErrorContext::new(
-                    otlp_error_codes::OTLP_UNSUPPORTED_PROTOCOL,
+                    error_codes::OTLP_UNSUPPORTED_PROTOCOL,
                     "the legacy HTTP/JSON exporter requires the HTTP/JSON protocol",
                     Remediation::recoverable(
                         "select HttpJson when using the legacy HTTP/JSON exporter",
@@ -799,7 +798,7 @@ pub(crate) fn validated_transport_bounds(
     if config.insecure_skip_verify && config.enabled {
         return Err(config_failure(
             ConfigFailureKind::InsecureTransportRejected,
-            otlp_error_codes::OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED,
+            error_codes::OTLP_CONFIG_INSECURE_TRANSPORT_REJECTED,
             "the selected backend does not support insecure certificate verification",
             OtlpConfigField::Endpoint,
             ValueOrigin::Explicit,
@@ -896,7 +895,7 @@ fn checked_duration(value: &ResolvedField<u64>) -> Result<Duration, ConfigFailur
     if value.value == 0 {
         return Err(config_failure(
             ConfigFailureKind::ZeroDuration,
-            otlp_error_codes::OTLP_CONFIG_ZERO_DURATION,
+            error_codes::OTLP_CONFIG_ZERO_DURATION,
             "duration must be greater than zero",
             value.field,
             value.origin,
@@ -910,7 +909,7 @@ fn checked_duration(value: &ResolvedField<u64>) -> Result<Duration, ConfigFailur
         .ok_or_else(|| {
             config_failure(
                 ConfigFailureKind::DurationOverflow,
-                otlp_error_codes::OTLP_CONFIG_DURATION_OVERFLOW,
+                error_codes::OTLP_CONFIG_DURATION_OVERFLOW,
                 "duration milliseconds overflow nanosecond conversion",
                 value.field,
                 value.origin,
@@ -919,7 +918,7 @@ fn checked_duration(value: &ResolvedField<u64>) -> Result<Duration, ConfigFailur
     let nanos = u32::try_from(nanos).map_err(|_| {
         config_failure(
             ConfigFailureKind::DurationOverflow,
-            otlp_error_codes::OTLP_CONFIG_DURATION_OVERFLOW,
+            error_codes::OTLP_CONFIG_DURATION_OVERFLOW,
             "duration milliseconds overflow nanosecond conversion",
             value.field,
             value.origin,
@@ -980,7 +979,7 @@ fn resolve_retry(
     if jitter.value > constants::MAX_OTLP_RETRY_JITTER_PERCENT {
         return Err(config_failure(
             ConfigFailureKind::InvalidJitterPercent,
-            otlp_error_codes::OTLP_CONFIG_JITTER_PERCENT,
+            error_codes::OTLP_CONFIG_JITTER_PERCENT,
             format!(
                 "retry jitter percent must be in 0..={}",
                 constants::MAX_OTLP_RETRY_JITTER_PERCENT
@@ -1017,7 +1016,7 @@ fn invalid_bound(lower: &ResolvedField<u64>, upper: &ResolvedField<u64>) -> Conf
     ConfigFailure::InvalidBoundOrdering {
         context: Box::new(
             ErrorContext::new(
-                otlp_error_codes::OTLP_CONFIG_BOUND_ORDER,
+                error_codes::OTLP_CONFIG_BOUND_ORDER,
                 "resolved transport bounds are out of order",
                 Remediation::recoverable(
                     "correct the named OTLP configuration fields",
@@ -1050,7 +1049,7 @@ fn not_applicable(field: OtlpConfigField, target: OtlpConfigTarget) -> ConfigFai
     ConfigFailure::ConfigFieldNotApplicable {
         context: Box::new(
             ErrorContext::new(
-                otlp_error_codes::OTLP_CONFIG_FIELD_NOT_APPLICABLE,
+                error_codes::OTLP_CONFIG_FIELD_NOT_APPLICABLE,
                 "configuration field is not applicable to the selected transport target",
                 Remediation::recoverable(
                     "omit the field or choose an applicable backend",
@@ -1147,7 +1146,7 @@ fn is_valid_http_endpoint(value: &str) -> bool {
 fn invalid_endpoint(message: &str, remediation: &str) -> ConfigFailure {
     ConfigFailure::InvalidEndpoint {
         context: Box::new(ErrorContext::new(
-            otlp_error_codes::OTLP_CONFIG_INVALID_ENDPOINT,
+            error_codes::OTLP_CONFIG_INVALID_ENDPOINT,
             message,
             Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
         )),
@@ -1157,7 +1156,7 @@ fn invalid_endpoint(message: &str, remediation: &str) -> ConfigFailure {
 fn invalid_header(message: &str, remediation: &str) -> ConfigFailure {
     ConfigFailure::InvalidHeader {
         context: Box::new(ErrorContext::new(
-            otlp_error_codes::OTLP_CONFIG_INVALID_HEADER,
+            error_codes::OTLP_CONFIG_INVALID_HEADER,
             message,
             Remediation::recoverable(remediation, ["use the documented OTLP transport defaults"]),
         )),
@@ -1244,7 +1243,7 @@ mod tests {
             assert!(matches!(error, ConfigFailure::InvalidEndpoint { .. }));
             assert_eq!(
                 error.diagnostic().code,
-                otlp_error_codes::OTLP_CONFIG_INVALID_ENDPOINT
+                error_codes::OTLP_CONFIG_INVALID_ENDPOINT
             );
         }
     }
@@ -1266,7 +1265,7 @@ mod tests {
             assert!(matches!(error, ConfigFailure::InvalidHeader { .. }));
             assert_eq!(
                 error.diagnostic().code,
-                otlp_error_codes::OTLP_CONFIG_INVALID_HEADER
+                error_codes::OTLP_CONFIG_INVALID_HEADER
             );
         }
     }
@@ -1517,7 +1516,7 @@ mod tests {
             .expect_err("transport validation precedes the missing endpoint check");
         assert_eq!(
             typed.diagnostic().code,
-            otlp_error_codes::OTLP_CONFIG_ZERO_DURATION
+            error_codes::OTLP_CONFIG_ZERO_DURATION
         );
     }
 
