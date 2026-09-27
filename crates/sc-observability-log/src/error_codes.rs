@@ -82,7 +82,12 @@ pub const SC_LOG_DETACH_TIMEOUT: ErrorCode = ErrorCode::new_static("SC_LOG_DETAC
 /// Canonical sc log detach not installed failure.
 pub const SC_LOG_DETACH_NOT_INSTALLED: ErrorCode =
     ErrorCode::new_static("SC_LOG_DETACH_NOT_INSTALLED");
-/// Canonical sc log foreign logger installed failure.
+/// Canonical companion-contract failure for `DetachError::ForeignLoggerInstalled`.
+///
+/// This is intentionally distinct from
+/// [`SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED`]: the latter reports an
+/// init-time attempt to install the owned bridge, whereas this code reports a
+/// non-owning attachment's foreign-facade rejection.
 pub const SC_LOG_FOREIGN_LOGGER_INSTALLED: ErrorCode =
     ErrorCode::new_static("SC_LOG_FOREIGN_LOGGER_INSTALLED");
 
@@ -101,5 +106,21 @@ mod tests {
             assert!(seen.insert(code.as_str()), "duplicate code {code}");
         }
         assert_eq!(ALL.len(), 19);
+    }
+
+    #[test]
+    fn foreign_logger_codes_have_distinct_lifecycle_contracts() {
+        assert_eq!(
+            SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED.as_str(),
+            "SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED"
+        );
+        assert_eq!(
+            SC_LOG_FOREIGN_LOGGER_INSTALLED.as_str(),
+            "SC_LOG_FOREIGN_LOGGER_INSTALLED"
+        );
+        assert_ne!(
+            SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED,
+            SC_LOG_FOREIGN_LOGGER_INSTALLED
+        );
     }
 }
