@@ -87,7 +87,7 @@ def inspect_archive(
         }
 
 
-def verify_stage(stage: Path, version: str | None = None, source_commit: str | None = None) -> dict:
+def verify_stage(stage: Path, version: str | None = None, source_commit: str | None = None, *, workspace_version: str | None = None) -> dict:
     evidence = json.loads((stage / "stage-manifest.json").read_text())
     qualified_version = evidence.get("candidate_version")
     if (evidence.get("schema_version") != 1 or (version is not None and qualified_version != version)
@@ -95,6 +95,8 @@ def verify_stage(stage: Path, version: str | None = None, source_commit: str | N
         raise ValueError("stage schema/version/publication mismatch")
     if not isinstance(qualified_version, str):
         raise ValueError("stage schema/version/publication mismatch")
+    if workspace_version is not None and not isinstance(workspace_version, str):
+        raise ValueError("workspace candidate version mismatch")
     actual_source = evidence.get("source_commit", "")
     if not re.fullmatch(r"[0-9a-f]{40}", actual_source) or (source_commit and actual_source != source_commit):
         raise ValueError("stage source commit mismatch")
