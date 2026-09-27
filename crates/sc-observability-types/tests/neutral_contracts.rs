@@ -149,7 +149,15 @@ fn canonical_error_variants_preserve_context() {
     check!(SubscriberError::Subscriber, error_codes::DIAGNOSTIC_INVALID);
     check!(LogSinkError::Write, error_codes::DIAGNOSTIC_INVALID);
     check!(LogSinkError::Flush, error_codes::DIAGNOSTIC_INVALID);
-    check!(ExportError::Transport, error_codes::DIAGNOSTIC_INVALID);
+    let transport_context = context(error_codes::IDENTITY_RESOLUTION_FAILED);
+    let transport = ExportError::Transport {
+        context: transport_context,
+    };
+    assert_eq!(
+        transport.code(),
+        error_codes::IDENTITY_RESOLUTION_FAILED,
+        "Transport preserves its underlying diagnostic code"
+    );
     check!(
         ExportError::BlockingBackendInAsyncContext,
         error_codes::otlp::OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT

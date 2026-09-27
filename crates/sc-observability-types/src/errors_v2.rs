@@ -78,21 +78,176 @@ context_error!(
     Flush => crate::error_codes::DIAGNOSTIC_INVALID
 );
 
-context_error!(
-    ExportError,
-    Transport => crate::error_codes::DIAGNOSTIC_INVALID,
-    BlockingBackendInAsyncContext => crate::error_codes::otlp::OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT,
-    AsyncLifecycleRequired => crate::error_codes::otlp::OTLP_ASYNC_LIFECYCLE_REQUIRED,
-    RuntimeTerminated => crate::error_codes::otlp::OTLP_RUNTIME_TERMINATED,
-    LifecycleTimeout => crate::error_codes::otlp::OTLP_LIFECYCLE_TIMEOUT,
-    QueueFull => crate::error_codes::otlp::OTLP_QUEUE_FULL,
-    WorkerTerminated => crate::error_codes::otlp::OTLP_WORKER_TERMINATED,
-    ShutdownCancelledRetry => crate::error_codes::otlp::OTLP_SHUTDOWN_CANCELLED_RETRY,
-    RetryDeadlineExhausted => crate::error_codes::otlp::OTLP_RETRY_DEADLINE_EXHAUSTED,
-    NonRetryableHttpStatus => crate::error_codes::otlp::OTLP_HTTP_STATUS_TERMINAL,
-    RetryAttemptsExhausted => crate::error_codes::otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED,
-    TerminalExportFailure => crate::error_codes::otlp::OTLP_EXPORT_TERMINAL
-);
+/// Canonical export failures with preserved diagnostic context.
+#[non_exhaustive]
+#[derive(Debug, PartialEq, Serialize, Deserialize, thiserror::Error)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ExportError {
+    /// Transport failure; preserves its underlying registered diagnostic code.
+    #[error(transparent)]
+    /// Diagnostic, remediation, source and construction backtrace.
+    Transport {
+        #[doc = "Diagnostic, remediation, source and construction backtrace."]
+        context: Box<ErrorContext>,
+    },
+    /// Blocking backend in async context failure; see the canonical cause mapping.
+    #[error(transparent)]
+    /// Diagnostic, remediation, source and construction backtrace.
+    BlockingBackendInAsyncContext {
+        #[doc = "Diagnostic, remediation, source and construction backtrace."]
+        context: Box<ErrorContext>,
+    },
+    /// Async lifecycle required failure; see the canonical cause mapping.
+    #[error(transparent)]
+    /// Diagnostic, remediation, source and construction backtrace.
+    AsyncLifecycleRequired {
+        #[doc = "Diagnostic, remediation, source and construction backtrace."]
+        context: Box<ErrorContext>,
+    },
+    /// Runtime terminated failure; see the canonical cause mapping.
+    #[error(transparent)]
+    /// Diagnostic, remediation, source and construction backtrace.
+    RuntimeTerminated {
+        #[doc = "Diagnostic, remediation, source and construction backtrace."]
+        context: Box<ErrorContext>,
+    },
+    /// Lifecycle timeout failure; see the canonical cause mapping.
+    #[error(transparent)]
+    /// Diagnostic, remediation, source and construction backtrace.
+    LifecycleTimeout {
+        #[doc = "Diagnostic, remediation, source and construction backtrace."]
+        context: Box<ErrorContext>,
+    },
+    /// Queue full failure; see the canonical cause mapping.
+    #[error(transparent)]
+    /// Diagnostic, remediation, source and construction backtrace.
+    QueueFull {
+        #[doc = "Diagnostic, remediation, source and construction backtrace."]
+        context: Box<ErrorContext>,
+    },
+    /// Worker terminated failure; see the canonical cause mapping.
+    #[error(transparent)]
+    /// Diagnostic, remediation, source and construction backtrace.
+    WorkerTerminated {
+        #[doc = "Diagnostic, remediation, source and construction backtrace."]
+        context: Box<ErrorContext>,
+    },
+    /// Shutdown cancelled retry failure; see the canonical cause mapping.
+    #[error(transparent)]
+    /// Diagnostic, remediation, source and construction backtrace.
+    ShutdownCancelledRetry {
+        #[doc = "Diagnostic, remediation, source and construction backtrace."]
+        context: Box<ErrorContext>,
+    },
+    /// Retry deadline exhausted failure; see the canonical cause mapping.
+    #[error(transparent)]
+    /// Diagnostic, remediation, source and construction backtrace.
+    RetryDeadlineExhausted {
+        #[doc = "Diagnostic, remediation, source and construction backtrace."]
+        context: Box<ErrorContext>,
+    },
+    /// Non-retryable HTTP status failure; see the canonical cause mapping.
+    #[error(transparent)]
+    /// Diagnostic, remediation, source and construction backtrace.
+    NonRetryableHttpStatus {
+        #[doc = "Diagnostic, remediation, source and construction backtrace."]
+        context: Box<ErrorContext>,
+    },
+    /// Retry attempts exhausted failure; see the canonical cause mapping.
+    #[error(transparent)]
+    /// Diagnostic, remediation, source and construction backtrace.
+    RetryAttemptsExhausted {
+        #[doc = "Diagnostic, remediation, source and construction backtrace."]
+        context: Box<ErrorContext>,
+    },
+    /// Terminal export failure; see the canonical cause mapping.
+    #[error(transparent)]
+    /// Diagnostic, remediation, source and construction backtrace.
+    TerminalExportFailure {
+        #[doc = "Diagnostic, remediation, source and construction backtrace."]
+        context: Box<ErrorContext>,
+    },
+}
+
+impl ExportError {
+    /// Returns the original error context without reconstruction.
+    #[must_use]
+    pub fn context(&self) -> &ErrorContext {
+        match self {
+            Self::Transport { context }
+            | Self::BlockingBackendInAsyncContext { context }
+            | Self::AsyncLifecycleRequired { context }
+            | Self::RuntimeTerminated { context }
+            | Self::LifecycleTimeout { context }
+            | Self::QueueFull { context }
+            | Self::WorkerTerminated { context }
+            | Self::ShutdownCancelledRetry { context }
+            | Self::RetryDeadlineExhausted { context }
+            | Self::NonRetryableHttpStatus { context }
+            | Self::RetryAttemptsExhausted { context }
+            | Self::TerminalExportFailure { context } => context,
+        }
+    }
+    /// Returns the preserved diagnostic.
+    #[must_use]
+    pub fn diagnostic(&self) -> &Diagnostic {
+        self.context().diagnostic()
+    }
+    /// Returns the stable machine-readable code for this export failure.
+    #[must_use]
+    pub fn code(&self) -> crate::ErrorCode {
+        match self {
+            Self::Transport { context } => context.diagnostic().code.clone(),
+            Self::BlockingBackendInAsyncContext { .. } => {
+                crate::error_codes::otlp::OTLP_BLOCKING_BACKEND_IN_ASYNC_CONTEXT
+            }
+            Self::AsyncLifecycleRequired { .. } => {
+                crate::error_codes::otlp::OTLP_ASYNC_LIFECYCLE_REQUIRED
+            }
+            Self::RuntimeTerminated { .. } => crate::error_codes::otlp::OTLP_RUNTIME_TERMINATED,
+            Self::LifecycleTimeout { .. } => crate::error_codes::otlp::OTLP_LIFECYCLE_TIMEOUT,
+            Self::QueueFull { .. } => crate::error_codes::otlp::OTLP_QUEUE_FULL,
+            Self::WorkerTerminated { .. } => crate::error_codes::otlp::OTLP_WORKER_TERMINATED,
+            Self::ShutdownCancelledRetry { .. } => {
+                crate::error_codes::otlp::OTLP_SHUTDOWN_CANCELLED_RETRY
+            }
+            Self::RetryDeadlineExhausted { .. } => {
+                crate::error_codes::otlp::OTLP_RETRY_DEADLINE_EXHAUSTED
+            }
+            Self::NonRetryableHttpStatus { .. } => {
+                crate::error_codes::otlp::OTLP_HTTP_STATUS_TERMINAL
+            }
+            Self::RetryAttemptsExhausted { .. } => {
+                crate::error_codes::otlp::OTLP_RETRY_ATTEMPTS_EXHAUSTED
+            }
+            Self::TerminalExportFailure { .. } => crate::error_codes::otlp::OTLP_EXPORT_TERMINAL,
+        }
+    }
+    /// Takes the original boxed context, preserving source identity and backtrace.
+    #[must_use]
+    pub fn into_context(self) -> Box<ErrorContext> {
+        match self {
+            Self::Transport { context }
+            | Self::BlockingBackendInAsyncContext { context }
+            | Self::AsyncLifecycleRequired { context }
+            | Self::RuntimeTerminated { context }
+            | Self::LifecycleTimeout { context }
+            | Self::QueueFull { context }
+            | Self::WorkerTerminated { context }
+            | Self::ShutdownCancelledRetry { context }
+            | Self::RetryDeadlineExhausted { context }
+            | Self::NonRetryableHttpStatus { context }
+            | Self::RetryAttemptsExhausted { context }
+            | Self::TerminalExportFailure { context } => context,
+        }
+    }
+}
+impl sealed::Sealed for ExportError {}
+impl DiagnosticInfo for ExportError {
+    fn diagnostic(&self) -> &Diagnostic {
+        self.diagnostic()
+    }
+}
 
 context_error!(
     ConfigFailure,
