@@ -1,6 +1,7 @@
 # SC-Observability Architecture
 
-**Status**: Approved baseline; ADR-011–ADR-019 Accepted for Phase D
+**Status**: Approved baseline; ADR-011–ADR-016 Accepted; ADR-017–ADR-019
+Accepted for Phase D
 **Applies to**: `sc-observability-types`, `sc-observability`, `sc-observe`, `sc-observability-otlp`
 **Related documents**:
 - [`requirements.md`](./requirements.md)
@@ -702,7 +703,7 @@ Important boundary:
 | `sc-observability-log-macros`† | third-party proc-macro support only (`syn`, `quote`, `proc-macro2`) | `sc-observability-log` (no reverse dependency back to the bridge), `sc-observability`, `sc-observe`, `sc-observability-otlp`, `agent-team-mail-*` | procedural macro expansion only for `sc-observability-log`'s event/`#[instrument]` forms; no runtime types; B.1 mechanical copy, unpublished |
 | `sc-observability-log-consumer-check`† | `sc-observability-log` only (direct path dependency) | `sc-observability-log-macros` (macro expansion is exercised only through the bridge, preserving the external macro-expansion hygiene check), `agent-team-mail-*` | CI-only compile-time proof that macro consumers need only the bridge dependency; never published |
 
-† This crate's ADR-011 companion-boundary placement (including its TYP-030 companion/wire-only exception scoping above) follows ADR-011's accepted companion-boundary decision.
+† This crate's ADR-011 companion-boundary placement (including its TYP-030 companion/wire-only exception scoping above) is provisional pending ADR-011's formal acceptance — see ADR-011's own Status line below.
 
 ### Phase B Binding Runtime Edges
 
@@ -809,9 +810,7 @@ ADR navigation index (status is recorded in each decision below):
 - [ADR-013: Owner-Controlled Shared Runtime Level](#adr-013-owner-controlled-shared-runtime-level)
 - [ADR-014: Result-Preserving Language Boundaries](#adr-014-result-preserving-language-boundaries)
 - [ADR-015: Embedded Python And Shared Binding Runtime](#adr-015-embedded-python-and-shared-binding-runtime)
-- [ADR-016: Shared Publishing Pipeline Adoption](#adr-016-shared-publishing-pipeline-adoption)
-- [ADR-017: Phase D 2.0 Error Surface](#adr-017-phase-d-20-error-surface)
-- [ADR-018: Dual OTLP Backends And Shared Lifecycle](#adr-018-dual-otlp-backends-and-shared-lifecycle)
+
 - [ADR-019: Phase D Implementation Decisions](#adr-019-phase-d-implementation-decisions)
 
 ### ADR-001: Observation-First Producers
@@ -1211,14 +1210,6 @@ in [the CI policy](ci-policy.md).
   Companion-only detach codes live in the bridge's sole error_codes.rs;
   core-only registration/settings codes live in core's sole error_codes.rs.
   obs-d-12 owns the shared names and registry rows. Constants remain separate.
-- **Decision — retained telemetry shutdown boundary**: The root
-  `sc_observability_types::TelemetryError::Shutdown` remains the retained 1.x
-  unit variant until the final facade migration, so existing unit-pattern
-  consumers keep their source-compatible boundary. The canonical,
-  data-carrying and `DiagnosticInfo`-implementing shutdown form is
-  `sc_observability_types::v2::TelemetryError::Shutdown { context }`; it is
-  adopted with the v2 `ExportFailure` migration. This is a compatibility
-  boundary, not a second telemetry failure contract.
 - **Decision — logging contracts**: obs-d-13 owns the settings shape, atomic
   retained-policy resolution and explicit JSON-root precedence; an empty
   explicit root is invalid. The host bridge uses an open object-safe policy
@@ -1356,21 +1347,3 @@ They are intentionally narrower than a full ATM migration proof:
   wired through the shared crates without `agent-team-mail-*` dependencies
 - they do not prove spool semantics, daemon fan-in merge behavior, ATM health
   JSON compatibility, or complete ATM env/config translation
-
-
-### Phase D types staging
-
-D.12 implements the accepted ADR-017/018/019 types contract under
-`sc_observability_types::v2`. ADR-017's canonical error migration does not
-replace the published root `MetricRecord`, `TraceContext`, or `SpanRecord`.
-Their construction, trait and serialization contracts remain intact under
-ADR-012; the new neutral models remain additive at the explicit `v2` path,
-including after D.18 integration. Any future root signal replacement needs
-a separately accepted ADR explicitly superseding ADR-012 for those named
-breaks before implementation, plus the PHD-002 manifest and API approval.
-A manifest entry alone does not expand ADR-017's scope.
-D.12 retains `version.workspace = true`; D.21 performs the atomic
-workspace 2.0 activation. The producer contract, constructors, serde shape,
-error inventory and DTO handoffs are specified in
-[API design](api-design.md#phase-d-canonical-types-and-wire-handoff).
-No transport implementation or runtime dependency enters the types layer.
