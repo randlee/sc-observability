@@ -99,8 +99,8 @@ in the report by number, done or with its findings, so closure is explicit.
 | cannot run | stays open, with a note | `refused`, `task-refused.md.j2` |
 
 A FAIL never closes the bead. Closing it would release the dev beads that
-depend on the checked sprint. The sanity member creates one finding bead, a child
-of the sprint bead, per undone deliverable, never one per lint diagnostic. The parent/child
+depend on the checked sprint. The sanity member creates one child finding bead of
+the checked bead per undone deliverable, never one per lint diagnostic. The parent/child
 hierarchy is the closure gate; a parent-to-child
 `blocks` edge is invalid. Each child has the severity priority (blocking P1,
 important P2, minor P4), records

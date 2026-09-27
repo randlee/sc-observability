@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create one finding bead, a child of the sprint bead, for every unfinished deliverable.
+"""Create one child finding bead of the checked bead for every unfinished deliverable.
 
 Usage:
   sanity-create-findings --task <sanity-bead> --bead <checked-bead> \
@@ -149,7 +149,7 @@ def main() -> int:
         labels = [f"phase-{phase}", FINDING_LABEL, f"stack:{stack}"]
         sprint_bead = sprint_bead_of(args.bead, lambda b: parent if b == args.bead else
                                      json.loads(command(["bd", "show", b, "--json"], args.actor, capture=True))[0])
-        children = existing_children(sprint_bead, args.actor, args.task, report["commit"])
+        children = existing_children(args.bead, args.actor, args.task, report["commit"])
         created = []
         for finding in findings:
             ref = finding.get("finding_ref")
@@ -186,7 +186,7 @@ def main() -> int:
             title = f"{args.bead} D{finding['deliverable']} not done: {deliverable_text[:80]}"
             child = command([
                 "bd", "create", title, "--type", "bug", "--status", "open",
-                "--parent", sprint_bead, "--description", description,
+                "--parent", args.bead, "--description", description,
                 "--acceptance", acceptance,
                 "--priority", str(priority),
                 "--labels", ",".join(labels), "--no-inherit-labels",
