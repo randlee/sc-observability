@@ -205,7 +205,7 @@ after its work passes the sanity check. See [`dev-sanity.md`](dev-sanity.md).
   order they complete, and the lead records the actual values when it links
   each one (`atm-bd-orchestration` "Stack Discipline").
 - Sprints that can run at once must have disjoint `owned_paths`. Sprints that
-  must share a file are ordered with `must_follow`.
+  share a path must be ordered: one's sanity bead in the other's blocker closure.
 
 The stack table is a query, not a document:
 

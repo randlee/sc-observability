@@ -81,5 +81,39 @@
       "dev_bead_id": "obs-d-21",
       "sanity_bead_id": "obs-d-21-sanity"
     }
-  ]
+  ],
+  "policy": {
+    "waivers": [
+      {
+        "bead": "obs-d-1-sanity",
+        "check": "reopened_after_pass",
+        "reason": "reopened 2026-09-26 for a plan fix before the frozen-sanity rule existed"
+      },
+      {
+        "bead": "obs-d-2-sanity",
+        "check": "reopened_after_pass",
+        "reason": "reopened 2026-09-26 for a plan fix before the frozen-sanity rule existed"
+      },
+      {
+        "bead": "obs-d-20-sanity",
+        "check": "reopened_after_pass",
+        "reason": "reopened 2026-09-26 for a plan fix before the frozen-sanity rule existed"
+      },
+      {
+        "bead": "obs-d-21-sanity",
+        "check": "reopened_after_pass",
+        "reason": "reopened 2026-09-26 for a plan fix before the frozen-sanity rule existed"
+      },
+      {
+        "bead": "obs-d-5",
+        "check": "started_before_blocker",
+        "reason": "started 2026-09-26 19:21Z on the pre-contract ready rule; obs-d-21-sanity passed 19:41Z"
+      },
+      {
+        "bead": "obs-d-6",
+        "check": "started_before_blocker",
+        "reason": "started 2026-09-26 19:31Z on the pre-contract ready rule; obs-d-21-sanity passed 19:41Z"
+      }
+    ]
+  }
 }

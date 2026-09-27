@@ -48,7 +48,7 @@ DELIVERABLE_LINE = re.compile(r"^\s*(\d+)[.)]\s+\S")
 # acceptance keys: at the start of a checkbox line ("- [ ] #2–3:", "- [ ] Deliverables 1–3:", "- [ ] D4:")
 # or in parentheses anywhere on the line ("(D1–D3)", "(#1/#3)", "(#2)"). A bare "#88" in prose is an issue number.
 AC_LINE_KEY = re.compile(r"^\s*(?:-\s*\[.\]\s*)?(?:#|Deliverables?\s*|D)(\d+(?:\s*(?:[-–—/,]|and)\s*(?:#|D)?\d+)*)\s*[:.)]", re.IGNORECASE)
-AC_PAREN_KEY = re.compile(r"\((?:#|D)(\d+(?:\s*(?:[-–—/,]|and)\s*(?:#|D)?\d+)*)\)")
+AC_PAREN_KEY = re.compile(r"\(`?(?:[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?(?:#|D)(\d+(?:\s*(?:[-–—/,]|and)\s*(?:#|D)?\d+)*)`?\)")
 FOLDED = re.compile(r"^\s*folded into\s+\S+", re.IGNORECASE)
 Problems = list[str]
 
@@ -486,6 +486,8 @@ class PhaseCheck:
                     self.problem(cdev, f"consumes handoff {path} from {dev} but its owned_paths do not include it")
         for i, a in enumerate(devs):
             for b in devs[i + 1:]:
+                if b in self.blocker_closure(a) or a in self.blocker_closure(b):
+                    continue  # ordered sprints may share paths
                 for pa in meta(self.by[a]).get("owned_paths") or []:
                     for pb in meta(self.by[b]).get("owned_paths") or []:
                         if isinstance(pa, str) and isinstance(pb, str) and paths_overlap(pa, pb):

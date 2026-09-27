@@ -152,14 +152,14 @@
    "issue_type": "task",
    "metadata": {
     "branch": "sprint/t-3",
-    "pr_target": "sprint/t-1",
+    "pr_target": "sprint/t-2",
     "layer": 3,
     "sprint": "t-3",
     "difficulty": "normal",
     "owned_paths": [
      "crates/t2/src/**"
     ],
-    "relation": "parallel_safe",
+    "relation": "must_follow",
     "requirements": [
      "NONE"
     ],
@@ -171,7 +171,7 @@
    "dependencies": [
     {
      "dependency_type": "blocks",
-     "depends_on_id": "x-t-1-sanity"
+     "depends_on_id": "x-t-2-sanity"
     }
    ],
    "parent": "x-phase-t",

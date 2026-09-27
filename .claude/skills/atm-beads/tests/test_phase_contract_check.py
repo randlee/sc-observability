@@ -26,6 +26,7 @@ EXPECT: dict[str, tuple[str, str] | None] = {
     "valid_index_with_policy": None,
     "valid_pass_with_qa": None,
     "valid_root_feature_under_epic": None,
+    "valid_ordered_overlap": None,
     "qa_under_root_validates": ("x-t-1-qa", "bd dep remove x-t-1-qa x-t-1 (validates), then bd update x-t-1-qa --parent x-t-1"),
     "finding_under_root_caused_by": ("x-t-1-qa-f1", "bd dep remove x-t-1-qa-f1 x-t-1 (caused-by), then bd update x-t-1-qa-f1 --parent x-t-1"),
     "root_task_at_top_level": ("x-phase-t", "phase root is a task; a phase root is an epic or a feature under an epic"),
@@ -149,8 +150,8 @@ class Constants(unittest.TestCase):
 
 class Parsing(unittest.TestCase):
     def test_acceptance_key_styles(self):
-        text = "- [ ] #1: a\n- [ ] #2–3: b\n- [ ] (D4) c\n- [ ] Deliverable 5: d\n- [ ] Deliverables 6–7: e\n- [ ] (#8/#9) f\n- [ ] fixes #88 in prose\n"
-        self.assertEqual(pcc.acceptance_refs(text), set(range(1, 10)))
+        text = "- [ ] #1: a\n- [ ] #2–3: b\n- [ ] (D4) c\n- [ ] Deliverable 5: d\n- [ ] Deliverables 6–7: e\n- [ ] (#8/#9) f\n- [ ] (`x-t-1#10/#11`) g\n- [ ] fixes #88 in prose\n"
+        self.assertEqual(pcc.acceptance_refs(text), set(range(1, 12)))
 
     def test_deliverables_list(self):
         self.assertEqual(pcc.parse_deliverables("## Goal\n1. not here\n## Deliverables\n1. a\n2. b\n\n## Acceptance\n3. no"), [1, 2])
