@@ -1211,6 +1211,14 @@ in [the CI policy](ci-policy.md).
   Companion-only detach codes live in the bridge's sole error_codes.rs;
   core-only registration/settings codes live in core's sole error_codes.rs.
   obs-d-12 owns the shared names and registry rows. Constants remain separate.
+- **Decision — retained telemetry shutdown boundary**: The root
+  `sc_observability_types::TelemetryError::Shutdown` remains the retained 1.x
+  unit variant until the final facade migration, so existing unit-pattern
+  consumers keep their source-compatible boundary. The canonical,
+  data-carrying and `DiagnosticInfo`-implementing shutdown form is
+  `sc_observability_types::v2::TelemetryError::Shutdown { context }`; it is
+  adopted with the v2 `ExportFailure` migration. This is a compatibility
+  boundary, not a second telemetry failure contract.
 - **Decision — logging contracts**: obs-d-13 owns the settings shape, atomic
   retained-policy resolution and explicit JSON-root precedence; an empty
   explicit root is invalid. The host bridge uses an open object-safe policy
