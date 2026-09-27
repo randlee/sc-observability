@@ -453,6 +453,65 @@ fn contract_tests_record_and_byte_capacity() {
     );
 }
 
+#[test]
+fn contract_tests_remaining_validation_variants_and_bullet_order() {
+    let jitter = validated_transport_bounds(&OtelConfig {
+        legacy_retry: Some(LegacyRetryPolicy {
+            retry_jitter_percent: Some(101),
+            ..LegacyRetryPolicy::default()
+        }),
+        ..legacy_config()
+    })
+    .expect_err("jitter above 100 is invalid");
+    assert!(matches!(jitter, ConfigFailure::InvalidJitterPercent { .. }));
+
+    let insecure = validated_transport_bounds(&OtelConfig {
+        insecure_skip_verify: true,
+        ..legacy_config()
+    })
+    .expect_err("insecure verification is rejected after ordered bounds");
+    assert!(matches!(
+        insecure,
+        ConfigFailure::InsecureTransportRejected { .. }
+    ));
+
+    let shutdown_before_retry_bound = validated_transport_bounds(&OtelConfig {
+        lifecycle_shutdown_timeout_ms: Some(2_999_u64.into()),
+        legacy_retry: Some(LegacyRetryPolicy {
+            retry_sequence_timeout_ms: Some(1_u64.into()),
+            ..LegacyRetryPolicy::default()
+        }),
+        ..legacy_config()
+    })
+    .expect_err("shared shutdown ordering precedes legacy retry ordering");
+    assert!(matches!(
+        shutdown_before_retry_bound,
+        ConfigFailure::InvalidBoundOrdering { .. }
+    ));
+    assert_eq!(
+        shutdown_before_retry_bound.diagnostic().details["field"].as_str(),
+        Some("Timeout")
+    );
+
+    let retry_after_cap = validated_transport_bounds(&OtelConfig {
+        legacy_retry: Some(LegacyRetryPolicy {
+            retry_sequence_timeout_ms: Some(3_000_u64.into()),
+            retry_after_cap_ms: Some(3_001_u64.into()),
+            ..LegacyRetryPolicy::default()
+        }),
+        ..legacy_config()
+    })
+    .expect_err("retry-after cap may not exceed retry sequence timeout");
+    assert!(matches!(
+        retry_after_cap,
+        ConfigFailure::InvalidBoundOrdering { .. }
+    ));
+    assert_eq!(
+        retry_after_cap.diagnostic().details["field"].as_str(),
+        Some("RetryAfterCap")
+    );
+}
+
 struct FakeLifecycle;
 impl ExporterLifecycle for FakeLifecycle {
     fn blocking_preflight(&self) -> Result<(), ExportError> {
