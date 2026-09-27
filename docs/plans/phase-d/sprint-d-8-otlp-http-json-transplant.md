@@ -186,7 +186,7 @@ Drop without explicit shutdown closes admission and signals the existing worker 
 
 ## Existing provenance consumer
 
-OTLP-023 still requires the existing immutable docs/plans/phase-d/legacy-otlp-provenance.json. D.8 reads it as source authority; D.9 consumes it to validate restored documentation. The existing manifest's consumer is transplant QA/source-blob verification, gating OTLP-023 against the observed loss of the legacy exporter. Retain it for as long as transplanted code is maintained. No additional provenance JSON/matrix, line-count gate, graph artifact, or validate_log_import.py extension is created. Add source-pin/disposition assertions to the owned adapter tests; use existing dependency/boundary checks only for actual forbidden edges.
+OTLP-023 still requires the existing immutable docs/plans/phase-d/legacy-otlp-provenance.json. D.8 reads it as source authority; D.9 consumes it to validate restored documentation. The existing manifest's consumer is transplant QA/source-blob verification, gating OTLP-023 against the observed loss of the legacy exporter. Retain it for as long as transplanted code is maintained. No additional provenance JSON/matrix, line-count gate, graph artifact, or extension of retired import validators is created. OTLP-023 is enforced by D8 adapter tests. Add source-pin/disposition assertions to the owned adapter tests; use existing dependency/boundary checks only for actual forbidden edges.
 
 The only file fence is metadata.owned_paths; paths mentioned as dependencies are read-only unless that metadata grants ownership.
 

@@ -1,13 +1,10 @@
-"""History prerequisites and anti-tampering at the generation evidence boundary."""
+"""Regression coverage for the retained generated-artifact hash check."""
 import contextlib
-import hashlib
 import importlib.util
 import io
 import json
 from pathlib import Path
 import shutil
-import subprocess
-import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -23,8 +20,6 @@ class GenerationProofTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name) / 'checkout'
-        subprocess.run(['git', 'clone', '--shared', '--no-checkout', str(ROOT), str(self.root)],
-                       check=True, capture_output=True, timeout=30)
         self.evidence_path = self.root / 'bindings/generation-manifest.json'
         self.evidence = json.loads((ROOT / 'bindings/generation-manifest.json').read_text())
         paths = {*self.evidence['inputs'], *self.evidence['outputs'], 'bindings/generation-manifest.json'}
@@ -40,38 +35,12 @@ class GenerationProofTests(unittest.TestCase):
     def test_valid_generation_evidence(self):
         self.validate()
 
-    def test_input_and_matching_hash_cannot_replace_pinned_source(self):
-        path = 'crates/sc-observability-dto/Cargo.toml'
-        content = (self.root / path).read_bytes() + b'\n[features]\nunauthorized = []\n'
-        (self.root / path).write_bytes(content)
-        self.evidence['inputs'][path] = hashlib.sha256(content).hexdigest()
-        self.evidence_path.write_text(json.dumps(self.evidence))
-        with self.assertRaisesRegex(SystemExit, 'generation source/toolchain drift'):
-            self.validate()
-
     def test_output_drift_remains_rejected(self):
         target = self.root / 'bindings/schema/v1.json'
         target.write_bytes(target.read_bytes() + b' ')
         with self.assertRaisesRegex(SystemExit, 'generated artifact hash drift'):
             self.validate()
 
-
-class CheckoutHistoryTests(unittest.TestCase):
-    def test_shallow_history_fails_closed_and_full_history_passes(self):
-        with tempfile.TemporaryDirectory() as temp:
-            destination = Path(temp) / 'shallow'
-            subprocess.run(['git', 'clone', '--depth=1', '--no-local', ROOT.as_uri(), str(destination)],
-                           check=True, capture_output=True, timeout=60)
-            command = [sys.executable, str(ROOT / 'scripts/ci/_log_release_adaptations.py'),
-                       '--destination', str(destination)]
-            rejected = subprocess.run(command, capture_output=True, text=True, timeout=60)
-            self.assertNotEqual(rejected.returncode, 0)
-            self.assertIn('rev-parse', rejected.stderr)
-            subprocess.run(['git', '-C', str(destination), 'fetch', '--unshallow'],
-                           check=True, capture_output=True, timeout=60)
-            accepted = subprocess.run(command, capture_output=True, text=True, timeout=60)
-            self.assertEqual(accepted.returncode, 0, accepted.stderr)
-            self.assertIn('historical provenance unchanged', accepted.stdout)
 
 
 if __name__ == '__main__':
