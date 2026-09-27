@@ -30,12 +30,13 @@ fn context(code: sc_observability_types::ErrorCode) -> Box<ErrorContext> {
 fn canonical_error_variants_preserve_context() {
     macro_rules! check {
         ($name:ident::$variant:ident, $code:expr) => {{
-            let original = context($code);
+            let original = context(error_codes::VALUE_VALIDATION_FAILED);
             let diagnostic = original.diagnostic().clone();
             let pointer = std::ptr::from_ref(&*original);
             let error = $name::$variant { context: original };
             assert_eq!(std::ptr::from_ref(error.context()), pointer);
             assert_eq!(DiagnosticInfo::diagnostic(&error), &diagnostic);
+            assert_eq!(error.code(), $code);
             let original_source = error
                 .source()
                 .unwrap()
@@ -53,7 +54,10 @@ fn canonical_error_variants_preserve_context() {
             assert_eq!(std::ptr::from_ref(&*error.into_context()), pointer);
         }};
     }
-    check!(IdentityError::Process, error_codes::DIAGNOSTIC_INVALID);
+    check!(
+        IdentityError::Process,
+        error_codes::IDENTITY_RESOLUTION_FAILED
+    );
     check!(InitError::Configuration, error_codes::DIAGNOSTIC_INVALID);
     check!(InitError::Runtime, error_codes::DIAGNOSTIC_INVALID);
     check!(EventError::Validation, error_codes::DIAGNOSTIC_INVALID);
@@ -208,7 +212,7 @@ fn stable_failure_codes() {
         assert_ne!(record.diagnostic().code, bytes.diagnostic().code);
     }
     let telemetry: TelemetryError = ExportError::QueueFull {
-        context: context(error_codes::otlp::OTLP_QUEUE_FULL),
+        context: context(error_codes::VALUE_VALIDATION_FAILED),
     }
     .into();
     assert_eq!(telemetry.code().as_str(), "OTLP_QUEUE_FULL");
@@ -216,6 +220,14 @@ fn stable_failure_codes() {
         &telemetry,
         TelemetryError::ExportFailure(ExportError::QueueFull { .. })
     ));
+    let TelemetryError::ExportFailure(error) = &telemetry else {
+        unreachable!("queue-full export failure must remain preserved")
+    };
+    assert_eq!(
+        error.diagnostic().code,
+        error_codes::VALUE_VALIDATION_FAILED,
+        "the preserved diagnostic may describe the underlying source, while the error variant fixes the public stable code"
+    );
     assert!(
         telemetry
             .source()
