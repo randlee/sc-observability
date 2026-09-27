@@ -197,29 +197,25 @@ TODO-specific rule:
    `ceremony-finding-screen` (where repository policy lists it) over all of
    them and list its `ceremony` and `concern_valid_remedy_ceremony` verdicts in the report as proposed
    `rejected: ceremony` rulings for the lead (see Ceremony Disputes).
-9. Check PR CI state when a PR number is present:
-   - prefer `atm gh monitor status`
-   - prefer `atm gh monitor pr <PR> --start-timeout 120`
-   - prefer `atm gh pr report <PR> --json`
-   - fall back to `gh pr checks <PR> --watch` and
-     `gh pr view <PR> --json mergeStateStatus,reviewDecision` if the repo-level
-     `atm gh` flow is unavailable
-10. Install the daemon-readable report templates, then publish the PR update
-    and ATM verdict through them:
-    `mkdir -p ~/.atm/templates/quality-management-gh && cp .claude/skills/quality-management-gh/*.j2 ~/.atm/templates/quality-management-gh/`.
-    Build the report vars for this QA run from the selected template's
-    `required_variables` frontmatter; every value must come from this run.
-    Write the vars file outside the repository working tree (in the session
-    scratchpad or a temp directory); never commit or stage it, and delete it
-    or let it expire after the send.
-    Render the PR comment with
-    `atm compose --template ~/.atm/templates/quality-management-gh/findings-report.md.j2 --vars <scratch>/qa-<pr>-vars.json | gh pr comment <PR> --body-file -`
-    for `FAIL`/`IN-FLIGHT`, or replace `findings-report.md.j2` with
-    `quality-report.md.j2` for `PASS`. Deliver the verdict to the lead by closing the task with
-    `atm task close <task-id> completed --template ~/.atm/templates/quality-management-gh/findings-report.md.j2 --vars <scratch>/qa-<pr>-vars.json`
-    for `FAIL`/`IN-FLIGHT`, or the `quality-report.md.j2` path for `PASS`.
-    A PR comment remains required; ATM template admission does not replace it.
-11. Report a final PASS, FAIL, or IN-FLIGHT gate to the lead, including
+9. Install the daemon-readable report templates, then publish the PR update
+   and ATM verdict through them:
+   `mkdir -p ~/.atm/templates/quality-management-gh && cp .claude/skills/quality-management-gh/*.j2 ~/.atm/templates/quality-management-gh/`.
+   Build the report vars for this QA run from the selected template's
+   `required_variables` frontmatter; every value must come from this run.
+   Write the vars file outside the repository working tree (in the session
+   scratchpad or a temp directory); never commit or stage it, and delete it
+   or let it expire after the send.
+   Render the PR comment with
+   `atm compose --template ~/.atm/templates/quality-management-gh/findings-report.md.j2 --vars <scratch>/qa-<pr>-vars.json | gh pr comment <PR> --body-file -`
+   for `FAIL`/`IN-FLIGHT`, or replace `findings-report.md.j2` with
+   `quality-report.md.j2` for `PASS`. Deliver the verdict to the lead by closing the task with
+   `atm task close <task-id> completed --template ~/.atm/templates/quality-management-gh/findings-report.md.j2 --vars <scratch>/qa-<pr>-vars.json`
+   for `FAIL`/`IN-FLIGHT`, or the `quality-report.md.j2` path for `PASS`.
+   A PR comment remains required; ATM template admission does not replace it.
+   Never poll or watch for CI: no `--watch`, no `atm gh monitor`, no
+   wait/timeout loop of any kind. A single non-blocking state read is the
+   only CI check permitted (see `qa-template.xml.j2` step `h`).
+10. Report a final PASS, FAIL, or IN-FLIGHT gate to the lead, including
     deliverable completion as `X/Y (Z%)`.
 
 When reporting QA findings, preserve their stable finding ids for durable
