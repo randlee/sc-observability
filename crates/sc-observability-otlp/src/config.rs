@@ -614,9 +614,12 @@ pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), Init
 /// Checked, backend-neutral transport bounds. Backend factories receive this
 /// value rather than raw configuration so no adapter can reinterpret a wire
 /// field or bypass the ordered validation contract.
-#[allow(
-    dead_code,
-    reason = "D.21 validates these factory-only bounds before D.6-D.8 consume them"
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "D.21 validates these factory-only bounds before D.6-D.8 consume them"
+    )
 )]
 #[derive(Debug)]
 pub(crate) struct ValidatedTransportBounds {
@@ -628,9 +631,12 @@ pub(crate) struct ValidatedTransportBounds {
     pub(crate) backend: BackendTransportBounds,
 }
 
-#[allow(
-    dead_code,
-    reason = "D.21 stages backend-neutral bounds before backend factories consume them"
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "D.21 stages backend-neutral bounds before backend factories consume them"
+    )
 )]
 #[derive(Debug)]
 pub(crate) enum BackendTransportBounds {
@@ -639,9 +645,12 @@ pub(crate) enum BackendTransportBounds {
     Legacy(ValidatedRetryPolicy),
 }
 
-#[allow(
-    dead_code,
-    reason = "D.21 stages checked legacy policy values for the D.8 factory"
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "D.21 stages checked legacy policy values for the D.8 factory"
+    )
 )]
 #[derive(Debug)]
 pub(crate) struct ValidatedRetryPolicy {

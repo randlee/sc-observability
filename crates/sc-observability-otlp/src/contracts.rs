@@ -54,7 +54,7 @@ pub(crate) type LifecycleFuture =
     Pin<Box<dyn Future<Output = Result<(), ExportError>> + Send + 'static>>;
 
 /// Object-safe lifecycle operations shared by exporter backends.
-#[allow(
+#[expect(
     dead_code,
     reason = "D.21 stages this private contract before D.6 supplies its lifecycle implementation"
 )]
@@ -94,9 +94,12 @@ pub(crate) trait MetricExporter<T = ExportRecord<MetricRecord>>: Send + Sync {
 }
 
 /// Backend-neutral set of private exporter capabilities.
-#[allow(
-    dead_code,
-    reason = "D.21 stages the set before D.7 and D.8 supply backend constructors"
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "D.21 stages the set before D.7 and D.8 supply backend constructors"
+    )
 )]
 pub(crate) struct ExporterSet<
     L = ExportRecord<LogRecord>,
