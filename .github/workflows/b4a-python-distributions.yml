@@ -57,17 +57,13 @@ jobs:
       - id: matrix
         shell: python
         run: |
-          import json, os
+          import json, os, sys
+          sys.path.insert(0, 'scripts/ci')
+          from python_arm64 import apply_windows_arm64_overlay
           policy = json.load(open('release/python-platform-policy.json'))
           ids = {platform['id'] for platform in policy['platforms']}
           assert len(ids) == len(policy['platforms'])
-          arm64 = next((platform for platform in policy['platforms'] if platform['id'] == 'windows-arm64'), None)
-          if arm64 is None:
-              arm64 = {'id': 'windows-arm64', 'runner': 'windows-11-arm', 'machine': 'ARM64',
-                       'wheel_platform': 'win_arm64', 'rust_target': 'aarch64-pc-windows-msvc'}
-              policy['platforms'].append(arm64)
-          arm64.setdefault('runner', 'windows-11-arm')
-          assert (arm64['machine'], arm64['wheel_platform'], arm64['rust_target']) == ('ARM64', 'win_arm64', 'aarch64-pc-windows-msvc')
+          apply_windows_arm64_overlay(policy)
           cells = [{**platform, 'python': version} for platform in policy['platforms'] for version in policy['interpreters']]
           assert len(policy['platforms']) == 6
           assert len(cells) == len(policy['platforms']) * len(policy['interpreters'])
@@ -130,9 +126,11 @@ jobs:
       - if: matrix.id == 'windows-arm64'
         name: Reject emulated Windows ARM64 build evidence
         shell: pwsh
-        run: |
-          python -c "import platform,sys; assert platform.system() == 'Windows' and platform.machine().upper() == 'ARM64', (platform.system(), platform.machine()); assert sys.implementation.name == 'cpython'"
-          rustup target add aarch64-pc-windows-msvc
+        run: python scripts/ci/python_arm64.py
+      - if: matrix.id == 'windows-arm64'
+        name: Provision Windows ARM64 Rust target
+        shell: pwsh
+        run: rustup target add aarch64-pc-windows-msvc
       - uses: actions/download-artifact@v7
         with:
           name: b4a-sdist
@@ -191,8 +189,7 @@ jobs:
       - if: matrix.id == 'windows-arm64'
         name: Reject emulated Windows ARM64 installed cell
         shell: pwsh
-        run: |
-          python -c "import platform,sys; assert platform.system() == 'Windows' and platform.machine().upper() == 'ARM64', (platform.system(), platform.machine()); assert sys.implementation.name == 'cpython'"
+        run: python scripts/ci/python_arm64.py
       - uses: actions/download-artifact@v7
         with:
           name: b4a-sdist
@@ -260,20 +257,13 @@ jobs:
         run: |
           sdist=( "$RUNNER_TEMP"/b4a-evidence/b4a-sdist/dist/*.tar.gz )
           python - <<'PYTHON'
-          import json, os
+          import json, os, sys
           from pathlib import Path
+          sys.path.insert(0, 'scripts/ci')
+          from python_arm64 import apply_windows_arm64_overlay
           policy_path = Path('release/python-platform-policy.json')
           policy = json.loads(policy_path.read_text())
-          arm64 = next((platform for platform in policy['platforms']
-                        if platform['id'] == 'windows-arm64'), None)
-          if arm64 is None:
-              policy['platforms'].append({
-                  'id': 'windows-arm64', 'runner': 'windows-11-arm', 'machine': 'ARM64',
-                  'wheel_platform': 'win_arm64', 'rust_target': 'aarch64-pc-windows-msvc',
-              })
-          elif (arm64.get('machine'), arm64.get('wheel_platform'), arm64.get('rust_target')) != (
-                  'ARM64', 'win_arm64', 'aarch64-pc-windows-msvc'):
-              raise SystemExit('Windows ARM64 policy handoff is incomplete')
+          apply_windows_arm64_overlay(policy)
           (Path(os.environ['RUNNER_TEMP']) / 'b4a-policy.json').write_text(json.dumps(policy))
           PYTHON
           python scripts/ci/validate_python_distribution.py aggregate \

@@ -1,8 +1,28 @@
 """Small, dependency-free native PE/ARM64 qualification helper."""
 from __future__ import annotations
 
+import platform
+import subprocess
+import sys
+
 PE_SIGNATURE = b"PE\0\0"
 PE_ARM64_MACHINE = 0xAA64
+WINDOWS_ARM64_RUST_HOST = "aarch64-pc-windows-msvc"
+WINDOWS_ARM64_POLICY = {"id": "windows-arm64", "runner": "windows-11-arm", "machine": "ARM64", "wheel_platform": "win_arm64", "rust_target": "aarch64-pc-windows-msvc"}
+
+
+def apply_windows_arm64_overlay(policy: dict) -> dict:
+    """Add or validate the temporary D.10 policy row; D.18 removes it on activation."""
+    row = next((item for item in policy["platforms"] if item["id"] == "windows-arm64"), None)
+    if row is None:
+        policy["platforms"].append(WINDOWS_ARM64_POLICY.copy())
+    elif any(
+        key != "runner" and row.get(key) != value
+        or key == "runner" and key in row and row[key] != value
+        for key, value in WINDOWS_ARM64_POLICY.items()
+    ):
+        raise RuntimeError("Windows ARM64 policy row differs from the D.10 handoff")
+    return policy
 
 
 def pe_machine(data: bytes) -> int | None:
@@ -20,11 +40,30 @@ def is_pe_arm64(data: bytes) -> bool:
     return pe_machine(data) == PE_ARM64_MACHINE
 
 
+def rustc_host(verbose_version: str) -> str | None:
+    """Extract the Rust compiler host triple from ``rustc -vV`` output."""
+    for line in verbose_version.splitlines():
+        if line.startswith("host: "):
+            return line.removeprefix("host: ")
+    return None
+
+
 def require_native_windows_arm64() -> None:
     """Reject Windows emulation/cross-build runners before native evidence runs."""
-    import platform
-    import sys
-
     if (platform.system() != "Windows" or platform.machine().upper() != "ARM64"
             or sys.implementation.name != "cpython"):
         raise RuntimeError("native Windows ARM64 runner and CPython are required")
+    host = rustc_host(subprocess.check_output(["rustc", "-vV"], text=True))
+    if host != WINDOWS_ARM64_RUST_HOST:
+        raise RuntimeError(
+            f"native Windows ARM64 rustc host is required; found {host or 'missing host'}"
+        )
+
+
+def main() -> None:
+    """Run the native Windows ARM64 preflight used by workflow jobs."""
+    require_native_windows_arm64()
+
+
+if __name__ == "__main__":
+    main()
