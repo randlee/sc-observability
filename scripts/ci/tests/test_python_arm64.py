@@ -1,9 +1,11 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from python_arm64 import PE_ARM64_MACHINE, is_pe_arm64, pe_machine
+from python_arm64 import (PE_ARM64_MACHINE, is_pe_arm64, main, pe_machine,
+                          require_native_windows_arm64)
 
 
 def pe(machine: int, offset: int = 0x80) -> bytes:
@@ -34,6 +36,21 @@ class WindowsArm64Tests(unittest.TestCase):
             with self.subTest(image=image):
                 self.assertIsNone(pe_machine(image))
                 self.assertFalse(is_pe_arm64(image))
+
+    @patch('python_arm64.sys.implementation.name', 'cpython')
+    @patch('python_arm64.platform.machine', return_value='ARM64')
+    @patch('python_arm64.platform.system', return_value='Windows')
+    def test_workflow_preflight_cli_accepts_native_runner(self, system, machine):
+        self.assertIsNone(main())
+        system.assert_called_once_with()
+        machine.assert_called_once_with()
+
+    @patch('python_arm64.sys.implementation.name', 'cpython')
+    @patch('python_arm64.platform.machine', return_value='AMD64')
+    @patch('python_arm64.platform.system', return_value='Windows')
+    def test_workflow_preflight_rejects_emulated_runner(self, _system, _machine):
+        with self.assertRaisesRegex(RuntimeError, 'native Windows ARM64'):
+            require_native_windows_arm64()
 
 
 if __name__ == '__main__':
