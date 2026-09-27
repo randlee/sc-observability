@@ -1,0 +1,28 @@
+boundary_id = "BOUNDARY-LogSettingsExample"
+owner_package = "log-settings-example"
+owner_crate_path = "log_settings_example"
+name = "LogSettingsExample"
+[public]
+facade = "crate_root"
+[implementation]
+type = "crate"
+module = "log_settings_example"
+visibility = "public"
+constructor = "none"
+[composition]
+roots = []
+[dependencies]
+allowed_dependents = []
+allowed_dependencies = ["sc-observability", "sc-observability-types"]
+forbidden_edges = []
+[references]
+scope = "outside_owner_crate"
+forbidden = []
+[testing]
+allowed_test_double_paths = []
+forbidden_test_bypasses = []
+[enforcement]
+lint_rules = ["LINT-LOG-SETTINGS-EXAMPLE-BOUNDARY"]
+review_gates = ["workspace_dependency_policy"]
+[status]
+state = "concrete_landed"
