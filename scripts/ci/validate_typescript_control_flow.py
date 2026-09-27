@@ -13,7 +13,7 @@ def main():
     for path in paths:
         if path.name == 'test.ts':
             continue
-        source = path.read_text()
+        source = path.read_text(encoding="utf-8")
         # The adapter's cfg(test) module is a trailing unit-test module. Public
         # operational code is above it; test assertions intentionally may panic.
         if path.suffix == '.rs':

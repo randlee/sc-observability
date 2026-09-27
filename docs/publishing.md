@@ -66,14 +66,17 @@ cutover, new releases of these crate names must come from this repo instead.
   each real publication with 12 bounded attempts and fails the sequence visibly
   if the exact non-yanked version does not appear. B.2 tests this gate with
   mocked responses and never invokes live publication.
-- `.github/workflows/b2-staged-consumer.yml` distributes a single immutable
+- `.github/workflows/b2-staged-consumer.yml` (dispatch-only preflight) distributes a single immutable
   stage to macOS, Linux and Windows; all three must attest the same candidate
   source SHA and archive checksums. Third-party dependencies can use crates.io;
   all first-party dependencies resolve only from freshly verified extractions.
 - B.P2's historical four-package stage uses `release/bp2-publish-artifacts.toml`.
   Its existing artifacts and evidence are not regenerated as B.2 evidence.
 
-Before publishing, the publisher dispatches `b2-staged-consumer.yml` and `bp2-staged-consumer.yml` on the candidate ref and verifies both complete successfully; these release preflight workflows run only via `workflow_dispatch`, never on PRs or pushes.
+The [CI release-preflight policy](ci-policy.md#release-preflight) defines the
+applicable candidate versions and the publisher's dispatch/verification
+procedure for these workflows. These release preflight workflows run only via
+`workflow_dispatch`, never on PRs or pushes.
 
 ### B.2 candidate workflow (no publication)
 

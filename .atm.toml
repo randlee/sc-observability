@@ -85,6 +85,7 @@ all = [
   "Use native atm send or atm ack for messages to cobs, lobs, aobs, quality-mgr, or obs-sanity",
   "Use native atm read to read messages from team-members",
 ]
+compact = ["Phase in progress: read .claude/skills/atm-bd-orchestration/SKILL.md in full before any dispatch."]
 
 [startup.cobs]
 all = [
