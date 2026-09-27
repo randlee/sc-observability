@@ -18,18 +18,21 @@ trait FixtureBridgeEventPolicy: Send + Sync {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 enum FixtureBridgeEventDecision {
     Admit,
     Reject(FixturePolicyRejection),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 enum FixturePolicyRejection {
     Denied,
     PayloadTooLarge,
     Invalid,
 }
 
+#[non_exhaustive]
 struct FixtureAttachmentOptions {
     bridge: BridgeOptions,
     policy: Arc<dyn FixtureBridgeEventPolicy>,
@@ -182,6 +185,30 @@ impl FixtureBridgeEventPolicy for FixtureDenyPolicy {
     }
 }
 
+struct FixtureAdmitPolicy;
+
+impl FixtureBridgeEventPolicy for FixtureAdmitPolicy {
+    fn decide(&self, _: &LogEvent) -> FixtureBridgeEventDecision {
+        FixtureBridgeEventDecision::Admit
+    }
+}
+
+struct FixturePayloadTooLargePolicy;
+
+impl FixtureBridgeEventPolicy for FixturePayloadTooLargePolicy {
+    fn decide(&self, _: &LogEvent) -> FixtureBridgeEventDecision {
+        FixtureBridgeEventDecision::Reject(FixturePolicyRejection::PayloadTooLarge)
+    }
+}
+
+struct FixtureInvalidPolicy;
+
+impl FixtureBridgeEventPolicy for FixtureInvalidPolicy {
+    fn decide(&self, _: &LogEvent) -> FixtureBridgeEventDecision {
+        FixtureBridgeEventDecision::Reject(FixturePolicyRejection::Invalid)
+    }
+}
+
 fn assert_open_policy(_: Arc<dyn FixtureBridgeEventPolicy>) {}
 
 fn contract_event() -> LogEvent {
@@ -272,20 +299,32 @@ fn foreign_logger_rejected() {
 
 #[test]
 fn attachment_options_accept_open_policy() {
-    let options = FixtureAttachmentOptions::new(
-        BridgeOptions {
-            default_action: ActionName::new("contract").expect("static action name"),
-            parse_bracket_action: true,
-        },
-        Arc::new(FixtureDenyPolicy),
-    );
-    assert_open_policy(Arc::clone(&options.policy));
-    assert!(options.bridge.parse_bracket_action);
-    assert_eq!(
-        options.policy.decide(&contract_event()),
-        FixtureBridgeEventDecision::Reject(FixturePolicyRejection::Denied)
-    );
-    let _ = FixtureBridgeEventDecision::Admit;
-    let _ = FixturePolicyRejection::PayloadTooLarge;
-    let _ = FixturePolicyRejection::Invalid;
+    let bridge = BridgeOptions {
+        default_action: ActionName::new("contract").expect("static action name"),
+        parse_bracket_action: true,
+    };
+
+    for (policy, expected) in [
+        (
+            Arc::new(FixtureAdmitPolicy) as Arc<dyn FixtureBridgeEventPolicy>,
+            FixtureBridgeEventDecision::Admit,
+        ),
+        (
+            Arc::new(FixtureDenyPolicy) as Arc<dyn FixtureBridgeEventPolicy>,
+            FixtureBridgeEventDecision::Reject(FixturePolicyRejection::Denied),
+        ),
+        (
+            Arc::new(FixturePayloadTooLargePolicy) as Arc<dyn FixtureBridgeEventPolicy>,
+            FixtureBridgeEventDecision::Reject(FixturePolicyRejection::PayloadTooLarge),
+        ),
+        (
+            Arc::new(FixtureInvalidPolicy) as Arc<dyn FixtureBridgeEventPolicy>,
+            FixtureBridgeEventDecision::Reject(FixturePolicyRejection::Invalid),
+        ),
+    ] {
+        let options = FixtureAttachmentOptions::new(bridge.clone(), policy);
+        assert_open_policy(Arc::clone(&options.policy));
+        assert!(options.bridge.parse_bracket_action);
+        assert_eq!(options.policy.decide(&contract_event()), expected);
+    }
 }
