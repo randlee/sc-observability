@@ -178,6 +178,31 @@ fn canonical_error_variants_preserve_context() {
 }
 
 #[test]
+fn telemetry_shutdown_preserves_context_and_diagnostic() {
+    let original = context(error_codes::otlp::OTLP_TELEMETRY_SHUTDOWN);
+    let diagnostic = original.diagnostic().clone();
+    let pointer = std::ptr::from_ref(&*original);
+    let shutdown = TelemetryError::Shutdown { context: original };
+
+    assert_eq!(std::ptr::from_ref(shutdown.context()), pointer);
+    assert_eq!(DiagnosticInfo::diagnostic(&shutdown), &diagnostic);
+    assert!(
+        shutdown
+            .source()
+            .unwrap()
+            .source()
+            .unwrap()
+            .is::<Sentinel>()
+    );
+    let saved = serde_json::to_value(&shutdown).unwrap();
+    assert_eq!(
+        saved["Shutdown"]["context"]["diagnostic"]["remediation"]["kind"],
+        "recoverable"
+    );
+    assert_eq!(std::ptr::from_ref(&*shutdown.into_context()), pointer);
+}
+
+#[test]
 fn stable_failure_codes() {
     let mut seen = std::collections::HashSet::new();
     for code in error_codes::ALL {
@@ -212,6 +237,10 @@ fn stable_failure_codes() {
     }
     .into();
     assert_eq!(telemetry.code().as_str(), "OTLP_QUEUE_FULL");
+    assert_eq!(
+        DiagnosticInfo::diagnostic(&telemetry).code,
+        error_codes::otlp::OTLP_QUEUE_FULL
+    );
     assert!(matches!(
         &telemetry,
         TelemetryError::ExportFailure(ExportError::QueueFull { .. })
@@ -226,9 +255,17 @@ fn stable_failure_codes() {
             .unwrap()
             .is::<Sentinel>()
     );
+    let shutdown = TelemetryError::Shutdown {
+        context: Box::new(ErrorContext::new(
+            error_codes::otlp::OTLP_TELEMETRY_SHUTDOWN,
+            "telemetry runtime is shut down",
+            Remediation::recoverable("construct a new telemetry instance", [] as [&str; 0]),
+        )),
+    };
+    assert_eq!(shutdown.code().as_str(), "OTLP_TELEMETRY_SHUTDOWN");
     assert_eq!(
-        TelemetryError::Shutdown.code().as_str(),
-        "OTLP_TELEMETRY_SHUTDOWN"
+        shutdown.diagnostic().remediation,
+        Remediation::recoverable("construct a new telemetry instance", [] as [&str; 0])
     );
 }
 fn finite(n: f64) -> FiniteF64 {
