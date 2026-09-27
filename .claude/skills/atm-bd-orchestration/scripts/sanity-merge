@@ -33,6 +33,9 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from worktree_status import is_clean
+
 CHECKER_KIND = "skipped"
 RUSTC = re.compile(r"^\s*-->\s+(?P<file>[^:\s]+):(?P<line>\d+):\d+", re.M)
 RUSTFMT = re.compile(r"^Diff in (?P<file>[^:\s]+)(?: at line |:)(?P<line>\d+)", re.M)
@@ -138,12 +141,12 @@ def verify_worktree(manifest):
         if run.returncode != 0:
             raise TaskFailure("SANITY.TARGET_UNREADABLE fatal 0", f"git {' '.join(argv)} failed in {worktree}")
         return run.stdout.strip()
-    head, branch, status = git("rev-parse", "HEAD"), git("rev-parse", "--abbrev-ref", "HEAD"), git("status", "--porcelain")
+    head, branch, status = git("rev-parse", "HEAD"), git("rev-parse", "--abbrev-ref", "HEAD"), git("status", "--porcelain", "--untracked-files=all")
     if head != manifest["sha"]:
         raise TaskFailure("SANITY.COMMIT_MISMATCH fatal 0", f"HEAD is {head}, not {manifest['sha']}")
     if branch != manifest["branch"]:
         raise TaskFailure("SANITY.COMMIT_MISMATCH fatal 0", f"checked-out branch is {branch}, not {manifest['branch']}")
-    if status:
+    if not is_clean(status):
         raise TaskFailure("SANITY.COMMIT_MISMATCH fatal 0", "worktree has uncommitted or untracked changes")
 
 

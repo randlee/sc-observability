@@ -71,6 +71,23 @@ class SanityMerge(unittest.TestCase):
         body = results if isinstance(results, str) else json.dumps(results)
         return subprocess.run([str(SCRIPT), *argv], input=body, capture_output=True, text=True)
 
+    def test_lock_exemption_does_not_hide_real_changes_after_split(self):
+        self.lint(0)
+        (self.wt / ".beads.gate.lock").write_text("live lock")
+        for name in (".beads.gate.lock.bak", "nested/.beads.gate.lock", ".sc-compose-old/log", "lib.rs"):
+            with self.subTest(name=name):
+                path = self.wt / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                original = path.read_text() if path.exists() else None
+                path.write_text("changed after split")
+                out = self.merge([self.result(1), self.result(2)])
+                self.assertEqual(out.returncode, 3, out.stderr)
+                self.assertIn("uncommitted or untracked", out.stderr)
+                if original is None:
+                    path.unlink()
+                else:
+                    path.write_text(original)
+
     def test_pass(self):
         self.lint(0, "ok\n")
         out = self.merge([self.result(2), self.result(1)])

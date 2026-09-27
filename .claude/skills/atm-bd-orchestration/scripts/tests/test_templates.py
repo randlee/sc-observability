@@ -19,7 +19,7 @@ class TemplateContractTests(unittest.TestCase):
         text = (ROOT / "templates/finding-bead.json.j2").read_text()
         self.assertIn("- difficulty", text)
         import json, sys
-        sys.path.insert(0, str(ROOT.parents[1] / "atm-beads" / "scripts"))
+        sys.path.insert(0, str(ROOT.parent / "atm-beads" / "scripts"))
         from plan_contract import SEVERITY_PRIORITY
         self.assertIn(json.dumps(SEVERITY_PRIORITY).replace(", ", ", "), text)  # the literal mirrors plan_contract; Jinja cannot import it
         self.assertIn('"difficulty"', text)
@@ -29,7 +29,7 @@ class TemplateContractTests(unittest.TestCase):
         text = (ROOT / "templates/dev-sanity-template.xml.j2").read_text()
         self.assertIn("- pr_number", text)
         self.assertIn("- pr_url", text)
-        self.assertIn("gh pr view", text)
+        self.assertIn("assignment-gates.py sanity", text)
         self.assertIn("SANITY.ZERO_DELTA", text)
 
     def test_workflow_issue_template_exists(self):
@@ -45,10 +45,19 @@ class TemplateContractTests(unittest.TestCase):
                 if name != "dev-sanity-template":
                     self.assertIn("--root {{ phase_root | string | cdata_escape }}", text)
 
-    def test_sanity_template_has_no_stale_base_check(self):
-        text = (ROOT / "templates/dev-sanity-template.xml.j2").read_text()
-        self.assertNotIn("STALE_BASE", text)  # sanity-split pins origin/<base> itself (three-dot diff)
-        self.assertIn("git fetch origin && git log --format=%H origin/", text)  # but the tracking ref must be fresh
+    def test_sanity_template_and_both_named_coordinators_require_stack_admission(self):
+        paths = [ROOT / "templates/dev-sanity-template.xml.j2", ROOT / "roles/dev-sanity.md"]
+        paths += [ROOT.parents[1] / "agents" / f"dev-sanity-{checker}.md" for checker in ("llm", "jev")]
+        for path in paths:
+            with self.subTest(path=path):
+                text = path.read_text()
+                self.assertIn("/sc-gh-stack-view", text)
+                self.assertIn("assignment-gates.py", text)
+                self.assertIn("--stack-view", text)
+                self.assertIn("--stack-report", text)
+                self.assertIn("integrate/phase-*", text)
+                self.assertIn("frozen", text)
+                self.assertNotIn("Never edit code, commit, push, or run `gh stack`.", text)
 
     def test_finding_bead_deliverables_are_splittable(self):
         import importlib.machinery, importlib.util, json, subprocess

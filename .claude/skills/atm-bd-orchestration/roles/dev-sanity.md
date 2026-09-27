@@ -41,20 +41,48 @@ waits on another check.
 
 ## Pre-claim refusals
 
-Before claim, the sanity member performs these numbered checks at the pinned
-commit. Each failure is a refusal, not a best-effort check:
+Before claim, run the shared admission gate for **every request**, once per
+sanity coordinator (both `dev-sanity-llm` and `dev-sanity-jev`), before children
+or lint. Locate the canonical `gh_stack_view.py` using `/sc-gh-stack-view` and
+pass its absolute path; the gate invokes it read-only with `--json`, from the
+assigned worktree. Keep the report outside that worktree.
 
-1. `test -n "$PR_NUMBER" && test -n "$PR_URL"`; otherwise refuse
-   `SANITY.PR_REQUIRED`.
-2. `gh pr view "$PR_NUMBER" --json baseRefName,headRefOid --jq '.baseRefName + " " + .headRefOid'`
-   must equal the declared `pr_target` and commit; otherwise refuse
-   `SANITY.STALE_BASE`. Then `git fetch origin`.
-3. `git log --format=%H "origin/$PR_TARGET..$COMMIT" | grep -q .` must pass;
-   otherwise refuse `SANITY.ZERO_DELTA`.
-4. `test -z "$(git status --porcelain --untracked-files=no | grep -v '^?? \.beads\.gate\.lock$')"`
-   must pass; otherwise refuse `SANITY.DIRTY_TREE`.
-5. `bd history "$TASK_ID"` must contain no earlier PASS; otherwise refuse
-   `SANITY_FROZEN`.
+```bash
+python3 .claude/skills/atm-bd-orchestration/scripts/assignment-gates.py sanity \
+  --bead "$TASK_ID" --checked-bead "$CHECKED_BEAD" --worktree "$WORKTREE" \
+  --branch "$BRANCH" --commit "$COMMIT" --pr-number "$PR_NUMBER" \
+  --pr-target "$PR_TARGET" --stack-view "$STACK_VIEW_SCRIPT" \
+  --stack-report "$SCRATCH/$TASK_ID-stack-view.txt"
+```
+
+Require a PR number and URL (`SANITY.PR_REQUIRED`). Only `READY` from the gate
+permits claiming. The gate verifies:
+
+1. Actual open PR base equals the checked bead's declared `pr_target`, and
+   its branch/head equal the assigned branch/pinned commit.
+2. A dependent PR belongs to exactly one coherent `/sc-gh-stack` with known
+   local/origin/PR heads and base coherence for every open layer. The bottom
+   layer may be behind a moving trunk if the canonical view permits it.
+   **Only actual PR bases `develop` or `integrate/phase-*` exempt membership**;
+   unrelated stacks do not gate a direct PR. Missing/incoherent/unknown stack
+   evidence refuses with `SANITY.STACK_REQUIRED`, `SANITY.STACK_INCOHERENT`, or
+   `SANITY.STACK_UNVERIFIED`. Unavailable tools/invalid output cannot pass.
+3. Worktree branch/HEAD and freshly fetched origin head equal the assignment
+   (`SANITY.HEAD_MISMATCH`), with nonzero delta against the PR target
+   (`SANITY.ZERO_DELTA`) and a clean tree including untracked files
+   (`SANITY.DIRTY_TREE`; ignore only existing gate/compose scratch paths).
+4. Task history contains no earlier PASS (`SANITY_FROZEN`).
+
+These checks apply to direct PRs too; their exception is membership only.
+The gate's non-READY code is a refusal, never a best-effort check. Prefix its
+code with `SANITY.` for the refusal, except the existing `SANITY_FROZEN` code.
+Neither red lower-layer CI nor a missing overall landing approval is a sanity
+quality finding. Children retain their narrow done/not-done contract.
+
+Sanity never edits, amends, rebases, or force-pushes frozen layers and never
+runs stack mutations. The lead's designated stack writer owns repairs; later
+fixes append above the current top. Read-only canonical stack view is allowed
+and required, including when an earlier prompt prohibited all `gh stack` use.
 
 For every refusal, before the refusal message or task close, strictly render
 `templates/workflow-issue-bead.json.j2` with id `$TASK_ID-wf-$CODE`, import it

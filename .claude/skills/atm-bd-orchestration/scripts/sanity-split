@@ -60,6 +60,9 @@ import sys
 import tempfile
 import time
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from worktree_status import is_clean
+
 HERE = Path(__file__).resolve().parent
 TEMPLATE = HERE.parent / "templates" / "dev-sanity-assignment.json.j2"
 CODES = {2: "SANITY.PLAN_INVALID", 3: "SANITY.TARGET_UNREADABLE", 4: "SANITY.COMMIT_MISMATCH", 5: "RENDER_FAILED"}
@@ -171,7 +174,7 @@ def pin(args):
     branch = git(args.worktree, "rev-parse", "--abbrev-ref", "HEAD").strip()
     if branch != args.branch:
         raise Fail(4, f"checked-out branch is {branch}, not {args.branch}")
-    if git(args.worktree, "status", "--porcelain").strip():
+    if not is_clean(git(args.worktree, "status", "--porcelain", "--untracked-files=all")):
         raise Fail(4, "worktree has uncommitted or untracked changes")
     remote = git(args.worktree, "ls-remote", "origin", f"refs/heads/{args.branch}",
                  what=f"cannot read origin refs/heads/{args.branch}")

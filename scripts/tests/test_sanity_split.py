@@ -108,6 +108,31 @@ class SanitySplit(unittest.TestCase):
         return subprocess.run([str(MERGE), str(manifest_file), "obs-x-1-sanity", "obs-x-1", "x"],
                               input=json.dumps(results), capture_output=True, text=True)
 
+    def test_generated_lock_and_compose_scratch_survive_split_and_merge(self):
+        (self.repo.wt / ".beads.gate.lock").write_text("live lock")
+        compose = self.repo.wt / ".sc-compose"
+        compose.mkdir()
+        (compose / "log.json").write_text("{}")
+        out = self.run_split(lint="true")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        manifest = json.loads(out.stdout)
+        self.assertEqual(self.wait_lint(manifest["lint"]["exit_file"]), "0")
+        merged = self.merge(manifest, [result(1, self.repo.sha), result(2, self.repo.sha)])
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+        self.assertEqual(json.loads(merged.stdout)["verdict"], "PASS")
+        self.assertEqual((self.repo.wt / ".beads.gate.lock").read_text(), "live lock")
+
+    def test_scratch_lookalikes_are_dirty(self):
+        for name in (".beads.gate.lock.bak", "nested/.beads.gate.lock", ".sc-compose-old/log"):
+            with self.subTest(name=name):
+                path = self.repo.wt / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("not generated scratch")
+                out = self.run_split()
+                self.assertEqual(out.returncode, 4, out.stderr)
+                self.assertIn("uncommitted or untracked", out.stderr)
+                path.unlink()
+
     def test_happy_path_renders_one_assignment_per_deliverable(self):
         out = self.run_split(commit=self.repo.sha[:8])
         self.assertEqual(out.returncode, 0, out.stderr)
