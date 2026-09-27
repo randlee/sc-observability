@@ -11,33 +11,19 @@ use std::time::Duration;
 
 use crate::config::{OtelConfig, validated_transport_bounds};
 use crate::contracts::{
-    CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, LifecycleFuture, LogExporter,
-    LogRecord, MetricExporter, TraceExporter,
+    CompleteSpan, ExportRecord, ExporterLifecycle, ExporterSet, InstrumentationScope,
+    LifecycleFuture, Resource,
 };
 use crate::lifecycle::{LifecycleCore, LifecycleState, SignalKind};
-use sc_observability_types::v2::{ExportError, MetricRecord};
-
-struct NoopLogs;
-struct NoopTraces;
-struct NoopMetrics;
-
-impl LogExporter for NoopLogs {
-    fn export_logs(&self, _batch: &[ExportRecord<LogRecord>]) -> Result<(), ExportError> {
-        Ok(())
-    }
-}
-
-impl TraceExporter for NoopTraces {
-    fn export_spans(&self, _batch: &[ExportRecord<CompleteSpan>]) -> Result<(), ExportError> {
-        Ok(())
-    }
-}
-
-impl MetricExporter for NoopMetrics {
-    fn export_metrics(&self, _batch: &[ExportRecord<MetricRecord>]) -> Result<(), ExportError> {
-        Ok(())
-    }
-}
+use crate::testing::{RecordingLogExporter, RecordingMetricExporter, RecordingTraceExporter};
+use sc_observability_types::v2::{
+    AggregationTemporality, AttributeValue, Attributes, ExportError, FiniteF64, HistogramPoint,
+    MetricRecord, MetricValue, SpanEvent, SpanKind, SpanRecord, SpanStatus, TraceContext,
+    TraceFlags,
+};
+use sc_observability_types::{
+    ActionName, DurationMs, MetricName, ServiceName, SpanId, Timestamp, TraceId,
+};
 
 struct PendingUntilReleased {
     released: Arc<AtomicBool>,
@@ -133,9 +119,9 @@ fn fixture(
         flush_entered: None,
     });
     let exporters = ExporterSet {
-        logs: Arc::new(NoopLogs),
-        traces: Arc::new(NoopTraces),
-        metrics: Arc::new(NoopMetrics),
+        logs: Arc::new(RecordingLogExporter::default()),
+        traces: Arc::new(RecordingTraceExporter::default()),
+        metrics: Arc::new(RecordingMetricExporter::default()),
         lifecycle,
     };
     let bounds = validated_transport_bounds(transport).expect("test transport bounds");
@@ -150,6 +136,78 @@ fn default_fixture() -> (
     Arc<AtomicBool>,
 ) {
     fixture(None, &OtelConfig::default())
+}
+
+fn preserved_records() -> (ExportRecord<CompleteSpan>, ExportRecord<MetricRecord>) {
+    let resource = Resource {
+        attributes: Attributes::from([("host.id".into(), AttributeValue::UInt(u64::MAX))]),
+        schema_url: Some("https://example.test/resource".into()),
+    };
+    let scope = InstrumentationScope {
+        name: "lifecycle-consumer".into(),
+        version: Some("2.0".into()),
+        schema_url: Some("https://example.test/scope".into()),
+        attributes: Attributes::from([("scope.enabled".into(), AttributeValue::Bool(true))]),
+    };
+    let metric = ExportRecord {
+        resource: resource.clone(),
+        scope: scope.clone(),
+        record: MetricRecord::try_new(
+            Timestamp::UNIX_EPOCH,
+            ServiceName::new("test").expect("valid service"),
+            MetricName::new("latency").expect("valid metric"),
+            MetricValue::Histogram {
+                point: HistogramPoint::try_new(
+                    vec![1.0],
+                    vec![1, 2],
+                    3,
+                    FiniteF64::new(5.0).expect("finite histogram sum"),
+                )
+                .expect("valid histogram"),
+                temporality: AggregationTemporality::Cumulative,
+                start_time: Timestamp::UNIX_EPOCH,
+            },
+        )
+        .expect("valid metric"),
+    };
+    let trace = TraceContext::new(
+        TraceId::new("1234567890abcdef1234567890abcdef").expect("valid trace"),
+        SpanId::new("1234567890abcdef").expect("valid span"),
+        TraceFlags::new(0x81),
+    );
+    let link = sc_observability_types::v2::SpanLink::new(
+        TraceId::new("abcdefabcdefabcdefabcdefabcdefab").expect("valid linked trace"),
+        SpanId::new("abcdefabcdefabcd").expect("valid linked span"),
+        TraceFlags::new(0x41),
+        Attributes::from([("link.kind".into(), AttributeValue::String("parent".into()))]),
+    );
+    let span = ExportRecord {
+        resource,
+        scope,
+        record: CompleteSpan {
+            record: SpanRecord::new(
+                Timestamp::UNIX_EPOCH,
+                ServiceName::new("test").expect("valid service"),
+                ActionName::new("request").expect("valid action"),
+                trace.clone(),
+                Attributes::from([("span.kind".into(), AttributeValue::String("server".into()))]),
+            )
+            .with_kind(SpanKind::Server)
+            .with_links(vec![link])
+            .end(SpanStatus::Ok, DurationMs::from(7)),
+            events: vec![SpanEvent {
+                timestamp: Timestamp::UNIX_EPOCH,
+                trace,
+                name: ActionName::new("event").expect("valid event"),
+                attributes: Attributes::from([(
+                    "event.kind".into(),
+                    AttributeValue::String("checkpoint".into()),
+                )]),
+                diagnostic: None,
+            }],
+        },
+    };
+    (span, metric)
 }
 
 struct NoopWake;
@@ -179,9 +237,9 @@ fn concurrent_waiters_do_not_start_duplicate_backend_operation() {
         flush_entered: Some(Arc::clone(&entered)),
     });
     let exporters = ExporterSet {
-        logs: Arc::new(NoopLogs),
-        traces: Arc::new(NoopTraces),
-        metrics: Arc::new(NoopMetrics),
+        logs: Arc::new(RecordingLogExporter::default()),
+        traces: Arc::new(RecordingTraceExporter::default()),
+        metrics: Arc::new(RecordingMetricExporter::default()),
         lifecycle,
     };
     let bounds = validated_transport_bounds(&OtelConfig::default()).expect("test bounds");
@@ -224,15 +282,35 @@ fn concurrent_waiters_do_not_start_duplicate_backend_operation() {
 #[test]
 fn ordered_flush_waits_for_prior_admission_and_preserves_payload() {
     let (core, flushes, _, released) = default_fixture();
-    let admitted = core
-        .admit(SignalKind::Metrics, "histogram-payload", 17)
-        .expect("admit");
-    assert_eq!(admitted.get(), &"histogram-payload");
+    let (span_payload, metric_payload) = preserved_records();
+    let admitted_span = core
+        .admit(SignalKind::Traces, span_payload.clone(), 256)
+        .expect("admit span");
+    let admitted_metric = core
+        .admit(SignalKind::Metrics, metric_payload.clone(), 128)
+        .expect("admit metric");
+    assert_eq!(admitted_span.get(), &span_payload);
+    assert_eq!(admitted_metric.get(), &metric_payload);
+    assert_eq!(admitted_span.get().resource, span_payload.resource);
+    assert_eq!(admitted_span.get().scope, span_payload.scope);
+    assert_eq!(admitted_span.get().record.record.trace().flags.bits(), 0x81);
+    assert_eq!(admitted_span.get().record.record.links().len(), 1);
+    assert_eq!(
+        admitted_span.get().record.events[0].trace.flags.bits(),
+        0x81
+    );
+    let MetricValue::Histogram { point, .. } = admitted_metric.get().record.value() else {
+        panic!("metric payload lost its histogram variant")
+    };
+    assert_eq!(point.explicit_bounds(), &[1.0]);
+    assert_eq!(point.bucket_counts(), &[1, 2]);
+    assert_eq!(point.count(), 3);
+    assert!((point.sum().get() - 5.0).abs() < f64::EPSILON);
     let mut flush = core.flush_async();
     assert!(poll_once(&mut flush).is_pending());
     assert_eq!(flushes.load(Ordering::Acquire), 0);
-    let payload = admitted.complete(Ok(()));
-    assert_eq!(payload, "histogram-payload");
+    assert_eq!(admitted_span.complete(Ok(())), span_payload);
+    assert_eq!(admitted_metric.complete(Ok(())), metric_payload);
     released.store(true, Ordering::Release);
     assert!(poll_once(&mut flush).is_ready());
     assert_eq!(flushes.load(Ordering::Acquire), 1);
