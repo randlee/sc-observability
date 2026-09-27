@@ -30,7 +30,7 @@ def prerequisites(bead):
 
 
 def build_graph(index, beads):
-    """Use the index for scope only; every displayed edge must exist in beads."""
+    """Render only the declared phase graph; Beads contribute live state."""
     validate_index(index)
     devs = set(index_bead_pairs(index))
     missing = devs - beads.keys()
@@ -45,18 +45,15 @@ def build_graph(index, beads):
             raise RuntimeError(f'{dev}: expected one live sanity gate, found {len(gates)}')
         if pairs[dev] != gates[0]:
             raise RuntimeError(f'{dev}: indexed sanity bead {pairs[dev]} does not match live gate {gates[0]}')
-    # Include original plan gates, never QA findings, fix tasks or arbitrary ancestors.
-    plan_gates = {key for key, bead in beads.items()
-                  if 'stage:plan-review' in (bead.get('labels') or [])}
-    allowed = devs | set(pairs.values()) | plan_gates
     nodes = devs | set(pairs.values())
-    todo = list(nodes)
-    while todo:
-        for prerequisite in prerequisites(beads[todo.pop()]):
-            if prerequisite in allowed and prerequisite not in nodes:
-                nodes.add(prerequisite)
-                todo.append(prerequisite)
-    edges = sorted((key, dep) for key in nodes for dep in prerequisites(beads[key]) if dep in nodes)
+    edges = []
+    for row in index['sprints']:
+        dev, sanity = row['dev_bead_id'], row['sanity_bead_id']
+        # The sanity gate waits on its dev bead.  Each listed prerequisite
+        # sprint gates this dev directly through its own sanity bead.
+        edges.append((sanity, dev))
+        edges.extend((dev, prerequisite) for prerequisite in row.get('depends_on_sanity_bead_ids', []))
+    edges = sorted(edges)
     try:
         tuple(TopologicalSorter({key: [dep for src, dep in edges if src == key]
                                  for key in nodes}).static_order())
@@ -381,8 +378,7 @@ def generate(repo, index, counts, phase, output=None, open_image=False, open_vie
         print(path(suffix))
     if publish_branch is not None:
         from phase_artifact import publish_artifact
-        published = publish_artifact(repo, publish_branch, phase, path('.html').read_text(),
-                                     json.dumps(index, indent=2) + '\n')
+        published = publish_artifact(repo, publish_branch, phase, path('.html').read_text())
         path('-published.json').write_text(json.dumps(published, indent=2) + '\n')
         print(f"Published {published['html_path']} on {publish_branch} at {published['commit'][:12]}")
     if open_image:
