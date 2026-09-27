@@ -2528,11 +2528,11 @@ a more precise row below.
 
 Core `error_codes.rs` owns `SC_LOG_SINK_REGISTRATION_DUPLICATE`,
 `SC_LOG_SINK_REGISTRATION_INVALID`, `SC_LOG_SINK_REGISTRATION_CLOSED`, and
-settings constants `LOG_PREFIX_COLLISION` (`LOG-001`),
-`LOG_INVALID_ENVIRONMENT` (`LOG-002`), `LOG_UNKNOWN_KEY` (`LOG-003`),
-`LOG_INVALID_VALUE` (`LOG-004`), `LOG_RESOLUTION` (`LOG-005`). The existing
-settings code spellings are retained; these are diagnostics, not requirement
-IDs. The bridge registry owns `SC_LOG_DETACH_TIMEOUT`,
+the D.1-owned settings constants `SC_LOG_SETTINGS_PREFIX_COLLISION`,
+`SC_LOG_SETTINGS_INVALID_ENVIRONMENT`, `SC_LOG_SETTINGS_UNKNOWN_KEY`,
+`SC_LOG_SETTINGS_INVALID_VALUE`, and `SC_LOG_SETTINGS_RESOLUTION`. `LOG-001`
+through `LOG-005` are requirement IDs and are not diagnostic codes. The bridge
+registry owns `SC_LOG_DETACH_TIMEOUT`,
 `SC_LOG_DETACH_NOT_INSTALLED`, `SC_LOG_FOREIGN_LOGGER_INSTALLED`.
 DTO and routing registry values retain their existing meanings.
 

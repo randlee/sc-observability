@@ -67,7 +67,7 @@ enum FixtureLogSettingsError {
 impl FixtureLogSettingsError {
     const fn code(self) -> &'static str {
         match self {
-            Self::InvalidValue => "LOG-004",
+            Self::InvalidValue => "SC_LOG_SETTINGS_INVALID_VALUE",
         }
     }
 }
@@ -208,7 +208,7 @@ fn log_root_validation() {
 
     let error = FixtureLogRoot::new(PathBuf::new()).expect_err("empty root is rejected");
     assert_eq!(error, FixtureLogSettingsError::InvalidValue);
-    assert_eq!(error.code(), "LOG-004");
+    assert_eq!(error.code(), "SC_LOG_SETTINGS_INVALID_VALUE");
 
     let error = FixtureLogSettings::resolve(FixtureLogSettingsInputs {
         file: Some(FixtureLogSettings {
@@ -579,7 +579,7 @@ fn contract_harness_preserves_context() {
         fn write(&self, _: &LogEvent) -> Result<(), FixtureHarnessError> {
             Err(FixtureHarnessError(Box::new(
                 ErrorContext::new(
-                    ErrorCode::new_static("SC_LOG_SINK_CONTRACT"),
+                    ErrorCode::new_static("D13_FIXTURE_LOG_SINK_CONTRACT"),
                     "contract sink rejected the event",
                     Remediation::recoverable("repair the sink", ["retry registration"]),
                 )
@@ -606,7 +606,7 @@ fn contract_harness_preserves_context() {
         .expect_err("rejecting fixture sink returns its context");
     assert_eq!(
         payload.context().diagnostic().code.as_str(),
-        "SC_LOG_SINK_CONTRACT"
+        "D13_FIXTURE_LOG_SINK_CONTRACT"
     );
     assert_eq!(
         payload.context().diagnostic().remediation,
