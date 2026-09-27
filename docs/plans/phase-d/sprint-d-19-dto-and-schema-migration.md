@@ -39,6 +39,7 @@ Generated projection of `obs-d-19`; the bead is authoritative.
   - `crates/sc-observability-dto/src/wire/primitives.rs`
   - `crates/sc-observability-dto/tests/**`
   - `docs/plans/phase-d/sprint-d-19-dto-and-schema-migration.md`
+  - `scripts/generate_python_bindings.py`
 
 ## Goal
 
