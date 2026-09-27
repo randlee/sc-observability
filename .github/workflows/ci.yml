@@ -131,7 +131,7 @@ jobs:
         run: |
           status=0
           bash scripts/ci/validate_public_api_diff.sh || status=$?
-          # Exit 1 reports an API change; higher codes mean the diff failed.
+          # Exit 1 reports an API change; 2 reports tool-error rows; 3 reports a validator crash.
           if [ "$status" -gt 1 ]; then exit "$status"; fi
 
       - name: Validate public API semver compatibility

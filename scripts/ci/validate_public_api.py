@@ -7,6 +7,7 @@ import hashlib
 import json
 import subprocess
 import sys
+import traceback
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -138,5 +139,14 @@ def main() -> int:
     return 0
 
 
+def cli() -> int:
+    """Run the validator and distinguish crashes from actionable API diffs."""
+    try:
+        return main()
+    except Exception:
+        traceback.print_exc()
+        return 3
+
+
 if __name__ == '__main__':
-    raise SystemExit(main())
+    raise SystemExit(cli())
