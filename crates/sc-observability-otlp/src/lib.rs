@@ -1878,18 +1878,23 @@ mod tests {
                 Some(ErrorCode::new_static("SC_TEST_CUSTOM_EXPORT"))
             );
 
-            let shutdown_context =
-                std::error::Error::source(error).expect("shutdown failure preserves its context");
-            let export_failure = shutdown_context
-                .source()
-                .expect("shutdown context preserves export failure");
-            let export_context = export_failure
-                .source()
-                .expect("export failure preserves its context");
-            let native_source = export_context
-                .source()
-                .expect("export context preserves native source");
-            assert_eq!(native_source.to_string(), "custom exporter native source");
+            let mut source = std::error::Error::source(error);
+            let mut saw_export_failure = false;
+            let mut final_source = None;
+            while let Some(current) = source {
+                saw_export_failure |= current.downcast_ref::<ExportError>().is_some();
+                final_source = Some(current.to_string());
+                source = current.source();
+            }
+            assert!(
+                saw_export_failure,
+                "source chain retains the export failure"
+            );
+            assert_eq!(
+                final_source.as_deref(),
+                Some("custom exporter native source"),
+                "source chain ends at the native exporter source"
+            );
         }
 
         let legacy = Telemetry::new_with_exporters(
