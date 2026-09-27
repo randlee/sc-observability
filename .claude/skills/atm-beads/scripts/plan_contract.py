@@ -55,6 +55,16 @@ VALIDATOR_ACTIONS: dict[str, tuple[tuple[str, str], ...]] = {
     "GRAPH.MISSING_EDGE": (("user", "approve the matching bd dep add command or amend sprints.jsonl in a plan PR"),),
     "STATE.WAIVER": (("user", "record a policy.waivers entry after ruling"),),
     "ENV.CANNOT_RUN": (("lead", "repair the validator environment and rerun validate-plan"),),
+    "STATE.OPEN_FINDINGS": (("lead", "reopen the parent or close every open sanity finding as not valid"),),
+    "STATE.REOPENED_PASS": (("user", "record a policy.waivers entry after ruling"),),
+    "STATE.BLOCKER_ORDER": (("lead", "stop work and restore prerequisite closure before redispatch"),),
+    "QA.MISSING": (("lead", "create and dispatch the required QA bead"),),
+    "QA.ROUND_CAP": (("lead", "stop dispatch and determine root cause before another round"),),
+    "PR.TARGET": (("assignee", "retarget the PR to metadata.pr_target and rerun validation"),),
+    "FINDING.PRIORITY": (("lead", "set finding priority from its severity policy"),),
+    "FINDING.SEVERITY": (("planner", "set a valid finding severity label"),),
+    "SANITY.BASE": (("assignee", "set metadata.base to the branch name, not a SHA"),),
+    "SANITY.COMMIT": (("assignee", "set metadata.commit to the reviewed 40-hex SHA"),),
 }
 
 

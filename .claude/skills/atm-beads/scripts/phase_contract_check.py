@@ -263,7 +263,33 @@ class PhaseCheck:
                     return
         if check in C.WAIVABLE_CHECKS:
             code = "STATE.WAIVER"
+        if code == "PLAN.INVALID":
+            code = self.problem_code(msg)
         self.problems.append(C.validator_problem(bead, code, msg))
+
+    @staticmethod
+    def problem_code(msg: str) -> str:
+        if "closed with open sanity finding" in msg:
+            return "STATE.OPEN_FINDINGS"
+        if "reopened at" in msg:
+            return "STATE.REOPENED_PASS"
+        if "before blocker" in msg or "while blocker" in msg:
+            return "STATE.BLOCKER_ORDER"
+        if "with no QA bead" in msg:
+            return "QA.MISSING"
+        if "ROUND_CAP" in msg or "QA round" in msg:
+            return "QA.ROUND_CAP"
+        if msg.startswith("PR #"):
+            return "PR.TARGET"
+        if "priority P" in msg or "severity map says" in msg:
+            return "FINDING.PRIORITY"
+        if "severity label" in msg:
+            return "FINDING.SEVERITY"
+        if "metadata.base is a SHA" in msg:
+            return "SANITY.BASE"
+        if "metadata.commit" in msg:
+            return "SANITY.COMMIT"
+        return "PLAN.INVALID"
 
     def warn(self, msg: str) -> None:
         self.warnings.append(C.WARNING_PREFIX + msg)
@@ -360,7 +386,9 @@ class PhaseCheck:
                 if dev in self.by and prerequisite_sanity not in deps(self.by[dev], "blocks"):
                     self.problem(dev, f"missing direct planned dependency on sanity bead {prerequisite_sanity}", code="GRAPH.MISSING_EDGE")
             if dev in self.by and dev in self.declared_edge_rows:
-                allowed = set(self.planned_sanity_dependencies.get(dev, []))
+                allowed = set(self.planned_sanity_dependencies.get(dev, [])) | {
+                    blocker for blocker in deps(self.by[dev], "blocks") if blocker.startswith(self.root_id + "-plan-qa")
+                }
                 for blocker in deps(self.by[dev], "blocks"):
                     if blocker not in allowed:
                         self.problem(dev, f"blocks edge {dev} -> {blocker} is not declared by sprints.jsonl; approve `bd dep remove {dev} {blocker}` or add it to the plan", code="GRAPH.UNPLANNED_EDGE")
@@ -380,6 +408,23 @@ class PhaseCheck:
                 continue  # absorbed sprint and its sanity bead: history, not membership
             st = stage(b) or "unlabelled"
             self.problem(bid, f"{st} bead is a child of {self.root_id} but not a listed sprint pair; report it to the user")
+        # Audit every phase blocks edge.  Only the declared plan dependencies,
+        # paired sanity/dev edges, root plan gates, and same-report finding
+        # prerequisites are execution-graph exceptions.
+        for bid in (sorted(self.phase_ids) if self.declared_edge_rows else []):
+            b = self.by.get(bid, {})
+            for blocker in deps(b, "blocks"):
+                allowed = False
+                if bid in self.pairs:
+                    allowed = blocker in self.planned_sanity_dependencies.get(bid, []) or blocker.startswith(self.root_id + "-plan-qa")
+                elif bid in self.pairs.values():
+                    allowed = blocker == str(meta(b).get("dev_bead") or "")
+                elif stage(b) == C.FINDING_LABEL and stage(self.by.get(blocker, {})) == C.FINDING_LABEL:
+                    left, right = meta(b), meta(self.by[blocker])
+                    allowed = bool(left.get("sanity_bead") and left.get("sanity_bead") == right.get("sanity_bead")
+                                   and left.get("commit_checked") and left.get("commit_checked") == right.get("commit_checked"))
+                if not allowed:
+                    self.problem(bid, f"blocks edge {bid} -> {blocker} is not declared by sprints.jsonl; approve `bd dep remove {bid} {blocker}` or add it to the plan", code="GRAPH.UNPLANNED_EDGE")
 
     def check_hierarchy(self) -> None:
         """Top level holds epics only (user ruling 2026-09-26: several phases share one repo, so beads at the
