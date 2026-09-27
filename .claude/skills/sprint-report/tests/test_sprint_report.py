@@ -14,6 +14,16 @@ loader.exec_module(report)
 
 
 class SprintReportTests(unittest.TestCase):
+    def test_report_template_and_skill_keep_current_usage_text(self):
+        repo = Path(__file__).resolve().parents[4]
+        template = (repo / '.claude/skills/sprint-report/report.md.j2').read_text()
+        skill = (repo / '.claude/skills/sprint-report/SKILL.md').read_text()
+        script = (repo / '.claude/skills/sprint-report/scripts/sprint-report').read_text()
+        self.assertIn('Sprint status report for phase plans.', template)
+        self.assertNotIn('agent-team-mail', template)
+        self.assertIn('`--table` is the default mode', skill)
+        self.assertIn('"\\n\\n".join(detailed_rows)', script)
+
     def test_phase_d_index_excludes_folded_d11(self):
         repo = Path(__file__).resolve().parents[4]
         index = report.load_index(
