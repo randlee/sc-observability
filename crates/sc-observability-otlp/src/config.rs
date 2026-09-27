@@ -366,6 +366,7 @@ impl TryFrom<String> for AuthHeader {
 }
 
 /// Transport-level OTLP configuration.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OtelConfig {
     /// Whether transport/export is enabled.
@@ -687,56 +688,192 @@ pub(crate) fn validated_telemetry_bounds(
     Ok(bounds)
 }
 
-/// Checked, backend-neutral transport bounds. Backend factories receive this
-/// value rather than raw configuration so no adapter can reinterpret a wire
-/// field or bypass the ordered validation contract.
+/// A duration checked as strictly positive by ordered config validation.
 #[cfg_attr(
     not(test),
-    expect(
-        dead_code,
-        reason = "D.21 validates these factory-only bounds before D.6-D.8 consume them"
-    )
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PositiveDuration(Duration);
+
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+impl PositiveDuration {
+    pub(crate) const fn get(self) -> Duration {
+        self.0
+    }
+}
+
+/// Checked maximum number of simultaneously admitted records.
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct QueueCapacity(usize);
+
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+impl QueueCapacity {
+    pub(crate) const fn get(self) -> usize {
+        self.0
+    }
+}
+
+/// Checked aggregate serialized-byte budget for admitted records.
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct QueueByteCapacity(usize);
+
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+impl QueueByteCapacity {
+    pub(crate) const fn get(self) -> usize {
+        self.0
+    }
+}
+
+/// A percentage validated within zero through one hundred.
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct BoundedPercent(u8);
+
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+impl BoundedPercent {
+    pub(crate) const fn get(self) -> u8 {
+        self.0
+    }
+}
+
+/// Positive lifecycle deadlines, both at least the request timeout.
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 #[derive(Debug)]
-pub(crate) struct ValidatedTransportBounds {
-    pub(crate) protocol: OtlpProtocol,
-    pub(crate) queue_capacity: usize,
-    pub(crate) queue_byte_capacity: usize,
-    pub(crate) request_timeout: Duration,
-    pub(crate) lifecycle_flush_timeout: Duration,
-    pub(crate) lifecycle_shutdown_timeout: Duration,
-    pub(crate) backend: BackendTransportBounds,
+pub(crate) struct LifecycleBounds {
+    flush: PositiveDuration,
+    shutdown: PositiveDuration,
 }
 
 #[cfg_attr(
     not(test),
-    expect(
-        dead_code,
-        reason = "D.21 stages backend-neutral bounds before backend factories consume them"
-    )
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+impl LifecycleBounds {
+    pub(crate) const fn flush(&self) -> PositiveDuration {
+        self.flush
+    }
+    pub(crate) const fn shutdown(&self) -> PositiveDuration {
+        self.shutdown
+    }
+}
+
+/// Checked transport bounds; private fields prohibit unchecked factory construction.
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+#[derive(Debug)]
+pub(crate) struct ValidatedTransportBounds {
+    protocol: OtlpProtocol,
+    queue_capacity: QueueCapacity,
+    queue_byte_capacity: QueueByteCapacity,
+    request_timeout: PositiveDuration,
+    lifecycle: LifecycleBounds,
+    backend: BackendTransportBounds,
+}
+
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+impl ValidatedTransportBounds {
+    pub(crate) const fn protocol(&self) -> OtlpProtocol {
+        self.protocol
+    }
+    pub(crate) const fn queue_capacity(&self) -> QueueCapacity {
+        self.queue_capacity
+    }
+    pub(crate) const fn queue_byte_capacity(&self) -> QueueByteCapacity {
+        self.queue_byte_capacity
+    }
+    pub(crate) const fn request_timeout(&self) -> PositiveDuration {
+        self.request_timeout
+    }
+    pub(crate) const fn lifecycle(&self) -> &LifecycleBounds {
+        &self.lifecycle
+    }
+    pub(crate) const fn backend(&self) -> &BackendTransportBounds {
+        &self.backend
+    }
+}
+
+/// Backend-specific state; SDK and disabled transports cannot carry retry policy.
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
 #[derive(Debug)]
 pub(crate) enum BackendTransportBounds {
     Disabled,
     Sdk,
-    Legacy(ValidatedRetryPolicy),
+    Legacy(RetryPolicy),
+}
+
+/// Checked legacy retry policy produced only by ordered config validation.
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
+)]
+#[derive(Debug)]
+pub(crate) struct RetryPolicy {
+    max_retries: u32,
+    initial_backoff: PositiveDuration,
+    max_backoff: PositiveDuration,
+    sequence_timeout: PositiveDuration,
+    retry_after_cap: PositiveDuration,
+    jitter: BoundedPercent,
 }
 
 #[cfg_attr(
     not(test),
-    expect(
-        dead_code,
-        reason = "D.21 stages checked legacy policy values for the D.8 factory"
-    )
+    allow(dead_code, reason = "D.21 checked contract consumed by D.6-D.8")
 )]
-#[derive(Debug)]
-pub(crate) struct ValidatedRetryPolicy {
-    pub(crate) max_retries: u32,
-    pub(crate) initial_backoff: Duration,
-    pub(crate) max_backoff: Duration,
-    pub(crate) sequence_timeout: Duration,
-    pub(crate) retry_after_cap: Duration,
-    pub(crate) jitter_percent: u8,
+impl RetryPolicy {
+    pub(crate) const fn max_retries(&self) -> u32 {
+        self.max_retries
+    }
+    pub(crate) const fn initial_backoff(&self) -> PositiveDuration {
+        self.initial_backoff
+    }
+    pub(crate) const fn max_backoff(&self) -> PositiveDuration {
+        self.max_backoff
+    }
+    pub(crate) const fn sequence_timeout(&self) -> PositiveDuration {
+        self.sequence_timeout
+    }
+    pub(crate) const fn retry_after_cap(&self) -> PositiveDuration {
+        self.retry_after_cap
+    }
+    pub(crate) const fn jitter(&self) -> BoundedPercent {
+        self.jitter
+    }
 }
 
 /// Resolves defaults and validates a transport in the documented first-failure
@@ -861,11 +998,13 @@ pub(crate) fn validated_transport_bounds(
 
     Ok(ValidatedTransportBounds {
         protocol: config.protocol,
-        queue_capacity: queue_capacity.value,
-        queue_byte_capacity: queue_byte_capacity.value,
+        queue_capacity: QueueCapacity(queue_capacity.value),
+        queue_byte_capacity: QueueByteCapacity(queue_byte_capacity.value),
         request_timeout,
-        lifecycle_flush_timeout,
-        lifecycle_shutdown_timeout,
+        lifecycle: LifecycleBounds {
+            flush: lifecycle_flush_timeout,
+            shutdown: lifecycle_shutdown_timeout,
+        },
         backend,
     })
 }
@@ -943,7 +1082,7 @@ fn resolve_usize(
     }
 }
 
-fn checked_duration(value: &ResolvedField<u64>) -> Result<Duration, ConfigFailure> {
+fn checked_duration(value: &ResolvedField<u64>) -> Result<PositiveDuration, ConfigFailure> {
     if value.value == 0 {
         return Err(config_failure(
             ConfigFailureKind::ZeroDuration,
@@ -953,13 +1092,13 @@ fn checked_duration(value: &ResolvedField<u64>) -> Result<Duration, ConfigFailur
             value.origin,
         ));
     }
-    Ok(Duration::from_millis(value.value))
+    Ok(PositiveDuration(Duration::from_millis(value.value)))
 }
 
 fn resolve_retry(
     raw: Option<&LegacyRetryPolicy>,
     timeout: &ResolvedField<u64>,
-) -> Result<ValidatedRetryPolicy, ConfigFailure> {
+) -> Result<RetryPolicy, ConfigFailure> {
     let raw = raw.cloned().unwrap_or_default();
     let initial = resolve_duration(
         OtlpConfigField::InitialBackoff,
@@ -1017,7 +1156,7 @@ fn resolve_retry(
             jitter.origin,
         ));
     }
-    Ok(ValidatedRetryPolicy {
+    Ok(RetryPolicy {
         max_retries: raw
             .max_retries
             .unwrap_or(constants::DEFAULT_OTLP_MAX_RETRIES),
@@ -1025,7 +1164,7 @@ fn resolve_retry(
         max_backoff,
         sequence_timeout,
         retry_after_cap,
-        jitter_percent: jitter.value,
+        jitter: BoundedPercent(jitter.value),
     })
 }
 

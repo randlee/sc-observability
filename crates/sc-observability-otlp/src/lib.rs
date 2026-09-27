@@ -198,7 +198,7 @@ impl ExporterLifecycle for DisabledLifecycle {
 /// deliberately checked here, after the configuration's normative ordered
 /// validation, so an unavailable backend cannot mask a malformed config.
 fn exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet, ConfigFailure> {
-    match &bounds.backend {
+    match bounds.backend() {
         BackendTransportBounds::Disabled => Ok(ExporterSet {
             logs: Arc::new(DisabledLogExporter),
             traces: Arc::new(DisabledTraceExporter),
@@ -212,12 +212,12 @@ fn exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet, Co
 
 fn sdk_exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet, ConfigFailure> {
     if !matches!(
-        bounds.protocol,
+        bounds.protocol(),
         config::OtlpProtocol::Grpc | config::OtlpProtocol::HttpBinary
     ) {
         return Err(unsupported_protocol(
             config::ExporterBackend::OpenTelemetrySdk,
-            bounds.protocol,
+            bounds.protocol(),
             "Grpc, HttpBinary",
         ));
     }
@@ -266,10 +266,10 @@ fn sdk_exporter_factory(bounds: &ValidatedTransportBounds) -> Result<ExporterSet
 fn legacy_exporter_factory(
     bounds: &ValidatedTransportBounds,
 ) -> Result<ExporterSet, ConfigFailure> {
-    if bounds.protocol != config::OtlpProtocol::HttpJson {
+    if bounds.protocol() != config::OtlpProtocol::HttpJson {
         return Err(unsupported_protocol(
             config::ExporterBackend::LegacyHttpJson,
-            bounds.protocol,
+            bounds.protocol(),
             "HttpJson",
         ));
     }

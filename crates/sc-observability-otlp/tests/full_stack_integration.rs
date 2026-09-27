@@ -138,33 +138,28 @@ impl TypedMetricProjector<AgentPayload> for TypedStaticMetricProjector {
 }
 
 fn disabled_telemetry_config() -> sc_observability_otlp::TelemetryConfig {
+    // Local projection fixture; exporter routing uses the private injection seam.
+    let mut transport = OtelConfig::default();
+    transport.enabled = false;
     TelemetryConfigBuilder::new(service_name())
         .enable_logs(LogsConfig::default())
         .enable_traces(TracesConfig::default())
         .enable_metrics(MetricsConfig::default())
-        .with_transport(OtelConfig {
-            // These integration fixtures validate local projection and
-            // registration only. Exporter routing is asserted separately
-            // through the crate-private ExporterSet injection seam.
-            enabled: false,
-            ..OtelConfig::default()
-        })
+        .with_transport(transport)
         .build()
         .expect("valid telemetry config")
 }
 
 fn enabled_telemetry_config() -> sc_observability_otlp::TelemetryConfig {
+    let mut transport = OtelConfig::default();
+    transport.enabled = true;
+    transport.endpoint =
+        Some(OtlpEndpoint::new("https://otel.example.internal").expect("valid OTLP endpoint"));
     TelemetryConfigBuilder::new(service_name())
         .enable_logs(LogsConfig::default())
         .enable_traces(TracesConfig::default())
         .enable_metrics(MetricsConfig::default())
-        .with_transport(OtelConfig {
-            enabled: true,
-            endpoint: Some(
-                OtlpEndpoint::new("https://otel.example.internal").expect("valid OTLP endpoint"),
-            ),
-            ..OtelConfig::default()
-        })
+        .with_transport(transport)
         .build()
         .expect("valid enabled telemetry config")
 }

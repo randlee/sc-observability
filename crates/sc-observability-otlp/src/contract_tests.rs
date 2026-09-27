@@ -131,20 +131,20 @@ fn contract_tests_retained_legacy_duration_precedes_capacity() {
 #[test]
 fn contract_tests_resolved_defaults() {
     let bounds = validated_transport_bounds(&legacy_config()).expect("default legacy bounds");
-    assert_eq!(bounds.queue_capacity, 1_024);
-    assert_eq!(bounds.queue_byte_capacity, 16 * 1024 * 1024);
-    assert_eq!(bounds.request_timeout.as_millis(), 3_000);
-    assert_eq!(bounds.lifecycle_flush_timeout.as_millis(), 30_000);
-    assert_eq!(bounds.lifecycle_shutdown_timeout.as_millis(), 30_000);
-    let BackendTransportBounds::Legacy(retry) = bounds.backend else {
+    assert_eq!(bounds.queue_capacity().get(), 1_024);
+    assert_eq!(bounds.queue_byte_capacity().get(), 16 * 1024 * 1024);
+    assert_eq!(bounds.request_timeout().get().as_millis(), 3_000);
+    assert_eq!(bounds.lifecycle().flush().get().as_millis(), 30_000);
+    assert_eq!(bounds.lifecycle().shutdown().get().as_millis(), 30_000);
+    let BackendTransportBounds::Legacy(retry) = bounds.backend() else {
         panic!("legacy selection retains retry policy");
     };
-    assert_eq!(retry.max_retries, 3);
-    assert_eq!(retry.jitter_percent, 20);
-    assert_eq!(retry.initial_backoff.as_millis(), 250);
-    assert_eq!(retry.max_backoff.as_millis(), 5_000);
-    assert_eq!(retry.sequence_timeout.as_millis(), 30_000);
-    assert_eq!(retry.retry_after_cap.as_millis(), 5_000);
+    assert_eq!(retry.max_retries(), 3);
+    assert_eq!(retry.jitter().get(), 20);
+    assert_eq!(retry.initial_backoff().get().as_millis(), 250);
+    assert_eq!(retry.max_backoff().get().as_millis(), 5_000);
+    assert_eq!(retry.sequence_timeout().get().as_millis(), 30_000);
+    assert_eq!(retry.retry_after_cap().get().as_millis(), 5_000);
 }
 
 #[test]
@@ -415,11 +415,11 @@ fn contract_tests_record_and_byte_capacity() {
     })
     .expect("record and byte upper bounds are accepted");
     assert_eq!(
-        upper_bounds.queue_capacity,
+        upper_bounds.queue_capacity().get(),
         constants::MAX_OTLP_QUEUE_CAPACITY
     );
     assert_eq!(
-        upper_bounds.queue_byte_capacity,
+        upper_bounds.queue_byte_capacity().get(),
         constants::MAX_OTLP_QUEUE_BYTE_CAPACITY
     );
 

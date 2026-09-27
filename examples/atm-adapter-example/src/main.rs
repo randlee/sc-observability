@@ -286,21 +286,21 @@ fn telemetry_config_from_env(
     let insecure_skip_verify = parse_bool_env("ATM_OTEL_INSECURE_SKIP_VERIFY")?.unwrap_or(false);
     let debug_local_export = parse_bool_env("ATM_OTEL_DEBUG_LOCAL_EXPORT")?.unwrap_or(false);
 
+    let mut transport = OtelConfig::default();
+    transport.enabled = endpoint.is_some();
+    transport.endpoint = endpoint;
+    transport.protocol = protocol;
+    transport.auth_header = auth_header;
+    transport.ca_file = ca_file;
+    transport.insecure_skip_verify = insecure_skip_verify;
+    transport.timeout_ms = Some(constants::OTLP_TIMEOUT_MS.into());
+    transport.debug_local_export = debug_local_export;
+
     Ok(TelemetryConfigBuilder::new(service)
         .enable_logs(LogsConfig::default())
         .enable_traces(TracesConfig::default())
         .enable_metrics(MetricsConfig::default())
-        .with_transport(OtelConfig {
-            enabled: endpoint.is_some(),
-            endpoint,
-            protocol,
-            auth_header,
-            ca_file,
-            insecure_skip_verify,
-            timeout_ms: Some(constants::OTLP_TIMEOUT_MS.into()),
-            debug_local_export,
-            ..OtelConfig::default()
-        })
+        .with_transport(transport)
         .with_resource(sc_observability_otlp::ResourceAttributes {
             attributes: [
                 ("service.namespace".to_string(), json!("atm")),
