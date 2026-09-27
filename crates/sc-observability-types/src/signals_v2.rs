@@ -52,15 +52,20 @@ impl std::fmt::Display for FiniteF64 {
 }
 
 /// Neutral attribute values without transport or JSON-library types in the API.
+///
+/// Native serde uses a `kind` tag and a `data` payload (omitted for `null`).
+/// Tags preserve the exact variant, including signed and unsigned integers
+/// with the same non-negative value, recursively through arrays and objects.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "kind", content = "data", rename_all = "snake_case")]
 pub enum AttributeValue {
     /// Boolean value.
     Bool(bool),
     /// Signed integer, preserved without floating-point coercion.
     Int(i64),
-    /// Unsigned integer, preserved without floating-point coercion.
+    /// Unsigned integer, preserved without signed or floating-point coercion.
+    #[serde(rename = "uint")]
     UInt(u64),
     /// Finite floating-point value.
     Float(FiniteF64),

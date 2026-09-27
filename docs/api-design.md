@@ -2521,6 +2521,17 @@ boolean, signed/unsigned integer, finite float, string, array, object or null
 values. Its public API has no serde_json, runtime or transport type dependency.
 The existing crate dependency on serde_json remains for 1.x diagnostics.
 
+Native attribute serde uses `{"kind":"int","data":5}` for `Int(5)` and
+`{"kind":"uint","data":5}` for `UInt(5)`. The tags are `bool`, `int`,
+`uint`, `float`, `string`, `array`, `object`, and `null`; null has no `data`
+field. Arrays contain tagged values and objects map names to tagged values
+recursively. Native equality distinguishes variants, even for equal
+non-negative numbers, and serde preserves that distinction over the full
+i64/u64 ranges. Bare untagged values are rejected rather than inferred.
+This is the staged v2 native representation; existing 1.x JSON attributes
+are unchanged. The DTO conversion below retains the tags but encodes integer
+payloads as canonical decimal strings.
+
 `SpanRecord<SpanStarted>::new(timestamp, service, name, trace, attributes)`
 creates an internal span with no links. `with_kind` and `with_links` populate
 those fields; `end(status, duration)` is the only route to
