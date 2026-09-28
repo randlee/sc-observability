@@ -669,7 +669,9 @@ pub enum TryLogError {
 impl From<LogError> for LogFailure {
     fn from(value: LogError) -> Self {
         match value {
-            LogError::InvalidEvent(error) => Self::InvalidEvent(error.into()),
+            LogError::InvalidEvent(error) => Self::InvalidEvent(
+                sc_observability_types::typed::EventFailure::from_context(error.into_context()),
+            ),
             LogError::WriterDegraded(context) => Self::WriterDegraded(context),
             LogError::ShutdownTimedOut(context) => Self::ShutdownTimedOut(context),
         }
@@ -679,7 +681,11 @@ impl From<LogError> for LogFailure {
 impl From<LogFailure> for LogError {
     fn from(value: LogFailure) -> Self {
         match value {
-            LogFailure::InvalidEvent(error) => Self::InvalidEvent(error.into()),
+            LogFailure::InvalidEvent(error) => {
+                Self::InvalidEvent(sc_observability_types::EventError::Validation {
+                    context: error.into_context(),
+                })
+            }
             LogFailure::WriterDegraded(context) => Self::WriterDegraded(context),
             LogFailure::ShutdownTimedOut(context) => Self::ShutdownTimedOut(context),
             #[allow(unreachable_patterns)]
@@ -691,7 +697,9 @@ impl From<LogFailure> for LogError {
 impl From<TryLogError> for TryLogFailure {
     fn from(value: TryLogError) -> Self {
         match value {
-            TryLogError::InvalidEvent(error) => Self::InvalidEvent(error.into()),
+            TryLogError::InvalidEvent(error) => Self::InvalidEvent(
+                sc_observability_types::typed::EventFailure::from_context(error.into_context()),
+            ),
             TryLogError::QueueFull(context) => Self::QueueFull(context),
             TryLogError::WriterDegraded(context) => Self::WriterDegraded(context),
             TryLogError::ShutdownTimedOut(context) => Self::ShutdownTimedOut(context),
@@ -702,7 +710,11 @@ impl From<TryLogError> for TryLogFailure {
 impl From<TryLogFailure> for TryLogError {
     fn from(value: TryLogFailure) -> Self {
         match value {
-            TryLogFailure::InvalidEvent(error) => Self::InvalidEvent(error.into()),
+            TryLogFailure::InvalidEvent(error) => {
+                Self::InvalidEvent(sc_observability_types::EventError::Validation {
+                    context: error.into_context(),
+                })
+            }
             TryLogFailure::QueueFull(context) => Self::QueueFull(context),
             TryLogFailure::WriterDegraded(context) => Self::WriterDegraded(context),
             TryLogFailure::ShutdownTimedOut(context) => Self::ShutdownTimedOut(context),
@@ -765,7 +777,9 @@ impl sealed_emitters::Sealed for Logger<Running> {}
 impl LogEmitter for Logger<Running> {
     fn emit_log(&self, event: LogEvent) -> Result<(), v2::EventError> {
         self.log(event).map_err(|error| match error {
-            LogError::InvalidEvent(error) => v2::EventError::Validation { context: error.0 },
+            LogError::InvalidEvent(error) => v2::EventError::Validation {
+                context: error.into_context(),
+            },
             LogError::WriterDegraded(context) | LogError::ShutdownTimedOut(context) => {
                 v2::EventError::Routing { context }
             }
@@ -2488,7 +2502,11 @@ mod tests {
             std::error::Error::source(&error)
                 .expect("preserved writer start source")
                 .to_string(),
-            "failed to start logger writer thread; caused by: injected writer start failure"
+            "injected writer start failure"
+        );
+        assert_eq!(
+            error.context().diagnostic().message,
+            "failed to start logger writer thread"
         );
     }
 

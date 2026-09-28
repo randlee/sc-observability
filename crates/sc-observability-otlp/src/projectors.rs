@@ -181,7 +181,11 @@ where
     T: Observable,
 {
     fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
-        <Self as TypedLogProjector<T>>::project_logs(self, observation).map_err(Into::into)
+        <Self as TypedLogProjector<T>>::project_logs(self, observation).map_err(|failure| {
+            ProjectionError::Projection {
+                context: failure.into_context(),
+            }
+        })
     }
 }
 
@@ -219,7 +223,11 @@ where
         &self,
         observation: &Observation<T>,
     ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        <Self as TypedSpanProjector<T>>::project_spans(self, observation).map_err(Into::into)
+        <Self as TypedSpanProjector<T>>::project_spans(self, observation).map_err(|failure| {
+            ProjectionError::Projection {
+                context: failure.into_context(),
+            }
+        })
     }
 }
 
@@ -257,25 +265,18 @@ where
         &self,
         observation: &Observation<T>,
     ) -> Result<Vec<MetricRecord>, ProjectionError> {
-        <Self as TypedMetricProjector<T>>::project_metrics(self, observation).map_err(Into::into)
+        <Self as TypedMetricProjector<T>>::project_metrics(self, observation).map_err(|failure| {
+            ProjectionError::Projection {
+                context: failure.into_context(),
+            }
+        })
     }
 }
 
 fn telemetry_to_projection_failure(
     error: sc_observability_types::TelemetryError,
 ) -> ProjectionFailure {
-    match error {
-        sc_observability_types::TelemetryError::Shutdown => {
-            ProjectionFailure::from_context(Box::new(ErrorContext::new(
-                error_codes::OTLP_TELEMETRY_SHUTDOWN,
-                "telemetry runtime is shut down",
-                Remediation::not_recoverable("do not project telemetry after shutdown"),
-            )))
-        }
-        sc_observability_types::TelemetryError::ExportFailure(context) => {
-            ProjectionFailure::from_context(context)
-        }
-    }
+    ProjectionFailure::from_context(error.into_context())
 }
 
 #[cfg(test)]

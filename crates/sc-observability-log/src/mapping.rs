@@ -11,11 +11,7 @@
 
 use std::borrow::Cow;
 
-use sc_observability_types::v2::IdentityError as CanonicalIdentityError;
-#[allow(
-    deprecated,
-    reason = "the copied log-facade bridge preserves its legacy identity resolver boundary"
-)]
+use sc_observability_types::IdentityError as CanonicalIdentityError;
 use sc_observability_types::{
     ActionName, ErrorContext, Level, LogEvent, Observation, ProcessIdentity, ProcessIdentityPolicy,
     Remediation, ServiceName, TargetCategory,
@@ -738,11 +734,13 @@ mod tests {
     struct FailingResolver;
     impl ProcessIdentityResolver for FailingResolver {
         fn resolve(&self) -> Result<ProcessIdentity, IdentityError> {
-            Err(IdentityError(Box::new(ErrorContext::new(
-                ErrorCode::new_static("TEST_RESOLVER_FAILED"),
-                "resolver failed",
-                Remediation::not_recoverable("test"),
-            ))))
+            Err(IdentityError::Process {
+                context: Box::new(ErrorContext::new(
+                    ErrorCode::new_static("TEST_RESOLVER_FAILED"),
+                    "resolver failed",
+                    Remediation::not_recoverable("test"),
+                )),
+            })
         }
     }
 
@@ -799,10 +797,10 @@ mod tests {
         let source = std::error::Error::source(error.context())
             .and_then(|source| source.downcast_ref::<IdentityError>())
             .unwrap();
-        assert_eq!(source.0.diagnostic().code.as_str(), "TEST_RESOLVER_FAILED");
+        assert_eq!(source.diagnostic().code.as_str(), "TEST_RESOLVER_FAILED");
     }
 
-    fn assert_auto_hostname_failure(error: &CanonicalIdentityError) {
+    fn assert_auto_hostname_failure(error: &IdentityError) {
         assert_eq!(
             error.diagnostic().code,
             crate::error_codes::SC_OBSERVABILITY_LOG_IDENTITY_RESOLUTION_FAILED

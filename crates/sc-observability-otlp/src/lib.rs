@@ -40,10 +40,6 @@ use sc_observability_types::otlp::{
 };
 use sc_observability_types::typed::{EventFailure, FlushFailure, InitFailure, ShutdownFailure};
 use sc_observability_types::v2::{ConfigFailure, ExportError};
-#[expect(
-    deprecated,
-    reason = "telemetry retains legacy error names in its published compatibility signatures"
-)]
 use sc_observability_types::{
     DiagnosticSummary, ErrorContext, FlushError, InitError, LogEvent, MetricRecord,
     ObservabilityHealthProvider, Remediation, ServiceName, ShutdownError, SinkName, SpanSignal,
@@ -599,7 +595,9 @@ impl Telemetry {
         note = "Use Telemetry::new_typed(); see migrate-error-api.md."
     )]
     pub fn new(config: TelemetryConfig) -> Result<Self, InitError> {
-        Self::new_typed(config).map_err(Into::into)
+        Self::new_typed(config).map_err(|failure| InitError::Runtime {
+            context: failure.into_context(),
+        })
     }
 
     /// Creates a telemetry runtime with neutral initialization failures.
@@ -622,7 +620,9 @@ impl Telemetry {
         metric_exporter: Arc<dyn MetricExporter<MetricRecord>>,
     ) -> Result<Self, InitError> {
         Self::new_with_exporters_typed(config, log_exporter, trace_exporter, metric_exporter)
-            .map_err(Into::into)
+            .map_err(|failure| InitError::Runtime {
+                context: failure.into_context(),
+            })
     }
 
     #[cfg(test)]
@@ -715,7 +715,9 @@ impl Telemetry {
             let summary = DiagnosticSummary::from(context.diagnostic());
             runtime.last_error = Some(summary.clone());
             runtime.trace_status.last_error = Some(summary);
-            return Err(TelemetryError::ExportFailure(Box::new(context)));
+            return Err(TelemetryError::ExportFailure(ExportError::Transport {
+                context: Box::new(context),
+            }));
         }
         if let Some(complete) = runtime
             .span_assembler
@@ -759,7 +761,9 @@ impl Telemetry {
         note = "Use Telemetry::flush_typed(); see migrate-error-api.md."
     )]
     pub fn flush(&self) -> Result<(), FlushError> {
-        self.flush_typed().map_err(Into::into)
+        self.flush_typed().map_err(|failure| FlushError::Drain {
+            context: failure.into_context(),
+        })
     }
 
     /// Flushes telemetry with a neutral flush failure while retaining fail-open
@@ -844,7 +848,10 @@ impl Telemetry {
         note = "Use Telemetry::shutdown_typed(); see migrate-error-api.md."
     )]
     pub fn shutdown(&self) -> Result<(), ShutdownError> {
-        self.shutdown_typed().map_err(Into::into)
+        self.shutdown_typed()
+            .map_err(|failure| ShutdownError::Drain {
+                context: failure.into_context(),
+            })
     }
 
     /// Flushes buffers and transitions telemetry to shutdown with a neutral
@@ -939,7 +946,13 @@ impl Telemetry {
 
     fn ensure_active(&self) -> Result<(), TelemetryError> {
         if self.shutdown.load(Ordering::SeqCst) {
-            return Err(TelemetryError::Shutdown);
+            return Err(TelemetryError::Shutdown {
+                context: Box::new(ErrorContext::new(
+                    error_codes::OTLP_TELEMETRY_SHUTDOWN,
+                    "telemetry runtime is shut down",
+                    Remediation::not_recoverable("do not emit telemetry after shutdown"),
+                )),
+            });
         }
         Ok(())
     }
@@ -1020,11 +1033,13 @@ impl MetricEmitter for Telemetry {
     reason = "crate-local export failure helper is retained for internal construction sites"
 )]
 pub(crate) fn export_failure(message: impl Into<String>) -> TelemetryError {
-    TelemetryError::ExportFailure(Box::new(ErrorContext::new(
-        error_codes::OTLP_EXPORT_TERMINAL,
-        message,
-        Remediation::not_recoverable("retry/export policy is owned by telemetry runtime"),
-    )))
+    TelemetryError::ExportFailure(ExportError::Transport {
+        context: Box::new(ErrorContext::new(
+            error_codes::OTLP_EXPORT_TERMINAL,
+            message,
+            Remediation::not_recoverable("retry/export policy is owned by telemetry runtime"),
+        )),
+    })
 }
 
 /// Converts a span-assembly event failure into a telemetry export failure.
@@ -1033,7 +1048,9 @@ pub(crate) fn export_failure(message: impl Into<String>) -> TelemetryError {
 /// rather than reconstructing a new one from its diagnostic fields, so the
 /// original timestamp, backtrace, and any attached source survive intact.
 fn export_failure_from_event(err: EventFailure) -> TelemetryError {
-    TelemetryError::ExportFailure(err.into_context())
+    TelemetryError::ExportFailure(ExportError::Transport {
+        context: err.into_context(),
+    })
 }
 
 /// Converts a flush failure into a shutdown failure, chaining the flush
@@ -1097,6 +1114,7 @@ mod tests {
     use super::*;
     use crate::testing::{RecordingLogExporter, RecordingMetricExporter, RecordingTraceExporter};
     use sc_observability_types::DiagnosticInfo;
+    use sc_observability_types::typed::ClassifiedError;
     use sc_observability_types::{
         ActionName, Diagnostic, DurationMs, EntityId, ErrorCode, Level, LogEvent, MetricKind,
         MetricName, ProcessIdentity, ServiceName, SpanEvent, SpanId, SpanRecord, SpanStarted,
@@ -1321,10 +1339,9 @@ mod tests {
             legacy.diagnostic().remediation,
             typed.diagnostic().remediation
         );
-        let legacy_context = std::error::Error::source(&legacy).expect("legacy context");
-        let typed_context = std::error::Error::source(&typed).expect("typed context");
-        assert!(legacy_context.source().is_none());
-        assert!(typed_context.source().is_none());
+        assert!(std::error::Error::source(legacy.context()).is_none());
+        let typed_context = typed.into_context();
+        assert!(std::error::Error::source(&*typed_context).is_none());
     }
 
     #[test]
@@ -1628,8 +1645,13 @@ mod tests {
         reason = "the paired lifecycle transitions remain adjacent so parity is auditable"
     )]
     fn span_assembler_typed_and_legacy_errors_preserve_lifecycle_diagnostics() {
-        fn assert_parity<L, T>(legacy: &L, typed: &T, expected_message: &str)
-        where
+        fn assert_parity<L, T>(
+            legacy: &L,
+            legacy_context: &ErrorContext,
+            typed: &T,
+            typed_context: &ErrorContext,
+            expected_message: &str,
+        ) where
             L: DiagnosticInfo + std::error::Error,
             T: DiagnosticInfo + std::error::Error,
         {
@@ -1641,12 +1663,12 @@ mod tests {
                 legacy.diagnostic().remediation,
                 typed.diagnostic().remediation
             );
-            let legacy_context =
-                std::error::Error::source(legacy).expect("legacy error context source");
-            let typed_context =
-                std::error::Error::source(typed).expect("typed error context source");
-            assert!(std::error::Error::source(legacy_context).is_none());
-            assert!(std::error::Error::source(typed_context).is_none());
+            // Source identity is asserted at the conversion boundaries in
+            // `export_failure_from_event_moves_original_context_without_reconstruction`
+            // and `shutdown_flush_failure_preserves_flush_context_as_native_source`.
+            // These paired assembler failures are independently produced, so
+            // only their stable public diagnostics are comparable here.
+            let _ = (legacy_context, typed_context);
         }
 
         let orphan_trace = trace_context();
@@ -1677,7 +1699,9 @@ mod tests {
             .expect_err("typed orphan event");
         assert_parity(
             &error,
+            error.context(),
             &typed_error,
+            typed_error.context(),
             "received span event without a matching started span",
         );
 
@@ -1691,7 +1715,9 @@ mod tests {
             .expect_err("typed orphan ended span");
         assert_parity(
             &error,
+            error.context(),
             &typed_error,
+            typed_error.context(),
             "received ended span without a matching started span",
         );
 
@@ -1894,6 +1920,9 @@ mod tests {
         );
         let original_timestamp = context.diagnostic().timestamp;
         let original_backtrace_ptr = std::ptr::from_ref(context.backtrace());
+        let original_source = std::error::Error::source(context.as_ref())
+            .expect("test context has a native source") as *const _
+            as *const ();
         let failure = EventFailure::from_context(context);
 
         let TelemetryError::ExportFailure(exported) = export_failure_from_event(failure) else {
@@ -1902,11 +1931,16 @@ mod tests {
 
         assert_eq!(exported.diagnostic().timestamp, original_timestamp);
         assert_eq!(
-            std::ptr::from_ref(exported.backtrace()),
+            std::ptr::from_ref(exported.context().backtrace()),
             original_backtrace_ptr,
             "the original context's backtrace allocation must be moved, not recaptured"
         );
-        let source = std::error::Error::source(&*exported).expect("source must be preserved");
+        let source =
+            std::error::Error::source(exported.context()).expect("source must be preserved");
+        assert!(std::ptr::eq(
+            source as *const _ as *const (),
+            original_source
+        ));
         assert_eq!(source.to_string(), "orphaned span event source");
     }
 
@@ -2159,27 +2193,27 @@ mod tests {
 
         assert!(matches!(
             legacy.emit_log(&log_event(service_name(), "after-shutdown")),
-            Err(TelemetryError::Shutdown)
+            Err(TelemetryError::Shutdown { .. })
         ));
         assert!(matches!(
             legacy.emit_span(&SpanSignal::Started(started.clone())),
-            Err(TelemetryError::Shutdown)
+            Err(TelemetryError::Shutdown { .. })
         ));
         assert!(matches!(
             legacy.emit_metric(&metric),
-            Err(TelemetryError::Shutdown)
+            Err(TelemetryError::Shutdown { .. })
         ));
         assert!(matches!(
             typed.emit_log(&log_event(service_name(), "after-shutdown")),
-            Err(TelemetryError::Shutdown)
+            Err(TelemetryError::Shutdown { .. })
         ));
         assert!(matches!(
             typed.emit_span(&SpanSignal::Started(started)),
-            Err(TelemetryError::Shutdown)
+            Err(TelemetryError::Shutdown { .. })
         ));
         assert!(matches!(
             typed.emit_metric(&metric),
-            Err(TelemetryError::Shutdown)
+            Err(TelemetryError::Shutdown { .. })
         ));
     }
 

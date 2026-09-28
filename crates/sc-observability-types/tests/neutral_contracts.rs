@@ -1030,7 +1030,7 @@ mod legacy_compatibility {
         let error = legacy_identity(identity.clone())
             .resolve()
             .expect_err("failure expected");
-        assert_context(&error.0, identity.expected_pointer);
+        assert_context(error.context(), identity.expected_pointer);
         assert_eq!(identity_calls.load(Ordering::SeqCst), 1);
 
         let subscriber_context = context("SC_OBSERVE_OBSERVATION_ROUTING_FAILURE");
@@ -1044,7 +1044,7 @@ mod legacy_compatibility {
         let error = legacy_subscriber(subscriber.clone())
             .observe(&observation())
             .expect_err("failure expected");
-        assert_context(&error.0, subscriber.expected_pointer);
+        assert_context(error.context(), subscriber.expected_pointer);
         assert_eq!(subscriber_calls.load(Ordering::SeqCst), 1);
 
         let (log_failure, log_pointer) =
@@ -1067,15 +1067,15 @@ mod legacy_compatibility {
         let error = legacy_log_projector(projectors.clone())
             .project_logs(&observation())
             .expect_err("failure expected");
-        assert_context(&error.0, projectors.log_pointer);
+        assert_context(error.context(), projectors.log_pointer);
         let error = legacy_span_projector(projectors.clone())
             .project_spans(&observation())
             .expect_err("failure expected");
-        assert_context(&error.0, projectors.span_pointer);
+        assert_context(error.context(), projectors.span_pointer);
         let error = legacy_metric_projector(projectors.clone())
             .project_metrics(&observation())
             .expect_err("failure expected");
-        assert_context(&error.0, projectors.metric_pointer);
+        assert_context(error.context(), projectors.metric_pointer);
         assert_eq!(projectors.log_calls.load(Ordering::SeqCst), 1);
         assert_eq!(projectors.span_calls.load(Ordering::SeqCst), 1);
         assert_eq!(projectors.metric_calls.load(Ordering::SeqCst), 1);
@@ -1088,7 +1088,9 @@ mod legacy_compatibility {
         let identity_calls = Arc::new(AtomicUsize::new(0));
         let identity = Arc::new(LegacyIdentityError {
             calls: Arc::clone(&identity_calls),
-            failure: Mutex::new(Some(IdentityError(identity_context))),
+            failure: Mutex::new(Some(IdentityError::Process {
+                context: identity_context,
+            })),
             expected_pointer: identity_pointer,
         });
         let error = typed_identity(identity.clone())
@@ -1103,7 +1105,9 @@ mod legacy_compatibility {
         let subscriber_calls = Arc::new(AtomicUsize::new(0));
         let subscriber = Arc::new(LegacySubscriberError {
             calls: Arc::clone(&subscriber_calls),
-            failure: Mutex::new(Some(SubscriberError(subscriber_context))),
+            failure: Mutex::new(Some(SubscriberError::Subscriber {
+                context: subscriber_context,
+            })),
             expected_pointer: subscriber_pointer,
         });
         let error = typed_subscriber(subscriber.clone())
@@ -1123,9 +1127,15 @@ mod legacy_compatibility {
             log_calls: Arc::new(AtomicUsize::new(0)),
             span_calls: Arc::new(AtomicUsize::new(0)),
             metric_calls: Arc::new(AtomicUsize::new(0)),
-            log: Mutex::new(Some(ProjectionError(log_context))),
-            span: Mutex::new(Some(ProjectionError(span_context))),
-            metric: Mutex::new(Some(ProjectionError(metric_context))),
+            log: Mutex::new(Some(ProjectionError::Projection {
+                context: log_context,
+            })),
+            span: Mutex::new(Some(ProjectionError::Projection {
+                context: span_context,
+            })),
+            metric: Mutex::new(Some(ProjectionError::Projection {
+                context: metric_context,
+            })),
             log_pointer,
             span_pointer,
             metric_pointer,

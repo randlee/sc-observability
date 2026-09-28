@@ -10,9 +10,9 @@ use std::sync::{
 };
 
 use sc_observability_types::typed::{
-    ClassifiedError, InitFailureKind, ProjectionFailure, SubscriberFailure, TypedLogProjector,
-    TypedMetricProjector, TypedObservationSubscriber, TypedSpanProjector, legacy_log_projector,
-    legacy_metric_projector, legacy_span_projector, legacy_subscriber, typed_subscriber,
+    ClassifiedError, ProjectionFailure, SubscriberFailure, TypedLogProjector, TypedMetricProjector,
+    TypedObservationSubscriber, TypedSpanProjector, legacy_log_projector, legacy_metric_projector,
+    legacy_span_projector, legacy_subscriber, typed_subscriber,
 };
 use sc_observability_types::v2::InitError as CanonicalInitError;
 use sc_observability_types::{
@@ -349,10 +349,10 @@ fn observation_adapter_preserves_custom_and_cross_family_context() {
         let legacy_error =
             sc_observability_types::ObservationSubscriber::observe(legacy.as_ref(), &observation())
                 .expect_err("legacy adapter should preserve failure");
-        assert_eq!(
-            legacy_error.kind(),
-            sc_observability_types::typed::SubscriberFailureKind::Unclassified
-        );
+        assert!(matches!(
+            &legacy_error,
+            sc_observability_types::SubscriberError::Subscriber { .. }
+        ));
         assert_eq!(legacy_error.context().diagnostic().code, code);
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(
@@ -409,7 +409,9 @@ macro_rules! projector_context_case {
                 &self,
                 _: &Observation<ObservationPayload>,
             ) -> Result<Vec<$output>, sc_observability_types::ProjectionError> {
-                Err(sc_observability_types::ProjectionError(self.fail()))
+                Err(sc_observability_types::ProjectionError::Projection {
+                    context: self.fail(),
+                })
             }
         }
         impl sc_observability_types::typed::$typed_trait<ObservationPayload> for FailingProjector {
@@ -454,11 +456,11 @@ macro_rules! projector_context_case {
                     let failure = if typed_to_legacy {
                         let adapter = sc_observability_types::typed::$legacy_adapter(fixture);
                         let error = adapter.$method(&observation()).expect_err("legacy failure");
-                        assert_eq!(
-                            error.kind(),
-                            sc_observability_types::typed::ProjectionFailureKind::Unclassified
-                        );
-                        ProjectionFailure::from(error)
+                        assert!(matches!(
+                            &error,
+                            sc_observability_types::ProjectionError::Projection { .. }
+                        ));
+                        ProjectionFailure::from_context(error.into_context())
                     } else {
                         let adapter = sc_observability_types::typed::$typed_adapter(fixture);
                         adapter.$method(&observation()).expect_err("typed failure")
@@ -660,10 +662,10 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
     let Err(new_empty) = Observability::new_typed(typed_config) else {
         panic!("new_typed without routes must fail");
     };
-    assert_eq!(
-        legacy_new.kind(),
-        InitFailureKind::ObservationInitialization
-    );
+    assert!(matches!(
+        &legacy_new,
+        CanonicalInitError::Configuration { .. }
+    ));
     assert!(matches!(
         &new_empty,
         CanonicalInitError::Configuration { .. }
@@ -710,10 +712,10 @@ fn typed_and_legacy_construction_failures_classify_consistently() {
     else {
         panic!("typed zero queue capacity must fail");
     };
-    assert_eq!(
-        legacy_logger_failure.kind(),
-        InitFailureKind::LoggerInitialization
-    );
+    assert!(matches!(
+        &legacy_logger_failure,
+        CanonicalInitError::Runtime { .. }
+    ));
     assert!(matches!(
         &typed_logger_failure,
         CanonicalInitError::Runtime { .. }

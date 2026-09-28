@@ -132,7 +132,9 @@ impl OtlpConfigTarget {
     reason = "OTLP config compatibility tests exercise retained constructors and builder"
 )]
 pub(crate) fn validate_config(config: &TelemetryConfig) -> Result<(), InitError> {
-    validate_config_typed(config).map_err(Into::into)
+    validate_config_typed(config).map_err(|failure| InitError::Configuration {
+        context: failure.into_context(),
+    })
 }
 
 pub(crate) fn validate_config_typed(config: &TelemetryConfig) -> Result<(), InitFailure> {

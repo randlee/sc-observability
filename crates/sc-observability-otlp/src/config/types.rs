@@ -97,7 +97,9 @@ impl OtlpEndpoint {
     pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
         Self::new_typed(value)
             .map_err(config_failure_to_init_failure)
-            .map_err(Into::into)
+            .map_err(|failure| InitError::Configuration {
+                context: failure.into_context(),
+            })
     }
 
     /// Creates a validated OTLP endpoint with a canonical configuration failure.
@@ -152,7 +154,9 @@ impl TryFrom<String> for OtlpEndpoint {
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::new_typed(value)
             .map_err(config_failure_to_init_failure)
-            .map_err(Into::into)
+            .map_err(|failure| InitError::Configuration {
+                context: failure.into_context(),
+            })
     }
 }
 
@@ -186,7 +190,9 @@ impl AuthHeader {
     pub fn new(value: impl Into<String>) -> Result<Self, InitError> {
         Self::new_typed(value)
             .map_err(config_failure_to_init_failure)
-            .map_err(Into::into)
+            .map_err(|failure| InitError::Configuration {
+                context: failure.into_context(),
+            })
     }
 
     /// Creates a validated authorization header with a canonical configuration failure.
@@ -241,7 +247,9 @@ impl TryFrom<String> for AuthHeader {
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::new_typed(value)
             .map_err(config_failure_to_init_failure)
-            .map_err(Into::into)
+            .map_err(|failure| InitError::Configuration {
+                context: failure.into_context(),
+            })
     }
 }
 
@@ -488,7 +496,10 @@ impl TelemetryConfigBuilder {
         note = "Use TelemetryConfigBuilder::build_typed(); see migrate-error-api.md."
     )]
     pub fn build(self) -> Result<TelemetryConfig, InitError> {
-        self.build_typed().map_err(Into::into)
+        self.build_typed()
+            .map_err(|failure| InitError::Configuration {
+                context: failure.into_context(),
+            })
     }
 
     /// Finalizes the telemetry configuration with a neutral initialization failure.

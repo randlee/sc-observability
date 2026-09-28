@@ -57,13 +57,11 @@ pub use diagnostic::{
     Diagnostic, DiagnosticInfo, DiagnosticSummary, ErrorContext, RecoverableSteps, Remediation,
 };
 #[doc(inline)]
-#[expect(
-    deprecated,
-    reason = "the crate root re-exports the retained legacy wrapper names"
-)]
-pub use errors::{
-    EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ObservationError,
-    ProjectionError, ShutdownError, SubscriberError, TelemetryError,
+pub use errors::ObservationError;
+#[doc(inline)]
+pub use errors_v2::{
+    EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError, ProjectionError,
+    ShutdownError, SubscriberError, TelemetryError,
 };
 #[doc(inline)]
 pub use events::{LogEvent, Observable, Observation};

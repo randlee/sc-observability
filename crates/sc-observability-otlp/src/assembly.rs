@@ -102,7 +102,10 @@ impl SpanAssembler {
         note = "Use SpanAssembler::push_typed(); see migrate-error-api.md."
     )]
     pub fn push(&mut self, signal: SpanSignal) -> Result<Option<CompleteSpan>, EventError> {
-        self.push_typed(signal).map_err(Into::into)
+        self.push_typed(signal)
+            .map_err(|failure| EventError::Validation {
+                context: failure.into_context(),
+            })
     }
 
     /// Pushes one lifecycle signal through the assembler with a neutral failure.

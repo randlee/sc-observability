@@ -524,7 +524,7 @@ fn core_parts(
                 resolver
                     .resolve()
                     .map_err(|e| native::v2::InitError::Configuration {
-                        context: native::typed::IdentityFailure::from(e).into_context(),
+                        context: e.into_context(),
                     })?
             }
         },

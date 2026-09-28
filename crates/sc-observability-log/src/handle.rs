@@ -19,7 +19,6 @@ use crate::{
     UnconfirmedShutdown, health,
 };
 use sc_observability::TryLogError;
-use sc_observability_types::DiagnosticInfo;
 
 /// A rejected submission: every failure of the guarded core maps to exactly one [`DropCause`].
 ///

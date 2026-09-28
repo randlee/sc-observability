@@ -40,12 +40,17 @@ use std::sync::Arc;
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::errors::{
+    EventError as LegacyEventError, ExportError as LegacyExportError,
+    FlushError as LegacyFlushError, IdentityError as LegacyIdentityError,
+    InitError as LegacyInitError, LogSinkError as LegacyLogSinkError,
+    ProjectionError as LegacyProjectionError, ShutdownError as LegacyShutdownError,
+    SubscriberError as LegacySubscriberError,
+};
 use crate::{
-    Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, EventError, ExportError, FlushError,
-    IdentityError, InitError, LogEvent, LogProjector, LogSinkError, MetricProjector, MetricRecord,
-    Observable, Observation, ObservationSubscriber, ProcessIdentity, ProcessIdentityResolver,
-    ProjectionError, Remediation, ShutdownError, SpanProjector, SpanSignal, SubscriberError,
-    error_codes, sealed,
+    Diagnostic, DiagnosticInfo, ErrorCode, ErrorContext, LogEvent, LogProjector, MetricProjector,
+    MetricRecord, Observable, Observation, ObservationSubscriber, ProcessIdentity,
+    ProcessIdentityResolver, Remediation, SpanProjector, SpanSignal, error_codes, sealed,
 };
 
 /// A diagnostic error whose family-specific kind is available without parsing
@@ -233,7 +238,7 @@ macro_rules! impl_legacy_classification {
 
 define_failure! {
     /// Typed process identity resolution failure.
-    IdentityError => IdentityFailure, IdentityFailureKind {
+    LegacyIdentityError => IdentityFailure, IdentityFailureKind {
         resolution_failed => ResolutionFailed => [
             "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"
                 => error_codes::IDENTITY_RESOLUTION_FAILED
@@ -243,7 +248,7 @@ define_failure! {
 
 define_failure! {
     /// Typed initialization failure spanning the neutral/runtime boundaries.
-    InitError => InitFailure, InitFailureKind {
+    LegacyInitError => InitFailure, InitFailureKind {
         logger_initialization => LoggerInitialization => ["SC_OBSERVABILITY_LOGGER_INIT_FAILED"],
         observation_initialization => ObservationInitialization => ["SC_OBSERVE_INIT_FAILED"],
         invalid_telemetry_config => InvalidTelemetryConfig => ["OTLP_CONFIG_INVALID", "SC_OBSERVABILITY_OTLP_INVALID_CONFIG"],
@@ -255,7 +260,7 @@ define_failure! {
 
 define_failure! {
     /// Typed event validation or lifecycle failure.
-    EventError => EventFailure, EventFailureKind {
+    LegacyEventError => EventFailure, EventFailureKind {
         invalid_event => InvalidEvent => ["SC_OBSERVABILITY_LOGGER_INVALID_EVENT"],
         closed => Closed => ["SC_OBSERVABILITY_LOGGER_SHUTDOWN"],
         queue_full => QueueFull => ["SC_OBSERVABILITY_LOGGER_QUEUE_FULL"],
@@ -267,7 +272,7 @@ define_failure! {
 
 define_failure! {
     /// Typed explicit flush failure.
-    FlushError => FlushFailure, FlushFailureKind {
+    LegacyFlushError => FlushFailure, FlushFailureKind {
         logger_flush => LoggerFlush => ["SC_OBSERVABILITY_LOGGER_FLUSH_FAILED"],
         writer_degraded => WriterDegraded => ["SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"],
         observation_flush => ObservationFlush => ["SC_OBSERVE_FLUSH_FAILED"],
@@ -278,7 +283,7 @@ define_failure! {
 
 define_failure! {
     /// Typed graceful-shutdown failure.
-    ShutdownError => ShutdownFailure, ShutdownFailureKind {
+    LegacyShutdownError => ShutdownFailure, ShutdownFailureKind {
         telemetry_flush => TelemetryFlush => ["OTLP_FLUSH_FAILED", "SC_OBSERVABILITY_OTLP_FLUSH_FAILED"],
         incomplete_spans => IncompleteSpans => ["OTLP_INCOMPLETE_SPAN_DROPPED", "SC_OBSERVABILITY_OTLP_INCOMPLETE_SPAN_DROPPED"],
         writer_degraded => WriterDegraded => ["SC_OBSERVABILITY_LOGGER_WRITER_DEGRADED"],
@@ -288,7 +293,7 @@ define_failure! {
 
 define_failure! {
     /// Typed log, span, or metric projection failure.
-    ProjectionError => ProjectionFailure, ProjectionFailureKind {
+    LegacyProjectionError => ProjectionFailure, ProjectionFailureKind {
         telemetry_closed => TelemetryClosed => ["OTLP_TELEMETRY_SHUTDOWN", "SC_OBSERVABILITY_OTLP_TELEMETRY_SHUTDOWN"],
         telemetry_export => TelemetryExport => ["OTLP_EXPORT_TERMINAL", "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"],
         span_assembly => SpanAssembly => ["OTLP_SPAN_ASSEMBLY_FAILED", "SC_OBSERVABILITY_OTLP_SPAN_ASSEMBLY_FAILED"],
@@ -298,14 +303,14 @@ define_failure! {
 
 define_failure! {
     /// Typed observation subscriber failure.
-    SubscriberError => SubscriberFailure, SubscriberFailureKind {
+    LegacySubscriberError => SubscriberFailure, SubscriberFailureKind {
         routing => Routing => ["SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"]
     }
 }
 
 define_failure! {
     /// Typed logging sink failure.
-    LogSinkError => LogSinkFailure, LogSinkFailureKind {
+    LegacyLogSinkError => LogSinkFailure, LogSinkFailureKind {
         write => Write => ["SC_OBSERVABILITY_LOGGER_SINK_WRITE_FAILED"],
         maintenance => Maintenance => ["SC_OBSERVABILITY_LOGGER_MAINTENANCE_FAILED"],
         fault_injected => FaultInjected => ["SC_OBSERVABILITY_LOGGER_SINK_FAULT_INJECTED"]
@@ -314,7 +319,7 @@ define_failure! {
 
 define_failure! {
     /// Typed telemetry exporter failure.
-    ExportError => ExportFailure, ExportFailureKind {
+    LegacyExportError => ExportFailure, ExportFailureKind {
         export => Export => ["OTLP_EXPORT_TERMINAL", "SC_OBSERVABILITY_OTLP_EXPORT_FAILED"]
     }
 }
@@ -358,15 +363,23 @@ pub enum TryLogFailure {
     ShutdownTimedOut(#[source] Box<ErrorContext>),
 }
 
-impl_legacy_classification!(IdentityError, IdentityFailure, IdentityFailureKind);
-impl_legacy_classification!(InitError, InitFailure, InitFailureKind);
-impl_legacy_classification!(EventError, EventFailure, EventFailureKind);
-impl_legacy_classification!(FlushError, FlushFailure, FlushFailureKind);
-impl_legacy_classification!(ShutdownError, ShutdownFailure, ShutdownFailureKind);
-impl_legacy_classification!(ProjectionError, ProjectionFailure, ProjectionFailureKind);
-impl_legacy_classification!(SubscriberError, SubscriberFailure, SubscriberFailureKind);
-impl_legacy_classification!(LogSinkError, LogSinkFailure, LogSinkFailureKind);
-impl_legacy_classification!(ExportError, ExportFailure, ExportFailureKind);
+impl_legacy_classification!(LegacyIdentityError, IdentityFailure, IdentityFailureKind);
+impl_legacy_classification!(LegacyInitError, InitFailure, InitFailureKind);
+impl_legacy_classification!(LegacyEventError, EventFailure, EventFailureKind);
+impl_legacy_classification!(LegacyFlushError, FlushFailure, FlushFailureKind);
+impl_legacy_classification!(LegacyShutdownError, ShutdownFailure, ShutdownFailureKind);
+impl_legacy_classification!(
+    LegacyProjectionError,
+    ProjectionFailure,
+    ProjectionFailureKind
+);
+impl_legacy_classification!(
+    LegacySubscriberError,
+    SubscriberFailure,
+    SubscriberFailureKind
+);
+impl_legacy_classification!(LegacyLogSinkError, LogSinkFailure, LogSinkFailureKind);
+impl_legacy_classification!(LegacyExportError, ExportFailure, ExportFailureKind);
 
 /// Typed process identity resolver contract.
 pub trait TypedProcessIdentityResolver: Send + Sync {
@@ -432,8 +445,12 @@ struct LegacyIdentityAdapter {
 }
 
 impl ProcessIdentityResolver for LegacyIdentityAdapter {
-    fn resolve(&self) -> Result<ProcessIdentity, IdentityError> {
-        self.inner.resolve().map_err(Into::into)
+    fn resolve(&self) -> Result<ProcessIdentity, crate::IdentityError> {
+        self.inner
+            .resolve()
+            .map_err(|failure| crate::IdentityError::Process {
+                context: failure.into_context(),
+            })
     }
 }
 
@@ -443,7 +460,9 @@ struct TypedIdentityAdapter {
 
 impl TypedProcessIdentityResolver for TypedIdentityAdapter {
     fn resolve(&self) -> Result<ProcessIdentity, IdentityFailure> {
-        self.inner.resolve().map_err(Into::into)
+        self.inner
+            .resolve()
+            .map_err(|error| IdentityFailure::from_context(error.into_context()))
     }
 }
 
@@ -452,8 +471,12 @@ struct LegacySubscriberAdapter<T: Observable> {
 }
 
 impl<T: Observable> ObservationSubscriber<T> for LegacySubscriberAdapter<T> {
-    fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberError> {
-        self.inner.observe(observation).map_err(Into::into)
+    fn observe(&self, observation: &Observation<T>) -> Result<(), crate::SubscriberError> {
+        self.inner
+            .observe(observation)
+            .map_err(|failure| crate::SubscriberError::Subscriber {
+                context: failure.into_context(),
+            })
     }
 }
 
@@ -463,7 +486,9 @@ struct TypedSubscriberAdapter<T: Observable> {
 
 impl<T: Observable> TypedObservationSubscriber<T> for TypedSubscriberAdapter<T> {
     fn observe(&self, observation: &Observation<T>) -> Result<(), SubscriberFailure> {
-        self.inner.observe(observation).map_err(Into::into)
+        self.inner
+            .observe(observation)
+            .map_err(|error| SubscriberFailure::from_context(error.into_context()))
     }
 }
 
@@ -472,8 +497,15 @@ struct LegacyLogProjectorAdapter<T: Observable> {
 }
 
 impl<T: Observable> LogProjector<T> for LegacyLogProjectorAdapter<T> {
-    fn project_logs(&self, observation: &Observation<T>) -> Result<Vec<LogEvent>, ProjectionError> {
-        self.inner.project_logs(observation).map_err(Into::into)
+    fn project_logs(
+        &self,
+        observation: &Observation<T>,
+    ) -> Result<Vec<LogEvent>, crate::ProjectionError> {
+        self.inner
+            .project_logs(observation)
+            .map_err(|failure| crate::ProjectionError::Projection {
+                context: failure.into_context(),
+            })
     }
 }
 
@@ -486,7 +518,9 @@ impl<T: Observable> TypedLogProjector<T> for TypedLogProjectorAdapter<T> {
         &self,
         observation: &Observation<T>,
     ) -> Result<Vec<LogEvent>, ProjectionFailure> {
-        self.inner.project_logs(observation).map_err(Into::into)
+        self.inner
+            .project_logs(observation)
+            .map_err(|error| ProjectionFailure::from_context(error.into_context()))
     }
 }
 
@@ -498,8 +532,12 @@ impl<T: Observable> SpanProjector<T> for LegacySpanProjectorAdapter<T> {
     fn project_spans(
         &self,
         observation: &Observation<T>,
-    ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        self.inner.project_spans(observation).map_err(Into::into)
+    ) -> Result<Vec<SpanSignal>, crate::ProjectionError> {
+        self.inner.project_spans(observation).map_err(|failure| {
+            crate::ProjectionError::Projection {
+                context: failure.into_context(),
+            }
+        })
     }
 }
 
@@ -512,7 +550,9 @@ impl<T: Observable> TypedSpanProjector<T> for TypedSpanProjectorAdapter<T> {
         &self,
         observation: &Observation<T>,
     ) -> Result<Vec<SpanSignal>, ProjectionFailure> {
-        self.inner.project_spans(observation).map_err(Into::into)
+        self.inner
+            .project_spans(observation)
+            .map_err(|error| ProjectionFailure::from_context(error.into_context()))
     }
 }
 
@@ -524,8 +564,12 @@ impl<T: Observable> MetricProjector<T> for LegacyMetricProjectorAdapter<T> {
     fn project_metrics(
         &self,
         observation: &Observation<T>,
-    ) -> Result<Vec<MetricRecord>, ProjectionError> {
-        self.inner.project_metrics(observation).map_err(Into::into)
+    ) -> Result<Vec<MetricRecord>, crate::ProjectionError> {
+        self.inner.project_metrics(observation).map_err(|failure| {
+            crate::ProjectionError::Projection {
+                context: failure.into_context(),
+            }
+        })
     }
 }
 
@@ -538,7 +582,9 @@ impl<T: Observable> TypedMetricProjector<T> for TypedMetricProjectorAdapter<T> {
         &self,
         observation: &Observation<T>,
     ) -> Result<Vec<MetricRecord>, ProjectionFailure> {
-        self.inner.project_metrics(observation).map_err(Into::into)
+        self.inner
+            .project_metrics(observation)
+            .map_err(|error| ProjectionFailure::from_context(error.into_context()))
     }
 }
 
@@ -625,6 +671,14 @@ pub fn typed_metric_projector<T: Observable>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::errors::{
+        EventError as LegacyEventError, ExportError as LegacyExportError,
+        FlushError as LegacyFlushError, IdentityError as LegacyIdentityError,
+        InitError as LegacyInitError, LogSinkError as LegacyLogSinkError,
+        ProjectionError as LegacyProjectionError, ShutdownError as LegacyShutdownError,
+        SubscriberError as LegacySubscriberError,
+    };
+    use crate::{IdentityError, ProjectionError, SubscriberError};
     use serde_json::json;
 
     fn remediation() -> Remediation {
@@ -1123,55 +1177,55 @@ mod tests {
         }
 
         assert_round_trip!(
-            IdentityError,
+            LegacyIdentityError,
             IdentityFailure,
             IdentityFailureKind::ResolutionFailed,
             "SC_OBSERVABILITY_TYPES_IDENTITY_RESOLUTION_FAILED"
         );
         assert_round_trip!(
-            InitError,
+            LegacyInitError,
             InitFailure,
             InitFailureKind::LoggerInitialization,
             "SC_OBSERVABILITY_LOGGER_INIT_FAILED"
         );
         assert_round_trip!(
-            EventError,
+            LegacyEventError,
             EventFailure,
             EventFailureKind::InvalidEvent,
             "SC_OBSERVABILITY_LOGGER_INVALID_EVENT"
         );
         assert_round_trip!(
-            FlushError,
+            LegacyFlushError,
             FlushFailure,
             FlushFailureKind::LoggerFlush,
             "SC_OBSERVABILITY_LOGGER_FLUSH_FAILED"
         );
         assert_round_trip!(
-            ShutdownError,
+            LegacyShutdownError,
             ShutdownFailure,
             ShutdownFailureKind::TelemetryFlush,
             "OTLP_FLUSH_FAILED"
         );
         assert_round_trip!(
-            ProjectionError,
+            LegacyProjectionError,
             ProjectionFailure,
             ProjectionFailureKind::TelemetryExport,
             "OTLP_EXPORT_TERMINAL"
         );
         assert_round_trip!(
-            SubscriberError,
+            LegacySubscriberError,
             SubscriberFailure,
             SubscriberFailureKind::Routing,
             "SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"
         );
         assert_round_trip!(
-            LogSinkError,
+            LegacyLogSinkError,
             LogSinkFailure,
             LogSinkFailureKind::Write,
             "SC_OBSERVABILITY_LOGGER_SINK_WRITE_FAILED"
         );
         assert_round_trip!(
-            ExportError,
+            LegacyExportError,
             ExportFailure,
             ExportFailureKind::Export,
             "OTLP_EXPORT_TERMINAL"
@@ -1254,9 +1308,9 @@ mod tests {
     fn legacy_conversion_moves_the_original_context_box() {
         let original = context("SC_OBSERVABILITY_LOGGER_QUEUE_FULL");
         let pointer = std::ptr::from_ref::<ErrorContext>(original.as_ref());
-        let typed = EventFailure::from(EventError(original));
+        let typed = EventFailure::from(LegacyEventError(original));
         assert_eq!(std::ptr::from_ref(typed.context()), pointer);
-        let legacy = EventError::from(typed);
+        let legacy = LegacyEventError::from(typed);
         assert_eq!(std::ptr::from_ref(legacy.0.as_ref()), pointer);
     }
 
@@ -1277,9 +1331,10 @@ mod tests {
 
     #[test]
     fn legacy_serialization_remains_available_and_typed_failures_are_not_serializable() {
-        let legacy = EventError(context("SC_OBSERVABILITY_LOGGER_QUEUE_FULL"));
+        let legacy = LegacyEventError(context("SC_OBSERVABILITY_LOGGER_QUEUE_FULL"));
         let encoded = serde_json::to_vec(&legacy).expect("legacy wrapper serializes");
-        let decoded: EventError = serde_json::from_slice(&encoded).expect("legacy wrapper decodes");
+        let decoded: LegacyEventError =
+            serde_json::from_slice(&encoded).expect("legacy wrapper decodes");
         assert_eq!(decoded, legacy);
     }
 

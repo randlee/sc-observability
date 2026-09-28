@@ -260,7 +260,8 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    use crate::{IdentityError, error_codes};
+    use crate::error_codes;
+    use crate::errors::IdentityError;
 
     #[test]
     fn remediation_construction_helpers_cover_both_variants() {

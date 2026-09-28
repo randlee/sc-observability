@@ -579,7 +579,9 @@ impl Logger<Running> {
     pub fn builder(
         config: crate::LoggerConfig,
     ) -> Result<LoggerBuilder, sc_observability_types::InitError> {
-        Self::builder_typed(config).map_err(Into::into)
+        Self::builder_typed(config).map_err(|failure| sc_observability_types::InitError::Runtime {
+            context: failure.into_context(),
+        })
     }
 
     /// Starts a construction-time builder that reports typed startup failures.
@@ -597,7 +599,9 @@ impl Logger<Running> {
         note = "Use Logger::new_typed(); see migrate-error-api.md."
     )]
     pub fn new(config: crate::LoggerConfig) -> Result<Self, sc_observability_types::InitError> {
-        Self::new_typed(config).map_err(Into::into)
+        Self::new_typed(config).map_err(|failure| sc_observability_types::InitError::Runtime {
+            context: failure.into_context(),
+        })
     }
 
     /// Creates a logger with recoverable typed startup failures.
@@ -613,7 +617,11 @@ impl Logger<Running> {
     pub fn new_with_level_owner(
         config: crate::LoggerConfig,
     ) -> Result<(Self, LevelOwner), sc_observability_types::InitError> {
-        Self::new_with_level_owner_typed(config).map_err(Into::into)
+        Self::new_with_level_owner_typed(config).map_err(|failure| {
+            sc_observability_types::InitError::Runtime {
+                context: failure.into_context(),
+            }
+        })
     }
 
     /// Creates a logger and weak level owner with typed startup failures.
@@ -771,7 +779,9 @@ impl Logger<Running> {
         note = "Use Logger::flush_typed(); see migrate-error-api.md."
     )]
     pub fn flush(&self) -> Result<(), FlushError> {
-        self.flush_typed().map_err(Into::into)
+        self.flush_typed().map_err(|failure| FlushError::Drain {
+            context: failure.into_context(),
+        })
     }
 
     /// Flushes all registered sinks through the writer-owned runtime with typed failures.
@@ -1169,13 +1179,17 @@ fn aggregate_logging_health_state(
 )]
 fn event_error_from_log_error(error: LogError) -> EventError {
     match error {
-        LogError::InvalidEvent(error) => error,
-        LogError::WriterDegraded(error) => EventError(Box::new(writer_degraded_error_context(
-            &error.diagnostic().message,
-        ))),
-        LogError::ShutdownTimedOut(error) => EventError(Box::new(
-            shutdown_timed_out_error_context(&error.diagnostic().message),
-        )),
+        LogError::InvalidEvent(error) => EventError::Validation {
+            context: error.into_context(),
+        },
+        LogError::WriterDegraded(error) => EventError::Routing {
+            context: Box::new(writer_degraded_error_context(&error.diagnostic().message)),
+        },
+        LogError::ShutdownTimedOut(error) => EventError::Routing {
+            context: Box::new(shutdown_timed_out_error_context(
+                &error.diagnostic().message,
+            )),
+        },
     }
 }
 

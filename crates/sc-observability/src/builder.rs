@@ -75,7 +75,9 @@ impl LoggerBuilder {
         note = "Use LoggerBuilder::new_typed(); see migrate-error-api.md."
     )]
     pub fn new(config: LoggerConfig) -> Result<Self, InitError> {
-        Self::new_typed(config).map_err(Into::into)
+        Self::new_typed(config).map_err(|failure| InitError::Runtime {
+            context: failure.into_context(),
+        })
     }
 
     /// Creates a builder with the configured built-in sinks and typed failures.
@@ -189,7 +191,10 @@ impl LoggerBuilder {
     pub fn build_with_level_owner(
         self,
     ) -> Result<(Logger<Running>, LevelOwner), sc_observability_types::InitError> {
-        self.build_with_level_owner_typed().map_err(Into::into)
+        self.build_with_level_owner_typed()
+            .map_err(|failure| InitError::Runtime {
+                context: failure.into_context(),
+            })
     }
 
     /// Finalizes construction with weak level ownership and typed failures.

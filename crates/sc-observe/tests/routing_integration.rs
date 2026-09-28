@@ -112,13 +112,14 @@ struct FailingSubscriber {
 
 impl ObservationSubscriber<AgentEvent> for FailingSubscriber {
     fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
-        Err(SubscriberError(
-            self.context
+        Err(SubscriberError::Subscriber {
+            context: self
+                .context
                 .lock()
                 .expect("subscriber context poisoned")
                 .take()
                 .expect("subscriber fixture invoked once"),
-        ))
+        })
     }
 }
 
@@ -131,13 +132,14 @@ impl sc_observability_types::LogProjector<AgentEvent> for FailingLogProjector {
         &self,
         _observation: &Observation<AgentEvent>,
     ) -> Result<Vec<LogEvent>, ProjectionError> {
-        Err(ProjectionError(
-            self.context
+        Err(ProjectionError::Projection {
+            context: self
+                .context
                 .lock()
                 .expect("log projector context poisoned")
                 .take()
                 .expect("log projector fixture invoked once"),
-        ))
+        })
     }
 }
 
@@ -150,13 +152,14 @@ impl SpanProjector<AgentEvent> for FailingSpanProjector {
         &self,
         _observation: &Observation<AgentEvent>,
     ) -> Result<Vec<SpanSignal>, ProjectionError> {
-        Err(ProjectionError(
-            self.context
+        Err(ProjectionError::Projection {
+            context: self
+                .context
                 .lock()
                 .expect("span projector context poisoned")
                 .take()
                 .expect("span projector fixture invoked once"),
-        ))
+        })
     }
 }
 
@@ -169,13 +172,14 @@ impl sc_observability_types::MetricProjector<AgentEvent> for FailingMetricProjec
         &self,
         _observation: &Observation<AgentEvent>,
     ) -> Result<Vec<sc_observability_types::MetricRecord>, ProjectionError> {
-        Err(ProjectionError(
-            self.context
+        Err(ProjectionError::Projection {
+            context: self
+                .context
                 .lock()
                 .expect("metric projector context poisoned")
                 .take()
                 .expect("metric projector fixture invoked once"),
-        ))
+        })
     }
 }
 
