@@ -291,6 +291,93 @@ fn safety_delta_shutdown_cancels_retry_wait() {
     ));
 }
 
+fn verify_provenance_source(
+    repo: &std::path::Path,
+    source_commit: &str,
+    entry: &Value,
+) -> Result<(), String> {
+    let source = entry["source"].as_str().expect("manifest source path");
+    let pinned_blob = Command::new("git")
+        .args(["-C", repo.to_str().expect("repo path"), "rev-parse"])
+        .arg(format!("{source_commit}:{source}"))
+        .output()
+        .expect("run git rev-parse");
+    assert!(
+        pinned_blob.status.success(),
+        "pinned source exists: {source}"
+    );
+    if String::from_utf8(pinned_blob.stdout)
+        .expect("blob id is utf8")
+        .trim()
+        != entry["git_blob"].as_str().expect("manifest git blob")
+    {
+        return Err(format!(
+            "manifest git_blob does not identify pinned source {source}"
+        ));
+    }
+    let source_bytes = Command::new("git")
+        .args(["-C", repo.to_str().expect("repo path"), "show"])
+        .arg(format!("{source_commit}:{source}"))
+        .output()
+        .expect("read pinned source");
+    assert!(
+        source_bytes.status.success(),
+        "read pinned source: {source}"
+    );
+    let mut hash = Command::new("shasum")
+        .args(["-a", "256"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("shasum is available");
+    hash.stdin
+        .take()
+        .expect("hash stdin")
+        .write_all(&source_bytes.stdout)
+        .expect("hash source bytes");
+    let sha256 = hash.wait_with_output().expect("finish sha256");
+    assert!(sha256.status.success(), "hash pinned source: {source}");
+    if String::from_utf8(sha256.stdout)
+        .expect("sha256 is utf8")
+        .split_whitespace()
+        .next()
+        .expect("sha256 digest")
+        != entry["sha256"].as_str().expect("manifest sha256")
+    {
+        return Err(format!(
+            "manifest sha256 does not identify pinned source {source}"
+        ));
+    }
+    Ok(())
+}
+
+#[test]
+fn provenance_rejects_tampered_hashes_for_every_manifest_entry() {
+    let manifest: Value = serde_json::from_str(include_str!(
+        "../../../../docs/plans/phase-d/legacy-otlp-provenance.json"
+    ))
+    .expect("valid provenance manifest");
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let source_commit = manifest["source_commit"].as_str().expect("source commit");
+    let entries = manifest["entries"].as_array().expect("manifest entries");
+    assert!(!entries.is_empty());
+    for entry in entries {
+        let source = entry["source"].as_str().expect("source path");
+        for field in ["git_blob", "sha256"] {
+            let mut tampered = entry.clone();
+            let original = entry[field].as_str().expect("source hash");
+            tampered[field] = Value::String("0".repeat(original.len()));
+            assert_eq!(
+                verify_provenance_source(&repo, source_commit, &tampered),
+                Err(format!(
+                    "manifest {field} does not identify pinned source {source}"
+                )),
+                "must reject a tampered {field} for {source}",
+            );
+        }
+    }
+}
+
 #[test]
 fn provenance_pin_and_destination_disposition_are_present() {
     let manifest = include_str!("../../../../docs/plans/phase-d/legacy-otlp-provenance.json");
@@ -303,6 +390,35 @@ fn provenance_pin_and_destination_disposition_are_present() {
     );
 
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entries = manifest["entries"].as_array().expect("manifest entries");
+    assert!(
+        !entries.is_empty(),
+        "provenance must contain source entries"
+    );
+    let source_commit = manifest["source_commit"].as_str().expect("source commit");
+    // Source identity applies to the entire manifest, including D9 scripts and
+    // reference/translation entries. Do not derive coverage from D8's owned
+    // destination list below: adapted destinations need not equal source bytes.
+    for entry in entries {
+        verify_provenance_source(&repo, source_commit, entry)
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert!(
+            matches!(
+                entry["disposition"].as_str(),
+                Some(
+                    "transplant-and-adapt"
+                        | "dependency-reference-only"
+                        | "translate-current-schema"
+                        | "reference-and-disposition-only"
+                )
+            ),
+            "unauthorized provenance disposition: {entry}"
+        );
+    }
+
+    // These destination existence/adaptation assertions belong to D8. D9's
+    // planned destinations are separate deliverables; their source pins above
+    // are still verified even before those destinations have been delivered.
     let destinations = [
         (
             "crates/sc-observability-otlp/src/lib.rs",
@@ -342,54 +458,6 @@ fn provenance_pin_and_destination_disposition_are_present() {
                 );
             }
         }
-        let source_commit = manifest["source_commit"].as_str().expect("source commit");
-        let pinned_blob = Command::new("git")
-            .args(["-C", repo.to_str().expect("repo path"), "rev-parse"])
-            .arg(format!("{source_commit}:{source}"))
-            .output()
-            .expect("run git rev-parse");
-        assert!(
-            pinned_blob.status.success(),
-            "pinned source exists: {source}"
-        );
-        assert_eq!(
-            String::from_utf8(pinned_blob.stdout)
-                .expect("blob id is utf8")
-                .trim(),
-            entry["git_blob"].as_str().expect("manifest git blob"),
-            "manifest blob identifies pinned source {source}"
-        );
-        let source_bytes = Command::new("git")
-            .args(["-C", repo.to_str().expect("repo path"), "show"])
-            .arg(format!("{source_commit}:{source}"))
-            .output()
-            .expect("read pinned source");
-        assert!(
-            source_bytes.status.success(),
-            "read pinned source: {source}"
-        );
-        let mut hash = Command::new("shasum")
-            .args(["-a", "256"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .expect("shasum is available");
-        hash.stdin
-            .take()
-            .expect("hash stdin")
-            .write_all(&source_bytes.stdout)
-            .expect("hash source bytes");
-        let sha256 = hash.wait_with_output().expect("finish sha256");
-        assert!(sha256.status.success(), "hash pinned source: {source}");
-        assert_eq!(
-            String::from_utf8(sha256.stdout)
-                .expect("sha256 is utf8")
-                .split_whitespace()
-                .next()
-                .expect("sha256 digest"),
-            entry["sha256"].as_str().expect("manifest sha256"),
-            "manifest sha256 identifies pinned source {source}"
-        );
         assert!(
             repo.join(destination).is_file(),
             "missing provenance destination {destination}"
