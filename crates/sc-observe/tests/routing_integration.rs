@@ -6,11 +6,16 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use sc_observability_types::typed::{
+    ClassifiedError, ProjectionFailureKind, SubscriberFailureKind, typed_log_projector,
+    typed_metric_projector, typed_span_projector, typed_subscriber,
+};
 use sc_observability_types::{
-    ActionName, Diagnostic, ErrorCode, Level, LogEvent, MetricKind, MetricName, MetricUnit,
-    Observation, ObservationSubscriber, OutcomeLabel, ProcessIdentity, ProjectionRegistration,
-    Remediation, SchemaVersion, ServiceName, SpanId, SpanProjector, SpanRecord, SpanSignal,
-    SpanStarted, SubscriberRegistration, TargetCategory, Timestamp, TraceContext, TraceId,
+    ActionName, Diagnostic, ErrorCode, ErrorContext, Level, LogEvent, MetricKind, MetricName,
+    MetricUnit, Observation, ObservationSubscriber, OutcomeLabel, ProcessIdentity, ProjectionError,
+    ProjectionRegistration, Remediation, SchemaVersion, ServiceName, SpanId, SpanProjector,
+    SpanRecord, SpanSignal, SpanStarted, SubscriberError, SubscriberRegistration, TargetCategory,
+    Timestamp, TraceContext, TraceId,
 };
 use sc_observe::{Observability, ObservabilityConfig};
 use serde_json::Map;
@@ -101,6 +106,79 @@ struct RecordingMetricProjector {
     count: Arc<AtomicU64>,
 }
 
+struct FailingSubscriber {
+    context: Mutex<Option<Box<ErrorContext>>>,
+}
+
+impl ObservationSubscriber<AgentEvent> for FailingSubscriber {
+    fn observe(&self, _observation: &Observation<AgentEvent>) -> Result<(), SubscriberError> {
+        Err(SubscriberError(
+            self.context
+                .lock()
+                .expect("subscriber context poisoned")
+                .take()
+                .expect("subscriber fixture invoked once"),
+        ))
+    }
+}
+
+struct FailingLogProjector {
+    context: Mutex<Option<Box<ErrorContext>>>,
+}
+
+impl sc_observability_types::LogProjector<AgentEvent> for FailingLogProjector {
+    fn project_logs(
+        &self,
+        _observation: &Observation<AgentEvent>,
+    ) -> Result<Vec<LogEvent>, ProjectionError> {
+        Err(ProjectionError(
+            self.context
+                .lock()
+                .expect("log projector context poisoned")
+                .take()
+                .expect("log projector fixture invoked once"),
+        ))
+    }
+}
+
+struct FailingSpanProjector {
+    context: Mutex<Option<Box<ErrorContext>>>,
+}
+
+impl SpanProjector<AgentEvent> for FailingSpanProjector {
+    fn project_spans(
+        &self,
+        _observation: &Observation<AgentEvent>,
+    ) -> Result<Vec<SpanSignal>, ProjectionError> {
+        Err(ProjectionError(
+            self.context
+                .lock()
+                .expect("span projector context poisoned")
+                .take()
+                .expect("span projector fixture invoked once"),
+        ))
+    }
+}
+
+struct FailingMetricProjector {
+    context: Mutex<Option<Box<ErrorContext>>>,
+}
+
+impl sc_observability_types::MetricProjector<AgentEvent> for FailingMetricProjector {
+    fn project_metrics(
+        &self,
+        _observation: &Observation<AgentEvent>,
+    ) -> Result<Vec<sc_observability_types::MetricRecord>, ProjectionError> {
+        Err(ProjectionError(
+            self.context
+                .lock()
+                .expect("metric projector context poisoned")
+                .take()
+                .expect("metric projector fixture invoked once"),
+        ))
+    }
+}
+
 impl sc_observability_types::MetricProjector<AgentEvent> for RecordingMetricProjector {
     fn project_metrics(
         &self,
@@ -152,15 +230,46 @@ fn temp_path(name: &str) -> std::path::PathBuf {
     ))
 }
 
+fn routing_failure_context(cause: &'static str) -> Box<ErrorContext> {
+    Box::new(
+        ErrorContext::new(
+            ErrorCode::new_static("SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"),
+            "routing fixture failed",
+            Remediation::not_recoverable("inspect the routing fixture"),
+        )
+        .source(Box::new(std::io::Error::other(cause))),
+    )
+}
+
+fn assert_routing_context(
+    context: &ErrorContext,
+    original_context: *const ErrorContext,
+    original_source: *const std::io::Error,
+    cause: &str,
+) {
+    assert_eq!(std::ptr::from_ref(context), original_context);
+    assert_eq!(
+        context.diagnostic().code.as_str(),
+        "SC_OBSERVE_OBSERVATION_ROUTING_FAILURE"
+    );
+    let source = std::error::Error::source(context)
+        .expect("routing source")
+        .downcast_ref::<std::io::Error>()
+        .expect("routing io source");
+    assert_eq!(std::ptr::from_ref(source), original_source);
+    assert_eq!(source.to_string(), cause);
+}
+
 #[test]
 fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
     let subscriber_calls = Arc::new(Mutex::new(Vec::new()));
     let log_calls = Arc::new(Mutex::new(Vec::new()));
     let span_count = Arc::new(AtomicU64::new(0));
     let metric_count = Arc::new(AtomicU64::new(0));
-    let root = temp_path("fanout");
-    let config = ObservabilityConfig::default_for(tool_name(), root.clone()).expect("config");
-    let runtime = Observability::builder(config)
+    let legacy_root = temp_path("fanout-legacy");
+    let legacy_config =
+        ObservabilityConfig::default_for(tool_name(), legacy_root.clone()).expect("config");
+    let legacy = Observability::builder(legacy_config)
         .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
             id: "subscriber",
             calls: subscriber_calls.clone(),
@@ -179,24 +288,155 @@ fn one_observation_can_fan_out_to_subscribers_logs_spans_and_metrics() {
                 })),
         )
         .build()
-        .expect("runtime");
+        .expect("legacy runtime");
 
-    runtime.emit(observation()).expect("emit");
+    let typed_root = temp_path("fanout-typed");
+    let typed_config =
+        ObservabilityConfig::default_for_typed(tool_name(), typed_root.clone()).expect("config");
+    let typed = Observability::builder(typed_config)
+        .register_subscriber(SubscriberRegistration::new(Arc::new(RecordingSubscriber {
+            id: "subscriber",
+            calls: subscriber_calls.clone(),
+        })))
+        .register_projection(
+            ProjectionRegistration::new()
+                .with_log_projector(Arc::new(RecordingLogProjector {
+                    calls: log_calls.clone(),
+                    id: "log",
+                }))
+                .with_span_projector(Arc::new(RecordingSpanProjector {
+                    count: span_count.clone(),
+                }))
+                .with_metric_projector(Arc::new(RecordingMetricProjector {
+                    count: metric_count.clone(),
+                })),
+        )
+        .build_typed()
+        .expect("typed runtime");
 
-    let log_path = root
+    legacy.emit(observation()).expect("legacy emit");
+    typed.emit(observation()).expect("typed emit");
+
+    let legacy_log_path = legacy_root
         .join(sc_observability::constants::DEFAULT_LOG_DIR_NAME)
         .join(format!(
             "obs-app{}",
             sc_observability::constants::DEFAULT_LOG_FILE_SUFFIX
         ));
-    let contents = std::fs::read_to_string(log_path).expect("read projected log file");
+    let typed_log_path = typed_root
+        .join(sc_observability::constants::DEFAULT_LOG_DIR_NAME)
+        .join(format!(
+            "obs-app{}",
+            sc_observability::constants::DEFAULT_LOG_FILE_SUFFIX
+        ));
+    let legacy_contents =
+        std::fs::read_to_string(legacy_log_path).expect("read legacy projected log file");
+    let typed_contents =
+        std::fs::read_to_string(typed_log_path).expect("read typed projected log file");
 
     assert_eq!(
         *subscriber_calls.lock().expect("subscriber calls poisoned"),
-        vec!["subscriber"]
+        vec!["subscriber", "subscriber"]
     );
-    assert_eq!(*log_calls.lock().expect("log calls poisoned"), vec!["log"]);
-    assert_eq!(span_count.load(Ordering::SeqCst), 1);
-    assert_eq!(metric_count.load(Ordering::SeqCst), 1);
-    assert!(contents.contains("\"action\":\"observation.received\""));
+    assert_eq!(
+        *log_calls.lock().expect("log calls poisoned"),
+        vec!["log", "log"]
+    );
+    assert_eq!(span_count.load(Ordering::SeqCst), 2);
+    assert_eq!(metric_count.load(Ordering::SeqCst), 2);
+    assert!(legacy_contents.contains("\"action\":\"observation.received\""));
+    assert!(typed_contents.contains("\"action\":\"observation.received\""));
+    legacy.shutdown().expect("legacy shutdown");
+    typed.shutdown_typed().expect("typed shutdown");
+}
+
+#[test]
+fn typed_routing_adapters_preserve_canonical_variants_codes_and_sources() {
+    let subscriber_context = routing_failure_context("subscriber source");
+    let subscriber_context_ptr = std::ptr::from_ref(subscriber_context.as_ref());
+    let subscriber_source_ptr = std::ptr::from_ref(
+        std::error::Error::source(subscriber_context.as_ref())
+            .expect("subscriber source")
+            .downcast_ref::<std::io::Error>()
+            .expect("subscriber io source"),
+    );
+    let subscriber = typed_subscriber(Arc::new(FailingSubscriber {
+        context: Mutex::new(Some(subscriber_context)),
+    }));
+    let subscriber_error = subscriber
+        .observe(&observation())
+        .expect_err("subscriber should fail");
+    assert_eq!(subscriber_error.kind(), SubscriberFailureKind::Routing);
+    assert_routing_context(
+        subscriber_error.context(),
+        subscriber_context_ptr,
+        subscriber_source_ptr,
+        "subscriber source",
+    );
+
+    let log_context = routing_failure_context("log projector source");
+    let log_context_ptr = std::ptr::from_ref(log_context.as_ref());
+    let log_source_ptr = std::ptr::from_ref(
+        std::error::Error::source(log_context.as_ref())
+            .expect("log projector source")
+            .downcast_ref::<std::io::Error>()
+            .expect("log projector io source"),
+    );
+    let log_projector = typed_log_projector(Arc::new(FailingLogProjector {
+        context: Mutex::new(Some(log_context)),
+    }));
+    let log_error = log_projector
+        .project_logs(&observation())
+        .expect_err("log projector should fail");
+    assert_eq!(log_error.kind(), ProjectionFailureKind::Routing);
+    assert_routing_context(
+        log_error.context(),
+        log_context_ptr,
+        log_source_ptr,
+        "log projector source",
+    );
+
+    let span_context = routing_failure_context("span projector source");
+    let span_context_ptr = std::ptr::from_ref(span_context.as_ref());
+    let span_source_ptr = std::ptr::from_ref(
+        std::error::Error::source(span_context.as_ref())
+            .expect("span projector source")
+            .downcast_ref::<std::io::Error>()
+            .expect("span projector io source"),
+    );
+    let span_projector = typed_span_projector(Arc::new(FailingSpanProjector {
+        context: Mutex::new(Some(span_context)),
+    }));
+    let span_error = span_projector
+        .project_spans(&observation())
+        .expect_err("span projector should fail");
+    assert_eq!(span_error.kind(), ProjectionFailureKind::Routing);
+    assert_routing_context(
+        span_error.context(),
+        span_context_ptr,
+        span_source_ptr,
+        "span projector source",
+    );
+
+    let metric_context = routing_failure_context("metric projector source");
+    let metric_context_ptr = std::ptr::from_ref(metric_context.as_ref());
+    let metric_source_ptr = std::ptr::from_ref(
+        std::error::Error::source(metric_context.as_ref())
+            .expect("metric projector source")
+            .downcast_ref::<std::io::Error>()
+            .expect("metric projector io source"),
+    );
+    let metric_projector = typed_metric_projector(Arc::new(FailingMetricProjector {
+        context: Mutex::new(Some(metric_context)),
+    }));
+    let metric_error = metric_projector
+        .project_metrics(&observation())
+        .expect_err("metric projector should fail");
+    assert_eq!(metric_error.kind(), ProjectionFailureKind::Routing);
+    assert_routing_context(
+        metric_error.context(),
+        metric_context_ptr,
+        metric_source_ptr,
+        "metric projector source",
+    );
 }
