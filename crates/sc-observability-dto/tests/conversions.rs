@@ -217,8 +217,9 @@ fn malformed_unknown_and_oversized_remote_errors_differ() {
 #[test]
 fn paths_keep_absence_and_non_unicode() {
     assert_eq!(from_path(None), PathDto::Absent);
-    assert!(to_path("", std::path::Path::new("/tmp")).is_err());
-    assert!(to_path("a\0b", std::path::Path::new("/tmp")).is_err());
+    let temp_dir = std::env::temp_dir();
+    assert!(to_path("", &temp_dir).is_err());
+    assert!(to_path("a\0b", &temp_dir).is_err());
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStringExt;
