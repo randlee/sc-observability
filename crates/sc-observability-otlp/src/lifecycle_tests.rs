@@ -642,6 +642,50 @@ fn admission_is_fail_open_and_drop_accounting_is_exact_once() {
 }
 
 #[test]
+fn byte_capacity_rejects_when_record_capacity_remains() {
+    let transport = OtelConfig {
+        queue_capacity: Some(4),
+        queue_byte_capacity: Some(4),
+        ..OtelConfig::default()
+    };
+    let (core, _, _, released) = fixture(None, &transport);
+    let admitted = core
+        .admit(SignalKind::Logs, (), 3)
+        .expect("admit below the byte capacity");
+    let before_rejection = core.health();
+    assert_eq!(before_rejection.admitted_records, 1);
+    assert_eq!(before_rejection.admitted_bytes, 3);
+
+    let Err(rejected) = core.admit(SignalKind::Logs, (), 2) else {
+        panic!("byte capacity must reject while record capacity remains")
+    };
+    assert_eq!(rejected.code(), crate::error_codes::OTLP_QUEUE_FULL);
+
+    let after_rejection = core.health();
+    assert_eq!(
+        after_rejection.admitted_records,
+        before_rejection.admitted_records
+    );
+    assert_eq!(
+        after_rejection.admitted_bytes,
+        before_rejection.admitted_bytes
+    );
+    assert_eq!(after_rejection.dropped_by_signal, [1, 0, 0]);
+    assert!(after_rejection.degraded);
+
+    admitted.complete(Ok(()));
+    let after_completion = core.health();
+    assert_eq!(after_completion.admitted_records, 0);
+    assert_eq!(after_completion.admitted_bytes, 0);
+    assert_eq!(after_completion.dropped_by_signal, [1, 0, 0]);
+
+    released.store(true, Ordering::Release);
+    let mut shutdown = core.shutdown_async();
+    assert!(poll_once(&mut shutdown).is_ready());
+    assert_eq!(core.health().phase, LifecycleState::Shutdown);
+}
+
+#[test]
 fn repeated_shutdown_uses_one_backend_operation() {
     let (core, _, shutdowns, released) = default_fixture();
     let mut first = core.shutdown_async();
