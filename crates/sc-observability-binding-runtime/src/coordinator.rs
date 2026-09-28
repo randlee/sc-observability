@@ -426,6 +426,8 @@ impl Coordinator {
             });
         let result = if self.failed.load(Ordering::SeqCst) {
             let error = error::shutdown_drain("helper failure prevents confirmed shutdown");
+            #[cfg(test)]
+            self.record_shutdown_source_chain(&error);
             Err(conversion::canonical(&error, conversion::Kind::Internal))
         } else {
             result
@@ -435,6 +437,16 @@ impl Coordinator {
         }
         self.shutdown.complete(result, || {});
         self.dispatcher.close();
+    }
+    #[cfg(test)]
+    fn record_shutdown_source_chain(&self, error: &native::v2::ShutdownError) {
+        let mut chain = Vec::new();
+        let mut source = std::error::Error::source(error);
+        while let Some(cause) = source {
+            chain.push(cause.to_string());
+            source = std::error::Error::source(cause);
+        }
+        *lock(&self.hooks.shutdown_source_chain) = Some(chain);
     }
     pub(crate) fn level(
         &self,
@@ -555,4 +567,5 @@ pub(crate) struct TestHooks {
     pub(crate) query: Mutex<Option<Arc<crate::tests::Gate>>>,
     pub(crate) flush: Mutex<Option<Arc<crate::tests::Gate>>>,
     pub(crate) crash: AtomicBool,
+    pub(crate) shutdown_source_chain: Mutex<Option<Vec<String>>>,
 }

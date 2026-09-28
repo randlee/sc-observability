@@ -843,6 +843,13 @@ fn failed_shutdown() -> Failure {
     let failure = owner
         .shutdown(Duration::from_secs(2))
         .expect_err("crashed helper must fail the real shutdown path");
+    let source_chain = lock(&backend.shared.hooks.shutdown_source_chain)
+        .take()
+        .expect("typed shutdown error was observed before DTO conversion");
+    assert!(
+        source_chain.is_empty(),
+        "shutdown drain source chain changed: {source_chain:?}"
+    );
     assert_eq!(
         failure.diagnostic().message,
         "helper failure prevents confirmed shutdown"
