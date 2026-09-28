@@ -128,7 +128,11 @@ def normalize_removed_items(items: set[str], entries: list[dict]) -> set[str]:
         if method and method.group(1) in _DERIVED_METHODS:
             continue
         owner = re.match(r"(?:pub (?:enum|struct|type|fn)|impl) ([^:]+::[^:]+)", item)
-        if owner and any(item_owner.startswith(root + "::") for root in removed_roots for item_owner in [owner.group(1)]):
+        if owner and any(
+            item_owner == root or item_owner.startswith(root + "::")
+            for root in removed_roots
+            for item_owner in [owner.group(1)]
+        ):
             continue
         normalized.add(item)
     return normalized
