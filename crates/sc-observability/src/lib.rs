@@ -975,26 +975,19 @@ mod tests {
 
     #[cfg(unix)]
     fn recreate_with_distinct_unix_identity(active_path: &Path) {
+        // Keep the old inode allocated while installing the replacement. This
+        // makes a distinct identity deterministic instead of depending on the
+        // filesystem's inode-reuse timing after unlink.
+        let retained_previous = fs::File::open(active_path).expect("open active log");
         let previous_identity = unix_file_identity(active_path);
         fs::remove_file(active_path).expect("remove active log");
-
-        let active_name = active_path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .expect("active log file name");
-
-        for attempt in 0..256 {
-            let replacement =
-                active_path.with_file_name(format!("{active_name}.replacement-{attempt}"));
-            fs::File::create(&replacement).expect("create replacement file");
-            if unix_file_identity(&replacement) != previous_identity {
-                fs::rename(&replacement, active_path).expect("install replacement active log");
-                return;
-            }
-            fs::remove_file(&replacement).expect("remove reused replacement inode");
-        }
-
-        panic!("failed to create replacement active log with distinct Unix identity");
+        fs::File::create(active_path).expect("recreate active log");
+        assert_ne!(
+            unix_file_identity(active_path),
+            previous_identity,
+            "retained old inode makes replacement identity distinct"
+        );
+        drop(retained_previous);
     }
 
     #[cfg(not(unix))]
