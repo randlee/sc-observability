@@ -107,3 +107,39 @@ pub const SC_LOG_DETACH_NOT_INSTALLED: ErrorCode =
 /// init-time attempt to install the owned bridge, whereas this code reports a
 /// non-owning attachment's foreign-facade rejection.
 /// Recovery: remove the competing logger or detach only the bridge that owns the facade.
+pub const SC_LOG_FOREIGN_LOGGER_INSTALLED: ErrorCode =
+    ErrorCode::new_static("SC_LOG_FOREIGN_LOGGER_INSTALLED");
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_codes_are_unique_and_prefixed() {
+        let mut seen = std::collections::HashSet::new();
+        for code in ALL {
+            assert!(
+                code.as_str().starts_with("SC_OBSERVABILITY_LOG_")
+                    || code.as_str().starts_with("SC_LOG_")
+            );
+            assert!(seen.insert(code.as_str()), "duplicate code {code}");
+        }
+        assert_eq!(ALL.len(), 19);
+    }
+
+    #[test]
+    fn foreign_logger_codes_have_distinct_lifecycle_contracts() {
+        assert_eq!(
+            SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED.as_str(),
+            "SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED"
+        );
+        assert_eq!(
+            SC_LOG_FOREIGN_LOGGER_INSTALLED.as_str(),
+            "SC_LOG_FOREIGN_LOGGER_INSTALLED"
+        );
+        assert_ne!(
+            SC_OBSERVABILITY_LOG_FOREIGN_LOGGER_INSTALLED,
+            SC_LOG_FOREIGN_LOGGER_INSTALLED
+        );
+    }
+}

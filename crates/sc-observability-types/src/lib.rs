@@ -109,3 +109,18 @@ pub use validation::{
 /// models remain under `v2`: the existing root `MetricRecord`, `TraceContext`,
 /// and `SpanRecord` APIs and serialization remain unchanged under ADR-012.
 /// The version bump does not authorize replacing those root signal types.
+pub mod v2 {
+    #[doc(inline)]
+    pub use crate::errors_v2::{
+        ConfigFailure, EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError,
+        MetricModelError, ProjectionError, ShutdownError, SubscriberError, TelemetryError,
+    };
+    #[doc(inline)]
+    pub use crate::signals_v2::{
+        AggregationTemporality, AttributeValue, Attributes, FiniteF64, HistogramPoint,
+        MetricRecord, MetricValue, SpanEvent, SpanKind, SpanLink, SpanRecord, SpanSignal,
+        SpanState, TraceContext, TraceFlags,
+    };
+    #[doc(inline)]
+    pub use crate::{SpanEnded, SpanStarted, SpanStatus};
+}

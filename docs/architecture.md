@@ -1371,3 +1371,7 @@ a separately accepted ADR explicitly superseding ADR-012 for those named
 breaks before implementation, plus the PHD-002 manifest and API approval.
 A manifest entry alone does not expand ADR-017's scope.
 D.12 retains `version.workspace = true`; D.21 performs the atomic
+workspace 2.0 activation. The producer contract, constructors, serde shape,
+error inventory and DTO handoffs are specified in
+[API design](api-design.md#phase-d-canonical-types-and-wire-handoff).
+No transport implementation or runtime dependency enters the types layer.
