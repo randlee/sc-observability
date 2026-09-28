@@ -649,13 +649,22 @@ fn log_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, event: &str
     result_json(result.map_err(project_event_failure))
 }
 
-fn query_backend(backend: Arc<dyn HostLoggingBackend>, py: Python<'_>, query: &str) -> String {
-    let result = parse_value(query, "query")
-        .and_then(sc_observability_dto::decode_query)
-        .and_then(|query: LogQueryDto| {
+fn query_backend(
+    backend: Arc<dyn HostLoggingBackend>,
+    py: Python<'_>,
+    query: &str,
+    timeout: &str,
+) -> String {
+    let result = parse_timeout(timeout)
+        .and_then(|timeout| {
+            parse_value(query, "query")
+                .and_then(sc_observability_dto::decode_query)
+                .map(|query| (query, timeout))
+        })
+        .and_then(|(query, timeout): (LogQueryDto, Duration)| {
             py.detach(move || {
                 let operation = backend.start_query(query)?;
-                operation.wait(Duration::from_millis(2_000))
+                operation.wait(timeout)
             })
         });
     result_json(result)
@@ -740,9 +749,9 @@ impl NativeLogger {
         })
     }
 
-    fn query(&self, py: Python<'_>, query: &str) -> String {
+    fn query(&self, py: Python<'_>, query: &str, timeout: &str) -> String {
         contained_json(|| match test_fault("query") {
-            Ok(()) => query_backend(Arc::new(self.backend.clone()), py, query),
+            Ok(()) => query_backend(Arc::new(self.backend.clone()), py, query, timeout),
             Err(error) => result_json::<()>(Err(error)),
         })
     }
@@ -854,9 +863,9 @@ impl NativeAttachedLogger {
         })
     }
 
-    fn query(&self, py: Python<'_>, query: &str) -> String {
+    fn query(&self, py: Python<'_>, query: &str, timeout: &str) -> String {
         contained_json(|| match test_fault("query") {
-            Ok(()) => query_backend(self.backend.clone(), py, query),
+            Ok(()) => query_backend(self.backend.clone(), py, query, timeout),
             Err(error) => result_json::<()>(Err(error)),
         })
     }

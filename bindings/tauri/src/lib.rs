@@ -11,11 +11,17 @@ use sc_observability_dto::{
 use sc_observability_types::v2;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeSet,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 const SCHEMA_VERSION: u32 = 1;
 const MAX_REQUEST_BYTES: usize = 65_536;
 const MAX_DEPTH: usize = 32;
+const MAX_QUERY_TARGETS: usize = 64;
+const DEFAULT_QUERY_TIMEOUT_MS: u32 = 2_000;
 const REDACTED: &str = "[REDACTED]";
 
 /// Host-selected policy applied before any backend call.
@@ -34,6 +40,12 @@ impl AdapterPolicy {
             return Err(invalid(
                 "policy",
                 "window and target allowlists must not be empty",
+            ));
+        }
+        if self.allowed_targets.len() > MAX_QUERY_TARGETS {
+            return Err(invalid(
+                "policy.allowed_targets",
+                "target allowlist exceeds the query fan-out bound",
             ));
         }
         if self.max_request_bytes == 0 || self.max_request_bytes as usize > MAX_REQUEST_BYTES {
@@ -74,6 +86,34 @@ impl AdapterPolicy {
     }
 }
 
+/// Optional observation settings which supplement the stable host policy.
+///
+/// `Adapter::new` and `plugin` retain the 2000 ms default. Hosts that need a
+/// different query observation deadline can use `Adapter::with_settings` or
+/// `plugin_with_settings` without changing the established `AdapterPolicy`
+/// struct shape.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdapterSettings {
+    pub policy: AdapterPolicy,
+    pub query_timeout_ms: u32,
+}
+
+impl AdapterSettings {
+    pub fn validate(&self) -> Result<(), Failure> {
+        self.policy.validate()?;
+        decode_timeout(Value::from(self.query_timeout_ms)).map(|_| ())
+    }
+}
+
+impl From<AdapterPolicy> for AdapterSettings {
+    fn from(policy: AdapterPolicy) -> Self {
+        Self {
+            policy,
+            query_timeout_ms: DEFAULT_QUERY_TIMEOUT_MS,
+        }
+    }
+}
+
 /// Serializable result discriminator used by every plugin command.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -89,6 +129,16 @@ fn invalid(field: &str, message: impl Into<String>) -> Failure {
             message.into(),
         )),
         field: field.to_owned(),
+    }
+}
+
+fn query_timeout_failure() -> Failure {
+    Failure::Timeout {
+        diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
+            sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_TIMEOUT,
+            "query aggregate observation deadline elapsed",
+        )),
+        operation: "query".to_owned(),
     }
 }
 
@@ -366,6 +416,7 @@ fn redact(mut event: LogEventDto, keys: &BTreeSet<String>) -> LogEventDto {
 pub struct Adapter {
     backend: Arc<dyn HostLoggingBackend>,
     policy: AdapterPolicy,
+    query_timeout: Duration,
 }
 
 impl std::fmt::Debug for Adapter {
@@ -381,8 +432,20 @@ impl Adapter {
         backend: Arc<dyn HostLoggingBackend>,
         policy: AdapterPolicy,
     ) -> Result<Self, Failure> {
-        policy.validate()?;
-        Ok(Self { backend, policy })
+        Self::with_settings(backend, AdapterSettings::from(policy))
+    }
+
+    /// Creates an adapter with host-selected query observation settings.
+    pub fn with_settings(
+        backend: Arc<dyn HostLoggingBackend>,
+        settings: AdapterSettings,
+    ) -> Result<Self, Failure> {
+        settings.validate()?;
+        Ok(Self {
+            backend,
+            query_timeout: Duration::from_millis(u64::from(settings.query_timeout_ms)),
+            policy: settings.policy,
+        })
     }
 
     pub fn try_log(&self, window: &str, value: Value) -> WireEnvelope<AdmissionDto> {
@@ -431,11 +494,19 @@ impl Adapter {
         );
         let mut events = Vec::new();
         let mut truncated = false;
+        let deadline = Instant::now() + self.query_timeout;
         for target in targets {
+            if Instant::now() >= deadline {
+                return Err(query_timeout_failure());
+            }
             let mut target_query = query.clone();
             target_query.target = Some(target);
             let operation = self.backend.start_query(target_query)?;
-            let snapshot = operation.completion(Duration::from_millis(2_000)).await?;
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(query_timeout_failure());
+            }
+            let snapshot = operation.completion(remaining).await?;
             truncated |= snapshot.truncated;
             events.extend(snapshot.events);
         }
@@ -500,7 +571,16 @@ pub fn plugin<R: tauri::Runtime>(
     backend: Arc<dyn HostLoggingBackend>,
     policy: AdapterPolicy,
 ) -> Result<tauri::plugin::TauriPlugin<R>, Failure> {
-    let adapter = Adapter::new(backend, policy)?;
+    plugin_with_settings(backend, AdapterSettings::from(policy))
+}
+
+/// Registers the plugin with an explicit query observation deadline.
+#[cfg(feature = "tauri")]
+pub fn plugin_with_settings<R: tauri::Runtime>(
+    backend: Arc<dyn HostLoggingBackend>,
+    settings: AdapterSettings,
+) -> Result<tauri::plugin::TauriPlugin<R>, Failure> {
+    let adapter = Adapter::with_settings(backend, settings)?;
     Ok(tauri::plugin::Builder::new("sc-observability")
         .setup(move |app, _api| {
             app.manage(ManagedAdapter(adapter.clone()));
@@ -716,6 +796,38 @@ mod tests {
             Err(Failure::Validation { ref diagnostic, .. })
                 if diagnostic.message.contains("invalid type")
         ));
+    }
+
+    #[test]
+    fn adapter_settings_select_query_timeout_without_changing_host_policy() {
+        let settings = AdapterSettings {
+            policy: AdapterPolicy {
+                allowed_window_labels: ["main".into()].into(),
+                allowed_targets: ["app".into()].into(),
+                max_request_bytes: MAX_REQUEST_BYTES as u32,
+                max_depth: MAX_DEPTH as u32,
+                redacted_field_keys: BTreeSet::new(),
+            },
+            query_timeout_ms: 17,
+        };
+        let adapter = Adapter::with_settings(Arc::new(IpcBackend), settings).unwrap();
+        assert_eq!(adapter.query_timeout, Duration::from_millis(17));
+    }
+
+    #[test]
+    fn query_target_count_is_bounded() {
+        let policy = AdapterPolicy {
+            allowed_window_labels: ["main".into()].into(),
+            allowed_targets: (0..=MAX_QUERY_TARGETS)
+                .map(|index| format!("app.{index}"))
+                .collect(),
+            max_request_bytes: MAX_REQUEST_BYTES as u32,
+            max_depth: MAX_DEPTH as u32,
+            redacted_field_keys: BTreeSet::new(),
+        };
+        assert!(
+            matches!(policy.validate(), Err(Failure::Validation { ref field, .. }) if field == "policy.allowed_targets")
+        );
     }
 
     #[test]

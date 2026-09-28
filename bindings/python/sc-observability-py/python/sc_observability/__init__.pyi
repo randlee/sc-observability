@@ -63,6 +63,12 @@ class LogQuery:
     limit: int = 100
     order: Literal['oldest_first', 'newest_first'] = 'oldest_first'
 
+@dataclass(frozen=True)
+class AdapterPolicy:
+    query_timeout_ms: int = 2000
+    max_request_bytes: int = 65536
+    max_depth: int = 32
+
 def _at() -> str:
     ...
 
@@ -83,13 +89,13 @@ class Logger:
     def __init__(self, _private: NoReturn) -> None:
         ...
 
-    def log(self, event: LogEvent) -> Result[generated.Admission]:
+    def log(self, event: LogEvent, policy: AdapterPolicy = AdapterPolicy()) -> Result[generated.Admission]:
         ...
 
     def submit(self, event: LogEvent) -> Result[LogReceipt]: ...
     async def flush_async(self, timeout_ms: int = 2000) -> Result[generated.Completion]: ...
 
-    def query(self, query: LogQuery) -> Result[generated.LogSnapshot]:
+    def query(self, query: LogQuery, policy: AdapterPolicy = AdapterPolicy()) -> Result[generated.LogSnapshot]:
         ...
 
     def health(self) -> Result[generated.LogHealth]:
@@ -115,13 +121,13 @@ class AttachedLogger:
     def __init__(self, _private: NoReturn) -> None:
         ...
 
-    def log(self, event: LogEvent) -> Result[generated.Admission]:
+    def log(self, event: LogEvent, policy: AdapterPolicy = AdapterPolicy()) -> Result[generated.Admission]:
         ...
 
     def submit(self, event: LogEvent) -> Result[LogReceipt]: ...
     async def flush_async(self, timeout_ms: int = 2000) -> Result[generated.Completion]: ...
 
-    def query(self, query: LogQuery) -> Result[generated.LogSnapshot]:
+    def query(self, query: LogQuery, policy: AdapterPolicy = AdapterPolicy()) -> Result[generated.LogSnapshot]:
         ...
 
     def health(self) -> Result[generated.LogHealth]:
