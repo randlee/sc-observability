@@ -1,6 +1,7 @@
 use super::implementation::{
     OtlpHttpExporter, build_logs_payload, normalize_logs_endpoint, parse_retry_after,
 };
+use crate::config::LegacyRetryPolicy;
 use crate::contracts::{ExporterLifecycle, LogExporter};
 use sc_observability_types::{
     ActionName, Level, LogEvent, ProcessIdentity, SchemaVersion, ServiceName, TargetCategory,
@@ -8,16 +9,16 @@ use sc_observability_types::{
 };
 use serde_json::Value;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 static RETRY_WAIT_TEST_LOCK: Mutex<()> = Mutex::new(());
 
@@ -66,6 +67,28 @@ fn custom_ca_file(contents: &str) -> PathBuf {
     ));
     fs::write(&path, contents).expect("write temporary CA bundle");
     path
+}
+
+fn retry_policy(
+    max_retries: u32,
+    initial_backoff_ms: u64,
+    max_backoff_ms: u64,
+    retry_sequence_timeout_ms: u64,
+    retry_after_cap_ms: u64,
+    retry_jitter_percent: u8,
+) -> LegacyRetryPolicy {
+    LegacyRetryPolicy {
+        max_retries: Some(max_retries),
+        initial_backoff_ms: Some(initial_backoff_ms.into()),
+        max_backoff_ms: Some(max_backoff_ms.into()),
+        retry_sequence_timeout_ms: Some(retry_sequence_timeout_ms.into()),
+        retry_after_cap_ms: Some(retry_after_cap_ms.into()),
+        retry_jitter_percent: Some(retry_jitter_percent),
+    }
+}
+
+fn logs_payload() -> Value {
+    build_logs_payload(&[super::implementation::log_record(&sample_log())])
 }
 
 #[test]
@@ -311,6 +334,192 @@ fn response_loss_retries_the_same_batch_without_false_success_drop() {
         )
         .expect("response loss is retried");
     server.join().expect("join server");
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+}
+
+#[test]
+fn loopback_retry_after_is_capped_before_the_next_request() {
+    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let calls_server = Arc::clone(&calls);
+    let server = thread::spawn(move || {
+        for attempt in 0..2 {
+            let (mut stream, _) = listener.accept().expect("accept request");
+            let request = read_request(&mut stream);
+            assert!(request.contains("\"hello\""));
+            calls_server.fetch_add(1, Ordering::Relaxed);
+            let response = if attempt == 0 {
+                b"HTTP/1.1 503 Service Unavailable\r\nRetry-After: 3600\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice()
+            } else {
+                b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice()
+            };
+            stream.write_all(response).expect("write response");
+        }
+    });
+    let (delay_tx, delay_rx) = mpsc::sync_channel(0);
+    let exporter = OtlpHttpExporter::for_endpoint_with_retry(
+        format!("http://{address}"),
+        retry_policy(1, 5, 50, 500, 20, 0),
+        1,
+        Some(delay_tx),
+    )
+    .expect("construct exporter");
+    let export_thread = thread::spawn(move || exporter.send_payload_sync("logs", &logs_payload()));
+    let delay = delay_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("retry entered the capped backoff");
+    let result = export_thread.join().expect("join export thread");
+    result.expect("capped Retry-After permits the next request");
+    server.join().expect("join server");
+    assert_eq!(delay, Duration::from_millis(20));
+    assert_eq!(calls.load(Ordering::Relaxed), 2);
+}
+
+#[test]
+fn loopback_fallback_jitter_preserves_an_ordered_retry_sequence() {
+    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let calls_server = Arc::clone(&calls);
+    let server = thread::spawn(move || {
+        for attempt in 0..3 {
+            let (mut stream, _) = listener.accept().expect("accept request");
+            let request = read_request(&mut stream);
+            assert!(request.contains("\"hello\""));
+            calls_server.fetch_add(1, Ordering::Relaxed);
+            let response = if attempt < 2 {
+                b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice()
+            } else {
+                b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".as_slice()
+            };
+            stream.write_all(response).expect("write response");
+        }
+    });
+    let (delay_tx, delay_rx) = mpsc::sync_channel(0);
+    let exporter = OtlpHttpExporter::for_endpoint_with_retry(
+        format!("http://{address}"),
+        retry_policy(2, 20, 40, 500, 100, 50),
+        1,
+        Some(delay_tx),
+    )
+    .expect("construct exporter");
+    let export_thread = thread::spawn(move || exporter.send_payload_sync("logs", &logs_payload()));
+    let first_delay = delay_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("first fallback retry entered backoff");
+    let second_delay = delay_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("second fallback retry entered backoff");
+    let result = export_thread.join().expect("join export thread");
+    result.expect("fallback retries eventually succeed");
+    server.join().expect("join server");
+    assert!(
+        (10..=30).contains(&first_delay.as_millis()),
+        "unexpected first fallback delay: {first_delay:?}"
+    );
+    assert!(
+        (20..=60).contains(&second_delay.as_millis()),
+        "unexpected second fallback delay: {second_delay:?}"
+    );
+    assert_eq!(calls.load(Ordering::Relaxed), 3);
+}
+
+#[test]
+fn loopback_retry_sequence_returns_deadline_exhaustion_after_multiple_requests() {
+    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let calls_server = Arc::clone(&calls);
+    let done = Arc::new(AtomicBool::new(false));
+    let done_server = Arc::clone(&done);
+    let server = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut handled = 0;
+        listener
+            .set_nonblocking(true)
+            .expect("set nonblocking listener");
+        while !done_server.load(Ordering::Acquire) && Instant::now() < deadline {
+            let (mut stream, _) = match listener.accept() {
+                Ok(accepted) => accepted,
+                Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                    thread::yield_now();
+                    continue;
+                }
+                Err(error) => panic!("accept request: {error}"),
+            };
+            stream
+                .set_nonblocking(false)
+                .expect("set blocking accepted stream");
+            let request = read_request(&mut stream);
+            assert!(request.contains("\"hello\""));
+            calls_server.fetch_add(1, Ordering::Relaxed);
+            stream
+                .write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .expect("write response");
+            handled += 1;
+        }
+        assert!(handled >= 2, "deadline fixture must observe two requests");
+    });
+    let exporter = OtlpHttpExporter::for_endpoint_with_retry(
+        format!("http://{address}"),
+        retry_policy(100, 20, 20, 500, 20, 0),
+        1,
+        None,
+    )
+    .expect("construct exporter");
+    let error = exporter
+        .send_payload_sync("logs", &logs_payload())
+        .expect_err("retry sequence must exhaust its deadline");
+    done.store(true, Ordering::Release);
+    server.join().expect("join server");
+    assert!(matches!(
+        error,
+        sc_observability_types::v2::ExportError::RetryDeadlineExhausted { .. }
+    ));
+    assert!(calls.load(Ordering::Relaxed) >= 2);
+}
+
+#[test]
+fn loopback_retry_attempt_limit_returns_typed_exhaustion() {
+    let _retry_wait_test_guard = RETRY_WAIT_TEST_LOCK.lock().expect("retry wait test lock");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let calls_server = Arc::clone(&calls);
+    let server = thread::spawn(move || {
+        for _ in 0..2 {
+            let (mut stream, _) = listener.accept().expect("accept request");
+            let request = read_request(&mut stream);
+            assert!(request.contains("\"hello\""));
+            calls_server.fetch_add(1, Ordering::Relaxed);
+            stream
+                .write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .expect("write response");
+        }
+    });
+    let exporter = OtlpHttpExporter::for_endpoint_with_retry(
+        format!("http://{address}"),
+        retry_policy(1, 5, 5, 500, 20, 0),
+        1,
+        None,
+    )
+    .expect("construct exporter");
+    let error = exporter
+        .send_payload_sync("logs", &logs_payload())
+        .expect_err("retry attempt limit must stop the sequence");
+    server.join().expect("join server");
+    assert!(matches!(
+        error,
+        sc_observability_types::v2::ExportError::RetryAttemptsExhausted { .. }
+    ));
     assert_eq!(calls.load(Ordering::Relaxed), 2);
 }
 

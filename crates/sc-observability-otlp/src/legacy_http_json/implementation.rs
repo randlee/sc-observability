@@ -90,6 +90,8 @@ pub(crate) struct LegacyHttpJsonConfig {
     lifecycle_shutdown_timeout: Duration,
     retry: RetrySettings,
     jitter_seed: u64,
+    #[cfg(test)]
+    retry_delay_observer: Option<SyncSender<Duration>>,
 }
 
 impl LegacyHttpJsonConfig {
@@ -125,6 +127,8 @@ impl LegacyHttpJsonConfig {
                 lifecycle_shutdown_timeout: bounds.lifecycle().shutdown().get(),
                 retry: RetrySettings::from_policy(policy),
                 jitter_seed: seed_from_os(),
+                #[cfg(test)]
+                retry_delay_observer: None,
             },
             bounds,
         ))
@@ -489,7 +493,7 @@ fn send_with_retries(
                 let delay = server_delay.unwrap_or(fallback.min(config.retry.max_backoff));
                 let delay =
                     apply_jitter(delay, config.retry.jitter_percent, &mut rng).min(remaining);
-                if !wait_cancelable(delay, cancel) {
+                if !wait_for_retry(config, delay, cancel) {
                     return Err(shutdown_cancelled_error());
                 }
             }
@@ -502,7 +506,7 @@ fn send_with_retries(
                     config.retry.jitter_percent,
                     &mut rng,
                 );
-                if !wait_cancelable(delay, cancel) {
+                if !wait_for_retry(config, delay, cancel) {
                     return Err(shutdown_cancelled_error());
                 }
             }
@@ -531,8 +535,34 @@ pub(super) fn parse_retry_after(value: &str, now: SystemTime) -> Option<Duration
 }
 
 pub(super) fn wait_cancelable(duration: Duration, cancel: &AtomicBool) -> bool {
+    wait_cancelable_with_observer(duration, cancel, None)
+}
+
+fn wait_for_retry(config: &LegacyHttpJsonConfig, duration: Duration, cancel: &AtomicBool) -> bool {
     #[cfg(test)]
-    notify_retry_wait_started();
+    let observer = config.retry_delay_observer.as_ref();
+    #[cfg(not(test))]
+    let _ = config;
+    #[cfg(not(test))]
+    let observer = None;
+
+    wait_cancelable_with_observer(duration, cancel, observer)
+}
+
+fn wait_cancelable_with_observer(
+    duration: Duration,
+    cancel: &AtomicBool,
+    observer: Option<&SyncSender<Duration>>,
+) -> bool {
+    #[cfg(not(test))]
+    let _ = observer;
+    #[cfg(test)]
+    {
+        notify_retry_wait_started();
+        if let Some(sender) = observer {
+            let _ = sender.try_send(duration);
+        }
+    }
 
     let deadline = Instant::now() + duration;
     while !cancel.load(Ordering::Acquire) {
@@ -660,6 +690,31 @@ impl OtlpHttpExporter {
         });
         config.ca_file = ca_file;
         let (worker_config, bounds) = LegacyHttpJsonConfig::from_otel(&config)?;
+        Ok(Self {
+            backend: LegacyBackend::new(worker_config, &bounds)?,
+            endpoint,
+        })
+    }
+
+    #[cfg(test)]
+    pub(super) fn for_endpoint_with_retry(
+        endpoint: String,
+        retry: crate::config::LegacyRetryPolicy,
+        jitter_seed: u64,
+        retry_delay_observer: Option<SyncSender<Duration>>,
+    ) -> Result<Self, ExportError> {
+        let sequence_timeout_ms = retry.retry_sequence_timeout_ms.map_or(3_000, u64::from);
+        let mut config = OtelConfig::new(ExporterBackend::LegacyHttpJson, OtlpProtocol::HttpJson);
+        config.enabled = true;
+        config.timeout_ms = Some(sequence_timeout_ms.saturating_sub(1).clamp(1, 100).into());
+        config.endpoint = Some(
+            crate::config::OtlpEndpoint::new_typed(endpoint.clone())
+                .expect("loopback test endpoint is valid"),
+        );
+        config.legacy_retry = Some(retry);
+        let (mut worker_config, bounds) = LegacyHttpJsonConfig::from_otel(&config)?;
+        worker_config.jitter_seed = jitter_seed;
+        worker_config.retry_delay_observer = retry_delay_observer;
         Ok(Self {
             backend: LegacyBackend::new(worker_config, &bounds)?,
             endpoint,
