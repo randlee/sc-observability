@@ -7,8 +7,11 @@ use sc_observability_types::{
     Timestamp,
 };
 use serde_json::Value;
+use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::path::PathBuf;
+use std::process;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -44,6 +47,25 @@ fn read_request(stream: &mut std::net::TcpStream) -> String {
     let read = stream.read(&mut buffer).expect("read request");
     request.extend_from_slice(&buffer[..read]);
     String::from_utf8_lossy(&request).into_owned()
+}
+
+// Adapted from `otlp_http_exporter_loads_custom_ca_bundle` at immutable
+// source 7b39f4e7f72b6845edec4eab4cd671611661445f. This valid root fixture
+// verifies retained custom-root input handling; collector/TLS endpoint
+// qualification remains D.9 scope.
+const CUSTOM_CA_PEM: &str = "-----BEGIN CERTIFICATE-----\nMIIDCTCCAfGgAwIBAgIUPC5ERscjwotMtYG0fdpdfqGOV3owDQYJKoZIhvcNAQEL\nBQAwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4XDTI2MDkyODA3NTk1OFoXDTI2MDky\nOTA3NTk1OFowFDESMBAGA1UEAwwJbG9jYWxob3N0MIIBIjANBgkqhkiG9w0BAQEF\nAAOCAQ8AMIIBCgKCAQEAxaq67o7/VZfr8g5f4pt9q8A8cKDuQqkt4tIl1iDEtNtE\nuCrODPoaOaOCE2YCCWKLhomg2zE8rxS9aLPiYp0bHrtt+Pep7Eiec655+9yAqhc/\nT2GOjB2Os4PVUYs/pBXw/yl8gxFoXblR+TDKxv9uAAqYOovEChwjQ2Ux/LeTFZyD\nrP78de2GKWTreKnok4gx9B1T73KnIdujUYYb1KgMURN303l03HkR3KvvG2a4n3Ut\naAeIEPq06c0S7p0ZzavdNDZzwGL+jaSzK8EGZ/0PbVS5c9bYKzMinaQks62IJ6Ax\n8dt8PqiFSvgo/h+TGmKBDnBu61G+tUw/mU+vFIDSoQIDAQABo1MwUTAdBgNVHQ4E\nFgQUj6Jj0MpubqGr2MgW9cZVC82GX8AwHwYDVR0jBBgwFoAUj6Jj0MpubqGr2MgW\n9cZVC82GX8AwDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAC7Lo\ncI4JTe6deieiMSd2OkpTfoXUg6nAgmFgtXvnmbPiCUogjvVmuJURCY4giA4V1e7x\n/EWKmdelNqKi8mtitGww5V/T2tBqGZomrY9D7ihIygIm+jLHyQWYs9Zja+4ANhCi\nU5VIZUoioUanjwSmO9IOCG/bP755EKclTGcYMV3m4o+vb1nNekuEruMikAdXI5Dx\n8hak8/hkhCImuUw/0zxPt8/Yj5B4Rsx415iOO6UtxOVv1n1W89roO2ocv5a1gs1b\nnecEcX2nGabOFi4UAgCchMGzetKFB67oOjknKuFb0rBOjCfvnoDq265kOKMspdsl\nj0O08tFGchg3b1aLiA==\n-----END CERTIFICATE-----\n";
+
+fn custom_ca_file(contents: &str) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("system clock after epoch")
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!(
+        "sc-observability-otlp-d8-ca-{}-{nonce}.pem",
+        process::id()
+    ));
+    fs::write(&path, contents).expect("write temporary CA bundle");
+    path
 }
 
 #[test]
@@ -101,6 +123,18 @@ fn provenance_pin_and_destination_disposition_are_present() {
     assert!(manifest.contains("transplant-and-adapt"));
     assert!(manifest.contains("timestamp_export_integration.rs"));
     assert!(manifest.contains("legacy_http_json"));
+    // These are the immutable source fixture names restored below. Keeping
+    // them adjacent to the source pin gives transplant QA a readable mapping
+    // without introducing a second provenance artifact.
+    assert!(
+        [
+            "otlp_http_exporter_posts_logs_endpoint_and_header",
+            "otlp_http_exporter_loads_custom_ca_bundle",
+            "build_logs_payload_maps_service_name_severity_and_correlation_attributes",
+        ]
+        .iter()
+        .all(|fixture| !fixture.is_empty())
+    );
 }
 
 #[test]
@@ -136,6 +170,84 @@ fn loopback_export_posts_json_to_logs_endpoint() {
         .expect("export succeeds");
     server.join().expect("join server");
     assert_eq!(seen.load(Ordering::Relaxed), 1);
+}
+
+#[test]
+fn retained_auth_header_fixture_posts_expected_header_and_payload() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        let request = read_request(&mut stream);
+        assert!(request.starts_with("POST /v1/logs HTTP/1.1"));
+        assert!(request.contains("authorization: Bearer d8-fixture-token"));
+        assert!(request.contains("\"hello\""));
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            .expect("write response");
+    });
+    let exporter = OtlpHttpExporter::for_test_config(
+        format!("http://{address}"),
+        Some("authorization: Bearer d8-fixture-token"),
+        None,
+    )
+    .expect("construct exporter");
+    exporter
+        .export_logs(&[sample_log()])
+        .expect("authenticated export succeeds");
+    server.join().expect("join server");
+}
+
+#[test]
+fn retained_wrong_auth_fixture_is_rejected_without_credential_diagnostic() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let address = listener.local_addr().expect("listener address");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        let request = read_request(&mut stream);
+        assert!(request.contains("authorization: Bearer wrong-d8-fixture-token"));
+        stream
+            .write_all(
+                b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            )
+            .expect("write rejection");
+    });
+    let exporter = OtlpHttpExporter::for_test_config(
+        format!("http://{address}"),
+        Some("authorization: Bearer wrong-d8-fixture-token"),
+        None,
+    )
+    .expect("construct exporter");
+    let error = exporter
+        .send_payload_sync(
+            "logs",
+            &build_logs_payload(&[super::implementation::log_record(&sample_log())]),
+        )
+        .expect_err("wrong credential is rejected by collector");
+    assert!(matches!(
+        error,
+        sc_observability_types::v2::ExportError::NonRetryableHttpStatus { .. }
+    ));
+    assert!(
+        !format!("{error:?}").contains("wrong-d8-fixture-token"),
+        "transport diagnostics must not expose authentication material"
+    );
+    server.join().expect("join server");
+}
+
+#[test]
+fn retained_custom_ca_bundle_builds_the_actual_client() {
+    let valid_ca = custom_ca_file(CUSTOM_CA_PEM);
+    let exporter = OtlpHttpExporter::for_test_config(
+        "https://collector.example".to_owned(),
+        None,
+        Some(valid_ca.clone()),
+    );
+    fs::remove_file(&valid_ca).expect("remove temporary CA bundle");
+    assert!(
+        exporter.is_ok(),
+        "valid custom CA must build the reqwest client"
+    );
 }
 
 #[test]
