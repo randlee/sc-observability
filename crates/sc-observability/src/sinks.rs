@@ -141,18 +141,17 @@ impl JsonlFileSink {
         deprecated,
         reason = "legacy RetentionPolicy remains supported for direct JsonlFileSink construction"
     )]
-    fn prune_old_files(&self, retention: RetentionPolicy) {
+    fn prune_old_files(&self, retention: RetentionPolicy) -> Result<(), LogSinkError> {
         let Some(parent) = self.path.parent() else {
-            return;
+            return Ok(());
         };
 
-        let Ok(entries) = fs::read_dir(parent) else {
-            return;
-        };
+        let entries = fs::read_dir(parent).map_err(|error| self.mark_failure(error))?;
         let retention_cutoff = SystemTime::now()
             - Duration::from_secs(u64::from(retention.max_age_days) * constants::SECS_PER_DAY);
 
-        for entry in entries.flatten() {
+        for entry in entries {
+            let entry = entry.map_err(|error| self.mark_failure(error))?;
             let path = entry.path();
             let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
                 continue;
@@ -168,13 +167,16 @@ impl JsonlFileSink {
                 continue;
             }
 
-            if let Ok(metadata) = entry.metadata()
-                && let Ok(modified) = metadata.modified()
-                && modified < retention_cutoff
+            let metadata = entry.metadata().map_err(|error| self.mark_failure(error))?;
+            if metadata
+                .modified()
+                .map_err(|error| self.mark_failure(error))?
+                < retention_cutoff
             {
-                let _ = fs::remove_file(path);
+                fs::remove_file(path).map_err(|error| self.mark_failure(error))?;
             }
         }
+        Ok(())
     }
 
     fn prune_retained_files(
@@ -321,7 +323,7 @@ impl crate::typed::TypedLogSink for JsonlFileSink {
                 policy.rotation.max_files.as_usize(),
                 line.len() as u64,
             )?;
-            self.prune_old_files(policy.retention);
+            self.prune_old_files(policy.retention)?;
         }
 
         let mut file = OpenOptions::new()
@@ -852,6 +854,28 @@ mod tests {
             error.diagnostic().remediation
         );
         assert!(std::error::Error::source(&typed_error).is_some());
+        assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
+    }
+
+    #[test]
+    fn legacy_prune_failures_mark_sink_health_and_return_error() {
+        let root = temp_root("legacy-prune-error");
+        let file_parent = root.join("logs");
+        fs::write(&file_parent, "not-a-directory").expect("block parent as file");
+        let sink = JsonlFileSink::new(
+            file_parent.join("service.log.jsonl"),
+            RotationPolicy::default(),
+            RetentionPolicy::default(),
+        );
+
+        let error = sink
+            .prune_old_files(RetentionPolicy::default())
+            .expect_err("prune failure");
+
+        assert_eq!(
+            error.diagnostic().code,
+            error_codes::LOGGER_SINK_WRITE_FAILED
+        );
         assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
     }
 
