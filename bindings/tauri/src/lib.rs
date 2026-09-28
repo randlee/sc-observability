@@ -52,15 +52,13 @@ impl AdapterPolicy {
                 "labels must be valid Tauri window labels",
             ));
         }
-        if self
-            .allowed_targets
-            .iter()
-            .any(|target| sc_observability_types::TargetCategory::new(target).is_err())
-        {
-            return Err(invalid(
-                "policy.allowed_targets",
-                "targets must be valid target categories",
-            ));
+        for target in &self.allowed_targets {
+            if let Err(error) = sc_observability_types::TargetCategory::new(target) {
+                return Err(invalid(
+                    "policy.allowed_targets",
+                    format!("target {target:?} is invalid: {error}"),
+                ));
+            }
         }
         if self.redacted_field_keys.iter().any(|key| is_protected_key(key)) {
             return Err(invalid(
@@ -80,11 +78,11 @@ pub enum WireResult<T> {
     Error { error: Failure },
 }
 
-fn invalid(field: &str, message: &str) -> Failure {
+fn invalid(field: &str, message: impl Into<String>) -> Failure {
     Failure::Validation {
         diagnostic: Box::new(sc_observability_dto::boundary_diagnostic(
             sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_INVALID_INPUT,
-            message,
+            message.into(),
         )),
         field: field.to_owned(),
     }
@@ -219,13 +217,14 @@ fn parse<T: DeserializeOwned>(
     operation: &str,
 ) -> Result<T, Failure> {
     let bytes = serde_json::to_vec(&value)
-        .map_err(|_| invalid(field, "request could not be serialized"))?;
+        .map_err(|error| invalid(field, format!("request could not be serialized: {error}")))?;
     if bytes.len() > policy.max_request_bytes as usize {
         return Err(invalid(field, "request exceeds configured size limit"));
     }
     inspect(&value, 0, policy.max_depth as usize)?;
     strict_request(&value, operation)?;
-    serde_json::from_value(value).map_err(|_| invalid(field, "request does not match schema v1"))
+    serde_json::from_value(value)
+        .map_err(|error| invalid(field, format!("request does not match schema v1: {error}")))
 }
 
 fn schema(value: &Value, field: &str) -> Result<(), Failure> {
@@ -344,8 +343,9 @@ impl Adapter {
         schema(&value, "request")?;
         let request: QueryRequest = parse(value, &self.policy, "request", "query")?;
         let query = decode_query(
-            serde_json::to_value(request.query)
-                .map_err(|_| invalid("query", "query could not be serialized"))?,
+            serde_json::to_value(request.query).map_err(|error| {
+                invalid("query", format!("query could not be serialized: {error}"))
+            })?,
         )?;
         if let Some(target) = &query.target
             && !self.policy.allowed_targets.contains(target)
@@ -589,7 +589,40 @@ mod tests {
                 redacted_field_keys: BTreeSet::new(),
             }
         };
-        assert!(matches!(policy.validate(), Err(Failure::Validation { ref field, .. }) if field == "policy.allowed_targets"));
+        assert!(matches!(
+            policy.validate(),
+            Err(Failure::Validation { ref field, ref diagnostic })
+                if field == "policy.allowed_targets"
+                    && diagnostic
+                        .message
+                        .contains("identifier must match [A-Za-z0-9._-]+")
+        ));
+    }
+
+    #[test]
+    fn parse_preserves_serde_diagnostic() {
+        let policy = AdapterPolicy {
+            allowed_window_labels: BTreeSet::from(["main".to_owned()]),
+            allowed_targets: BTreeSet::from(["app".to_owned()]),
+            max_request_bytes: MAX_REQUEST_BYTES as u32,
+            max_depth: MAX_DEPTH as u32,
+            redacted_field_keys: BTreeSet::new(),
+        };
+        let result = parse::<QueryRequest>(
+            serde_json::json!({
+                "schema_version": 1,
+                "query": {"schema_version": 1, "limit": "not an integer"}
+            }),
+            &policy,
+            "request",
+            "query",
+        );
+
+        assert!(matches!(
+            result,
+            Err(Failure::Validation { ref diagnostic, .. })
+                if diagnostic.message.contains("invalid type")
+        ));
     }
 
     #[test]
