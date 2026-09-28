@@ -69,6 +69,7 @@ Generated projection of `obs-d-18`; the bead is authoritative.
   - `docs/api-approvals/**`
   - `docs/migrate-error-api.md`
   - `docs/migration*.md`
+  - `docs/plans/phase-d/sprint-d-16-log-error-migration.md`
   - `docs/plans/phase-d/sprint-d-18-integration-and-public-api.md`
   - `docs/plans/phase-d/sprint-d-17-log-consumer-error-migration.md`
   - `docs/project-plan.md`

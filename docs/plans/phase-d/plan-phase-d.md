@@ -54,7 +54,7 @@ Every sprint closes with `cargo check --workspace --all-features --locked` and `
 
 ## Parallelism after correction
 
-Nineteen active dev sprints and four numbered waves; numbered wave 1 has two dependency stages. Measured critical path remains five dev sprints: obs-d-12 through obs-d-21, obs-d-7, obs-d-18, and obs-d-9 (sanity/plan-QA gates excluded). The scoped split releases six direct types-contract consumers independently of OTLP work: obs-d-4/14/15/17/19/20; obs-d-17 also retains its logging-contract gate. obs-d-1/2/3 keep their existing logging-contract gates. The former D16 work is proposed as part of D18 rather than a separate release. Wave 2 has thirteen active beads; maximum dependency-independent width remains fifteen with root obs-d-10 alongside released implementations. The useful gain is earlier release of types-only work, not a claimed shorter OTLP critical path.
+Nineteen active dev sprints and four numbered waves; numbered wave 1 has two dependency stages. Measured critical path remains five dev sprints: obs-d-12 through obs-d-21, obs-d-7, obs-d-18, and obs-d-9 (sanity/plan-QA gates excluded). The scoped split releases six direct types-contract consumers independently of OTLP work: obs-d-4/14/15/17/19/20; obs-d-17 also retains its logging-contract gate. obs-d-1/2/3 keep their existing logging-contract gates. The former D16 work is proposed as part of D18 rather than a separate release. Wave 2 has thirteen active beads; maximum dependency-independent width is thirteen after the administrative D16 absorption. The useful gain is earlier release of types-only work, not a claimed shorter OTLP critical path.
 
 ## Wave table
 

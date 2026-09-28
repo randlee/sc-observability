@@ -2,7 +2,7 @@
 
 ## Status
 
-This is a historical disposition record, not an active sprint projection. The pending `obs-decision-d16-d18-ownership` option A absorbs D16's unfinished canonical logging-error work into `obs-d-18`. It does **not** assert an `obs-d-16` pass, close its bead or sanity bead, waive any requirement, or change the live Beads dependency graph.
+This is a historical disposition record, not an active sprint projection. The pending `obs-decision-d16-d18-ownership` option A absorbs D16's unfinished canonical logging-error work into `obs-d-18`, which is the maintenance owner of this historical plan file. It does **not** assert an `obs-d-16` pass, close its bead or sanity bead, waive any requirement, or change the live Beads dependency graph.
 
 ## Original D16 scope, now proposed for D18 ownership
 
