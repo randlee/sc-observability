@@ -78,13 +78,12 @@ pub fn group_records_by_resource_and_scope<T: Clone>(
         {
             group
         } else {
+            let index = resources.len();
             resources.push(OtlpResourceGroup {
                 resource: item.resource.clone(),
                 scopes: Vec::new(),
             });
-            resources
-                .last_mut()
-                .expect("resource group was just inserted")
+            &mut resources[index]
         };
 
         if let Some(scope_group) = resource_group

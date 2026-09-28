@@ -1,0 +1,18 @@
+[package]
+name = "otlp-sdk-example"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+sc-observability-otlp = { workspace = true, features = ["otlp-sdk"] }
+sc-observability-types.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true

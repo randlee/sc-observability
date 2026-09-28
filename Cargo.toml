@@ -12,6 +12,7 @@ members = [
   "bindings/python/sc-observability-py",
   "examples/rust-python-logging",
   "examples/otlp-legacy",
+  "examples/otlp-sdk",
   "examples/log-settings",
 ]
 exclude = ["examples/atm-adapter-example"]
@@ -47,6 +48,7 @@ tokio = { version = "=1.53.1", features = ["rt", "rt-multi-thread", "macros", "t
 opentelemetry = "=0.33.0"
 opentelemetry_sdk = { version = "=0.33.0", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "=0.33.0", default-features = false, features = ["trace", "metrics", "logs", "grpc-tonic", "tls-ring", "tls-webpki-roots", "http-proto", "reqwest-client", "reqwest-rustls"] }
+opentelemetry-proto = { version = "=0.33.0", default-features = false, features = ["gen-tonic-messages", "trace", "metrics", "logs"] }
 reqwest = { version = "=0.12.28", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 httpdate = "=1.0.3"
 getrandom = "=0.4.3"

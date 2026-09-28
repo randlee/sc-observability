@@ -903,6 +903,15 @@ name = "otlp-legacy-example"
 version = "2.0.0"
 
 [[package]]
+name = "otlp-sdk-example"
+version = "2.0.0"
+dependencies = [
+ "sc-observability-otlp",
+ "sc-observability-types",
+ "tokio",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1560,6 +1569,7 @@ dependencies = [
  "httpdate",
  "opentelemetry",
  "opentelemetry-otlp",
+ "opentelemetry-proto",
  "opentelemetry_sdk",
  "reqwest 0.12.28",
  "sc-observability",
