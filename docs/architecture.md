@@ -1242,11 +1242,18 @@ in [the CI policy](ci-policy.md).
 - **Decision — facade event-error boundary**: `LogEmitter::emit_log` returns
   the canonical `v2::EventError`, whose signature cannot carry the separate
   `v2::ShutdownError::{Timeout, Drain}` variants. At this boundary only, a
-  real writer shutdown timeout or drain failure is therefore projected to
-  `EventError::Routing` with the original diagnostic context preserved. The
-  typed `Logger::shutdown` and `LogControl` paths continue to return the
-  dedicated shutdown variants; this mapping is not a claim that timeout and
-  drain are interchangeable elsewhere.
+  disconnected writer's admission failure (`LogError::WriterDegraded`) is
+  projected to `EventError::Routing` with its diagnostic context preserved.
+  The compatibility match also retains a `LogError::ShutdownTimedOut` arm,
+  but the current public logger cannot reach it through `LogEmitter`: only
+  `WriterRuntime::shutdown(self)` records the timeout, and its caller
+  `Logger::shutdown(self)` consumes the running logger and returns
+  `Logger<Stopped>`, which does not implement `LogEmitter`. Actual shutdown
+  timeouts are retained in the stopped logger's health, not returned as
+  `ShutdownError` by this API. A sink drain failure is likewise not itself
+  an emitter admission failure. The real-path regressions cover writer
+  disconnection through the emitter and timeout diagnostics through stopped
+  health; they do not manufacture a running logger after shutdown.
 - **Decision — staged core exports**: the core crate temporarily re-exports
   only the v2 `EventError` and `LogSinkError` types consumed by its owned
   implementation. The remaining v2 error contracts stay owned by

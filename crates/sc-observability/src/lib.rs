@@ -708,9 +708,12 @@ mod sealed_emitters {
     pub trait Sealed {}
 }
 
-#[expect(
-    dead_code,
-    reason = "crate-local emitter trait is intentionally available for logging-only injection"
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "crate-local emitter trait is intentionally available for logging-only injection"
+    )
 )]
 pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
     fn emit_log(&self, event: LogEvent) -> Result<(), v2::EventError>;
@@ -1992,6 +1995,14 @@ mod tests {
         let maintenance = stopped.health().maintenance.expect("maintenance health");
         assert!(maintenance.last_error.is_some());
         assert_eq!(stopped.health().writer_state, WriterState::Degraded);
+        let timeout = stopped
+            .health()
+            .last_writer_error
+            .expect("actual writer shutdown timeout is retained in stopped health");
+        assert_eq!(timeout.code, Some(error_codes::LOGGER_SHUTDOWN_TIMED_OUT));
+        assert_eq!(timeout.message, "writer thread did not stop within 10ms");
+        // Shutdown consumes Logger<Running>. The returned Logger<Stopped>
+        // exposes this diagnostic through health, not through LogEmitter.
         assert!(
             signal.is_active(),
             "shutdown returned before the blocked writer left its maintenance pass"
@@ -2098,6 +2109,45 @@ mod tests {
         assert_eq!(
             typed_flush.diagnostic().code,
             error_codes::LOGGER_WRITER_DEGRADED
+        );
+
+        // Exercise both admission boundaries after a real worker failure,
+        // rather than constructing an error and testing a conversion alone.
+        let LogError::WriterDegraded(legacy_context) = logger
+            .log(log_event(service_name()))
+            .expect_err("legacy admission observes the disconnected writer")
+        else {
+            panic!("disconnected writer must retain its admission failure kind");
+        };
+        let v2::EventError::Routing { context } = logger
+            .emit_log(log_event(service_name()))
+            .expect_err("canonical emitter observes the disconnected writer")
+        else {
+            panic!("writer admission failure must map to EventError::Routing");
+        };
+        let diagnostic = context.diagnostic();
+        let original = legacy_context.diagnostic();
+        assert_eq!(diagnostic.code, error_codes::LOGGER_WRITER_DEGRADED);
+        assert_eq!(diagnostic.code, original.code);
+        assert_eq!(diagnostic.message, original.message);
+        assert_eq!(diagnostic.remediation, original.remediation);
+        assert_eq!(diagnostic.cause, original.cause);
+        assert_eq!(diagnostic.docs, original.docs);
+        assert_eq!(diagnostic.details, original.details);
+        // Separate admissions create their own diagnostic timestamps.
+        assert_eq!(
+            diagnostic.message,
+            "writer thread disconnected while admitting log work"
+        );
+        assert_eq!(
+            diagnostic.remediation,
+            Remediation::recoverable(
+                "inspect logger writer-thread health",
+                [
+                    "inspect logger.health().writer_state",
+                    "inspect logger.health().last_writer_error",
+                ],
+            )
         );
 
         // Consume the runtime after the intentionally panicked worker has
