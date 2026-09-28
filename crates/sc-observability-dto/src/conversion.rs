@@ -941,18 +941,15 @@ fn timeout_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureD
         operation: "lifecycle".into(),
     }
 }
-fn unknown_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
-    CanonicalFailureDto::UnknownRemote {
-        diagnostic,
-        remote_kind: "unknown_canonical_cause".into(),
-    }
+fn unexpected_local_failure(diagnostic: Box<CanonicalDiagnosticDto>) -> CanonicalFailureDto {
+    CanonicalFailureDto::Internal { diagnostic }
 }
 canonical_projection!(
     IdentityError,
     value,
     match value {
         core::v2::IdentityError::Process { .. } => validation_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -961,7 +958,7 @@ canonical_projection!(
     match value {
         core::v2::InitError::Configuration { .. } => validation_failure,
         core::v2::InitError::Runtime { .. } => unavailable_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -970,7 +967,7 @@ canonical_projection!(
     match value {
         core::v2::EventError::Validation { .. } => validation_failure,
         core::v2::EventError::Routing { .. } => unavailable_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -978,7 +975,7 @@ canonical_projection!(
     value,
     match value {
         core::v2::FlushError::Drain { context } => drain_category(context),
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -987,7 +984,7 @@ canonical_projection!(
     match value {
         core::v2::ShutdownError::Timeout { .. } => timeout_failure,
         core::v2::ShutdownError::Drain { context } => drain_category(context),
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -995,7 +992,7 @@ canonical_projection!(
     value,
     match value {
         core::v2::ProjectionError::Projection { .. } => validation_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -1003,7 +1000,7 @@ canonical_projection!(
     value,
     match value {
         core::v2::SubscriberError::Subscriber { .. } => unavailable_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -1011,7 +1008,7 @@ canonical_projection!(
     value,
     match value {
         core::v2::LogSinkError::Write { .. } | core::v2::LogSinkError::Flush { .. } => io_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -1021,7 +1018,7 @@ canonical_projection!(
         core::v2::MetricModelError::InvalidHistogram { .. }
         | core::v2::MetricModelError::InvalidTemporality { .. }
         | core::v2::MetricModelError::InvalidInterval { .. } => validation_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 canonical_projection!(
@@ -1042,7 +1039,7 @@ canonical_projection!(
         core::v2::ConfigFailure::UnsupportedBackend { .. } => validation_failure,
         core::v2::ConfigFailure::UnsupportedProtocol { .. } => validation_failure,
         core::v2::ConfigFailure::TokioRuntimeRequired { .. } => validation_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 );
 fn export_category(
@@ -1068,7 +1065,7 @@ fn export_category(
         core::v2::ExportError::NonRetryableHttpStatus { .. } => io_failure,
         core::v2::ExportError::RetryAttemptsExhausted { .. } => io_failure,
         core::v2::ExportError::TerminalExportFailure { .. } => io_failure,
-        _ => unknown_failure,
+        _ => unexpected_local_failure,
     }
 }
 fn drain_category(
@@ -1088,7 +1085,9 @@ impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
             core::v2::TelemetryError::Shutdown { context } => Ok(Self::Closed {
                 diagnostic: Box::new(from_canonical_diagnostic(context.diagnostic())?),
             }),
-            _ => Err(invalid_input("error", "unknown telemetry failure variant")),
+            _ => Ok(unexpected_local_failure(Box::new(
+                from_canonical_diagnostic(value.diagnostic())?,
+            ))),
         }
     }
 }
