@@ -442,10 +442,12 @@ fn start_flush_backend(
     timeout: &str,
 ) -> (Option<Py<NativeFlushOperation>>, String) {
     let operation = parse_timeout(timeout).and_then(|timeout| {
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            backend.start_flush(timeout)
-        }))
-        .unwrap_or_else(|_| Err(internal_failure("native flush start panicked")))
+        py.detach(|| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                backend.start_flush(timeout)
+            }))
+            .unwrap_or_else(|_| Err(internal_failure("native flush start panicked")))
+        })
     });
     match operation {
         Ok(operation) => match Py::new(py, NativeFlushOperation { operation }) {
@@ -745,9 +747,12 @@ impl NativeLogger {
         })
     }
 
-    fn health(&self) -> String {
+    fn health(&self, py: Python<'_>) -> String {
         contained_json(|| match test_fault("health") {
-            Ok(()) => result_json(self.backend.health().map_err(project_runtime_failure)),
+            Ok(()) => {
+                let backend = self.backend.clone();
+                result_json(py.detach(move || backend.health().map_err(project_runtime_failure)))
+            }
             Err(error) => result_json::<()>(Err(error)),
         })
     }
@@ -856,9 +861,12 @@ impl NativeAttachedLogger {
         })
     }
 
-    fn health(&self) -> String {
+    fn health(&self, py: Python<'_>) -> String {
         contained_json(|| match test_fault("health") {
-            Ok(()) => result_json(self.backend.health().map_err(project_runtime_failure)),
+            Ok(()) => {
+                let backend = self.backend.clone();
+                result_json(py.detach(move || backend.health().map_err(project_runtime_failure)))
+            }
             Err(error) => result_json::<()>(Err(error)),
         })
     }
@@ -1301,18 +1309,18 @@ mod tests {
                 .is_ok();
             let attached_revision = attached
                 .borrow(py)
-                .health()
+                .health(py)
                 .contains("\"effective_level\":\"debug\"")
                 && attached
                     .borrow(py)
-                    .health()
+                    .health(py)
                     .contains("\"level_revision\":\"1\"");
             let stopped = owner.shutdown(Duration::from_secs(2)).is_ok();
             let closed = attached
                 .borrow(py)
                 .log(py, event)
                 .contains(sc_observability_dto::error_codes::SC_OBSERVABILITY_BINDING_CLOSED);
-            let retained_health = attached.borrow(py).health().contains("\"kind\":\"ok\"");
+            let retained_health = attached.borrow(py).health(py).contains("\"kind\":\"ok\"");
             missing_is_tagged
                 && admitted
                 && level_changed
@@ -1493,7 +1501,7 @@ mod tests {
             attached
                 .bind(py)
                 .borrow()
-                .health()
+                .health(py)
                 .contains("\"kind\":\"ok\"")
         });
         assert!(active && stopped && retained);
