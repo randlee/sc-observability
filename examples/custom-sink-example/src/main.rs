@@ -3,11 +3,10 @@
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
 
-use sc_observability::typed::TypedLogSink;
-use sc_observability::v2::LogSinkError;
+use sc_observability::LogSinkError;
 use sc_observability::{
     ActionName, Diagnostic, DiagnosticSummary, ErrorCode, ErrorContext, Level, LogEvent, LogFilter,
-    LoggerBuilder, LoggerConfig, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity,
+    LoggerBuilder, LoggerConfig, LogSink, OBSERVATION_ENVELOPE_VERSION, OutcomeLabel, ProcessIdentity,
     Remediation, SchemaVersion, ServiceName, SinkHealth, SinkHealthState, SinkName,
     SinkRegistration, TargetCategory, Timestamp, WriterState,
 };
@@ -103,7 +102,7 @@ impl AuditSink {
     }
 }
 
-impl TypedLogSink for AuditSink {
+impl LogSink for AuditSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         let mut stderr = io::stderr().lock();
         writeln!(
@@ -195,9 +194,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut builder = LoggerBuilder::new_typed(LoggerConfig::default_for(service.clone(), root))?;
 
     builder.register_sink(
-        SinkRegistration::new(sc_observability::typed::legacy_sink(Arc::new(
-            AuditSink::new(),
-        )))
+        SinkRegistration::new(Arc::new(AuditSink::new()))
         .with_filter(Arc::new(AuditOnly)),
     );
     let logger = builder.build_typed()?;

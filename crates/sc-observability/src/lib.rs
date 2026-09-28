@@ -71,10 +71,6 @@ pub use sc_observability_types::{
 /// the integration sprint activates the major-version API. New consumers can
 /// use this namespace to match the discriminated errors without losing the
 /// original diagnostic context or typed source.
-pub mod v2 {
-    #[doc(inline)]
-    pub use sc_observability_types::v2::{EventError, LogSinkError};
-}
 #[allow(
     deprecated,
     reason = "the facade retains legacy error names in its public compatibility surface"
@@ -441,10 +437,10 @@ pub trait LogFilter: Send + Sync {
 /// semver-significant public API change.
 pub trait LogSink: Send + Sync {
     /// Writes one event to the sink.
-    fn write(&self, event: &LogEvent) -> Result<(), sc_observability_types::v2::LogSinkError>;
+    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError>;
 
     /// Flushes any buffered sink state.
-    fn flush(&self) -> Result<(), sc_observability_types::v2::LogSinkError> {
+    fn flush(&self) -> Result<(), LogSinkError> {
         Ok(())
     }
 
@@ -765,7 +761,7 @@ mod sealed_emitters {
     )
 )]
 pub(crate) trait LogEmitter: sealed_emitters::Sealed + Send + Sync {
-    fn emit_log(&self, event: LogEvent) -> Result<(), v2::EventError>;
+    fn emit_log(&self, event: LogEvent) -> Result<(), EventError>;
 }
 
 impl sealed_emitters::Sealed for Logger<Running> {}
@@ -775,13 +771,13 @@ impl sealed_emitters::Sealed for Logger<Running> {}
     reason = "the crate-local compatibility emitter calls the retained deprecated logger boundary"
 )]
 impl LogEmitter for Logger<Running> {
-    fn emit_log(&self, event: LogEvent) -> Result<(), v2::EventError> {
+    fn emit_log(&self, event: LogEvent) -> Result<(), EventError> {
         self.log(event).map_err(|error| match error {
-            LogError::InvalidEvent(error) => v2::EventError::Validation {
+            LogError::InvalidEvent(error) => EventError::Validation {
                 context: error.into_context(),
             },
             LogError::WriterDegraded(context) | LogError::ShutdownTimedOut(context) => {
-                v2::EventError::Routing { context }
+                EventError::Routing { context }
             }
         })
     }
@@ -1516,26 +1512,6 @@ mod tests {
             Some(error_codes::LOGGER_SINK_WRITE_FAILED)
         );
         assert_eq!(writes.load(Ordering::SeqCst), 1);
-
-        let typed = crate::typed::TypedLogSink::write(&sink, &event)
-            .expect_err("typed console write fails");
-        assert_eq!(
-            typed.diagnostic().code,
-            error_codes::LOGGER_SINK_WRITE_FAILED
-        );
-        assert_eq!(
-            std::error::Error::source(&typed)
-                .expect("typed native source")
-                .to_string(),
-            "injected console write failure"
-        );
-        let health = crate::typed::TypedLogSink::health(&sink);
-        assert_eq!(health.state, SinkHealthState::DegradedDropping);
-        assert_eq!(
-            health.last_error.expect("typed failure health").code,
-            Some(error_codes::LOGGER_SINK_WRITE_FAILED)
-        );
-        assert_eq!(writes.load(Ordering::SeqCst), 2);
     }
 
     #[test]
@@ -2173,7 +2149,7 @@ mod tests {
         else {
             panic!("disconnected writer must retain its admission failure kind");
         };
-        let v2::EventError::Routing { context } = logger
+        let EventError::Routing { context } = logger
             .emit_log(log_event(service_name()))
             .expect_err("canonical emitter observes the disconnected writer")
         else {

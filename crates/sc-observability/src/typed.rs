@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use sc_observability_types::v2::LogSinkError;
+use sc_observability_types::LogSinkError;
 
 use crate::{LogEvent, LogSink, SinkHealth};
 

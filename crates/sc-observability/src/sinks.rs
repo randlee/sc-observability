@@ -374,7 +374,7 @@ impl JsonlFileSink {
     }
 }
 
-impl crate::typed::TypedLogSink for JsonlFileSink {
+impl LogSink for JsonlFileSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(|err| self.mark_failure(err))?;
@@ -411,16 +411,6 @@ impl crate::typed::TypedLogSink for JsonlFileSink {
             .read()
             .expect("file sink health poisoned")
             .clone()
-    }
-}
-
-impl LogSink for JsonlFileSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        <Self as crate::typed::TypedLogSink>::write(self, event)
-    }
-
-    fn health(&self) -> SinkHealth {
-        <Self as crate::typed::TypedLogSink>::health(self)
     }
 }
 
@@ -529,7 +519,7 @@ impl ConsoleSink {
     }
 }
 
-impl crate::typed::TypedLogSink for ConsoleSink {
+impl LogSink for ConsoleSink {
     fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
         serialize_event_bounded(event).map_err(|context| LogSinkError::Write { context })?;
         let line = Self::format_line(event);
@@ -546,16 +536,6 @@ impl crate::typed::TypedLogSink for ConsoleSink {
             .read()
             .expect("console sink health poisoned")
             .clone()
-    }
-}
-
-impl LogSink for ConsoleSink {
-    fn write(&self, event: &LogEvent) -> Result<(), LogSinkError> {
-        <Self as crate::typed::TypedLogSink>::write(self, event)
-    }
-
-    fn health(&self) -> SinkHealth {
-        <Self as crate::typed::TypedLogSink>::health(self)
     }
 }
 
@@ -970,17 +950,6 @@ mod tests {
             )
         );
         assert!(std::error::Error::source(&error).is_some());
-        let typed_error = crate::typed::TypedLogSink::write(&sink, &log_event())
-            .expect_err("typed write failure");
-        assert_eq!(
-            typed_error.diagnostic().code,
-            error_codes::LOGGER_SINK_WRITE_FAILED
-        );
-        assert_eq!(
-            typed_error.diagnostic().remediation,
-            error.diagnostic().remediation
-        );
-        assert!(std::error::Error::source(&typed_error).is_some());
         assert_eq!(sink.health().state, SinkHealthState::DegradedDropping);
 
         let console = ConsoleSink::from_writer(Box::new(FailingConsoleWriter));
