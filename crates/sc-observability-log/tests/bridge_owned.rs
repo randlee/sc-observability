@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use sc_observability_log::{
-    ActionName, AttachmentOptions, BridgeEventPolicy, BridgeOptions, InitError, LoggerConfig,
+    ActionName, AttachmentOptions, BridgeEventPolicy, BridgeOptions, DetachError, LoggerConfig,
     ServiceName, attach_logger, init,
 };
 use sc_observability_types::LogEvent;
@@ -51,10 +51,9 @@ fn owned_init_excludes_host_attachment() {
         Arc::new(Admit),
     );
 
-    assert!(matches!(
-        attach_logger(host.clone(), attachment_options),
-        Err(InitError::AlreadyInitialized)
-    ));
+    let error = attach_logger(host.clone(), attachment_options).expect_err("owned facade rejects");
+    assert!(matches!(error, DetachError::ForeignLoggerInstalled { .. }));
+    assert_eq!(error.code().as_str(), "SC_LOG_FOREIGN_LOGGER_INSTALLED");
     guard
         .shutdown(Duration::from_secs(2))
         .expect("owned shutdown");

@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use sc_observability_log::{
-    ActionName, AttachmentOptions, BridgeEventPolicy, BridgeOptions, InitError, LoggerConfig,
+    ActionName, AttachmentOptions, BridgeEventPolicy, BridgeOptions, DetachError, LoggerConfig,
     ServiceName, attach_logger,
 };
 use sc_observability_types::LogEvent;
@@ -54,10 +54,9 @@ fn attachment_rejects_a_foreign_process_global_logger() {
         Arc::new(Admit),
     );
 
-    assert!(matches!(
-        attach_logger(Arc::clone(&host), options),
-        Err(InitError::ForeignLoggerInstalled)
-    ));
+    let error = attach_logger(Arc::clone(&host), options).expect_err("foreign facade rejects");
+    assert!(matches!(error, DetachError::ForeignLoggerInstalled { .. }));
+    assert_eq!(error.code().as_str(), "SC_LOG_FOREIGN_LOGGER_INSTALLED");
     let host =
         Arc::try_unwrap(host).unwrap_or_else(|_| panic!("failed attach retains no host Arc"));
     host.shutdown();

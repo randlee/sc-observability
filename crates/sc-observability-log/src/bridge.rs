@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use crate::control::BridgeEvent;
 use crate::handle;
-use crate::{DropCause, EmitError, InitError, LogControl, mapping};
+use crate::{DropCause, EmitError, LogControl, mapping};
 use sc_observability_types::{
     AdmissionOutcome, ErrorCode, ErrorContext, LogEvent, OperationDiagnostic, ProcessIdentity,
     Remediation, ServiceName, Timestamp,
@@ -122,6 +122,16 @@ impl DetachError {
                 crate::error_codes::SC_LOG_DETACH_NOT_INSTALLED,
                 "logger attachment is no longer installed",
                 "discard stale controls and attach the current host logger",
+            )),
+        }
+    }
+
+    fn foreign_logger_installed() -> Self {
+        Self::ForeignLoggerInstalled {
+            context: Box::new(context(
+                crate::error_codes::SC_LOG_FOREIGN_LOGGER_INSTALLED,
+                "another logger attachment or owner occupies the log facade",
+                "use the logger owner or detach the active attachment before attaching",
             )),
         }
     }
@@ -269,19 +279,15 @@ impl Drop for LogAttachment {
 ///
 /// # Errors
 ///
-/// Returns [`InitError::AlreadyInitialized`] when owned initialization or
-/// another attachment already occupies the bridge, and
-/// [`InitError::ForeignLoggerInstalled`] when another `log::Log` owns the
-/// process facade.
+/// Returns [`DetachError::ForeignLoggerInstalled`] when the process facade is
+/// occupied by an owned bridge, another attachment, or a foreign `log::Log`.
 pub fn attach_logger(
     logger: Arc<sc_observability::Logger>,
     options: AttachmentOptions,
-) -> Result<LogAttachment, InitError> {
-    // The attachment is a facade installation, so the existing init errors
-    // deliberately remain the public failure surface.
+) -> Result<LogAttachment, DetachError> {
     let mode = BRIDGE_MODE.load(Ordering::SeqCst);
     if !matches!(mode, MODE_EMPTY | MODE_DETACHED) {
-        return Err(InitError::AlreadyInitialized);
+        return Err(DetachError::foreign_logger_installed());
     }
 
     let first_facade = if mode == MODE_EMPTY {
@@ -292,12 +298,12 @@ pub fn attach_logger(
         false
     };
     if mode == MODE_EMPTY && !first_facade {
-        return Err(InitError::AlreadyInitialized);
+        return Err(DetachError::foreign_logger_installed());
     }
     if first_facade {
         if log::set_boxed_logger(Box::new(Bridge)).is_err() {
             BRIDGE_MODE.store(MODE_STOPPED, Ordering::SeqCst);
-            return Err(InitError::ForeignLoggerInstalled);
+            return Err(DetachError::foreign_logger_installed());
         }
         log::set_max_level(log::LevelFilter::Trace);
     }
@@ -321,7 +327,7 @@ pub fn attach_logger(
         .write()
         .unwrap_or_else(PoisonError::into_inner);
     if slot.is_some() {
-        return Err(InitError::AlreadyInitialized);
+        return Err(DetachError::foreign_logger_installed());
     }
     *slot = Some(Arc::clone(&state));
     BRIDGE_MODE.store(MODE_ATTACHED, Ordering::SeqCst);
