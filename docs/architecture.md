@@ -1239,6 +1239,18 @@ in [the CI policy](ci-policy.md).
   capabilities. It compiles downstream open-trait implementations with
   deprecated usage denied. It does not reimplement runtime mappings or remove
   1.x wrappers; obs-d-18 owns final removal and semver/release gates.
+- **Decision — facade event-error boundary**: `LogEmitter::emit_log` returns
+  the canonical `v2::EventError`, whose signature cannot carry the separate
+  `v2::ShutdownError::{Timeout, Drain}` variants. At this boundary only, a
+  real writer shutdown timeout or drain failure is therefore projected to
+  `EventError::Routing` with the original diagnostic context preserved. The
+  typed `Logger::shutdown` and `LogControl` paths continue to return the
+  dedicated shutdown variants; this mapping is not a claim that timeout and
+  drain are interchangeable elsewhere.
+- **Decision — staged core exports**: the core crate temporarily re-exports
+  only the v2 `EventError` and `LogSinkError` types consumed by its owned
+  implementation. The remaining v2 error contracts stay owned by
+  `sc-observability-types` until D.18 activates the canonical root exports.
 - **Consequences**: Contract ownership is independent in wave 1. Shared
   artifacts have producer/consumer handoffs, and backend implementations use
   the common lifecycle. No new boundary-rule framework is authorized. Cargo

@@ -72,10 +72,7 @@ pub use sc_observability_types::{
 /// original diagnostic context or typed source.
 pub mod v2 {
     #[doc(inline)]
-    pub use sc_observability_types::v2::{
-        ConfigFailure, EventError, ExportError, FlushError, IdentityError, InitError, LogSinkError,
-        MetricModelError, ProjectionError, ShutdownError, SubscriberError, TelemetryError,
-    };
+    pub use sc_observability_types::v2::{EventError, LogSinkError};
 }
 #[allow(
     deprecated,

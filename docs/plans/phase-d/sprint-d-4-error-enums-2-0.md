@@ -89,3 +89,13 @@ production completion.
   qualification, compatibility retirement, D.3's `sinks.rs` migration, or
   changes in another sprint's construction files; those owners and obs-d-18
   close them.
+
+## Finding amendments
+
+- The `LogEmitter::emit_log` signature returns `v2::EventError`, so it cannot
+  carry `v2::ShutdownError::{Timeout, Drain}` directly. The accepted ADR-017
+  boundary mapping is `EventError::Routing` with the original timeout/drain
+  diagnostic preserved; typed shutdown APIs retain their dedicated variants.
+- The staged core `v2` module exports only `EventError` and `LogSinkError`,
+  the contracts consumed by this layer. D.18 owns activation of the complete
+  canonical root export surface and removal of this temporary staging seam.
