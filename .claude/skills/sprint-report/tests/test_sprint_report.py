@@ -1,9 +1,14 @@
+import io
 import importlib.machinery
 import importlib.util
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/sprint-report'
 loader = importlib.machinery.SourceFileLoader('sprint_report', str(SCRIPT))
@@ -13,6 +18,29 @@ loader.exec_module(report)
 
 
 class SprintReportTests(unittest.TestCase):
+    def run_main_with_index(self, repo, path):
+        with mock.patch.object(report.subprocess, 'check_output', return_value=f'{repo}\n'):
+            with mock.patch.object(report.sys, 'argv', ['sprint-report', '--index', str(path)]):
+                with mock.patch.object(report.sys, 'stderr', new_callable=io.StringIO) as stderr:
+                    return report.main(), stderr.getvalue()
+
+    def test_report_template_and_skill_keep_current_usage_text(self):
+        repo = Path(__file__).resolve().parents[4]
+        template = (repo / '.claude/skills/sprint-report/report.md.j2').read_text()
+        skill = (repo / '.claude/skills/sprint-report/SKILL.md').read_text()
+        script = (repo / '.claude/skills/sprint-report/scripts/sprint-report').read_text()
+        self.assertIn('Sprint status report for phase plans.', template)
+        self.assertNotIn('agent-team-mail', template)
+        self.assertIn('`--table` is the default mode', skill)
+        self.assertIn('"\\n\\n".join(detailed_rows)', script)
+
+    def test_phase_d_index_excludes_folded_d11(self):
+        repo = Path(__file__).resolve().parents[4]
+        index = report.load_index(
+            repo, repo / 'docs/plans/phase-d/sprints.jsonl', 'obs-phase-d'
+        )[1]
+        self.assertNotIn('obs-d-11', report.index_bead_pairs(index))
+
     def test_loads_compact_canonical_tuples_and_rejects_invalid_rows(self):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
@@ -31,6 +59,81 @@ class SprintReportTests(unittest.TestCase):
             path.write_text('["x-1", "gate-1", ["unknown"]]\n')
             with self.assertRaisesRegex(RuntimeError, 'unknown sprint'):
                 report.load_index(repo, path, 'obs-phase-x')
+            path.write_text('')
+            with self.assertRaisesRegex(RuntimeError, 'contains no sprints'):
+                report.load_index(repo, path, 'obs-phase-x')
+
+    def test_root_lookup_uses_phase_index_path_without_root_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path.parent.mkdir(parents=True)
+            path.write_text('["x-1", "gate-1", []]\n')
+            with mock.patch.object(report, 'index_path', return_value=path) as index_path:
+                index = report.load_index(repo, None, 'obs-phase-x')[1]
+            index_path.assert_called_once_with(repo, 'obs-phase-x')
+            self.assertEqual(index['root_bead_id'], 'obs-phase-x')
+
+    def test_root_lookup_executes_phase_id_fallback_end_to_end(self):
+        checkout = Path(__file__).resolve().parents[4]
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            subprocess.run(['git', 'init', '-q'], cwd=repo, check=True)
+            helper_dir = repo / '.claude/skills/atm-beads/scripts'
+            helper_dir.mkdir(parents=True)
+            for name in ('phase-index-path', 'sprint_index_common.py'):
+                shutil.copy2(checkout / '.claude/skills/atm-beads/scripts' / name, helper_dir / name)
+            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path.parent.mkdir(parents=True)
+            path.write_text('["x-1", "gate-1", []]\n')
+            bin_dir = repo / 'bin'
+            bin_dir.mkdir()
+            bd = bin_dir / 'bd'
+            bd.write_text('#!/bin/sh\nprintf \'[{"id":"obs-phase-x","metadata":{}}]\\n\'\n')
+            bd.chmod(0o755)
+            old_cwd = Path.cwd()
+            try:
+                os.chdir(repo)
+                with mock.patch.dict(os.environ, {'PATH': f'{bin_dir}{os.pathsep}{os.environ["PATH"]}'}):
+                    actual_path, index = report.load_index(repo, None, 'obs-phase-x')
+            finally:
+                os.chdir(old_cwd)
+            self.assertEqual(actual_path.resolve(), path.resolve())
+            self.assertEqual(index['root_bead_id'], 'obs-phase-x')
+
+    def test_main_reports_malformed_json_without_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path.parent.mkdir(parents=True)
+            path.write_text('{not json}\n')
+            code, error = self.run_main_with_index(repo, path)
+            self.assertEqual(code, 2)
+            self.assertIn('sprint-report:', error)
+            self.assertNotIn('Traceback', error)
+
+    def test_main_reports_row_without_id_without_traceback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path.parent.mkdir(parents=True)
+            path.write_text('["", "gate-1", []]\n')
+            code, error = self.run_main_with_index(repo, path)
+            self.assertEqual(code, 2)
+            self.assertIn('sprint-report:', error)
+            self.assertNotIn('Traceback', error)
+
+    def test_main_rejects_empty_index_before_bd_show(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            path = repo / 'docs/plans/phase-x/sprints.jsonl'
+            path.parent.mkdir(parents=True)
+            path.write_text('')
+            with mock.patch.object(report, 'run_json') as run_json:
+                code, error = self.run_main_with_index(repo, path)
+            self.assertEqual(code, 2)
+            run_json.assert_not_called()
+            self.assertIn('contains no sprints', error)
 
     def test_membership_index_reads_names_and_order_from_live_beads(self):
         index = {'sprints': [
@@ -87,11 +190,30 @@ class SprintReportTests(unittest.TestCase):
         self.assertEqual(report.select_pr(prs, 'sprint/d-1')['number'], 4)
         self.assertIsNone(report.select_pr(prs, None))
 
+    def test_pr_lookup_uses_head_branch_not_planned_base(self):
+        # d-13's PR is based on d-12 even though its plan targeted d-21.
+        # A lookup by base would miss it (or choose an unrelated PR sharing
+        # the plan target); the report must use the source branch alone.
+        prs = [
+            {'number': 234, 'headRefName': 'sprint/d-13-logging-contract',
+             'baseRefName': 'sprint/d-12-types-and-otlp-contract', 'state': 'OPEN'},
+            {'number': 999, 'headRefName': 'unrelated',
+             'baseRefName': 'sprint/d-21-otlp-contract', 'state': 'OPEN'},
+        ]
+        self.assertEqual(
+            report.select_pr(prs, 'sprint/d-13-logging-contract')['number'], 234
+        )
+        self.assertIsNone(report.select_pr(prs, None))
+
     def test_running_check_is_not_green(self):
         self.assertEqual(report.check_icon({'statusCheckRollup': [{'status': 'IN_PROGRESS', 'conclusion': ''}]}), '🌀')
 
     def test_closed_dev_without_sanity_is_flagged(self):
         self.assertEqual(report.status_icon({'status': 'closed'}, None), '🚩')
+
+    def test_missing_sanity_gate_is_flagged_except_for_blocked_work(self):
+        self.assertEqual(report.status_icon({'status': 'in_progress'}, None), '🚩')
+        self.assertEqual(report.status_icon({'status': 'blocked'}, None), '🚧')
 
     def test_dev_done_requires_explicit_sanity_pass(self):
         dev = {'status': 'closed'}
@@ -146,6 +268,15 @@ class SprintReportTests(unittest.TestCase):
     def test_fail_verdict_survives_closed_findings(self):
         qa = {'status': 'closed', 'close_reason': 'FAIL: two findings', 'metadata': {'round': 2}}
         self.assertEqual(report.qa_summary(qa, [{'status': 'closed'}]), 'R2 FAIL (0 open)')
+
+    def test_explicit_qa_verdict_overrides_legacy_close_text(self):
+        qa = {
+            'status': 'closed',
+            'close_reason': 'PASS: stale legacy text',
+            'metadata': {'round': 2, 'verdict': 'FAIL'},
+        }
+        self.assertEqual(report.qa_verdict(qa), 'FAIL')
+        self.assertEqual(report.qa_icon(qa, [{'status': 'closed'}]), '🚩')
 
     def test_verdict_is_prefix_not_substring(self):
         qa = {'status': 'closed', 'close_reason': 'not a FAIL verdict', 'metadata': {'round': 1}}
