@@ -294,7 +294,7 @@ pub struct FlushRequest {
     /// Wire schema version.
     pub schema_version: u32,
     /// timeout ms.
-    #[cfg_attr(feature = "schema-gen", schemars(range(min = 0, max = 60000)))]
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 0, max = crate::constants::MAX_TIMEOUT_MS)))]
     /// Wire timeout ms.
     pub timeout_ms: u32,
 }
@@ -375,7 +375,7 @@ pub enum ClientOutcome {
 #[cfg_attr(feature = "schema-gen", derive(schemars::JsonSchema))]
 pub struct ClientStatus {
     /// Number of outstanding operations, bounded by client admission.
-    #[cfg_attr(feature = "schema-gen", schemars(range(min = 0, max = 256)))]
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 0, max = crate::constants::MAX_CLIENT_IN_FLIGHT)))]
     /// Wire in flight.
     pub in_flight: u32,
     /// Saturating counters for every declared failure kind.

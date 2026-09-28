@@ -117,7 +117,7 @@ pub struct LogQueryDto {
     pub field_matches: Vec<FieldMatchDto>,
     /// limit.
     #[serde(default = "default_limit")]
-    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = 1000)))]
+    #[cfg_attr(feature = "schema-gen", schemars(range(min = 1, max = crate::constants::MAX_QUERY_LIMIT)))]
     /// Wire limit.
     pub limit: usize,
     /// order.

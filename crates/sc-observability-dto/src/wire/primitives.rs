@@ -226,7 +226,7 @@ pub enum LogOrderDto {
 }
 
 pub(crate) fn default_limit() -> usize {
-    100
+    crate::constants::DEFAULT_QUERY_LIMIT
 }
 /// Version-one PathDto wire value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
