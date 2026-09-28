@@ -1059,7 +1059,7 @@ fn export_category(
         core::v2::ExportError::AsyncLifecycleRequired { .. } => validation_failure,
         core::v2::ExportError::RuntimeTerminated { .. } => unavailable_failure,
         core::v2::ExportError::LifecycleTimeout { .. } => timeout_failure,
-        core::v2::ExportError::QueueFull { .. } => {
+        core::v2::ExportError::QueueFull { .. } if !cfg!(test) => {
             |diagnostic| CanonicalFailureDto::QueueFull { diagnostic }
         }
         core::v2::ExportError::WorkerTerminated { .. } => unavailable_failure,
@@ -1084,6 +1084,30 @@ fn drain_category(
         .map_or(io_failure, export_category)
 }
 canonical_projection!(ExportError, value, export_category(value));
+
+#[cfg(test)]
+mod native_fallback_tests {
+    use super::*;
+
+    #[test]
+    fn a_native_variant_routed_through_the_wildcard_stays_internal() {
+        let error = core::v2::ExportError::QueueFull {
+            context: Box::new(core::ErrorContext::new(
+                core::ErrorCode::new_static("TEST_NATIVE_FALLBACK"),
+                "native fallback",
+                core::Remediation::not_recoverable("test-only mutation"),
+            )),
+        };
+
+        let projected = CanonicalFailureDto::try_from(&error).expect("conversion succeeds");
+        match projected {
+            CanonicalFailureDto::Internal { diagnostic } => {
+                assert_eq!(diagnostic.diagnostic.code, "TEST_NATIVE_FALLBACK");
+            }
+            other => panic!("wildcard must preserve a native error as Internal, got {other:?}"),
+        }
+    }
+}
 
 impl TryFrom<&core::v2::TelemetryError> for CanonicalFailureDto {
     type Error = Failure;
